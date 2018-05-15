@@ -1,101 +1,69 @@
-#include <string.h>
 #include <stdio.h>
-#include <malloc.h>
 
 #include <switch.h>
-#include "fsext.h"
+#include "menu.h"
+#include "dumper.h"
+#include "ccolor.h"
 
-bool isGameCardInserted(FsDeviceOperator* o) {
-    bool inserted;
-    if (R_FAILED(fsDeviceOperatorIsGameCardInserted(o, &inserted)))
-        return false;
-    return inserted;
+FsDeviceOperator fsOperatorInstance;
+
+bool shouldWaitForAnyButton = false;
+
+void menuWaitForAnyButton() {
+    printf(C_DIM "Press any button to return to menu\n");
+    shouldWaitForAnyButton = true;
 }
 
-bool doLogic(FsDeviceOperator* fsOperator) {
-    bool cardInserted = isGameCardInserted(fsOperator);
-    printf("IsGameCardInserted = %i\n", cardInserted);
-    if (!cardInserted)
-        return false;
-
-    u32 handle;
-    if (R_FAILED(fsDeviceOperatorGetGameCardHandle(fsOperator, &handle))) {
-        printf("GetGameCardHandle failed\n");
-        return false;
-    }
-    FsStorage gameCardStorage;
-    Result result;
-    if (R_FAILED(result = fsOpenGameCard(&gameCardStorage, handle, 0))) {
-        printf("MountGameCard failed %i\n", result);
-        return false;
-    }
-    printf("Opened card\n");
-
-    u64 size;
-    fsStorageGetSize(&gameCardStorage, &size);
-    printf("Size = %li\n", size);
-    FILE* outFile = fopen("out.bin", "wb");
-    printf("Opened output file\n");
-
-    const size_t bufs = 1024 * 1024;
-    char* buf = (char*) malloc(bufs);
-    for (u64 off = 0; off < size; off += bufs) {
-        u64 n = bufs;
-        if (size - off < n)
-            n = size - off;
-        if (R_FAILED(result = fsStorageRead(&gameCardStorage, off, buf, n))) {
-            printf("fsStorageRead error\n");
-            fsStorageClose(&gameCardStorage);
-            return false;
-        }
-        if (fwrite(buf, 1, n, outFile) != n) {
-            printf("fwrite error\n");
-            fsStorageClose(&gameCardStorage);
-            return false;
-        }
-        printf("Dumping %i%% [%li / %li]\n", (int) (off * 100 / size), off, size);
-    }
-    free(buf);
-
-    fclose(outFile);
-
-    fsStorageClose(&gameCardStorage);
-
-    printf("Done!\n");
-
-    return true;
+void startOperation(const char* title) {
+    consoleClear();
+    printf(C_DIM "%s\n\n" C_RESET, title);
 }
+
+void dumpPartitionZero() {
+    startOperation("Raw Dump Partition 0 (SysUpdate)");
+    dumpPartitionRaw(&fsOperatorInstance, 0);
+    menuWaitForAnyButton();
+}
+
+MenuItem mainMenu[] = {
+        { .text = "Raw Dump Partition 0 (SysUpdate)", .callback = dumpPartitionZero },
+        { .text = NULL }
+};
 
 int main(int argc, char **argv)
 {
     gfxInitDefault();
     consoleInit(NULL);
 
-    FsDeviceOperator fsOperator;
-    if (R_FAILED(fsOpenDeviceOperator(&fsOperator))) {
+    if (R_FAILED(fsOpenDeviceOperator(&fsOperatorInstance))) {
         printf("Failed to open device operator\n");
         return -1;
     }
 
-    doLogic(&fsOperator);
-
-    fsDeviceOperatorClose(&fsOperator);
-
+    menuSetCurrent(mainMenu);
 
     while(appletMainLoop())
     {
+        bool btnWait = shouldWaitForAnyButton;
+
         hidScanInput();
 
-        //
+        if (!btnWait)
+            menuUpdate(&fsOperatorInstance);
 
         u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
-
         if (kDown & KEY_PLUS) break;
+        if (btnWait && kDown) {
+            shouldWaitForAnyButton = false;
+            menuPrint();
+        }
 
         gfxFlushBuffers();
         gfxSwapBuffers();
         gfxWaitForVsync();
     }
+
+    fsDeviceOperatorClose(&fsOperatorInstance);
 
     gfxExit();
     return 0;
