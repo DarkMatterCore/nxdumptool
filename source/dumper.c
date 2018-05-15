@@ -12,6 +12,8 @@ bool dumpPartitionRaw(FsDeviceOperator* fsOperator, u32 partition) {
         return false;
     }
 
+    printf("Handle = %x\n", handle);
+
     if (partition == 0) {
         u32 title_ver;
         fsDeviceOperatorUpdatePartitionInfo(fsOperator, handle, &title_ver, NULL);
@@ -47,15 +49,26 @@ bool dumpPartitionRaw(FsDeviceOperator* fsOperator, u32 partition) {
             n = size - off;
         if (R_FAILED(result = fsStorageRead(&gameCardStorage, off, buf, n))) {
             printf("fsStorageRead error\n");
+            free(buf);
             fsStorageClose(&gameCardStorage);
             return false;
         }
         if (fwrite(buf, 1, n, outFile) != n) {
             printf("fwrite error\n");
+            free(buf);
             fsStorageClose(&gameCardStorage);
             return false;
         }
         if (((off / bufs) % 10) == 0) {
+            hidScanInput();
+            u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
+            if (kDown & KEY_B) {
+                printf("\nCancelled\n");
+                free(buf);
+                fsStorageClose(&gameCardStorage);
+                return false;
+            }
+
             printf(C_CLEAR_LINE "\rDumping %i%% [%li / %li bytes]", (int) (off * 100 / size), off, size);
             syncDisplay();
         }
