@@ -11,6 +11,13 @@ bool dumpPartitionRaw(FsDeviceOperator* fsOperator, u32 partition) {
         printf("GetGameCardHandle failed\n");
         return false;
     }
+
+    if (partition == 0) {
+        u32 title_ver;
+        fsDeviceOperatorUpdatePartitionInfo(fsOperator, handle, &title_ver, NULL);
+        printf("System title-version = %i\n", title_ver);
+    }
+
     FsStorage gameCardStorage;
     Result result;
     if (R_FAILED(result = fsOpenGameCard(&gameCardStorage, handle, partition))) {

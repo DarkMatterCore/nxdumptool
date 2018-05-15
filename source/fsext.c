@@ -81,6 +81,48 @@ Result fsDeviceOperatorIsGameCardInserted(FsDeviceOperator* d, bool* out) {
     return rc;
 }
 
+Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator* d, u32 handle, u32* out_title_version, u64* out_title_id) {
+    IpcCommand c;
+    ipcInitialize(&c);
+
+    struct {
+        u64 magic;
+        u64 cmd_id;
+        u32 handle;
+    } *raw;
+
+    raw = ipcPrepareHeader(&c, sizeof(*raw));
+
+    raw->magic = SFCI_MAGIC;
+    raw->cmd_id = 203;
+    raw->handle = handle;
+
+    Result rc = serviceIpcDispatch(&d->s);
+
+    if (R_SUCCEEDED(rc)) {
+        IpcParsedCommand r;
+        ipcParse(&r);
+
+        struct {
+            u64 magic;
+            u64 result;
+            u32 title_ver;
+            u64 title_id;
+        } *resp = r.Raw;
+
+        rc = resp->result;
+
+        if (R_SUCCEEDED(rc)) {
+            if (out_title_version != NULL)
+                *out_title_version = resp->title_ver;
+            if (out_title_id != NULL)
+                *out_title_id = resp->title_id;
+        }
+    }
+
+    return rc;
+}
+
 Result fsDeviceOperatorGetGameCardHandle(FsDeviceOperator* d, u32* out) {
     IpcCommand c;
     ipcInitialize(&c);
