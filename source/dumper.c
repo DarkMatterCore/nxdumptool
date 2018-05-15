@@ -43,43 +43,42 @@ bool dumpPartitionRaw(FsDeviceOperator* fsOperator, u32 partition) {
 
     const size_t bufs = 1024 * 1024;
     char* buf = (char*) malloc(bufs);
+    bool success = true;
     for (u64 off = 0; off < size; off += bufs) {
         u64 n = bufs;
         if (size - off < n)
             n = size - off;
         if (R_FAILED(result = fsStorageRead(&gameCardStorage, off, buf, n))) {
-            printf("fsStorageRead error\n");
-            free(buf);
-            fsStorageClose(&gameCardStorage);
-            return false;
+            printf("\nfsStorageRead error\n");
+            success = false;
+            break;
         }
         if (fwrite(buf, 1, n, outFile) != n) {
-            printf("fwrite error\n");
-            free(buf);
-            fsStorageClose(&gameCardStorage);
-            return false;
+            printf("\nfwrite error\n");
+            success = false;
+            break;
         }
         if (((off / bufs) % 10) == 0) {
             hidScanInput();
             u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
             if (kDown & KEY_B) {
                 printf("\nCancelled\n");
-                free(buf);
-                fsStorageClose(&gameCardStorage);
-                return false;
+                success = false;
+                break;
             }
 
             printf(C_CLEAR_LINE "\rDumping %i%% [%li / %li bytes]", (int) (off * 100 / size), off, size);
             syncDisplay();
         }
     }
+    if (success) {
+        printf(C_CLEAR_LINE "\rDone!\n");
+        syncDisplay();
+    }
+
     free(buf);
-    printf(C_CLEAR_LINE "\rDone!\n");
-    syncDisplay();
-
     fclose(outFile);
-
     fsStorageClose(&gameCardStorage);
 
-    return true;
+    return success;
 }
