@@ -10,9 +10,23 @@ void workaroundPartitionZeroAccess(FsDeviceOperator* fsOperator) {
     if (R_FAILED(fsDeviceOperatorGetGameCardHandle(fsOperator, &handle)))
         return;
     FsStorage gameCardStorage;
-    if (R_FAILED(fsOpenGameCard(&gameCardStorage, handle, 0)))
+    if (R_FAILED(fsOpenGameCardStorage(&gameCardStorage, handle, 0)))
         return;
     fsStorageClose(&gameCardStorage);
+}
+
+bool openPartitionFs(FsFileSystem* ret, FsDeviceOperator* fsOperator, u32 partition) {
+    u32 handle;
+    if (R_FAILED(fsDeviceOperatorGetGameCardHandle(fsOperator, &handle))) {
+        printf("GetGameCardHandle failed\n");
+        return false;
+    }
+    Result result;
+    if (R_FAILED(result = fsMountGameCard(ret, handle, partition))) {
+        printf("MountGameCard failed %x\n", result);
+        return false;
+    }
+    printf("Opened card\n");
 }
 
 bool dumpPartitionRaw(FsDeviceOperator* fsOperator, u32 partition) {
@@ -32,7 +46,7 @@ bool dumpPartitionRaw(FsDeviceOperator* fsOperator, u32 partition) {
 
     FsStorage gameCardStorage;
     Result result;
-    if (R_FAILED(result = fsOpenGameCard(&gameCardStorage, handle, partition))) {
+    if (R_FAILED(result = fsOpenGameCardStorage(&gameCardStorage, handle, partition))) {
         printf("MountGameCard failed %x\n", result);
         return false;
     }

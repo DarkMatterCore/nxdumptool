@@ -4,7 +4,8 @@
 #include <switch/services/fs.h>
 
 // IFileSystemProxy
-Result fsOpenGameCard(FsStorage* out, u32 handle, u32 partition);
+Result fsOpenGameCardStorage(FsStorage* out, u32 handle, u32 partition);
+Result fsMountGameCard(FsFileSystem* out, u32 handle, u32 partition);
 
 
 // IDeviceOperator

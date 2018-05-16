@@ -4,7 +4,7 @@
 
 
 // IFileSystemProxy
-Result fsOpenGameCard(FsStorage* out, u32 handle, u32 partition) {
+Result fsOpenGameCardStorage(FsStorage* out, u32 handle, u32 partition) {
     IpcCommand c;
     ipcInitialize(&c);
 
@@ -19,6 +19,44 @@ Result fsOpenGameCard(FsStorage* out, u32 handle, u32 partition) {
 
     raw->magic = SFCI_MAGIC;
     raw->cmd_id = 30;
+    raw->handle = handle;
+    raw->partition = partition;
+
+    Result rc = serviceIpcDispatch(fsGetServiceSession());
+
+    if (R_SUCCEEDED(rc)) {
+        IpcParsedCommand r;
+        ipcParse(&r);
+
+        struct {
+            u64 magic;
+            u64 result;
+        } *resp = r.Raw;
+
+        rc = resp->result;
+
+        if (R_SUCCEEDED(rc)) {
+            serviceCreate(&out->s, r.Handles[0]);
+        }
+    }
+
+    return rc;
+}
+Result fsMountGameCard(FsFileSystem* out, u32 handle, u32 partition) {
+    IpcCommand c;
+    ipcInitialize(&c);
+
+    struct {
+        u64 magic;
+        u64 cmd_id;
+        u32 handle;
+        u32 partition;
+    } PACKED *raw;
+
+    raw = ipcPrepareHeader(&c, sizeof(*raw));
+
+    raw->magic = SFCI_MAGIC;
+    raw->cmd_id = 31;
     raw->handle = handle;
     raw->partition = partition;
 
