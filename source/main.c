@@ -63,6 +63,11 @@ void dumpPartitionDataMenuItem(MenuItem* item) {
     menuWaitForAnyButton();
 }
 
+void openMainMenu();
+void viewPartitionExitCb() {
+    fsdevUnmountDevice("view");
+    openMainMenu();
+}
 void viewPartitionMenuItem(MenuItem* item) {
     u32 partition = (u32) (size_t) item->userdata;
 
@@ -74,13 +79,12 @@ void viewPartitionMenuItem(MenuItem* item) {
         menuWaitForAnyButton();
         return;
     }
-    fsdevUnmountDevice("view"); // unmount it if it exists   TODO: This should be done when exiting, not here
     if (fsdevMountDevice("view", fs) == -1) {
         printf("fsdevMountDevice failed\n");
         menuWaitForAnyButton();
         return;
     }
-    printFilesInDir("view:/");
+    printFilesInDir("view://", "view://", viewPartitionExitCb);
 }
 
 

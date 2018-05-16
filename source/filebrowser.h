@@ -2,5 +2,4 @@
 
 #include "menu.h"
 
-void printFilesInDir(const char* path);
-void printFilesInDirMenuItem(MenuItem* item);
+void printFilesInDir(const char* path, const char* basePath, void (*exitCb)());
