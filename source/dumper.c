@@ -4,9 +4,14 @@
 #include <malloc.h>
 #include <dirent.h>
 #include <memory.h>
+#include <limits.h>
 #include <sys/stat.h>
+#include <alloca.h>
 #include "ccolor.h"
 #include "util.h"
+
+#define FILE_MAX INT_MAX
+#define SPLIT_FILE_MIN 4000000000u
 
 void workaroundPartitionZeroAccess(FsDeviceOperator* fsOperator) {
     u32 handle;
@@ -111,33 +116,66 @@ bool dumpPartitionRaw(FsDeviceOperator* fsOperator, u32 partition) {
     return success;
 }
 
-bool copyFile(const char* source, const char* dest) {
+#define NAME_BUF_LEN 4096
+
+bool copyFile(const char* source, const char* dest, bool doSplitting) {
     printf("Copying %s...", source);
+    syncDisplay();
     FILE* inFile = fopen(source, "rb");
     if (!inFile) {
         printf("\nFailed to open input file\n");
         return false;
     }
-    FILE* outFile = fopen(dest, "wb");
-    if (!outFile) {
-        printf("\nFailed to open output file\n");
-        fclose(outFile);
-        return false;
-    }
-
     fseek(inFile, 0L, SEEK_END);
     long int size = ftell(inFile);
     fseek(inFile, 0L, SEEK_SET);
+
+    char* splitFilename = NULL;
+    size_t destLen = strlen(dest);
+    if (size > SPLIT_FILE_MIN && doSplitting) {
+        if (destLen + 1 > NAME_BUF_LEN) {
+            printf("\nFilename is too long\n");
+            return 0;
+        }
+        splitFilename = alloca(NAME_BUF_LEN);
+        strcpy(splitFilename, dest);
+        sprintf(&splitFilename[destLen], ".%02i", 0);
+    }
+
+    FILE* outFile = fopen(splitFilename != NULL ? splitFilename : dest, "wb");
+    if (!outFile) {
+        printf("\nFailed to open output file\n");
+        fclose(inFile);
+        return false;
+    }
 
     const size_t bufs = 1024 * 1024;
     char* buf = (char*) malloc(bufs);
     bool success = true;
     ssize_t n;
     size_t total = 0;
+    size_t file_off = 0;
     size_t last_report = 0;
     printf(" [00%%]");
     syncDisplay();
+    int lastp = 0;
     while (true) {
+        if (total - file_off >= FILE_MAX && splitFilename != NULL) {
+            fclose(outFile);
+            file_off += FILE_MAX;
+            sprintf(&splitFilename[destLen], ".%02i", (int) (file_off / FILE_MAX));
+            outFile = fopen(splitFilename, "wb");
+            if (!outFile) {
+                printf("\nFailed to open output file\n");
+                free(buf);
+                fclose(inFile);
+                return false;
+            }
+        }
+
+        size_t readCount = bufs;
+        if (FILE_MAX - (total - file_off) < readCount)
+            readCount = FILE_MAX - (total - file_off);
         n = fread(buf, 1, bufs, inFile);
         if (n <= 0) {
             if (feof(inFile))
@@ -163,8 +201,11 @@ bool copyFile(const char* source, const char* dest) {
             int p = (int) (total * 100 / size);
             if (p >= 100)
                 p = 99;
-            printf("\b\b\b\b%02i%%]", p);
-            syncDisplay();
+            if (lastp != p) {
+                printf("\b\b\b\b%02i%%]", p);
+                syncDisplay();
+                lastp = p;
+            }
             last_report = total;
         }
     }
@@ -176,9 +217,7 @@ bool copyFile(const char* source, const char* dest) {
     return success;
 }
 
-#define NAME_BUF_LEN 4096
-
-bool _copyDirectory(char* sbuf, size_t source_len, char* dbuf, size_t dest_len) {
+bool _copyDirectory(char* sbuf, size_t source_len, char* dbuf, size_t dest_len, bool splitting) {
     DIR* dir = opendir(sbuf);
     struct dirent* ent;
     sbuf[source_len] = '/';
@@ -195,12 +234,12 @@ bool _copyDirectory(char* sbuf, size_t source_len, char* dbuf, size_t dest_len) 
         strcpy(dbuf + dest_len + 1, ent->d_name);
         if (ent->d_type == DT_DIR) {
             mkdir(dbuf, 0744);
-            if (!_copyDirectory(sbuf, source_len + 1 + d_name_len, dbuf, dest_len + 1 + d_name_len)) {
+            if (!_copyDirectory(sbuf, source_len + 1 + d_name_len, dbuf, dest_len + 1 + d_name_len, splitting)) {
                 closedir(dir);
                 return false;
             }
         } else {
-            if (!copyFile(sbuf, dbuf)) {
+            if (!copyFile(sbuf, dbuf, splitting)) {
                 closedir(dir);
                 return false;
             }
@@ -210,7 +249,7 @@ bool _copyDirectory(char* sbuf, size_t source_len, char* dbuf, size_t dest_len) 
     return true;
 }
 
-bool copyDirectory(const char* source, const char* dest) {
+bool copyDirectory(const char* source, const char* dest, bool splitting) {
     char sbuf[NAME_BUF_LEN];
     char dbuf[NAME_BUF_LEN];
     size_t source_len = strlen(source);
@@ -226,5 +265,5 @@ bool copyDirectory(const char* source, const char* dest) {
     strcpy(sbuf, source);
     strcpy(dbuf, dest);
     mkdir(dbuf, 0744);
-    return _copyDirectory(sbuf, source_len, dbuf, dest_len);
+    return _copyDirectory(sbuf, source_len, dbuf, dest_len, splitting);
 }

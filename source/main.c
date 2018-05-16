@@ -55,7 +55,7 @@ void dumpPartitionDataMenuItem(MenuItem* item) {
         char outbuf[64];
         sprintf(outbuf, "/dump_%u", partition);
         printf("Copying to %s\n", outbuf);
-        if (copyDirectory("gamecard:/", outbuf)) {
+        if (copyDirectory("gamecard:/", outbuf, true)) {
             printf("Done!\n");
         }
     }
@@ -93,8 +93,8 @@ MenuItem mainMenu[] = {
         { .text = "Dump Partition 1 (Normal)", .callback = dumpPartitionDataMenuItem, .userdata = (void*) 1 },
         { .text = "Dump Partition 2 (Secure)", .callback = dumpPartitionDataMenuItem, .userdata = (void*) 2 },
         { .text = "Raw Dump Partition 0 (SysUpdate)", .callback = dumpPartitionRawMenuItem, .userdata = (void*) 0 },
-        { .text = "Raw Dump Partition 0 (Normal)", .callback = dumpPartitionRawMenuItem, .userdata = (void*) 1 },
-        { .text = "Raw Dump Partition 0 (Secure)", .callback = dumpPartitionRawMenuItem, .userdata = (void*) 2 },
+        { .text = "Raw Dump Partition 1 (Normal)", .callback = dumpPartitionRawMenuItem, .userdata = (void*) 1 },
+        { .text = "Raw Dump Partition 2 (Secure)", .callback = dumpPartitionRawMenuItem, .userdata = (void*) 2 },
         { .text = "View files on Game Card (SysUpdate)", .callback = viewPartitionMenuItem, .userdata = (void*) 0 },
         { .text = "View files on Game Card (Normal)", .callback = viewPartitionMenuItem, .userdata = (void*) 1 },
         { .text = "View files on Game Card (Secure)", .callback = viewPartitionMenuItem, .userdata = (void*) 2 },
