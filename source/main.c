@@ -7,7 +7,12 @@
 
 FsDeviceOperator fsOperatorInstance;
 
+bool shouldExit = false;
 bool shouldWaitForAnyButton = false;
+
+void menuExit() {
+    shouldExit = true;
+}
 
 void menuWaitForAnyButton() {
     printf(C_DIM "Press any button to return to menu\n");
@@ -40,7 +45,7 @@ int main(int argc, char **argv) {
         return -1;
     }
 
-    menuSetCurrent(mainMenu);
+    menuSetCurrent(mainMenu, menuExit);
 
     while(appletMainLoop())
     {
@@ -57,6 +62,8 @@ int main(int argc, char **argv) {
             shouldWaitForAnyButton = false;
             menuPrint();
         }
+        if (shouldExit)
+            break;
 
         gfxFlushBuffers();
         gfxSwapBuffers();

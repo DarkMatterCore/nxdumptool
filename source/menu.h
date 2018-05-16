@@ -8,5 +8,5 @@ typedef struct {
 } MenuItem;
 
 void menuPrint();
-void menuSetCurrent(MenuItem* menuItems);
+void menuSetCurrent(MenuItem* menuItems, void (*exitCallback)());
 void menuUpdate(FsDeviceOperator* fsOperator);

@@ -8,6 +8,7 @@ MenuItem* menuCurrent;
 int menuCurrentCount;
 bool menuCardIsInserted;
 int menuSelIndex = 0;
+void (*menuExitCallback)();
 
 void menuPrint() {
     consoleClear();
@@ -43,6 +44,10 @@ int menuHandleInput() {
         menuCurrent[menuSelIndex].callback();
         return -1;
     }
+    if ((keys & KEY_B) && menuExitCallback != NULL) {
+        menuExitCallback();
+        return -1;
+    }
     if (((keys & KEY_RSTICK_UP) | (keys & KEY_LSTICK_UP)) && menuSelIndex > 0) {
         menuSelIndex--;
         needsRefresh = true;
@@ -55,7 +60,8 @@ int menuHandleInput() {
 }
 
 
-void menuSetCurrent(MenuItem* menuItems) {
+void menuSetCurrent(MenuItem* menuItems, void (*exitCallback)()) {
+    menuExitCallback = exitCallback;
     menuCurrent = menuItems;
     menuCurrentCount = 0;
     while ((menuItems++)->text != NULL)
