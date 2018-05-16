@@ -29,21 +29,33 @@ void startOperation(const char* title) {
     printf(C_DIM "%s\n\n" C_RESET, title);
 }
 
-void dumpPartitionZeroRaw(MenuItem* item) {
-    startOperation("Raw Dump Partition 0 (SysUpdate)");
-    workaroundPartitionZeroAccess(&fsOperatorInstance);
-    dumpPartitionRaw(&fsOperatorInstance, 0);
+void dumpPartitionRawMenuItem(MenuItem* item) {
+    u32 partition = (u32) (size_t) item->userdata;
+
+    char titlebuf[64];
+    sprintf(titlebuf, "Dump Partition %i (Raw)", partition);
+    startOperation(titlebuf);
+    if (partition == 0 || partition == 1)
+        workaroundPartitionZeroAccess(&fsOperatorInstance);
+    dumpPartitionRaw(&fsOperatorInstance, partition);
     menuWaitForAnyButton();
 }
 
-void dumpPartitionZeroData(MenuItem* item) {
-    startOperation("Dump Partition 0 (SysUpdate)");
-    workaroundPartitionZeroAccess(&fsOperatorInstance);
+void dumpPartitionDataMenuItem(MenuItem* item) {
+    u32 partition = (u32) (size_t) item->userdata;
+
+    char titlebuf[64];
+    sprintf(titlebuf, "Dump Partition %i", partition);
+    startOperation(titlebuf);
+    if (partition == 0 || partition == 1)
+        workaroundPartitionZeroAccess(&fsOperatorInstance);
     FsFileSystem fs;
-    if (openPartitionFs(&fs, &fsOperatorInstance, 0) &&
+    if (openPartitionFs(&fs, &fsOperatorInstance, partition) &&
             fsdevMountDevice("gamecard", fs) != -1) {
-        printf("Copying to /dump_0\n");
-        if (copyDirectory("gamecard:/", "/dump_0")) {
+        char outbuf[64];
+        sprintf(outbuf, "/dump_%u", partition);
+        printf("Copying to %s\n", outbuf);
+        if (copyDirectory("gamecard:/", outbuf)) {
             printf("Done!\n");
         }
     }
@@ -51,28 +63,37 @@ void dumpPartitionZeroData(MenuItem* item) {
     menuWaitForAnyButton();
 }
 
-void viewPartitionZero() {
-    startOperation("Mount Partition 0 (SysUpdate)");
-    workaroundPartitionZeroAccess(&fsOperatorInstance);
+void viewPartitionMenuItem(MenuItem* item) {
+    u32 partition = (u32) (size_t) item->userdata;
+
+    startOperation("View Files");
+    if (partition == 0 || partition == 1)
+        workaroundPartitionZeroAccess(&fsOperatorInstance);
     FsFileSystem fs;
-    if (!openPartitionFs(&fs, &fsOperatorInstance, 0)) {
+    if (!openPartitionFs(&fs, &fsOperatorInstance, partition)) {
         menuWaitForAnyButton();
         return;
     }
-    fsdevUnmountDevice("test"); // unmount it if it exists
-    if (fsdevMountDevice("test", fs) == -1) {
+    fsdevUnmountDevice("view"); // unmount it if it exists   TODO: This should be done when exiting, not here
+    if (fsdevMountDevice("view", fs) == -1) {
         printf("fsdevMountDevice failed\n");
         menuWaitForAnyButton();
         return;
     }
-    printFilesInDir("test:/");
+    printFilesInDir("view:/");
 }
 
 
 MenuItem mainMenu[] = {
-        { .text = "Dump Partition 0 (SysUpdate)", .callback = dumpPartitionZeroData },
-        { .text = "Raw Dump Partition 0 (SysUpdate)", .callback = dumpPartitionZeroRaw },
-        { .text = "View files on Game Card (SysUpdate)", .callback = viewPartitionZero },
+        { .text = "Dump Partition 0 (SysUpdate)", .callback = dumpPartitionDataMenuItem, .userdata = (void*) 0 },
+        { .text = "Dump Partition 1 (Normal)", .callback = dumpPartitionDataMenuItem, .userdata = (void*) 1 },
+        { .text = "Dump Partition 2 (Secure)", .callback = dumpPartitionDataMenuItem, .userdata = (void*) 2 },
+        { .text = "Raw Dump Partition 0 (SysUpdate)", .callback = dumpPartitionRawMenuItem, .userdata = (void*) 0 },
+        { .text = "Raw Dump Partition 0 (Normal)", .callback = dumpPartitionRawMenuItem, .userdata = (void*) 1 },
+        { .text = "Raw Dump Partition 0 (Secure)", .callback = dumpPartitionRawMenuItem, .userdata = (void*) 2 },
+        { .text = "View files on Game Card (SysUpdate)", .callback = viewPartitionMenuItem, .userdata = (void*) 0 },
+        { .text = "View files on Game Card (Normal)", .callback = viewPartitionMenuItem, .userdata = (void*) 1 },
+        { .text = "View files on Game Card (Secure)", .callback = viewPartitionMenuItem, .userdata = (void*) 2 },
         { .text = NULL }
 };
 void openMainMenu() {

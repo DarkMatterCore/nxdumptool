@@ -168,7 +168,8 @@ bool copyFile(const char* source, const char* dest) {
             last_report = total;
         }
     }
-    printf("\b\b\b\b\bDone!\n");
+    if (success)
+        printf("\b\b\b\b\bDone!\n");
     free(buf);
     fclose(inFile);
     fclose(outFile);
@@ -205,6 +206,7 @@ bool _copyDirectory(char* sbuf, size_t source_len, char* dbuf, size_t dest_len) 
             }
         }
     }
+    closedir(dir);
     return true;
 }
 
