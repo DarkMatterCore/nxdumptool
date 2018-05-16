@@ -21,6 +21,7 @@ void startOperation(const char* title) {
 
 void dumpPartitionZero() {
     startOperation("Raw Dump Partition 0 (SysUpdate)");
+    workaroundPartitionZeroAccess(&fsOperatorInstance);
     dumpPartitionRaw(&fsOperatorInstance, 0);
     menuWaitForAnyButton();
 }
@@ -30,8 +31,7 @@ MenuItem mainMenu[] = {
         { .text = NULL }
 };
 
-int main(int argc, char **argv)
-{
+int main(int argc, char **argv) {
     gfxInitDefault();
     consoleInit(NULL);
 

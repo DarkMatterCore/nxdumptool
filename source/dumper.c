@@ -5,6 +5,16 @@
 #include "ccolor.h"
 #include "util.h"
 
+void workaroundPartitionZeroAccess(FsDeviceOperator* fsOperator) {
+    u32 handle;
+    if (R_FAILED(fsDeviceOperatorGetGameCardHandle(fsOperator, &handle)))
+        return;
+    FsStorage gameCardStorage;
+    if (R_FAILED(fsOpenGameCard(&gameCardStorage, handle, 0)))
+        return;
+    fsStorageClose(&gameCardStorage);
+}
+
 bool dumpPartitionRaw(FsDeviceOperator* fsOperator, u32 partition) {
     u32 handle;
     if (R_FAILED(fsDeviceOperatorGetGameCardHandle(fsOperator, &handle))) {
