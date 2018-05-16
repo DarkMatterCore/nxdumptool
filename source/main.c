@@ -29,10 +29,25 @@ void startOperation(const char* title) {
     printf(C_DIM "%s\n\n" C_RESET, title);
 }
 
-void dumpPartitionZero(MenuItem* item) {
+void dumpPartitionZeroRaw(MenuItem* item) {
     startOperation("Raw Dump Partition 0 (SysUpdate)");
     workaroundPartitionZeroAccess(&fsOperatorInstance);
     dumpPartitionRaw(&fsOperatorInstance, 0);
+    menuWaitForAnyButton();
+}
+
+void dumpPartitionZeroData(MenuItem* item) {
+    startOperation("Dump Partition 0 (SysUpdate)");
+    workaroundPartitionZeroAccess(&fsOperatorInstance);
+    FsFileSystem fs;
+    if (openPartitionFs(&fs, &fsOperatorInstance, 0) &&
+            fsdevMountDevice("gamecard", fs) != -1) {
+        printf("Copying to /dump_0\n");
+        if (copyDirectory("gamecard:/", "/dump_0")) {
+            printf("Done!\n");
+        }
+    }
+    fsdevUnmountDevice("dump");
     menuWaitForAnyButton();
 }
 
@@ -44,6 +59,7 @@ void viewPartitionZero() {
         menuWaitForAnyButton();
         return;
     }
+    fsdevUnmountDevice("test"); // unmount it if it exists
     if (fsdevMountDevice("test", fs) == -1) {
         printf("fsdevMountDevice failed\n");
         menuWaitForAnyButton();
@@ -54,7 +70,8 @@ void viewPartitionZero() {
 
 
 MenuItem mainMenu[] = {
-        { .text = "Raw Dump Partition 0 (SysUpdate)", .callback = dumpPartitionZero },
+        { .text = "Dump Partition 0 (SysUpdate)", .callback = dumpPartitionZeroData },
+        { .text = "Raw Dump Partition 0 (SysUpdate)", .callback = dumpPartitionZeroRaw },
         { .text = "View files on Game Card (SysUpdate)", .callback = viewPartitionZero },
         { .text = NULL }
 };
