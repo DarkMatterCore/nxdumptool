@@ -2,9 +2,10 @@
 
 #include <switch.h>
 
-typedef struct {
-    const char* text;
-    void (*callback)();
+typedef struct _MenuItem {
+    char* text;
+    void (*callback)(struct _MenuItem* item);
+    void* userdata;
 } MenuItem;
 
 void menuPrint();

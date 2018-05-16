@@ -41,7 +41,7 @@ int menuHandleInput() {
     bool needsRefresh = false;
     u64 keys = hidKeysDown(CONTROLLER_P1_AUTO);
     if ((keys & KEY_A) && menuCurrent[menuSelIndex].callback != NULL) {
-        menuCurrent[menuSelIndex].callback();
+        menuCurrent[menuSelIndex].callback(&menuCurrent[menuSelIndex]);
         return -1;
     }
     if ((keys & KEY_B) && menuExitCallback != NULL) {
