@@ -127,7 +127,8 @@ int main(int argc, char **argv) {
 
         u64 kDown = hidKeysDown(CONTROLLER_P1_AUTO);
         if (kDown & KEY_PLUS) break;
-        if (btnWait && kDown) {
+        if (btnWait && (kDown & (KEY_A | KEY_B | KEY_X | KEY_Y | KEY_L | KEY_R | KEY_ZL | KEY_ZR | KEY_MINUS |
+                KEY_DLEFT | KEY_DRIGHT | KEY_DUP | KEY_DDOWN))) {
             shouldWaitForAnyButton = false;
             menuPrint();
         }
