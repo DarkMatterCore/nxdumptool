@@ -17,6 +17,7 @@ Thanks to
 --------------
 
 * MCMrARM, for creating the original application.
+* RSDuck, for their vba-next-switch port. It's UI menu code was taken as a basis for this application.
 * Foen, for giving me some pretty good hints about how to use the NCM service.
 * Yellows8, for helping me fix a silly bug in my implementation of some NCM service IPC calls.
 * The folks from ReSwitched, for working towards the creation of a good homebrew ecosystem.
