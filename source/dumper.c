@@ -380,7 +380,7 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 										
 										if (new_file_chunk_size > 0)
 										{
-											if (fwrite(buf, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
+											if (fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
 											{
 												snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write chunk to offset 0x%016lX", fileOffset + old_file_chunk_size);
 												uiDrawString(strbuf, 0, (breaks + 7) * 8, 255, 0, 0);
@@ -517,7 +517,7 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 							
 							if (new_file_chunk_size > 0)
 							{
-								if (fwrite(buf, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
+								if (fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
 								{
 									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write chunk to offset 0x%016lX", fileOffset + old_file_chunk_size);
 									uiDrawString(strbuf, 0, (breaks + 7) * 8, 255, 0, 0);
@@ -770,7 +770,7 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 									
 									if (new_file_chunk_size > 0)
 									{
-										if (fwrite(buf, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
+										if (fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
 										{
 											snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write chunk to offset 0x%016lX", off + old_file_chunk_size);
 											uiDrawString(strbuf, 0, (breaks + 4) * 8, 255, 0, 0);
@@ -989,11 +989,14 @@ bool copyFile(const char* source, const char* dest, bool doSplitting)
 								break;
 							}
 							
-							if (fwrite(buf, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
+							if (new_file_chunk_size > 0)
 							{
-								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write chunk to offset 0x%016lX", off + old_file_chunk_size);
-								uiDrawString(strbuf, 0, (breaks + 7) * 8, 255, 0, 0);
-								break;
+								if (fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
+								{
+									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write chunk to offset 0x%016lX", off + old_file_chunk_size);
+									uiDrawString(strbuf, 0, (breaks + 7) * 8, 255, 0, 0);
+									break;
+								}
 							}
 						} else {
 							if (fwrite(buf, 1, n, outFile) != n)

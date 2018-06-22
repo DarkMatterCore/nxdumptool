@@ -25,6 +25,10 @@ Thanks to
 Changelog
 --------------
 
+**v1.0.2:**
+
+* Fixed a silly bug in the file splitting code.
+
 **v1.0.1:**
 
 * Minor UI fixes and tweaks.

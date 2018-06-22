@@ -33,9 +33,9 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 VERSION_MAJOR := 1
 VERSION_MINOR := 0
-VERSION_MICRO := 1
+VERSION_MICRO := 2
 
-APP_TITLE	:=	Game Card Dump Tool
+APP_TITLE	:=	gcdumptool
 APP_AUTHOR	:=	MCMrARM, DarkMatterCore
 APP_VERSION	:= ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_MICRO}
 
