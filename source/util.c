@@ -61,21 +61,21 @@ bool getGameCardTitleID(u64 *titleID)
 					*titleID = appList->meta_record.titleID;
 					success = true;
 				} else {
-					uiStatusMsg("MetaDatabaseListApplication failed! (0x%08x)", result);
+					uiStatusMsg("getGameCardTitleID: MetaDatabaseListApplication failed! (0x%08x)", result);
 				}
 			} else {
-				uiStatusMsg("GetContentMetaDatabase failed! (0x%08x)", result);
+				uiStatusMsg("getGameCardTitleID: GetContentMetaDatabase failed! (0x%08x)", result);
 			}
 		} else {
-			uiStatusMsg("OpenContentMetaDatabase failed! (0x%08x)", result);
+			uiStatusMsg("getGameCardTitleID: OpenContentMetaDatabase failed! (0x%08x)", result);
 		}
 		
 		// Seems to cause problems
-		//if (R_FAILED(result = ncmCloseContentMetaDatabase(FsStorageId_GameCard))) uiStatusMsg("CloseContentMetaDatabase failed! (0x%08x)", result);
+		//if (R_FAILED(result = ncmCloseContentMetaDatabase(FsStorageId_GameCard))) uiStatusMsg("getGameCardTitleID: CloseContentMetaDatabase failed! (0x%08x)", result);
 		
 		free(appList);
 	} else {
-		uiStatusMsg("Unable to allocate memory for the NCM service operations.");
+		uiStatusMsg("getGameCardTitleID: Unable to allocate memory for the NCM service operations.");
 	}
 	
 	return success;
@@ -103,25 +103,23 @@ bool getGameCardControlNacp(u64 titleID, char *nameBuf, int nameBufSize, char *a
 				if (R_SUCCEEDED(result = nacpGetLanguageEntry(&buf->nacp, &langentry)))
 				{
 					strncpy(nameBuf, langentry->name, nameBufSize - 1);
-					
 					strncpy(authorBuf, langentry->author, authorBufSize - 1);
-					
 					strncpy(versionBuf, buf->nacp.version, versionBufSize - 1);
 					
 					success = true;
 				} else {
-					uiStatusMsg("GetLanguageEntry failed! (0x%08x)", result);
+					uiStatusMsg("getGameCardControlNacp: GetLanguageEntry failed! (0x%08x)", result);
 				}
 			} else {
-				uiStatusMsg("Control.nacp buffer size (%u bytes) is too small! Expected: %u bytes", outsize, sizeof(buf->nacp));
+				uiStatusMsg("getGameCardControlNacp: Control.nacp buffer size (%u bytes) is too small! Expected: %u bytes", outsize, sizeof(buf->nacp));
 			}
 		} else {
-			uiStatusMsg("GetApplicationControlData failed! (0x%08x)", result);
+			uiStatusMsg("getGameCardControlNacp: GetApplicationControlData failed! (0x%08x)", result);
 		}
 		
 		free(buf);
 	} else {
-		uiStatusMsg("Unable to allocate memory for the NS service operations.");
+		uiStatusMsg("getGameCardControlNacp: Unable to allocate memory for the NS service operations.");
 	}
 	
 	return success;
@@ -135,7 +133,7 @@ int getSdCardFreeSpace(u64 *out)
 	rc = statvfs("sdmc:/", &st);
 	if (rc != 0)
 	{
-		uiStatusMsg("Unable to get SD card filesystem stats! statvfs: %d (%s).", errno, strerror(errno));
+		uiStatusMsg("getSdCardFreeSpace: Unable to get SD card filesystem stats! statvfs: %d (%s).", errno, strerror(errno));
 	} else {
 		*out = (u64)(st.f_bsize * st.f_bfree);
 	}

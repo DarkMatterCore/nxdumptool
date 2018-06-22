@@ -49,7 +49,7 @@ static char titlebuf[NAME_BUF_LEN * 2] = {'\0'};
 static const int maxListElements = 45;
 
 static char *filenameBuffer = NULL;
-static char *filenames[FILENAMES_COUNT_MAX];
+static char *filenames[FILENAME_MAX_CNT];
 static int filenamesCount = 0;
 
 static UIState uiState;
@@ -229,13 +229,31 @@ void uiDrawString(const char* string, int x, int y, u8 r, u8 g, u8 b)
 
 void uiStatusMsg(const char* format, ...)
 {
-	statusMessageFadeout = 500;
+	statusMessageFadeout = 1000;
 	va_list args;
 	va_start(args, format);
 	vsnprintf(statusMessage, sizeof(statusMessage) / sizeof(statusMessage[0]), format, args);
 	va_end(args);
 	
 	//printf("Status message: %s\n", statusMessage);
+}
+
+void uiUpdateStatusMsg()
+{
+	if (!strlen(statusMessage) || !statusMessageFadeout) return;
+	
+	int fadeout = (statusMessageFadeout > 255 ? 255 : statusMessageFadeout);
+	uiFill(0, currentFBHeight - 12, currentFBWidth, 8, 50, 50, 50);
+	uiDrawString(statusMessage, 4, currentFBHeight - 12, fadeout, fadeout, fadeout);
+	statusMessageFadeout -= 4;
+}
+
+void uiPleaseWait()
+{
+	breaks = headlineCnt;
+	uiDrawString("Please wait...", 0, breaks * 8, 115, 115, 255);
+	syncDisplay();
+	delay(2);
 }
 
 void uiUpdateFreeSpace()
@@ -255,7 +273,7 @@ void uiInit()
 	scroll = 0;
 	headlineCnt = 0;
 	
-	filenameBuffer = (char*)malloc(FILENAMEBUFFER_SIZE);
+	filenameBuffer = (char*)malloc(FILENAME_BUFFER_SIZE);
 	
 	int i, headlineLen = strlen(appHeadline);
 	for(i = 0; i < headlineLen; i++)
@@ -292,11 +310,17 @@ void uiClearScreen()
 	uiFill(0, 0, currentFBWidth, currentFBHeight, 50, 50, 50);
 }
 
+void uiPrintHeadline()
+{
+	uiClearScreen();
+	uiDrawString(appHeadline, 0, 0, 255, 255, 255);
+}
+
 static void enterDirectory(const char *path)
 {
 	snprintf(currentDirectory, sizeof(currentDirectory) / sizeof(currentDirectory[0]), "%s", path);
 	
-	filenamesCount = FILENAMES_COUNT_MAX;
+	filenamesCount = FILENAME_MAX_CNT;
 	getDirectoryContents(filenameBuffer, &filenames[0], &filenamesCount, currentDirectory, (!strcmp(currentDirectory, "view:/") && strlen(currentDirectory) == 6));
 	
 	cursor = 0;
@@ -306,9 +330,6 @@ static void enterDirectory(const char *path)
 UIResult uiLoop(u32 keysDown)
 {
 	UIResult res = resultNone;
-	
-	uiClearScreen();
-	uiDrawString(appHeadline, 0, 0, 255, 255, 255);
 	
 	int i;
 	breaks = headlineCnt;
@@ -326,7 +347,7 @@ UIResult uiLoop(u32 keysDown)
 		
 		if (uiState != stateViewGameCardFsBrowser)
 		{
-			if (gameCardInserted && hfs0_header != NULL && (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT || hfs0_partition_cnt == GAMECARD_TYPE2_PARTITION_CNT))
+			if (gameCardInserted && hfs0_header != NULL && (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT || hfs0_partition_cnt == GAMECARD_TYPE2_PARTITION_CNT) && gameCardTitleID != 0)
 			{
 				uiDrawString("Game Card is inserted!", 0, breaks * 8, 0, 255, 0);
 				breaks += 2;
@@ -372,8 +393,13 @@ UIResult uiLoop(u32 keysDown)
 				{
 					if (hfs0_header != NULL)
 					{
-						snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Error: unknown root HFS0 header partition count! (%u)", hfs0_partition_cnt);
-						uiDrawString(titlebuf, 0, breaks * 8, 255, 0, 0);
+						if (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT || hfs0_partition_cnt == GAMECARD_TYPE2_PARTITION_CNT)
+						{
+							uiDrawString("Error: unable to retrieve the game card Title ID!", 0, breaks * 8, 255, 0, 0);
+						} else {
+							snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Error: unknown root HFS0 header partition count! (%u)", hfs0_partition_cnt);
+							uiDrawString(titlebuf, 0, breaks * 8, 255, 0, 0);
+						}
 					} else {
 						uiDrawString("Error: unable to get root HFS0 header data!", 0, breaks * 8, 255, 0, 0);
 					}
@@ -387,7 +413,7 @@ UIResult uiLoop(u32 keysDown)
 			breaks += 2;
 		}
 		
-		if (gameCardInserted && hfs0_header != NULL && (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT || hfs0_partition_cnt == GAMECARD_TYPE2_PARTITION_CNT))
+		if (gameCardInserted && hfs0_header != NULL && (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT || hfs0_partition_cnt == GAMECARD_TYPE2_PARTITION_CNT) && gameCardTitleID != 0)
 		{
 			const char **menu = NULL;
 			int menuItemsCount;
@@ -719,12 +745,7 @@ UIResult uiLoop(u32 keysDown)
 		res = resultShowMainMenu;
 	}
 	
-	if (statusMessageFadeout > 0)
-	{
-		int fadeout = (statusMessageFadeout > 255 ? 255 : statusMessageFadeout);
-		uiDrawString(statusMessage, 4, currentFBHeight - 12, fadeout, fadeout, fadeout);
-		statusMessageFadeout -= 4;
-	}
-
+	uiUpdateStatusMsg();
+	
 	return res;
 }

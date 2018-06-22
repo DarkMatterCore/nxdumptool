@@ -33,7 +33,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 VERSION_MAJOR := 1
 VERSION_MINOR := 0
-VERSION_MICRO := 0
+VERSION_MICRO := 1
 
 APP_TITLE	:=	Game Card Dump Tool
 APP_AUTHOR	:=	MCMrARM, DarkMatterCore

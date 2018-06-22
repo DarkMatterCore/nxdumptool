@@ -45,38 +45,33 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 	Result result;
 	FsStorage gameCardStorage;
 	
-	//breaks = 0;
-	//uiClearScreen();
-	
 	hfs0_partition_cnt = 0;
 	
 	workaroundPartitionZeroAccess(fsOperator);
 	
 	if (R_FAILED(result = fsDeviceOperatorGetGameCardHandle(fsOperator, &handle)))
 	{
-		//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle failed! (0x%08X)", result);
-		//uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+		uiStatusMsg("getRootHfs0Header: GetGameCardHandle failed! (0x%08X)", result);
 		return false;
 	}
 	
 	if (R_FAILED(result = fsOpenGameCardStorage(&gameCardStorage, handle, 0)))
 	{
-		//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage failed! (0x%08X)", result);
-		//uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+		uiStatusMsg("getRootHfs0Header: OpenGameCardStorage failed! (0x%08X)", result);
 		return false;
 	}
 	
 	char *gamecard_header = (char*)malloc(GAMECARD_HEADER_SIZE);
 	if (!gamecard_header)
 	{
+		uiStatusMsg("getRootHfs0Header: Unable to allocate memory for the gamecard header!");
 		fsStorageClose(&gameCardStorage);
 		return false;
 	}
 	
 	if (R_FAILED(result = fsStorageRead(&gameCardStorage, 0, gamecard_header, GAMECARD_HEADER_SIZE)))
 	{
-		//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed! (0x%08X)", result);
-		//uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+		uiStatusMsg("getRootHfs0Header: StorageRead failed to read %u-byte chunk from offset 0x%016lX! (0x%08X)", GAMECARD_HEADER_SIZE, 0, result);
 		
 		free(gamecard_header);
 		
@@ -108,8 +103,7 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 			gameCardSize = GAMECARD_SIZE_32GiB;
 			break;
 		default:
-			//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Invalid game card size value: 0x%02X", cardSize);
-			//uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+			uiStatusMsg("getRootHfs0Header: Invalid game card size value: 0x%02X", cardSize);
 			
 			free(gamecard_header);
 			
@@ -125,19 +119,16 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 	
 	free(gamecard_header);
 	
-	/*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Root HFS0 offset: 0x%016lX", hfs0_offset);
-	uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-	breaks++;
+	/*uiStatusMsg("getRootHfs0Header: Root HFS0 offset: 0x%016lX", hfs0_offset);
+	delay(1);
 	
-	snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Root HFS0 size: 0x%016lX", hfs0_size);
-	uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-	breaks++;*/
+	uiStatusMsg("getRootHfs0Header: Root HFS0 size: 0x%016lX", hfs0_size);
+	delay(1);*/
 	
 	hfs0_header = (char*)malloc(hfs0_size);
 	if (!hfs0_header)
 	{
-		//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to allocate buffer!");
-		//uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+		uiStatusMsg("getRootHfs0Header: Unable to allocate memory for the root HFS0 header!");
 		
 		gameCardSize = 0;
 		memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
@@ -151,8 +142,7 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 	
 	if (R_FAILED(result = fsStorageRead(&gameCardStorage, hfs0_offset, hfs0_header, hfs0_size)))
 	{
-		//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed! (0x%08X)", result);
-		//uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+		uiStatusMsg("getRootHfs0Header: StorageRead failed to read %u-byte chunk from offset 0x%016lX! (0x%08X)", hfs0_size, hfs0_offset, result);
 		
 		gameCardSize = 0;
 		memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
@@ -171,8 +161,7 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 	
 	if (magic != HFS0_MAGIC)
 	{
-		//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Magic word mismatch! 0x%08X != 0x%08X", magic, HFS0_MAGIC);
-		//uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+		uiStatusMsg("getRootHfs0Header: Magic word mismatch! 0x%08X != 0x%08X", magic, HFS0_MAGIC);
 		
 		gameCardSize = 0;
 		memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
@@ -341,8 +330,6 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping partition #%u...", partition);
 						uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
 						
-						syncDisplay();
-						
 						workaroundPartitionZeroAccess(fsOperator);
 						
 						if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(fsOperator, &handle)))
@@ -493,8 +480,6 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 					
 					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Writing 0xFF padding...");
 					uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-					
-					syncDisplay();
 					
 					for(partitionOffset = 0; partitionOffset < paddingSize; partitionOffset += n, fileOffset += n)
 					{
@@ -945,8 +930,6 @@ bool copyFile(const char* source, const char* dest, bool doSplitting)
 	
 	snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying \"%s\"...", source);
 	uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-	
-	syncDisplay();
 	
 	if ((destLen + 1) < NAME_BUF_LEN)
 	{

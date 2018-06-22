@@ -50,6 +50,8 @@ int main(int argc, char **argv)
 				{
 					currentFB = gfxGetFramebuffer(&currentFBWidth, &currentFBHeight);
 					
+					uiPrintHeadline();
+					
 					gameCardInserted = isGameCardInserted(&fsOperatorInstance);
 					
 					if (gameCardInserted)
@@ -57,13 +59,14 @@ int main(int argc, char **argv)
 						if (hfs0_header == NULL)
 						{
 							// Don't access the gamecard immediately to avoid conflicts with the fs-srv, ncm and ns services
-							delay(1);
+							uiPleaseWait();
 							
 							getRootHfs0Header(&fsOperatorInstance);
-							
 							getGameCardTitleID(&gameCardTitleID);
-							
 							getGameCardControlNacp(gameCardTitleID, gameCardName, sizeof(gameCardName), gameCardAuthor, sizeof(gameCardAuthor), gameCardVersion, sizeof(gameCardVersion));
+							
+							uiPrintHeadline();
+							uiUpdateStatusMsg();
 						}
 					} else {
 						if (hfs0_header != NULL)
