@@ -4,7 +4,8 @@ Nintendo Switch Game Card Dump Tool
 Main features
 --------------
 
-* Generates full XCI cartridge dumps (with optional certificate removal). All dumps are padded with 0xFF to match the full game card size.
+* Generates XCI cartridge dumps (with optional certificate removal and optional 0xFF padding to match the full game card size).
+* CRC32 checksum calculation for XCI dumps.
 * Precise HFS0 raw partition dumping (using the root HFS0 header from the game card).
 * Partition filesystem data dumping.
 * Partition filesystem browser (with manual file dump support).
@@ -20,10 +21,16 @@ Thanks to
 * RSDuck, for their vba-next-switch port. It's UI menu code was taken as a basis for this application.
 * Foen, for giving me some pretty good hints about how to use the NCM service.
 * Yellows8, for helping me fix a silly bug in my implementation of some NCM service IPC calls.
+* Björn Samuelsson, for his public domain CRC32 checksum calculation for C (crc32_fast.c).
 * The folks from ReSwitched, for working towards the creation of a good homebrew ecosystem.
 
 Changelog
 --------------
+
+**v1.0.3:**
+
+* Made the 0xFF padding feature a configurable option.
+* Added CRC32 checksum calculation for XCI dumps.
 
 **v1.0.2:**
 

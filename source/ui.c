@@ -28,6 +28,8 @@ extern u32 hfs0_partition_cnt;
 extern u64 gameCardTitleID;
 extern char gameCardName[0x201], gameCardAuthor[0x101], gameCardVersion[0x11];
 
+static bool isFat32 = true, dumpCert = false, addPadding = false;
+
 static u32 selectedOption;
 
 static char statusMessage[2048] = {'\0'};
@@ -57,8 +59,8 @@ static UIState uiState;
 static const char *appHeadline = "Nintendo Switch Game Card Dump Tool v" APP_VERSION ".\nOriginal code by MCMrARM.\nAdditional modifications by DarkMatterCore.\n\n";
 static const char *appControls = "[D-Pad / Analog Stick] Move | [A] Select | [B] Back | [+] Exit";
 
-static const char *mainMenuItems[] = { "Raw XCI Dump (Full)", "Raw Partition Dump", "Partition Data Dump", "View Game Card Files", "Dump Game Card Certificate" };
-static const char *xciDumpMenuItems[] = { "Full Dump with Certificate (exFAT)", "Full Dump without Certificate (exFAT)", "Full Dump with Certificate (FAT32 - 2 GiB chunks)", "Full Dump without Certificate (FAT32 - 2 GiB chunks)" };
+static const char *mainMenuItems[] = { "Full XCI Dump", "Raw Partition Dump", "Partition Data Dump", "View Game Card Files", "Dump Game Card Certificate" };
+static const char *xciDumpMenuItems[] = { "Start XCI dump process", "Split output dump (FAT32 support): ", "Dump certificate: ", "Pad output dump to match full game card size: " };
 static const char *partitionDumpType1MenuItems[] = { "Dump Partition 0 (SysUpdate)", "Dump Partition 1 (Normal)", "Dump Partition 2 (Secure)" };
 static const char *partitionDumpType2MenuItems[] = { "Dump Partition 0 (SysUpdate)", "Dump Partition 1 (Logo)", "Dump Partition 2 (Normal)", "Dump Partition 3 (Secure)" };
 static const char *viewGameCardFsType1MenuItems[] = { "View Files from Partition 0 (SysUpdate)", "View Files from Partition 1 (Normal)", "View Files from Partition 2 (Secure)" };
@@ -468,8 +470,8 @@ UIResult uiLoop(u32 keysDown)
 				int scrollAmount = 0;
 				if ((keysDown & KEY_DOWN) || (keysDown & KEY_RSTICK_DOWN) || (keysDown & KEY_LSTICK_DOWN)) scrollAmount = 1;
 				if ((keysDown & KEY_UP) || (keysDown & KEY_RSTICK_UP) || (keysDown & KEY_LSTICK_UP)) scrollAmount = -1;
-				if ((keysDown & KEY_LEFT) || (keysDown & KEY_RSTICK_LEFT) || (keysDown & KEY_LSTICK_LEFT)) scrollAmount = -5;
-				if ((keysDown & KEY_RIGHT) || (keysDown & KEY_RSTICK_RIGHT) || (keysDown & KEY_LSTICK_RIGHT)) scrollAmount = 5;
+				if (uiState != stateXciDumpMenu && ((keysDown & KEY_LEFT) || (keysDown & KEY_RSTICK_LEFT) || (keysDown & KEY_LSTICK_LEFT))) scrollAmount = -5;
+				if (uiState != stateXciDumpMenu && ((keysDown & KEY_RIGHT) || (keysDown & KEY_RSTICK_RIGHT) || (keysDown & KEY_LSTICK_RIGHT))) scrollAmount = 5;
 				
 				if (scrollAmount > 0)
 				{
@@ -503,9 +505,43 @@ UIResult uiLoop(u32 keysDown)
 					if (i + scroll == cursor)
 					{
 						uiFill(0, (breaks * 8) + (i * 13), currentFBWidth / 2, 13, 33, 34, 39);
-						uiDrawString(menu[j], 0, (breaks * 8) + (i * 13) + 2, 0, 255, 197);		
+						uiDrawString(menu[j], 0, (breaks * 8) + (i * 13) + 2, 0, 255, 197);
 					} else {
 						uiDrawString(menu[j], 0, (breaks * 8) + (i * 13) + 2, color, color, color);
+					}
+					
+					// Print XCI dump menu settings values
+					if (uiState == stateXciDumpMenu && (i == 1 || i == 2 || i == 3))
+					{
+						switch(i)
+						{
+							case 1: // Split output dump (FAT32 support)
+								if (isFat32)
+								{
+									uiDrawString("Yes", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 0, 255, 0);
+								} else {
+									uiDrawString("No", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 255, 0, 0);
+								}
+								break;
+							case 2: // Dump certificate
+								if (dumpCert)
+								{
+									uiDrawString("Yes", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 0, 255, 0);
+								} else {
+									uiDrawString("No", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 255, 0, 0);
+								}
+								break;
+							case 3: // Add padding
+								if (addPadding)
+								{
+									uiDrawString("Yes", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 0, 255, 0);
+								} else {
+									uiDrawString("No", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 255, 0, 0);
+								}
+								break;
+							default:
+								break;
+						}
 					}
 					
 					i++;
@@ -513,115 +549,161 @@ UIResult uiLoop(u32 keysDown)
 					if (i >= maxListElements) break;
 				}
 				
-				// Select
-				if (keysDown & KEY_A)
+				if (uiState == stateXciDumpMenu)
 				{
-					if (uiState == stateMainMenu)
+					// Select
+					if ((keysDown & KEY_A) && cursor == 0)
+					{
+						selectedOption = (u32)cursor;
+						res = resultDumpXci;
+					}
+					
+					// Back
+					if (keysDown & KEY_B) res = resultShowMainMenu;
+					
+					// Change option to false
+					if ((keysDown & KEY_LEFT) || (keysDown & KEY_RSTICK_LEFT) || (keysDown & KEY_LSTICK_LEFT))
 					{
 						switch(cursor)
 						{
-							case 0:
-								res = resultShowXciDumpMenu;
+							case 1: // Split output dump (FAT32 support)
+								isFat32 = false;
 								break;
-							case 1:
-								res = resultShowRawPartitionDumpMenu;
+							case 2: // Dump certificate
+								dumpCert = false;
 								break;
-							case 2:
-								res = resultShowPartitionDataDumpMenu;
-								break;
-							case 3:
-								res = resultShowViewGameCardFsMenu;
-								break;
-							case 4:
-								res = resultDumpGameCardCertificate;
+							case 3: // Add padding
+								addPadding = false;
 								break;
 							default:
 								break;
 						}
-					} else
-					if (uiState == stateXciDumpMenu)
-					{
-						selectedOption = (u32)cursor;
-						res = resultDumpXci;
-					} else
-					if (uiState == stateRawPartitionDumpMenu)
-					{
-						selectedOption = (u32)cursor;
-						res = resultDumpRawPartition;
-					} else
-					if (uiState == statePartitionDataDumpMenu)
-					{
-						selectedOption = (u32)cursor;
-						res = resultDumpPartitionData;
-					} else
-					if (uiState == stateViewGameCardFsMenu)
-					{
-						selectedOption = (u32)cursor;
-						res = resultShowViewGameCardFsGetList;
-					} else
-					if (uiState == stateViewGameCardFsBrowser)
-					{
-						char *selectedPath = (char*)malloc(strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2);
-						memset(selectedPath, 0, strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2);
-						
-						if (strlen(filenames[cursor]) == 2 && !strcmp(filenames[cursor], ".."))
-						{
-							for(i = (strlen(currentDirectory) - 1); i >= 0; i--)
-							{
-								if (currentDirectory[i] == '/')
-								{
-									strncpy(selectedPath, currentDirectory, i);
-									selectedPath[i] = '\0';
-									break;
-								}
-							}
-						} else {
-							snprintf(selectedPath, strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2, "%s/%s", currentDirectory, filenames[cursor]);
-						}
-						
-						if (isDirectory(selectedPath))
-						{
-							enterDirectory(selectedPath);
-						} else {
-							snprintf(fileCopyPath, sizeof(fileCopyPath) / sizeof(fileCopyPath[0]), "%s", selectedPath);
-							res = resultViewGameCardFsBrowserCopyFile;
-						}
-						
-						free(selectedPath);
 					}
-				}
-				
-				// Back
-				if (keysDown & KEY_B)
-				{
-					if (uiState == stateXciDumpMenu || uiState == stateRawPartitionDumpMenu || uiState == statePartitionDataDumpMenu || uiState == stateViewGameCardFsMenu)
+					
+					// Change option to true
+					if ((keysDown & KEY_RIGHT) || (keysDown & KEY_RSTICK_RIGHT) || (keysDown & KEY_LSTICK_RIGHT))
 					{
-						res = resultShowMainMenu;
-					} else
-					if (uiState == stateViewGameCardFsBrowser)
-					{
-						if (!strcmp(currentDirectory, "view:/") && strlen(currentDirectory) == 6)
+						switch(cursor)
 						{
-							fsdevUnmountDevice("view");
-							
-							res = resultShowViewGameCardFsMenu;
-						} else {
-							char *selectedPath = (char*)malloc(strlen(currentDirectory) + 1);
-							memset(selectedPath, 0, strlen(currentDirectory) + 1);
-							
-							for(i = (strlen(currentDirectory) - 1); i >= 0; i--)
+							case 1: // Split output dump (FAT32 support)
+								isFat32 = true;
+								break;
+							case 2: // Dump certificate
+								dumpCert = true;
+								break;
+							case 3: // Add padding
+								addPadding = true;
+								break;
+							default:
+								break;
+						}
+					}
+				} else {
+					// Select
+					if (keysDown & KEY_A)
+					{
+						if (uiState == stateMainMenu)
+						{
+							switch(cursor)
 							{
-								if (currentDirectory[i] == '/')
-								{
-									strncpy(selectedPath, currentDirectory, i);
-									selectedPath[i] = '\0';
+								case 0:
+									res = resultShowXciDumpMenu;
 									break;
+								case 1:
+									res = resultShowRawPartitionDumpMenu;
+									break;
+								case 2:
+									res = resultShowPartitionDataDumpMenu;
+									break;
+								case 3:
+									res = resultShowViewGameCardFsMenu;
+									break;
+								case 4:
+									res = resultDumpGameCardCertificate;
+									break;
+								default:
+									break;
+							}
+						} else
+						if (uiState == stateRawPartitionDumpMenu)
+						{
+							selectedOption = (u32)cursor;
+							res = resultDumpRawPartition;
+						} else
+						if (uiState == statePartitionDataDumpMenu)
+						{
+							selectedOption = (u32)cursor;
+							res = resultDumpPartitionData;
+						} else
+						if (uiState == stateViewGameCardFsMenu)
+						{
+							selectedOption = (u32)cursor;
+							res = resultShowViewGameCardFsGetList;
+						} else
+						if (uiState == stateViewGameCardFsBrowser)
+						{
+							char *selectedPath = (char*)malloc(strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2);
+							memset(selectedPath, 0, strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2);
+							
+							if (strlen(filenames[cursor]) == 2 && !strcmp(filenames[cursor], ".."))
+							{
+								for(i = (strlen(currentDirectory) - 1); i >= 0; i--)
+								{
+									if (currentDirectory[i] == '/')
+									{
+										strncpy(selectedPath, currentDirectory, i);
+										selectedPath[i] = '\0';
+										break;
+									}
 								}
+							} else {
+								snprintf(selectedPath, strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2, "%s/%s", currentDirectory, filenames[cursor]);
 							}
 							
-							if (isDirectory(selectedPath)) enterDirectory(selectedPath);
+							if (isDirectory(selectedPath))
+							{
+								enterDirectory(selectedPath);
+							} else {
+								snprintf(fileCopyPath, sizeof(fileCopyPath) / sizeof(fileCopyPath[0]), "%s", selectedPath);
+								res = resultViewGameCardFsBrowserCopyFile;
+							}
 							
 							free(selectedPath);
+						}
+					}
+					
+					// Back
+					if (keysDown & KEY_B)
+					{
+						if (uiState == stateRawPartitionDumpMenu || uiState == statePartitionDataDumpMenu || uiState == stateViewGameCardFsMenu)
+						{
+							res = resultShowMainMenu;
+						} else
+						if (uiState == stateViewGameCardFsBrowser)
+						{
+							if (!strcmp(currentDirectory, "view:/") && strlen(currentDirectory) == 6)
+							{
+								fsdevUnmountDevice("view");
+								
+								res = resultShowViewGameCardFsMenu;
+							} else {
+								char *selectedPath = (char*)malloc(strlen(currentDirectory) + 1);
+								memset(selectedPath, 0, strlen(currentDirectory) + 1);
+								
+								for(i = (strlen(currentDirectory) - 1); i >= 0; i--)
+								{
+									if (currentDirectory[i] == '/')
+									{
+										strncpy(selectedPath, currentDirectory, i);
+										selectedPath[i] = '\0';
+										break;
+									}
+								}
+								
+								if (isDirectory(selectedPath)) enterDirectory(selectedPath);
+								
+								free(selectedPath);
+							}
 						}
 					}
 				}
@@ -630,13 +712,22 @@ UIResult uiLoop(u32 keysDown)
 	} else
 	if (uiState == stateDumpXci)
 	{
-		uiDrawString(xciDumpMenuItems[selectedOption], 0, breaks * 8, 115, 115, 255);
+		uiDrawString(mainMenuItems[0], 0, breaks * 8, 115, 115, 255);
+		breaks++;
+		
+		snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "%s%s", xciDumpMenuItems[1], (isFat32 ? "Yes" : "No"));
+		uiDrawString(titlebuf, 0, breaks * 8, 115, 115, 255);
+		breaks++;
+		
+		snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "%s%s", xciDumpMenuItems[2], (dumpCert ? "Yes" : "No"));
+		uiDrawString(titlebuf, 0, breaks * 8, 115, 115, 255);
+		breaks++;
+		
+		snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "%s%s", xciDumpMenuItems[3], (addPadding ? "Yes" : "No"));
+		uiDrawString(titlebuf, 0, breaks * 8, 115, 115, 255);
 		breaks += 2;
 		
-		bool isFat32 = (selectedOption == 2 || selectedOption == 3);
-		bool dumpCert = (selectedOption == 0 || selectedOption == 2);
-		
-		dumpGameCartridge(&fsOperatorInstance, isFat32, dumpCert);
+		dumpGameCartridge(&fsOperatorInstance, isFat32, dumpCert, addPadding);
 		
 		waitForButtonPress();
 		

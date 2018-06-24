@@ -48,7 +48,7 @@ typedef struct
 void workaroundPartitionZeroAccess(FsDeviceOperator* fsOperator);
 bool getRootHfs0Header(FsDeviceOperator* fsOperator);
 bool getHsf0PartitionDetails(u32 partition, u64 *out_offset, u64 *out_size);
-bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert);
+bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert, bool addPadding);
 bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitting);
 bool openPartitionFs(FsFileSystem* ret, FsDeviceOperator* fsOperator, u32 partition);
 bool copyFile(const char* source, const char* dest, bool doSplitting);

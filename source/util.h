@@ -5,7 +5,7 @@
 
 #include <switch.h>
 
-#define APP_VERSION "1.0.2"
+#define APP_VERSION "1.0.3"
 #define NAME_BUF_LEN 4096
 
 bool isGameCardInserted(FsDeviceOperator* o);
