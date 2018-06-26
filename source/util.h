@@ -5,7 +5,7 @@
 
 #include <switch.h>
 
-#define APP_VERSION "1.0.3"
+#define APP_VERSION "1.0.4"
 #define NAME_BUF_LEN 4096
 
 bool isGameCardInserted(FsDeviceOperator* o);
@@ -31,5 +31,9 @@ bool isDirectory(char *path);
 void addString(char **filenames, int *filenamesCount, char **nextFilename, const char *string);
 
 void getDirectoryContents(char *filenameBuffer, char **filenames, int *filenamesCount, const char *directory, bool skipParent);
+
+bool gameCardDumpNSWDBCheck(u32 crc, char *releaseName, int bufsize);
+
+char *RemoveIllegalCharacters(char *name);
 
 #endif

@@ -5,6 +5,7 @@
 #include <limits.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <math.h>
 
 #include "crc32_fast.h"
 #include "dumper.h"
@@ -18,8 +19,8 @@ extern int breaks;
 
 extern u32 currentFBWidth, currentFBHeight;
 
-extern u64 gameCardSize;
-extern char gameCardSizeStr[32];
+extern u64 gameCardSize, trimmedCardSize;
+extern char gameCardSizeStr[32], trimmedCardSizeStr[32];
 
 extern char *hfs0_header;
 extern u64 hfs0_offset, hfs0_size;
@@ -115,6 +116,10 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 	
 	convertSize(gameCardSize, gameCardSizeStr, sizeof(gameCardSizeStr) / sizeof(gameCardSizeStr[0]));
 	
+	memcpy(&trimmedCardSize, gamecard_header + GAMECARD_DATAEND_ADDR, sizeof(u64));
+	trimmedCardSize = (GAMECARD_HEADER_SIZE + (trimmedCardSize * MEDIA_UNIT_SIZE));
+	convertSize(trimmedCardSize, trimmedCardSizeStr, sizeof(trimmedCardSizeStr) / sizeof(trimmedCardSizeStr[0]));
+	
 	memcpy(&hfs0_offset, gamecard_header + HFS0_OFFSET_ADDR, sizeof(u64));
 	memcpy(&hfs0_size, gamecard_header + HFS0_SIZE_ADDR, sizeof(u64));
 	
@@ -134,6 +139,9 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 		gameCardSize = 0;
 		memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
 		
+		trimmedCardSize = 0;
+		memset(trimmedCardSizeStr, 0, sizeof(trimmedCardSizeStr));
+		
 		hfs0_offset = hfs0_size = 0;
 		
 		fsStorageClose(&gameCardStorage);
@@ -147,6 +155,9 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 		
 		gameCardSize = 0;
 		memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
+		
+		trimmedCardSize = 0;
+		memset(trimmedCardSizeStr, 0, sizeof(trimmedCardSizeStr));
 		
 		free(hfs0_header);
 		hfs0_header = NULL;
@@ -166,6 +177,9 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 		
 		gameCardSize = 0;
 		memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
+		
+		trimmedCardSize = 0;
+		memset(trimmedCardSizeStr, 0, sizeof(trimmedCardSizeStr));
 		
 		free(hfs0_header);
 		hfs0_header = NULL;
@@ -223,11 +237,11 @@ bool getHsf0PartitionDetails(u32 partition, u64 *out_offset, u64 *out_size)
 	return true;
 }
 
-bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert, bool addPadding)
+bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert, bool trimDump, bool calcCrc)
 {
-	u64 partitionOffset = 0, fileOffset = 0, xciDataSize = 0, totalSize = 0, paddingSize = 0, n;
+	u64 partitionOffset = 0, fileOffset = 0, xciDataSize = 0, totalSize = 0, n;
 	u64 partitionSizes[ISTORAGE_PARTITION_CNT];
-	char partitionSizesStr[ISTORAGE_PARTITION_CNT][32] = {'\0'}, xciDataSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'}, totalSizeStr[32] = {'\0'}, paddingSizeStr[32] = {'\0'}, filename[128] = {'\0'}, timeStamp[16] = {'\0'};
+	char partitionSizesStr[ISTORAGE_PARTITION_CNT][32] = {'\0'}, xciDataSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'}, totalSizeStr[32] = {'\0'}, filename[256] = {'\0'}, timeStamp[16] = {'\0'};
 	u32 handle, partition;
 	Result result;
 	FsStorage gameCardStorage;
@@ -235,8 +249,13 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 	FILE *outFile = NULL;
 	char *buf = NULL;
 	u8 splitIndex = 0;
-	int progress = 0;
-	u32 crc = 0;
+	u8 progress = 0;
+	u32 crc1 = 0, crc2 = 0;
+	
+	time_t start, now, remainingTime;
+	struct tm *timeinfo;
+	char etaInfo[32] = {'\0'};
+	double lastSpeed = 0.0, averageSpeed = 0.0;
 	
 	for(partition = 0; partition < ISTORAGE_PARTITION_CNT; partition++)
 	{
@@ -291,25 +310,25 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 		convertSize(xciDataSize, xciDataSizeStr, sizeof(xciDataSizeStr) / sizeof(xciDataSizeStr[0]));
 		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI data size: %s (%lu bytes)", xciDataSizeStr, xciDataSize);
 		uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
+		breaks += 2;
 		
-		if (addPadding)
+		if (trimDump)
 		{
-			totalSize = gameCardSize;
-			snprintf(totalSizeStr, sizeof(totalSizeStr) / sizeof(totalSizeStr[0]), "%s", gameCardSizeStr);
+			totalSize = trimmedCardSize;
+			snprintf(totalSizeStr, sizeof(totalSizeStr) / sizeof(totalSizeStr[0]), "%s", trimmedCardSizeStr);
 			
-			paddingSize = (totalSize - xciDataSize);
-			convertSize(paddingSize, paddingSizeStr, sizeof(paddingSizeStr) / sizeof(paddingSizeStr[0]));
+			// Change dump size for the last IStorage partition
+			u64 partitionSizesSum = 0;
+			for(int i = 0; i < (ISTORAGE_PARTITION_CNT - 1); i++) partitionSizesSum += partitionSizes[i];
 			
-			breaks += 2;
-			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "0xFF padding size: %s (%lu bytes)", paddingSizeStr, paddingSize);
-			uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
+			partitionSizes[ISTORAGE_PARTITION_CNT - 1] = (trimmedCardSize - partitionSizesSum);
 		} else {
 			totalSize = xciDataSize;
 			snprintf(totalSizeStr, sizeof(totalSizeStr) / sizeof(totalSizeStr[0]), "%s", xciDataSizeStr);
 		}
 		
-		convertSize(totalSize, totalSizeStr, sizeof(totalSizeStr) / sizeof(totalSizeStr[0]));
-		
+		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output dump size: %s (%lu bytes)", totalSizeStr, totalSize);
+		uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
 		breaks++;
 		
 		if (totalSize <= freeSpace)
@@ -334,6 +353,8 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump procedure started. Writing output to \"%.*s\". Hold B to cancel.", (int)((totalSize > SPLIT_FILE_MIN && isFat32) ? (strlen(filename) - 3) : strlen(filename)), filename);
 					uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
 					breaks += 2;
+					
+					time(&start);
 					
 					for(partition = 0; partition < ISTORAGE_PARTITION_CNT; partition++)
 					{
@@ -366,8 +387,45 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 									// Remove game card certificate
 									if (fileOffset == 0 && !dumpCert) memset(buf + CERT_OFFSET, 0xFF, CERT_SIZE);
 									
-									// Update CRC32
-									crc32(buf, n, &crc);
+									if (calcCrc)
+									{
+										if (!trimDump)
+										{
+											if (dumpCert)
+											{
+												if (fileOffset == 0)
+												{
+													// Update CRC32 (with gamecard certificate)
+													crc32(buf, n, &crc1);
+													
+													// Backup gamecard certificate to an array
+													char tmpCert[CERT_SIZE] = {'\0'};
+													memcpy(tmpCert, buf + CERT_OFFSET, CERT_SIZE);
+													
+													// Remove gamecard certificate from buffer
+													memset(buf + CERT_OFFSET, 0xFF, CERT_SIZE);
+													
+													// Update CRC32 (without gamecard certificate)
+													crc32(buf, n, &crc2);
+													
+													// Restore gamecard certificate to buffer
+													memcpy(buf + CERT_OFFSET, tmpCert, CERT_SIZE);
+												} else {
+													// Update CRC32 (with gamecard certificate)
+													crc32(buf, n, &crc1);
+													
+													// Update CRC32 (without gamecard certificate)
+													crc32(buf, n, &crc2);
+												}
+											} else {
+												// Update CRC32
+												crc32(buf, n, &crc2);
+											}
+										} else {
+											// Update CRC32
+											crc32(buf, n, &crc1);
+										}
+									}
 									
 									if (totalSize > SPLIT_FILE_MIN && isFat32 && (fileOffset + n) < totalSize && (fileOffset + n) >= ((splitIndex + 1) * SPLIT_FILE_2GiB))
 									{
@@ -419,16 +477,29 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 										}
 									}
 									
-									progress = (int)(((fileOffset + n) * 100) / totalSize);
+									time(&now);
+									
+									lastSpeed = ((double)((fileOffset + n) / DUMP_BUFFER_SIZE) / difftime(now, start));
+									averageSpeed = ((SMOOTHING_FACTOR * lastSpeed) + ((1 - SMOOTHING_FACTOR) * averageSpeed));
+									if (!isnormal(averageSpeed)) averageSpeed = 0.00; // Very low values
+									
+									remainingTime = (time_t)((double)((totalSize - (fileOffset + n)) / DUMP_BUFFER_SIZE) / averageSpeed);
+									timeinfo = localtime(&remainingTime);
+									strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
+									
+									progress = (u8)(((fileOffset + n) * 100) / totalSize);
+									
+									uiFill(0, ((breaks + 3) * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
+									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%.2lf MiB/s [ETA: %s]", averageSpeed, etaInfo);
+									uiDrawString(strbuf, (currentFBWidth / 4) - 8 - (strlen(strbuf) * 8), ((breaks + 3) * 8) + 4, 255, 255, 255);
 									
 									uiFill(currentFBWidth / 4, (breaks + 3) * 8, currentFBWidth / 2, 16, 0, 0, 0);
 									uiFill(currentFBWidth / 4, (breaks + 3) * 8, (((fileOffset + n) * (currentFBWidth / 2)) / totalSize), 16, 0, 255, 0);
 									
+									uiFill(currentFBWidth - (currentFBWidth / 4) + 8, ((breaks + 3) * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
 									convertSize(fileOffset + n, curSizeStr, sizeof(curSizeStr) / sizeof(curSizeStr[0]));
-									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%d%% [%s / %s]", progress, curSizeStr, totalSizeStr);
-									
-									uiFill((currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, currentFBWidth - ((currentFBWidth / 4) + (currentFBWidth / 2) + 8), 8, 50, 50, 50);
-									uiDrawString(strbuf, (currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
+									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%u%% [%s / %s]", progress, curSizeStr, totalSizeStr);
+									uiDrawString(strbuf, currentFBWidth - (currentFBWidth / 4) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
 									
 									syncDisplay();
 									
@@ -446,19 +517,18 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 									}
 								}
 								
-								if (fileOffset >= xciDataSize) success = true;
+								if (fileOffset >= totalSize) success = true;
 								
 								// Support empty files
 								if (!partitionSizes[partition])
 								{
-									uiFill(currentFBWidth / 4, (breaks + 3) * 8, currentFBWidth / 2, 16, 0, 255, 0);
 									uiFill(currentFBWidth / 4, (breaks + 3) * 8, ((fileOffset * (currentFBWidth / 2)) / totalSize), 16, 0, 255, 0);
 									
 									convertSize(fileOffset, curSizeStr, sizeof(curSizeStr) / sizeof(curSizeStr[0]));
-									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%d%% [%s / %s]", progress, curSizeStr, totalSizeStr);
+									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%u%% [%s / %s]", progress, curSizeStr, totalSizeStr);
 									
-									uiFill((currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, currentFBWidth - ((currentFBWidth / 4) + (currentFBWidth / 2) + 8), 8, 50, 50, 50);
-									uiDrawString(strbuf, (currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
+									uiFill(currentFBWidth - (currentFBWidth / 4) + 8, ((breaks + 3) * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
+									uiDrawString(strbuf, currentFBWidth - (currentFBWidth / 4) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
 									
 									syncDisplay();
 								}
@@ -486,136 +556,74 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 						if (!proceed) break;
 					}
 					
-					if (!success) free(buf);
+					free(buf);
 				} else {
 					uiDrawString("Failed to allocate memory for the dump process!", 0, breaks * 8, 255, 0, 0);
 				}
 				
 				if (success)
 				{
-					if (addPadding)
-					{
-						// Add file padding
-						memset(buf, 0xFF, DUMP_BUFFER_SIZE);
-						
-						uiFill(0, breaks * 8, currentFBWidth, 8, 50, 50, 50);
-						uiFill(0, (breaks + 3) * 8, currentFBWidth, 16, 50, 50, 50);
-						
-						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Writing 0xFF padding...");
-						uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-						
-						for(partitionOffset = 0; partitionOffset < paddingSize; partitionOffset += n, fileOffset += n)
-						{
-							if (DUMP_BUFFER_SIZE > (paddingSize - partitionOffset)) n = (paddingSize - partitionOffset);
-							
-							// Update CRC32
-							crc32(buf, n, &crc);
-							
-							if (totalSize > SPLIT_FILE_MIN && isFat32 && (fileOffset + n) < totalSize && (fileOffset + n) >= ((splitIndex + 1) * SPLIT_FILE_2GiB))
-							{
-								u64 new_file_chunk_size = ((fileOffset + n) - ((splitIndex + 1) * SPLIT_FILE_2GiB));
-								u64 old_file_chunk_size = (n - new_file_chunk_size);
-								
-								if (old_file_chunk_size > 0)
-								{
-									if (fwrite(buf, 1, old_file_chunk_size, outFile) != old_file_chunk_size)
-									{
-										snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write chunk to offset 0x%016lX", fileOffset);
-										uiDrawString(strbuf, 0, (breaks + 7) * 8, 255, 0, 0);
-										proceed = false;
-										break;
-									}
-								}
-								
-								fclose(outFile);
-								
-								splitIndex++;
-								snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_%s.xci.%02u", gameCardTitleID, timeStamp, splitIndex);
-								
-								outFile = fopen(filename, "wb");
-								if (!outFile)
-								{
-									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
-									uiDrawString(strbuf, 0, (breaks + 7) * 8, 255, 0, 0);
-									proceed = false;
-									break;
-								}
-								
-								if (new_file_chunk_size > 0)
-								{
-									if (fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile) != new_file_chunk_size)
-									{
-										snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write chunk to offset 0x%016lX", fileOffset + old_file_chunk_size);
-										uiDrawString(strbuf, 0, (breaks + 7) * 8, 255, 0, 0);
-										proceed = false;
-										break;
-									}
-								}
-							} else {
-								if (fwrite(buf, 1, n, outFile) != n)
-								{
-									snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write chunk to offset 0x%016lX", fileOffset);
-									uiDrawString(strbuf, 0, (breaks + 7) * 8, 255, 0, 0);
-									proceed = false;
-									break;
-								}
-							}
-							
-							progress = (int)(((fileOffset + n) * 100) / totalSize);
-							
-							uiFill(currentFBWidth / 4, (breaks + 3) * 8, currentFBWidth / 2, 16, 0, 0, 0);
-							uiFill(currentFBWidth / 4, (breaks + 3) * 8, (((fileOffset + n) * (currentFBWidth / 2)) / totalSize), 16, 0, 255, 0);
-							
-							convertSize(fileOffset + n, curSizeStr, sizeof(curSizeStr) / sizeof(curSizeStr[0]));
-							snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%d%% [%s / %s]", progress, curSizeStr, totalSizeStr);
-							
-							uiFill((currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, currentFBWidth - ((currentFBWidth / 4) + (currentFBWidth / 2) + 8), 8, 50, 50, 50);
-							uiDrawString(strbuf, (currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
-							
-							syncDisplay();
-							
-							if ((fileOffset + n) < totalSize && ((fileOffset / DUMP_BUFFER_SIZE) % 10) == 0)
-							{
-								hidScanInput();
-								
-								u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-								if (keysDown & KEY_B)
-								{
-									uiDrawString("Process canceled", 0, (breaks + 7) * 8, 255, 0, 0);
-									proceed = false;
-									break;
-								}
-							}
-						}
-					}
-					
-					if (outFile) fclose(outFile);
+					fclose(outFile);
 					
 					breaks += 7;
 					
-					if (proceed)
+					now -= start;
+					timeinfo = localtime(&now);
+					strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
+					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", etaInfo);
+					uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
+					
+					if (calcCrc)
 					{
-						uiDrawString("Process successfully completed!", 0, breaks * 8, 0, 255, 0);
 						breaks++;
 						
-						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 hash: %08X", crc);
-						uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
-					} else {
-						success = false;
-						
-						if (totalSize > SPLIT_FILE_MIN && isFat32)
+						if (!trimDump)
 						{
-							for(u8 i = 0; i <= splitIndex; i++)
+							if (dumpCert)
 							{
-								snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_%s.xci.%02u", gameCardTitleID, timeStamp, i);
-								remove(filename);
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum (with certificate): %08X", crc1);
+								uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
+								breaks++;
+								
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum (without certificate): %08X", crc2);
+								uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
+							} else {
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum: %08X", crc2);
+								uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
+							}
+							
+							breaks += 2;
+							uiDrawString("Starting verification process using XML database from nswdb.com...", 0, breaks * 8, 255, 255, 255);
+							breaks++;
+							
+							char releaseName[256] = {'\0'}, newFilename[256] = {'\0'};
+							if (gameCardDumpNSWDBCheck(crc2, releaseName, sizeof(releaseName) / sizeof(releaseName[0])))
+							{
+								if (totalSize > SPLIT_FILE_MIN && isFat32)
+								{
+									for(u8 i = 0; i <= splitIndex; i++)
+									{
+										snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_%s.xci.%02u", gameCardTitleID, timeStamp, i);
+										snprintf(newFilename, sizeof(newFilename) / sizeof(newFilename[0]), "sdmc:/%s.xci.%02u", RemoveIllegalCharacters(releaseName), i);
+										rename(filename, newFilename);
+									}
+								} else {
+									snprintf(newFilename, sizeof(newFilename) / sizeof(newFilename[0]), "sdmc:/%s.xci", RemoveIllegalCharacters(releaseName));
+									rename(filename, newFilename);
+								}
+								
+								breaks++;
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output XCI dump renamed to \"%.*s\"", (int)((totalSize > SPLIT_FILE_MIN && isFat32) ? (strlen(newFilename) - 3) : strlen(newFilename)), newFilename);
+								uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
 							}
 						} else {
-							remove(filename);
+							snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum: %08X", crc1);
+							uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
+							breaks++;
+							
+							uiDrawString("Dump verification disabled (not compatible with trimmed dumps).", 0, breaks * 8, 255, 255, 255);
 						}
 					}
-					
-					free(buf);
 				} else {
 					if (outFile) fclose(outFile);
 					
@@ -653,10 +661,15 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 	char *buf;
 	u64 off, n = DUMP_BUFFER_SIZE;
 	FsStorage gameCardStorage;
-	char totalSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'}, filename[128] = {'\0'}, timeStamp[16] = {'\0'};
-	int progress = 0;
+	char totalSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'}, filename[256] = {'\0'}, timeStamp[16] = {'\0'};
+	u8 progress = 0;
 	FILE *outFile = NULL;
 	u8 splitIndex = 0;
+	
+	time_t start, now, remainingTime;
+	struct tm *timeinfo;
+	char etaInfo[32] = {'\0'};
+	double lastSpeed = 0.0, averageSpeed = 0.0;
 	
 	workaroundPartitionZeroAccess(fsOperator);
 	
@@ -735,6 +748,8 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 							
 							syncDisplay();
 							
+							time(&start);
+							
 							for (off = 0; off < size; off += n)
 							{
 								if (DUMP_BUFFER_SIZE > (size - off)) n = (size - off);
@@ -792,16 +807,29 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 									}
 								}
 								
-								progress = (int)(((off + n) * 100) / size);
+								time(&now);
+								
+								lastSpeed = ((double)((off + n) / DUMP_BUFFER_SIZE) / difftime(now, start));
+								averageSpeed = ((SMOOTHING_FACTOR * lastSpeed) + ((1 - SMOOTHING_FACTOR) * averageSpeed));
+								if (!isnormal(averageSpeed)) averageSpeed = 0.00; // Very low values
+								
+								remainingTime = (time_t)((double)((size - (off + n)) / DUMP_BUFFER_SIZE) / averageSpeed);
+								timeinfo = localtime(&remainingTime);
+								strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
+								
+								progress = (u8)(((off + n) * 100) / size);
+								
+								uiFill(0, (breaks * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%.2lf MiB/s [ETA: %s]", averageSpeed, etaInfo);
+								uiDrawString(strbuf, (currentFBWidth / 4) - 8 - (strlen(strbuf) * 8), (breaks * 8) + 4, 255, 255, 255);
 								
 								uiFill(currentFBWidth / 4, breaks * 8, currentFBWidth / 2, 16, 0, 0, 0);
 								uiFill(currentFBWidth / 4, breaks * 8, (((off + n) * (currentFBWidth / 2)) / size), 16, 0, 255, 0);
 								
+								uiFill(currentFBWidth - (currentFBWidth / 4) + 8, (breaks * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
 								convertSize(off + n, curSizeStr, sizeof(curSizeStr) / sizeof(curSizeStr[0]));
-								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%d%% [%s / %s]", progress, curSizeStr, totalSizeStr);
-								
-								uiFill((currentFBWidth / 4) + (currentFBWidth / 2) + 8, (breaks * 8) + 4, currentFBWidth - ((currentFBWidth / 4) + (currentFBWidth / 2) + 8), 8, 50, 50, 50);
-								uiDrawString(strbuf, (currentFBWidth / 4) + (currentFBWidth / 2) + 8, (breaks * 8) + 4, 255, 255, 255);
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%u%% [%s / %s]", progress, curSizeStr, totalSizeStr);
+								uiDrawString(strbuf, currentFBWidth - (currentFBWidth / 4) + 8, (breaks * 8) + 4, 255, 255, 255);
 								
 								syncDisplay();
 								
@@ -827,15 +855,19 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 								
 								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "100%% [0 B / 0 B]");
 								
-								uiFill((currentFBWidth / 4) + (currentFBWidth / 2) + 8, (breaks * 8) + 4, currentFBWidth - ((currentFBWidth / 4) + (currentFBWidth / 2) + 8), 8, 50, 50, 50);
-								uiDrawString(strbuf, (currentFBWidth / 4) + (currentFBWidth / 2) + 8, (breaks * 8) + 4, 255, 255, 255);
+								uiFill(currentFBWidth - (currentFBWidth / 4) + 8, (breaks * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
+								uiDrawString(strbuf, currentFBWidth - (currentFBWidth / 4) + 8, (breaks * 8) + 4, 255, 255, 255);
 								
 								syncDisplay();
 							}
 							
 							if (success)
 							{
-								uiDrawString("Process successfully completed!", 0, (breaks + 4) * 8, 0, 255, 0);
+								now -= start;
+								timeinfo = localtime(&now);
+								strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", etaInfo);
+								uiDrawString(strbuf, 0, (breaks + 4) * 8, 0, 255, 0);
 							} else {
 								uiFill(currentFBWidth / 4, breaks * 8, (((off + n) * (currentFBWidth / 2)) / size), 16, 255, 0, 0);
 							}
@@ -920,7 +952,7 @@ bool openPartitionFs(FsFileSystem* ret, FsDeviceOperator* fsOperator, u32 partit
 	return success;
 }
 
-bool copyFile(const char* source, const char* dest, bool doSplitting)
+bool copyFile(const char* source, const char* dest, bool doSplitting, bool calcEta)
 {
 	bool success = false;
 	char splitFilename[NAME_BUF_LEN] = {'\0'};
@@ -929,8 +961,13 @@ bool copyFile(const char* source, const char* dest, bool doSplitting)
 	char *buf = NULL;
 	u64 size, off, n = DUMP_BUFFER_SIZE;
 	u8 splitIndex = 0;
-	int progress = 0;
+	u8 progress = 0;
 	char totalSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'};
+	
+	time_t start, now, remainingTime;
+	struct tm *timeinfo;
+	char etaInfo[32] = {'\0'};
+	double lastSpeed = 0.0, averageSpeed = 0.0;
 	
 	uiFill(0, breaks * 8, currentFBWidth, 8, 50, 50, 50);
 	uiFill(0, (breaks + 3) * 8, currentFBWidth, 16, 50, 50, 50);
@@ -957,6 +994,8 @@ bool copyFile(const char* source, const char* dest, bool doSplitting)
 				buf = (char*)malloc(DUMP_BUFFER_SIZE);
 				if (buf)
 				{
+					if (calcEta) time(&start);
+					
 					for (off = 0; off < size; off += n)
 					{
 						if (DUMP_BUFFER_SIZE > (size - off)) n = (size - off);
@@ -1014,16 +1053,32 @@ bool copyFile(const char* source, const char* dest, bool doSplitting)
 							}
 						}
 						
-						progress = (int)(((off + n) * 100) / size);
+						if (calcEta)
+						{
+							time(&now);
+							
+							lastSpeed = ((double)((off + n) / DUMP_BUFFER_SIZE) / difftime(now, start));
+							averageSpeed = ((SMOOTHING_FACTOR * lastSpeed) + ((1 - SMOOTHING_FACTOR) * averageSpeed));
+							if (!isnormal(averageSpeed)) averageSpeed = 0.00; // Very low values
+							
+							remainingTime = (time_t)((double)((size - (off + n)) / DUMP_BUFFER_SIZE) / averageSpeed);
+							timeinfo = localtime(&remainingTime);
+							strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
+							
+							uiFill(0, ((breaks + 3) * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
+							snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%.2lf MiB/s [ETA: %s]", averageSpeed, etaInfo);
+							uiDrawString(strbuf, (currentFBWidth / 4) - 8 - (strlen(strbuf) * 8), ((breaks + 3) * 8) + 4, 255, 255, 255);
+						}
+						
+						progress = (u8)(((off + n) * 100) / size);
 						
 						uiFill(currentFBWidth / 4, (breaks + 3) * 8, currentFBWidth / 2, 16, 0, 0, 0);
 						uiFill(currentFBWidth / 4, (breaks + 3) * 8, (((off + n) * (currentFBWidth / 2)) / size), 16, 0, 255, 0);
 						
+						uiFill(currentFBWidth - (currentFBWidth / 4) + 8, ((breaks + 3) * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
 						convertSize(off + n, curSizeStr, sizeof(curSizeStr) / sizeof(curSizeStr[0]));
-						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%d%% [%s / %s]", progress, curSizeStr, totalSizeStr);
-						
-						uiFill((currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, currentFBWidth - ((currentFBWidth / 4) + (currentFBWidth / 2) + 8), 8, 50, 50, 50);
-						uiDrawString(strbuf, (currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%u%% [%s / %s]", progress, curSizeStr, totalSizeStr);
+						uiDrawString(strbuf, currentFBWidth - (currentFBWidth / 4) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
 						
 						syncDisplay();
 						
@@ -1049,8 +1104,8 @@ bool copyFile(const char* source, const char* dest, bool doSplitting)
 						
 						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "100%% [0 B / 0 B]");
 						
-						uiFill((currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, currentFBWidth - ((currentFBWidth / 4) + (currentFBWidth / 2) + 8), 8, 50, 50, 50);
-						uiDrawString(strbuf, (currentFBWidth / 4) + (currentFBWidth / 2) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
+						uiFill(currentFBWidth - (currentFBWidth / 4) + 8, ((breaks + 3) * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
+						uiDrawString(strbuf, currentFBWidth - (currentFBWidth / 4) + 8, ((breaks + 3) * 8) + 4, 255, 255, 255);
 						
 						syncDisplay();
 					}
@@ -1069,8 +1124,19 @@ bool copyFile(const char* source, const char* dest, bool doSplitting)
 				
 				if (outFile) fclose(outFile);
 				
-				if (!success)
+				if (success)
 				{
+					if (calcEta)
+					{
+						breaks += 7;
+						
+						now -= start;
+						timeinfo = localtime(&now);
+						strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", etaInfo);
+						uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
+					}
+				} else {
 					if (size > SPLIT_FILE_MIN && doSplitting)
 					{
 						for(u8 i = 0; i <= splitIndex; i++)
@@ -1139,7 +1205,7 @@ bool _copyDirectory(char* sbuf, size_t source_len, char* dbuf, size_t dest_len, 
 					break;
 				}
 			} else {
-				if (!copyFile(sbuf, dbuf, splitting))
+				if (!copyFile(sbuf, dbuf, splitting, false))
 				{
 					success = false;
 					break;
@@ -1371,7 +1437,7 @@ bool dumpGameCertificate(FsDeviceOperator* fsOperator)
 	FsStorage gameCardStorage;
 	bool success = false;
 	FILE *outFile = NULL;
-	char timeStamp[16] = {'\0'}, filename[128] = {'\0'};
+	char timeStamp[16] = {'\0'}, filename[256] = {'\0'};
 	char *buf = NULL;
 	
 	workaroundPartitionZeroAccess(fsOperator);

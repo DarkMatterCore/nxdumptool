@@ -10,11 +10,14 @@
 #define SPLIT_FILE_MIN					(u64)0xEE6B2800		// 4 GB (4000000000 bytes)
 #define SPLIT_FILE_2GiB					(u64)0x80000000
 
+#define MEDIA_UNIT_SIZE					0x200
+
 #define CERT_OFFSET						0x7000
 #define CERT_SIZE						0x200
 
 #define GAMECARD_HEADER_SIZE			0x200
 #define GAMECARD_SIZE_ADDR				0x10D
+#define GAMECARD_DATAEND_ADDR			0x118
 
 #define HFS0_OFFSET_ADDR				0x130
 #define HFS0_SIZE_ADDR					0x138
@@ -35,6 +38,8 @@
 
 #define bswap_32(a)						((((a) << 24) & 0xff000000) | (((a) << 8) & 0xff0000) | (((a) >> 8) & 0xff00) | (((a) >> 24) & 0xff))
 
+#define SMOOTHING_FACTOR				(double)0.05
+
 typedef struct
 {
 	u64 file_offset;
@@ -48,10 +53,10 @@ typedef struct
 void workaroundPartitionZeroAccess(FsDeviceOperator* fsOperator);
 bool getRootHfs0Header(FsDeviceOperator* fsOperator);
 bool getHsf0PartitionDetails(u32 partition, u64 *out_offset, u64 *out_size);
-bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert, bool addPadding);
+bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert, bool trimDump, bool calcCrc);
 bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitting);
 bool openPartitionFs(FsFileSystem* ret, FsDeviceOperator* fsOperator, u32 partition);
-bool copyFile(const char* source, const char* dest, bool doSplitting);
+bool copyFile(const char* source, const char* dest, bool doSplitting, bool calcEta);
 bool copyDirectory(const char* source, const char* dest, bool doSplitting);
 void removeDirectory(const char *path);
 bool getDirectorySize(const char *path, u64 *out_size);

@@ -4,8 +4,10 @@ Nintendo Switch Game Card Dump Tool
 Main features
 --------------
 
-* Generates XCI cartridge dumps (with optional certificate removal and optional 0xFF padding to match the full game card size).
+* Generates XCI cartridge dumps (with optional certificate removal and optional trimming).
 * CRC32 checksum calculation for XCI dumps.
+* Full XCI dump verification using XML database from nswdb.com (NSWreleases.xml).
+* XCI dump renaming based on the XML database from nswdb.com (NSWreleases.xml).
 * Precise HFS0 raw partition dumping (using the root HFS0 header from the game card).
 * Partition filesystem data dumping.
 * Partition filesystem browser (with manual file dump support).
@@ -13,6 +15,7 @@ Main features
 * Free SD card space checks in place.
 * File splitting support for all operations, using 2 GiB parts.
 * Game card Title ID and Control.nacp retrieval support using NCM and NS services.
+* Dump speed and ETA calculation.
 
 Thanks to
 --------------
@@ -26,6 +29,15 @@ Thanks to
 
 Changelog
 --------------
+
+**v1.0.4:**
+
+* exFAT mode turned on by default.
+* Replaced padding option with a trim output dump option (same as XCI-Cutter).
+* Added dump speed and ETA calculation.
+* Added XCI dump verification using XML database from nswdb.com (NSWreleases.xml). The file must be saved to the SD card root directory. Also, keep in mind that dump verification is only performed if you choose to create a full dump (with or without cert), not a trimmed one.
+* Made CRC32 checksum calculation + XCI dump verification a configurable option.
+* Output XCI dumps will get renamed to their corresponding Scene release if a match is found using the XML database from nswdb.com (e.g. "sdmc:/0100000000010000_20180625-234930.xci" -> "sdmc:/Super.Mario.Odyssey.NSW-BigBlueBox.xci").
 
 **v1.0.3:**
 

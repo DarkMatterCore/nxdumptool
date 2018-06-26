@@ -8,13 +8,29 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <switch/services/ns.h>
+#include <libxml/globals.h>
+#include <libxml/xpath.h>
 
+#include "dumper.h"
 #include "fsext.h"
 #include "ncmext.h"
 #include "ui.h"
 #include "util.h"
 
 extern int breaks;
+
+extern u64 gameCardSize;
+extern u64 gameCardTitleID;
+extern u32 hfs0_partition_cnt;
+
+const char *nswReleasesXmlPath = "sdmc:/NSWreleases.xml";
+const char *nswReleasesRootElement = "releases";
+const char *nswReleasesChildren = "release";
+const char *nswReleasesChildrenImageSize = "imagesize";
+const char *nswReleasesChildrenTitleID = "titleid";
+const char *nswReleasesChildrenImgCrc = "imgcrc";
+const char *nswReleasesChildrenReleaseName = "releasename";
+const char *nswReleasesChildrenCard = "card";
 
 bool isGameCardInserted(FsDeviceOperator* o)
 {
@@ -194,9 +210,7 @@ void convertSize(u64 size, char *out, int bufsize)
 
 void getCurrentTimestamp(char *out, int bufsize)
 {
-	time_t timer;
-	time(&timer);
-	
+	time_t timer = time(NULL);
 	struct tm *timeinfo = localtime(&timer);
 	
 	char buffer[32] = {'\0'};
@@ -275,4 +289,165 @@ void getDirectoryContents(char *filenameBuffer, char **filenames, int *filenames
 	
 	// ".." should stay at the top
 	qsort(filenames + 1, (*filenamesCount) - 1, sizeof(char*), &sortAlpha);
+}
+
+bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u32 crc, u32 cnt, char *releaseName, int bufsize)
+{
+	xmlChar *key;
+	xmlNodePtr node = cur;
+	
+	u8 imageSize = (u8)(gameCardSize / GAMECARD_SIZE_1GiB);
+	u8 card = (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? 1 : 2);
+	
+	u8 xmlImageSize = 0;
+	u64 xmlTitleID = 0;
+	u32 xmlCrc = 0;
+	u8 xmlCard = 0;
+	char xmlReleaseName[256] = {'\0'};
+	
+	bool found = false;
+	char strbuf[512] = {'\0'};
+	
+	while (node != NULL)
+	{
+		if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenImageSize)))
+		{
+			key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
+			
+			xmlImageSize = (u8)atoi((const char*)key);
+			
+			xmlFree(key);
+		} else
+		if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenTitleID)))
+		{
+			key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
+			
+			xmlTitleID = strtoull((const char*)key, NULL, 16);
+			
+			xmlFree(key);
+		} else
+		if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenImgCrc)))
+		{
+			key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
+			
+			xmlCrc = strtoul((const char*)key, NULL, 16);
+			
+			xmlFree(key);
+		} else
+		if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenReleaseName)))
+		{
+			key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
+			
+			snprintf(xmlReleaseName, sizeof(xmlReleaseName) / sizeof(xmlReleaseName[0]), "%s", (char*)key);
+			
+			xmlFree(key);
+		} else
+		if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenCard)))
+		{
+			key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
+			
+			xmlCard = (u8)atoi((const char*)key);
+			
+			xmlFree(key);
+		}
+		
+		node = node->next;
+	}
+	
+	//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Cartridge Image Size: %u\nCartridge Title ID: %016lX\nCartridge Image CRC32: %08X\nCartridge Type: %u\n\nXML Image Size: %u\nXML Title ID: %016lX\nXML Image CRC32: %08X\nXML Release Name: %s\nXML Card Type: %u", imageSize, gameCardTitleID, crc, card, xmlImageSize, xmlTitleID, xmlCrc, xmlReleaseName, xmlCard);
+	//uiDrawString(strbuf, 0, 0, 255, 255, 255);
+	
+	if (xmlImageSize == imageSize && xmlTitleID == gameCardTitleID && xmlCrc == crc && xmlCard == card)
+	{
+		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found matching Scene release: \"%s\" (CRC32: %08X). This is a good dump!", xmlReleaseName, xmlCrc);
+		uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
+		
+		snprintf(releaseName, bufsize, "%s", xmlReleaseName);
+		
+		found = true;
+	} else {
+		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump doesn't match Scene release: \"%s\"! (CRC32: %08X)", xmlReleaseName, xmlCrc);
+		uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+	}
+	
+	breaks++;
+	
+	return found;
+}
+
+xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar *xpath)
+{
+	xmlXPathContextPtr context = NULL;
+	xmlXPathObjectPtr result = NULL;
+	
+	context = xmlXPathNewContext(doc);
+	result = xmlXPathEvalExpression(xpath, context);
+	
+	if (xmlXPathNodeSetIsEmpty(result->nodesetval))
+	{
+		xmlXPathFreeObject(result);
+		return NULL;
+	}
+	
+	return result;
+}
+
+bool gameCardDumpNSWDBCheck(u32 crc, char *releaseName, int bufsize)
+{
+	if (!gameCardTitleID || !hfs0_partition_cnt || !crc) return false;
+	
+	xmlDocPtr doc = NULL;
+	bool found = false;
+	char strbuf[512] = {'\0'};
+	
+	doc = xmlParseFile(nswReleasesXmlPath);
+	if (doc)
+	{
+		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "//%s/%s[.//%s='%016lX']", nswReleasesRootElement, nswReleasesChildren, nswReleasesChildrenTitleID, gameCardTitleID);
+		xmlXPathObjectPtr nodeSet = getNodeSet(doc, (xmlChar*)strbuf);
+		if (nodeSet)
+		{
+			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found %d %s with Title ID \"%016lX\"", nodeSet->nodesetval->nodeNr, (nodeSet->nodesetval->nodeNr > 1 ? "releases" : "release"), gameCardTitleID);
+			uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
+			breaks++;
+			
+			u32 i;
+			for (i = 0; i < nodeSet->nodesetval->nodeNr; i++)
+			{
+				xmlNodePtr node = nodeSet->nodesetval->nodeTab[i]->xmlChildrenNode;
+				
+				found = parseNSWDBRelease(doc, node, crc, i, releaseName, bufsize);
+				if (found) break;
+			}
+			
+			if (!found)
+			{
+				uiDrawString("No matches found in XML document!", 0, breaks * 8, 255, 0, 0);
+			} else {
+				breaks--;
+			}
+			
+			xmlXPathFreeObject(nodeSet);
+		} else {
+			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to find records with Title ID \"%016lX\" within the XML document!", gameCardTitleID);
+			uiDrawString(strbuf, 0, 0, 255, 0, 0);
+		}
+		
+		xmlFreeDoc(doc);
+	} else {
+		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open and/or parse \"%s\"!", nswReleasesXmlPath);
+		uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
+	}
+	
+	return found;
+}
+
+char *RemoveIllegalCharacters(char *name)
+{
+	u32 i, len = strlen(name);
+	for (i = 0; i < len; i++)
+	{
+		if (memchr("?[]/\\=+<>:;\",*|^", name[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || name[i] < 0x20 || name[i] > 0x7E) name[i] = '_';
+	}
+	return name;
 }

@@ -12,8 +12,8 @@ FsDeviceOperator fsOperatorInstance;
 
 bool gameCardInserted;
 
-u64 gameCardSize = 0;
-char gameCardSizeStr[32] = {'\0'};
+u64 gameCardSize = 0, trimmedCardSize = 0;
+char gameCardSizeStr[32] = {'\0'}, trimmedCardSizeStr[32] = {'\0'};
 
 char *hfs0_header = NULL;
 u64 hfs0_offset = 0, hfs0_size = 0;
@@ -76,6 +76,9 @@ int main(int argc, char **argv)
 							{
 								gameCardSize = 0;
 								memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
+								
+								trimmedCardSize = 0;
+								memset(trimmedCardSizeStr, 0, sizeof(trimmedCardSizeStr));
 								
 								free(hfs0_header);
 								hfs0_header = NULL;

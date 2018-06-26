@@ -19,7 +19,7 @@ extern bool gameCardInserted;
 extern u32 currentFBWidth, currentFBHeight;
 extern u8 *currentFB;
 
-extern char gameCardSizeStr[32];
+extern char gameCardSizeStr[32], trimmedCardSizeStr[32];
 
 extern char *hfs0_header;
 extern u64 hfs0_offset, hfs0_size;
@@ -28,7 +28,7 @@ extern u32 hfs0_partition_cnt;
 extern u64 gameCardTitleID;
 extern char gameCardName[0x201], gameCardAuthor[0x101], gameCardVersion[0x11];
 
-static bool isFat32 = true, dumpCert = false, addPadding = false;
+static bool isFat32 = false, dumpCert = false, trimDump = false, calcCrc = true;
 
 static u32 selectedOption;
 
@@ -60,7 +60,7 @@ static const char *appHeadline = "Nintendo Switch Game Card Dump Tool v" APP_VER
 static const char *appControls = "[D-Pad / Analog Stick] Move | [A] Select | [B] Back | [+] Exit";
 
 static const char *mainMenuItems[] = { "Full XCI Dump", "Raw Partition Dump", "Partition Data Dump", "View Game Card Files", "Dump Game Card Certificate" };
-static const char *xciDumpMenuItems[] = { "Start XCI dump process", "Split output dump (FAT32 support): ", "Dump certificate: ", "Pad output dump to match full game card size: " };
+static const char *xciDumpMenuItems[] = { "Start XCI dump process", "Split output dump (FAT32 support): ", "Dump certificate: ", "Trim output dump: ", "CRC32 checksum calculation + dump verification: " };
 static const char *partitionDumpType1MenuItems[] = { "Dump Partition 0 (SysUpdate)", "Dump Partition 1 (Normal)", "Dump Partition 2 (Secure)" };
 static const char *partitionDumpType2MenuItems[] = { "Dump Partition 0 (SysUpdate)", "Dump Partition 1 (Logo)", "Dump Partition 2 (Normal)", "Dump Partition 3 (Secure)" };
 static const char *viewGameCardFsType1MenuItems[] = { "View Files from Partition 0 (SysUpdate)", "View Files from Partition 1 (Normal)", "View Files from Partition 2 (Secure)" };
@@ -388,6 +388,10 @@ UIResult uiLoop(u32 keysDown)
 				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
 				breaks++;
 				
+				snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Used space: %s", trimmedCardSizeStr);
+				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
+				breaks++;
+				
 				snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Partition count: %u (%s)", hfs0_partition_cnt, GAMECARD_TYPE(hfs0_partition_cnt));
 				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
 			} else {
@@ -511,7 +515,7 @@ UIResult uiLoop(u32 keysDown)
 					}
 					
 					// Print XCI dump menu settings values
-					if (uiState == stateXciDumpMenu && (i == 1 || i == 2 || i == 3))
+					if (uiState == stateXciDumpMenu && i > 0)
 					{
 						switch(i)
 						{
@@ -531,8 +535,16 @@ UIResult uiLoop(u32 keysDown)
 									uiDrawString("No", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 255, 0, 0);
 								}
 								break;
-							case 3: // Add padding
-								if (addPadding)
+							case 3: // Trim output dump
+								if (trimDump)
+								{
+									uiDrawString("Yes", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 0, 255, 0);
+								} else {
+									uiDrawString("No", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 255, 0, 0);
+								}
+								break;
+							case 4: // CRC32 checksum calculation + dump verification
+								if (calcCrc)
 								{
 									uiDrawString("Yes", strlen(menu[i]) * 8, (breaks * 8) + (i * 13) + 2, 0, 255, 0);
 								} else {
@@ -572,8 +584,11 @@ UIResult uiLoop(u32 keysDown)
 							case 2: // Dump certificate
 								dumpCert = false;
 								break;
-							case 3: // Add padding
-								addPadding = false;
+							case 3: // Trim output dump
+								trimDump = false;
+								break;
+							case 4: // CRC32 checksum calculation + dump verification
+								calcCrc = false;
 								break;
 							default:
 								break;
@@ -591,8 +606,11 @@ UIResult uiLoop(u32 keysDown)
 							case 2: // Dump certificate
 								dumpCert = true;
 								break;
-							case 3: // Add padding
-								addPadding = true;
+							case 3: // Trim output dump
+								trimDump = true;
+								break;
+							case 4: // CRC32 checksum calculation + dump verification
+								calcCrc = true;
 								break;
 							default:
 								break;
@@ -723,11 +741,15 @@ UIResult uiLoop(u32 keysDown)
 		uiDrawString(titlebuf, 0, breaks * 8, 115, 115, 255);
 		breaks++;
 		
-		snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "%s%s", xciDumpMenuItems[3], (addPadding ? "Yes" : "No"));
+		snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "%s%s", xciDumpMenuItems[3], (trimDump ? "Yes" : "No"));
+		uiDrawString(titlebuf, 0, breaks * 8, 115, 115, 255);
+		breaks++;
+		
+		snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "%s%s", xciDumpMenuItems[4], (calcCrc ? "Yes" : "No"));
 		uiDrawString(titlebuf, 0, breaks * 8, 115, 115, 255);
 		breaks += 2;
 		
-		dumpGameCartridge(&fsOperatorInstance, isFat32, dumpCert, addPadding);
+		dumpGameCartridge(&fsOperatorInstance, isFat32, dumpCert, trimDump, calcCrc);
 		
 		waitForButtonPress();
 		
@@ -804,11 +826,7 @@ UIResult uiLoop(u32 keysDown)
 				uiDrawString("Hold B to cancel", 0, breaks * 8, 255, 255, 255);
 				breaks += 2;
 				
-				if (copyFile(fileCopyPath, destCopyPath, true))
-				{
-					breaks += 7;
-					uiDrawString("Process successfully completed!", 0, breaks * 8, 0, 255, 0);
-				}
+				copyFile(fileCopyPath, destCopyPath, true, true);
 			} else {
 				uiDrawString("Error: not enough free space available in the SD card.", 0, breaks * 8, 255, 0, 0);
 			}
