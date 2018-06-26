@@ -422,7 +422,7 @@ bool gameCardDumpNSWDBCheck(u32 crc, char *releaseName, int bufsize)
 			
 			if (!found)
 			{
-				uiDrawString("No matches found in XML document!", 0, breaks * 8, 255, 0, 0);
+				uiDrawString("No matches found in XML document! This could either be a bad dump or an undumped cartridge.", 0, breaks * 8, 255, 0, 0);
 			} else {
 				breaks--;
 			}
@@ -435,8 +435,8 @@ bool gameCardDumpNSWDBCheck(u32 crc, char *releaseName, int bufsize)
 		
 		xmlFreeDoc(doc);
 	} else {
-		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open and/or parse \"%s\"!", nswReleasesXmlPath);
-		uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
+		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to open and/or parse \"%s\"!", nswReleasesXmlPath);
+		uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
 	}
 	
 	return found;
