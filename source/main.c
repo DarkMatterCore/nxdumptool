@@ -19,8 +19,16 @@ char *hfs0_header = NULL;
 u64 hfs0_offset = 0, hfs0_size = 0;
 u32 hfs0_partition_cnt = 0;
 
+//char *partitionHfs0Header = NULL;
+//u64 partitionHfs0HeaderSize = 0;
+
 u64 gameCardTitleID = 0;
-char gameCardName[0x201] = {'\0'}, gameCardAuthor[0x101] = {'\0'}, gameCardVersion[0x11] = {'\0'};
+u32 gameCardVersion = 0;
+char gameCardName[0x201] = {'\0'}, fixedGameCardName[0x201] = {'\0'}, gameCardAuthor[0x101] = {'\0'}, gameCardVersionStr[64] = {'\0'};
+
+u64 gameCardUpdateTitleID = 0;
+u32 gameCardUpdateVersion = 0;
+char gameCardUpdateVersionStr[128] = {'\0'};
 
 u32 currentFBWidth, currentFBHeight;
 u8 *currentFB;
@@ -64,9 +72,21 @@ int main(int argc, char **argv)
 								// Don't access the gamecard immediately to avoid conflicts with the fsp-srv, ncm and ns services
 								uiPleaseWait();
 								
-								getRootHfs0Header(&fsOperatorInstance);
-								getGameCardTitleID(&gameCardTitleID);
-								getGameCardControlNacp(gameCardTitleID, gameCardName, sizeof(gameCardName), gameCardAuthor, sizeof(gameCardAuthor), gameCardVersion, sizeof(gameCardVersion));
+								if (getRootHfs0Header(&fsOperatorInstance))
+								{
+									if (getGameCardTitleIDAndVersion(&gameCardTitleID, &gameCardVersion))
+									{
+										convertTitleVersionToDecimal(gameCardVersion, gameCardVersionStr, sizeof(gameCardVersionStr));
+										getGameCardControlNacp(gameCardTitleID, gameCardName, sizeof(gameCardName), gameCardAuthor, sizeof(gameCardAuthor));
+										strtrim(gameCardName);
+										
+										if (strlen(gameCardName))
+										{
+											snprintf(fixedGameCardName, sizeof(fixedGameCardName) / sizeof(fixedGameCardName[0]), "%s", gameCardName);
+											removeIllegalCharacters(fixedGameCardName);
+										}
+									}
+								}
 								
 								uiPrintHeadline();
 								uiUpdateStatusMsg();
@@ -85,11 +105,25 @@ int main(int argc, char **argv)
 								hfs0_offset = hfs0_size = 0;
 								hfs0_partition_cnt = 0;
 								
+								/*if (partitionHfs0Header != NULL)
+								{
+									free(partitionHfs0Header);
+									partitionHfs0Header = NULL;
+									partitionHfs0HeaderSize = 0;
+								}*/
+								
 								gameCardTitleID = 0;
+								gameCardVersion = 0;
 								
 								memset(gameCardName, 0, sizeof(gameCardName));
+								memset(fixedGameCardName, 0, sizeof(fixedGameCardName));
 								memset(gameCardAuthor, 0, sizeof(gameCardAuthor));
-								memset(gameCardVersion, 0, sizeof(gameCardVersion));
+								memset(gameCardVersionStr, 0, sizeof(gameCardVersionStr));
+								
+								gameCardUpdateTitleID = 0;
+								gameCardUpdateVersion = 0;
+								
+								memset(gameCardUpdateVersionStr, 0, sizeof(gameCardUpdateVersionStr));
 							}
 						}
 						
@@ -135,6 +169,12 @@ int main(int argc, char **argv)
 							case resultDumpGameCardCertificate:
 								uiSetState(stateDumpGameCardCertificate);
 								break;
+							case resultUpdateNSWDBXml:
+								uiSetState(stateUpdateNSWDBXml);
+								break;
+							case resultUpdateApplication:
+								uiSetState(stateUpdateApplication);
+								break;
 							case resultExit:
 								exitLoop = true;
 								break;
@@ -149,7 +189,7 @@ int main(int argc, char **argv)
 					
 					nsExit();
 				} else {
-					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the ns service! (0x%08x)", result);
+					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the ns service! (0x%08X)", result);
 					uiDrawString(strbuf, 0, 0, 255, 255, 255);
 					delay(5);
 					ret = -4;
@@ -157,7 +197,7 @@ int main(int argc, char **argv)
 				
 				ncmExit();
 			} else {
-				snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the ncm service! (0x%08x)", result);
+				snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the ncm service! (0x%08X)", result);
 				uiDrawString(strbuf, 0, 0, 255, 255, 255);
 				delay(5);
 				ret = -3;
@@ -165,7 +205,7 @@ int main(int argc, char **argv)
 			
 			fsDeviceOperatorClose(&fsOperatorInstance);
 		} else {
-			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open device operator! (0x%08x)", result);
+			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open device operator! (0x%08X)", result);
 			uiDrawString(strbuf, 0, 0, 255, 255, 255);
 			delay(5);
 			ret = -2;
@@ -173,13 +213,15 @@ int main(int argc, char **argv)
 		
 		fsExit();
 	} else {
-		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the fsp-srv service! (0x%08x)", result);
+		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the fsp-srv service! (0x%08X)", result);
 		uiDrawString(strbuf, 0, 0, 255, 255, 255);
 		delay(5);
 		ret = -1;
 	}
 	
 	if (hfs0_header != NULL) free(hfs0_header);
+	
+	//if (partitionHfs0Header != NULL) free(partitionHfs0Header);
 	
 	uiDeinit();
 	

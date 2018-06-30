@@ -20,6 +20,8 @@ typedef enum {
 	resultShowViewGameCardFsBrowser,
 	resultViewGameCardFsBrowserCopyFile,
 	resultDumpGameCardCertificate,
+	resultUpdateNSWDBXml,
+	resultUpdateApplication,
 	resultExit
 } UIResult;
 
@@ -35,7 +37,9 @@ typedef enum {
 	stateViewGameCardFsGetList,
 	stateViewGameCardFsBrowser,
 	stateViewGameCardFsBrowserCopyFile,
-	stateDumpGameCardCertificate
+	stateDumpGameCardCertificate,
+	stateUpdateNSWDBXml,
+	stateUpdateApplication
 } UIState;
 
 void uiFill(int x, int y, int width, int height, u8 r, u8 g, u8 b);

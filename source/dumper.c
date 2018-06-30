@@ -26,9 +26,18 @@ extern char *hfs0_header;
 extern u64 hfs0_offset, hfs0_size;
 extern u32 hfs0_partition_cnt;
 
-extern u64 gameCardTitleID;
+//extern char *partitionHfs0Header;
+//extern u64 partitionHfs0HeaderSize;
 
-static char strbuf[512] = {'\0'};
+extern u64 gameCardTitleID;
+extern u32 gameCardVersion;
+extern char fixedGameCardName[0x201];
+
+extern u64 gameCardUpdateTitleID;
+extern u32 gameCardUpdateVersion;
+extern char gameCardUpdateVersionStr[128];
+
+static char strbuf[NAME_BUF_LEN * 2] = {'\0'};
 
 void workaroundPartitionZeroAccess(FsDeviceOperator* fsOperator)
 {
@@ -55,6 +64,71 @@ bool getRootHfs0Header(FsDeviceOperator* fsOperator)
 	{
 		uiStatusMsg("getRootHfs0Header: GetGameCardHandle failed! (0x%08X)", result);
 		return false;
+	}
+	
+	// Get bundled FW version update
+	if (R_SUCCEEDED(fsDeviceOperatorUpdatePartitionInfo(fsOperator, handle, &gameCardUpdateVersion, &gameCardUpdateTitleID)))
+	{
+		if (gameCardUpdateTitleID == GAMECARD_UPDATE_TITLEID)
+		{
+			char decimalVersion[64] = {'\0'};
+			convertTitleVersionToDecimal(gameCardUpdateVersion, decimalVersion, sizeof(decimalVersion));
+			
+			switch(gameCardUpdateVersion)
+			{
+				case SYSUPDATE_100:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "1.0.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_200:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "2.0.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_210:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "2.1.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_220:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "2.2.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_230:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "2.3.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_300:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "3.0.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_301:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "3.0.1 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_302:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "3.0.2 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_400:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "4.0.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_401:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "4.0.1 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_410:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "4.1.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_500:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "5.0.0 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_501:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "5.0.1 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_502:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "5.0.2 - v%s", decimalVersion);
+					break;
+				case SYSUPDATE_510:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "5.1.0 - v%s", decimalVersion);
+					break;
+				default:
+					snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "UNKNOWN - v%s", decimalVersion);
+					break;
+			}
+		} else {
+			gameCardUpdateTitleID = 0;
+			gameCardUpdateVersion = 0;
+		}
 	}
 	
 	if (R_FAILED(result = fsOpenGameCardStorage(&gameCardStorage, handle, 0)))
@@ -237,11 +311,120 @@ bool getHsf0PartitionDetails(u32 partition, u64 *out_offset, u64 *out_size)
 	return true;
 }
 
+/*bool getPartitionHfs0Header(FsDeviceOperator* fsOperator, u32 partition)
+{
+	if (hfs0_header == NULL) return false;
+	
+	if (partitionHfs0Header != NULL)
+	{
+		free(partitionHfs0Header);
+		partitionHfs0Header = NULL;
+		partitionHfs0HeaderSize = 0;
+	}
+	
+	char *buf = NULL;
+	Result result;
+	FsStorage gameCardStorage;
+	u64 partitionSize = 0, partitionOffset = 0, roundedHfs0HeaderSize = 0;
+	u32 handle, hfs0FileCount = 0, hfs0StrTableSize = 0;
+	bool success = false;
+	
+	if (getHsf0PartitionDetails(partition, &partitionOffset, &partitionSize))
+	{
+		workaroundPartitionZeroAccess(fsOperator);
+		
+		if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(fsOperator, &handle)))
+		{
+			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle succeeded: 0x%08X", handle);
+			uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
+			breaks++;
+			
+			// Same ugly hack from dumpRawPartition()
+			if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, handle, (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? (partition < 2 ? 0 : 1) : (partition < 3 ? 0 : 1)))))
+			{
+				snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage succeeded: 0x%08X", handle);
+				uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
+				breaks++;
+				
+				buf = (char*)malloc(MEDIA_UNIT_SIZE);
+				if (buf)
+				{
+					// First read MEDIA_UNIT_SIZE bytes
+					if (R_SUCCEEDED(result = fsStorageRead(&gameCardStorage, partitionOffset, buf, MEDIA_UNIT_SIZE)))
+					{
+						memcpy(&hfs0FileCount, buf + 4, sizeof(u32));
+						memcpy(&hfs0StrTableSize, buf + 4, sizeof(u32));
+						
+						partitionHfs0HeaderSize = (0x10 + (0x40 * hfs0FileCount) + hfs0StrTableSize);
+						
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u file count: %u", partition, hfs0FileCount);
+						uiDrawString(strbuf, 0, (breaks + 4) * 8, 255, 0, 0);
+						breaks++;
+						
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u string table size: %u bytes", partition, hfs0StrTableSize);
+						uiDrawString(strbuf, 0, (breaks + 4) * 8, 255, 0, 0);
+						breaks++;
+						
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u HFS0 header size: %lu bytes", partition, partitionHfs0HeaderSize);
+						uiDrawString(strbuf, 0, (breaks + 4) * 8, 255, 0, 0);
+						breaks++;
+						
+						memset(buf, 0, DUMP_BUFFER_SIZE);
+						roundedHfs0HeaderSize = round_up(partitionHfs0HeaderSize, MEDIA_UNIT_SIZE);
+						
+						partitionHfs0Header = (char*)malloc(roundedHfs0HeaderSize);
+						if (partitionHfs0Header)
+						{
+							// Then read the whole HFS0 header
+							if (R_SUCCEEDED(result = fsStorageRead(&gameCardStorage, partitionOffset, partitionHfs0Header, roundedHfs0HeaderSize)))
+							{
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u HFS0 header successfully retrieved!", partition);
+								uiDrawString(strbuf, 0, (breaks + 4) * 8, 255, 0, 0);
+								success = true;
+							} else {
+								free(partitionHfs0Header);
+								partitionHfs0Header = NULL;
+								partitionHfs0HeaderSize = 0;
+								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionOffset);
+								uiDrawString(strbuf, 0, (breaks + 4) * 8, 255, 0, 0);
+							}
+						} else {
+							partitionHfs0HeaderSize = 0;
+							snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to allocate memory for the HFS0 header from partition #%u!", partition);
+							uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+						}
+					} else {
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionOffset);
+						uiDrawString(strbuf, 0, (breaks + 4) * 8, 255, 0, 0);
+					}
+					
+					free(buf);
+				} else {
+					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to allocate memory for the HFS0 header from partition #%u!", partition);
+					uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+				}
+				
+				fsStorageClose(&gameCardStorage);
+			} else {
+				snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage failed! (0x%08X)", result);
+				uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+			}
+		} else {
+			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle failed! (0x%08X)", result);
+			uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+		}
+	}
+	
+	breaks += 2;
+	
+	return success;
+}*/
+
 bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert, bool trimDump, bool calcCrc)
 {
 	u64 partitionOffset = 0, fileOffset = 0, xciDataSize = 0, totalSize = 0, n;
 	u64 partitionSizes[ISTORAGE_PARTITION_CNT];
-	char partitionSizesStr[ISTORAGE_PARTITION_CNT][32] = {'\0'}, xciDataSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'}, totalSizeStr[32] = {'\0'}, filename[256] = {'\0'}, timeStamp[16] = {'\0'};
+	char partitionSizesStr[ISTORAGE_PARTITION_CNT][32] = {'\0'}, xciDataSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'}, totalSizeStr[32] = {'\0'}, filename[NAME_BUF_LEN] = {'\0'};
 	u32 handle, partition;
 	Result result;
 	FsStorage gameCardStorage;
@@ -335,13 +518,11 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 		{
 			breaks++;
 			
-			getCurrentTimestamp(timeStamp, sizeof(timeStamp) / sizeof(timeStamp[0]));
-			
 			if (totalSize > SPLIT_FILE_MIN && isFat32)
 			{
-				snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_%s.xci.%02u", gameCardTitleID, timeStamp, splitIndex);
+				snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX).xci.%02u", fixedGameCardName, gameCardVersion, gameCardTitleID, splitIndex);
 			} else {
-				snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_%s.xci", gameCardTitleID, timeStamp);
+				snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX).xci", fixedGameCardName, gameCardVersion, gameCardTitleID);
 			}
 			
 			outFile = fopen(filename, "wb");
@@ -446,7 +627,7 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 										fclose(outFile);
 										
 										splitIndex++;
-										snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_%s.xci.%02u", gameCardTitleID, timeStamp, splitIndex);
+										snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX).xci.%02u", fixedGameCardName, gameCardVersion, gameCardTitleID, splitIndex);
 										
 										outFile = fopen(filename, "wb");
 										if (!outFile)
@@ -596,26 +777,7 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 							uiDrawString("Starting verification process using XML database from nswdb.com...", 0, breaks * 8, 255, 255, 255);
 							breaks++;
 							
-							char releaseName[256] = {'\0'}, newFilename[256] = {'\0'};
-							if (gameCardDumpNSWDBCheck(crc2, releaseName, sizeof(releaseName) / sizeof(releaseName[0])))
-							{
-								if (totalSize > SPLIT_FILE_MIN && isFat32)
-								{
-									for(u8 i = 0; i <= splitIndex; i++)
-									{
-										snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_%s.xci.%02u", gameCardTitleID, timeStamp, i);
-										snprintf(newFilename, sizeof(newFilename) / sizeof(newFilename[0]), "sdmc:/%s.xci.%02u", RemoveIllegalCharacters(releaseName), i);
-										rename(filename, newFilename);
-									}
-								} else {
-									snprintf(newFilename, sizeof(newFilename) / sizeof(newFilename[0]), "sdmc:/%s.xci", RemoveIllegalCharacters(releaseName));
-									rename(filename, newFilename);
-								}
-								
-								breaks++;
-								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output XCI dump renamed to \"%.*s\"", (int)((totalSize > SPLIT_FILE_MIN && isFat32) ? (strlen(newFilename) - 3) : strlen(newFilename)), newFilename);
-								uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-							}
+							gameCardDumpNSWDBCheck(crc2);
 						} else {
 							snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum: %08X", crc1);
 							uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
@@ -631,7 +793,7 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 					{
 						for(u8 i = 0; i <= splitIndex; i++)
 						{
-							snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_%s.xci.%02u", gameCardTitleID, timeStamp, i);
+							snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX).xci.%02u", fixedGameCardName, gameCardVersion, gameCardTitleID, i);
 							remove(filename);
 						}
 					} else {
@@ -661,7 +823,7 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 	char *buf;
 	u64 off, n = DUMP_BUFFER_SIZE;
 	FsStorage gameCardStorage;
-	char totalSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'}, filename[256] = {'\0'}, timeStamp[16] = {'\0'};
+	char totalSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'}, filename[NAME_BUF_LEN] = {'\0'};
 	u8 progress = 0;
 	FILE *outFile = NULL;
 	u8 splitIndex = 0;
@@ -678,26 +840,6 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle succeeded: 0x%08X", handle);
 		uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
 		breaks++;
-		
-		if (partition == 0)
-		{
-			u32 title_ver;
-			u64 title_id;
-			
-			if (R_SUCCEEDED(fsDeviceOperatorUpdatePartitionInfo(fsOperator, handle, &title_ver, &title_id)))
-			{
-				snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "System Title Version: v%u", title_ver);
-				uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-				breaks++;
-				
-				snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "System Title ID: %016lX", title_id);
-				uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-			} else {
-				uiDrawString("Unable to get the system title-version from partition #0. Not a big problem, though", 0, breaks * 8, 255, 0, 0);
-			}
-			
-			breaks++;
-		}
 		
 		// Ugly hack
 		// The IStorage instance returned for partition == 0 contains the gamecard header, the gamecard certificate, the root HFS0 header and:
@@ -727,13 +869,11 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 				
 				if (size <= freeSpace)
 				{
-					getCurrentTimestamp(timeStamp, sizeof(timeStamp) / sizeof(timeStamp[0]));
-					
 					if (size > SPLIT_FILE_MIN && doSplitting)
 					{
-						snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_part%u_%s.hfs0.%02u", gameCardTitleID, partition, timeStamp, splitIndex);
+						snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s).hfs0.%02u", fixedGameCardName, gameCardVersion, gameCardTitleID, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition), splitIndex);
 					} else {
-						snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_part%u_%s.hfs0", gameCardTitleID, partition, timeStamp);
+						snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s).hfs0", fixedGameCardName, gameCardVersion, gameCardTitleID, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition));
 					}
 					
 					outFile = fopen(filename, "wb");
@@ -779,7 +919,7 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 									fclose(outFile);
 									
 									splitIndex++;
-									snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_part%u_%s.hfs0.%02u", gameCardTitleID, partition, timeStamp, splitIndex);
+									snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s).hfs0.%02u", fixedGameCardName, gameCardVersion, gameCardTitleID, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition), splitIndex);
 									
 									outFile = fopen(filename, "wb");
 									if (!outFile)
@@ -887,7 +1027,7 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 							{
 								for(u8 i = 0; i <= splitIndex; i++)
 								{
-									snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_part%u_%s.hfs0.%02u", gameCardTitleID, partition, timeStamp, i);
+									snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s).hfs0.%02u", fixedGameCardName, gameCardVersion, gameCardTitleID, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition), i);
 									remove(filename);
 								}
 							} else {
@@ -1340,9 +1480,9 @@ bool dumpPartitionData(FsDeviceOperator* fsOperator, u32 partition)
 	int ret;
 	bool success = false;
 	u64 total_size;
-	char dumpPath[128] = {'\0'}, timeStamp[16] = {'\0'}, totalSizeStr[32] = {'\0'};
+	char dumpPath[NAME_BUF_LEN] = {'\0'}, totalSizeStr[32] = {'\0'};
 	
-	if (partition == 0 || partition == 1) workaroundPartitionZeroAccess(fsOperator);
+	workaroundPartitionZeroAccess(fsOperator);
 	
 	if (openPartitionFs(&fs, fsOperator, partition))
 	{
@@ -1362,10 +1502,9 @@ bool dumpPartitionData(FsDeviceOperator* fsOperator, u32 partition)
 				
 				if (total_size <= freeSpace)
 				{
-					getCurrentTimestamp(timeStamp, sizeof(timeStamp) / sizeof(timeStamp[0]));
-					snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "sdmc:/%016lX_part%u_%s", gameCardTitleID, partition, timeStamp);
+					snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s)", fixedGameCardName, gameCardVersion, gameCardTitleID, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition));
 					
-					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying partition #%u data to \"%s\". Hold B to cancel.", partition, dumpPath);
+					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying partition #%u data to \"%s/\". Hold B to cancel.", partition, dumpPath);
 					uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
 					breaks++;
 					
@@ -1406,7 +1545,7 @@ bool mountViewPartition(FsDeviceOperator *fsOperator, u32 partition)
 	int ret;
 	bool success = false;
 	
-	if (partition == 0 || partition == 1) workaroundPartitionZeroAccess(fsOperator);
+	workaroundPartitionZeroAccess(fsOperator);
 	
 	if (openPartitionFs(&fs, fsOperator, partition))
 	{
@@ -1432,12 +1571,12 @@ bool mountViewPartition(FsDeviceOperator *fsOperator, u32 partition)
 
 bool dumpGameCertificate(FsDeviceOperator* fsOperator)
 {
-	u32 handle;
+	u32 handle, crc;
 	Result result;
 	FsStorage gameCardStorage;
 	bool success = false;
 	FILE *outFile = NULL;
-	char timeStamp[16] = {'\0'}, filename[256] = {'\0'};
+	char filename[NAME_BUF_LEN] = {'\0'};
 	char *buf = NULL;
 	
 	workaroundPartitionZeroAccess(fsOperator);
@@ -1456,46 +1595,47 @@ bool dumpGameCertificate(FsDeviceOperator* fsOperator)
 			
 			if (CERT_SIZE <= freeSpace)
 			{
-				getCurrentTimestamp(timeStamp, sizeof(timeStamp) / sizeof(timeStamp[0]));
-				snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%016lX_cert_%s.bin", gameCardTitleID, timeStamp);
-				
-				outFile = fopen(filename, "wb");
-				if (outFile)
+				buf = (char*)malloc(DUMP_BUFFER_SIZE);
+				if (buf)
 				{
-					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping game card certificate to file \"%s\"...", filename);
-					uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
-					breaks++;
-					
-					syncDisplay();
-					
-					buf = (char*)malloc(DUMP_BUFFER_SIZE);
-					if (buf)
+					if (R_SUCCEEDED(result = fsStorageRead(&gameCardStorage, CERT_OFFSET, buf, CERT_SIZE)))
 					{
-						if (R_SUCCEEDED(result = fsStorageRead(&gameCardStorage, CERT_OFFSET, buf, CERT_SIZE)))
+						// Calculate CRC32
+						crc32(buf, CERT_SIZE, &crc);
+						
+						snprintf(filename, sizeof(filename) / sizeof(filename[0]), "sdmc:/%s v%u (%016lX) - Certificate (%08X).bin", fixedGameCardName, gameCardVersion, gameCardTitleID, crc);
+						
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping game card certificate to file \"%s\"...", filename);
+						uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
+						breaks++;
+						
+						syncDisplay();
+						
+						outFile = fopen(filename, "wb");
+						if (outFile)
 						{
 							if (fwrite(buf, 1, CERT_SIZE, outFile) == CERT_SIZE)
 							{
 								success = true;
 								uiDrawString("Process successfully completed!", 0, breaks * 8, 0, 255, 0);
 							} else {
-								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write certificate data");
-								uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+								uiDrawString("Failed to write certificate data!", 0, breaks * 8, 255, 0, 0);
 							}
+							
+							fclose(outFile);
+							if (!success) remove(filename);
 						} else {
-							snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%08X", result, CERT_OFFSET);
+							snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file \"%s\"!", filename);
 							uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
 						}
-						
-						free(buf);
 					} else {
-						uiDrawString("Failed to allocate memory for the dump process!", 0, breaks * 8, 255, 0, 0);
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%08X", result, CERT_OFFSET);
+						uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
 					}
 					
-					fclose(outFile);
-					if (!success) remove(filename);
+					free(buf);
 				} else {
-					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file \"%s\"!", filename);
-					uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
+					uiDrawString("Failed to allocate memory for the dump process!", 0, breaks * 8, 255, 0, 0);
 				}
 			} else {
 				uiDrawString("Error: not enough free space available in the SD card.", 0, breaks * 8, 255, 0, 0);

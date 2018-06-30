@@ -26,7 +26,10 @@ extern u64 hfs0_offset, hfs0_size;
 extern u32 hfs0_partition_cnt;
 
 extern u64 gameCardTitleID;
-extern char gameCardName[0x201], gameCardAuthor[0x101], gameCardVersion[0x11];
+extern u32 gameCardVersion;
+extern char gameCardName[0x201], fixedGameCardName[0x201], gameCardAuthor[0x101], gameCardVersionStr[64];
+
+extern char gameCardUpdateVersionStr[128];
 
 static bool isFat32 = false, dumpCert = false, trimDump = false, calcCrc = true;
 
@@ -59,12 +62,12 @@ static UIState uiState;
 static const char *appHeadline = "Nintendo Switch Game Card Dump Tool v" APP_VERSION ".\nOriginal code by MCMrARM.\nAdditional modifications by DarkMatterCore.\n\n";
 static const char *appControls = "[D-Pad / Analog Stick] Move | [A] Select | [B] Back | [+] Exit";
 
-static const char *mainMenuItems[] = { "Full XCI Dump", "Raw Partition Dump", "Partition Data Dump", "View Game Card Files", "Dump Game Card Certificate" };
+static const char *mainMenuItems[] = { "Full XCI Dump", "Raw Partition Dump", "Partition Data Dump", "View Game Card Files", "Dump Game Card Certificate", "Update nswdb.com XML database", "Update application (not working at this moment)" };
 static const char *xciDumpMenuItems[] = { "Start XCI dump process", "Split output dump (FAT32 support): ", "Dump certificate: ", "Trim output dump: ", "CRC32 checksum calculation + dump verification: " };
-static const char *partitionDumpType1MenuItems[] = { "Dump Partition 0 (SysUpdate)", "Dump Partition 1 (Normal)", "Dump Partition 2 (Secure)" };
-static const char *partitionDumpType2MenuItems[] = { "Dump Partition 0 (SysUpdate)", "Dump Partition 1 (Logo)", "Dump Partition 2 (Normal)", "Dump Partition 3 (Secure)" };
-static const char *viewGameCardFsType1MenuItems[] = { "View Files from Partition 0 (SysUpdate)", "View Files from Partition 1 (Normal)", "View Files from Partition 2 (Secure)" };
-static const char *viewGameCardFsType2MenuItems[] = { "View Files from Partition 0 (SysUpdate)", "View Files from Partition 1 (Logo)", "View Files from Partition 2 (Normal)", "View Files from Partition 3 (Secure)" };
+static const char *partitionDumpType1MenuItems[] = { "Dump Partition 0 (Update)", "Dump Partition 1 (Normal)", "Dump Partition 2 (Secure)" };
+static const char *partitionDumpType2MenuItems[] = { "Dump Partition 0 (Update)", "Dump Partition 1 (Logo)", "Dump Partition 2 (Normal)", "Dump Partition 3 (Secure)" };
+static const char *viewGameCardFsType1MenuItems[] = { "View Files from Partition 0 (Update)", "View Files from Partition 1 (Normal)", "View Files from Partition 2 (Secure)" };
+static const char *viewGameCardFsType2MenuItems[] = { "View Files from Partition 0 (Update)", "View Files from Partition 1 (Logo)", "View Files from Partition 2 (Normal)", "View Files from Partition 3 (Secure)" };
 
 static unsigned char asciiData[128][8] = {
 	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, {0x00, 0x3E, 0x41, 0x55, 0x41, 0x55, 0x49, 0x3E},
@@ -362,27 +365,21 @@ UIResult uiLoop(u32 keysDown)
 				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
 				breaks++;*/
 				
-				if (strlen(gameCardName) && strlen(gameCardAuthor))
-				{
-					snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Name: %s", gameCardName);
-					uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
-					breaks++;
-					
-					snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Developer: %s", gameCardAuthor);
-					uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
-					breaks++;
-				}
+				snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Name: %s", gameCardName);
+				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
+				breaks++;
+				
+				snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Developer: %s", gameCardAuthor);
+				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
+				breaks++;
 				
 				snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Title ID: %016lX", gameCardTitleID);
 				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
 				breaks++;
 				
-				if (strlen(gameCardVersion))
-				{
-					snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Version: %s", gameCardVersion);
-					uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
-					breaks++;
-				}
+				snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Version: %s", gameCardVersionStr);
+				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
+				breaks++;
 				
 				snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Size: %s", gameCardSizeStr);
 				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
@@ -394,6 +391,13 @@ UIResult uiLoop(u32 keysDown)
 				
 				snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Partition count: %u (%s)", hfs0_partition_cnt, GAMECARD_TYPE(hfs0_partition_cnt));
 				uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
+				
+				if (strlen(gameCardUpdateVersionStr))
+				{
+					breaks++;
+					snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Game Card FW Version: %s", gameCardUpdateVersionStr);
+					uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
+				}
 			} else {
 				if (gameCardInserted)
 				{
@@ -402,6 +406,16 @@ UIResult uiLoop(u32 keysDown)
 						if (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT || hfs0_partition_cnt == GAMECARD_TYPE2_PARTITION_CNT)
 						{
 							uiDrawString("Error: unable to retrieve the game card Title ID!", 0, breaks * 8, 255, 0, 0);
+							
+							if (strlen(gameCardUpdateVersionStr))
+							{
+								breaks++;
+								snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Game Card FW Version: %s", gameCardUpdateVersionStr);
+								uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
+								breaks++;
+								
+								uiDrawString("In order to be able to dump data from this cartridge, make sure your console is at least on this FW version.", 0, breaks * 8, 255, 255, 255);
+							}
 						} else {
 							snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Error: unknown root HFS0 header partition count! (%u)", hfs0_partition_cnt);
 							uiDrawString(titlebuf, 0, breaks * 8, 255, 0, 0);
@@ -639,6 +653,12 @@ UIResult uiLoop(u32 keysDown)
 								case 4:
 									res = resultDumpGameCardCertificate;
 									break;
+								case 5:
+									res = resultUpdateNSWDBXml;
+									break;
+								case 6:
+									//res = resultUpdateApplication;
+									break;
 								default:
 									break;
 							}
@@ -818,7 +838,10 @@ UIResult uiLoop(u32 keysDown)
 				{
 					if (fileCopyPath[i] == '/')
 					{
-						snprintf(destCopyPath, sizeof(destCopyPath) / sizeof(destCopyPath[0]), "sdmc:/%.*s", (int)(strlen(fileCopyPath) - i), fileCopyPath + i + 1);
+						snprintf(destCopyPath, sizeof(destCopyPath) / sizeof(destCopyPath[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s)", fixedGameCardName, gameCardVersion, gameCardTitleID, selectedOption, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, selectedOption));
+						mkdir(destCopyPath, 0744);
+						
+						snprintf(destCopyPath, sizeof(destCopyPath) / sizeof(destCopyPath[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s)/%.*s", fixedGameCardName, gameCardVersion, gameCardTitleID, selectedOption, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, selectedOption), (int)(strlen(fileCopyPath) - i), fileCopyPath + i + 1);
 						break;
 					}
 				}
@@ -847,6 +870,30 @@ UIResult uiLoop(u32 keysDown)
 		breaks += 2;
 		
 		dumpGameCertificate(&fsOperatorInstance);
+		
+		waitForButtonPress();
+		
+		uiUpdateFreeSpace();
+		res = resultShowMainMenu;
+	} else
+	if (uiState == stateUpdateNSWDBXml)
+	{
+		uiDrawString(mainMenuItems[5], 0, breaks * 8, 115, 115, 255);
+		breaks += 2;
+		
+		updateNSWDBXml();
+		
+		waitForButtonPress();
+		
+		uiUpdateFreeSpace();
+		res = resultShowMainMenu;
+	} else
+	if (uiState == stateUpdateApplication)
+	{
+		uiDrawString(mainMenuItems[6], 0, breaks * 8, 115, 115, 255);
+		breaks += 2;
+		
+		updateApplication();
 		
 		waitForButtonPress();
 		
