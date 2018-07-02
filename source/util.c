@@ -443,7 +443,7 @@ void gameCardDumpNSWDBCheck(u32 crc)
 			xmlXPathFreeObject(nodeSet);
 		} else {
 			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to find records with Title ID \"%016lX\" within the XML document!", gameCardTitleID);
-			uiDrawString(strbuf, 0, 0, 255, 0, 0);
+			uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
 		}
 		
 		xmlFreeDoc(doc);
