@@ -35,6 +35,8 @@ static bool isFat32 = false, dumpCert = false, trimDump = false, calcCrc = true;
 
 static u32 selectedOption;
 
+static FsFileSystem fs;
+
 static char statusMessage[2048] = {'\0'};
 static int statusMessageFadeout = 0;
 
@@ -60,14 +62,14 @@ static int filenamesCount = 0;
 static UIState uiState;
 
 static const char *appHeadline = "Nintendo Switch Game Card Dump Tool v" APP_VERSION ".\nOriginal code by MCMrARM.\nAdditional modifications by DarkMatterCore.\n\n";
-static const char *appControls = "[D-Pad / Analog Stick] Move | [A] Select | [B] Back | [+] Exit";
+static const char *appControls = "[D-Pad / Analog Sticks] Move | [A] Select | [B] Back | [+] Exit";
 
-static const char *mainMenuItems[] = { "Full XCI Dump", "Raw Partition Dump", "Partition Data Dump", "View Game Card Files", "Dump Game Card Certificate", "Update nswdb.com XML database", "Update application (not working at this moment)" };
+static const char *mainMenuItems[] = { "Full XCI dump", "Raw partition dump", "Partition data dump", "View game card files", "Dump game card certificate", "Update NSWDB.COM XML database", "Update application (not working at this moment)" };
 static const char *xciDumpMenuItems[] = { "Start XCI dump process", "Split output dump (FAT32 support): ", "Dump certificate: ", "Trim output dump: ", "CRC32 checksum calculation + dump verification: " };
-static const char *partitionDumpType1MenuItems[] = { "Dump Partition 0 (Update)", "Dump Partition 1 (Normal)", "Dump Partition 2 (Secure)" };
-static const char *partitionDumpType2MenuItems[] = { "Dump Partition 0 (Update)", "Dump Partition 1 (Logo)", "Dump Partition 2 (Normal)", "Dump Partition 3 (Secure)" };
-static const char *viewGameCardFsType1MenuItems[] = { "View Files from Partition 0 (Update)", "View Files from Partition 1 (Normal)", "View Files from Partition 2 (Secure)" };
-static const char *viewGameCardFsType2MenuItems[] = { "View Files from Partition 0 (Update)", "View Files from Partition 1 (Logo)", "View Files from Partition 2 (Normal)", "View Files from Partition 3 (Secure)" };
+static const char *partitionDumpType1MenuItems[] = { "Dump partition 0 (Update)", "Dump partition 1 (Normal)", "Dump partition 2 (Secure)" };
+static const char *partitionDumpType2MenuItems[] = { "Dump partition 0 (Update)", "Dump partition 1 (Logo)", "Dump partition 2 (Normal)", "Dump partition 3 (Secure)" };
+static const char *viewGameCardFsType1MenuItems[] = { "View files from partition 0 (Update)", "View files from partition 1 (Normal)", "View files from partition 2 (Secure)" };
+static const char *viewGameCardFsType2MenuItems[] = { "View files from partition 0 (Update)", "View files from partition 1 (Logo)", "View files from partition 2 (Normal)", "View files from partition 3 (Secure)" };
 
 static unsigned char asciiData[128][8] = {
 	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00}, {0x00, 0x3E, 0x41, 0x55, 0x41, 0x55, 0x49, 0x3E},
@@ -294,8 +296,6 @@ void uiInit()
 void uiDeinit()
 {
 	if (filenameBuffer) free(filenameBuffer);
-	
-	if (uiState == stateViewGameCardFsBrowser) fsdevUnmountDevice("view");
 }
 
 void uiSetState(UIState state)
@@ -342,7 +342,16 @@ UIResult uiLoop(u32 keysDown)
 	if (uiState == stateMainMenu || uiState == stateXciDumpMenu || uiState == stateRawPartitionDumpMenu || uiState == statePartitionDataDumpMenu || uiState == stateViewGameCardFsMenu || uiState == stateViewGameCardFsBrowser)
 	{
 		// Exit
-		if (keysDown & KEY_PLUS) return resultExit;
+		if (keysDown & KEY_PLUS)
+		{
+			if (uiState == stateViewGameCardFsBrowser)
+			{
+				fsdevUnmountDevice("view");
+				fsFsClose(&fs);
+			}
+			
+			return resultExit;
+		}
 		
 		uiDrawString(appControls, 0, breaks * 8, 255, 255, 255);
 		breaks += 2;
@@ -395,7 +404,7 @@ UIResult uiLoop(u32 keysDown)
 				if (strlen(gameCardUpdateVersionStr))
 				{
 					breaks++;
-					snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Game Card FW Version: %s", gameCardUpdateVersionStr);
+					snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Bundled FW update: %s", gameCardUpdateVersionStr);
 					uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
 				}
 			} else {
@@ -410,7 +419,7 @@ UIResult uiLoop(u32 keysDown)
 							if (strlen(gameCardUpdateVersionStr))
 							{
 								breaks++;
-								snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Game Card FW Version: %s", gameCardUpdateVersionStr);
+								snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Bundled FW Update: %s", gameCardUpdateVersionStr);
 								uiDrawString(titlebuf, 0, breaks * 8, 0, 255, 0);
 								breaks++;
 								
@@ -722,6 +731,7 @@ UIResult uiLoop(u32 keysDown)
 							if (!strcmp(currentDirectory, "view:/") && strlen(currentDirectory) == 6)
 							{
 								fsdevUnmountDevice("view");
+								fsFsClose(&fs);
 								
 								res = resultShowViewGameCardFsMenu;
 							} else {
@@ -807,7 +817,7 @@ UIResult uiLoop(u32 keysDown)
 		uiDrawString((hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? viewGameCardFsType1MenuItems[selectedOption] : viewGameCardFsType1MenuItems[selectedOption]), 0, breaks * 8, 115, 115, 255);
 		breaks += 2;
 		
-		if (mountViewPartition(&fsOperatorInstance, selectedOption))
+		if (mountViewPartition(&fsOperatorInstance, &fs, selectedOption))
 		{
 			enterDirectory("view:/");
 			

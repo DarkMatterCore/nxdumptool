@@ -4,7 +4,6 @@
 #include <memory.h>
 
 #include "dumper.h"
-#include "ncmext.h"
 #include "ui.h"
 #include "util.h"
 

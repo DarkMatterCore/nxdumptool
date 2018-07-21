@@ -33,7 +33,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 VERSION_MAJOR := 1
 VERSION_MINOR := 0
-VERSION_MICRO := 5
+VERSION_MICRO := 6
 
 APP_TITLE	:=	gcdumptool
 APP_AUTHOR	:=	MCMrARM, DarkMatterCore
@@ -56,8 +56,8 @@ CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
 			$(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -D__LINUX_ERRNO_EXTENSIONS__
-CFLAGS  +=  `aarch64-none-elf-pkg-config libxml-2.0 --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config zlib --cflags`
+CFLAGS  +=  `aarch64-none-elf-pkg-config libxml-2.0 --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config json-c --cflags`
 
 CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
@@ -65,7 +65,7 @@ CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lcurl -lz -lnx -ljson-c -lxml2 -lm
+LIBS	:= -lcurl -lxml2 -lz -lnx -ljson-c -lm
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

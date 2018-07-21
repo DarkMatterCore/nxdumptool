@@ -83,7 +83,7 @@ bool copyDirectory(const char* source, const char* dest, bool doSplitting);
 void removeDirectory(const char *path);
 bool getDirectorySize(const char *path, u64 *out_size);
 bool dumpPartitionData(FsDeviceOperator* fsOperator, u32 partition);
-bool mountViewPartition(FsDeviceOperator *fsOperator, u32 partition);
+bool mountViewPartition(FsDeviceOperator *fsOperator, FsFileSystem *out, u32 partition);
 bool dumpGameCertificate(FsDeviceOperator *fsOperator);
 
 #endif

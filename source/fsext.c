@@ -15,7 +15,7 @@ Result fsOpenGameCardStorage(FsStorage* out, u32 handle, u32 partition)
 		u64 cmd_id;
 		u32 handle;
 		u32 partition;
-	} PACKED *raw;
+	} *raw;
 	
 	raw = ipcPrepareHeader(&c, sizeof(*raw));
 	
@@ -54,7 +54,7 @@ Result fsOpenGameCardFileSystem(FsFileSystem* out, u32 handle, u32 partition)
 		u64 cmd_id;
 		u32 handle;
 		u32 partition;
-	} PACKED *raw;
+	} *raw;
 	
 	raw = ipcPrepareHeader(&c, sizeof(*raw));
 	
@@ -194,43 +194,6 @@ Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator* d, u32 handle, u32*
 			if (out_title_version != NULL) *out_title_version = resp->title_ver;
 			if (out_title_id != NULL) *out_title_id = resp->title_id;
 		}
-	}
-	
-	return rc;
-}
-
-// FsStorage
-Result fsStorageGetSize(FsStorage* s, u64* out)
-{
-	IpcCommand c;
-	ipcInitialize(&c);
-	
-	struct {
-		u64 magic;
-		u64 cmd_id;
-	} *raw;
-	
-	raw = ipcPrepareHeader(&c, sizeof(*raw));
-	
-	raw->magic = SFCI_MAGIC;
-	raw->cmd_id = 4;
-	
-	Result rc = serviceIpcDispatch(&s->s);
-	
-	if (R_SUCCEEDED(rc))
-	{
-		IpcParsedCommand r;
-		ipcParse(&r);
-		
-		struct {
-			u64 magic;
-			u64 result;
-			u64 size;
-		} *resp = r.Raw;
-		
-		rc = resp->result;
-		
-		if (R_SUCCEEDED(rc)) *out = resp->size;
 	}
 	
 	return rc;

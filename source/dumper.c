@@ -1529,6 +1529,8 @@ bool dumpPartitionData(FsDeviceOperator* fsOperator, u32 partition)
 			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "fsdevMountDevice failed! (%d)", ret);
 			uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
 		}
+		
+		fsFsClose(&fs);
 	} else {
 		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open partition #%u filesystem!", partition);
 		uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
@@ -1539,17 +1541,16 @@ bool dumpPartitionData(FsDeviceOperator* fsOperator, u32 partition)
 	return success;
 }
 
-bool mountViewPartition(FsDeviceOperator *fsOperator, u32 partition)
+bool mountViewPartition(FsDeviceOperator *fsOperator, FsFileSystem *out, u32 partition)
 {
-	FsFileSystem fs;
 	int ret;
 	bool success = false;
 	
 	workaroundPartitionZeroAccess(fsOperator);
 	
-	if (openPartitionFs(&fs, fsOperator, partition))
+	if (openPartitionFs(out, fsOperator, partition))
 	{
-		ret = fsdevMountDevice("view", fs);
+		ret = fsdevMountDevice("view", *out);
 		if (ret != -1)
 		{
 			//snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "fsdevMountDevice succeeded: %d", ret);
@@ -1558,6 +1559,7 @@ bool mountViewPartition(FsDeviceOperator *fsOperator, u32 partition)
 			
 			success = true;
 		} else {
+			fsFsClose(out);
 			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "fsdevMountDevice failed! (%d)", ret);
 			uiDrawString(strbuf, 0, breaks * 8, 255, 0, 0);
 		}

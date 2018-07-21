@@ -5,9 +5,13 @@
 
 #include <switch.h>
 
-#define APP_VERSION "1.0.5"
-#define NAME_BUF_LEN 4096
-#define SOCK_BUFFERSIZE 65536
+#define APP_VERSION				"1.0.6"
+
+#define NAME_BUF_LEN			4096
+
+#define SOCK_BUFFERSIZE			65536
+
+#define META_DATABASE_FILTER	0x80	// Regular Application
 
 bool isGameCardInserted(FsDeviceOperator* o);
 

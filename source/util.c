@@ -9,6 +9,7 @@
 #include <sys/stat.h>
 #include <sys/statvfs.h>
 #include <sys/socket.h>
+#include <switch/services/ncm.h>
 #include <switch/services/ns.h>
 #include <libxml2/libxml/globals.h>
 #include <libxml2/libxml/xpath.h>
@@ -17,7 +18,6 @@
 
 #include "dumper.h"
 #include "fsext.h"
-#include "ncmext.h"
 #include "ui.h"
 #include "util.h"
 
@@ -77,38 +77,30 @@ bool getGameCardTitleIDAndVersion(u64 *titleID, u32 *version)
 	bool success = false;
 	
 	Result result;
-	ncmContentMetaDatabase ncmDb;
+	NcmContentMetaDatabase ncmDb;
 	
-	ncmApplicationMetaKey *appList = (ncmApplicationMetaKey*)malloc(sizeof(ncmApplicationMetaKey));
+	NcmApplicationContentMetaKey *appList = (NcmApplicationContentMetaKey*)malloc(sizeof(NcmApplicationContentMetaKey));
 	if (appList)
 	{
-		memset(appList, 0, sizeof(ncmApplicationMetaKey));
+		memset(appList, 0, sizeof(NcmApplicationContentMetaKey));
 		
-		if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(FsStorageId_GameCard)))
+		if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(FsStorageId_GameCard, &ncmDb)))
 		{
-			if (R_SUCCEEDED(result = ncmGetContentMetaDatabase(&ncmDb, FsStorageId_GameCard)))
+			if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, META_DATABASE_FILTER, appList, sizeof(NcmApplicationContentMetaKey), NULL, NULL)))
 			{
-				if (R_SUCCEEDED(result = ncmMetaDatabaseListApplication(&ncmDb, appList, sizeof(ncmApplicationMetaKey), 0)))
-				{
-					*titleID = appList->meta_record.titleID;
-					*version = appList->meta_record.titleVersion;
-					success = true;
-				} else {
-					uiStatusMsg("getGameCardTitleIDAndVersion: MetaDatabaseListApplication failed! (0x%08X)", result);
-				}
+				*titleID = appList->metaRecord.titleId;
+				*version = appList->metaRecord.version;
+				success = true;
 			} else {
-				uiStatusMsg("getGameCardTitleIDAndVersion: GetContentMetaDatabase failed! (0x%08X)", result);
+				uiStatusMsg("getGameCardTitleIDAndVersion: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
 			}
 		} else {
-			uiStatusMsg("getGameCardTitleIDAndVersion: OpenContentMetaDatabase failed! (0x%08X)", result);
+			uiStatusMsg("getGameCardTitleIDAndVersion: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
 		}
-		
-		// Seems to cause problems
-		//if (R_FAILED(result = ncmCloseContentMetaDatabase(FsStorageId_GameCard))) uiStatusMsg("getGameCardTitleIDAndVersion: CloseContentMetaDatabase failed! (0x%08X)", result);
 		
 		free(appList);
 	} else {
-		uiStatusMsg("getGameCardTitleIDAndVersion: Unable to allocate memory for the NCM service operations.");
+		uiStatusMsg("getGameCardTitleIDAndVersion: Unable to allocate memory for the ncm service operations.");
 	}
 	
 	return success;
@@ -147,7 +139,6 @@ bool getGameCardControlNacp(u64 titleID, char *nameBuf, int nameBufSize, char *a
 				{
 					strncpy(nameBuf, langentry->name, nameBufSize - 1);
 					strncpy(authorBuf, langentry->author, authorBufSize - 1);
-					
 					success = true;
 				} else {
 					uiStatusMsg("getGameCardControlNacp: GetLanguageEntry failed! (0x%08X)", result);
@@ -161,7 +152,7 @@ bool getGameCardControlNacp(u64 titleID, char *nameBuf, int nameBufSize, char *a
 		
 		free(buf);
 	} else {
-		uiStatusMsg("getGameCardControlNacp: Unable to allocate memory for the NS service operations.");
+		uiStatusMsg("getGameCardControlNacp: Unable to allocate memory for the ns service operations.");
 	}
 	
 	return success;
