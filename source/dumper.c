@@ -435,7 +435,7 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 	u8 progress = 0;
 	u32 crc1 = 0, crc2 = 0;
 	
-	time_t start, now, remainingTime;
+	u64 start, now, remainingTime;
 	struct tm *timeinfo;
 	char etaInfo[32] = {'\0'};
 	double lastSpeed = 0.0, averageSpeed = 0.0;
@@ -535,7 +535,7 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 					uiDrawString(strbuf, 0, breaks * 8, 255, 255, 255);
 					breaks += 2;
 					
-					time(&start);
+					timeGetCurrentTime(TimeType_LocalSystemClock, &start);
 					
 					for(partition = 0; partition < ISTORAGE_PARTITION_CNT; partition++)
 					{
@@ -658,14 +658,14 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 										}
 									}
 									
-									time(&now);
+									timeGetCurrentTime(TimeType_LocalSystemClock, &now);
 									
-									lastSpeed = ((double)((fileOffset + n) / DUMP_BUFFER_SIZE) / difftime(now, start));
+									lastSpeed = (((double)(fileOffset + n) / (double)DUMP_BUFFER_SIZE) / difftime((time_t)now, (time_t)start));
 									averageSpeed = ((SMOOTHING_FACTOR * lastSpeed) + ((1 - SMOOTHING_FACTOR) * averageSpeed));
 									if (!isnormal(averageSpeed)) averageSpeed = 0.00; // Very low values
 									
-									remainingTime = (time_t)((double)((totalSize - (fileOffset + n)) / DUMP_BUFFER_SIZE) / averageSpeed);
-									timeinfo = localtime(&remainingTime);
+									remainingTime = (u64)(((double)(totalSize - (fileOffset + n)) / (double)DUMP_BUFFER_SIZE) / averageSpeed);
+									timeinfo = localtime((time_t*)&remainingTime);
 									strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
 									
 									progress = (u8)(((fileOffset + n) * 100) / totalSize);
@@ -749,7 +749,7 @@ bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert
 					breaks += 7;
 					
 					now -= start;
-					timeinfo = localtime(&now);
+					timeinfo = localtime((time_t*)&now);
 					strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
 					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", etaInfo);
 					uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);
@@ -828,7 +828,7 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 	FILE *outFile = NULL;
 	u8 splitIndex = 0;
 	
-	time_t start, now, remainingTime;
+	u64 start, now, remainingTime;
 	struct tm *timeinfo;
 	char etaInfo[32] = {'\0'};
 	double lastSpeed = 0.0, averageSpeed = 0.0;
@@ -888,7 +888,7 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 							
 							syncDisplay();
 							
-							time(&start);
+							timeGetCurrentTime(TimeType_LocalSystemClock, &start);
 							
 							for (off = 0; off < size; off += n)
 							{
@@ -947,14 +947,14 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 									}
 								}
 								
-								time(&now);
+								timeGetCurrentTime(TimeType_LocalSystemClock, &now);
 								
-								lastSpeed = ((double)((off + n) / DUMP_BUFFER_SIZE) / difftime(now, start));
+								lastSpeed = (((double)(off + n) / (double)DUMP_BUFFER_SIZE) / difftime((time_t)now, (time_t)start));
 								averageSpeed = ((SMOOTHING_FACTOR * lastSpeed) + ((1 - SMOOTHING_FACTOR) * averageSpeed));
 								if (!isnormal(averageSpeed)) averageSpeed = 0.00; // Very low values
 								
-								remainingTime = (time_t)((double)((size - (off + n)) / DUMP_BUFFER_SIZE) / averageSpeed);
-								timeinfo = localtime(&remainingTime);
+								remainingTime = (u64)(((double)(size - (off + n)) / (double)DUMP_BUFFER_SIZE) / averageSpeed);
+								timeinfo = localtime((time_t*)&remainingTime);
 								strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
 								
 								progress = (u8)(((off + n) * 100) / size);
@@ -1004,7 +1004,7 @@ bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitt
 							if (success)
 							{
 								now -= start;
-								timeinfo = localtime(&now);
+								timeinfo = localtime((time_t*)&now);
 								strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
 								snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", etaInfo);
 								uiDrawString(strbuf, 0, (breaks + 4) * 8, 0, 255, 0);
@@ -1104,7 +1104,7 @@ bool copyFile(const char* source, const char* dest, bool doSplitting, bool calcE
 	u8 progress = 0;
 	char totalSizeStr[32] = {'\0'}, curSizeStr[32] = {'\0'};
 	
-	time_t start, now, remainingTime;
+	u64 start, now, remainingTime;
 	struct tm *timeinfo;
 	char etaInfo[32] = {'\0'};
 	double lastSpeed = 0.0, averageSpeed = 0.0;
@@ -1134,7 +1134,7 @@ bool copyFile(const char* source, const char* dest, bool doSplitting, bool calcE
 				buf = (char*)malloc(DUMP_BUFFER_SIZE);
 				if (buf)
 				{
-					if (calcEta) time(&start);
+					if (calcEta) timeGetCurrentTime(TimeType_LocalSystemClock, &start);
 					
 					for (off = 0; off < size; off += n)
 					{
@@ -1195,14 +1195,14 @@ bool copyFile(const char* source, const char* dest, bool doSplitting, bool calcE
 						
 						if (calcEta)
 						{
-							time(&now);
+							timeGetCurrentTime(TimeType_LocalSystemClock, &now);
 							
-							lastSpeed = ((double)((off + n) / DUMP_BUFFER_SIZE) / difftime(now, start));
+							lastSpeed = (((double)(off + n) / (double)DUMP_BUFFER_SIZE) / difftime((time_t)now, (time_t)start));
 							averageSpeed = ((SMOOTHING_FACTOR * lastSpeed) + ((1 - SMOOTHING_FACTOR) * averageSpeed));
 							if (!isnormal(averageSpeed)) averageSpeed = 0.00; // Very low values
 							
-							remainingTime = (time_t)((double)((size - (off + n)) / DUMP_BUFFER_SIZE) / averageSpeed);
-							timeinfo = localtime(&remainingTime);
+							remainingTime = (u64)(((double)(size - (off + n)) / (double)DUMP_BUFFER_SIZE) / averageSpeed);
+							timeinfo = localtime((time_t*)&remainingTime);
 							strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
 							
 							uiFill(0, ((breaks + 3) * 8) + 4, (currentFBWidth / 4) - 8, 8, 50, 50, 50);
@@ -1271,7 +1271,7 @@ bool copyFile(const char* source, const char* dest, bool doSplitting, bool calcE
 						breaks += 7;
 						
 						now -= start;
-						timeinfo = localtime(&now);
+						timeinfo = localtime((time_t*)&now);
 						strftime(etaInfo, sizeof(etaInfo) / sizeof(etaInfo[0]), "%HH%MM%SS", timeinfo);
 						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", etaInfo);
 						uiDrawString(strbuf, 0, breaks * 8, 0, 255, 0);

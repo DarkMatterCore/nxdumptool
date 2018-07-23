@@ -54,136 +54,146 @@ int main(int argc, char **argv)
 			{
 				if (R_SUCCEEDED(result = nsInitialize()))
 				{
-					bool exitLoop = false;
-					
-					while(appletMainLoop())
+					if (R_SUCCEEDED(result = timeInitialize()))
 					{
-						currentFB = gfxGetFramebuffer(&currentFBWidth, &currentFBHeight);
+						bool exitLoop = false;
 						
-						uiPrintHeadline();
-						
-						gameCardInserted = isGameCardInserted(&fsOperatorInstance);
-						
-						if (gameCardInserted)
+						while(appletMainLoop())
 						{
-							if (hfs0_header == NULL)
+							currentFB = gfxGetFramebuffer(&currentFBWidth, &currentFBHeight);
+							
+							uiPrintHeadline();
+							
+							gameCardInserted = isGameCardInserted(&fsOperatorInstance);
+							
+							if (gameCardInserted)
 							{
-								// Don't access the gamecard immediately to avoid conflicts with the fsp-srv, ncm and ns services
-								uiPleaseWait();
-								
-								if (getRootHfs0Header(&fsOperatorInstance))
+								if (hfs0_header == NULL)
 								{
-									if (getGameCardTitleIDAndVersion(&gameCardTitleID, &gameCardVersion))
+									// Don't access the gamecard immediately to avoid conflicts with the fsp-srv, ncm and ns services
+									uiPleaseWait();
+									
+									if (getRootHfs0Header(&fsOperatorInstance))
 									{
-										convertTitleVersionToDecimal(gameCardVersion, gameCardVersionStr, sizeof(gameCardVersionStr));
-										getGameCardControlNacp(gameCardTitleID, gameCardName, sizeof(gameCardName), gameCardAuthor, sizeof(gameCardAuthor));
-										strtrim(gameCardName);
-										
-										if (strlen(gameCardName))
+										if (getGameCardTitleIDAndVersion(&gameCardTitleID, &gameCardVersion))
 										{
-											snprintf(fixedGameCardName, sizeof(fixedGameCardName) / sizeof(fixedGameCardName[0]), "%s", gameCardName);
-											removeIllegalCharacters(fixedGameCardName);
+											convertTitleVersionToDecimal(gameCardVersion, gameCardVersionStr, sizeof(gameCardVersionStr));
+											getGameCardControlNacp(gameCardTitleID, gameCardName, sizeof(gameCardName), gameCardAuthor, sizeof(gameCardAuthor));
+											strtrim(gameCardName);
+											
+											if (strlen(gameCardName))
+											{
+												snprintf(fixedGameCardName, sizeof(fixedGameCardName) / sizeof(fixedGameCardName[0]), "%s", gameCardName);
+												removeIllegalCharacters(fixedGameCardName);
+											}
 										}
 									}
+									
+									uiPrintHeadline();
+									uiUpdateStatusMsg();
 								}
-								
-								uiPrintHeadline();
-								uiUpdateStatusMsg();
-							}
-						} else {
-							if (hfs0_header != NULL)
-							{
-								gameCardSize = 0;
-								memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
-								
-								trimmedCardSize = 0;
-								memset(trimmedCardSizeStr, 0, sizeof(trimmedCardSizeStr));
-								
-								free(hfs0_header);
-								hfs0_header = NULL;
-								hfs0_offset = hfs0_size = 0;
-								hfs0_partition_cnt = 0;
-								
-								/*if (partitionHfs0Header != NULL)
+							} else {
+								if (hfs0_header != NULL)
 								{
-									free(partitionHfs0Header);
-									partitionHfs0Header = NULL;
-									partitionHfs0HeaderSize = 0;
-								}*/
-								
-								gameCardTitleID = 0;
-								gameCardVersion = 0;
-								
-								memset(gameCardName, 0, sizeof(gameCardName));
-								memset(fixedGameCardName, 0, sizeof(fixedGameCardName));
-								memset(gameCardAuthor, 0, sizeof(gameCardAuthor));
-								memset(gameCardVersionStr, 0, sizeof(gameCardVersionStr));
-								
-								gameCardUpdateTitleID = 0;
-								gameCardUpdateVersion = 0;
-								
-								memset(gameCardUpdateVersionStr, 0, sizeof(gameCardUpdateVersionStr));
+									gameCardSize = 0;
+									memset(gameCardSizeStr, 0, sizeof(gameCardSizeStr));
+									
+									trimmedCardSize = 0;
+									memset(trimmedCardSizeStr, 0, sizeof(trimmedCardSizeStr));
+									
+									free(hfs0_header);
+									hfs0_header = NULL;
+									hfs0_offset = hfs0_size = 0;
+									hfs0_partition_cnt = 0;
+									
+									/*if (partitionHfs0Header != NULL)
+									{
+										free(partitionHfs0Header);
+										partitionHfs0Header = NULL;
+										partitionHfs0HeaderSize = 0;
+									}*/
+									
+									gameCardTitleID = 0;
+									gameCardVersion = 0;
+									
+									memset(gameCardName, 0, sizeof(gameCardName));
+									memset(fixedGameCardName, 0, sizeof(fixedGameCardName));
+									memset(gameCardAuthor, 0, sizeof(gameCardAuthor));
+									memset(gameCardVersionStr, 0, sizeof(gameCardVersionStr));
+									
+									gameCardUpdateTitleID = 0;
+									gameCardUpdateVersion = 0;
+									
+									memset(gameCardUpdateVersionStr, 0, sizeof(gameCardUpdateVersionStr));
+								}
 							}
+							
+							hidScanInput();
+							u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+							
+							UIResult result = uiLoop(keysDown);
+							switch(result)
+							{
+								case resultShowMainMenu:
+									uiSetState(stateMainMenu);
+									break;
+								case resultShowXciDumpMenu:
+									uiSetState(stateXciDumpMenu);
+									break;
+								case resultDumpXci:
+									uiSetState(stateDumpXci);
+									break;
+								case resultShowRawPartitionDumpMenu:
+									uiSetState(stateRawPartitionDumpMenu);
+									break;
+								case resultDumpRawPartition:
+									uiSetState(stateDumpRawPartition);
+									break;
+								case resultShowPartitionDataDumpMenu:
+									uiSetState(statePartitionDataDumpMenu);
+									break;
+								case resultDumpPartitionData:
+									uiSetState(stateDumpPartitionData);
+									break;
+								case resultShowViewGameCardFsMenu:
+									uiSetState(stateViewGameCardFsMenu);
+									break;
+								case resultShowViewGameCardFsGetList:
+									uiSetState(stateViewGameCardFsGetList);
+									break;
+								case resultShowViewGameCardFsBrowser:
+									uiSetState(stateViewGameCardFsBrowser);
+									break;
+								case resultViewGameCardFsBrowserCopyFile:
+									uiSetState(stateViewGameCardFsBrowserCopyFile);
+									break;
+								case resultDumpGameCardCertificate:
+									uiSetState(stateDumpGameCardCertificate);
+									break;
+								case resultUpdateNSWDBXml:
+									uiSetState(stateUpdateNSWDBXml);
+									break;
+								case resultUpdateApplication:
+									uiSetState(stateUpdateApplication);
+									break;
+								case resultExit:
+									exitLoop = true;
+									break;
+								default:
+									break;
+							}
+							
+							if (exitLoop) break;
+							
+							syncDisplay();
 						}
 						
-						hidScanInput();
-						u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-						
-						UIResult result = uiLoop(keysDown);
-						switch(result)
-						{
-							case resultShowMainMenu:
-								uiSetState(stateMainMenu);
-								break;
-							case resultShowXciDumpMenu:
-								uiSetState(stateXciDumpMenu);
-								break;
-							case resultDumpXci:
-								uiSetState(stateDumpXci);
-								break;
-							case resultShowRawPartitionDumpMenu:
-								uiSetState(stateRawPartitionDumpMenu);
-								break;
-							case resultDumpRawPartition:
-								uiSetState(stateDumpRawPartition);
-								break;
-							case resultShowPartitionDataDumpMenu:
-								uiSetState(statePartitionDataDumpMenu);
-								break;
-							case resultDumpPartitionData:
-								uiSetState(stateDumpPartitionData);
-								break;
-							case resultShowViewGameCardFsMenu:
-								uiSetState(stateViewGameCardFsMenu);
-								break;
-							case resultShowViewGameCardFsGetList:
-								uiSetState(stateViewGameCardFsGetList);
-								break;
-							case resultShowViewGameCardFsBrowser:
-								uiSetState(stateViewGameCardFsBrowser);
-								break;
-							case resultViewGameCardFsBrowserCopyFile:
-								uiSetState(stateViewGameCardFsBrowserCopyFile);
-								break;
-							case resultDumpGameCardCertificate:
-								uiSetState(stateDumpGameCardCertificate);
-								break;
-							case resultUpdateNSWDBXml:
-								uiSetState(stateUpdateNSWDBXml);
-								break;
-							case resultUpdateApplication:
-								uiSetState(stateUpdateApplication);
-								break;
-							case resultExit:
-								exitLoop = true;
-								break;
-							default:
-								break;
-						}
-						
-						if (exitLoop) break;
-						
-						syncDisplay();
+						timeExit();
+					} else {
+						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the time service! (0x%08X)", result);
+						uiDrawString(strbuf, 0, 0, 255, 255, 255);
+						delay(5);
+						ret = -5;
 					}
 					
 					nsExit();

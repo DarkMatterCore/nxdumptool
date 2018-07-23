@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <math.h>
-#include <time.h>
 #include <dirent.h>
 #include <ctype.h>
 #include <sys/stat.h>
@@ -66,10 +65,10 @@ void delay(u8 seconds)
 {
 	if (!seconds) return;
 	
-	time_t timer;
-	time(&timer);
+	u64 nanoseconds = seconds * (u64)1000000000;
+	svcSleepThread(nanoseconds);
 	
-	while(time(NULL) < (timer + seconds)) syncDisplay();
+	syncDisplay();
 }
 
 bool getGameCardTitleIDAndVersion(u64 *titleID, u32 *version)

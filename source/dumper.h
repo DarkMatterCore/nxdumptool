@@ -60,7 +60,7 @@
 #define bswap_32(a)						((((a) << 24) & 0xff000000) | (((a) << 8) & 0xff0000) | (((a) >> 8) & 0xff00) | (((a) >> 24) & 0xff))
 #define round_up(x, y)					((x) + (((y) - ((x) % (y))) % (y)))			// Aligns 'x' bytes to a 'y' bytes boundary
 
-#define SMOOTHING_FACTOR				(double)0.05
+#define SMOOTHING_FACTOR				(double)0.01
 
 typedef struct
 {
