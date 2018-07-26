@@ -78,9 +78,10 @@ int main(int argc, char **argv)
 										if (getGameCardTitleIDAndVersion(&gameCardTitleID, &gameCardVersion))
 										{
 											convertTitleVersionToDecimal(gameCardVersion, gameCardVersionStr, sizeof(gameCardVersionStr));
-											getGameCardControlNacp(gameCardTitleID, gameCardName, sizeof(gameCardName), gameCardAuthor, sizeof(gameCardAuthor));
-											strtrim(gameCardName);
 											
+											getGameCardControlNacp(gameCardTitleID, gameCardName, sizeof(gameCardName), gameCardAuthor, sizeof(gameCardAuthor));
+											
+											strtrim(gameCardName);
 											if (strlen(gameCardName))
 											{
 												snprintf(fixedGameCardName, sizeof(fixedGameCardName) / sizeof(fixedGameCardName[0]), "%s", gameCardName);
@@ -192,6 +193,7 @@ int main(int argc, char **argv)
 					} else {
 						snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the time service! (0x%08X)", result);
 						uiDrawString(strbuf, 0, 0, 255, 255, 255);
+						syncDisplay();
 						delay(5);
 						ret = -5;
 					}
@@ -200,6 +202,7 @@ int main(int argc, char **argv)
 				} else {
 					snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the ns service! (0x%08X)", result);
 					uiDrawString(strbuf, 0, 0, 255, 255, 255);
+					syncDisplay();
 					delay(5);
 					ret = -4;
 				}
@@ -208,6 +211,7 @@ int main(int argc, char **argv)
 			} else {
 				snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the ncm service! (0x%08X)", result);
 				uiDrawString(strbuf, 0, 0, 255, 255, 255);
+				syncDisplay();
 				delay(5);
 				ret = -3;
 			}
@@ -216,6 +220,7 @@ int main(int argc, char **argv)
 		} else {
 			snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open device operator! (0x%08X)", result);
 			uiDrawString(strbuf, 0, 0, 255, 255, 255);
+			syncDisplay();
 			delay(5);
 			ret = -2;
 		}
@@ -224,6 +229,7 @@ int main(int argc, char **argv)
 	} else {
 		snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the fsp-srv service! (0x%08X)", result);
 		uiDrawString(strbuf, 0, 0, 255, 255, 255);
+		syncDisplay();
 		delay(5);
 		ret = -1;
 	}
@@ -231,10 +237,10 @@ int main(int argc, char **argv)
 	if (hfs0_header != NULL) free(hfs0_header);
 	
 	//if (partitionHfs0Header != NULL) free(partitionHfs0Header);
-	
+
 	uiDeinit();
 	
-    gfxExit();
+	gfxExit();
 	
-    return ret;
+	return ret;
 }

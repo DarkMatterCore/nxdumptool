@@ -237,6 +237,7 @@ void uiDrawString(const char* string, int x, int y, u8 r, u8 g, u8 b)
 void uiStatusMsg(const char* format, ...)
 {
 	statusMessageFadeout = 1000;
+	
 	va_list args;
 	va_start(args, format);
 	vsnprintf(statusMessage, sizeof(statusMessage) / sizeof(statusMessage[0]), format, args);
@@ -249,9 +250,12 @@ void uiUpdateStatusMsg()
 {
 	if (!strlen(statusMessage) || !statusMessageFadeout) return;
 	
-	int fadeout = (statusMessageFadeout > 255 ? 255 : statusMessageFadeout);
 	uiFill(0, currentFBHeight - 12, currentFBWidth, 8, 50, 50, 50);
+	
+	int fadeout = (statusMessageFadeout > 255 ? 255 : statusMessageFadeout);
 	uiDrawString(statusMessage, 4, currentFBHeight - 12, fadeout, fadeout, fadeout);
+	syncDisplay();
+	
 	statusMessageFadeout -= 4;
 }
 
