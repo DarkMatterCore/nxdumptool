@@ -5,17 +5,24 @@
 
 #include <switch.h>
 
-#define APP_VERSION				"1.0.6"
+#define KiB                     (1024.0)
+#define MiB                     (1024.0 * KiB)
+#define GiB                     (1024.0 * MiB)
 
-#define NAME_BUF_LEN			4096
+#define APP_VERSION             "1.0.6"
 
-#define SOCK_BUFFERSIZE			65536
+#define NAME_BUF_LEN            4096
 
-#define META_DATABASE_FILTER	0x80	// Regular Application
+#define SOCK_BUFFERSIZE         65536
 
-bool isGameCardInserted(FsDeviceOperator* o);
+#define META_DATABASE_FILTER    0x80	// Regular Application
 
-void syncDisplay();
+#define FILENAME_BUFFER_SIZE    (1024 * 512)  // 512 KiB
+#define FILENAME_MAX_CNT        2048
+
+bool isGameCardInserted();
+
+void fsGameCardDetectionThreadFunc(void *arg);
 
 void delay(u8 seconds);
 
@@ -24,6 +31,12 @@ bool getGameCardTitleIDAndVersion(u64 *titleID, u32 *version);
 void convertTitleVersionToDecimal(u32 version, char *versionBuf, int versionBufSize);
 
 bool getGameCardControlNacp(u64 titleID, char *nameBuf, int nameBufSize, char *authorBuf, int authorBufSize);
+
+void removeIllegalCharacters(char *name);
+
+void strtrim(char *str);
+
+void loadGameCardInfo();
 
 int getSdCardFreeSpace(u64 *out);
 
@@ -37,14 +50,12 @@ void addString(char **filenames, int *filenamesCount, char **nextFilename, const
 
 void getDirectoryContents(char *filenameBuffer, char **filenames, int *filenamesCount, const char *directory, bool skipParent);
 
+void enterDirectory(const char *path);
+
 void gameCardDumpNSWDBCheck(u32 crc);
 
 void updateNSWDBXml();
 
 void updateApplication();
-
-void removeIllegalCharacters(char *name);
-
-void strtrim(char *str);
 
 #endif

@@ -7,12 +7,11 @@
 #include <switch/services/fs.h>
 
 // IFileSystemProxy
-Result fsOpenGameCardStorage(FsStorage* out, u32 handle, u32 partition);
-Result fsOpenGameCardFileSystem(FsFileSystem* out, u32 handle, u32 partition);
+Result fsOpenGameCardStorage(FsStorage* out, const FsGameCardHandle* handle, u32 partition);
+Result fsOpenGameCardFileSystem(FsFileSystem* out, const FsGameCardHandle* handle, u32 partition);
+Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier* out);
 
 // IDeviceOperator
-Result fsDeviceOperatorIsGameCardInserted(FsDeviceOperator* d, bool* out);
-Result fsDeviceOperatorGetGameCardHandle(FsDeviceOperator* d, u32* out);
-Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator* d, u32 handle, u32* out_title_version, u64* out_title_id);
+Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator* d, const FsGameCardHandle* handle, u32* out_title_version, u64* out_title_id);
 
 #endif
