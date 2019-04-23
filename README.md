@@ -4,18 +4,18 @@ Nintendo Switch Game Card Dump Tool
 Main features
 --------------
 
-* Generates XCI cartridge dumps (with optional certificate removal and optional trimming).
+* Generates XCI cartridge dumps with optional certificate removal and optional trimming.
 * CRC32 checksum calculation for XCI dumps.
-* Full XCI dump verification using XML database from nswdb.com (NSWreleases.xml).
-* XML database update via libcurl.
-* Precise HFS0 raw partition dumping (using the root HFS0 header from the game card).
+* Full XCI dump verification using XML database from NSWDB.COM (NSWreleases.xml).
+* XML database and in-app update via libcurl.
+* Precise HFS0 raw partition dumping, using the root HFS0 header from the game card.
 * Partition filesystem data dumping.
-* Partition filesystem browser (with manual file dump support).
+* Partition filesystem browser with manual file dump support.
 * Manual game card certificate dump.
 * Free SD card space checks in place.
 * File splitting support for all operations, using 2 GiB parts.
 * Game card Title ID and Control.nacp retrieval support using NCM and NS services.
-* Dump speed and ETA calculation.
+* Dump speed, ETA calculation and progress bar.
 
 Thanks to
 --------------
@@ -30,6 +30,21 @@ Thanks to
 
 Changelog
 --------------
+
+**v1.0.6:**
+
+* Updated application codebase in order to make it compatible with the latest devkitA64 and libnx releases.
+* Removed some fs-srv service functions from fsext.c/h that have been included in libnx (and fixed the ones that haven't).
+* Revamped the GFX code to replace the 8x8 ASCII font with the shared system font, using the pl service and FreeType.
+* Enabled (and fixed) the in-app update option. HTTPS compatibility is achieved through the mbedtls portlib.
+* Disabled screen dimming and auto sleep.
+* Added file counter to partition browser.
+* Changed the naming convention for split gamecard dumps to *.xc[part number], in order to make them compatible with SX OS and other tools right away.
+* Increased the delay after inserting a new gamecard by 1 second.
+* Added a gamecard detection thread to monitor gamecard state changes in a better way. This thread is hooked to a gamecard detection kernel handle retrieved through an IEventNotifier object.
+* Replaced partition filesystem mounting through fs-srv service calls with manual HFS0 partition header parsing. This should fix issues when browsing the Logo partition from type 0x02 gamecards.
+* Blocked HOME button presses when running as a regular/system application instead of an applet. A warning message will be displayed whenever any operation is started if the application is running as an applet.
+* Added detection for bundled FW versions 6.0.0 - 8.0.0.
 
 **v1.0.5:**
 

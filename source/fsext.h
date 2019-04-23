@@ -8,7 +8,6 @@
 
 // IFileSystemProxy
 Result fsOpenGameCardStorage(FsStorage* out, const FsGameCardHandle* handle, u32 partition);
-Result fsOpenGameCardFileSystem(FsFileSystem* out, const FsGameCardHandle* handle, u32 partition);
 Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier* out);
 
 // IDeviceOperator

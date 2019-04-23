@@ -4,6 +4,7 @@
 #include <errno.h>
 #include <math.h>
 #include <dirent.h>
+#include <unistd.h>
 #include <ctype.h>
 #include <sys/stat.h>
 #include <sys/statvfs.h>
@@ -53,8 +54,6 @@ static char *result_buf = NULL;
 static size_t result_sz = 0;
 static size_t result_written = 0;
 
-char currentDirectory[NAME_BUF_LEN] = {'\0'};
-
 char *filenameBuffer = NULL;
 char *filenames[FILENAME_MAX_CNT];
 int filenamesCount = 0;
@@ -64,6 +63,8 @@ FsEventNotifier fsGameCardEventNotifier;
 Handle fsGameCardEventHandle;
 Event fsGameCardKernelEvent;
 UEvent exitEvent;
+
+AppletType programAppletType;
 
 bool gameCardInserted;
 
@@ -75,7 +76,8 @@ u64 hfs0_offset = 0, hfs0_size = 0;
 u32 hfs0_partition_cnt = 0;
 
 char *partitionHfs0Header = NULL;
-u64 partitionHfs0HeaderSize = 0;
+u64 partitionHfs0HeaderOffset = 0, partitionHfs0HeaderSize = 0;
+u32 partitionHfs0FileCount = 0, partitionHfs0StrTableSize = 0;
 
 u64 gameCardTitleID = 0;
 u32 gameCardVersion = 0;
@@ -287,7 +289,10 @@ void loadGameCardInfo()
             {
                 free(partitionHfs0Header);
                 partitionHfs0Header = NULL;
+                partitionHfs0HeaderOffset = 0;
                 partitionHfs0HeaderSize = 0;
+                partitionHfs0FileCount = 0;
+                partitionHfs0StrTableSize = 0;
             }
             
             gameCardTitleID = 0;
@@ -379,76 +384,44 @@ void waitForButtonPress()
     {
         hidScanInput();
         u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-        if (keysDown && !(keysDown & KEY_TOUCH)) break;
+        if (keysDown && !((keysDown & KEY_TOUCH) || (keysDown & KEY_LSTICK_LEFT) || (keysDown & KEY_LSTICK_RIGHT) || (keysDown & KEY_LSTICK_UP) || (keysDown & KEY_LSTICK_DOWN) || \
+            (keysDown & KEY_RSTICK_LEFT) || (keysDown & KEY_RSTICK_RIGHT) || (keysDown & KEY_RSTICK_UP) || (keysDown & KEY_RSTICK_DOWN))) break;
     }
 }
 
-bool isDirectory(char *path)
+void addStringToFilenameBuffer(const char *string, char **nextFilename)
 {
-    DIR* dir = opendir(path);
-    if (!dir) return false;
-    
-    closedir(dir);
-    return true;
-}
-
-void addString(char **filenames, int *filenamesCount, char **nextFilename, const char *string)
-{
-    filenames[(*filenamesCount)++] = *nextFilename;
+    filenames[filenamesCount++] = *nextFilename;
     strcpy(*nextFilename, string);
-    *nextFilename += strlen(string) + 1;
+    *nextFilename += (strlen(string) + 1);
 }
 
-static int sortAlpha(const void* a, const void* b)
+void removeDirectory(const char *path)
 {
-    return strcasecmp(*((const char**)a), *((const char**)b));
-}
-
-void getDirectoryContents(char *filenameBuffer, char **filenames, int *filenamesCount, const char *directory, bool skipParent)
-{
-    struct dirent *ent;
-    int i, maxFilenamesCount = *filenamesCount;
-    char *nextFilename = filenameBuffer;
+    struct dirent* ent;
+    char cur_path[NAME_BUF_LEN] = {'\0'};
     
-    char *slash = (char*)malloc(strlen(directory) + 2);
-    memset(slash, 0, strlen(directory) + 2);
-    snprintf(slash, strlen(directory) + 2, "%s/", directory);
-    
-    *filenamesCount = 0;
-    
-    if (!skipParent) addString(filenames, filenamesCount, &nextFilename, "..");
-    
-    DIR* dir = opendir(slash);
+    DIR *dir = opendir(path);
     if (dir)
     {
-        for(i = 0; i < maxFilenamesCount; i++)
+        while ((ent = readdir(dir)) != NULL)
         {
-            ent = readdir(dir);
-            if (!ent) break;
-            
             if ((strlen(ent->d_name) == 1 && !strcmp(ent->d_name, ".")) || (strlen(ent->d_name) == 2 && !strcmp(ent->d_name, ".."))) continue;
             
-            addString(filenames, filenamesCount, &nextFilename, ent->d_name);
+            snprintf(cur_path, sizeof(cur_path) / sizeof(cur_path[0]), "%s/%s", path, ent->d_name);
+            
+            if (ent->d_type == DT_DIR)
+            {
+                removeDirectory(cur_path);
+            } else {
+                remove(cur_path);
+            }
         }
         
         closedir(dir);
+        
+        rmdir(path);
     }
-    
-    free(slash);
-    
-    // ".." should stay at the top
-    qsort(filenames + 1, (*filenamesCount) - 1, sizeof(char*), &sortAlpha);
-}
-
-void enterDirectory(const char *path)
-{
-    snprintf(currentDirectory, sizeof(currentDirectory) / sizeof(currentDirectory[0]), "%s", path);
-    
-    filenamesCount = FILENAME_MAX_CNT;
-    getDirectoryContents(filenameBuffer, &filenames[0], &filenamesCount, currentDirectory, (!strcmp(currentDirectory, "view:/") && strlen(currentDirectory) == 6));
-    
-    cursor = 0;
-    scroll = 0;
 }
 
 bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u32 crc)
@@ -672,7 +645,13 @@ void updateNSWDBXml()
             {
                 snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Downloading XML database from \"%s\", please wait...", nswReleasesXmlUrl);
                 uiDrawString(strbuf, 0, breaks * font_height, 255, 255, 255);
-                breaks++;
+                breaks += 2;
+                
+                if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+                {
+                    uiDrawString("Do not press the HOME button. Doing so could corrupt the SD card filesystem.", 0, breaks * font_height, 255, 0, 0);
+                    breaks += 2;
+                }
                 
                 uiRefreshDisplay();
                 
@@ -929,6 +908,12 @@ void updateApplication()
                                         
                                         uiDrawString("Please wait...", 0, breaks * font_height, 255, 255, 255);
                                         breaks += 2;
+                                        
+                                        if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+                                        {
+                                            uiDrawString("Do not press the HOME button. Doing so could corrupt the SD card filesystem.", 0, breaks * font_height, 255, 0, 0);
+                                            breaks += 2;
+                                        }
                                         
                                         uiRefreshDisplay();
                                         

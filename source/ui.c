@@ -19,6 +19,8 @@
 
 extern FsDeviceOperator fsOperatorInstance;
 
+extern AppletType programAppletType;
+
 extern bool gameCardInserted;
 
 extern char gameCardSizeStr[32], trimmedCardSizeStr[32];
@@ -27,13 +29,15 @@ extern char *hfs0_header;
 extern u64 hfs0_offset, hfs0_size;
 extern u32 hfs0_partition_cnt;
 
+extern char *partitionHfs0Header;
+extern u64 partitionHfs0HeaderOffset, partitionHfs0HeaderSize;
+extern u32 partitionHfs0FileCount, partitionHfs0StrTableSize;
+
 extern u64 gameCardTitleID;
 extern u32 gameCardVersion;
 extern char gameCardName[0x201], fixedGameCardName[0x201], gameCardAuthor[0x101], gameCardVersionStr[64];
 
 extern char gameCardUpdateVersionStr[128];
-
-extern char currentDirectory[NAME_BUF_LEN];
 
 extern char *filenameBuffer;
 extern char *filenames[FILENAME_MAX_CNT];
@@ -54,18 +58,15 @@ int scroll = 0;
 int breaks = 0;
 int font_height = 0;
 
+static u32 selectedPartitionIndex;
+static u32 selectedFileIndex;
+
 static bool highlight = false;
 
 static bool isFat32 = false, dumpCert = false, trimDump = false, calcCrc = true;
 
-static u32 selectedOption;
-
-static FsFileSystem fs;
-
 static char statusMessage[2048] = {'\0'};
 static int statusMessageFadeout = 0;
-
-static char fileCopyPath[NAME_BUF_LEN * 2] = {'\0'};
 
 static int headlineCnt = 0;
 
@@ -272,19 +273,18 @@ void uiUpdateStatusMsg()
 {
 	if (!strlen(statusMessage) || !statusMessageFadeout) return;
 	
+    uiFill(0, FB_HEIGHT - (font_height * 2), FB_WIDTH, font_height * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+    
     if ((statusMessageFadeout - 4) > BG_COLOR_RGB)
     {
-        uiFill(0, FB_HEIGHT - (font_height * 2), FB_WIDTH, font_height * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-        
         int fadeout = (statusMessageFadeout > 255 ? 255 : statusMessageFadeout);
         uiDrawString(statusMessage, 0, FB_HEIGHT - (font_height * 2), fadeout, fadeout, fadeout);
-        uiRefreshDisplay();
-        
         statusMessageFadeout -= 4;
     } else {
-        uiFill(0, FB_HEIGHT - (font_height * 2), FB_WIDTH, font_height * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
         statusMessageFadeout = 0;
     }
+    
+    uiRefreshDisplay();
 }
 
 void uiPleaseWait()
@@ -411,6 +411,12 @@ int uiInit()
     /* Disable screen dimming and auto sleep */
     appletSetMediaPlaybackState(true);
     
+    /* Get applet type */
+    programAppletType = appletGetAppletType();
+    
+    /* Block HOME menu button presses if we're running as a regular application or a system application */
+    if (programAppletType == AppletType_Application || programAppletType == AppletType_SystemApplication) appletBeginBlockingHomeButton(0);
+    
     /* Clear screen */
     uiClearScreen();
     
@@ -419,6 +425,9 @@ int uiInit()
 
 void uiDeinit()
 {
+    /* Unblock HOME menu button presses if we're running as a regular application or a system application */
+    if (programAppletType == AppletType_Application || programAppletType == AppletType_SystemApplication) appletEndBlockingHomeButton();
+    
     /* Enable screen dimming and auto sleep */
     appletSetMediaPlaybackState(false);
     
@@ -459,6 +468,7 @@ UIResult uiProcess()
     int menuItemsCount = 0;
     
     u32 keysDown;
+    u32 keysHeld;
     
     uiPrintHeadline();
     loadGameCardInfo();
@@ -588,11 +598,7 @@ UIResult uiProcess()
                     menu = (const char**)filenames;
                     menuItemsCount = filenamesCount;
                     
-                    uiDrawString((hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? viewGameCardFsType1MenuItems[selectedOption] : viewGameCardFsType2MenuItems[selectedOption]), 0, breaks * font_height, 115, 115, 255);
-                    breaks += 2;
-                    
-                    snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Current directory: %s", currentDirectory);
-                    uiDrawString(titlebuf, 0, breaks * font_height, 255, 255, 255);
+                    uiDrawString((hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? viewGameCardFsType1MenuItems[selectedPartitionIndex] : viewGameCardFsType2MenuItems[selectedPartitionIndex]), 0, breaks * font_height, 115, 115, 255);
                     breaks += 2;
                     
                     snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "File count: %d | Current file: %d", menuItemsCount, cursor + 1);
@@ -677,18 +683,10 @@ UIResult uiProcess()
         
         hidScanInput();
         keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        keysHeld = hidKeysHeld(CONTROLLER_P1_AUTO);
         
         // Exit
-        if (keysDown & KEY_PLUS)
-        {
-            if (uiState == stateViewGameCardFsBrowser)
-            {
-                fsdevUnmountDevice("view");
-                fsFsClose(&fs);
-            }
-            
-            res = resultExit;
-        }
+        if (keysDown & KEY_PLUS) res = resultExit;
         
         // Process key inputs only if the UI state hasn't been changed
         if (res == resultNone)
@@ -698,11 +696,7 @@ UIResult uiProcess()
             if (uiState == stateXciDumpMenu)
             {
                 // Select
-                if ((keysDown & KEY_A) && cursor == 0)
-                {
-                    selectedOption = (u32)cursor;
-                    res = resultDumpXci;
-                }
+                if ((keysDown & KEY_A) && cursor == 0) res = resultDumpXci;
                 
                 // Back
                 if (keysDown & KEY_B) res = resultShowMainMenu;
@@ -752,10 +746,10 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if (keysDown & KEY_UP) scrollAmount = -1;
+                if ((keysDown & KEY_DUP) || (keysHeld & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP)) scrollAmount = -1;
                 
                 // Go down
-                if (keysDown & KEY_DOWN) scrollAmount = 1;
+                if ((keysDown & KEY_DDOWN) || (keysHeld & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN)) scrollAmount = 1;
             } else {
                 // Select
                 if (keysDown & KEY_A)
@@ -791,48 +785,27 @@ UIResult uiProcess()
                     } else
                     if (uiState == stateRawPartitionDumpMenu)
                     {
-                        selectedOption = (u32)cursor;
+                        // Save selected partition index
+                        selectedPartitionIndex = (u32)cursor;
                         res = resultDumpRawPartition;
                     } else
                     if (uiState == statePartitionDataDumpMenu)
                     {
-                        selectedOption = (u32)cursor;
+                        // Save selected partition index
+                        selectedPartitionIndex = (u32)cursor;
                         res = resultDumpPartitionData;
                     } else
                     if (uiState == stateViewGameCardFsMenu)
                     {
-                        selectedOption = (u32)cursor;
+                        // Save selected partition index
+                        selectedPartitionIndex = (u32)cursor;
                         res = resultShowViewGameCardFsGetList;
                     } else
                     if (uiState == stateViewGameCardFsBrowser)
                     {
-                        char *selectedPath = (char*)malloc(strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2);
-                        memset(selectedPath, 0, strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2);
-                        
-                        if (strlen(filenames[cursor]) == 2 && !strcmp(filenames[cursor], ".."))
-                        {
-                            for(i = (strlen(currentDirectory) - 1); i >= 0; i--)
-                            {
-                                if (currentDirectory[i] == '/')
-                                {
-                                    strncpy(selectedPath, currentDirectory, i);
-                                    selectedPath[i] = '\0';
-                                    break;
-                                }
-                            }
-                        } else {
-                            snprintf(selectedPath, strlen(currentDirectory) + 1 + strlen(filenames[cursor]) + 2, "%s/%s", currentDirectory, filenames[cursor]);
-                        }
-                        
-                        if (isDirectory(selectedPath))
-                        {
-                            enterDirectory(selectedPath);
-                        } else {
-                            snprintf(fileCopyPath, sizeof(fileCopyPath) / sizeof(fileCopyPath[0]), "%s", selectedPath);
-                            res = resultViewGameCardFsBrowserCopyFile;
-                        }
-                        
-                        free(selectedPath);
+                        // Save selected file index
+                        selectedFileIndex = (u32)cursor;
+                        res = resultViewGameCardFsBrowserCopyFile;
                     }
                 }
                 
@@ -845,40 +818,24 @@ UIResult uiProcess()
                     } else
                     if (uiState == stateViewGameCardFsBrowser)
                     {
-                        if (!strcmp(currentDirectory, "view:/") && strlen(currentDirectory) == 6)
-                        {
-                            fsdevUnmountDevice("view");
-                            fsFsClose(&fs);
-                            
-                            res = resultShowViewGameCardFsMenu;
-                        } else {
-                            char *selectedPath = (char*)malloc(strlen(currentDirectory) + 1);
-                            memset(selectedPath, 0, strlen(currentDirectory) + 1);
-                            
-                            for(i = (strlen(currentDirectory) - 1); i >= 0; i--)
-                            {
-                                if (currentDirectory[i] == '/')
-                                {
-                                    strncpy(selectedPath, currentDirectory, i);
-                                    selectedPath[i] = '\0';
-                                    break;
-                                }
-                            }
-                            
-                            if (isDirectory(selectedPath)) enterDirectory(selectedPath);
-                            
-                            free(selectedPath);
-                        }
+                        free(partitionHfs0Header);
+                        partitionHfs0Header = NULL;
+                        partitionHfs0HeaderOffset = 0;
+                        partitionHfs0HeaderSize = 0;
+                        partitionHfs0FileCount = 0;
+                        partitionHfs0StrTableSize = 0;
+                        
+                        res = resultShowViewGameCardFsMenu;
                     }
                 }
                 
                 // Go up
-                if (keysDown & KEY_UP) scrollAmount = -1;
-                if (keysDown & KEY_LEFT) scrollAmount = -5;
+                if ((keysDown & KEY_DUP) || (keysHeld & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP)) scrollAmount = -1;
+                if ((keysDown & KEY_DLEFT) || (keysHeld & KEY_LSTICK_LEFT) || (keysHeld & KEY_RSTICK_LEFT)) scrollAmount = -5;
                 
                 // Go down
-                if (keysDown & KEY_DOWN) scrollAmount = 1;
-                if (keysDown & KEY_RIGHT) scrollAmount = 5;
+                if ((keysDown & KEY_DDOWN) || (keysHeld & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN)) scrollAmount = 1;
+                if ((keysDown & KEY_DRIGHT) || (keysHeld & KEY_LSTICK_RIGHT) || (keysHeld & KEY_RSTICK_RIGHT)) scrollAmount = 5;
             }
             
             // Calculate scroll only if the UI state hasn't been changed
@@ -930,6 +887,8 @@ UIResult uiProcess()
         uiDrawString(titlebuf, 0, breaks * font_height, 115, 115, 255);
         breaks += 2;
         
+        uiRefreshDisplay();
+        
         dumpGameCartridge(&fsOperatorInstance, isFat32, dumpCert, trimDump, calcCrc);
         
         waitForButtonPress();
@@ -939,11 +898,13 @@ UIResult uiProcess()
     } else
     if (uiState == stateDumpRawPartition)
     {
-        snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Raw %s", (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? partitionDumpType1MenuItems[selectedOption] : partitionDumpType2MenuItems[selectedOption]));
+        snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Raw %s", (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? partitionDumpType1MenuItems[selectedPartitionIndex] : partitionDumpType2MenuItems[selectedPartitionIndex]));
         uiDrawString(titlebuf, 0, breaks * font_height, 115, 115, 255);
         breaks += 2;
         
-        dumpRawPartition(&fsOperatorInstance, selectedOption, true);
+        uiRefreshDisplay();
+        
+        dumpRawPartition(&fsOperatorInstance, selectedPartitionIndex, true);
         
         waitForButtonPress();
         
@@ -952,11 +913,13 @@ UIResult uiProcess()
     } else
     if (uiState == stateDumpPartitionData)
     {
-        snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Data %s", (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? partitionDumpType1MenuItems[selectedOption] : partitionDumpType2MenuItems[selectedOption]));
+        snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Data %s", (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? partitionDumpType1MenuItems[selectedPartitionIndex] : partitionDumpType2MenuItems[selectedPartitionIndex]));
         uiDrawString(titlebuf, 0, breaks * font_height, 115, 115, 255);
         breaks += 2;
         
-        dumpPartitionData(&fsOperatorInstance, selectedOption);
+        uiRefreshDisplay();
+        
+        dumpPartitionData(&fsOperatorInstance, selectedPartitionIndex);
         
         waitForButtonPress();
         
@@ -965,13 +928,15 @@ UIResult uiProcess()
     } else
     if (uiState == stateViewGameCardFsGetList)
     {
-        uiDrawString((hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? viewGameCardFsType1MenuItems[selectedOption] : viewGameCardFsType1MenuItems[selectedOption]), 0, breaks * font_height, 115, 115, 255);
+        uiDrawString((hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? viewGameCardFsType1MenuItems[selectedPartitionIndex] : viewGameCardFsType2MenuItems[selectedPartitionIndex]), 0, breaks * font_height, 115, 115, 255);
         breaks += 2;
         
-        if (mountViewPartition(&fsOperatorInstance, &fs, selectedOption))
+        uiRefreshDisplay();
+        
+        if (getHfs0FileList(&fsOperatorInstance, selectedPartitionIndex))
         {
-            enterDirectory("view:/");
-            
+            cursor = 0;
+            scroll = 0;
             res = resultShowViewGameCardFsBrowser;
         } else {
             breaks += 2;
@@ -981,45 +946,13 @@ UIResult uiProcess()
     } else
     if (uiState == stateViewGameCardFsBrowserCopyFile)
     {
-        uiDrawString("Manual File Dump", 0, breaks * font_height, 115, 115, 255);
+        snprintf(titlebuf, sizeof(titlebuf) / sizeof(titlebuf[0]), "Manual File Dump: %s (Partition %u [%s])", filenames[selectedFileIndex], selectedPartitionIndex, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, selectedPartitionIndex));
+        uiDrawString(titlebuf, 0, breaks * font_height, 115, 115, 255);
         breaks += 2;
         
-        FILE *inFile = fopen(fileCopyPath, "rb");
-        if (inFile)
-        {
-            fseek(inFile, 0L, SEEK_END);
-            u64 input_filesize = ftell(inFile);
-            fclose(inFile);
-            
-            if (input_filesize <= freeSpace)
-            {
-                char destCopyPath[NAME_BUF_LEN] = {'\0'};
-                
-                for(i = (strlen(fileCopyPath) - 1); i >= 0; i--)
-                {
-                    if (fileCopyPath[i] == '/')
-                    {
-                        snprintf(destCopyPath, sizeof(destCopyPath) / sizeof(destCopyPath[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s)", fixedGameCardName, gameCardVersion, gameCardTitleID, selectedOption, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, selectedOption));
-                        mkdir(destCopyPath, 0744);
-                        
-                        snprintf(destCopyPath, sizeof(destCopyPath) / sizeof(destCopyPath[0]), "sdmc:/%s v%u (%016lX) - Partition %u (%s)/%.*s", fixedGameCardName, gameCardVersion, gameCardTitleID, selectedOption, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, selectedOption), (int)(strlen(fileCopyPath) - i), fileCopyPath + i + 1);
-                        break;
-                    }
-                }
-                
-                uiDrawString("Hold B to cancel.", 0, breaks * font_height, 255, 255, 255);
-                breaks += 2;
-                
-                uiDrawString("Do not press the HOME button. Doing so could corrupt the SD card filesystem.", 0, breaks * font_height, 255, 0, 0);
-                breaks += 2;
-                
-                copyFile(fileCopyPath, destCopyPath, true, true);
-            } else {
-                uiDrawString("Error: not enough free space available in the SD card.", 0, breaks * font_height, 255, 0, 0);
-            }
-        } else {
-            uiDrawString("Error: unable to get input file size.", 0, breaks * font_height, 255, 0, 0);
-        }
+        uiRefreshDisplay();
+        
+        dumpFileFromPartition(&fsOperatorInstance, selectedPartitionIndex, selectedFileIndex, filenames[selectedFileIndex]);
         
         breaks += 2;
         

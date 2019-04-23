@@ -26,11 +26,7 @@ void fsGameCardDetectionThreadFunc(void *arg);
 
 void delay(u8 seconds);
 
-bool getGameCardTitleIDAndVersion(u64 *titleID, u32 *version);
-
 void convertTitleVersionToDecimal(u32 version, char *versionBuf, int versionBufSize);
-
-bool getGameCardControlNacp(u64 titleID, char *nameBuf, int nameBufSize, char *authorBuf, int authorBufSize);
 
 void removeIllegalCharacters(char *name);
 
@@ -44,13 +40,9 @@ void convertSize(u64 size, char *out, int bufsize);
 
 void waitForButtonPress();
 
-bool isDirectory(char *path);
+void addStringToFilenameBuffer(const char *string, char **nextFilename);
 
-void addString(char **filenames, int *filenamesCount, char **nextFilename, const char *string);
-
-void getDirectoryContents(char *filenameBuffer, char **filenames, int *filenamesCount, const char *directory, bool skipParent);
-
-void enterDirectory(const char *path);
+void removeDirectory(const char *path);
 
 void gameCardDumpNSWDBCheck(u32 crc);
 

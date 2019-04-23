@@ -33,6 +33,8 @@
 #define GAMECARD_TYPE2_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Logo" : ((x) == 2 ? "Normal" : ((x) == 3 ? "Secure" : "Unknown"))))
 #define GAMECARD_PARTITION_NAME(x, y)   ((x) == GAMECARD_TYPE1_PARTITION_CNT ? GAMECARD_TYPE1_PART_NAMES(y) : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? GAMECARD_TYPE2_PART_NAMES(y) : "Unknown"))
 
+#define HFS0_TO_ISTORAGE_IDX(x, y)      ((x) == GAMECARD_TYPE1_PARTITION_CNT ? ((y) < 2 ? 0 : 1) : ((y) < 3 ? 0 : 1))
+
 #define GAMECARD_SIZE_1GiB              (u64)0x40000000
 #define GAMECARD_SIZE_2GiB              (u64)0x80000000
 #define GAMECARD_SIZE_4GiB              (u64)0x100000000
@@ -81,18 +83,12 @@ typedef struct
     u8 hashed_region_sha256[0x20];
 } PACKED hfs0_entry_table;
 
-void workaroundPartitionZeroAccess(FsDeviceOperator* fsOperator);
 bool getRootHfs0Header(FsDeviceOperator* fsOperator);
-bool getHsf0PartitionDetails(u32 partition, u64 *out_offset, u64 *out_size);
 bool dumpGameCartridge(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert, bool trimDump, bool calcCrc);
 bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitting);
-bool openPartitionFs(FsFileSystem* ret, FsDeviceOperator* fsOperator, u32 partition);
-bool copyFile(const char* source, const char* dest, bool doSplitting, bool calcEta);
-bool copyDirectory(const char* source, const char* dest, bool doSplitting);
-void removeDirectory(const char *path);
-bool getDirectorySize(const char *path, u64 *out_size);
 bool dumpPartitionData(FsDeviceOperator* fsOperator, u32 partition);
-bool mountViewPartition(FsDeviceOperator *fsOperator, FsFileSystem *out, u32 partition);
+bool getHfs0FileList(FsDeviceOperator* fsOperator, u32 partition);
+bool dumpFileFromPartition(FsDeviceOperator* fsOperator, u32 partition, u32 file, char *filename);
 bool dumpGameCertificate(FsDeviceOperator *fsOperator);
 
 #endif

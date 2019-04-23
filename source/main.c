@@ -57,7 +57,7 @@ int main(int argc, char *argv[])
                         result = fsOpenGameCardDetectionEventNotifier(&fsGameCardEventNotifier);
                         if (R_SUCCEEDED(result))
                         {
-                            /* Retrieve kernel event handle */
+                            /* Retrieve gamecard detection event handle */
                             result = fsEventNotifierGetEventHandle(&fsGameCardEventNotifier, &fsGameCardEventHandle);
                             if (R_SUCCEEDED(result))
                             {
@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
                                     ret = -9;
                                 }
                                 
-                                /* Close kernel event */
+                                /* Close gamecard detection kernel event */
                                 eventClose(&fsGameCardKernelEvent);
                             } else {
                                 snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to retrieve gamecard detection event handle! (0x%08X)", result);
@@ -171,7 +171,7 @@ int main(int argc, char *argv[])
                                 ret = -8;
                             }
                             
-                            /* Close gamecard event notifier */
+                            /* Close gamecard detection event notifier */
                             fsEventNotifierClose(&fsGameCardEventNotifier);
                         } else {
                             snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open gamecard detection event notifier! (0x%08X)", result);

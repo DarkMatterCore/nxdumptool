@@ -46,47 +46,6 @@ Result fsOpenGameCardStorage(FsStorage* out, const FsGameCardHandle* handle, u32
     return rc;
 }
 
-Result fsOpenGameCardFileSystem(FsFileSystem* out, const FsGameCardHandle* handle, u32 partition)
-{
-    IpcCommand c;
-    ipcInitialize(&c);
-    
-    struct {
-        u64 magic;
-        u64 cmd_id;
-        u32 handle;
-        u32 partition;
-    } *raw;
-    
-    raw = serviceIpcPrepareHeader(fsGetServiceSession(), &c, sizeof(*raw));
-    
-    raw->magic = SFCI_MAGIC;
-    raw->cmd_id = 31;
-    raw->handle = handle->value;
-    raw->partition = partition;
-    
-    Result rc = serviceIpcDispatch(fsGetServiceSession());
-    
-    if (R_SUCCEEDED(rc))
-    {
-        IpcParsedCommand r;
-        
-        struct {
-            u64 magic;
-            u64 result;
-        } *resp;
-        
-        serviceIpcParse(fsGetServiceSession(), &r, sizeof(*resp));
-        resp = r.Raw;
-        
-        rc = resp->result;
-        
-        if (R_SUCCEEDED(rc)) serviceCreateSubservice(&out->s, fsGetServiceSession(), &r, 0);
-    }
-    
-    return rc;
-}
-
 Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier* out)
 {
     IpcCommand c;
