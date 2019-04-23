@@ -31,6 +31,11 @@ Thanks to
 Changelog
 --------------
 
+**v1.0.7:**
+
+* Fixed a segmentation fault when trying to free an invalid XML node data pointer when a Scene release from NSWReleases.xml with a matching Title ID misses data related to that node.
+* Added a message suggesting the user to restart the application after a successful update.
+
 **v1.0.6:**
 
 * Updated application codebase in order to make it compatible with the latest devkitA64 and libnx releases.

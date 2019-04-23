@@ -9,7 +9,7 @@
 #define MiB                     (1024.0 * KiB)
 #define GiB                     (1024.0 * MiB)
 
-#define APP_VERSION             "1.0.6"
+#define APP_VERSION             "1.0.7"
 
 #define NAME_BUF_LEN            4096
 

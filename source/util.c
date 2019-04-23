@@ -40,7 +40,6 @@ const char *nswReleasesChildrenImageSize = "imagesize";
 const char *nswReleasesChildrenTitleID = "titleid";
 const char *nswReleasesChildrenImgCrc = "imgcrc";
 const char *nswReleasesChildrenReleaseName = "releasename";
-const char *nswReleasesChildrenCard = "card";
 
 const char *githubReleasesApiUrl = "https://api.github.com/repos/DarkMatterCore/gcdumptool/releases/latest";
 const char *gcDumpToolTmpPath = "sdmc:/switch/gcdumptool.nro.tmp";
@@ -426,75 +425,98 @@ void removeDirectory(const char *path)
 
 bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u32 crc)
 {
+    if (!doc || !cur) return false;
+    
     xmlChar *key;
     xmlNodePtr node = cur;
     
     u8 imageSize = (u8)(gameCardSize / GAMECARD_SIZE_1GiB);
-    u8 card = (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT ? 1 : 2);
     
     u8 xmlImageSize = 0;
     u64 xmlTitleID = 0;
     u32 xmlCrc = 0;
-    u8 xmlCard = 0;
     char xmlReleaseName[256] = {'\0'};
     
     bool found = false;
     char strbuf[512] = {'\0'};
     
-    while (node != NULL)
+    while(node != NULL)
     {
         if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenImageSize)))
         {
             key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
-            
-            xmlImageSize = (u8)atoi((const char*)key);
-            
-            xmlFree(key);
+            if (key)
+            {
+                xmlImageSize = (u8)atoi((const char*)key);
+                xmlFree(key);
+            }
         } else
         if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenTitleID)))
         {
             key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
-            
-            xmlTitleID = strtoull((const char*)key, NULL, 16);
-            
-            xmlFree(key);
+            if (key)
+            {
+                xmlTitleID = strtoull((const char*)key, NULL, 16);
+                xmlFree(key);
+            }
         } else
         if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenImgCrc)))
         {
             key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
-            
-            xmlCrc = strtoul((const char*)key, NULL, 16);
-            
-            xmlFree(key);
+            if (key)
+            {
+                xmlCrc = strtoul((const char*)key, NULL, 16);
+                xmlFree(key);
+            }
         }
         if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenReleaseName)))
         {
             key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
-            
-            snprintf(xmlReleaseName, sizeof(xmlReleaseName) / sizeof(xmlReleaseName[0]), "%s", (char*)key);
-            
-            xmlFree(key);
-        } else
-        if ((!xmlStrcmp(node->name, (const xmlChar *)nswReleasesChildrenCard)))
-        {
-            key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
-            
-            xmlCard = (u8)atoi((const char*)key);
-            
-            xmlFree(key);
+            if (key)
+            {
+                snprintf(xmlReleaseName, sizeof(xmlReleaseName) / sizeof(xmlReleaseName[0]), "%s", (char*)key);
+                xmlFree(key);
+            }
         }
         
         node = node->next;
     }
     
-    //snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Cartridge Image Size: %u\nCartridge Title ID: %016lX\nCartridge Image CRC32: %08X\nCartridge Type: %u\n\nXML Image Size: %u\nXML Title ID: %016lX\nXML Image CRC32: %08X\nXML Release Name: %s\nXML Card Type: %u", imageSize, gameCardTitleID, crc, card, xmlImageSize, xmlTitleID, xmlCrc, xmlReleaseName, xmlCard);
-    //uiDrawString(strbuf, 0, 0, 255, 255, 255);
+    /*if (xmlImageSize && xmlTitleID && strlen(xmlReleaseName))
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Cartridge Image Size: %u.", imageSize);
+        uiDrawString(strbuf, 0, breaks * font_height, 255, 255, 255);
+        breaks++;
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Cartridge Title ID: %016lX.", gameCardTitleID);
+        uiDrawString(strbuf, 0, breaks * font_height, 255, 255, 255);
+        breaks++;
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Cartridge Image CRC32: %08X.", crc);
+        uiDrawString(strbuf, 0, breaks * font_height, 255, 255, 255);
+        breaks += 2;
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XML Image Size: %u.", xmlImageSize);
+        uiDrawString(strbuf, 0, breaks * font_height, 255, 255, 255);
+        breaks++;
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XML Title ID: %016lX.", xmlTitleID);
+        uiDrawString(strbuf, 0, breaks * font_height, 255, 255, 255);
+        breaks++;
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XML Image CRC32: %08X.", xmlCrc);
+        uiDrawString(strbuf, 0, breaks * font_height, 255, 255, 255);
+        breaks++;
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XML Release Name: %s.", xmlReleaseName);
+        uiDrawString(strbuf, 0, breaks * font_height, 255, 255, 255);
+        breaks += 2;
+    }*/
     
-    if (xmlImageSize == imageSize && xmlTitleID == gameCardTitleID && xmlCrc == crc && xmlCard == card)
+    if (xmlImageSize == imageSize && xmlTitleID == gameCardTitleID && xmlCrc == crc)
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found matching Scene release: \"%s\" (CRC32: %08X). This is a good dump!", xmlReleaseName, xmlCrc);
         uiDrawString(strbuf, 0, breaks * font_height, 0, 255, 0);
-        
         found = true;
     } else {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump doesn't match Scene release: \"%s\"! (CRC32: %08X)", xmlReleaseName, xmlCrc);
@@ -545,7 +567,7 @@ void gameCardDumpNSWDBCheck(u32 crc)
             uiRefreshDisplay();
             
             u32 i;
-            for (i = 0; i < nodeSet->nodesetval->nodeNr; i++)
+            for(i = 0; i < nodeSet->nodesetval->nodeNr; i++)
             {
                 xmlNodePtr node = nodeSet->nodesetval->nodeTab[i]->xmlChildrenNode;
                 
@@ -943,9 +965,14 @@ void updateApplication()
                                             
                                             if (res == CURLE_OK && http_code >= 200 && http_code <= 299 && size > 0)
                                             {
+                                                success = true;
+                                                
                                                 snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Successfully downloaded %.0lf bytes!", size);
                                                 uiDrawString(strbuf, 0, breaks * font_height, 0, 255, 0);
-                                                success = true;
+                                                breaks++;
+                                                
+                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Please restart the application to reflect the changes.", size);
+                                                uiDrawString(strbuf, 0, breaks * font_height, 0, 255, 0);
                                             } else {
                                                 snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to request latest update binary! HTTP status code: %ld", http_code);
                                                 uiDrawString(strbuf, 0, breaks * font_height, 255, 0, 0);
