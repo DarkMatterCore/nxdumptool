@@ -1,7 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <malloc.h>
 #include <switch.h>
 #include <memory.h>
 
@@ -9,6 +8,7 @@
 #include "ui.h"
 #include "util.h"
 #include "fsext.h"
+#include "extkeys.h"
 
 /* Extern variables */
 
@@ -19,10 +19,11 @@ extern Handle fsGameCardEventHandle;
 extern Event fsGameCardKernelEvent;
 extern UEvent exitEvent;
 
-extern char *hfs0_header;
-extern char *partitionHfs0Header;
-
 extern bool gameCardInserted;
+
+extern char strbuf[NAME_BUF_LEN * 4];
+
+extern nca_keyset_t nca_keyset;
 
 int main(int argc, char *argv[])
 {
@@ -31,7 +32,6 @@ int main(int argc, char *argv[])
     
     int ret = 0;
     Result result;
-    char strbuf[512] = {'\0'};
     
     /* Initialize the fsp-srv service */
     result = fsInitialize();
@@ -79,6 +79,9 @@ int main(int argc, char *argv[])
                                     result = threadStart(&thread);
                                     if (R_SUCCEEDED(result))
                                     {
+                                        /* Zero out NCA keyset */
+                                        memset(&nca_keyset, 0, sizeof(nca_keyset_t));
+                                        
                                         /* Main application loop */
                                         bool exitLoop = false;
                                         while(appletMainLoop())
@@ -94,6 +97,12 @@ int main(int argc, char *argv[])
                                                     break;
                                                 case resultDumpXci:
                                                     uiSetState(stateDumpXci);
+                                                    break;
+                                                case resultShowNspDumpMenu:
+                                                    uiSetState(stateNspDumpMenu);
+                                                    break;
+                                                case resultDumpNsp:
+                                                    uiSetState(stateDumpNsp);
                                                     break;
                                                 case resultShowRawPartitionDumpMenu:
                                                     uiSetState(stateRawPartitionDumpMenu);
@@ -231,9 +240,8 @@ int main(int argc, char *argv[])
         ret = -2;
     }
     
-    /* Free resources */
-    if (hfs0_header != NULL) free(hfs0_header);
-    if (partitionHfs0Header != NULL) free(partitionHfs0Header);
+    /* Free gamecard resources */
+    freeGameCardInfo();
     
     /* Deinitialize UI */
     uiDeinit();

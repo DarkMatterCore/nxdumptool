@@ -19,7 +19,7 @@
 #define HIGHLIGHT_FONT_COLOR_G  255
 #define HIGHLIGHT_FONT_COLOR_B  197
 
-#define XCIDUMP_OPTIONS_X_POS   (35 * CHAR_PT_SIZE)
+#define OPTIONS_X_POS   (35 * CHAR_PT_SIZE)
 
 #define TAB_WIDTH               4
 
@@ -28,6 +28,8 @@ typedef enum {
     resultShowMainMenu,
     resultShowXciDumpMenu,
     resultDumpXci,
+    resultShowNspDumpMenu,
+    resultDumpNsp,
     resultShowRawPartitionDumpMenu,
     resultDumpRawPartition,
     resultShowPartitionDataDumpMenu,
@@ -46,6 +48,8 @@ typedef enum {
     stateMainMenu,
     stateXciDumpMenu,
     stateDumpXci,
+    stateNspDumpMenu,
+    stateDumpNsp,
     stateRawPartitionDumpMenu,
     stateDumpRawPartition,
     statePartitionDataDumpMenu,
@@ -69,7 +73,7 @@ void uiStatusMsg(const char *fmt, ...);
 
 void uiUpdateStatusMsg();
 
-void uiPleaseWait();
+void uiPleaseWait(u8 wait);
 
 void uiUpdateFreeSpace();
 

@@ -4,8 +4,11 @@ Nintendo Switch Game Card Dump Tool
 Main features
 --------------
 
-* Generates XCI cartridge dumps with optional certificate removal and optional trimming.
-* CRC32 checksum calculation for XCI dumps.
+* Generates full cartridge image dumps (XCI) with optional certificate removal and optional trimming.
+* Generates installable packages (NSP) from cartridge applications.
+    - You'll need to retrieve the full NCA keyset beforehand, using Lockpick. It must be stored in "sdmc:/switch/prod.keys".
+* Supports multigame carts.
+* CRC32 checksum calculation for XCI/NSP dumps.
 * Full XCI dump verification using XML database from NSWDB.COM (NSWreleases.xml).
 * XML database and in-app update via libcurl.
 * Precise HFS0 raw partition dumping, using the root HFS0 header from the game card.
@@ -14,7 +17,7 @@ Main features
 * Manual game card certificate dump.
 * Free SD card space checks in place.
 * File splitting support for all operations, using 2 GiB parts.
-* Game card Title ID and Control.nacp retrieval support using NCM and NS services.
+* Game card metadata retrieval using NCM and NS services.
 * Dump speed, ETA calculation and progress bar.
 
 Thanks to
@@ -24,12 +27,26 @@ Thanks to
 * RSDuck, for their vba-next-switch port. It's UI menu code was taken as a basis for this application.
 * Foen, for giving me some pretty good hints about how to use the NCM service.
 * Yellows8, for helping me fix a silly bug in my implementation of some NCM service IPC calls.
+* SciresM, for hactool. It's AES cipher handling and external keys file parsing code is used during the NSP dump process.
 * Björn Samuelsson, for his public domain CRC32 checksum calculation code for C (crc32_fast.c).
 * AnalogMan, for his constant support and ideas.
 * The folks from ReSwitched, for working towards the creation of a good homebrew ecosystem.
 
 Changelog
 --------------
+
+**v1.0.8:**
+
+* Added proper metadata reading from multigame carts.
+* Added gamecard -> NSP dump option:
+	- Compatible with file splitting (for FAT32 support). The same layout from splitNSP.py is used: a directory with numbered part files (00, 01, etc.). The archive bit is enabled right away in this directory to allow HOS to treat it as if it were a whole file. This way, it can be used with any application with NSP-handling capabilities.
+    - Compatible with CRC32 checksum calculation. Disclaimer: NSP dumps can't be verified against the XML database.
+    - Output NSPs contain a metadata XML file based on the information from the CNMT NCA for the application, which is decrypted using code from hactool. The necessary keyset is loaded from "sdmc:/switch/prod.keys", which can be generated using Lockpick.
+    - If a multigame cart is used, you'll be able to choose which application to dump from the menu.
+* Dump verification process tweaked for multigame carts: it'll now look for a possible checksum match using the Title IDs from all bundled applications.
+* Improved error reporting in dumper.c when a write operation fails. Furthermore, if a write error is produced when trying to write data to an offset past the FAT32 file size limit (0xFFFFFFFF bytes), the application will suggest the user to enable the file splitting option.
+* Tweaked part sizes for splitted dumps: XCI/raw partition/manual file dump part size now matches the one used by XCI-Cutter, while the NSP part size matches the one used by splitNSP.py.
+* Minor fixes to the UI code.
 
 **v1.0.7:**
 
