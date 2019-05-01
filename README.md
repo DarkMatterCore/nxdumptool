@@ -16,7 +16,7 @@ Main features
 * Partition filesystem browser with manual file dump support.
 * Manual game card certificate dump.
 * Free SD card space checks in place.
-* File splitting support for all operations, using 2 GiB parts.
+* File splitting support for all operations.
 * Game card metadata retrieval using NCM and NS services.
 * Dump speed, ETA calculation and progress bar.
 
@@ -39,7 +39,7 @@ Changelog
 
 * Added proper metadata reading from multigame carts.
 * Added gamecard -> NSP dump option:
-	- Compatible with file splitting (for FAT32 support). The same layout from splitNSP.py is used: a directory with numbered part files (00, 01, etc.). The archive bit is enabled right away in this directory to allow HOS to treat it as if it were a whole file. This way, it can be used with any application with NSP-handling capabilities.
+    - Compatible with file splitting (for FAT32 support). The same layout from splitNSP.py is used: a directory with numbered part files (00, 01, etc.). The archive bit is enabled right away in this directory to allow HOS to treat it as if it were a whole file. This way, it can be used with any application with NSP-handling capabilities.
     - Compatible with CRC32 checksum calculation. Disclaimer: NSP dumps can't be verified against the XML database.
     - Output NSPs contain a metadata XML file based on the information from the CNMT NCA for the application, which is decrypted using code from hactool. The necessary keyset is loaded from "sdmc:/switch/prod.keys", which can be generated using Lockpick.
     - If a multigame cart is used, you'll be able to choose which application to dump from the menu.
