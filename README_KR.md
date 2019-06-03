@@ -1,0 +1,113 @@
+# gcdumptool
+닌텐도 스위치 게임 카드 덤프 도구
+
+주요 기능
+--------------
+
+* 선택적 인증서 제거 및 선택적인 트리밍을 통해 전체 카트리지 이미지 덤프 (XCI)를 생성.
+* 카트리지 응용 프로그램에서 설치 가능 패키지 (NSP)를 생성.
+    - Lockpick을 사용하여 미리 전체 NCA 키 집합을 검색해야합니다. "sdmc:/switch/prod.keys"에 저장해야합니다.
+* 멀티 게임 카트 지원.
+* XCI / NSP 덤프에 대한 CRC32 체크섬 계산.
+* NSWDB.COM (NSWreleases.xml)의 XML 데이터베이스를 사용하여 전체 XCI 덤프 확인.
+* libcurl을 통한 XML 데이터베이스, 인앱 업데이트.
+* 게임 카드에서 루트 HFS0 헤더를 사용하여 정확한 HFS0 원시 파티션 덤프.
+* 파티션 파일 시스템 데이터 덤프.
+* 수동 파일 덤프를 지원하는 파티션 파일 시스템 브라우저.
+* 수동 게임 카드 인증서 덤프.
+* 잔여 SD 카드 공간 확인.
+* 모든 작업에 대한 파일 분할 지원.
+* NCM 및 NS 서비스를 사용한 게임 카드 메타 데이터 검색.
+* 덤프 속도, ETA 계산, 진행률 표시 줄.
+
+감사
+--------------
+
+* MCMrARM,  오리지널 응용 프로그램 제작.
+* RSDuck, vba-next-switch 포트 용. UI 메뉴 코드는이 응용 프로그램의 기초로 사용.
+* Foen, NCM 서비스를 사용하는 방법에 대한 좋은 힌트 제공.
+* Yellows8, 일부 NCM 서비스 IPC 호출을 구현할 때 버그를 수정하도록 도움.
+* SciresM, hactool. AES 암호 처리 및 외부 키 파일 구문 분석 코드는 NSP 덤프 프로세스 중에 사용.
+* Bj?n Samuelsson, C에 대한 공개 도메인 CRC32 체크섬 계산 코드 (crc32_fast.c).
+* AnalogMan, 지속적인 지지와 아이디어.
+* ReSwitched의 사람들은 좋은 홈브류 에코 시스템을 창조하기 위해 노력.
+
+변경이력
+--------------
+
+**v1.0.8:**
+
+* 멀티 게임 카트에서 적절한 메타 데이터 읽기 추가.
+* gamecard -> NSP 덤프 옵션 추가:
+    - 파일 분할과 호환 (FAT32 지원). splitNSP.py와 동일한 레이아웃이 사용: 번호가 매겨진 파트 파일 (00, 01 등)이 있는 디렉토리. 아카이브 비트는 이 디렉토리에서 즉시 활성화되어 HOS가 전체 파일인 것처럼 처리할 수 있음. 이 방법은 NSP 처리 기능이 있는 모든 응용 프로그램에서 사용할 수 있음.
+    - CRC32 체크섬 계산과 호환. 면책 조항: NSP 덤프는 XML 데이터베이스에 대해 확인할 수 없음.
+    - 출력 NSP에는 응용 프로그램에 대한 CNMT NCA의 정보를 기반으로 메타 데이터 XML 파일이 들어 있으며 hactool의 코드를 사용하여 암호 해독. 필요한 키셋은 "sdmc:/switch/prod.keys"에서 로드되며 Lockpick을 사용하여 생성할 수 있음.
+    - 멀티 게임 카트를 사용하면 메뉴에서 덤프할 응용 프로그램을 선택할 수 있음.
+* 덤프 확인 프로세스가 멀티 게임 카트에 맞게 조정. 이제 번들로 제공되는 모든 응용 프로그램의 타이틀 ID를 사용하여 가능한 체크섬 일치를 찾음.
+* 쓰기 조작이 실패할 때 dumper.c의 향상된 오류보고. 또한 FAT32 파일 크기 제한 (0xFFFFFFFF 바이트)을 넘은 오프셋에 데이터를 쓰려고 할 때 쓰기 오류가 발생하면 응용 프로그램에서 사용자에게 파일 분할 옵션을 사용하도록 제안.
+* 분할된 덤프의 부품 크기 조정: XCI/raw partition/수동 파일 덤프 파트 크기가 이제 XCI-Cutter에서 사용되는 파트 크기와 일치하지만 NSP 파트 크기는 splitNSP.py에서 사용되는 부품 크기와 일치
+* UI 코드에 대한 사소한 수정.
+
+**v1.0.7:**
+
+* 타이틀 ID가 일치하는 NSWReleases.xml의 Scene 릴리스가 해당 노드와 관련된 데이터를 누락한 경우 유효하지 않은 XML 노드 데이터 포인터를 해제하려고 시도할 때 세그먼트화 오류 수정
+* 업데이트 성공 후 사용자에게 응용 프로그램을 다시 시작하라는 메시지를 추가.
+
+**v1.0.6:**
+
+* 최신 devkitA64 및 libnx 릴리즈와 호환되도록 응용 프로그램 코드베이스 업데이트.
+* libnx에 포함되어있는 fsext.c/h에서 일부 fs-srv 서비스 기능 제거 (아직 수정하지 않은 기능을 수정).
+* GFX 코드를 개조하여 pl 서비스와 FreeType을 사용하여 8x8 ASCII 글꼴을 공유 시스템 글꼴 대체.
+* 인앱 업데이트 옵션을 활성화 (및 수정). HTTPS 호환성은 mbedtls portlib를 통해 이루어짐.
+* 비활성화된 화면 디밍 및 자동 절전.
+* 파티션 브라우저에 파일 카운터 추가.
+* Changed the naming convention for split gamecard dumps to *.xc[part number], in order to make them compatible with SX OS and other tools right away.
+* Increased the delay after inserting a new gamecard by 1 second.
+* Added a gamecard detection thread to monitor gamecard state changes in a better way. This thread is hooked to a gamecard detection kernel handle retrieved through an IEventNotifier object.
+* Replaced partition filesystem mounting through fs-srv service calls with manual HFS0 partition header parsing. This should fix issues when browsing the Logo partition from type 0x02 gamecards.
+* Blocked HOME button presses when running as a regular/system application instead of an applet. A warning message will be displayed whenever any operation is started if the application is running as an applet.
+* Added detection for bundled FW versions 6.0.0 - 8.0.0.
+
+**v1.0.5:**
+
+* 캐시된 Control.nacp에서 ncm 서비스를 검색하는 대신 ncm 서비스를 사용하는 게임 카드 버전 읽기 수정.
+* 게임 카드와 함께 제공되는 FW 업데이트 버전을 읽고 식별하는 기능 추가.
+* 게임 카드 타이틀 ID를 읽는 중 오류가 발생하는 경우 응용 프로그램은 설명과 함께 번들로 제공되는 FW 버전 업데이트도 표시
+* nswdb.com의 XML 데이터베이스를 기반으로 출력 XCI 덤프 이름 바꾸기가 제거.
+* 출력 명명 체계가 변경. ASCII 범위를 벗어나는 문자는 밑줄로 변경:
+	- XCI 덤프: "sdmc:/[GameName] v[GameVersion] ([TitleID]).xci".
+	- 원시 파티션 덤프: "sdmc:/[GameName] v[GameVersion] ([TitleID]) - 파티션 [PartitionIndex] ([PartitionName]).hfs0".
+	- 파티션 데이터 덤프 (디렉토리): "sdmc:/[GameName] v[GameVersion] ([TitleID]) - 파티션 [PartitionIndex] ([PartitionName])/".
+	- 인증서 덤프: "sdmc:/[GameName] v[GameVersion] ([TitleID]) - Certificate ([CRC32]).bin".
+* 수동 파일 덤프는 이제 SD 카드 루트가 아닌 해당 디렉토리에 저장.
+* 주 메뉴에 XML 데이터베이스 업데이트 옵션 추가
+* 주 메뉴에 업데이트 응용 프로그램 옵션 추가. libcurl은 보안 연결을 다루는데 문제가 있기 때문에 현재로서는 작동하지 않음. 따라서 옵션이 비활성화되었습니다 (A를 누르면 아무 것도하지 않습니다). 그럼에도 불구하고 GitHub API에서 JSON 응답을 구문 분석하는 코드는 거의 준비가되어 있으므로 시간 문제 일뿐.
+
+**v1.0.4:**
+
+* exFAT 모드는 기본적으로 켜져 있음.
+* 패딩 옵션을 트림 출력 덤프 옵션으로 변경 (XCI-Cutter와 동일).
+* 덤프 속도 및 ETA 계산 추가..
+* nswdb.com (NSWreleases.xml)의 XML 데이터베이스를 사용하여 XCI 덤프 확인 추가. 파일은 SD 카드 루트 디렉토리에 저장함. 또한 덤프 검증은 전체 덤프 (인증서 포함 또는 제외)를 작성하기로 한 경우에만 수행되며 절단되지 않은 경우에는 수행되지 않음.
+* CRC32 체크섬 계산 + XCI 덤프 확인을 구성 가능한 옵션 제작.
+* nswdb.com의 XML 데이터베이스를 사용하여 일치하는 항목이 발견되면 출력 XCI 덤프의 이름이 해당 Scene 릴리스로 변경 (예: "sdmc:/0100000000010000_20180625-234930.xci"-> "sdmc:/Super.Mario.Odyssey.NSW- BigBlueBox.xci").
+
+**v1.0.3:**
+
+* 0xFF 패딩 기능을 구성 가능한 옵션 제작.
+* XCI 덤프에 대한 CRC32 체크섬 계산 추가.
+
+**v1.0.2:**
+
+* 파일 분할 코드에서 바보같은 버그 수정.
+
+**v1.0.1:**
+
+* 사소한 UI 수정 및 조정.
+* uiLoop()에서 누락 된 타이틀 ID 확인을 일부 추가.
+* uiStatusMsg()에 대한 모든 호출이 이제 올바르게 식별.
+* 새로운 gamecard가 감지되면 대기 시간이 2 초로 증가.
+
+**v1.0.0:**
+
+첫 릴리즈.
