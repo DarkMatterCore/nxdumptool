@@ -61,12 +61,12 @@
 * 인앱 업데이트 옵션을 활성화 (및 수정). HTTPS 호환성은 mbedtls portlib를 통해 이루어짐.
 * 비활성화된 화면 디밍 및 자동 절전.
 * 파티션 브라우저에 파일 카운터 추가.
-* Changed the naming convention for split gamecard dumps to *.xc[part number], in order to make them compatible with SX OS and other tools right away.
-* Increased the delay after inserting a new gamecard by 1 second.
-* Added a gamecard detection thread to monitor gamecard state changes in a better way. This thread is hooked to a gamecard detection kernel handle retrieved through an IEventNotifier object.
-* Replaced partition filesystem mounting through fs-srv service calls with manual HFS0 partition header parsing. This should fix issues when browsing the Logo partition from type 0x02 gamecards.
-* Blocked HOME button presses when running as a regular/system application instead of an applet. A warning message will be displayed whenever any operation is started if the application is running as an applet.
-* Added detection for bundled FW versions 6.0.0 - 8.0.0.
+* 분할된 게임 카드 덤프의 이름 지정 규칙을 SX OS 및 기타 도구와 즉시 호환되도록 *.xc[부품 번호]로 변경.
+* 새로운 게임카드를 1 초 삽입한 후 지연 시간이 증가.
+* 게임카드 상태 변경 사항을 보다 나은 방법으로 모니터링 할 수 있는 게임카드 탐지 스레드 추가. 이 스레드는 IEventNotifier 개체를 통해 검색된 게임카드 검색 커널 핸들에 연결.
+* 수동 HFS0 파티션 헤더 구문 분석으로 fs-srv 서비스 호출을 통해 파티션 된 파일 시스템 마운트 대체. 이 경우 0x02 유형의 게임카드에서 로고 파티션을 탐색할 때 문제 수정.
+* 애플릿 대신 일반/시스템 응용 프로그램으로 실행 중일 때 홈 버튼이 눌려 있습니다. 응용 프로그램이 애플릿으로 실행중인 경우 작업이 시작될 때마다 경고 메시지가 표시.
+* 번들로 제공되는 FW 버전 6.0.0 - 8.0.0에 대한 감지 추가.
 
 **v1.0.5:**
 
