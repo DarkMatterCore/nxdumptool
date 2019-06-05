@@ -4,36 +4,94 @@ Nintendo Switch Game Card Dump Tool
 Main features
 --------------
 
-* Generates full cartridge image dumps (XCI) with optional certificate removal and optional trimming.
-* Generates installable packages (NSP) from cartridge applications.
-    - You'll need to retrieve the full NCA keyset beforehand, using Lockpick. It must be stored in "sdmc:/switch/prod.keys".
-* Supports multigame carts.
+* Generates full Cartridge Image dumps (XCI) with optional certificate removal and optional trimming.
+* Generates installable Nintendo Submission Packages (NSP) from base applications, updates and DLCs stored in the inserted game card.
+* Compatible with multigame carts.
 * CRC32 checksum calculation for XCI/NSP dumps.
 * Full XCI dump verification using XML database from NSWDB.COM (NSWreleases.xml).
 * XML database and in-app update via libcurl.
 * Precise HFS0 raw partition dumping, using the root HFS0 header from the game card.
-* Partition filesystem data dumping.
-* Partition filesystem browser with manual file dump support.
+* HFS0 partition file data dumping.
+* HFS0 partition file browser with manual file dump support.
+* RomFS section file data dumping.
+* RomFS section file browser with manual file dump support.
 * Manual game card certificate dump.
 * Free SD card space checks in place.
 * File splitting support for all operations.
 * Game card metadata retrieval using NCM and NS services.
-* Dump speed, ETA calculation and progress bar.
+* Dump speed calculation, ETA calculation and progress bar.
 
 Thanks to
 --------------
 
 * MCMrARM, for creating the original application.
-* RSDuck, for their vba-next-switch port. It's UI menu code was taken as a basis for this application.
+* RSDuck, for vba-next-switch port. It's UI menu code was taken as a basis for this application.
 * Foen, for giving me some pretty good hints about how to use the NCM service.
 * Yellows8, for helping me fix a silly bug in my implementation of some NCM service IPC calls.
-* SciresM, for hactool. It's AES cipher handling and external keys file parsing code is used during the NSP dump process.
+* SciresM, for hactool. It's NCA content handling procedure is reproduced during the NSP dump process.
+* The-4n, for 4NXCI and hacPack. The NCA content patching procedure used in 4NXCI is replicated in the application, as well as the NACP XML generation from hacPack.
+* shchmue, for Lockpick. It was used as a reference for the key-collection algorithm needed for the NSP dump and RomFS dump/browse procedures.
 * Björn Samuelsson, for his public domain CRC32 checksum calculation code for C (crc32_fast.c).
 * AnalogMan, for his constant support and ideas.
+* RattletraPM, for the awesome icon used in the application.
+* The GNOME project, from which the high contrast directory/file icons for the filebrowser modes were retrieved.
 * The folks from ReSwitched, for working towards the creation of a good homebrew ecosystem.
 
 Changelog
 --------------
+
+**v1.1.0:**
+* Replaced the application icon with a new, stylish one made by RattletraPM. Thanks a lot!
+* Gamecard base application icons are now retrieved and displayed in the menu.
+* L/ZL/R/ZR buttons can now be used to change the displayed base application info if a multigame cart is inserted, instead of displaying everything right away.
+* The Nintendo Extension shared font is now used to display bitmaps representing controller buttons and sticks instead of just using text to reference them.
+* Replaced the mbedtls-based AES and SHA-256 implementations with functions from the hardware accelerated cryptography API from libnx.
+* Added an option to generate split XCI dumps using a directory with the archive bit set, just like split NSP dumps. It will only appear if "Split output dump" is enabled.
+* Fixed ETA calculation.
+* Enabled ETA calculation in full HFS0 partition data dumps.
+* Fixed CRC32 checksum calculation for gamecard certificate dumps.
+* Added Program NCA RomFS section parser:
+    - Supports filesystem dumping, filesystem browsing, manual file dumping and file splitting. Enjoy datamining your gamecards!
+    - Compatible with multigame carts. You'll be able to choose which base application RomFS will be dumped/browsed from a submenu.
+    - Output files will be saved to: "sdmc:/[GameName] v[GameVersion] ([TitleID]) (RomFS)/".
+* Added high contrast directory/file icons from GNOME project to file browsing modes (HFS0 / RomFS).
+* Fixed the NSP generation code (based on 4NXCI / hacPack):
+    - Delta Fragment NCAs are now discarded.
+    - The SHA-256 checksum is recalculated for every NCA content after being modified, resulting in new NCA IDs.
+    - The ACID public key is replaced in the NPDM section from the Program NCA. All the related NCA/PFS0 Superblock SHA-256 hashes are recalculated.
+        - The NPDM signature in the Program NCA header is now replaced as well.
+    - The content records from the Application CNMT are updated with proper SHA-256 hashes and new NCA IDs. All the related NCA/PFS0 Superblock hashes are recalculated.
+    - NACP XMLs are now generated as well.
+    - Because of all these changes, the CRC32 checksum can't be calculated until the dump procedure is complete.
+        - If this option is enabled, the application will take extra time after the NSP dump has been completed to calculate the CRC32 checksum. Nonetheless, you'll be able to cancel this procedure.
+        - A warning message will appear in the NSP dump menu if CRC32 checksum calculation is enabled to inform the user about this extra step.
+        - Furthermore, the output CRC32 checksum will be different on each new dump. This is because the NPDM signature in the Program NCA header uses a random seed.
+    - This effectively makes the generated NSPs only need ES patches to work. ACID patches shouldn't be needed anymore.
+* Added NSP dumping support for Patch and AddOnContent title types with gamecards that include bundled Updates/DLCs:
+    - The information displayed in the main menu now shows how many Updates/DLCs are bundled in the inserted gamecard (per application and in total).
+    - If a bundled gamecard update features a populated Rights ID bitfield, both its Ticket and Certificate will get added to the output NSP.
+    - Additionally, the NSP dump menu has been divided in three subcategories: base application, update and DLC.
+        - Each submenu will only appear if the inserted gamecard holds at least one title belonging to the category it represents.
+        - If only the base application is included, like most gamecards, choosing the NSP dump option in the main menu will take you right to the base application dump menu.
+        - Once you enter a submenu, you'll be able to choose exactly which title to dump belonging to that category.
+    - Output update NSPs will not be modified in any way. Thus, unlike NSPs from base applications and DLCs, their CRC32 checksums will always be the same.
+* Fixed the minimum system version field size in the extended CNMT header struct. Thanks to @0Liam !
+* Changed the naming convention for output NSP dumps:
+	- Base application: "sdmc:/[GameName] v[GameVersion] ([TitleID]) (BASE).nsp".
+	- Update: "sdmc:/[GameName] v[UpdateVersion] ([UpdateTitleID]) (UPD).nsp".
+        - If a matching base application isn't found: "sdmc:/[UpdateTitleID] v[UpdateVersion] (UPD).nsp".
+	- DLC: "sdmc:/[GameName] v[DLCVersion] ([DLCTitleID]) (DLC).nsp".
+        - If a matching base application isn't found: "sdmc:/[DLCTitleID] v[DLCVersion] (DLC).nsp".
+* The application is now able to retrieve the NCA header key and perform NCA key area decryption at runtime, using the SPL services. Thus, is isn't needed to run Lockpick beforehand anymore to dump NSPs (nor to dump/browse RomFS data).
+* If the inserted gamecard includes a bundled update, its version number will now be used in the output filename for XCI, HFS0 and gamecard certificate dumps.
+* Minor improvements to the file splitting code.
+    - Additionally, the filename for the current part will now be displayed and updated for all operations if file splitting is enabled.
+* The application update feature will now use the launch path from argv if it's available. Otherwise, it defaults to "sdmc:/switch/gcdumptool.nro".
+* Cosmetic fixes to the UI layout.
+* NCM service resources are now properly closed.
+* Removed unnecessary service (de)initializations.
+
+Big thanks to PatrickD85, unvaluablespace, wartutor and Slim45 for testing these changes!
 
 **v1.0.8:**
 

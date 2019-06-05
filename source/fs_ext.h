@@ -1,7 +1,7 @@
 #pragma once
 
-#ifndef __FSEXT_H__
-#define __FSEXT_H__
+#ifndef __FS_EXT_H__
+#define __FS_EXT_H__
 
 #include <switch/types.h>
 #include <switch/services/fs.h>

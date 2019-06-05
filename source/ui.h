@@ -19,9 +19,27 @@
 #define HIGHLIGHT_FONT_COLOR_G  255
 #define HIGHLIGHT_FONT_COLOR_B  197
 
-#define OPTIONS_X_POS   (35 * CHAR_PT_SIZE)
+#define COMMON_MAX_ELEMENTS     8
+#define HFS0_MAX_ELEMENTS       14
+#define ROMFS_MAX_ELEMENTS      12
+
+#define OPTIONS_X_POS           (35 * CHAR_PT_SIZE)
 
 #define TAB_WIDTH               4
+
+#define BROWSER_ICON_DIMENSION  16
+
+#define NINTENDO_FONT_A         "\xE0\xA0"
+#define NINTENDO_FONT_B         "\xE0\xA1"
+#define NINTENDO_FONT_L         "\xE0\xA4"
+#define NINTENDO_FONT_R         "\xE0\xA5"
+#define NINTENDO_FONT_ZL        "\xE0\xA6"
+#define NINTENDO_FONT_ZR        "\xE0\xA7"
+#define NINTENDO_FONT_DPAD      "\xE0\xAA"
+#define NINTENDO_FONT_PLUS      "\xE0\xB5"
+#define NINTENDO_FONT_HOME      "\xE0\xB9"
+#define NINTENDO_FONT_LSTICK    "\xE0\xC1"
+#define NINTENDO_FONT_RSTICK    "\xE0\xC2"
 
 typedef enum {
     resultNone,
@@ -29,16 +47,29 @@ typedef enum {
     resultShowXciDumpMenu,
     resultDumpXci,
     resultShowNspDumpMenu,
+    resultShowNspAppDumpMenu,
+    resultShowNspPatchDumpMenu,
+    resultShowNspAddOnDumpMenu,
     resultDumpNsp,
-    resultShowRawPartitionDumpMenu,
-    resultDumpRawPartition,
-    resultShowPartitionDataDumpMenu,
-    resultDumpPartitionData,
-    resultShowViewGameCardFsMenu,
-    resultShowViewGameCardFsGetList,
-    resultShowViewGameCardFsBrowser,
-    resultViewGameCardFsBrowserCopyFile,
+    resultShowHfs0Menu,
+    resultShowRawHfs0PartitionDumpMenu,
+    resultDumpRawHfs0Partition,
+    resultShowHfs0PartitionDataDumpMenu,
+    resultDumpHfs0PartitionData,
+    resultShowHfs0BrowserMenu,
+    resultHfs0BrowserGetList,
+    resultShowHfs0Browser,
+    resultHfs0BrowserCopyFile,
+    resultShowRomFsMenu,
+    resultShowRomFsSectionDataDumpMenu,
+    resultDumpRomFsSectionData,
+    resultShowRomFsSectionBrowserMenu,
+    resultRomFsSectionBrowserGetEntries,
+    resultShowRomFsSectionBrowser,
+    resultRomFsSectionBrowserChangeDir,
+    resultRomFsSectionBrowserCopyFile,
     resultDumpGameCardCertificate,
+    resultShowUpdateMenu,
     resultUpdateNSWDBXml,
     resultUpdateApplication,
     resultExit
@@ -49,21 +80,40 @@ typedef enum {
     stateXciDumpMenu,
     stateDumpXci,
     stateNspDumpMenu,
+    stateNspAppDumpMenu,
+    stateNspPatchDumpMenu,
+    stateNspAddOnDumpMenu,
     stateDumpNsp,
-    stateRawPartitionDumpMenu,
-    stateDumpRawPartition,
-    statePartitionDataDumpMenu,
-    stateDumpPartitionData,
-    stateViewGameCardFsMenu,
-    stateViewGameCardFsGetList,
-    stateViewGameCardFsBrowser,
-    stateViewGameCardFsBrowserCopyFile,
+    stateHfs0Menu,
+    stateRawHfs0PartitionDumpMenu,
+    stateDumpRawHfs0Partition,
+    stateHfs0PartitionDataDumpMenu,
+    stateDumpHfs0PartitionData,
+    stateHfs0BrowserMenu,
+    stateHfs0BrowserGetList,
+    stateHfs0Browser,
+    stateHfs0BrowserCopyFile,
+    stateRomFsMenu,
+    stateRomFsSectionDataDumpMenu,
+    stateDumpRomFsSectionData,
+    stateRomFsSectionBrowserMenu,
+    stateRomFsSectionBrowserGetEntries,
+    stateRomFsSectionBrowser,
+    stateRomFsSectionBrowserChangeDir,
+    stateRomFsSectionBrowserCopyFile,
     stateDumpGameCardCertificate,
+    stateUpdateMenu,
     stateUpdateNSWDBXml,
     stateUpdateApplication
 } UIState;
 
 void uiFill(int x, int y, int width, int height, u8 r, u8 g, u8 b);
+
+void uiDrawIcon(const u8 *icon, int width, int height, int x, int y);
+
+bool uiLoadJpgFromMem(u8 *rawJpg, size_t rawJpgSize, int expectedWidth, int expectedHeight, int desiredWidth, int desiredHeight, u8 **outBuf);
+
+bool uiLoadJpgFromFile(const char *filename, int expectedWidth, int expectedHeight, int desiredWidth, int desiredHeight, u8 **outBuf);
 
 void uiDrawString(const char *string, int x, int y, u8 r, u8 g, u8 b);
 
@@ -81,9 +131,9 @@ void uiClearScreen();
 
 void uiPrintHeadline();
 
-int uiInit();
-
 void uiDeinit();
+
+int uiInit();
 
 void uiSetState(UIState state);
 

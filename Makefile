@@ -32,8 +32,8 @@ include $(DEVKITPRO)/libnx/switch_rules
 #---------------------------------------------------------------------------------
 
 VERSION_MAJOR := 1
-VERSION_MINOR := 0
-VERSION_MICRO := 8
+VERSION_MINOR := 1
+VERSION_MICRO := 0
 
 APP_TITLE	:=	gcdumptool
 APP_AUTHOR	:=	MCMrARM, DarkMatterCore
@@ -45,28 +45,29 @@ SOURCES		:=	source
 DATA		:=	data
 INCLUDES	:=	include
 EXEFS_SRC	:=	exefs_src
-#ROMFS	:=	romfs
+ROMFS       :=	romfs
 
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-ARCH	:=	-march=armv8-a -mtune=cortex-a57 -mtp=soft -fPIE
+ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
 CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
 			$(ARCH) $(DEFINES)
 
-CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -D__LINUX_ERRNO_EXTENSIONS__
+CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -D__LINUX_ERRNO_EXTENSIONS__ -DAPP_VERSION=\"${APP_VERSION}\"
 CFLAGS  +=  `freetype-config --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config zlib --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config libxml-2.0 --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config json-c --cflags`
+CFLAGS  +=  `aarch64-none-elf-pkg-config libturbojpeg --cflags`
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=gnu++11
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lnx -ljson-c -lm `freetype-config --libs`
+LIBS	:= -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lnx -ljson-c -lm `freetype-config --libs` -lturbojpeg
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

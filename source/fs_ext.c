@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "fsext.h"
+#include "fs_ext.h"
 
 // IFileSystemProxy
 Result fsOpenGameCardStorage(FsStorage* out, const FsGameCardHandle* handle, u32 partition)

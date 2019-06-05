@@ -4,6 +4,7 @@
 #define __DUMPER_H__
 
 #include <switch.h>
+#include "util.h"
 
 #define DUMP_BUFFER_SIZE                (u64)0x100000		// 1 MiB (1048576 bytes)
 #define ISTORAGE_PARTITION_CNT          2
@@ -17,14 +18,16 @@
 #define CERT_OFFSET                     0x7000
 #define CERT_SIZE                       0x200
 
-#define SMOOTHING_FACTOR                (double)0.01
+#define SMOOTHING_FACTOR                (double)0.05
 
 void workaroundPartitionZeroAccess(FsDeviceOperator* fsOperator);
-bool dumpCartridgeImage(FsDeviceOperator* fsOperator, bool isFat32, bool dumpCert, bool trimDump, bool calcCrc);
-bool dumpApplicationNSP(FsDeviceOperator* fsOperator, bool isFat32, bool calcCrc, u32 appIndex);
-bool dumpRawPartition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitting);
-bool dumpPartitionData(FsDeviceOperator* fsOperator, u32 partition);
-bool dumpFileFromPartition(FsDeviceOperator* fsOperator, u32 partition, u32 file, char *filename);
+bool dumpCartridgeImage(FsDeviceOperator* fsOperator, bool isFat32, bool setXciArchiveBit, bool dumpCert, bool trimDump, bool calcCrc);
+bool dumpNintendoSubmissionPackage(FsDeviceOperator* fsOperator, nspDumpType selectedNspDumpType, u32 titleIndex, bool isFat32, bool calcCrc);
+bool dumpRawHfs0Partition(FsDeviceOperator* fsOperator, u32 partition, bool doSplitting);
+bool dumpHfs0PartitionData(FsDeviceOperator* fsOperator, u32 partition);
+bool dumpFileFromHfs0Partition(FsDeviceOperator* fsOperator, u32 partition, u32 file, char *filename);
+bool dumpRomFsSectionData(FsDeviceOperator* fsOperator, u32 appIndex);
+bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting);
 bool dumpGameCertificate(FsDeviceOperator *fsOperator);
 
 #endif
