@@ -2,10 +2,9 @@
 #include <string.h>
 #include <stdlib.h>
 
-#include "nca.h"
+#include "keys.h"
 #include "util.h"
 #include "ui.h"
-#include "keys.h"
 #include "rsa.h"
 
 /* Extern variables */
@@ -13,6 +12,7 @@
 extern int breaks;
 extern int font_height;
 
+extern exefs_ctx_t exeFsContext;
 extern romfs_ctx_t romFsContext;
 
 extern char strbuf[NAME_BUF_LEN * 4];
@@ -209,7 +209,7 @@ void convertU64ToNcaSize(const u64 size, u8 out[0x6])
 bool loadNcaKeyset()
 {
     // Keyset already loaded
-    if (nca_keyset.key_cnt > 0) return true;
+    if (nca_keyset.total_key_cnt > 0) return true;
     
     if (!(envIsSyscallHinted(0x60) &&   // svcDebugActiveProcess
           envIsSyscallHinted(0x63) &&   // svcGetDebugEvent
@@ -386,7 +386,7 @@ bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize)
     return true;
 }
 
-bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title_rights_ctx *rights_info, u8 *decrypted_nca_keys)
+bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title_rights_ctx *rights_info, u8 *decrypted_nca_keys, bool retrieveTitleKeyData)
 {
     if (!ncaBuf || !ncaBufSize || ncaBufSize < NCA_FULL_HEADER_LENGTH || !out || !decrypted_nca_keys)
     {
@@ -462,13 +462,45 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
     
     if (has_rights_id)
     {
-        if (rights_info != NULL && !rights_info->has_rights_id)
+        if (rights_info != NULL)
         {
-            rights_info->has_rights_id = true;
-            memcpy(rights_info->rights_id, out->rights_id, 16);
-            convertDataToHexString(out->rights_id, 16, rights_info->rights_id_str, 33);
-            sprintf(rights_info->tik_filename, "%s.tik", rights_info->rights_id_str);
-            sprintf(rights_info->cert_filename, "%s.cert", rights_info->rights_id_str);
+            // If we're dealing with a rights info context, retrieve the ticket for the current title
+            
+            if (!rights_info->has_rights_id)
+            {
+                rights_info->has_rights_id = true;
+                
+                memcpy(rights_info->rights_id, out->rights_id, 16);
+                convertDataToHexString(out->rights_id, 16, rights_info->rights_id_str, 33);
+                sprintf(rights_info->tik_filename, "%s.tik", rights_info->rights_id_str);
+                sprintf(rights_info->cert_filename, "%s.cert", rights_info->rights_id_str);
+                
+                if (retrieveTitleKeyData)
+                {
+                    if (!retrieveNcaTikTitleKey(out, (u8*)(&(rights_info->tik_data)), rights_info->enc_titlekey, rights_info->dec_titlekey)) return false;
+                    
+                    memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
+                    memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info->dec_titlekey, 0x10);
+                }
+            } else {
+                // Copy what we already have
+                if (retrieveTitleKeyData)
+                {
+                    memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
+                    memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info->dec_titlekey, 0x10);
+                }
+            }
+        } else {
+            // Otherwise, only retrieve the decrypted titlekey. This is used with ExeFS/RomFS section parsing for SD/eMMC titles
+            if (retrieveTitleKeyData)
+            {
+                u8 tmp_dec_titlekey[0x10];
+                
+                if (!retrieveNcaTikTitleKey(out, NULL, NULL, tmp_dec_titlekey)) return false;
+                
+                memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
+                memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), tmp_dec_titlekey, 0x10);
+            }
         }
     } else {
         if (!decryptNcaKeyArea(out, decrypted_nca_keys)) return false;
@@ -799,7 +831,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
     return true;
 }
 
-bool retrieveCnmtNcaData(nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *output, title_rights_ctx *rights_info)
+bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *output, title_rights_ctx *rights_info, bool replaceKeyArea)
 {
     if (!ncaBuf || !xml_program_info || !xml_content_info || !output || !rights_info)
     {
@@ -808,6 +840,8 @@ bool retrieveCnmtNcaData(nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_p
     }
     
     nca_header_t dec_header;
+    
+    u32 i;
     
     u64 section_offset;
     u64 section_size;
@@ -835,7 +869,9 @@ bool retrieveCnmtNcaData(nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_p
     char cnmtFileName[50] = {'\0'};
     snprintf(cnmtFileName, sizeof(cnmtFileName) / sizeof(cnmtFileName[0]), "%s_%016lx.cnmt", getTitleType(xml_program_info->type), xml_program_info->title_id);
     
-    if (!decryptNcaHeader(ncaBuf, xml_content_info->size, &dec_header, rights_info, xml_content_info->decrypted_nca_keys)) return false;
+    // Decrypt the NCA header
+    // Don't retrieve the ticket and/or titlekey if we're dealing with a Patch with titlekey crypto bundled with the inserted gamecard
+    if (!decryptNcaHeader(ncaBuf, xml_content_info->size, &dec_header, rights_info, xml_content_info->decrypted_nca_keys, (curStorageId != FsStorageId_GameCard))) return false;
     
     if (dec_header.fs_headers[0].partition_type != NCA_FS_HEADER_PARTITION_PFS0 || dec_header.fs_headers[0].fs_type != NCA_FS_HEADER_FSTYPE_PFS0)
     {
@@ -856,8 +892,39 @@ bool retrieveCnmtNcaData(nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_p
         return false;
     }
     
-    // Modify distribution type
-    if (selectedNspDumpType != DUMP_PATCH_NSP) dec_header.distribution = 0;
+    bool has_rights_id = false;
+    
+    for(i = 0; i < 0x10; i++)
+    {
+        if (dec_header.rights_id[i] != 0)
+        {
+            has_rights_id = true;
+            break;
+        }
+    }
+    
+    if (curStorageId == FsStorageId_GameCard)
+    {
+        if (has_rights_id)
+        {
+            uiDrawString("Error: Rights ID field in NCA header not empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            return false;
+        }
+        
+        // Modify distribution type
+        if (selectedNspDumpType != DUMP_PATCH_NSP) dec_header.distribution = 0;
+    } else
+    if (curStorageId == FsStorageId_SdCard || curStorageId == FsStorageId_NandUser)
+    {
+        if (has_rights_id && replaceKeyArea)
+        {
+            // Generate new encrypted NCA key area using titlekey
+            if (!generateEncryptedNcaKeyAreaWithTitlekey(&dec_header, xml_content_info->decrypted_nca_keys)) return false;
+            
+            // Remove rights ID from NCA
+            memset(dec_header.rights_id, 0, 0x10);
+        }
+    }
     
     section_offset = ((u64)dec_header.section_entries[0].media_start_offset * (u64)MEDIA_UNIT_SIZE);
     section_size = (((u64)dec_header.section_entries[0].media_end_offset * (u64)MEDIA_UNIT_SIZE) - section_offset);
@@ -870,7 +937,6 @@ bool retrieveCnmtNcaData(nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_p
     
     // Generate initial CTR
     unsigned char ctr[0x10];
-    unsigned int i;
     u64 ofs = (section_offset >> 4);
     
     for(i = 0; i < 0x8; i++)
@@ -1083,7 +1149,147 @@ bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program
     return true;
 }
 
-bool readRomFsEntriesFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
+bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
+{
+    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys)
+    {
+        uiDrawString("Error: invalid parameters to read RomFS section from NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    u8 exefs_index;
+    bool found_exefs = false;
+    
+    u32 i;
+    
+    u64 section_offset;
+    u64 section_size;
+    
+    unsigned char ctr[0x10];
+    memset(ctr, 0, 0x10);
+    
+    u64 ofs;
+    
+    u8 ctr_key[NCA_KEY_AREA_KEY_SIZE];
+    memcpy(ctr_key, decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), NCA_KEY_AREA_KEY_SIZE);
+    
+    Aes128CtrContext aes_ctx;
+    aes128CtrContextCreate(&aes_ctx, ctr_key, ctr);
+    
+    u64 nca_pfs0_offset;
+    pfs0_header nca_pfs0_header;
+    
+    u64 nca_pfs0_entries_offset;
+    pfs0_entry_table *nca_pfs0_entries = NULL;
+    
+    u64 nca_pfs0_str_table_offset;
+    char *nca_pfs0_str_table = NULL;
+    
+    u64 nca_pfs0_data_offset;
+    
+    initExeFsContext();
+    
+    for(exefs_index = 0; exefs_index < 4; exefs_index++)
+    {
+        if (dec_nca_header->fs_headers[exefs_index].partition_type != NCA_FS_HEADER_PARTITION_PFS0 || dec_nca_header->fs_headers[exefs_index].fs_type != NCA_FS_HEADER_FSTYPE_PFS0 || !dec_nca_header->fs_headers[exefs_index].pfs0_superblock.pfs0_size || dec_nca_header->fs_headers[exefs_index].crypt_type != NCA_FS_HEADER_CRYPT_CTR) continue;
+        
+        section_offset = ((u64)dec_nca_header->section_entries[exefs_index].media_start_offset * (u64)MEDIA_UNIT_SIZE);
+        section_size = (((u64)dec_nca_header->section_entries[exefs_index].media_end_offset * (u64)MEDIA_UNIT_SIZE) - section_offset);
+        
+        if (!section_offset || section_offset < NCA_FULL_HEADER_LENGTH || !section_size) continue;
+        
+        // Generate initial CTR
+        ofs = (section_offset >> 4);
+        
+        for(i = 0; i < 0x8; i++)
+        {
+            ctr[i] = dec_nca_header->fs_headers[exefs_index].section_ctr[0x08 - i - 1];
+            ctr[0x10 - i - 1] = (unsigned char)(ofs & 0xFF);
+            ofs >>= 8;
+        }
+        
+        aes128CtrContextResetCtr(&aes_ctx, ctr);
+        
+        nca_pfs0_offset = (section_offset + dec_nca_header->fs_headers[exefs_index].pfs0_superblock.pfs0_offset);
+        
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_offset, &nca_pfs0_header, sizeof(pfs0_header), &aes_ctx, false)) return false;
+        
+        if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC || !nca_pfs0_header.file_cnt || !nca_pfs0_header.str_table_size) continue;
+        
+        nca_pfs0_entries_offset = (nca_pfs0_offset + sizeof(pfs0_header));
+        
+        nca_pfs0_entries = calloc(nca_pfs0_header.file_cnt, sizeof(pfs0_entry_table));
+        if (!nca_pfs0_entries) continue;
+        
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_entries_offset, nca_pfs0_entries, (u64)nca_pfs0_header.file_cnt * sizeof(pfs0_entry_table), &aes_ctx, false))
+        {
+            free(nca_pfs0_entries);
+            return false;
+        }
+        
+        nca_pfs0_str_table_offset = (nca_pfs0_entries_offset + ((u64)nca_pfs0_header.file_cnt * sizeof(pfs0_entry_table)));
+        
+        nca_pfs0_str_table = calloc(nca_pfs0_header.str_table_size, sizeof(char));
+        if (!nca_pfs0_str_table)
+        {
+            free(nca_pfs0_entries);
+            nca_pfs0_entries = NULL;
+            continue;
+        }
+        
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_str_table_offset, nca_pfs0_str_table, (u64)nca_pfs0_header.str_table_size, &aes_ctx, false))
+        {
+            free(nca_pfs0_str_table);
+            free(nca_pfs0_entries);
+            return false;
+        }
+        
+        for(i = 0; i < nca_pfs0_header.file_cnt; i++)
+        {
+            char *cur_filename = (nca_pfs0_str_table + nca_pfs0_entries[i].filename_offset);
+            
+            if (!strncasecmp(cur_filename, "main.npdm", 9))
+            {
+                found_exefs = true;
+                break;
+            }
+        }
+        
+        if (found_exefs) break;
+        
+        free(nca_pfs0_str_table);
+        nca_pfs0_str_table = NULL;
+        
+        free(nca_pfs0_entries);
+        nca_pfs0_entries = NULL;
+    }
+    
+    if (!found_exefs)
+    {
+        uiDrawString("Error: NCA doesn't hold an ExeFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    nca_pfs0_data_offset = (nca_pfs0_str_table_offset + (u64)nca_pfs0_header.str_table_size);
+    
+    // Save data to output struct
+    // The caller function must free these data pointers
+    memcpy(&(exeFsContext.ncmStorage), ncmStorage, sizeof(NcmContentStorage));
+    memcpy(&(exeFsContext.ncaId), ncaId, sizeof(NcmNcaId));
+    memcpy(&(exeFsContext.aes_ctx), &aes_ctx, sizeof(Aes128CtrContext));
+    exeFsContext.exefs_offset = nca_pfs0_offset;
+    exeFsContext.exefs_size = dec_nca_header->fs_headers[exefs_index].pfs0_superblock.pfs0_size;
+    memcpy(&(exeFsContext.exefs_header), &nca_pfs0_header, sizeof(pfs0_header));
+    exeFsContext.exefs_entries_offset = nca_pfs0_entries_offset;
+    exeFsContext.exefs_entries = nca_pfs0_entries;
+    exeFsContext.exefs_str_table_offset = nca_pfs0_str_table_offset;
+    exeFsContext.exefs_str_table = nca_pfs0_str_table;
+    exeFsContext.exefs_data_offset = nca_pfs0_data_offset;
+    
+    return true;
+}
+
+bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys)
     {
@@ -1115,6 +1321,8 @@ bool readRomFsEntriesFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaI
     
     romfs_dir *romfs_dir_entries = NULL;
     romfs_file *romfs_file_entries = NULL;
+    
+    initRomFsContext();
     
     for(romfs_index = 0; romfs_index < 4; romfs_index++)
     {
@@ -1767,9 +1975,7 @@ bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
     u8 i;
     char tmp[NAME_BUF_LEN] = {'\0'};
     
-    initRomFsContext();
-    
-    if (!readRomFsEntriesFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys)) return false;
+    if (!readRomFsEntryFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys)) return false;
     
     // Look for the control.nacp file
     while(entryOffset < romFsContext.romfs_filetable_size)

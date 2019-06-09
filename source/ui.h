@@ -22,6 +22,8 @@
 #define COMMON_MAX_ELEMENTS     8
 #define HFS0_MAX_ELEMENTS       14
 #define ROMFS_MAX_ELEMENTS      12
+#define SDCARD_MAX_ELEMENTS     4
+#define ORPHAN_MAX_ELEMENTS     12
 
 #define OPTIONS_X_POS           (35 * CHAR_PT_SIZE)
 
@@ -31,6 +33,7 @@
 
 #define NINTENDO_FONT_A         "\xE0\xA0"
 #define NINTENDO_FONT_B         "\xE0\xA1"
+#define NINTENDO_FONT_Y         "\xE0\xA3"
 #define NINTENDO_FONT_L         "\xE0\xA4"
 #define NINTENDO_FONT_R         "\xE0\xA5"
 #define NINTENDO_FONT_ZL        "\xE0\xA6"
@@ -44,6 +47,7 @@
 typedef enum {
     resultNone,
     resultShowMainMenu,
+    resultShowGameCardMenu,
     resultShowXciDumpMenu,
     resultDumpXci,
     resultShowNspDumpMenu,
@@ -60,6 +64,13 @@ typedef enum {
     resultHfs0BrowserGetList,
     resultShowHfs0Browser,
     resultHfs0BrowserCopyFile,
+    resultShowExeFsMenu,
+    resultShowExeFsSectionDataDumpMenu,
+    resultDumpExeFsSectionData,
+    resultShowExeFsSectionBrowserMenu,
+    resultExeFsSectionBrowserGetList,
+    resultShowExeFsSectionBrowser,
+    resultExeFsSectionBrowserCopyFile,
     resultShowRomFsMenu,
     resultShowRomFsSectionDataDumpMenu,
     resultDumpRomFsSectionData,
@@ -69,6 +80,9 @@ typedef enum {
     resultRomFsSectionBrowserChangeDir,
     resultRomFsSectionBrowserCopyFile,
     resultDumpGameCardCertificate,
+    resultShowSdCardEmmcMenu,
+    resultShowSdCardEmmcTitleMenu,
+    resultShowSdCardEmmcOrphanPatchAddOnMenu,
     resultShowUpdateMenu,
     resultUpdateNSWDBXml,
     resultUpdateApplication,
@@ -77,6 +91,7 @@ typedef enum {
 
 typedef enum {
     stateMainMenu,
+    stateGameCardMenu,
     stateXciDumpMenu,
     stateDumpXci,
     stateNspDumpMenu,
@@ -93,6 +108,13 @@ typedef enum {
     stateHfs0BrowserGetList,
     stateHfs0Browser,
     stateHfs0BrowserCopyFile,
+    stateExeFsMenu,
+    stateExeFsSectionDataDumpMenu,
+    stateDumpExeFsSectionData,
+    stateExeFsSectionBrowserMenu,
+    stateExeFsSectionBrowserGetList,
+    stateExeFsSectionBrowser,
+    stateExeFsSectionBrowserCopyFile,
     stateRomFsMenu,
     stateRomFsSectionDataDumpMenu,
     stateDumpRomFsSectionData,
@@ -102,10 +124,19 @@ typedef enum {
     stateRomFsSectionBrowserChangeDir,
     stateRomFsSectionBrowserCopyFile,
     stateDumpGameCardCertificate,
+    stateSdCardEmmcMenu,
+    stateSdCardEmmcTitleMenu,
+    stateSdCardEmmcOrphanPatchAddOnMenu,
     stateUpdateMenu,
     stateUpdateNSWDBXml,
     stateUpdateApplication
 } UIState;
+
+typedef enum {
+    MENUTYPE_MAIN = 0,
+    MENUTYPE_GAMECARD,
+    MENUTYPE_SDCARD_EMMC
+} curMenuType;
 
 void uiFill(int x, int y, int width, int height, u8 r, u8 g, u8 b);
 
@@ -116,6 +147,8 @@ bool uiLoadJpgFromMem(u8 *rawJpg, size_t rawJpgSize, int expectedWidth, int expe
 bool uiLoadJpgFromFile(const char *filename, int expectedWidth, int expectedHeight, int desiredWidth, int desiredHeight, u8 **outBuf);
 
 void uiDrawString(const char *string, int x, int y, u8 r, u8 g, u8 b);
+
+u32 uiGetStrWidth(char *string);
 
 void uiRefreshDisplay();
 

@@ -1,11 +1,11 @@
-# gcdumptool
-Nintendo Switch Game Card Dump Tool
+﻿# nxdumptool
+Nintendo Switch Dump Tool
 
 Main features
 --------------
 
 * Generates full Cartridge Image dumps (XCI) with optional certificate removal and optional trimming.
-* Generates installable Nintendo Submission Packages (NSP) from base applications, updates and DLCs stored in the inserted game card.
+* Generates installable Nintendo Submission Packages (NSP) from base applications, updates and DLCs stored in the inserted game card, SD card and eMMC storage devices.
 * Compatible with multigame carts.
 * CRC32 checksum calculation for XCI/NSP dumps.
 * Full XCI dump verification using XML database from NSWDB.COM (NSWreleases.xml).
@@ -13,32 +13,85 @@ Main features
 * Precise HFS0 raw partition dumping, using the root HFS0 header from the game card.
 * HFS0 partition file data dumping.
 * HFS0 partition file browser with manual file dump support.
-* RomFS section file data dumping.
-* RomFS section file browser with manual file dump support.
+* Program NCA ExeFS section file data dumping.
+* Program NCA ExeFS section file browser with manual file dump support.
+* Program NCA RomFS section file data dumping.
+* Program NCA RomFS section file browser with manual file dump support.
 * Manual game card certificate dump.
 * Free SD card space checks in place.
 * File splitting support for all operations.
 * Game card metadata retrieval using NCM and NS services.
 * Dump speed calculation, ETA calculation and progress bar.
 
+Operations related to installed SD/eMMC titles require a keys file located at "sdmc:/switch/prod.keys". Use [Lockpick_RCM](https://github.com/shchmue/Lockpick_RCM) to generate it.
+
 Thanks to
 --------------
 
-* MCMrARM, for creating the original application.
-* RSDuck, for vba-next-switch port. It's UI menu code was taken as a basis for this application.
-* Foen, for giving me some pretty good hints about how to use the NCM service.
-* Yellows8, for helping me fix a silly bug in my implementation of some NCM service IPC calls.
-* SciresM, for hactool. It's NCA content handling procedure is reproduced during the NSP dump process.
-* The-4n, for 4NXCI and hacPack. The NCA content patching procedure used in 4NXCI is replicated in the application, as well as the NACP XML generation from hacPack.
-* shchmue, for Lockpick. It was used as a reference for the key-collection algorithm needed for the NSP dump and RomFS dump/browse procedures.
-* Bj�rn Samuelsson, for his public domain CRC32 checksum calculation code for C (crc32_fast.c).
-* AnalogMan, for his constant support and ideas.
-* RattletraPM, for the awesome icon used in the application.
+* [MCMrARM](https://github.com/MCMrARM), for creating the original application.
+* [RSDuck](https://github.com/RSDuck), for vba-next-switch port. It's UI menu code was taken as a basis for this application.
+* [foen](https://github.com/foen), for giving me some pretty good hints about how to use the NCM service.
+* [yellows8](https://github.com/yellows8), for helping me fix a silly bug in my implementation of some NCM service IPC calls.
+* [SciresM](https://github.com/SciresM), for [hactool](https://github.com/SciresM/hactool) (licensed under [ISC](https://github.com/SciresM/hactool/blob/master/LICENSE)). It's NCA content handling procedure is reproduced during the NSP dump process.
+* [The-4n](https://github.com/The-4n), for [4NXCI](https://github.com/The-4n/4NXCI) (licensed under [ISC](https://github.com/The-4n/4NXCI/blob/master/LICENSE)) and [hacPack](https://github.com/The-4n/hacPack) (licensed under [GPLv2](https://github.com/The-4n/hacPack/blob/master/LICENSE)). The NCA content patching procedure used in 4NXCI is replicated in the application, as well as the NACP XML generation from hacPack.
+* [shchmue](https://github.com/shchmue), for [Lockpick](https://github.com/shchmue/Lockpick) (licensed under [GPLv2](https://github.com/shchmue/Lockpick/blob/master/LICENSE)). It is used as a reference for the runtime key-collection algorithm needed for the NSP dump, ExeFS dump/browse and RomFS dump/browse procedures.
+* Björn Samuelsson, for his [public domain CRC32 checksum calculation C-code](http://home.thep.lu.se/~bjorn/crc).
+* [Adubbz](https://github.com/Adubbz), for [Tinfoil](https://github.com/Adubbz/Tinfoil) (licensed under [MIT](https://github.com/Adubbz/Tinfoil/blob/master/LICENSE)). Its wrappers for ES service IPC calls are used in the application.
+* ChaN, for the [FatFs module](http://elm-chan.org/fsw/ff/00index_e.html) (licensed under [FatFs license](http://elm-chan.org/fsw/ff/doc/appnote.html#license)). It is used to read ES savedata files from the BIS System partition.
+* [AnalogMan](https://github.com/AnalogMan151), for his constant support and ideas.
+* [RattletraPM](https://github.com/RattletraPM), for the awesome icon used in the application.
 * The GNOME project, from which the high contrast directory/file icons for the filebrowser modes were retrieved.
 * The folks from ReSwitched, for working towards the creation of a good homebrew ecosystem.
+* The Comfy Boyes, for being both awesome and supportive. You know who you are.
+
+Donate
+--------------
+
+If you like my work and you'd like to support me in any way, it's not necessary, but a donation would be greatly appreciated!
+
+[![Donate](https://img.shields.io/static/v1.svg?label=PayPal&message=Donate&color=blue&style=flat&logo=paypal)](https://paypal.me/DarkMatterCore)
 
 Changelog
 --------------
+
+**v1.1.1:**
+* Project name changed to `nxdumptool`. This is no longer a gamecard-only tool.
+* Added ExeFS dumping/browsing support. This feature, along with the already available RomFS options, makes the application an excellent tool for modders!
+* Added compatibility with FS process memory layout in the key retrieval procedure while using emuMMC. Thanks to [shchmue](https://github.com/shchmue)!
+* Due to public demand, NSP dumping, ExeFS dumping/browsing and RomFS dumping/browsing support has been added for base applications, updates and DLCs available in both SD card and eMMC!
+    * Now it's possible to select the source storage device (gamecard, SD card / eMMC) for any operation right after launching the application.
+        * The gamecard submenu works exactly like the main menu has worked up to this point (except for the update options, which are now displayed in the new main menu).
+        * The SD card / eMMC submenu shows installed base applications along with their icons. Upon selecting a title, a submenu with NSP and RomFS options will show up. It's also possible to dump updates/DLCs for an installed base application this way.
+        * If there's installed content (updates/DLCs) with missing base application titles, pressing Y on the SD card / eMMC submenu will display this "orphan" content list and let you dump titles from it nonetheless.
+    * It is possible to generate console-specific NSP dumps, dumps with modified tickets to remove console-specific data, and ticket-less dumps with standard NCA key area crypto.
+        * Two new options are available in the NSP dump submenus for SD/eMMC titles: "Remove console specific data" and "Generate ticket-less dump". The latter won't appear if the former isn't enabled.
+            * "Remove console specific data" cleans console specific data fields from a "personalized" ticket and replaces its RSA titlekey block with a 16-byte encrypted titlekey, essentially converting it to a "common" ticket. This option has no effect if the title already uses a "common" ticket.
+            * "Generate ticket-less dump" goes another step ahead by cleaning up the Rights ID field in every NCA content file that includes it, stores the decrypted titlekey in the NCA key area and then encrypts this area using standard crypto, removing the need for a tik/cert combination.
+        * Console-specific NSP dumps and dumps with modified tickets include both `tik` and `cert` files.
+        * All NSP dumps generated from installed SD/eMMC titles include both `.cnmt.xml` and `.nacp.xml` files whenever possible.
+    * Sadly, due to limitations in the methods currently used to perform key retrieval/derivation at runtime, NSP dumping, ExeFS dumping/browsing and RomFS dumping/browsing for SD/eMMC titles require the "sdmc:/switch/prod.keys" file. Specifically, these are the needed keys:
+        * `eticket_rsa_kek`.
+        * `titlekek_##` (varies from `00` to `1F`).
+    * Additionally, ticket-less NSP dumps for SD/eMMC titles also require the following keys:
+        * `key_area_key_application_##` (varies from `00` to `1F`).
+        * `key_area_key_ocean_##` (varies from `00` to `1F`).
+        * `key_area_key_system_##` (varies from `00` to `1F`).
+    * All gamecard-related operations can still be performed without the need for a keys file!
+* Output data generated by the application will now be saved to its corresponding subdirectory in "sdmc:/nxdumptool/":
+    * XCI dumps: "sdmc:/nxdumptool/XCI/".
+    * NSP dumps: "sdmc:/nxdumptool/NSP/".
+    * HFS0 data: "sdmc:/nxdumptool/HFS0/".
+    * ExeFS data: "sdmc:/nxdumptool/ExeFS/".
+    * RomFS data: "sdmc:/nxdumptool/RomFS/".
+    * Certificate dumps: "sdmc:/nxdumptool/Certificate/".
+* The location for the NSWDB.COM XML database has been moved to "sdmc:/nxdumptool/NSWreleases.xml".
+* Tickets from updates with titlekey crypto dumped from gamecards are now converted to regular "common" tickets before being written to the output NSP dump.
+* The content distribution type for updates dumped from custom XCIs mounted through SX OS is now set to "download".
+* Fixed a NCM service handle exhaustion bug if an error ocurred while reading the RomFS section entry from the Program NCA for any base application.
+* Changed the application icon yet again. Big thanks to RattletraPM!
+* Minor changes and other various general fixes.
+
+Thanks to [simontime](https://github.com/simontime) for helping me out with the RSA certificate chain retrieval process! Also thanks to MUXI from PSXTools forums for providing with testing!
 
 **v1.1.0:**
 * Replaced the application icon with a new, stylish one made by RattletraPM. Thanks a lot!
@@ -75,7 +128,7 @@ Changelog
         - If only the base application is included, like most gamecards, choosing the NSP dump option in the main menu will take you right to the base application dump menu.
         - Once you enter a submenu, you'll be able to choose exactly which title to dump belonging to that category.
     - Output update NSPs will not be modified in any way. Thus, unlike NSPs from base applications and DLCs, their CRC32 checksums will always be the same.
-* Fixed the minimum system version field size in the extended CNMT header struct. Thanks to @0Liam !
+* Fixed the minimum system version field size in the extended CNMT header struct. Thanks to [0Liam](https://github.com/0Liam)!
 * Changed the naming convention for output NSP dumps:
 	- Base application: "sdmc:/[GameName] v[GameVersion] ([TitleID]) (BASE).nsp".
 	- Update: "sdmc:/[GameName] v[UpdateVersion] ([UpdateTitleID]) (UPD).nsp".

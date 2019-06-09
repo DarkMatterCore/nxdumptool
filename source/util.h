@@ -6,6 +6,14 @@
 #include <switch.h>
 #include "nca.h"
 
+#define OUTPUT_DUMP_BASE_PATH           "sdmc:/nxdumptool/"
+#define XCI_DUMP_PATH                   (OUTPUT_DUMP_BASE_PATH "XCI/")
+#define NSP_DUMP_PATH                   (OUTPUT_DUMP_BASE_PATH "NSP/")
+#define HFS0_DUMP_PATH                  (OUTPUT_DUMP_BASE_PATH "HFS0/")
+#define EXEFS_DUMP_PATH                 (OUTPUT_DUMP_BASE_PATH "ExeFS/")
+#define ROMFS_DUMP_PATH                 (OUTPUT_DUMP_BASE_PATH "RomFS/")
+#define CERT_DUMP_PATH                  (OUTPUT_DUMP_BASE_PATH "Certificate/")
+
 #define KiB                             (1024.0)
 #define MiB                             (1024.0 * KiB)
 #define GiB                             (1024.0 * MiB)
@@ -21,14 +29,15 @@
 #define APPLICATION_PATCH_BITMASK       (u64)0x800
 #define APPLICATION_ADDON_BITMASK       (u64)0xFFFFFFFFFFFF0000
 
+#define FILENAME_LENGTH                 512
 #define FILENAME_MAX_CNT                20000
-#define FILENAME_BUFFER_SIZE            (512 * FILENAME_MAX_CNT)   // 10000 KiB
+#define FILENAME_BUFFER_SIZE            (FILENAME_LENGTH * FILENAME_MAX_CNT)    // 10000 KiB
 
 #define NACP_APPNAME_LEN                0x200
 #define NACP_AUTHOR_LEN                 0x100
 #define VERSION_STR_LEN                 0x40
 
-#define GAMECARD_WAIT_TIME              3                           // 3 seconds
+#define GAMECARD_WAIT_TIME              3                                       // 3 seconds
 
 #define GAMECARD_HEADER_SIZE            0x200
 #define GAMECARD_SIZE_ADDR              0x10D
@@ -36,15 +45,15 @@
 
 #define HFS0_OFFSET_ADDR                0x130
 #define HFS0_SIZE_ADDR                  0x138
-#define HFS0_MAGIC                      (u32)0x48465330             // "HFS0"
+#define HFS0_MAGIC                      (u32)0x48465330                         // "HFS0"
 #define HFS0_FILE_COUNT_ADDR            0x04
 #define HFS0_STR_TABLE_SIZE_ADDR        0x08
 #define HFS0_ENTRY_TABLE_ADDR           0x10
 
 #define MEDIA_UNIT_SIZE                 0x200
 
-#define GAMECARD_TYPE1_PARTITION_CNT    3                           // "update" (0), "normal" (1), "update" (2)
-#define GAMECARD_TYPE2_PARTITION_CNT    4                           // "update" (0), "logo" (1), "normal" (2), "update" (3)
+#define GAMECARD_TYPE1_PARTITION_CNT    3                                       // "update" (0), "normal" (1), "update" (2)
+#define GAMECARD_TYPE2_PARTITION_CNT    4                                       // "update" (0), "logo" (1), "normal" (2), "update" (3)
 #define GAMECARD_TYPE(x)                ((x) == GAMECARD_TYPE1_PARTITION_CNT ? "Type 0x01" : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? "Type 0x02" : "Unknown"))
 #define GAMECARD_TYPE1_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Normal" : ((x) == 2 ? "Secure" : "Unknown")))
 #define GAMECARD_TYPE2_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Logo" : ((x) == 2 ? "Normal" : ((x) == 3 ? "Secure" : "Unknown"))))
@@ -91,6 +100,9 @@
 #define bswap_32(a)                     ((((a) << 24) & 0xff000000) | (((a) << 8) & 0xff0000) | (((a) >> 8) & 0xff00) | (((a) >> 24) & 0xff))
 #define round_up(x, y)                  ((x) + (((y) - ((x) % (y))) % (y)))			// Aligns 'x' bytes to a 'y' bytes boundary
 
+#define ORPHAN_ENTRY_TYPE_PATCH         1
+#define ORPHAN_ENTRY_TYPE_ADDON         2
+
 typedef struct {
     u64 file_offset;
     u64 file_size;
@@ -115,6 +127,11 @@ typedef struct {
     double averageSpeed;
 } PACKED progress_ctx_t;
 
+typedef struct {
+    u32 index;
+    u8 type; // 1 = Patch, 2 = AddOn
+} PACKED orphan_patch_addon_entry;
+
 bool isGameCardInserted();
 
 void fsGameCardDetectionThreadFunc(void *arg);
@@ -123,21 +140,25 @@ void delay(u8 seconds);
 
 void formatETAString(u64 curTime, char *output, u32 outSize);
 
-void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize);
+void initExeFsContext();
 
-void removeIllegalCharacters(char *name);
-
-void strtrim(char *str);
-
-void freeStringsPtr(char **var);
+void freeExeFsContext();
 
 void initRomFsContext();
 
 void freeRomFsContext();
 
-void freeGameCardInfo();
+void freeGlobalData();
 
-void loadGameCardInfo();
+void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize);
+
+void removeIllegalCharacters(char *name);
+
+void createOutputDirectories();
+
+void strtrim(char *str);
+
+void loadTitleInfo();
 
 bool getHfs0EntryDetails(u8 *hfs0Header, u64 hfs0HeaderOffset, u64 hfs0HeaderSize, u32 num_entries, u32 entry_idx, bool isRoot, u32 partitionIndex, u64 *out_offset, u64 *out_size);
 
@@ -145,11 +166,15 @@ bool getPartitionHfs0Header(u32 partition);
 
 bool getHfs0FileList(u32 partition);
 
-u8 *getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename, u64 *outSize);
+bool getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename, u8 *outBuf, u64 outBufSize);
+
+bool calculateExeFsExtractedDataSize(u64 *out);
 
 bool calculateRomFsExtractedDataSize(u64 *out);
 
-bool readProgramNcaRomFs(u32 appIndex);
+bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs);
+
+bool getExeFsFileList();
 
 bool getRomFsFileList(u32 dir_offset);
 
@@ -157,11 +182,23 @@ int getSdCardFreeSpace(u64 *out);
 
 void convertSize(u64 size, char *out, int bufsize);
 
+void addStringToFilenameBuffer(const char *string, char **nextFilename);
+
 char *generateDumpFullName();
 
 char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex);
 
 void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, const char *prefix);
+
+bool checkOrphanPatchOrAddOn(bool addOn);
+
+void generateOrphanPatchOrAddOnList();
+
+bool checkIfBaseApplicationHasPatchOrAddOn(u32 appIndex, bool addOn);
+
+bool checkIfPatchOrAddOnBelongToBaseApplication(u32 titleIndex, u32 appIndex, bool addOn);
+
+u32 retrieveFirstPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn);
 
 void waitForButtonPress();
 
@@ -170,8 +207,6 @@ void printProgressBar(progress_ctx_t *progressCtx, bool calcData, u64 chunkSize)
 void setProgressBarError(progress_ctx_t *progressCtx);
 
 void convertDataToHexString(const u8 *data, const u32 dataSize, char *outBuf, const u32 outBufSize);
-
-void addStringToFilenameBuffer(const char *string, char **nextFilename);
 
 void removeDirectory(const char *path);
 

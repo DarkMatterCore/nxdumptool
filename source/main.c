@@ -102,8 +102,14 @@ int main(int argc, char *argv[])
                                             /* Zero out NCA keyset */
                                             memset(&nca_keyset, 0, sizeof(nca_keyset_t));
                                             
+                                            /* Init ExeFS context */
+                                            initExeFsContext();
+                                            
                                             /* Init RomFS context */
                                             initRomFsContext();
+                                            
+                                            /* Make sure output directories exist */
+                                            createOutputDirectories();
                                             
                                             /* Main application loop */
                                             bool exitLoop = false;
@@ -114,6 +120,9 @@ int main(int argc, char *argv[])
                                                 {
                                                     case resultShowMainMenu:
                                                         uiSetState(stateMainMenu);
+                                                        break;
+                                                    case resultShowGameCardMenu:
+                                                        uiSetState(stateGameCardMenu);
                                                         break;
                                                     case resultShowXciDumpMenu:
                                                         uiSetState(stateXciDumpMenu);
@@ -163,6 +172,27 @@ int main(int argc, char *argv[])
                                                     case resultHfs0BrowserCopyFile:
                                                         uiSetState(stateHfs0BrowserCopyFile);
                                                         break;
+                                                    case resultShowExeFsMenu:
+                                                        uiSetState(stateExeFsMenu);
+                                                        break;
+                                                    case resultShowExeFsSectionDataDumpMenu:
+                                                        uiSetState(stateExeFsSectionDataDumpMenu);
+                                                        break;
+                                                    case resultDumpExeFsSectionData:
+                                                        uiSetState(stateDumpExeFsSectionData);
+                                                        break;
+                                                    case resultShowExeFsSectionBrowserMenu:
+                                                        uiSetState(stateExeFsSectionBrowserMenu);
+                                                        break;
+                                                    case resultExeFsSectionBrowserGetList:
+                                                        uiSetState(stateExeFsSectionBrowserGetList);
+                                                        break;
+                                                    case resultShowExeFsSectionBrowser:
+                                                        uiSetState(stateExeFsSectionBrowser);
+                                                        break;
+                                                    case resultExeFsSectionBrowserCopyFile:
+                                                        uiSetState(stateExeFsSectionBrowserCopyFile);
+                                                        break;
                                                     case resultShowRomFsMenu:
                                                         uiSetState(stateRomFsMenu);
                                                         break;
@@ -189,6 +219,15 @@ int main(int argc, char *argv[])
                                                         break;
                                                     case resultDumpGameCardCertificate:
                                                         uiSetState(stateDumpGameCardCertificate);
+                                                        break;
+                                                    case resultShowSdCardEmmcMenu:
+                                                        uiSetState(stateSdCardEmmcMenu);
+                                                        break;
+                                                    case resultShowSdCardEmmcTitleMenu:
+                                                        uiSetState(stateSdCardEmmcTitleMenu);
+                                                        break;
+                                                    case resultShowSdCardEmmcOrphanPatchAddOnMenu:
+                                                        uiSetState(stateSdCardEmmcOrphanPatchAddOnMenu);
                                                         break;
                                                     case resultShowUpdateMenu:
                                                         uiSetState(stateUpdateMenu);
@@ -312,8 +351,8 @@ int main(int argc, char *argv[])
         ret = -2;
     }
     
-    /* Free gamecard resources */
-    freeGameCardInfo();
+    /* Free global resources */
+    freeGlobalData();
     
     /* Deinitialize UI */
     uiDeinit();

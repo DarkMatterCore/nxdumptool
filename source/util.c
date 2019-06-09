@@ -29,11 +29,13 @@ extern int font_height;
 extern int cursor;
 extern int scroll;
 
+extern curMenuType menuType;
+
 /* Constants */
 
 const char *nswReleasesXmlUrl = "http://nswdb.com/xml.php";
-const char *nswReleasesXmlTmpPath = "sdmc:/NSWreleases.xml.tmp";
-const char *nswReleasesXmlPath = "sdmc:/NSWreleases.xml";
+const char *nswReleasesXmlTmpPath = OUTPUT_DUMP_BASE_PATH "NSWreleases.xml.tmp";
+const char *nswReleasesXmlPath = OUTPUT_DUMP_BASE_PATH "NSWreleases.xml";
 const char *nswReleasesRootElement = "releases";
 const char *nswReleasesChildren = "release";
 const char *nswReleasesChildrenImageSize = "imagesize";
@@ -41,9 +43,9 @@ const char *nswReleasesChildrenTitleID = "titleid";
 const char *nswReleasesChildrenImgCrc = "imgcrc";
 const char *nswReleasesChildrenReleaseName = "releasename";
 
-const char *githubReleasesApiUrl = "https://api.github.com/repos/DarkMatterCore/gcdumptool/releases/latest";
-const char *gcDumpToolPath = "sdmc:/switch/gcdumptool.nro";
-const char *userAgent = "gcdumptool/" APP_VERSION " (Nintendo Switch)";
+const char *githubReleasesApiUrl = "https://api.github.com/repos/DarkMatterCore/nxdumptool/releases/latest";
+const char *nxDumpToolPath = "sdmc:/switch/nxdumptool.nro";
+const char *userAgent = "nxdumptool/" APP_VERSION " (Nintendo Switch)";
 
 /* Statically allocated variables */
 
@@ -68,6 +70,10 @@ bool gameCardInserted;
 u64 gameCardSize = 0, trimmedCardSize = 0;
 char gameCardSizeStr[32] = {'\0'}, trimmedCardSizeStr[32] = {'\0'};
 
+u64 gameCardUpdateTitleID = 0;
+u32 gameCardUpdateVersion = 0;
+char gameCardUpdateVersionStr[128] = {'\0'};
+
 u8 *hfs0_header = NULL;
 u64 hfs0_offset = 0, hfs0_size = 0;
 u32 hfs0_partition_cnt = 0;
@@ -76,32 +82,34 @@ u8 *partitionHfs0Header = NULL;
 u64 partitionHfs0HeaderOffset = 0, partitionHfs0HeaderSize = 0;
 u32 partitionHfs0FileCount = 0, partitionHfs0StrTableSize = 0;
 
-u32 gameCardAppCount = 0;
-u64 *gameCardTitleID = NULL;
-u32 *gameCardVersion = NULL;
+u32 titleAppCount = 0;
+u64 *titleAppTitleID = NULL;
+u32 *titleAppVersion = NULL;
+FsStorageId *titleAppStorageId = NULL;
 
-u32 gameCardPatchCount = 0;
-u64 *gameCardPatchTitleID = NULL;
-u32 *gameCardPatchVersion = NULL;
+u32 titlePatchCount = 0;
+u64 *titlePatchTitleID = NULL;
+u32 *titlePatchVersion = NULL;
+FsStorageId *titlePatchStorageId = NULL;
 
-u32 gameCardAddOnCount = 0;
-u64 *gameCardAddOnTitleID = NULL;
-u32 *gameCardAddOnVersion = NULL;
+u32 titleAddOnCount = 0;
+u64 *titleAddOnTitleID = NULL;
+u32 *titleAddOnVersion = NULL;
+FsStorageId *titleAddOnStorageId = NULL;
 
-char **gameCardName = NULL;
-char **fixedGameCardName = NULL;
-char **gameCardAuthor = NULL;
-char **gameCardVersionStr = NULL;
-u8 **gameCardIcon = NULL;
+char **titleName = NULL;
+char **fixedTitleName = NULL;
+char **titleAuthor = NULL;
+char **titleAppVersionStr = NULL;
+u8 **titleIcon = NULL;
 
-u64 gameCardUpdateTitleID = 0;
-u32 gameCardUpdateVersion = 0;
-char gameCardUpdateVersionStr[128] = {'\0'};
-
+exefs_ctx_t exeFsContext;
 romfs_ctx_t romFsContext;
 
 char curRomFsPath[NAME_BUF_LEN] = {'\0'};
 romfs_browser_entry *romFsBrowserEntries = NULL;
+
+orphan_patch_addon_entry *orphanEntries = NULL;
 
 char strbuf[NAME_BUF_LEN * 4] = {'\0'};
 
@@ -172,273 +180,6 @@ void formatETAString(u64 curTime, char *output, u32 outSize)
     snprintf(output, outSize, "%02luH%02luM%02luS", hour, min, sec);
 }
 
-bool listGameCardTitles(NcmContentMetaDatabase *ncmDb, u8 filter)
-{
-    if (!ncmDb || (filter != META_DB_REGULAR_APPLICATION && filter != META_DB_PATCH && filter != META_DB_ADDON))
-    {
-        uiStatusMsg("listGameCardTitles: invalid parameters (0x%02X filter).", filter);
-        return false;
-    }
-    
-    bool success = false;
-    bool proceed = true;
-    
-    Result result;
-    
-    NcmApplicationContentMetaKey *titleList = NULL;
-    NcmApplicationContentMetaKey *titleListTmp = NULL;
-    size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
-    
-    u32 written = 0;
-    u32 total = 0;
-    
-    u64 *titleIDs = NULL;
-    u32 *versions = NULL;
-    
-    titleList = calloc(1, titleListSize);
-    if (titleList)
-    {
-        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, filter, titleList, titleListSize, &written, &total)))
-        {
-            if (written && total)
-            {
-                if (total > written)
-                {
-                    titleListSize *= total;
-                    titleListTmp = realloc(titleList, titleListSize);
-                    if (titleListTmp)
-                    {
-                        titleList = titleListTmp;
-                        memset(titleList, 0, titleListSize);
-                        
-                        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, filter, titleList, titleListSize, &written, &total)))
-                        {
-                            if (written != total)
-                            {
-                                uiStatusMsg("listGameCardTitles: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u) (0x%02X filter).", written, total, filter);
-                                proceed = false;
-                            }
-                        } else {
-                            uiStatusMsg("listGameCardTitles: ncmContentMetaDatabaseListApplication failed! (0x%08X) (0x%02X filter).", result, filter);
-                            proceed = false;
-                        }
-                    } else {
-                        uiStatusMsg("listGameCardTitles: error reallocating output buffer for ncmContentMetaDatabaseListApplication (%u %s) (0x%02X filter).", total, (total == 1 ? "entry" : "entries"), filter);
-                        proceed = false;
-                    }
-                }
-                
-                if (proceed)
-                {
-                    titleIDs = calloc(total, sizeof(u64));
-                    versions = calloc(total, sizeof(u32));
-                    
-                    if (titleIDs != NULL && versions != NULL)
-                    {
-                        u32 i;
-                        for(i = 0; i < total; i++)
-                        {
-                            titleIDs[i] = titleList[i].metaRecord.titleId;
-                            versions[i] = titleList[i].metaRecord.version;
-                        }
-                        
-                        if (filter == META_DB_REGULAR_APPLICATION)
-                        {
-                            gameCardAppCount = total;
-                            gameCardTitleID = titleIDs;
-                            gameCardVersion = versions;
-                        } else
-                        if (filter == META_DB_PATCH)
-                        {
-                            gameCardPatchCount = total;
-                            gameCardPatchTitleID = titleIDs;
-                            gameCardPatchVersion = versions;
-                        } else
-                        if (filter == META_DB_ADDON)
-                        {
-                            gameCardAddOnCount = total;
-                            gameCardAddOnTitleID = titleIDs;
-                            gameCardAddOnVersion = versions;
-                        }
-                        
-                        success = true;
-                    } else {
-                        if (titleIDs != NULL) free(titleIDs);
-                        
-                        if (versions != NULL) free(versions);
-                        
-                        uiStatusMsg("listGameCardTitles: failed to allocate memory for TID/version buffer! (0x%02X filter).", filter);
-                    }
-                }
-            } else {
-                // Only display this error if we're dealing with regular applications. Patch and AddOn titles are optional
-                if (filter == META_DB_REGULAR_APPLICATION) uiStatusMsg("listGameCardTitles: ncmContentMetaDatabaseListApplication wrote no entries to output buffer! (0x%02X filter).", filter);
-            }
-        } else {
-            uiStatusMsg("listGameCardTitles: ncmContentMetaDatabaseListApplication failed! (0x%08X) (0x%02X filter).", result, filter);
-        }
-        
-        free(titleList);
-    } else {
-        uiStatusMsg("listGameCardTitles: unable to allocate memory for the ApplicationContentMetaKey struct (0x%02X filter).", filter);
-    }
-    
-    return success;
-}
-
-bool getGameCardTitleIDAndVersion()
-{
-    bool success = false;
-    
-    Result result;
-    NcmContentMetaDatabase ncmDb;
-    
-    gameCardAppCount = 0;
-    
-    if (gameCardTitleID != NULL)
-    {
-        free(gameCardTitleID);
-        gameCardTitleID = NULL;
-    }
-    
-    if (gameCardVersion != NULL)
-    {
-        free(gameCardVersion);
-        gameCardVersion = NULL;
-    }
-    
-    gameCardPatchCount = 0;
-    
-    if (gameCardPatchTitleID != NULL)
-    {
-        free(gameCardPatchTitleID);
-        gameCardPatchTitleID = NULL;
-    }
-    
-    if (gameCardPatchVersion != NULL)
-    {
-        free(gameCardPatchVersion);
-        gameCardPatchVersion = NULL;
-    }
-    
-    gameCardAddOnCount = 0;
-    
-    if (gameCardAddOnTitleID != NULL)
-    {
-        free(gameCardAddOnTitleID);
-        gameCardAddOnTitleID = NULL;
-    }
-    
-    if (gameCardAddOnVersion != NULL)
-    {
-        free(gameCardAddOnVersion);
-        gameCardAddOnVersion = NULL;
-    }
-    
-    if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(FsStorageId_GameCard, &ncmDb)))
-    {
-        success = listGameCardTitles(&ncmDb, META_DB_REGULAR_APPLICATION);
-        if (success)
-        {
-            listGameCardTitles(&ncmDb, META_DB_PATCH);
-            listGameCardTitles(&ncmDb, META_DB_ADDON);
-        }
-        
-        serviceClose(&(ncmDb.s));
-    } else {
-        uiStatusMsg("getGameCardTitleIDAndVersion: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
-    }
-    
-    return success;
-}
-
-void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize)
-{
-    u8 major = (u8)((version >> 26) & 0x3F);
-    u8 middle = (u8)((version >> 20) & 0x3F);
-    u8 minor = (u8)((version >> 16) & 0xF);
-    u16 build = (u16)version;
-    
-    snprintf(versionBuf, versionBufSize, "%u (%u.%u.%u.%u)", version, major, middle, minor, build);
-}
-
-bool getGameCardControlNacp(u64 titleID, char *nameBuf, int nameBufSize, char *authorBuf, int authorBufSize, u8 **iconBuf)
-{
-    if (!titleID || !nameBuf || !nameBufSize || !authorBuf || !authorBufSize || !iconBuf)
-    {
-        uiStatusMsg("getGameCardControlNacp: invalid parameters to retrieve Control.nacp.");
-        return false;
-    }
-    
-    bool getNameAndAuthor = false, getIcon = false, success = false;
-    Result result;
-    size_t outsize = 0;
-    NsApplicationControlData *buf = NULL;
-    NacpLanguageEntry *langentry = NULL;
-    
-    buf = calloc(1, sizeof(NsApplicationControlData));
-    if (buf)
-    {
-        if (R_SUCCEEDED(result = nsGetApplicationControlData(1, titleID, buf, sizeof(NsApplicationControlData), &outsize)))
-        {
-            if (outsize >= sizeof(buf->nacp))
-            {
-                if (R_SUCCEEDED(result = nacpGetLanguageEntry(&buf->nacp, &langentry)))
-                {
-                    strncpy(nameBuf, langentry->name, nameBufSize);
-                    strncpy(authorBuf, langentry->author, authorBufSize);
-                    getNameAndAuthor = true;
-                } else {
-                    uiStatusMsg("getGameCardControlNacp: GetLanguageEntry failed! (0x%08X)", result);
-                }
-                
-                getIcon = uiLoadJpgFromMem(buf->icon, sizeof(buf->icon), NACP_ICON_SQUARE_DIMENSION, NACP_ICON_SQUARE_DIMENSION, NACP_ICON_DOWNSCALED, NACP_ICON_DOWNSCALED, iconBuf);
-                if (!getIcon) uiStatusMsg(strbuf);
-                
-                success = (getNameAndAuthor && getIcon);
-            } else {
-                uiStatusMsg("getGameCardControlNacp: Control.nacp buffer size (%u bytes) is too small! Expected: %u bytes", outsize, sizeof(buf->nacp));
-            }
-        } else {
-            uiStatusMsg("getGameCardControlNacp: GetApplicationControlData failed! (0x%08X)", result);
-        }
-        
-        free(buf);
-    } else {
-        uiStatusMsg("getGameCardControlNacp: Unable to allocate memory for the ns service operations.");
-    }
-    
-    return success;
-}
-
-void removeIllegalCharacters(char *name)
-{
-    u32 i, len = strlen(name);
-    for (i = 0; i < len; i++)
-    {
-        if (memchr("?[]/\\=+<>:;\",*|^", name[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || name[i] < 0x20 || name[i] > 0x7E) name[i] = '_';
-    }
-}
-
-void strtrim(char *str)
-{
-    if (!str || !*str) return;
-    
-    char *start = str;
-    char *end = start + strlen(str);
-    
-    while(--end >= start)
-    {
-        if (!isspace(*end)) break;
-    }
-    
-    *(++end) = '\0';
-    
-    while(isspace(*start)) start++;
-    
-    if (start != str) memmove(str, start, end - start + 1);
-}
-
 void freeStringsPtr(char **var)
 {
     if (var)
@@ -447,6 +188,40 @@ void freeStringsPtr(char **var)
 		for(i = 0; var[i]; i++) free(var[i]);
 		free(var);
 	}
+}
+
+void initExeFsContext()
+{
+    memset(&(exeFsContext.ncmStorage), 0, sizeof(NcmContentStorage));
+    memset(&(exeFsContext.ncaId), 0, sizeof(NcmNcaId));
+    memset(&(exeFsContext.aes_ctx), 0, sizeof(Aes128CtrContext));
+    exeFsContext.exefs_offset = 0;
+    exeFsContext.exefs_size = 0;
+    memset(&(exeFsContext.exefs_header), 0, sizeof(pfs0_header));
+    exeFsContext.exefs_entries_offset = 0;
+    exeFsContext.exefs_entries = NULL;
+    exeFsContext.exefs_str_table_offset = 0;
+    exeFsContext.exefs_str_table = NULL;
+    exeFsContext.exefs_data_offset = 0;
+}
+
+void freeExeFsContext()
+{
+    // Remember to close this NCM service resource
+    serviceClose(&(exeFsContext.ncmStorage.s));
+    memset(&(exeFsContext.ncmStorage), 0, sizeof(NcmContentStorage));
+    
+    if (exeFsContext.exefs_entries != NULL)
+    {
+        free(exeFsContext.exefs_entries);
+        exeFsContext.exefs_entries = NULL;
+    }
+    
+    if (exeFsContext.exefs_str_table != NULL)
+    {
+        free(exeFsContext.exefs_str_table);
+        exeFsContext.exefs_str_table = NULL;
+    }
 }
 
 void initRomFsContext()
@@ -513,81 +288,111 @@ void freeGameCardInfo()
     trimmedCardSize = 0;
     memset(trimmedCardSizeStr, 0, sizeof(trimmedCardSizeStr));
     
-    gameCardAppCount = 0;
-    
-    if (gameCardTitleID != NULL)
-    {
-        free(gameCardTitleID);
-        gameCardTitleID = NULL;
-    }
-    
-    if (gameCardVersion != NULL)
-    {
-        free(gameCardVersion);
-        gameCardVersion = NULL;
-    }
-    
-    gameCardPatchCount = 0;
-    
-    if (gameCardPatchTitleID != NULL)
-    {
-        free(gameCardPatchTitleID);
-        gameCardPatchTitleID = NULL;
-    }
-    
-    if (gameCardPatchVersion != NULL)
-    {
-        free(gameCardPatchVersion);
-        gameCardPatchVersion = NULL;
-    }
-    
-    gameCardAddOnCount = 0;
-    
-    if (gameCardAddOnTitleID != NULL)
-    {
-        free(gameCardAddOnTitleID);
-        gameCardAddOnTitleID = NULL;
-    }
-    
-    if (gameCardAddOnVersion != NULL)
-    {
-        free(gameCardAddOnVersion);
-        gameCardAddOnVersion = NULL;
-    }
-    
-    if (gameCardName != NULL)
-    {
-        freeStringsPtr(gameCardName);
-        gameCardName = NULL;
-    }
-    
-    if (fixedGameCardName != NULL)
-    {
-        freeStringsPtr(fixedGameCardName);
-        fixedGameCardName = NULL;
-    }
-    
-    if (gameCardAuthor != NULL)
-    {
-        freeStringsPtr(gameCardAuthor);
-        gameCardAuthor = NULL;
-    }
-    
-    if (gameCardVersionStr != NULL)
-    {
-        freeStringsPtr(gameCardVersionStr);
-        gameCardVersionStr = NULL;
-    }
-    
-    if (gameCardIcon != NULL)
-    {
-        freeStringsPtr((char**)gameCardIcon);
-        gameCardIcon = NULL;
-    }
-    
     gameCardUpdateTitleID = 0;
     gameCardUpdateVersion = 0;
     memset(gameCardUpdateVersionStr, 0, sizeof(gameCardUpdateVersionStr));
+}
+
+void freeTitleInfo()
+{
+    titleAppCount = 0;
+    
+    if (titleAppTitleID != NULL)
+    {
+        free(titleAppTitleID);
+        titleAppTitleID = NULL;
+    }
+    
+    if (titleAppVersion != NULL)
+    {
+        free(titleAppVersion);
+        titleAppVersion = NULL;
+    }
+    
+    if (titleAppVersionStr != NULL)
+    {
+        freeStringsPtr(titleAppVersionStr);
+        titleAppVersionStr = NULL;
+    }
+    
+    if (titleAppStorageId != NULL)
+    {
+        free(titleAppStorageId);
+        titleAppStorageId = NULL;
+    }
+    
+    titlePatchCount = 0;
+    
+    if (titlePatchTitleID != NULL)
+    {
+        free(titlePatchTitleID);
+        titlePatchTitleID = NULL;
+    }
+    
+    if (titlePatchVersion != NULL)
+    {
+        free(titlePatchVersion);
+        titlePatchVersion = NULL;
+    }
+    
+    if (titlePatchStorageId != NULL)
+    {
+        free(titlePatchStorageId);
+        titlePatchStorageId = NULL;
+    }
+    
+    titleAddOnCount = 0;
+    
+    if (titleAddOnTitleID != NULL)
+    {
+        free(titleAddOnTitleID);
+        titleAddOnTitleID = NULL;
+    }
+    
+    if (titleAddOnVersion != NULL)
+    {
+        free(titleAddOnVersion);
+        titleAddOnVersion = NULL;
+    }
+    
+    if (titleAddOnStorageId != NULL)
+    {
+        free(titleAddOnStorageId);
+        titleAddOnStorageId = NULL;
+    }
+    
+    if (titleName != NULL)
+    {
+        freeStringsPtr(titleName);
+        titleName = NULL;
+    }
+    
+    if (fixedTitleName != NULL)
+    {
+        freeStringsPtr(fixedTitleName);
+        fixedTitleName = NULL;
+    }
+    
+    if (titleAuthor != NULL)
+    {
+        freeStringsPtr(titleAuthor);
+        titleAuthor = NULL;
+    }
+    
+    if (titleIcon != NULL)
+    {
+        freeStringsPtr((char**)titleIcon);
+        titleIcon = NULL;
+    }
+}
+
+void freeGlobalData()
+{
+    freeGameCardInfo();
+    
+    freeTitleInfo();
+    
+    freeExeFsContext();
     
     freeRomFsContext();
     
@@ -596,6 +401,387 @@ void freeGameCardInfo()
         free(romFsBrowserEntries);
         romFsBrowserEntries = NULL;
     }
+    
+    if (orphanEntries != NULL)
+    {
+        free(orphanEntries);
+        orphanEntries = NULL;
+    }
+}
+
+bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
+{
+    if (!ncmDb || (filter != META_DB_REGULAR_APPLICATION && filter != META_DB_PATCH && filter != META_DB_ADDON))
+    {
+        uiStatusMsg("listTitlesByType: invalid parameters (0x%02X filter).", filter);
+        return false;
+    }
+    
+    bool success = false, proceed = true, freeBuf = false;
+    
+    Result result;
+    
+    NcmApplicationContentMetaKey *titleList = NULL;
+    NcmApplicationContentMetaKey *titleListTmp = NULL;
+    size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
+    
+    u32 written = 0;
+    u32 total = 0;
+    
+    u64 *titleIDs = NULL, *tmpTIDs = NULL;
+    u32 *versions = NULL, *tmpVersions = NULL;
+    
+    titleList = calloc(1, titleListSize);
+    if (titleList)
+    {
+        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, filter, titleList, titleListSize, &written, &total)))
+        {
+            if (written && total)
+            {
+                if (total > written)
+                {
+                    titleListSize *= total;
+                    titleListTmp = realloc(titleList, titleListSize);
+                    if (titleListTmp)
+                    {
+                        titleList = titleListTmp;
+                        memset(titleList, 0, titleListSize);
+                        
+                        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, filter, titleList, titleListSize, &written, &total)))
+                        {
+                            if (written != total)
+                            {
+                                uiStatusMsg("listTitlesByType: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u) (0x%02X filter).", written, total, filter);
+                                proceed = false;
+                            }
+                        } else {
+                            uiStatusMsg("listTitlesByType: ncmContentMetaDatabaseListApplication failed! (0x%08X) (0x%02X filter).", result, filter);
+                            proceed = false;
+                        }
+                    } else {
+                        uiStatusMsg("listTitlesByType: error reallocating output buffer for ncmContentMetaDatabaseListApplication (%u %s) (0x%02X filter).", total, (total == 1 ? "entry" : "entries"), filter);
+                        proceed = false;
+                    }
+                }
+                
+                if (proceed)
+                {
+                    titleIDs = calloc(total, sizeof(u64));
+                    versions = calloc(total, sizeof(u32));
+                    
+                    if (titleIDs != NULL && versions != NULL)
+                    {
+                        u32 i;
+                        for(i = 0; i < total; i++)
+                        {
+                            titleIDs[i] = titleList[i].metaRecord.titleId;
+                            versions[i] = titleList[i].metaRecord.version;
+                        }
+                        
+                        if (filter == META_DB_REGULAR_APPLICATION)
+                        {
+                            // If ptr == NULL, realloc will essentially act as a malloc
+                            tmpTIDs = realloc(titleAppTitleID, (titleAppCount + total) * sizeof(u64));
+                            tmpVersions = realloc(titleAppVersion, (titleAppCount + total) * sizeof(u32));
+                            
+                            if (tmpTIDs != NULL && tmpVersions != NULL)
+                            {
+                                titleAppTitleID = tmpTIDs;
+                                memcpy(titleAppTitleID + titleAppCount, titleIDs, total * sizeof(u64));
+                                
+                                titleAppVersion = tmpVersions;
+                                memcpy(titleAppVersion + titleAppCount, versions, total * sizeof(u32));
+                                
+                                titleAppCount += total;
+                                
+                                success = true;
+                            } else {
+                                if (tmpTIDs != NULL)
+                                {
+                                    titleAppTitleID = tmpTIDs;
+                                    free(tmpTIDs);
+                                }
+                                
+                                if (tmpVersions != NULL)
+                                {
+                                    titleAppVersion = tmpVersions;
+                                    free(tmpVersions);
+                                }
+                                
+                                freeBuf = true;
+                            }
+                        } else
+                        if (filter == META_DB_PATCH)
+                        {
+                            // If ptr == NULL, realloc will essentially act as a malloc
+                            tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount + total) * sizeof(u64));
+                            tmpVersions = realloc(titlePatchVersion, (titlePatchCount + total) * sizeof(u32));
+                            
+                            if (tmpTIDs != NULL && tmpVersions != NULL)
+                            {
+                                titlePatchTitleID = tmpTIDs;
+                                memcpy(titlePatchTitleID + titlePatchCount, titleIDs, total * sizeof(u64));
+                                
+                                titlePatchVersion = tmpVersions;
+                                memcpy(titlePatchVersion + titlePatchCount, versions, total * sizeof(u32));
+                                
+                                titlePatchCount += total;
+                                
+                                success = true;
+                            } else {
+                                if (tmpTIDs != NULL)
+                                {
+                                    titlePatchTitleID = tmpTIDs;
+                                    free(tmpTIDs);
+                                }
+                                
+                                if (tmpVersions != NULL)
+                                {
+                                    titlePatchVersion = tmpVersions;
+                                    free(tmpVersions);
+                                }
+                                
+                                freeBuf = true;
+                            }
+                        } else
+                        if (filter == META_DB_ADDON)
+                        {
+                            // If ptr == NULL, realloc will essentially act as a malloc
+                            tmpTIDs = realloc(titleAddOnTitleID, (titleAddOnCount + total) * sizeof(u64));
+                            tmpVersions = realloc(titleAddOnVersion, (titleAddOnCount + total) * sizeof(u32));
+                            
+                            if (tmpTIDs != NULL && tmpVersions != NULL)
+                            {
+                                titleAddOnTitleID = tmpTIDs;
+                                memcpy(titleAddOnTitleID + titleAddOnCount, titleIDs, total * sizeof(u64));
+                                
+                                titleAddOnVersion = tmpVersions;
+                                memcpy(titleAddOnVersion + titleAddOnCount, versions, total * sizeof(u32));
+                                
+                                titleAddOnCount += total;
+                                
+                                success = true;
+                            } else {
+                                if (tmpTIDs != NULL)
+                                {
+                                    titleAddOnTitleID = tmpTIDs;
+                                    free(tmpTIDs);
+                                }
+                                
+                                if (tmpVersions != NULL)
+                                {
+                                    titleAddOnVersion = tmpVersions;
+                                    free(tmpVersions);
+                                }
+                                
+                                freeBuf = true;
+                            }
+                        }
+                    } else {
+                        freeBuf = true;
+                    }
+                    
+                    if (freeBuf)
+                    {
+                        if (titleIDs != NULL) free(titleIDs);
+                        
+                        if (versions != NULL) free(versions);
+                        
+                        uiStatusMsg("listTitlesByType: failed to allocate memory for TID/version buffer! (0x%02X filter).", filter);
+                    }
+                }
+            } else {
+                // There are no titles that match the provided filter in the opened storage device
+                success = true;
+            }
+        } else {
+            uiStatusMsg("listTitlesByType: ncmContentMetaDatabaseListApplication failed! (0x%08X) (0x%02X filter).", result, filter);
+        }
+        
+        free(titleList);
+    } else {
+        uiStatusMsg("listTitlesByType: unable to allocate memory for the ApplicationContentMetaKey struct (0x%02X filter).", filter);
+    }
+    
+    return success;
+}
+
+bool getTitleIDAndVersionList(FsStorageId curStorageId)
+{
+    if (curStorageId != FsStorageId_GameCard && curStorageId != FsStorageId_SdCard && curStorageId != FsStorageId_NandUser)
+    {
+        uiStatusMsg("getTitleIDAndVersionList: invalid storage ID!");
+        return false;
+    }
+    
+    bool listApp = false, listPatch = false, listAddOn = false, success = false;
+    
+    Result result;
+    NcmContentMetaDatabase ncmDb;
+    
+    u32 i;
+    FsStorageId *tmpStorages = NULL;
+    u32 curAppCount = titleAppCount, curPatchCount = titlePatchCount, curAddOnCount = titleAddOnCount;
+    
+    if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+    {
+        listApp = listTitlesByType(&ncmDb, META_DB_REGULAR_APPLICATION);
+        if (listApp && titleAppCount > curAppCount)
+        {
+            tmpStorages = realloc(titleAppStorageId, titleAppCount * sizeof(FsStorageId));
+            if (tmpStorages)
+            {
+                titleAppStorageId = tmpStorages;
+                
+                tmpStorages = NULL;
+                
+                for(i = curAppCount; i < titleAppCount; i++) titleAppStorageId[i] = curStorageId;
+            } else {
+                titleAppCount = curAppCount;
+                listApp = false;
+            }
+        }
+        
+        listPatch = listTitlesByType(&ncmDb, META_DB_PATCH);
+        if (listPatch && titlePatchCount > curPatchCount)
+        {
+            tmpStorages = realloc(titlePatchStorageId, titlePatchCount * sizeof(FsStorageId));
+            if (tmpStorages)
+            {
+                titlePatchStorageId = tmpStorages;
+                
+                tmpStorages = NULL;
+                
+                for(i = curPatchCount; i < titlePatchCount; i++) titlePatchStorageId[i] = curStorageId;
+            } else {
+                titlePatchCount = curPatchCount;
+                listPatch = false;
+            }
+        }
+        
+        listAddOn = listTitlesByType(&ncmDb, META_DB_ADDON);
+        if (listAddOn && titleAddOnCount > curAddOnCount)
+        {
+            tmpStorages = realloc(titleAddOnStorageId, titleAddOnCount * sizeof(FsStorageId));
+            if (tmpStorages)
+            {
+                titleAddOnStorageId = tmpStorages;
+                
+                tmpStorages = NULL;
+                
+                for(i = curAddOnCount; i < titleAddOnCount; i++) titleAddOnStorageId[i] = curStorageId;
+            } else {
+                titleAddOnCount = curAddOnCount;
+                listAddOn = false;
+            }
+        }
+        
+        success = (listApp || listPatch || listAddOn);
+        
+        serviceClose(&(ncmDb.s));
+    } else {
+        uiStatusMsg("getTitleIDAndVersionList: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
+    }
+    
+    return success;
+}
+
+void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize)
+{
+    u8 major = (u8)((version >> 26) & 0x3F);
+    u8 middle = (u8)((version >> 20) & 0x3F);
+    u8 minor = (u8)((version >> 16) & 0xF);
+    u16 build = (u16)version;
+    
+    snprintf(versionBuf, versionBufSize, "%u (%u.%u.%u.%u)", version, major, middle, minor, build);
+}
+
+bool getTitleControlNacp(u64 titleID, char *nameBuf, int nameBufSize, char *authorBuf, int authorBufSize, u8 **iconBuf)
+{
+    if (!titleID || !nameBuf || !nameBufSize || !authorBuf || !authorBufSize || !iconBuf)
+    {
+        uiStatusMsg("getTitleControlNacp: invalid parameters to retrieve Control.nacp.");
+        return false;
+    }
+    
+    bool getNameAndAuthor = false, getIcon = false, success = false;
+    Result result;
+    size_t outsize = 0;
+    NsApplicationControlData *buf = NULL;
+    NacpLanguageEntry *langentry = NULL;
+    
+    buf = calloc(1, sizeof(NsApplicationControlData));
+    if (buf)
+    {
+        if (R_SUCCEEDED(result = nsGetApplicationControlData(1, titleID, buf, sizeof(NsApplicationControlData), &outsize)))
+        {
+            if (outsize >= sizeof(buf->nacp))
+            {
+                if (R_SUCCEEDED(result = nacpGetLanguageEntry(&buf->nacp, &langentry)))
+                {
+                    strncpy(nameBuf, langentry->name, nameBufSize);
+                    strncpy(authorBuf, langentry->author, authorBufSize);
+                    getNameAndAuthor = true;
+                } else {
+                    uiStatusMsg("getTitleControlNacp: GetLanguageEntry failed! (0x%08X)", result);
+                }
+                
+                getIcon = uiLoadJpgFromMem(buf->icon, sizeof(buf->icon), NACP_ICON_SQUARE_DIMENSION, NACP_ICON_SQUARE_DIMENSION, NACP_ICON_DOWNSCALED, NACP_ICON_DOWNSCALED, iconBuf);
+                if (!getIcon) uiStatusMsg(strbuf);
+                
+                success = (getNameAndAuthor && getIcon);
+            } else {
+                uiStatusMsg("getTitleControlNacp: Control.nacp buffer size (%u bytes) is too small! Expected: %u bytes", outsize, sizeof(buf->nacp));
+            }
+        } else {
+            uiStatusMsg("getTitleControlNacp: GetApplicationControlData failed! (0x%08X)", result);
+        }
+        
+        free(buf);
+    } else {
+        uiStatusMsg("getTitleControlNacp: Unable to allocate memory for the ns service operations.");
+    }
+    
+    return success;
+}
+
+void removeIllegalCharacters(char *name)
+{
+    u32 i, len = strlen(name);
+    for (i = 0; i < len; i++)
+    {
+        if (memchr("?[]/\\=+<>:;\",*|^", name[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || name[i] < 0x20 || name[i] > 0x7E) name[i] = '_';
+    }
+}
+
+void createOutputDirectories()
+{
+    mkdir(OUTPUT_DUMP_BASE_PATH, 0744);
+    mkdir(XCI_DUMP_PATH, 0744); 
+    mkdir(NSP_DUMP_PATH, 0744);
+    mkdir(HFS0_DUMP_PATH, 0744);
+    mkdir(EXEFS_DUMP_PATH, 0744);
+    mkdir(ROMFS_DUMP_PATH, 0744);
+    mkdir(CERT_DUMP_PATH, 0744);
+}
+
+void strtrim(char *str)
+{
+    if (!str || !*str) return;
+    
+    char *start = str;
+    char *end = start + strlen(str);
+    
+    while(--end >= start)
+    {
+        if (!isspace(*end)) break;
+    }
+    
+    *(++end) = '\0';
+    
+    while(isspace(*start)) start++;
+    
+    if (start != str) memmove(str, start, end - start + 1);
 }
 
 bool getRootHfs0Header()
@@ -608,7 +794,7 @@ bool getRootHfs0Header()
     
     hfs0_partition_cnt = 0;
     
-    workaroundPartitionZeroAccess(&fsOperatorInstance);
+    workaroundPartitionZeroAccess();
     
     if (R_FAILED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
     {
@@ -652,7 +838,7 @@ bool getRootHfs0Header()
             gameCardSize = GAMECARD_SIZE_32GiB;
             break;
         default:
-            uiStatusMsg("getRootHfs0Header: Invalid game card size value: 0x%02X", cardSize);
+            uiStatusMsg("getRootHfs0Header: Invalid gamecard size value: 0x%02X", cardSize);
             fsStorageClose(&gameCardStorage);
             return false;
     }
@@ -836,105 +1022,101 @@ void getGameCardUpdateInfo()
     }
 }
 
-void loadGameCardInfo()
+void loadTitleInfo()
 {
-    bool freeBuf = false;
-    
-    if (gameCardInserted)
+    if (menuType == MENUTYPE_MAIN)
     {
-        if (hfs0_header == NULL)
+        freeGlobalData();
+        return;
+    }
+    
+    bool proceed = false, freeBuf = false;
+    
+    if (menuType == MENUTYPE_GAMECARD)
+    {
+        if (gameCardInserted)
         {
+            if (hfs0_header != NULL) return;
+            
             /* Don't access the gamecard immediately to avoid conflicts with the fsp-srv, ncm and ns services */
             uiPleaseWait(GAMECARD_WAIT_TIME);
             
-            if (getRootHfs0Header())
+            if (!getRootHfs0Header())
             {
-                getGameCardUpdateInfo();
-                
-                if (getGameCardTitleIDAndVersion())
-                {
-                    gameCardName = calloc(gameCardAppCount + 1, sizeof(char*));
-                    fixedGameCardName = calloc(gameCardAppCount + 1, sizeof(char*));
-                    gameCardAuthor = calloc(gameCardAppCount + 1, sizeof(char*));
-                    gameCardVersionStr = calloc(gameCardAppCount + 1, sizeof(char*));
-                    gameCardIcon = calloc(gameCardAppCount + 1, sizeof(u8*));
-                    
-                    if (gameCardName != NULL && fixedGameCardName != NULL && gameCardAuthor != NULL && gameCardVersionStr != NULL && gameCardIcon != NULL)
-                    {
-                        u32 i;
-                        for(i = 0; i < gameCardAppCount; i++)
-                        {
-                            gameCardName[i] = calloc(NACP_APPNAME_LEN + 1, sizeof(char));
-                            fixedGameCardName[i] = calloc(NACP_APPNAME_LEN + 1, sizeof(char));
-                            gameCardAuthor[i] = calloc(NACP_AUTHOR_LEN + 1, sizeof(char));
-                            gameCardVersionStr[i] = calloc(VERSION_STR_LEN + 1, sizeof(char));
-                            
-                            if (gameCardName[i] != NULL && fixedGameCardName[i] != NULL && gameCardAuthor[i] != NULL && gameCardVersionStr[i] != NULL)
-                            {
-                                convertTitleVersionToDecimal(gameCardVersion[i], gameCardVersionStr[i], VERSION_STR_LEN);
-                                
-                                if (getGameCardControlNacp(gameCardTitleID[i], gameCardName[i], NACP_APPNAME_LEN, gameCardAuthor[i], NACP_AUTHOR_LEN, &(gameCardIcon[i])))
-                                {
-                                    strtrim(gameCardName[i]);
-                                    strtrim(gameCardAuthor[i]);
-                                    
-                                    snprintf(fixedGameCardName[i], NACP_APPNAME_LEN, gameCardName[i]);
-                                    removeIllegalCharacters(fixedGameCardName[i]);
-                                } else {
-                                    freeBuf = true;
-                                    break;
-                                }
-                            } else {
-                                uiStatusMsg("loadGameCardInfo: error allocating memory for gamecard information (application #%u).", i + 1);
-                                freeBuf = true;
-                                break;
-                            }
-                        }
-                    } else {
-                        uiStatusMsg("loadGameCardInfo: error allocating memory for gamecard information.");
-                        freeBuf = true;
-                    }
-                    
-                    if (freeBuf)
-                    {
-                        if (gameCardName != NULL)
-                        {
-                            freeStringsPtr(gameCardName);
-                            gameCardName = NULL;
-                        }
-                        
-                        if (fixedGameCardName != NULL)
-                        {
-                            freeStringsPtr(fixedGameCardName);
-                            fixedGameCardName = NULL;
-                        }
-                        
-                        if (gameCardAuthor != NULL)
-                        {
-                            freeStringsPtr(gameCardAuthor);
-                            gameCardAuthor = NULL;
-                        }
-                        
-                        if (gameCardVersionStr != NULL)
-                        {
-                            freeStringsPtr(gameCardVersionStr);
-                            gameCardVersionStr = NULL;
-                        }
-                        
-                        if (gameCardIcon != NULL)
-                        {
-                            freeStringsPtr((char**)gameCardIcon);
-                            gameCardIcon = NULL;
-                        }
-                    }
-                }
+                uiPrintHeadline();
+                return;
             }
             
-            uiPrintHeadline();
+            getGameCardUpdateInfo();
+            
+            freeTitleInfo();
+            
+            proceed = getTitleIDAndVersionList(FsStorageId_GameCard);
+        } else {
+            freeGlobalData();
+            return;
         }
-    } else {
-        freeGameCardInfo();
+    } else
+    if (menuType == MENUTYPE_SDCARD_EMMC)
+    {
+        if (titleAppCount || titlePatchCount || titleAddOnCount) return;
+        
+        uiPleaseWait(1);
+        
+        freeTitleInfo();
+        
+        proceed = (getTitleIDAndVersionList(FsStorageId_SdCard) && getTitleIDAndVersionList(FsStorageId_NandUser));
     }
+    
+    if (proceed && titleAppCount > 0)
+    {
+        titleName = calloc(titleAppCount + 1, sizeof(char*));
+        fixedTitleName = calloc(titleAppCount + 1, sizeof(char*));
+        titleAuthor = calloc(titleAppCount + 1, sizeof(char*));
+        titleAppVersionStr = calloc(titleAppCount + 1, sizeof(char*));
+        titleIcon = calloc(titleAppCount + 1, sizeof(u8*));
+        
+        if (titleName != NULL && fixedTitleName != NULL && titleAuthor != NULL && titleAppVersionStr != NULL && titleIcon != NULL)
+        {
+            u32 i;
+            for(i = 0; i < titleAppCount; i++)
+            {
+                titleName[i] = calloc(NACP_APPNAME_LEN + 1, sizeof(char));
+                fixedTitleName[i] = calloc(NACP_APPNAME_LEN + 1, sizeof(char));
+                titleAuthor[i] = calloc(NACP_AUTHOR_LEN + 1, sizeof(char));
+                titleAppVersionStr[i] = calloc(VERSION_STR_LEN + 1, sizeof(char));
+                
+                if (titleName[i] != NULL && fixedTitleName[i] != NULL && titleAuthor[i] != NULL && titleAppVersionStr[i] != NULL)
+                {
+                    convertTitleVersionToDecimal(titleAppVersion[i], titleAppVersionStr[i], VERSION_STR_LEN);
+                    
+                    if (getTitleControlNacp(titleAppTitleID[i], titleName[i], NACP_APPNAME_LEN, titleAuthor[i], NACP_AUTHOR_LEN, &(titleIcon[i])))
+                    {
+                        strtrim(titleName[i]);
+                        
+                        strtrim(titleAuthor[i]);
+                        
+                        snprintf(fixedTitleName[i], NACP_APPNAME_LEN, titleName[i]);
+                        removeIllegalCharacters(fixedTitleName[i]);
+                    } else {
+                        freeBuf = true;
+                        break;
+                    }
+                } else {
+                    uiStatusMsg("loadTitleInfo: error allocating memory for title information (application #%u).", i + 1);
+                    freeBuf = true;
+                    break;
+                }
+            }
+        } else {
+            uiStatusMsg("loadTitleInfo: error allocating memory for title information.");
+            freeBuf = true;
+        }
+        
+        if (freeBuf) freeTitleInfo();
+    }
+    
+    uiPrintHeadline();
 }
 
 bool getHfs0EntryDetails(u8 *hfs0Header, u64 hfs0HeaderOffset, u64 hfs0HeaderSize, u32 num_entries, u32 entry_idx, bool isRoot, u32 partitionIndex, u64 *out_offset, u64 *out_size)
@@ -1019,7 +1201,7 @@ bool getPartitionHfs0Header(u32 partition)
     
     if (getHfs0EntryDetails(hfs0_header, hfs0_offset, hfs0_size, hfs0_partition_cnt, partition, true, 0, &partitionHfs0HeaderOffset, &partitionSize))
     {
-        workaroundPartitionZeroAccess(&fsOperatorInstance);
+        workaroundPartitionZeroAccess();
         
         if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
         {
@@ -1131,14 +1313,16 @@ bool getPartitionHfs0Header(u32 partition)
         uiDrawString("Error: unable to get partition details from the root HFS0 header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
     }
     
-    if (!success) breaks += 2;
-    
     return success;
 }
 
 bool getHfs0FileList(u32 partition)
 {
-    if (!getPartitionHfs0Header(partition)) return false;
+    if (!getPartitionHfs0Header(partition))
+    {
+        breaks += 2;
+        return false;
+    }
     
     if (!partitionHfs0Header)
     {
@@ -1193,18 +1377,18 @@ bool getHfs0FileList(u32 partition)
     return true;
 }
 
-u8 *getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename, u64 *outSize)
+// Used to retrieve tik/cert files from the HFS0 Secure partition
+bool getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename, u8 *outBuf, u64 outBufSize)
 {
-    if (!partitionHfs0Header || !partitionHfs0FileCount || !partitionHfs0HeaderSize || !gameCardStorage || !filename || !outSize)
+    if (!partitionHfs0Header || !partitionHfs0FileCount || !partitionHfs0HeaderSize || !gameCardStorage || !filename || !outBuf || !outBufSize)
     {
         uiDrawString("Error: invalid parameters to retrieve file from HFS0 partition!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return NULL;
     }
     
-    bool proceed = true, found = false;
+    bool success = false, proceed = true, found = false;
     
     u32 i;
-    u8 *buf = NULL;
     Result result;
     hfs0_entry_table tmp_hfs0_entry;
     
@@ -1216,26 +1400,24 @@ u8 *getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename,
         {
             found = true;
             
-            buf = malloc(tmp_hfs0_entry.file_size);
-            if (!buf)
+            if (outBufSize > tmp_hfs0_entry.file_size)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to allocate memory for file \"%s\"!", filename);
+                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: file \"%s\" is smaller than expected! (0x%016lX < 0x%016lX)", filename, tmp_hfs0_entry.file_size, outBufSize);
                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                 proceed = false;
                 break;
             }
             
-            if (R_FAILED(result = fsStorageRead(gameCardStorage, partitionHfs0HeaderSize + tmp_hfs0_entry.file_offset, buf, tmp_hfs0_entry.file_size)))
+            if (R_FAILED(result = fsStorageRead(gameCardStorage, partitionHfs0HeaderSize + tmp_hfs0_entry.file_offset, outBuf, outBufSize)))
             {
                 snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to read file \"%s\" from the HFS0 partition!", filename);
                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                free(buf);
-                buf = NULL;
                 proceed = false;
                 break;
             }
             
-            *outSize = tmp_hfs0_entry.file_size;
+            success = true;
+            
             break;
         }
     }
@@ -1246,7 +1428,25 @@ u8 *getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename,
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
     }
     
-    return buf;
+    return success;
+}
+
+bool calculateExeFsExtractedDataSize(u64 *out)
+{
+    if (!exeFsContext.exefs_header.file_cnt || !exeFsContext.exefs_entries || !out)
+    {
+        uiDrawString("Error: invalid parameters to calculate extracted data size for the ExeFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    u32 i;
+    u64 totalSize = 0;
+    
+    for(i = 0; i < exeFsContext.exefs_header.file_cnt; i++) totalSize += exeFsContext.exefs_entries[i].file_size;
+    
+    *out = totalSize;
+    
+    return true;
 }
 
 bool calculateRomFsExtractedDataSize(u64 *out)
@@ -1273,24 +1473,31 @@ bool calculateRomFsExtractedDataSize(u64 *out)
     return true;
 }
 
-bool readProgramNcaRomFs(u32 appIndex)
+bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
 {
     Result result;
     u32 i = 0;
     u32 written = 0;
     u32 total = 0;
     u32 appNcaCount = 0;
-    u32 partition = (hfs0_partition_cnt - 1); // Select the secure partition
+    u32 partition = 0;
+    
+    FsStorageId curStorageId;
     
     NcmContentMetaDatabase ncmDb;
     memset(&ncmDb, 0, sizeof(NcmContentMetaDatabase));
+    
+    NcmContentMetaRecordsHeader contentRecordsHeader;
+    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaRecordsHeader));
+    
+    u64 contentRecordsHeaderReadSize = 0;
     
     NcmContentStorage ncmStorage;
     memset(&ncmStorage, 0, sizeof(NcmContentStorage));
     
     NcmApplicationContentMetaKey *appList = NULL;
     NcmContentRecord *appContentRecords = NULL;
-    size_t appListSize = (sizeof(NcmApplicationContentMetaKey) * gameCardAppCount);
+    size_t appListSize = (sizeof(NcmApplicationContentMetaKey) * titleAppCount);
     
     NcmNcaId ncaId;
     char ncaIdStr[33] = {'\0'};
@@ -1301,14 +1508,40 @@ bool readProgramNcaRomFs(u32 appIndex)
     
     bool success = false, foundProgram = false;
     
-    workaroundPartitionZeroAccess(&fsOperatorInstance);
-    
-    if (!getPartitionHfs0Header(partition)) return false;
-    
-    if (!partitionHfs0FileCount)
+    if (!titleAppCount || appIndex > (titleAppCount - 1))
     {
-        uiDrawString("The Secure HFS0 partition is empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        goto out;
+        uiDrawString("Error: invalid application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    curStorageId = titleAppStorageId[appIndex];
+    
+    if (curStorageId != FsStorageId_GameCard && curStorageId != FsStorageId_SdCard && curStorageId != FsStorageId_NandUser)
+    {
+        uiDrawString("Error: invalid title storage ID!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    // If we're dealing with a gamecard, call workaroundPartitionZeroAccess() and read the secure partition header. Otherwise, ncmContentStorageReadContentIdFile() will fail with error 0x00171002
+    if (curStorageId == FsStorageId_GameCard)
+    {
+        partition = (hfs0_partition_cnt - 1); // Select the secure partition
+        
+        workaroundPartitionZeroAccess();
+        
+        if (!getPartitionHfs0Header(partition))
+        {
+            breaks += 2;
+            return false;
+        }
+        
+        if (!partitionHfs0FileCount)
+        {
+            uiDrawString("The Secure HFS0 partition is empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            goto out;
+        }
     }
     
     uiDrawString("Looking for the Program NCA...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
@@ -1322,7 +1555,7 @@ bool readProgramNcaRomFs(u32 appIndex)
         goto out;
     }
     
-    if (R_FAILED(result = ncmOpenContentMetaDatabase(FsStorageId_GameCard, &ncmDb)))
+    if (R_FAILED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1342,30 +1575,37 @@ bool readProgramNcaRomFs(u32 appIndex)
         goto out;
     }
     
-    if (written != total || written != gameCardAppCount)
+    if (written != total || written != titleAppCount)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, gameCardAppCount);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, titleAppCount);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    appContentRecords = calloc(partitionHfs0FileCount, sizeof(NcmContentRecord));
+    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(appList[appIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    appNcaCount = (u32)(contentRecordsHeader.numContentRecords);
+    
+    appContentRecords = calloc(appNcaCount, sizeof(NcmContentRecord));
     if (!appContentRecords)
     {
         uiDrawString("Error: unable to allocate memory for the ContentRecord struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(appList[appIndex].metaRecord), 0, appContentRecords, partitionHfs0FileCount * sizeof(NcmContentRecord), &written)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(appList[appIndex].metaRecord), 0, appContentRecords, appNcaCount * sizeof(NcmContentRecord), &written)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    appNcaCount = written;
-    
-    if (R_FAILED(result = ncmOpenContentStorage(FsStorageId_GameCard, &ncmStorage)))
+    if (R_FAILED(result = ncmOpenContentStorage(curStorageId, &ncmStorage)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmOpenContentStorage failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1394,7 +1634,8 @@ bool readProgramNcaRomFs(u32 appIndex)
     uiRefreshDisplay();
     breaks += 2;
     
-    uiDrawString("Retrieving RomFS entry tables...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Retrieving %s...", (!readRomFs ? "ExeFS entries" : "RomFS entry tables"));
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     uiRefreshDisplay();
     breaks++;
     
@@ -1406,7 +1647,7 @@ bool readProgramNcaRomFs(u32 appIndex)
     }
     
     // Decrypt the NCA header
-    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, NULL, decrypted_nca_keys)) goto out;
+    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, NULL, decrypted_nca_keys, (curStorageId != FsStorageId_GameCard))) goto out;
     
     bool has_rights_id = false;
     
@@ -1419,35 +1660,80 @@ bool readProgramNcaRomFs(u32 appIndex)
         }
     }
     
-    if (has_rights_id)
+    if (curStorageId == FsStorageId_GameCard)
     {
-        uiDrawString("Error: Rights ID field in Program NCA header not empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        goto out;
+        if (has_rights_id)
+        {
+            uiDrawString("Error: Rights ID field in Program NCA header not empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            goto out;
+        }
     }
     
-    // Read directory and file tables from the RomFS section
-    if (!readRomFsEntriesFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
+    if (!readRomFs)
+    {
+        // Read file entries from the ExeFS section
+        if (!readExeFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
+    } else {
+        // Read directory and file tables from the RomFS section
+        if (!readRomFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
+    }
     
     success = true;
     
 out:
     if (appContentRecords) free(appContentRecords);
     
+    if (!success) serviceClose(&(ncmStorage.s));
+    
     serviceClose(&(ncmDb.s));
     
     if (appList) free(appList);
     
-    if (partitionHfs0Header)
+    if (curStorageId == FsStorageId_GameCard)
     {
-        free(partitionHfs0Header);
-        partitionHfs0Header = NULL;
-        partitionHfs0HeaderOffset = 0;
-        partitionHfs0HeaderSize = 0;
-        partitionHfs0FileCount = 0;
-        partitionHfs0StrTableSize = 0;
+        if (partitionHfs0Header)
+        {
+            free(partitionHfs0Header);
+            partitionHfs0Header = NULL;
+            partitionHfs0HeaderOffset = 0;
+            partitionHfs0HeaderSize = 0;
+            partitionHfs0FileCount = 0;
+            partitionHfs0StrTableSize = 0;
+        }
     }
     
     return success;
+}
+
+bool getExeFsFileList()
+{
+    if (!exeFsContext.exefs_header.file_cnt || !exeFsContext.exefs_entries || !exeFsContext.exefs_str_table)
+    {
+        uiDrawString("Error: invalid parameters to retrieve ExeFS section filelist!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (exeFsContext.exefs_header.file_cnt > FILENAME_MAX_CNT)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "ExeFS section contains more than %u entries! (%u entries)", FILENAME_MAX_CNT, exeFsContext.exefs_header.file_cnt);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    u32 i;
+    
+    memset(filenameBuffer, 0, FILENAME_BUFFER_SIZE);
+    filenamesCount = 0;
+    
+    char *nextFilename = filenameBuffer;
+    
+    for(i = 0; i < exeFsContext.exefs_header.file_cnt; i++)
+    {
+        char *cur_filename = (exeFsContext.exefs_str_table + exeFsContext.exefs_entries[i].filename_offset);
+        addStringToFilenameBuffer(cur_filename, &nextFilename);
+    }
+    
+    return true;
 }
 
 bool getRomFsParentDir(u32 dir_offset, u32 *out)
@@ -1719,9 +2005,16 @@ void convertSize(u64 size, char *out, int bufsize)
     snprintf(out, bufsize, "%s", buffer);
 }
 
+void addStringToFilenameBuffer(const char *string, char **nextFilename)
+{
+    filenames[filenamesCount++] = *nextFilename;
+    snprintf(*nextFilename, FILENAME_LENGTH, string);
+    *nextFilename += FILENAME_LENGTH;
+}
+
 char *generateDumpFullName()
 {
-    if (!gameCardAppCount || !fixedGameCardName || !gameCardTitleID || !gameCardVersion) return NULL;
+    if (!titleAppCount || !fixedTitleName || !titleAppTitleID || !titleAppVersion) return NULL;
     
     u32 i, j;
     
@@ -1733,20 +2026,20 @@ char *generateDumpFullName()
     fullname = calloc(strsize, sizeof(char));
     if (!fullname) return NULL;
     
-    for(i = 0; i < gameCardAppCount; i++)
+    for(i = 0; i < titleAppCount; i++)
     {
-        u32 highestVersion = gameCardVersion[i];
+        u32 highestVersion = titleAppVersion[i];
         
         // Check if our current gamecard has any bundled updates for this application. If so, use the highest update version available
-        if (gameCardPatchCount > 0 && gameCardPatchTitleID != NULL && gameCardPatchVersion != NULL)
+        if (titlePatchCount > 0 && titlePatchTitleID != NULL && titlePatchVersion != NULL)
         {
-            for(j = 0; j < gameCardPatchCount; j++)
+            for(j = 0; j < titlePatchCount; j++)
             {
-                if (gameCardPatchTitleID[j] == (gameCardTitleID[i] | APPLICATION_PATCH_BITMASK) && gameCardPatchVersion[j] > highestVersion) highestVersion = gameCardPatchVersion[j];
+                if (titlePatchTitleID[j] == (titleAppTitleID[i] | APPLICATION_PATCH_BITMASK) && titlePatchVersion[j] > highestVersion) highestVersion = titlePatchVersion[j];
             }
         }
         
-        snprintf(tmp, sizeof(tmp) / sizeof(tmp[0]), "%s v%u (%016lX)", fixedGameCardName[i], highestVersion, gameCardTitleID[i]);
+        snprintf(tmp, sizeof(tmp) / sizeof(tmp[0]), "%s v%u (%016lX)", fixedTitleName[i], highestVersion, titleAppTitleID[i]);
         
         if ((strlen(fullname) + strlen(tmp) + 4) > strsize)
         {
@@ -1776,7 +2069,7 @@ char *generateDumpFullName()
 
 char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex)
 {
-    if (!gameCardAppCount || !fixedGameCardName || !gameCardTitleID || (selectedNspDumpType == DUMP_APP_NSP && !gameCardVersion) || (selectedNspDumpType == DUMP_PATCH_NSP && (!gameCardPatchCount || !gameCardPatchTitleID || !gameCardPatchVersion)) || (selectedNspDumpType == DUMP_ADDON_NSP && (!gameCardAddOnCount || !gameCardAddOnTitleID || !gameCardAddOnVersion))) return NULL;
+    if (!titleAppCount || !fixedTitleName || !titleAppTitleID || (selectedNspDumpType == DUMP_APP_NSP && !titleAppVersion) || (selectedNspDumpType == DUMP_PATCH_NSP && (!titlePatchCount || !titlePatchTitleID || !titlePatchVersion)) || (selectedNspDumpType == DUMP_ADDON_NSP && (!titleAddOnCount || !titleAddOnTitleID || !titleAddOnVersion))) return NULL;
     
     u32 app;
     bool foundApp = false;
@@ -1787,13 +2080,13 @@ char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex)
     
     if (selectedNspDumpType == DUMP_APP_NSP)
     {
-        snprintf(fullname, strsize, "%s v%u (%016lX) (BASE)", fixedGameCardName[titleIndex], gameCardVersion[titleIndex], gameCardTitleID[titleIndex]);
+        snprintf(fullname, strsize, "%s v%u (%016lX) (BASE)", fixedTitleName[titleIndex], titleAppVersion[titleIndex], titleAppTitleID[titleIndex]);
     } else
     if (selectedNspDumpType == DUMP_PATCH_NSP)
     {
-        for(app = 0; app < gameCardAppCount; app++)
+        for(app = 0; app < titleAppCount; app++)
         {
-            if (gameCardPatchTitleID[titleIndex] == (gameCardTitleID[app] | APPLICATION_PATCH_BITMASK))
+            if (titlePatchTitleID[titleIndex] == (titleAppTitleID[app] | APPLICATION_PATCH_BITMASK))
             {
                 foundApp = true;
                 break;
@@ -1802,16 +2095,16 @@ char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex)
         
         if (foundApp)
         {
-            snprintf(fullname, strsize, "%s v%u (%016lX) (UPD)", fixedGameCardName[app], gameCardPatchVersion[titleIndex], gameCardPatchTitleID[titleIndex]);
+            snprintf(fullname, strsize, "%s v%u (%016lX) (UPD)", fixedTitleName[app], titlePatchVersion[titleIndex], titlePatchTitleID[titleIndex]);
         } else {
-            snprintf(fullname, strsize, "%016lX v%u (UPD)", gameCardPatchTitleID[titleIndex], gameCardPatchVersion[titleIndex]);
+            snprintf(fullname, strsize, "%016lX v%u (UPD)", titlePatchTitleID[titleIndex], titlePatchVersion[titleIndex]);
         }
     } else
     if (selectedNspDumpType == DUMP_ADDON_NSP)
     {
-        for(app = 0; app < gameCardAppCount; app++)
+        for(app = 0; app < titleAppCount; app++)
         {
-            if ((gameCardAddOnTitleID[titleIndex] & APPLICATION_ADDON_BITMASK) == (gameCardTitleID[app] & APPLICATION_ADDON_BITMASK))
+            if ((titleAddOnTitleID[titleIndex] & APPLICATION_ADDON_BITMASK) == (titleAppTitleID[app] & APPLICATION_ADDON_BITMASK))
             {
                 foundApp = true;
                 break;
@@ -1820,9 +2113,9 @@ char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex)
         
         if (foundApp)
         {
-            snprintf(fullname, strsize, "%s v%u (%016lX) (DLC)", fixedGameCardName[app], gameCardAddOnVersion[titleIndex], gameCardAddOnTitleID[titleIndex]);
+            snprintf(fullname, strsize, "%s v%u (%016lX) (DLC)", fixedTitleName[app], titleAddOnVersion[titleIndex], titleAddOnTitleID[titleIndex]);
         } else {
-            snprintf(fullname, strsize, "%016lX v%u (DLC)", gameCardAddOnTitleID[titleIndex], gameCardAddOnVersion[titleIndex]);
+            snprintf(fullname, strsize, "%016lX v%u (DLC)", titleAddOnTitleID[titleIndex], titleAddOnVersion[titleIndex]);
         }
     } else {
         free(fullname);
@@ -1837,7 +2130,7 @@ void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, co
     char versionStr[128] = {'\0'};
     convertTitleVersionToDecimal(version, versionStr, sizeof(versionStr));
     
-    if (!gameCardAppCount || !gameCardTitleID || !*gameCardTitleID || !gameCardName || !*gameCardName)
+    if (!titleAppCount || !titleAppTitleID || !titleName || !*titleName)
     {
         if (prefix)
         {
@@ -1852,9 +2145,9 @@ void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, co
     u32 app;
     bool foundApp = false;
     
-    for(app = 0; app < gameCardAppCount; app++)
+    for(app = 0; app < titleAppCount; app++)
     {
-        if ((!addOn && titleID == (gameCardTitleID[app] | APPLICATION_PATCH_BITMASK)) || (addOn && (titleID & APPLICATION_ADDON_BITMASK) == (gameCardTitleID[app] & APPLICATION_ADDON_BITMASK)))
+        if ((!addOn && titleID == (titleAppTitleID[app] | APPLICATION_PATCH_BITMASK)) || (addOn && (titleID & APPLICATION_ADDON_BITMASK) == (titleAppTitleID[app] & APPLICATION_ADDON_BITMASK)))
         {
             foundApp = true;
             break;
@@ -1865,9 +2158,9 @@ void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, co
     {
         if (prefix)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s | %016lX v%s", prefix, gameCardName[app], titleID, versionStr);
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s | %016lX v%s", prefix, titleName[app], titleID, versionStr);
         } else {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s | %016lX v%s", gameCardName[app], titleID, versionStr);
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s | %016lX v%s", titleName[app], titleID, versionStr);
         }
     } else {
         if (prefix)
@@ -1877,6 +2170,194 @@ void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, co
             snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%016lX v%s", titleID, versionStr);
         }
     }
+}
+
+bool checkOrphanPatchOrAddOn(bool addOn)
+{
+    if (!titleAppCount || !titleAppTitleID || (!addOn && (!titlePatchCount || !titlePatchTitleID)) || (addOn && (!titleAddOnCount || !titleAddOnTitleID))) return false;
+    
+    u32 i, j;
+    u32 count = (!addOn ? titlePatchCount : titleAddOnCount);
+    
+    for(i = 0; i < count; i++)
+    {
+        bool foundMatch = false;
+        
+        for(j = 0; j < titleAppCount; j++)
+        {
+            if ((!addOn && titlePatchTitleID[i] == (titleAppTitleID[j] | APPLICATION_PATCH_BITMASK)) || (addOn && (titleAddOnTitleID[i] & APPLICATION_ADDON_BITMASK) == (titleAppTitleID[j] & APPLICATION_ADDON_BITMASK)))
+            {
+                foundMatch = true;
+                break;
+            }
+        }
+        
+        if (!foundMatch) return true;
+    }
+    
+    return false;
+}
+
+void generateOrphanPatchOrAddOnList()
+{
+    u32 i, j;
+    char *nextFilename = filenameBuffer;
+    filenamesCount = 0;
+    
+    bool foundMatch;
+    char versionStr[128] = {'\0'};
+    u32 orphanEntryIndex = 0, patchCount = 0, addOnCount = 0;
+    orphan_patch_addon_entry *orphanPatchEntries = NULL, *orphanAddOnEntries = NULL;
+    
+    if (orphanEntries != NULL)
+    {
+        free(orphanEntries);
+        orphanEntries = NULL;
+    }
+    
+    if ((!titlePatchCount || !titlePatchTitleID || !titlePatchVersion) && (!titleAddOnCount || !titleAddOnTitleID || !titleAddOnVersion)) return;
+    
+    if (titlePatchCount)
+    {
+        orphanPatchEntries = calloc(titlePatchCount, sizeof(orphan_patch_addon_entry));
+        if (!orphanPatchEntries) return;
+        
+        for(i = 0; i < titlePatchCount; i++)
+        {
+            foundMatch = false;
+            
+            if (titleAppCount && titleAppTitleID)
+            {
+                for(j = 0; j < titleAppCount; j++)
+                {
+                    if (titlePatchTitleID[i] == (titleAppTitleID[j] | APPLICATION_PATCH_BITMASK))
+                    {
+                        foundMatch = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!foundMatch)
+            {
+                convertTitleVersionToDecimal(titlePatchVersion[i], versionStr, sizeof(versionStr));
+                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%016lX v%s (Update)", titlePatchTitleID[i], versionStr);
+                addStringToFilenameBuffer(strbuf, &nextFilename);
+                
+                orphanPatchEntries[orphanEntryIndex].index = i;
+                orphanPatchEntries[orphanEntryIndex].type = ORPHAN_ENTRY_TYPE_PATCH;
+                
+                orphanEntryIndex++;
+                patchCount++;
+            }
+        }
+    }
+    
+    if (titleAddOnCount)
+    {
+        orphanAddOnEntries = calloc(titleAddOnCount, sizeof(orphan_patch_addon_entry));
+        if (!orphanAddOnEntries)
+        {
+            if (orphanPatchEntries) free(orphanPatchEntries);
+            return;
+        }
+        
+        orphanEntryIndex = 0;
+        
+        for(i = 0; i < titleAddOnCount; i++)
+        {
+            foundMatch = false;
+            
+            if (titleAppCount && titleAppTitleID)
+            {
+                for(j = 0; j < titleAppCount; j++)
+                {
+                    if ((titleAddOnTitleID[i] & APPLICATION_ADDON_BITMASK) == (titleAppTitleID[j] & APPLICATION_ADDON_BITMASK))
+                    {
+                        foundMatch = true;
+                        break;
+                    }
+                }
+            }
+            
+            if (!foundMatch)
+            {
+                convertTitleVersionToDecimal(titleAddOnVersion[i], versionStr, sizeof(versionStr));
+                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%016lX v%s (DLC)", titleAddOnTitleID[i], versionStr);
+                addStringToFilenameBuffer(strbuf, &nextFilename);
+                
+                orphanAddOnEntries[orphanEntryIndex].index = i;
+                orphanAddOnEntries[orphanEntryIndex].type = ORPHAN_ENTRY_TYPE_ADDON;
+                
+                orphanEntryIndex++;
+                addOnCount++;
+            }
+        }
+    }
+    
+    filenamesCount = (patchCount + addOnCount);
+    
+    orphanEntries = calloc(filenamesCount, sizeof(orphan_patch_addon_entry));
+    if (!orphanEntries)
+    {
+        filenamesCount = 0;
+        if (orphanPatchEntries) free(orphanPatchEntries);
+        if (orphanAddOnEntries) free(orphanAddOnEntries);
+        return;
+    }
+    
+    if (titlePatchCount)
+    {
+        if (patchCount) memcpy(orphanEntries, orphanPatchEntries, patchCount * sizeof(orphan_patch_addon_entry));
+        
+        free(orphanPatchEntries);
+    }
+    
+    if (titleAddOnCount)
+    {
+        if (addOnCount) memcpy(orphanEntries + patchCount, orphanAddOnEntries, addOnCount * sizeof(orphan_patch_addon_entry));
+        
+        free(orphanAddOnEntries);
+    }
+}
+
+bool checkIfBaseApplicationHasPatchOrAddOn(u32 appIndex, bool addOn)
+{
+    if (!titleAppCount || appIndex > (titleAppCount - 1) || !titleAppTitleID || (!addOn && (!titlePatchCount || !titlePatchTitleID)) || (addOn && (!titleAddOnCount || !titleAddOnTitleID))) return false;
+    
+    u32 i;
+    u32 count = (!addOn ? titlePatchCount : titleAddOnCount);
+    
+    for(i = 0; i < count; i++)
+    {
+        if ((!addOn && (titleAppTitleID[appIndex] | APPLICATION_PATCH_BITMASK) == titlePatchTitleID[i]) || (addOn && (titleAppTitleID[appIndex] & APPLICATION_ADDON_BITMASK) == (titleAddOnTitleID[i] & APPLICATION_ADDON_BITMASK))) return true;
+    }
+    
+    return false;
+}
+
+bool checkIfPatchOrAddOnBelongToBaseApplication(u32 titleIndex, u32 appIndex, bool addOn)
+{
+    if (!titleAppCount || appIndex > (titleAppCount - 1) || !titleAppTitleID || (!addOn && (!titlePatchCount || titleIndex > (titlePatchCount - 1) || !titlePatchTitleID)) || (addOn && (!titleAddOnCount || titleIndex > (titleAddOnCount - 1) || !titleAddOnTitleID))) return false;
+    
+    if ((!addOn && titlePatchTitleID[titleIndex] == (titleAppTitleID[appIndex] | APPLICATION_PATCH_BITMASK)) || (addOn && (titleAddOnTitleID[titleIndex] & APPLICATION_ADDON_BITMASK) == (titleAppTitleID[appIndex] & APPLICATION_ADDON_BITMASK))) return true;
+    
+    return false;
+}
+
+u32 retrieveFirstPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn)
+{
+    if (!titleAppCount || appIndex > (titleAppCount - 1) || !titleAppTitleID || (!addOn && (!titlePatchCount || !titlePatchTitleID)) || (addOn && (!titleAddOnCount || !titleAddOnTitleID))) return 0;
+    
+    u32 titleIndex;
+    u32 count = (!addOn ? titlePatchCount : titleAddOnCount);
+    
+    for(titleIndex = 0; titleIndex < count; titleIndex++)
+    {
+        if ((!addOn && (titleAppTitleID[appIndex] | APPLICATION_PATCH_BITMASK) == titlePatchTitleID[titleIndex]) || (addOn && (titleAppTitleID[appIndex] & APPLICATION_ADDON_BITMASK) == (titleAddOnTitleID[titleIndex] & APPLICATION_ADDON_BITMASK))) return titleIndex;
+    }
+    
+    return 0;
 }
 
 void waitForButtonPress()
@@ -1954,15 +2435,10 @@ void convertDataToHexString(const u8 *data, const u32 dataSize, char *outBuf, co
     }
 }
 
-void addStringToFilenameBuffer(const char *string, char **nextFilename)
-{
-    filenames[filenamesCount++] = *nextFilename;
-    strcpy(*nextFilename, string);
-    *nextFilename += (strlen(string) + 1);
-}
-
 void removeDirectory(const char *path)
 {
+    if (!path || !strlen(path)) return;
+    
     struct dirent *ent;
     char cur_path[NAME_BUF_LEN] = {'\0'};
     
@@ -2100,7 +2576,7 @@ xmlXPathObjectPtr getNodeSet(xmlDocPtr doc, xmlChar *xpath)
 
 void gameCardDumpNSWDBCheck(u32 crc)
 {
-    if (!gameCardAppCount || !gameCardTitleID || !hfs0_partition_cnt || !crc) return;
+    if (!titleAppCount || !titleAppTitleID || !hfs0_partition_cnt) return;
     
     xmlDocPtr doc = NULL;
     bool found = false;
@@ -2109,13 +2585,13 @@ void gameCardDumpNSWDBCheck(u32 crc)
     if (doc)
     {
         u32 i;
-        for(i = 0; i < gameCardAppCount; i++)
+        for(i = 0; i < titleAppCount; i++)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "//%s/%s[.//%s='%016lX']", nswReleasesRootElement, nswReleasesChildren, nswReleasesChildrenTitleID, gameCardTitleID[i]);
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "//%s/%s[.//%s='%016lX']", nswReleasesRootElement, nswReleasesChildren, nswReleasesChildrenTitleID, titleAppTitleID[i]);
             xmlXPathObjectPtr nodeSet = getNodeSet(doc, (xmlChar*)strbuf);
             if (nodeSet)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found %d %s with Title ID \"%016lX\".", nodeSet->nodesetval->nodeNr, (nodeSet->nodesetval->nodeNr > 1 ? "releases" : "release"), gameCardTitleID[i]);
+                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found %d %s with Title ID \"%016lX\".", nodeSet->nodesetval->nodeNr, (nodeSet->nodesetval->nodeNr > 1 ? "releases" : "release"), titleAppTitleID[i]);
                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                 breaks++;
                 
@@ -2126,7 +2602,7 @@ void gameCardDumpNSWDBCheck(u32 crc)
                 {
                     xmlNodePtr node = nodeSet->nodesetval->nodeTab[i]->xmlChildrenNode;
                     
-                    found = parseNSWDBRelease(doc, node, gameCardTitleID[i], crc);
+                    found = parseNSWDBRelease(doc, node, titleAppTitleID[i], crc);
                     if (found) break;
                 }
                 
@@ -2134,17 +2610,17 @@ void gameCardDumpNSWDBCheck(u32 crc)
                 
                 if (!found)
                 {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "No checksum matches found in XML document for Title ID \"%016lX\"!", gameCardTitleID[i]);
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "No checksum matches found in XML document for Title ID \"%016lX\"!", titleAppTitleID[i]);
                     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                    if ((i + 1) < gameCardAppCount) breaks += 2;
+                    if ((i + 1) < titleAppCount) breaks += 2;
                 } else {
                     breaks--;
                     break;
                 }
             } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "No records with Title ID \"%016lX\" found within the XML document!", gameCardTitleID[i]);
+                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "No records with Title ID \"%016lX\" found within the XML document!", titleAppTitleID[i]);
                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                if ((i + 1) < gameCardAppCount) breaks += 2;
+                if ((i + 1) < titleAppCount) breaks += 2;
             }
         }
         
@@ -2425,7 +2901,7 @@ void updateApplication()
     char downloadUrl[512] = {'\0'}, releaseTag[32] = {'\0'};
     bool success = false;
     struct json_object *jobj, *name, *assets;
-    FILE *gcDumpToolNro = NULL;
+    FILE *nxDumpToolNro = NULL;
     char nroPath[NAME_BUF_LEN] = {'\0'};
     
     if (R_SUCCEEDED(result = networkInit()))
@@ -2512,17 +2988,17 @@ void updateApplication()
                                         
                                         uiRefreshDisplay();
                                         
-                                        snprintf(nroPath, sizeof(nroPath) / sizeof(nroPath[0]), "%s.tmp", (strlen(appLaunchPath) ? appLaunchPath : gcDumpToolPath));
+                                        snprintf(nroPath, sizeof(nroPath) / sizeof(nroPath[0]), "%s.tmp", (strlen(appLaunchPath) ? appLaunchPath : nxDumpToolPath));
                                         
-                                        gcDumpToolNro = fopen(nroPath, "wb");
-                                        if (gcDumpToolNro)
+                                        nxDumpToolNro = fopen(nroPath, "wb");
+                                        if (nxDumpToolNro)
                                         {
                                             curl_easy_reset(curl);
                                             
                                             curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L);
                                             curl_easy_setopt(curl, CURLOPT_URL, downloadUrl);
                                             curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, writeCurlFile);
-                                            curl_easy_setopt(curl, CURLOPT_WRITEDATA, gcDumpToolNro);
+                                            curl_easy_setopt(curl, CURLOPT_WRITEDATA, nxDumpToolNro);
                                             curl_easy_setopt(curl, CURLOPT_USERAGENT, userAgent);
                                             curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
                                             curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
@@ -2552,7 +3028,7 @@ void updateApplication()
                                                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                                             }
                                             
-                                            fclose(gcDumpToolNro);
+                                            fclose(nxDumpToolNro);
                                             
                                             if (success)
                                             {

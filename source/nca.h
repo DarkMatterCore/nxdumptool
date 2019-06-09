@@ -57,6 +57,21 @@
 #define NSP_TIK_FILENAME_LENGTH         0x25                // Rights ID + ".tik" + NULL terminator
 #define NSP_CERT_FILENAME_LENGTH        0x26                // Rights ID + ".cert" + NULL terminator
 
+#define ETICKET_ENTRY_SIZE              0x400
+#define ETICKET_TITLEKEY_OFFSET         0x180
+#define ETICKET_RIGHTSID_OFFSET         0x2A0
+#define ETICKET_UNKNOWN_FIELD_SIZE      0x140
+#define ETICKET_DATA_OFFSET             0x140
+
+#define ETICKET_CA_CERT_SIZE            0x400
+#define ETICKET_XS_CERT_SIZE            0x300
+
+#define ETICKET_TIK_FILE_SIZE           (ETICKET_ENTRY_SIZE - 0x140)
+#define ETICKET_CERT_FILE_SIZE          (ETICKET_CA_CERT_SIZE + ETICKET_XS_CERT_SIZE)
+
+#define ETICKET_TITLEKEY_COMMON         0
+#define ETICKET_TITLEKEY_PERSONALIZED   1
+
 typedef enum {
     DUMP_APP_NSP = 0,
     DUMP_PATCH_NSP,
@@ -257,6 +272,70 @@ typedef struct {
 } PACKED nca_cnmt_mod_data;
 
 typedef struct {
+    u32 sig_type;
+    u8 signature[0x100];
+    u8 padding[0x3C];
+    char sig_issuer[0x40];
+    u8 titlekey_block[0x100];
+    u8 unk1;
+    u8 titlekey_type;
+    u8 unk2[0x03];
+    u8 master_key_rev;
+    u8 unk3[0x0A];
+    u64 ticket_id;
+    u64 device_id;
+    u8 rights_id[0x10];
+    u32 account_id;
+    u8 unk4[0x0C];
+} PACKED rsa2048_sha256_ticket;
+
+typedef struct {
+    bool has_rights_id;
+    u8 rights_id[0x10];
+    char rights_id_str[33];
+    char tik_filename[37];
+    char cert_filename[38];
+    u8 enc_titlekey[0x10];
+    u8 dec_titlekey[0x10];
+    u8 cert_data[ETICKET_CERT_FILE_SIZE];
+    rsa2048_sha256_ticket tik_data;
+} PACKED title_rights_ctx;
+
+typedef struct {
+    NcmContentStorage ncmStorage;
+    NcmNcaId ncaId;
+    Aes128CtrContext aes_ctx;
+    u64 exefs_offset; // Relative to NCA start
+    u64 exefs_size;
+    pfs0_header exefs_header;
+    u64 exefs_entries_offset; // Relative to NCA start
+    pfs0_entry_table *exefs_entries;
+    u64 exefs_str_table_offset; // Relative to NCA start
+    char *exefs_str_table;
+    u64 exefs_data_offset; // Relative to NCA start
+} PACKED exefs_ctx_t;
+
+typedef struct {
+    NcmContentStorage ncmStorage;
+    NcmNcaId ncaId;
+    Aes128CtrContext aes_ctx;
+    u64 romfs_offset; // Relative to NCA start
+    u64 romfs_size;
+    u64 romfs_dirtable_offset; // Relative to NCA start
+    u64 romfs_dirtable_size;
+    romfs_dir *romfs_dir_entries;
+    u64 romfs_filetable_offset; // Relative to NCA start
+    u64 romfs_filetable_size;
+    romfs_file *romfs_file_entries;
+    u64 romfs_filedata_offset; // Relative to NCA start
+} PACKED romfs_ctx_t;
+
+typedef struct {
+    u8 type; // 1 = Dir, 2 = File
+    u64 offset; // Relative to directory/file table, depending on type
+} PACKED romfs_browser_entry;
+
+typedef struct {
     NacpLanguageEntry lang[16];
     char Isbn[0x25];
     u8 StartupUserAccount;
@@ -309,34 +388,6 @@ typedef struct {
     u8 Reserved[0xDEC];
 } PACKED nacp_t;
 
-typedef struct {
-    bool has_rights_id;
-    u8 rights_id[0x10];
-    char rights_id_str[33];
-    char tik_filename[37];
-    char cert_filename[38];
-} PACKED title_rights_ctx;
-
-typedef struct {
-    NcmContentStorage ncmStorage;
-    NcmNcaId ncaId;
-    Aes128CtrContext aes_ctx;
-    u64 romfs_offset; // Relative to NCA start
-    u64 romfs_size;
-    u64 romfs_dirtable_offset; // Relative to NCA start
-    u64 romfs_dirtable_size;
-    romfs_dir *romfs_dir_entries;
-    u64 romfs_filetable_offset; // Relative to NCA start
-    u64 romfs_filetable_size;
-    romfs_file *romfs_file_entries;
-    u64 romfs_filedata_offset; // Relative to NCA start
-} PACKED romfs_ctx_t;
-
-typedef struct {
-    u8 type; // 1 = Dir, 2 = File
-    u64 offset; // Relative to directory/file table, depending on type
-} PACKED romfs_browser_entry;
-
 void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, char *out);
 
 void convertNcaSizeToU64(const u8 size[0x6], u64 *out);
@@ -347,15 +398,17 @@ bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *nc
 
 bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize);
 
-bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title_rights_ctx *rights_info, u8 *decrypted_nca_keys);
+bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title_rights_ctx *rights_info, u8 *decrypted_nca_keys, bool retrieveTitleKeyData);
 
 bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data *output);
 
-bool retrieveCnmtNcaData(nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *output, title_rights_ctx *rights_info);
+bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *output, title_rights_ctx *rights_info, bool replaceKeyArea);
 
 bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *cnmt_mod);
 
-bool readRomFsEntriesFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
+bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
+
+bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
 bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf);
 

@@ -33,15 +33,15 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 VERSION_MAJOR := 1
 VERSION_MINOR := 1
-VERSION_MICRO := 0
+VERSION_MICRO := 1
 
-APP_TITLE	:=	gcdumptool
+APP_TITLE	:=	nxdumptool
 APP_AUTHOR	:=	MCMrARM, DarkMatterCore
 APP_VERSION	:=  ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_MICRO}
 
-TARGET		:=	gcdumptool
+TARGET		:=	nxdumptool
 BUILD		:=	build
-SOURCES		:=	source
+SOURCES		:=	source source/fatfs
 DATA		:=	data
 INCLUDES	:=	include
 EXEFS_SRC	:=	exefs_src
