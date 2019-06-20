@@ -208,7 +208,7 @@ void convertU64ToNcaSize(const u64 size, u8 out[0x6])
 
 bool loadNcaKeyset()
 {
-    // Keyset already loaded
+    // Check if the keyset has been already loaded
     if (nca_keyset.total_key_cnt > 0) return true;
     
     if (!(envIsSyscallHinted(0x60) &&   // svcDebugActiveProcess
@@ -221,7 +221,7 @@ bool loadNcaKeyset()
         return false;
     }
     
-    return getNcaKeys();
+    return loadMemoryKeys();
 }
 
 size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src, size_t size, u32 sector, bool encrypt)
@@ -297,7 +297,7 @@ bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *nc
     if (R_FAILED(result = ncmContentStorageReadContentIdFile(ncmStorage, ncaId, block_start_offset, tmp_buf, block_size)))
     {
         free(tmp_buf);
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentStorageReadContentIdFile failed for %lu bytes block at offset 0x%016lX from NCA \"%s\"! (0x%08X)", block_size, block_start_offset, nca_id, result);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read encrypted %lu bytes block at offset 0x%016lX from NCA \"%s\"! (0x%08X)", block_size, block_start_offset, nca_id, result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
     }
@@ -481,6 +481,8 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
                     
                     memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
                     memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info->dec_titlekey, 0x10);
+                    
+                    rights_info->retrieved_tik = true;
                 }
             } else {
                 // Copy what we already have
@@ -2209,7 +2211,7 @@ bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
     
 out:
     // Manually free these pointers
-    // Calling freeRomFsContext() would also close the ncmStorage handle
+    // Calling freeRomFsContext() would also close the ncmStorage handle and the gamecard IStorage instance (if available)
     free(romFsContext.romfs_dir_entries);
     romFsContext.romfs_dir_entries = NULL;
     

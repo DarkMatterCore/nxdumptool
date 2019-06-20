@@ -299,6 +299,7 @@ typedef struct {
     u8 dec_titlekey[0x10];
     u8 cert_data[ETICKET_CERT_FILE_SIZE];
     rsa2048_sha256_ticket tik_data;
+    bool retrieved_tik;
 } PACKED title_rights_ctx;
 
 typedef struct {

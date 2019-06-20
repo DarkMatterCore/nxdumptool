@@ -97,6 +97,14 @@ u64 *titleAddOnTitleID = NULL;
 u32 *titleAddOnVersion = NULL;
 FsStorageId *titleAddOnStorageId = NULL;
 
+u32 sdCardTitleAppCount = 0;
+u32 sdCardTitlePatchCount = 0;
+u32 sdCardTitleAddOnCount = 0;
+
+u32 nandUserTitleAppCount = 0;
+u32 nandUserTitlePatchCount = 0;
+u32 nandUserTitleAddOnCount = 0;
+
 char **titleName = NULL;
 char **fixedTitleName = NULL;
 char **titleAuthor = NULL;
@@ -360,6 +368,14 @@ void freeTitleInfo()
         free(titleAddOnStorageId);
         titleAddOnStorageId = NULL;
     }
+    
+    sdCardTitleAppCount = 0;
+    sdCardTitlePatchCount = 0;
+    sdCardTitleAddOnCount = 0;
+    
+    nandUserTitleAppCount = 0;
+    nandUserTitlePatchCount = 0;
+    nandUserTitleAddOnCount = 0;
     
     if (titleName != NULL)
     {
@@ -1065,7 +1081,21 @@ void loadTitleInfo()
         
         freeTitleInfo();
         
-        proceed = (getTitleIDAndVersionList(FsStorageId_SdCard) && getTitleIDAndVersionList(FsStorageId_NandUser));
+        if (getTitleIDAndVersionList(FsStorageId_SdCard))
+        {
+            sdCardTitleAppCount = titleAppCount;
+            sdCardTitlePatchCount = titlePatchCount;
+            sdCardTitleAddOnCount = titleAddOnCount;
+            
+            if (getTitleIDAndVersionList(FsStorageId_NandUser))
+            {
+                nandUserTitleAppCount = (titleAppCount - sdCardTitleAppCount);
+                nandUserTitlePatchCount = (titlePatchCount - sdCardTitlePatchCount);
+                nandUserTitleAddOnCount = (titleAddOnCount - sdCardTitleAddOnCount);
+                
+                proceed = true;
+            }
+        }
     }
     
     if (proceed && titleAppCount > 0)
@@ -1479,6 +1509,8 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     u32 i = 0;
     u32 written = 0;
     u32 total = 0;
+    u32 appCount = 0;
+    u32 ncmAppIndex = 0;
     u32 appNcaCount = 0;
     u32 partition = 0;
     
@@ -1497,7 +1529,7 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     
     NcmApplicationContentMetaKey *appList = NULL;
     NcmContentRecord *appContentRecords = NULL;
-    size_t appListSize = (sizeof(NcmApplicationContentMetaKey) * titleAppCount);
+    size_t appListSize = sizeof(NcmApplicationContentMetaKey);
     
     NcmNcaId ncaId;
     char ncaIdStr[33] = {'\0'};
@@ -1508,9 +1540,9 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     
     bool success = false, foundProgram = false;
     
-    if (!titleAppCount || appIndex > (titleAppCount - 1))
+    if (!titleAppStorageId)
     {
-        uiDrawString("Error: invalid application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: title storage ID unavailable!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
@@ -1523,6 +1555,40 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
         breaks += 2;
         return false;
     }
+    
+    switch(curStorageId)
+    {
+        case FsStorageId_GameCard:
+            appCount = titleAppCount;
+            ncmAppIndex = appIndex;
+            break;
+        case FsStorageId_SdCard:
+            appCount = sdCardTitleAppCount;
+            ncmAppIndex = appIndex;
+            break;
+        case FsStorageId_NandUser:
+            appCount = nandUserTitleAppCount;
+            ncmAppIndex = (appIndex - sdCardTitleAppCount);
+            break;
+        default:
+            break;
+    }
+    
+    if (!appCount)
+    {
+        uiDrawString("Error: invalid base application count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    if (ncmAppIndex > (appCount - 1))
+    {
+        uiDrawString("Error: invalid base application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    appListSize *= appCount;
     
     // If we're dealing with a gamecard, call workaroundPartitionZeroAccess() and read the secure partition header. Otherwise, ncmContentStorageReadContentIdFile() will fail with error 0x00171002
     if (curStorageId == FsStorageId_GameCard)
@@ -1575,14 +1641,14 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
         goto out;
     }
     
-    if (written != total || written != titleAppCount)
+    if (written != total)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, titleAppCount);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, total);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(appList[appIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
+    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(appList[ncmAppIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1598,7 +1664,7 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(appList[appIndex].metaRecord), 0, appContentRecords, appNcaCount * sizeof(NcmContentRecord), &written)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(appList[ncmAppIndex].metaRecord), 0, appContentRecords, appNcaCount * sizeof(NcmContentRecord), &written)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1641,7 +1707,7 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     
     if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentStorageReadContentIdFile failed! (0x%08X)", result);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read header from Program NCA! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
@@ -1896,6 +1962,21 @@ bool getRomFsFileList(u32 dir_offset)
                 romFsBrowserEntries[i].offset = entryOffset;
                 
                 snprintf(curName, entry->nameLen + 1, (char*)entry->name);
+                
+                // Fix entry name length
+                u32 strWidth = uiGetStrWidth(curName);
+                
+                if ((BROWSER_ICON_DIMENSION + 16 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+                {
+                    while((BROWSER_ICON_DIMENSION + 16 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+                    {
+                        curName[strlen(curName) - 1] = '\0';
+                        strWidth = uiGetStrWidth(curName);
+                    }
+                    
+                    strcat(curName, "...");
+                }
+                
                 addStringToFilenameBuffer(curName, &nextFilename);
                 
                 i++;
@@ -1921,6 +2002,21 @@ bool getRomFsFileList(u32 dir_offset)
                 romFsBrowserEntries[i].offset = entryOffset;
                 
                 snprintf(curName, entry->nameLen + 1, (char*)entry->name);
+                
+                // Fix entry name length
+                u32 strWidth = uiGetStrWidth(curName);
+                
+                if ((BROWSER_ICON_DIMENSION + 16 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+                {
+                    while((BROWSER_ICON_DIMENSION + 16 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+                    {
+                        curName[strlen(curName) - 1] = '\0';
+                        strWidth = uiGetStrWidth(curName);
+                    }
+                    
+                    strcat(curName, "...");
+                }
+                
                 addStringToFilenameBuffer(curName, &nextFilename);
                 
                 i++;
@@ -2125,18 +2221,20 @@ char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex)
     return fullname;
 }
 
-void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, const char *prefix)
+void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, bool addAppName, const char *prefix, char *outBuf, size_t outBufSize)
 {
+    if (!outBuf || !outBufSize) return;
+    
     char versionStr[128] = {'\0'};
     convertTitleVersionToDecimal(version, versionStr, sizeof(versionStr));
     
-    if (!titleAppCount || !titleAppTitleID || !titleName || !*titleName)
+    if (!titleAppCount || !titleAppTitleID || !titleName || !*titleName || !addAppName)
     {
         if (prefix)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%016lX v%s", prefix, titleID, versionStr);
+            snprintf(outBuf, outBufSize, "%s%016lX v%s", prefix, titleID, versionStr);
         } else {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%016lX v%s", titleID, versionStr);
+            snprintf(outBuf, outBufSize, "%016lX v%s", titleID, versionStr);
         }
         
         return;
@@ -2158,16 +2256,16 @@ void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, co
     {
         if (prefix)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s | %016lX v%s", prefix, titleName[app], titleID, versionStr);
+            snprintf(outBuf, outBufSize, "%s%s | %016lX v%s", prefix, titleName[app], titleID, versionStr);
         } else {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s | %016lX v%s", titleName[app], titleID, versionStr);
+            snprintf(outBuf, outBufSize, "%s | %016lX v%s", titleName[app], titleID, versionStr);
         }
     } else {
         if (prefix)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%016lX v%s", prefix, titleID, versionStr);
+            snprintf(outBuf, outBufSize, "%s%016lX v%s", prefix, titleID, versionStr);
         } else {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%016lX v%s", titleID, versionStr);
+            snprintf(outBuf, outBufSize, "%016lX v%s", titleID, versionStr);
         }
     }
 }
@@ -2336,7 +2434,7 @@ bool checkIfBaseApplicationHasPatchOrAddOn(u32 appIndex, bool addOn)
     return false;
 }
 
-bool checkIfPatchOrAddOnBelongToBaseApplication(u32 titleIndex, u32 appIndex, bool addOn)
+bool checkIfPatchOrAddOnBelongsToBaseApplication(u32 titleIndex, u32 appIndex, bool addOn)
 {
     if (!titleAppCount || appIndex > (titleAppCount - 1) || !titleAppTitleID || (!addOn && (!titlePatchCount || titleIndex > (titlePatchCount - 1) || !titlePatchTitleID)) || (addOn && (!titleAddOnCount || titleIndex > (titleAddOnCount - 1) || !titleAddOnTitleID))) return false;
     
@@ -2354,10 +2452,50 @@ u32 retrieveFirstPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn)
     
     for(titleIndex = 0; titleIndex < count; titleIndex++)
     {
-        if ((!addOn && (titleAppTitleID[appIndex] | APPLICATION_PATCH_BITMASK) == titlePatchTitleID[titleIndex]) || (addOn && (titleAppTitleID[appIndex] & APPLICATION_ADDON_BITMASK) == (titleAddOnTitleID[titleIndex] & APPLICATION_ADDON_BITMASK))) return titleIndex;
+        if (checkIfPatchOrAddOnBelongsToBaseApplication(titleIndex, appIndex, addOn)) return titleIndex;
     }
     
     return 0;
+}
+
+u32 retrievePreviousPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 appIndex, bool addOn)
+{
+    u32 count = (!addOn ? titlePatchCount : titleAddOnCount);
+    u32 retTitleIndex = startTitleIndex;
+    u32 curTitleIndex = 0;
+    
+    if (!titleAppCount || appIndex > (titleAppCount - 1) || !titleAppTitleID || !startTitleIndex || startTitleIndex >= count || (!addOn && (!titlePatchCount || !titlePatchTitleID)) || (addOn && (!titleAddOnCount || !titleAddOnTitleID))) return retTitleIndex;
+    
+    for(curTitleIndex = startTitleIndex; curTitleIndex > 0; curTitleIndex--)
+    {
+        if (checkIfPatchOrAddOnBelongsToBaseApplication((curTitleIndex - 1), appIndex, addOn))
+        {
+            retTitleIndex = (curTitleIndex - 1);
+            break;
+        }
+    }
+    
+    return retTitleIndex;
+}
+
+u32 retrieveNextPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 appIndex, bool addOn)
+{
+    u32 count = (!addOn ? titlePatchCount : titleAddOnCount);
+    u32 retTitleIndex = startTitleIndex;
+    u32 curTitleIndex = 0;
+    
+    if (!titleAppCount || appIndex > (titleAppCount - 1) || !titleAppTitleID || startTitleIndex >= count || (!addOn && (!titlePatchCount || !titlePatchTitleID)) || (addOn && (!titleAddOnCount || !titleAddOnTitleID))) return retTitleIndex;
+    
+    for(curTitleIndex = (startTitleIndex + 1); curTitleIndex < count; curTitleIndex++)
+    {
+        if (checkIfPatchOrAddOnBelongsToBaseApplication(curTitleIndex, appIndex, addOn))
+        {
+            retTitleIndex = curTitleIndex;
+            break;
+        }
+    }
+    
+    return retTitleIndex;
 }
 
 void waitForButtonPress()
@@ -2433,6 +2571,173 @@ void convertDataToHexString(const u8 *data, const u32 dataSize, char *outBuf, co
         sprintf(tmp, "%02x", data[i]);
         strcat(outBuf, tmp);
     }
+}
+
+bool checkIfFileExists(const char *path)
+{
+    if (!path || !strlen(path)) return false;
+    
+    FILE *chkfile = fopen(path, "rb");
+    if (chkfile)
+    {
+        fclose(chkfile);
+        return true;
+    }
+    
+    return false;
+}
+
+bool yesNoPrompt(const char *message)
+{
+    if (message && strlen(message))
+    {
+        uiDrawString(message, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        breaks++;
+    }
+    
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "[ %s ] Yes | [ %s ] No", NINTENDO_FONT_A, NINTENDO_FONT_B);
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    breaks += 2;
+    
+    uiRefreshDisplay();
+    
+    bool ret = false;
+    
+    while(true)
+    {
+        hidScanInput();
+        
+        u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        
+        if (keysDown & KEY_A)
+        {
+            ret = true;
+            break;
+        } else
+        if (keysDown & KEY_B)
+        {
+            ret = false;
+            break;
+        }
+    }
+    
+    return ret;
+}
+
+bool checkIfDumpedNspContainsConsoleData(const char *nspPath)
+{
+    if (!nspPath || !strlen(nspPath)) return false;
+    
+    FILE *nspFile = NULL;
+    u64 nspSize = 0;
+    
+    size_t read_bytes;
+    pfs0_header nspHeader;
+    pfs0_entry_table *nspEntries = NULL;
+    char *nspStrTable = NULL;
+    
+    u32 i;
+    bool foundTik = false;
+    u64 tikOffset = 0, tikSize = 0;
+    rsa2048_sha256_ticket tikData;
+    
+    const u8 titlekey_block_0x190_empty_hash[0x20] = {
+        0x2D, 0xFB, 0xA6, 0x33, 0x81, 0x70, 0x46, 0xC7, 0xF5, 0x59, 0xED, 0x4B, 0x93, 0x07, 0x60, 0x48,
+        0x43, 0x5F, 0x7E, 0x1A, 0x90, 0xF1, 0x4E, 0xB8, 0x03, 0x5C, 0x04, 0xB9, 0xEB, 0xAE, 0x25, 0x37
+    };
+    
+    u8 titlekey_block_0x190_hash[0x20];
+    
+    nspFile = fopen(nspPath, "rb");
+    if (!nspFile) return false;
+    
+    fseek(nspFile, 0, SEEK_END);
+    nspSize = ftell(nspFile);
+    rewind(nspFile);
+    
+    if (nspSize < sizeof(pfs0_header))
+    {
+        fclose(nspFile);
+        return false;
+    }
+    
+    read_bytes = fread(&nspHeader, 1, sizeof(pfs0_header), nspFile);
+    
+    if (read_bytes != sizeof(pfs0_header) || bswap_32(nspHeader.magic) != PFS0_MAGIC || nspSize < (sizeof(pfs0_header) + (sizeof(pfs0_entry_table) * (u64)nspHeader.file_cnt) + (u64)nspHeader.str_table_size))
+    {
+        fclose(nspFile);
+        return false;
+    }
+    
+    nspEntries = calloc((u64)nspHeader.file_cnt, sizeof(pfs0_entry_table));
+    if (!nspEntries)
+    {
+        fclose(nspFile);
+        return false;
+    }
+    
+    read_bytes = fread(nspEntries, 1, sizeof(pfs0_entry_table) * (u64)nspHeader.file_cnt, nspFile);
+    
+    if (read_bytes != (sizeof(pfs0_entry_table) * (u64)nspHeader.file_cnt))
+    {
+        free(nspEntries);
+        fclose(nspFile);
+        return false;
+    }
+    
+    nspStrTable = calloc((u64)nspHeader.str_table_size, sizeof(char));
+    if (!nspStrTable)
+    {
+        free(nspEntries);
+        fclose(nspFile);
+        return false;
+    }
+    
+    read_bytes = fread(nspStrTable, 1, (u64)nspHeader.str_table_size, nspFile);
+    
+    if (read_bytes != (u64)nspHeader.str_table_size)
+    {
+        free(nspStrTable);
+        free(nspEntries);
+        fclose(nspFile);
+        return false;
+    }
+    
+    for(i = 0; i < nspHeader.file_cnt; i++)
+    {
+        char *curFilename = (nspStrTable + nspEntries[i].filename_offset);
+        
+        if (!strncasecmp(curFilename + strlen(curFilename) - 4, ".tik", 4))
+        {
+            tikOffset = (sizeof(pfs0_header) + (sizeof(pfs0_entry_table) * (u64)nspHeader.file_cnt) + (u64)nspHeader.str_table_size + nspEntries[i].file_offset);
+            tikSize = nspEntries[i].file_size;
+            foundTik = true;
+            break;
+        }
+    }
+    
+    free(nspStrTable);
+    free(nspEntries);
+    
+    if (!foundTik || tikSize != ETICKET_TIK_FILE_SIZE || nspSize < (tikOffset + tikSize))
+    {
+        fclose(nspFile);
+        return false;
+    }
+    
+    fseek(nspFile, tikOffset, SEEK_SET);
+    
+    read_bytes = fread(&tikData, 1, ETICKET_TIK_FILE_SIZE, nspFile);
+    
+    fclose(nspFile);
+    
+    if (read_bytes != ETICKET_TIK_FILE_SIZE) return false;
+    
+    sha256CalculateHash(titlekey_block_0x190_hash, tikData.titlekey_block + 0x10, 0xF0);
+    
+    if (!strncmp(tikData.sig_issuer, "Root-CA00000003-XS00000021", 26) || memcmp(titlekey_block_0x190_hash, titlekey_block_0x190_empty_hash, 0x20) != 0 || tikData.titlekey_type != ETICKET_TITLEKEY_COMMON || tikData.ticket_id != 0 || tikData.device_id != 0 || tikData.account_id != 0) return true;
+    
+    return false;
 }
 
 void removeDirectory(const char *path)

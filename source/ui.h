@@ -19,18 +19,25 @@
 #define HIGHLIGHT_FONT_COLOR_G  255
 #define HIGHLIGHT_FONT_COLOR_B  197
 
+// UTF-8
+#define UPWARDS_ARROW           "\xE2\x86\x91"
+#define DOWNWARDS_ARROW         "\xE2\x86\x93"
+
 #define COMMON_MAX_ELEMENTS     8
 #define HFS0_MAX_ELEMENTS       14
 #define ROMFS_MAX_ELEMENTS      12
-#define SDCARD_MAX_ELEMENTS     4
+#define SDCARD_MAX_ELEMENTS     3
 #define ORPHAN_MAX_ELEMENTS     12
 
-#define OPTIONS_X_POS           (35 * CHAR_PT_SIZE)
+#define OPTIONS_X_START_POS     (35 * CHAR_PT_SIZE)
+#define OPTIONS_X_END_POS       (OPTIONS_X_START_POS + (6 * CHAR_PT_SIZE))
+#define OPTIONS_X_END_POS_NSP   (FB_WIDTH - (4 * CHAR_PT_SIZE))
 
 #define TAB_WIDTH               4
 
 #define BROWSER_ICON_DIMENSION  16
 
+// UTF-16
 #define NINTENDO_FONT_A         "\xE0\xA0"
 #define NINTENDO_FONT_B         "\xE0\xA1"
 #define NINTENDO_FONT_Y         "\xE0\xA3"
@@ -148,7 +155,7 @@ bool uiLoadJpgFromFile(const char *filename, int expectedWidth, int expectedHeig
 
 void uiDrawString(const char *string, int x, int y, u8 r, u8 g, u8 b);
 
-u32 uiGetStrWidth(char *string);
+u32 uiGetStrWidth(const char *string);
 
 void uiRefreshDisplay();
 

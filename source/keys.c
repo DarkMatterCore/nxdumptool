@@ -331,7 +331,7 @@ bool findFSRodataKeys(keyLocation *location)
     return true;
 }
 
-bool getNcaKeys()
+bool loadMemoryKeys()
 {
     if (nca_keyset.memory_key_cnt > 0) return true;
     
@@ -630,7 +630,7 @@ int parse_hex_key(unsigned char *key, const char *hex, unsigned int len)
     return 1;
 }
 
-int loadExternalKeys(FILE *f)
+int readKeysFromFile(FILE *f)
 {
     u32 i;
     int ret;
@@ -693,6 +693,38 @@ int loadExternalKeys(FILE *f)
     nca_keyset.total_key_cnt += nca_keyset.ext_key_cnt;
     
     return 1;
+}
+
+bool loadExternalKeys()
+{
+    // Check if the keyset has been already loaded
+    if (nca_keyset.ext_key_cnt > 0) return true;
+    
+    // Open keys file
+    FILE *keysFile = fopen(keysFilePath, "rb");
+    if (!keysFile)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to open \"%s\" to retrieve \"eticket_rsa_kek\", titlekeks and KAEKs!", keysFilePath);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    // Load keys
+    int ret = readKeysFromFile(keysFile);
+    fclose(keysFile);
+    
+    if (ret < 1)
+    {
+        if (ret == -1)
+        {
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to parse necessary keys from \"%s\"! (keys file empty?)", keysFilePath);
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        }
+        
+        return false;
+    }
+    
+    return true;
 }
 
 bool testKeyPair(const void *E, const void *D, const void *N)
@@ -951,33 +983,8 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
         return false;
     }
     
-    // Retrieve external keys
-    if (!nca_keyset.ext_key_cnt)
-    {
-        // Open keys file
-        FILE *keysFile = fopen(keysFilePath, "rb");
-        if (!keysFile)
-        {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to open \"%s\" to retrieve \"eticket_rsa_kek\" and titlekeks!", keysFilePath);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            return false;
-        }
-        
-        // Load keys
-        int ret = loadExternalKeys(keysFile);
-        fclose(keysFile);
-        
-        if (ret < 1)
-        {
-            if (ret == -1)
-            {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to parse necessary keys from \"%s\"! (keys file empty?)", keysFilePath);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            }
-            
-            return false;
-        }
-    }
+    // Load external keys
+    if (!loadExternalKeys()) return false;
     
     // Decrypt eTicket RSA key
     memcpy(ctr, eticket_data + ETICKET_DEVKEY_CTR_OFFSET, 0x10);

@@ -19,6 +19,8 @@
 
 extern FsDeviceOperator fsOperatorInstance;
 
+extern nca_keyset_t nca_keyset;
+
 extern u64 freeSpace;
 
 extern int breaks;
@@ -43,6 +45,14 @@ extern FsStorageId *titlePatchStorageId;
 
 extern u32 titleAddOnCount;
 extern FsStorageId *titleAddOnStorageId;
+
+extern u32 sdCardTitleAppCount;
+extern u32 sdCardTitlePatchCount;
+extern u32 sdCardTitleAddOnCount;
+
+extern u32 nandUserTitleAppCount;
+extern u32 nandUserTitlePatchCount;
+extern u32 nandUserTitleAddOnCount;
 
 extern AppletType programAppletType;
 
@@ -176,8 +186,37 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
             {
                 if (setXciArchiveBit)
                 {
+                    // Temporary, we'll use this to check if the dump already exists (it should have the archive bit set if so)
                     snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci", XCI_DUMP_PATH, dumpName);
-                    
+                } else {
+                    snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xc%u", XCI_DUMP_PATH, dumpName, splitIndex);
+                }
+            } else {
+                snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci", XCI_DUMP_PATH, dumpName);
+            }
+            
+            // Check if the dump already exists
+            if (checkIfFileExists(filename))
+            {
+                // Ask the user if they want to proceed anyway
+                int cur_breaks = breaks;
+                breaks++;
+                
+                proceed = yesNoPrompt("You have already dumped this content. Do you wish to proceed anyway?");
+                if (!proceed)
+                {
+                    uiDrawString("Process canceled.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                } else {
+                    // Remove the prompt from the screen
+                    breaks = cur_breaks;
+                    uiFill(0, 8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+                }
+            }
+            
+            if (proceed)
+            {
+                if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && setXciArchiveBit)
+                {
                     // Since we may actually be dealing with an existing directory with the archive bit set or unset, let's try both
                     // Better safe than sorry
                     unlink(filename);
@@ -187,312 +226,308 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
                     
                     sprintf(tmp_idx, "/%02u", splitIndex);
                     strcat(filename, tmp_idx);
-                } else {
-                    snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xc%u", XCI_DUMP_PATH, dumpName, splitIndex);
                 }
-            } else {
-                snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci", XCI_DUMP_PATH, dumpName);
-            }
-            
-            outFile = fopen(filename, "wb");
-            if (outFile)
-            {
-                buf = malloc(DUMP_BUFFER_SIZE);
-                if (buf)
+                
+                outFile = fopen(filename, "wb");
+                if (outFile)
                 {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump procedure started. Hold %s to cancel.", NINTENDO_FONT_B);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                    breaks += 2;
-                    
-                    if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+                    buf = malloc(DUMP_BUFFER_SIZE);
+                    if (buf)
                     {
-                        uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump procedure started. Hold %s to cancel.", NINTENDO_FONT_B);
+                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                         breaks += 2;
-                    }
-                    
-                    progressCtx.line_offset = (breaks + 4);
-                    timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
-                    
-                    for(partition = 0; partition < ISTORAGE_PARTITION_CNT; partition++)
-                    {
-                        n = DUMP_BUFFER_SIZE;
                         
-                        workaroundPartitionZeroAccess();
-                        
-                        if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
+                        if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
                         {
-                            if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, partition)))
+                            uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                            breaks += 2;
+                        }
+                        
+                        progressCtx.line_offset = (breaks + 4);
+                        timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
+                        
+                        for(partition = 0; partition < ISTORAGE_PARTITION_CNT; partition++)
+                        {
+                            n = DUMP_BUFFER_SIZE;
+                            
+                            workaroundPartitionZeroAccess();
+                            
+                            if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
                             {
-                                for(partitionOffset = 0; partitionOffset < partitionSizes[partition]; partitionOffset += n, progressCtx.curOffset += n)
+                                if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, partition)))
                                 {
-                                    uiFill(0, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-                                    
-                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(filename, '/' ) + 1);
-                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                                    
-                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping IStorage partition #%u...", partition);
-                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                                    
-                                    if (DUMP_BUFFER_SIZE > (partitionSizes[partition] - partitionOffset)) n = (partitionSizes[partition] - partitionOffset);
-                                    
-                                    if (R_FAILED(result = fsStorageRead(&gameCardStorage, partitionOffset, buf, n)))
+                                    for(partitionOffset = 0; partitionOffset < partitionSizes[partition]; partitionOffset += n, progressCtx.curOffset += n)
                                     {
-                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%016lX for partition #%u", result, partitionOffset, partition);
-                                        uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                        proceed = false;
-                                        break;
-                                    }
-                                    
-                                    // Remove gamecard certificate
-                                    if (progressCtx.curOffset == 0 && !dumpCert) memset(buf + CERT_OFFSET, 0xFF, CERT_SIZE);
-                                    
-                                    if (calcCrc)
-                                    {
-                                        if (!trimDump)
+                                        uiFill(0, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+                                        
+                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(filename, '/' ) + 1);
+                                        uiDrawString(strbuf, 8, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                        
+                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping IStorage partition #%u...", partition);
+                                        uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                        
+                                        if (DUMP_BUFFER_SIZE > (partitionSizes[partition] - partitionOffset)) n = (partitionSizes[partition] - partitionOffset);
+                                        
+                                        if (R_FAILED(result = fsStorageRead(&gameCardStorage, partitionOffset, buf, n)))
                                         {
-                                            if (dumpCert)
+                                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%016lX for partition #%u", result, partitionOffset, partition);
+                                            uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                            proceed = false;
+                                            break;
+                                        }
+                                        
+                                        // Remove gamecard certificate
+                                        if (progressCtx.curOffset == 0 && !dumpCert) memset(buf + CERT_OFFSET, 0xFF, CERT_SIZE);
+                                        
+                                        if (calcCrc)
+                                        {
+                                            if (!trimDump)
                                             {
-                                                if (progressCtx.curOffset == 0)
+                                                if (dumpCert)
                                                 {
-                                                    // Update CRC32 (with gamecard certificate)
-                                                    crc32(buf, n, &crc1);
-                                                    
-                                                    // Backup gamecard certificate to an array
-                                                    char tmpCert[CERT_SIZE] = {'\0'};
-                                                    memcpy(tmpCert, buf + CERT_OFFSET, CERT_SIZE);
-                                                    
-                                                    // Remove gamecard certificate from buffer
-                                                    memset(buf + CERT_OFFSET, 0xFF, CERT_SIZE);
-                                                    
-                                                    // Update CRC32 (without gamecard certificate)
-                                                    crc32(buf, n, &crc2);
-                                                    
-                                                    // Restore gamecard certificate to buffer
-                                                    memcpy(buf + CERT_OFFSET, tmpCert, CERT_SIZE);
+                                                    if (progressCtx.curOffset == 0)
+                                                    {
+                                                        // Update CRC32 (with gamecard certificate)
+                                                        crc32(buf, n, &crc1);
+                                                        
+                                                        // Backup gamecard certificate to an array
+                                                        char tmpCert[CERT_SIZE] = {'\0'};
+                                                        memcpy(tmpCert, buf + CERT_OFFSET, CERT_SIZE);
+                                                        
+                                                        // Remove gamecard certificate from buffer
+                                                        memset(buf + CERT_OFFSET, 0xFF, CERT_SIZE);
+                                                        
+                                                        // Update CRC32 (without gamecard certificate)
+                                                        crc32(buf, n, &crc2);
+                                                        
+                                                        // Restore gamecard certificate to buffer
+                                                        memcpy(buf + CERT_OFFSET, tmpCert, CERT_SIZE);
+                                                    } else {
+                                                        // Update CRC32 (with gamecard certificate)
+                                                        crc32(buf, n, &crc1);
+                                                        
+                                                        // Update CRC32 (without gamecard certificate)
+                                                        crc32(buf, n, &crc2);
+                                                    }
                                                 } else {
-                                                    // Update CRC32 (with gamecard certificate)
-                                                    crc32(buf, n, &crc1);
-                                                    
-                                                    // Update CRC32 (without gamecard certificate)
+                                                    // Update CRC32
                                                     crc32(buf, n, &crc2);
                                                 }
                                             } else {
                                                 // Update CRC32
-                                                crc32(buf, n, &crc2);
-                                            }
-                                        } else {
-                                            // Update CRC32
-                                            crc32(buf, n, &crc1);
-                                        }
-                                    }
-                                    
-                                    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && (progressCtx.curOffset + n) >= ((splitIndex + 1) * SPLIT_FILE_XCI_PART_SIZE))
-                                    {
-                                        u64 new_file_chunk_size = ((progressCtx.curOffset + n) - ((splitIndex + 1) * SPLIT_FILE_XCI_PART_SIZE));
-                                        u64 old_file_chunk_size = (n - new_file_chunk_size);
-                                        
-                                        if (old_file_chunk_size > 0)
-                                        {
-                                            write_res = fwrite(buf, 1, old_file_chunk_size, outFile);
-                                            if (write_res != old_file_chunk_size)
-                                            {
-                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", old_file_chunk_size, progressCtx.curOffset, splitIndex, write_res);
-                                                uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                                proceed = false;
-                                                break;
+                                                crc32(buf, n, &crc1);
                                             }
                                         }
                                         
-                                        fclose(outFile);
-                                        outFile = NULL;
-                                        
-                                        if (new_file_chunk_size > 0 || (progressCtx.curOffset + n) < progressCtx.totalSize)
+                                        if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && (progressCtx.curOffset + n) >= ((splitIndex + 1) * SPLIT_FILE_XCI_PART_SIZE))
                                         {
-                                            splitIndex++;
+                                            u64 new_file_chunk_size = ((progressCtx.curOffset + n) - ((splitIndex + 1) * SPLIT_FILE_XCI_PART_SIZE));
+                                            u64 old_file_chunk_size = (n - new_file_chunk_size);
                                             
-                                            if (setXciArchiveBit)
+                                            if (old_file_chunk_size > 0)
                                             {
-                                                snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci/%02u", XCI_DUMP_PATH, dumpName, splitIndex);
-                                            } else {
-                                                snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xc%u", XCI_DUMP_PATH, dumpName, splitIndex);
-                                            }
-                                            
-                                            outFile = fopen(filename, "wb");
-                                            if (!outFile)
-                                            {
-                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
-                                                uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                                proceed = false;
-                                                break;
-                                            }
-                                            
-                                            if (new_file_chunk_size > 0)
-                                            {
-                                                write_res = fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile);
-                                                if (write_res != new_file_chunk_size)
+                                                write_res = fwrite(buf, 1, old_file_chunk_size, outFile);
+                                                if (write_res != old_file_chunk_size)
                                                 {
-                                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", new_file_chunk_size, progressCtx.curOffset + old_file_chunk_size, splitIndex, write_res);
+                                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", old_file_chunk_size, progressCtx.curOffset, splitIndex, write_res);
                                                     uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                                                     proceed = false;
                                                     break;
                                                 }
                                             }
-                                        }
-                                    } else {
-                                        write_res = fwrite(buf, 1, n, outFile);
-                                        if (write_res != n)
-                                        {
-                                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX! (wrote %lu bytes)", n, progressCtx.curOffset, write_res);
-                                            uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                                             
-                                            if ((progressCtx.curOffset + n) > FAT32_FILESIZE_LIMIT)
+                                            fclose(outFile);
+                                            outFile = NULL;
+                                            
+                                            if (new_file_chunk_size > 0 || (progressCtx.curOffset + n) < progressCtx.totalSize)
                                             {
-                                                uiDrawString("You're probably using a FAT32 partition. Make sure to enable the \"Split output dump\" option.", 8, ((progressCtx.line_offset + 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                                                fat32_error = true;
+                                                splitIndex++;
+                                                
+                                                if (setXciArchiveBit)
+                                                {
+                                                    snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci/%02u", XCI_DUMP_PATH, dumpName, splitIndex);
+                                                } else {
+                                                    snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xc%u", XCI_DUMP_PATH, dumpName, splitIndex);
+                                                }
+                                                
+                                                outFile = fopen(filename, "wb");
+                                                if (!outFile)
+                                                {
+                                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
+                                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                                    proceed = false;
+                                                    break;
+                                                }
+                                                
+                                                if (new_file_chunk_size > 0)
+                                                {
+                                                    write_res = fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile);
+                                                    if (write_res != new_file_chunk_size)
+                                                    {
+                                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", new_file_chunk_size, progressCtx.curOffset + old_file_chunk_size, splitIndex, write_res);
+                                                        uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                                        proceed = false;
+                                                        break;
+                                                    }
+                                                }
                                             }
-                                            
-                                            proceed = false;
-                                            break;
+                                        } else {
+                                            write_res = fwrite(buf, 1, n, outFile);
+                                            if (write_res != n)
+                                            {
+                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX! (wrote %lu bytes)", n, progressCtx.curOffset, write_res);
+                                                uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                                
+                                                if ((progressCtx.curOffset + n) > FAT32_FILESIZE_LIMIT)
+                                                {
+                                                    uiDrawString("You're probably using a FAT32 partition. Make sure to enable the \"Split output dump\" option.", 8, ((progressCtx.line_offset + 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                                    fat32_error = true;
+                                                }
+                                                
+                                                proceed = false;
+                                                break;
+                                            }
                                         }
-                                    }
-                                    
-                                    printProgressBar(&progressCtx, true, n);
-                                    
-                                    if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
-                                    {
-                                        hidScanInput();
                                         
-                                        u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                                        if (keysDown & KEY_B)
+                                        printProgressBar(&progressCtx, true, n);
+                                        
+                                        if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
                                         {
-                                            uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                            proceed = false;
-                                            break;
+                                            hidScanInput();
+                                            
+                                            u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+                                            if (keysDown & KEY_B)
+                                            {
+                                                uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                                proceed = false;
+                                                break;
+                                            }
                                         }
                                     }
+                                    
+                                    if (progressCtx.curOffset >= progressCtx.totalSize) success = true;
+                                    
+                                    // Support empty files
+                                    if (!partitionSizes[partition])
+                                    {
+                                        uiFill(0, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+                                        
+                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(filename, '/' ) + 1);
+                                        uiDrawString(strbuf, 8, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                        
+                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping IStorage partition #%u...", partition);
+                                        uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                        
+                                        printProgressBar(&progressCtx, false, 0);
+                                    }
+                                    
+                                    fsStorageClose(&gameCardStorage);
+                                } else {
+                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage failed for partition #%u! (0x%08X)", partition, result);
+                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                    proceed = false;
                                 }
-                                
-                                if (progressCtx.curOffset >= progressCtx.totalSize) success = true;
-                                
-                                // Support empty files
-                                if (!partitionSizes[partition])
-                                {
-                                    uiFill(0, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-                                    
-                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(filename, '/' ) + 1);
-                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                                    
-                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping IStorage partition #%u...", partition);
-                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                                    
-                                    printProgressBar(&progressCtx, false, 0);
-                                }
-                                
-                                fsStorageClose(&gameCardStorage);
                             } else {
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage failed for partition #%u! (0x%08X)", partition, result);
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle failed for partition #%u! (0x%08X)", partition, result);
                                 uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                                 proceed = false;
                             }
-                        } else {
-                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle failed for partition #%u! (0x%08X)", partition, result);
-                            uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                            proceed = false;
+                            
+                            if (!proceed)
+                            {
+                                setProgressBarError(&progressCtx);
+                                if (fat32_error) breaks += 2;
+                                break;
+                            }
                         }
                         
-                        if (!proceed)
-                        {
-                            setProgressBarError(&progressCtx);
-                            if (fat32_error) breaks += 2;
-                            break;
-                        }
+                        free(buf);
+                        
+                        breaks = (progressCtx.line_offset + 2);
+                    } else {
+                        uiDrawString("Failed to allocate memory for the dump process!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                     }
                     
-                    free(buf);
+                    if (outFile) fclose(outFile);
                     
-                    breaks = (progressCtx.line_offset + 2);
-                } else {
-                    uiDrawString("Failed to allocate memory for the dump process!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                }
-                
-                if (outFile) fclose(outFile);
-                
-                if (success)
-                {
-                    timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
-                    progressCtx.now -= progressCtx.start;
-                    
-                    formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
-                    
-                    if (calcCrc)
+                    if (success)
                     {
-                        breaks++;
+                        timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
+                        progressCtx.now -= progressCtx.start;
                         
-                        if (!trimDump)
+                        formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
+                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                        
+                        if (calcCrc)
                         {
-                            if (dumpCert)
+                            breaks++;
+                            
+                            if (!trimDump)
                             {
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum (with certificate): %08X", crc1);
+                                if (dumpCert)
+                                {
+                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum (with certificate): %08X", crc1);
+                                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                                    breaks++;
+                                    
+                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum (without certificate): %08X", crc2);
+                                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                                } else {
+                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum: %08X", crc2);
+                                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                                }
+                                
+                                breaks += 2;
+                                uiDrawString("Starting verification process using XML database from NSWDB.COM...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                breaks++;
+                                
+                                uiRefreshDisplay();
+                                
+                                gameCardDumpNSWDBCheck(crc2);
+                            } else {
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum: %08X", crc1);
                                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
                                 breaks++;
                                 
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum (without certificate): %08X", crc2);
-                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
-                            } else {
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum: %08X", crc2);
-                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                                uiDrawString("Dump verification disabled (not compatible with trimmed dumps).", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                             }
-                            
-                            breaks += 2;
-                            uiDrawString("Starting verification process using XML database from NSWDB.COM...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                            breaks++;
-                            
-                            uiRefreshDisplay();
-                            
-                            gameCardDumpNSWDBCheck(crc2);
-                        } else {
-                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XCI dump CRC32 checksum: %08X", crc1);
-                            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
-                            breaks++;
-                            
-                            uiDrawString("Dump verification disabled (not compatible with trimmed dumps).", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                         }
-                    }
-                    
-                    // Set archive bit (only for FAT32 and if the required option is enabled)
-                    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && setXciArchiveBit)
-                    {
-                        snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci", XCI_DUMP_PATH, dumpName);
-                        if (R_FAILED(result = fsdevSetArchiveBit(filename)))
-                        {
-                            breaks += 2;
-                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Warning: failed to set archive bit on output directory! (0x%08X)", result);
-                            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                        }
-                    }
-                } else {
-                    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
-                    {
-                        if (setXciArchiveBit)
+                        
+                        // Set archive bit (only for FAT32 and if the required option is enabled)
+                        if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && setXciArchiveBit)
                         {
                             snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci", XCI_DUMP_PATH, dumpName);
-                            removeDirectory(filename);
-                        } else {
-                            for(u8 i = 0; i <= splitIndex; i++)
+                            if (R_FAILED(result = fsdevSetArchiveBit(filename)))
                             {
-                                snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xc%u", XCI_DUMP_PATH, dumpName, i);
-                                unlink(filename);
+                                breaks += 2;
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Warning: failed to set archive bit on output directory! (0x%08X)", result);
+                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                             }
                         }
                     } else {
-                        unlink(filename);
+                        if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
+                        {
+                            if (setXciArchiveBit)
+                            {
+                                snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci", XCI_DUMP_PATH, dumpName);
+                                removeDirectory(filename);
+                            } else {
+                                for(u8 i = 0; i <= splitIndex; i++)
+                                {
+                                    snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xc%u", XCI_DUMP_PATH, dumpName, i);
+                                    unlink(filename);
+                                }
+                            }
+                        } else {
+                            unlink(filename);
+                        }
                     }
+                } else {
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file \"%s\"!", filename);
+                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                 }
-            } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file \"%s\"!", filename);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
             }
         } else {
             uiDrawString("Error: not enough free space available in the SD card.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -512,6 +547,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     u32 i = 0, j = 0;
     u32 written = 0;
     u32 total = 0;
+    u32 titleCount = 0;
+    u32 ncmTitleIndex = 0;
     u32 titleNcaCount = 0;
     u32 partition = 0;
     
@@ -536,7 +573,6 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     NcmApplicationContentMetaKey *titleList = NULL;
     NcmContentRecord *titleContentRecords = NULL;
     size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
-    titleListSize *= (selectedNspDumpType == DUMP_APP_NSP ? titleAppCount : (selectedNspDumpType == DUMP_PATCH_NSP ? titlePatchCount : titleAddOnCount));
     
     cnmt_xml_program_info xml_program_info;
     cnmt_xml_content_info *xml_content_info = NULL;
@@ -589,7 +625,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     u8 *buf = NULL;
     u8 splitIndex = 0;
     u32 crc = 0;
-    bool proceed = true, success = false, dumping = false, fat32_error = false;
+    bool proceed = true, success = false, dumping = false, fat32_error = false, removeFile = true;
     
     progress_ctx_t progressCtx;
     memset(&progressCtx, 0, sizeof(progress_ctx_t));
@@ -599,20 +635,6 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     size_t write_res;
     
     int initial_breaks = breaks;
-    
-    if ((selectedNspDumpType == DUMP_APP_NSP && !titleAppCount) || (selectedNspDumpType == DUMP_PATCH_NSP && !titlePatchCount) || (selectedNspDumpType == DUMP_ADDON_NSP && !titleAddOnCount))
-    {
-        uiDrawString("Error: invalid title type count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        breaks += 2;
-        return false;
-    }
-    
-    if ((selectedNspDumpType == DUMP_APP_NSP && titleIndex > (titleAppCount - 1)) || (selectedNspDumpType == DUMP_PATCH_NSP && titleIndex > (titlePatchCount - 1)) || (selectedNspDumpType == DUMP_ADDON_NSP && titleIndex > (titleAddOnCount - 1)))
-    {
-        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        breaks += 2;
-        return false;
-    }
     
     if ((selectedNspDumpType == DUMP_APP_NSP && !titleAppStorageId) || (selectedNspDumpType == DUMP_PATCH_NSP && !titlePatchStorageId) || (selectedNspDumpType == DUMP_ADDON_NSP && !titleAddOnStorageId))
     {
@@ -630,6 +652,40 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         return false;
     }
     
+    switch(curStorageId)
+    {
+        case FsStorageId_GameCard:
+            titleCount = (selectedNspDumpType == DUMP_APP_NSP ? titleAppCount : (selectedNspDumpType == DUMP_PATCH_NSP ? titlePatchCount : titleAddOnCount));
+            ncmTitleIndex = titleIndex;
+            break;
+        case FsStorageId_SdCard:
+            titleCount = (selectedNspDumpType == DUMP_APP_NSP ? sdCardTitleAppCount : (selectedNspDumpType == DUMP_PATCH_NSP ? sdCardTitlePatchCount : sdCardTitleAddOnCount));
+            ncmTitleIndex = titleIndex;
+            break;
+        case FsStorageId_NandUser:
+            titleCount = (selectedNspDumpType == DUMP_APP_NSP ? nandUserTitleAppCount : (selectedNspDumpType == DUMP_PATCH_NSP ? nandUserTitlePatchCount : nandUserTitleAddOnCount));
+            ncmTitleIndex = (titleIndex - (selectedNspDumpType == DUMP_APP_NSP ? sdCardTitleAppCount : (selectedNspDumpType == DUMP_PATCH_NSP ? sdCardTitlePatchCount : sdCardTitleAddOnCount)));
+            break;
+        default:
+            break;
+    }
+    
+    if (!titleCount)
+    {
+        uiDrawString("Error: invalid title type count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    if (ncmTitleIndex > (titleCount - 1))
+    {
+        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    titleListSize *= titleCount;
+    
     char *dumpName = generateNSPDumpName(selectedNspDumpType, titleIndex);
     if (!dumpName)
     {
@@ -639,7 +695,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     }
     
     // If we're dealing with a gamecard, call workaroundPartitionZeroAccess() and read the secure partition header. Otherwise, ncmContentStorageReadContentIdFile() will fail with error 0x00171002
-    // Also open an IStorage instance to the secure partition, since we may need it if we're dealing with a Patch with titlekey crypto
+    // Also open an IStorage instance for the HFS0 Secure partition, since we may also need it if we're dealing with a Patch with titlekey crypto, in order to retrieve the tik file
     if (curStorageId == FsStorageId_GameCard)
     {
         partition = (hfs0_partition_cnt - 1); // Select the secure partition
@@ -702,14 +758,14 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    if (written != total || (selectedNspDumpType == DUMP_APP_NSP && written != titleAppCount) || (selectedNspDumpType == DUMP_PATCH_NSP && written != titlePatchCount) || (selectedNspDumpType == DUMP_ADDON_NSP && written != titleAddOnCount))
+    if (written != total)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, (selectedNspDumpType == DUMP_APP_NSP ? titleAppCount : (selectedNspDumpType == DUMP_PATCH_NSP ? titlePatchCount : titleAddOnCount)));
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, total);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[titleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
+    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -725,7 +781,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[titleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -734,9 +790,9 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     // Fill information for our CNMT XML
     memset(&xml_program_info, 0, sizeof(cnmt_xml_program_info));
-    xml_program_info.type = titleList[titleIndex].metaRecord.type;
-    xml_program_info.title_id = titleList[titleIndex].metaRecord.titleId;
-    xml_program_info.version = titleList[titleIndex].metaRecord.version;
+    xml_program_info.type = titleList[ncmTitleIndex].metaRecord.type;
+    xml_program_info.title_id = titleList[ncmTitleIndex].metaRecord.titleId;
+    xml_program_info.version = titleList[ncmTitleIndex].metaRecord.version;
     xml_program_info.nca_cnt = titleNcaCount;
     
     xml_content_info = calloc(titleNcaCount, sizeof(cnmt_xml_content_info));
@@ -765,8 +821,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             continue;
         }
         
-        // Skip Delta Fragments or any other unknown content types
-        if (titleContentRecords[titleRecordIndex].type >= NCA_CONTENT_TYPE_DELTA)
+        // Skip Delta Fragments or any other unknown content types if we're not dealing with Patch titles dumped from installed SD/eMMC (with tiklessDump disabled)
+        if (titleContentRecords[titleRecordIndex].type >= NCA_CONTENT_TYPE_DELTA && (curStorageId == FsStorageId_GameCard || selectedNspDumpType != DUMP_PATCH_NSP || tiklessDump))
         {
             xml_program_info.nca_cnt--;
             i--;
@@ -784,7 +840,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         
         if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentStorageReadContentIdFile failed for NCA \"%s\"! (0x%08X)", xml_content_info[i].nca_id_str, result);
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read header from NCA \"%s\"! (0x%08X)", xml_content_info[i].nca_id_str, result);
             uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
             proceed = false;
             break;
@@ -840,8 +896,54 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             {
                 if (!has_rights_id)
                 {
-                    // We're most likely dealing with a custom XCI mounted through SX OS, so let's change back the content distribution method
+                    // We're could be dealing with a custom XCI mounted through SX OS, so let's change back the content distribution method
                     dec_nca_header.distribution = 0;
+                } else {
+                    if (!rights_info.retrieved_tik)
+                    {
+                        // Retrieve tik file
+                        if (!getPartitionHfs0FileByName(&gameCardStorage, rights_info.tik_filename, (u8*)(&(rights_info.tik_data)), ETICKET_TIK_FILE_SIZE))
+                        {
+                            proceed = false;
+                            break;
+                        }
+                        
+                        memcpy(rights_info.enc_titlekey, rights_info.tik_data.titlekey_block, 0x10);
+                        
+                        rights_info.retrieved_tik = true;
+                    }
+                    
+                    // Mess with the NCA header if we're dealing with a content with a populated rights ID field and if tiklessDump is true (removeConsoleData is ignored)
+                    if (tiklessDump)
+                    {
+                        // Load external keys
+                        if (!loadExternalKeys())
+                        {
+                            proceed = false;
+                            break;
+                        }
+                        
+                        // Decrypt titlekey
+                        u8 crypto_type = xml_content_info[i].keyblob;
+                        if (crypto_type) crypto_type--;
+                        
+                        Aes128Context titlekey_aes_ctx;
+                        aes128ContextCreate(&titlekey_aes_ctx, nca_keyset.titlekeks[crypto_type], false);
+                        aes128DecryptBlock(&titlekey_aes_ctx, rights_info.dec_titlekey, rights_info.enc_titlekey);
+                        
+                        memset(xml_content_info[i].decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
+                        memcpy(xml_content_info[i].decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info.dec_titlekey, 0x10);
+                        
+                        // Generate new encrypted NCA key area using titlekey
+                        if (!generateEncryptedNcaKeyAreaWithTitlekey(&dec_nca_header, xml_content_info[i].decrypted_nca_keys))
+                        {
+                            proceed = false;
+                            break;
+                        }
+                        
+                        // Remove rights ID from NCA
+                        memset(dec_nca_header.rights_id, 0, 0x10);
+                    }
                 }
             }
         } else
@@ -914,7 +1016,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, cnmtNcaBuf, xml_content_info[cnmtNcaIndex].size)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentStorageReadContentIdFile failed for CNMT NCA \"%s\"! (0x%08X)", xml_content_info[cnmtNcaIndex].nca_id_str, result);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read CNMT NCA \"%s\"! (0x%08X)", xml_content_info[cnmtNcaIndex].nca_id_str, result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
@@ -938,15 +1040,12 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     generateCnmtXml(&xml_program_info, xml_content_info, cnmtXml);
     
-    bool includeCertAndTik = (rights_info.has_rights_id && (curStorageId == FsStorageId_GameCard || (curStorageId != FsStorageId_GameCard && !tiklessDump)));
+    bool includeCertAndTik = (rights_info.has_rights_id && !tiklessDump);
     
     if (includeCertAndTik)
     {
         if (curStorageId == FsStorageId_GameCard)
         {
-            // Retrieve tik file
-            if (!getPartitionHfs0FileByName(&gameCardStorage, rights_info.tik_filename, (u8*)(&(rights_info.tik_data)), ETICKET_TIK_FILE_SIZE)) goto out;
-            
             // Ticket files from Patch titles bundled with gamecards have a different layout
             // Let's convert it to a normal "common" ticket
             memset(rights_info.tik_data.signature, 0xFF, 0x100);
@@ -1057,7 +1156,28 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
+    // Temporary, we'll use this to check if the dump already exists (it should have the archive bit set if so)
     snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+    
+    // Check if the dump already exists
+    if (checkIfFileExists(dumpPath))
+    {
+        // Ask the user if they want to proceed anyway
+        int cur_breaks = breaks;
+        breaks++;
+        
+        proceed = yesNoPrompt("You have already dumped this content. Do you wish to proceed anyway?");
+        if (!proceed)
+        {
+            uiDrawString("Process canceled.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            removeFile = false;
+            goto out;
+        } else {
+            // Remove the prompt from the screen
+            breaks = cur_breaks;
+            uiFill(0, 8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+        }
+    }
     
     // Since we may actually be dealing with an existing directory with the archive bit set or unset, let's try both
     // Better safe than sorry
@@ -1185,7 +1305,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             
             if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, nca_offset, buf, n)))
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentStorageReadContentIdFile failed (0x%08X) at offset 0x%016lX for NCA \"%s\".", result, nca_offset, xml_content_info[i].nca_id_str);
+                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read %lu bytes chunk at offset 0x%016lX from NCA \"%s\"! (0x%08X)", n, nca_offset, xml_content_info[i].nca_id_str, result);
                 uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                 proceed = false;
                 break;
@@ -1777,13 +1897,16 @@ out:
             if (fat32_error) breaks += 2;
         }
         
-        snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
-        
-        if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
+        if (removeFile)
         {
-            removeDirectory(dumpPath);
-        } else {
-            unlink(dumpPath);
+            snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+            
+            if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
+            {
+                removeDirectory(dumpPath);
+            } else {
+                unlink(dumpPath);
+            }
         }
     }
     
@@ -1839,7 +1962,7 @@ bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
 {
     Result result;
     u64 partitionOffset;
-    bool success = false, fat32_error = false;
+    bool proceed = true, success = false, fat32_error = false;
     u8 *buf = NULL;
     u64 n = DUMP_BUFFER_SIZE;
     FsGameCardHandle handle;
@@ -1904,171 +2027,191 @@ bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
                         snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s - Partition %u (%s).hfs0", HFS0_DUMP_PATH, dumpName, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition));
                     }
                     
-                    outFile = fopen(filename, "wb");
-                    if (outFile)
+                    // Check if the dump already exists
+                    if (checkIfFileExists(filename))
                     {
-                        buf = malloc(DUMP_BUFFER_SIZE);
-                        if (buf)
+                        // Ask the user if they want to proceed anyway
+                        int cur_breaks = breaks;
+                        
+                        proceed = yesNoPrompt("You have already dumped this content. Do you wish to proceed anyway?");
+                        if (!proceed)
                         {
-                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping raw HFS0 partition #%u. Hold %s to cancel.", partition, NINTENDO_FONT_B);
-                            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                            breaks += 2;
-                            
-                            if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+                            uiDrawString("Process canceled.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        } else {
+                            // Remove the prompt from the screen
+                            breaks = cur_breaks;
+                            uiFill(0, 8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+                        }
+                    }
+                    
+                    if (proceed)
+                    {
+                        outFile = fopen(filename, "wb");
+                        if (outFile)
+                        {
+                            buf = malloc(DUMP_BUFFER_SIZE);
+                            if (buf)
                             {
-                                uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping raw HFS0 partition #%u. Hold %s to cancel.", partition, NINTENDO_FONT_B);
+                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                                 breaks += 2;
-                            }
-                            
-                            uiRefreshDisplay();
-                            
-                            progressCtx.line_offset = (breaks + 2);
-                            timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
-                            
-                            for (progressCtx.curOffset = 0; progressCtx.curOffset < progressCtx.totalSize; progressCtx.curOffset += n)
-                            {
-                                uiFill(0, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
                                 
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(filename, '/' ) + 1);
-                                uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                                
-                                if (DUMP_BUFFER_SIZE > (progressCtx.totalSize - progressCtx.curOffset)) n = (progressCtx.totalSize - progressCtx.curOffset);
-                                
-                                if (R_FAILED(result = fsStorageRead(&gameCardStorage, partitionOffset + progressCtx.curOffset, buf, n)))
+                                if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
                                 {
-                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionOffset + progressCtx.curOffset);
-                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                    break;
+                                    uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                    breaks += 2;
                                 }
                                 
-                                if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting && (progressCtx.curOffset + n) >= ((splitIndex + 1) * SPLIT_FILE_GENERIC_PART_SIZE))
+                                uiRefreshDisplay();
+                                
+                                progressCtx.line_offset = (breaks + 2);
+                                timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
+                                
+                                for (progressCtx.curOffset = 0; progressCtx.curOffset < progressCtx.totalSize; progressCtx.curOffset += n)
                                 {
-                                    u64 new_file_chunk_size = ((progressCtx.curOffset + n) - ((splitIndex + 1) * SPLIT_FILE_GENERIC_PART_SIZE));
-                                    u64 old_file_chunk_size = (n - new_file_chunk_size);
+                                    uiFill(0, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
                                     
-                                    if (old_file_chunk_size > 0)
+                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(filename, '/' ) + 1);
+                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                    
+                                    if (DUMP_BUFFER_SIZE > (progressCtx.totalSize - progressCtx.curOffset)) n = (progressCtx.totalSize - progressCtx.curOffset);
+                                    
+                                    if (R_FAILED(result = fsStorageRead(&gameCardStorage, partitionOffset + progressCtx.curOffset, buf, n)))
                                     {
-                                        write_res = fwrite(buf, 1, old_file_chunk_size, outFile);
-                                        if (write_res != old_file_chunk_size)
-                                        {
-                                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", old_file_chunk_size, progressCtx.curOffset, splitIndex, write_res);
-                                            uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                            break;
-                                        }
+                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionOffset + progressCtx.curOffset);
+                                        uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                        break;
                                     }
                                     
-                                    fclose(outFile);
-                                    outFile = NULL;
-                                    
-                                    if (new_file_chunk_size > 0 || (progressCtx.curOffset + n) < progressCtx.totalSize)
+                                    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting && (progressCtx.curOffset + n) >= ((splitIndex + 1) * SPLIT_FILE_GENERIC_PART_SIZE))
                                     {
-                                        splitIndex++;
-                                        snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s - Partition %u (%s).hfs0.%02u", HFS0_DUMP_PATH, dumpName, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition), splitIndex);
+                                        u64 new_file_chunk_size = ((progressCtx.curOffset + n) - ((splitIndex + 1) * SPLIT_FILE_GENERIC_PART_SIZE));
+                                        u64 old_file_chunk_size = (n - new_file_chunk_size);
                                         
-                                        outFile = fopen(filename, "wb");
-                                        if (!outFile)
+                                        if (old_file_chunk_size > 0)
                                         {
-                                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
-                                            uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                            break;
-                                        }
-                                        
-                                        if (new_file_chunk_size > 0)
-                                        {
-                                            write_res = fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile);
-                                            if (write_res != new_file_chunk_size)
+                                            write_res = fwrite(buf, 1, old_file_chunk_size, outFile);
+                                            if (write_res != old_file_chunk_size)
                                             {
-                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", new_file_chunk_size, progressCtx.curOffset + old_file_chunk_size, splitIndex, write_res);
+                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", old_file_chunk_size, progressCtx.curOffset, splitIndex, write_res);
                                                 uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                                                 break;
                                             }
                                         }
+                                        
+                                        fclose(outFile);
+                                        outFile = NULL;
+                                        
+                                        if (new_file_chunk_size > 0 || (progressCtx.curOffset + n) < progressCtx.totalSize)
+                                        {
+                                            splitIndex++;
+                                            snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s - Partition %u (%s).hfs0.%02u", HFS0_DUMP_PATH, dumpName, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition), splitIndex);
+                                            
+                                            outFile = fopen(filename, "wb");
+                                            if (!outFile)
+                                            {
+                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
+                                                uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                                break;
+                                            }
+                                            
+                                            if (new_file_chunk_size > 0)
+                                            {
+                                                write_res = fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile);
+                                                if (write_res != new_file_chunk_size)
+                                                {
+                                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", new_file_chunk_size, progressCtx.curOffset + old_file_chunk_size, splitIndex, write_res);
+                                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                                    break;
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        write_res = fwrite(buf, 1, n, outFile);
+                                        if (write_res != n)
+                                        {
+                                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX! (wrote %lu bytes)", n, progressCtx.curOffset, write_res);
+                                            uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                            
+                                            if ((progressCtx.curOffset + n) > FAT32_FILESIZE_LIMIT)
+                                            {
+                                                uiDrawString("You're probably using a FAT32 partition. Make sure to enable file splitting.", 8, ((progressCtx.line_offset + 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                                fat32_error = true;
+                                            }
+                                            
+                                            break;
+                                        }
+                                    }
+                                    
+                                    printProgressBar(&progressCtx, true, n);
+                                    
+                                    if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+                                    {
+                                        hidScanInput();
+                                        
+                                        u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+                                        if (keysDown & KEY_B)
+                                        {
+                                            uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                            break;
+                                        }
+                                    }
+                                }
+                                
+                                if (progressCtx.curOffset >= progressCtx.totalSize) success = true;
+                                
+                                // Support empty files
+                                if (!progressCtx.totalSize)
+                                {
+                                    uiFill(0, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+                                    
+                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(filename, '/' ) + 1);
+                                    uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                    
+                                    progressCtx.progress = 100;
+                                    
+                                    printProgressBar(&progressCtx, false, 0);
+                                }
+                                
+                                breaks = (progressCtx.line_offset + 2);
+                                
+                                if (success)
+                                {
+                                    timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
+                                    progressCtx.now -= progressCtx.start;
+                                    
+                                    formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
+                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
+                                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                                } else {
+                                    setProgressBarError(&progressCtx);
+                                    if (fat32_error) breaks += 2;
+                                }
+                                
+                                free(buf);
+                            } else {
+                                uiDrawString("Failed to allocate memory for the dump process!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                            }
+                            
+                            if (outFile) fclose(outFile);
+                            
+                            if (!success)
+                            {
+                                if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
+                                {
+                                    for(u8 i = 0; i <= splitIndex; i++)
+                                    {
+                                        snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s - Partition %u (%s).hfs0.%02u", HFS0_DUMP_PATH, dumpName, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition), i);
+                                        unlink(filename);
                                     }
                                 } else {
-                                    write_res = fwrite(buf, 1, n, outFile);
-                                    if (write_res != n)
-                                    {
-                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX! (wrote %lu bytes)", n, progressCtx.curOffset, write_res);
-                                        uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                        
-                                        if ((progressCtx.curOffset + n) > FAT32_FILESIZE_LIMIT)
-                                        {
-                                            uiDrawString("You're probably using a FAT32 partition. Make sure to enable file splitting.", 8, ((progressCtx.line_offset + 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                                            fat32_error = true;
-                                        }
-                                        
-                                        break;
-                                    }
-                                }
-                                
-                                printProgressBar(&progressCtx, true, n);
-                                
-                                if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
-                                {
-                                    hidScanInput();
-                                    
-                                    u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                                    if (keysDown & KEY_B)
-                                    {
-                                        uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                                        break;
-                                    }
-                                }
-                            }
-                            
-                            if (progressCtx.curOffset >= progressCtx.totalSize) success = true;
-                            
-                            // Support empty files
-                            if (!progressCtx.totalSize)
-                            {
-                                uiFill(0, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-                                
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(filename, '/' ) + 1);
-                                uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                                
-                                progressCtx.progress = 100;
-                                
-                                printProgressBar(&progressCtx, false, 0);
-                            }
-                            
-                            breaks = (progressCtx.line_offset + 2);
-                            
-                            if (success)
-                            {
-                                timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
-                                progressCtx.now -= progressCtx.start;
-                                
-                                formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
-                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
-                            } else {
-                                setProgressBarError(&progressCtx);
-                                if (fat32_error) breaks += 2;
-                            }
-                            
-                            free(buf);
-                        } else {
-                            uiDrawString("Failed to allocate memory for the dump process!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                        }
-                        
-                        if (outFile) fclose(outFile);
-                        
-                        if (!success)
-                        {
-                            if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
-                            {
-                                for(u8 i = 0; i <= splitIndex; i++)
-                                {
-                                    snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s - Partition %u (%s).hfs0.%02u", HFS0_DUMP_PATH, dumpName, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition), i);
                                     unlink(filename);
                                 }
-                            } else {
-                                unlink(filename);
                             }
+                        } else {
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file \"%s\"!", filename);
+                            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                         }
-                    } else {
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file \"%s\"!", filename);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                     }
                 } else {
                     uiDrawString("Error: not enough free space available in the SD card.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -2478,7 +2621,7 @@ bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename)
     
     u64 file_offset = 0;
     u64 file_size = 0;
-    bool success = false;
+    bool proceed = true, success = false;
     
     if (getHfs0EntryDetails(partitionHfs0Header, partitionHfs0HeaderOffset, partitionHfs0HeaderSize, partitionHfs0FileCount, file, false, partition, &file_offset, &file_size))
     {
@@ -2503,36 +2646,58 @@ bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename)
             {
                 mkdir(destCopyPath, 0744);
                 
-                snprintf(destCopyPath, sizeof(destCopyPath) / sizeof(destCopyPath[0]), "%s%s - Partition %u (%s)/%s", HFS0_DUMP_PATH, dumpName, partition, GAMECARD_PARTITION_NAME(hfs0_partition_cnt, partition), fixedFilename);
+                strcat(destCopyPath, "/");
+                strcat(destCopyPath, fixedFilename);
                 
                 breaks++;
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Hold %s to cancel.", NINTENDO_FONT_B);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                breaks += 2;
                 
-                if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+                // Check if the dump already exists
+                if (checkIfFileExists(destCopyPath))
                 {
-                    uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                    breaks += 2;
+                    // Ask the user if they want to proceed anyway
+                    int cur_breaks = breaks;
+                    
+                    proceed = yesNoPrompt("You have already dumped this content. Do you wish to proceed anyway?");
+                    if (!proceed)
+                    {
+                        uiDrawString("Process canceled.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    } else {
+                        // Remove the prompt from the screen
+                        breaks = cur_breaks;
+                        uiFill(0, 8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+                    }
                 }
                 
-                uiRefreshDisplay();
-                
-                progressCtx.line_offset = (breaks + 4);
-                timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
-                
-                success = copyFileFromHfs0(partition, filename, destCopyPath, file_offset, file_size, &progressCtx, true);
-                
-                breaks = (progressCtx.line_offset + 2);
-                
-                if (success)
+                if (proceed)
                 {
-                    timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
-                    progressCtx.now -= progressCtx.start;
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Hold %s to cancel.", NINTENDO_FONT_B);
+                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                    breaks += 2;
                     
-                    formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                    if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+                    {
+                        uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        breaks += 2;
+                    }
+                    
+                    uiRefreshDisplay();
+                    
+                    progressCtx.line_offset = (breaks + 4);
+                    timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
+                    
+                    success = copyFileFromHfs0(partition, filename, destCopyPath, file_offset, file_size, &progressCtx, true);
+                    
+                    breaks = (progressCtx.line_offset + 2);
+                    
+                    if (success)
+                    {
+                        timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
+                        progressCtx.now -= progressCtx.start;
+                        
+                        formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
+                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                    }
                 }
             } else {
                 breaks++;
@@ -2574,14 +2739,14 @@ bool dumpExeFsSectionData(u32 appIndex, bool doSplitting)
     
     if (!titleAppCount)
     {
-        uiDrawString("Error: invalid gamecard application count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid application count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
     if (appIndex > (titleAppCount - 1))
     {
-        uiDrawString("Error: invalid gamecard application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
@@ -2857,7 +3022,7 @@ bool dumpFileFromExeFsSection(u32 appIndex, u32 fileIndex, bool doSplitting)
     FILE *outFile = NULL;
     u8 *buf = NULL;
     u8 splitIndex = 0;
-    bool proceed = true, success = false, fat32_error = false;
+    bool proceed = true, success = false, fat32_error = false, removeFile = true;
     
     char dumpPath[NAME_BUF_LEN * 2] = {'\0'};
     char tmp_idx[5];
@@ -2897,12 +3062,45 @@ bool dumpFileFromExeFsSection(u32 appIndex, u32 fileIndex, bool doSplitting)
     strcat(dumpPath, exeFsFilename);
     removeIllegalCharacters(dumpPath + cur_len);
     
+    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
+    {
+        sprintf(tmp_idx, ".%02u", splitIndex);
+        strcat(dumpPath, tmp_idx);
+    }
+    
     progressCtx.totalSize = exeFsContext.exefs_entries[fileIndex].file_size;
     convertSize(progressCtx.totalSize, progressCtx.totalSizeStr, sizeof(progressCtx.totalSizeStr) / sizeof(progressCtx.totalSizeStr[0]));
     
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "File size: %s (%lu bytes).", progressCtx.totalSizeStr, progressCtx.totalSize);
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-    breaks += 2;
+    breaks++;
+    
+    if (progressCtx.totalSize > freeSpace)
+    {
+        uiDrawString("Error: not enough free space available in the SD card.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    breaks++;
+    
+    // Check if the dump already exists
+    if (checkIfFileExists(dumpPath))
+    {
+        // Ask the user if they want to proceed anyway
+        int cur_breaks = breaks;
+        
+        proceed = yesNoPrompt("You have already dumped this content. Do you wish to proceed anyway?");
+        if (!proceed)
+        {
+            uiDrawString("Process canceled.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            removeFile = false;
+            goto out;
+        } else {
+            // Remove the prompt from the screen
+            breaks = cur_breaks;
+            uiFill(0, 8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+        }
+    }
     
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Hold %s to cancel.", NINTENDO_FONT_B);
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
@@ -2918,12 +3116,6 @@ bool dumpFileFromExeFsSection(u32 appIndex, u32 fileIndex, bool doSplitting)
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying \"%s\"...", exeFsFilename);
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     breaks += 2;
-    
-    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
-    {
-        sprintf(tmp_idx, ".%02u", splitIndex);
-        strcat(dumpPath, tmp_idx);
-    }
     
     outFile = fopen(dumpPath, "wb");
     if (!outFile)
@@ -3076,19 +3268,22 @@ out:
     {
         if (fat32_error) breaks += 2;
         
-        if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
+        if (removeFile)
         {
-            for(u8 i = 0; i <= splitIndex; i++)
+            if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
             {
-                char *tmp = strrchr(dumpPath, '.');
-                if (tmp != NULL) *tmp = '\0';
-                
-                sprintf(tmp_idx, ".%02u", splitIndex);
-                strcat(dumpPath, tmp_idx);
+                for(u8 i = 0; i <= splitIndex; i++)
+                {
+                    char *tmp = strrchr(dumpPath, '.');
+                    if (tmp != NULL) *tmp = '\0';
+                    
+                    sprintf(tmp_idx, ".%02u", splitIndex);
+                    strcat(dumpPath, tmp_idx);
+                    unlink(dumpPath);
+                }
+            } else {
                 unlink(dumpPath);
             }
-        } else {
-            unlink(dumpPath);
         }
     }
     
@@ -3380,14 +3575,14 @@ bool dumpRomFsSectionData(u32 appIndex)
     
     if (!titleAppCount)
     {
-        uiDrawString("Error: invalid gamecard application count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid application count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
     if (appIndex > (titleAppCount - 1))
     {
-        uiDrawString("Error: invalid gamecard application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
@@ -3487,7 +3682,7 @@ bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting)
     FILE *outFile = NULL;
     u8 *buf = NULL;
     u8 splitIndex = 0;
-    bool proceed = true, success = false, fat32_error = false;
+    bool proceed = true, success = false, fat32_error = false, removeFile = true;
     
     char dumpPath[NAME_BUF_LEN * 2] = {'\0'};
     char tmp_idx[5];
@@ -3561,12 +3756,45 @@ bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting)
     strncat(dumpPath, (char*)entry->name, entry->nameLen);
     removeIllegalCharacters(dumpPath + cur_len);
     
+    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
+    {
+        sprintf(tmp_idx, ".%02u", splitIndex);
+        strcat(dumpPath, tmp_idx);
+    }
+    
     progressCtx.totalSize = entry->dataSize;
     convertSize(progressCtx.totalSize, progressCtx.totalSizeStr, sizeof(progressCtx.totalSizeStr) / sizeof(progressCtx.totalSizeStr[0]));
     
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "File size: %s (%lu bytes).", progressCtx.totalSizeStr, progressCtx.totalSize);
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-    breaks += 2;
+    breaks++;
+    
+    if (progressCtx.totalSize > freeSpace)
+    {
+        uiDrawString("Error: not enough free space available in the SD card.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    breaks++;
+    
+    // Check if the dump already exists
+    if (checkIfFileExists(dumpPath))
+    {
+        // Ask the user if they want to proceed anyway
+        int cur_breaks = breaks;
+        
+        proceed = yesNoPrompt("You have already dumped this content. Do you wish to proceed anyway?");
+        if (!proceed)
+        {
+            uiDrawString("Process canceled.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            removeFile = false;
+            goto out;
+        } else {
+            // Remove the prompt from the screen
+            breaks = cur_breaks;
+            uiFill(0, 8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+        }
+    }
     
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Hold %s to cancel.", NINTENDO_FONT_B);
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
@@ -3582,12 +3810,6 @@ bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting)
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying \"romfs:%s/%.*s\"...", curRomFsPath, entry->nameLen, entry->name);
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     breaks += 2;
-    
-    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
-    {
-        sprintf(tmp_idx, ".%02u", splitIndex);
-        strcat(dumpPath, tmp_idx);
-    }
     
     outFile = fopen(dumpPath, "wb");
     if (!outFile)
@@ -3740,19 +3962,22 @@ out:
     {
         if (fat32_error) breaks += 2;
         
-        if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
+        if (removeFile)
         {
-            for(u8 i = 0; i <= splitIndex; i++)
+            if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
             {
-                char *tmp = strrchr(dumpPath, '.');
-                if (tmp != NULL) *tmp = '\0';
-                
-                sprintf(tmp_idx, ".%02u", splitIndex);
-                strcat(dumpPath, tmp_idx);
+                for(u8 i = 0; i <= splitIndex; i++)
+                {
+                    char *tmp = strrchr(dumpPath, '.');
+                    if (tmp != NULL) *tmp = '\0';
+                    
+                    sprintf(tmp_idx, ".%02u", splitIndex);
+                    strcat(dumpPath, tmp_idx);
+                    unlink(dumpPath);
+                }
+            } else {
                 unlink(dumpPath);
             }
-        } else {
-            unlink(dumpPath);
         }
     }
     
@@ -3769,7 +3994,7 @@ bool dumpGameCardCertificate()
     Result result;
     FsGameCardHandle handle;
     FsStorage gameCardStorage;
-    bool success = false;
+    bool proceed = true, success = false;
     FILE *outFile = NULL;
     char filename[NAME_BUF_LEN * 2] = {'\0'};
     u8 buf[CERT_SIZE];
@@ -3806,36 +4031,56 @@ bool dumpGameCardCertificate()
                     
                     snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s - Certificate (%08X).bin", CERT_DUMP_PATH, dumpName, crc);
                     
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping gamecard certificate to \"%s\"...", strrchr(filename, '/' ) + 1);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                    breaks += 2;
-                    
-                    if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+                    // Check if the dump already exists
+                    if (checkIfFileExists(filename))
                     {
-                        uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                        breaks += 2;
+                        // Ask the user if they want to proceed anyway
+                        int cur_breaks = breaks;
+                        
+                        proceed = yesNoPrompt("You have already dumped this content. Do you wish to proceed anyway?");
+                        if (!proceed)
+                        {
+                            uiDrawString("Process canceled.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        } else {
+                            // Remove the prompt from the screen
+                            breaks = cur_breaks;
+                            uiFill(0, 8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4))) + (font_height / 8)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+                        }
                     }
                     
-                    uiRefreshDisplay();
-                    
-                    outFile = fopen(filename, "wb");
-                    if (outFile)
+                    if (proceed)
                     {
-                        write_res = fwrite(buf, 1, CERT_SIZE, outFile);
-                        if (write_res == CERT_SIZE)
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dumping gamecard certificate to \"%s\"...", strrchr(filename, '/' ) + 1);
+                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        breaks += 2;
+                        
+                        if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
                         {
-                            success = true;
-                            uiDrawString("Process successfully completed!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
-                        } else {
-                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %u bytes certificate data! (wrote %lu bytes)", CERT_SIZE, write_res);
-                            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                            uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                            breaks += 2;
                         }
                         
-                        fclose(outFile);
-                        if (!success) unlink(filename);
-                    } else {
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file \"%s\"!", filename);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        uiRefreshDisplay();
+                        
+                        outFile = fopen(filename, "wb");
+                        if (outFile)
+                        {
+                            write_res = fwrite(buf, 1, CERT_SIZE, outFile);
+                            if (write_res == CERT_SIZE)
+                            {
+                                success = true;
+                                uiDrawString("Process successfully completed!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                            } else {
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %u bytes certificate data! (wrote %lu bytes)", CERT_SIZE, write_res);
+                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                            }
+                            
+                            fclose(outFile);
+                            if (!success) unlink(filename);
+                        } else {
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file \"%s\"!", filename);
+                            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        }
                     }
                 } else {
                     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%08X", result, CERT_OFFSET);

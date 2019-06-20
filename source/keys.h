@@ -64,8 +64,9 @@ typedef struct {
     u8 key_area_keys[0x20][3][0x10];            /* Key area encryption keys. */
 } PACKED nca_keyset_t;
 
-bool getNcaKeys();
+bool loadMemoryKeys();
 bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out);
+bool loadExternalKeys();
 bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_enc_key, u8 *out_dec_key);
 bool generateEncryptedNcaKeyAreaWithTitlekey(nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 bool readCertsFromApplicationRomFs();

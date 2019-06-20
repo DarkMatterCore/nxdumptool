@@ -54,6 +54,26 @@ If you like my work and you'd like to support me in any way, it's not necessary,
 Changelog
 --------------
 
+**v1.1.2:**
+* Delta fragment NCAs are now included in update NSPs dumped from SD/eMMC if the "Generate ticket-less dump" option is disabled.
+* It is now possible to generate ticket-less NSP dumps from bundled updates in gamecards. Please bear in mind that this option requires the external "sdmc:/switch/prod.keys" file.
+* UI tweaks:
+    * The application now keeps track of the selected title in SD/eMMC and "orphan" content modes when entering a menu and then going back to the list.
+    * After selecting a title in the SD/eMMC menu, information about content already dumped related to the selected title will now be displayed (BASE / UPD / DLC).
+        * Likewise, after selecting a title in the "orphan" title list (Y button), an additional line will now display if the selected title has been dumped or not.
+        * This also informs the user if the dumps contain console-specific data.
+    * Three additional entries will now be displayed in the "orphan" title list.
+    * Upwards and downwards arrows will now be displayed for lists that exceed the max element count.
+        * Because of this change, max element count for the SD/eMMC title list had to be reduced from 4 to 3.
+    * Leftwards and rightwards arrowheads are now displayed in menus with options.
+    * A "hint" message is now displayed in the "orphan" content mode to let the user know they'll be able to find gamecard updates in that section.
+* If a file has been already dumped, the application will display a prompt asking the user if they want to proceed anyway or not. This doesn't apply to full HFS0/ExeFS/RomFS data dumps.
+* It is now possible to jump from the first list element to the last one and viceversa using the D-Pad Up/Down and Left Stick Up/Down. The Right Stick is still used exclusively for fast scrolling and won't be affected by this change.
+* Fixed a bug where NSP/ExeFS/RomFS dumping would fail if the written entry count returned by `ncmContentMetaDatabaseListApplication()` didn't match the total entry count for the selected NSP dump type.
+* Fixed a bug where NSP/ExeFS/RomFS dumping would fail if an invalid title index was used with `ncmContentMetaDatabaseGet()`.
+
+Thanks to [Maschell](https://github.com/Maschell), [DuIslingr](https://github.com/DuIslingr) and MUXI from PSXTools forums for reporting these bugs and providing with testing!
+
 **v1.1.1:**
 * Project name changed to `nxdumptool`. This is no longer a gamecard-only tool.
 * Added ExeFS dumping/browsing support. This feature, along with the already available RomFS options, makes the application an excellent tool for modders!

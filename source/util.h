@@ -188,7 +188,7 @@ char *generateDumpFullName();
 
 char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex);
 
-void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, const char *prefix);
+void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, bool addAppName, const char *prefix, char *outBuf, size_t outBufSize);
 
 bool checkOrphanPatchOrAddOn(bool addOn);
 
@@ -196,9 +196,13 @@ void generateOrphanPatchOrAddOnList();
 
 bool checkIfBaseApplicationHasPatchOrAddOn(u32 appIndex, bool addOn);
 
-bool checkIfPatchOrAddOnBelongToBaseApplication(u32 titleIndex, u32 appIndex, bool addOn);
+bool checkIfPatchOrAddOnBelongsToBaseApplication(u32 titleIndex, u32 appIndex, bool addOn);
 
 u32 retrieveFirstPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn);
+
+u32 retrievePreviousPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 appIndex, bool addOn);
+
+u32 retrieveNextPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 appIndex, bool addOn);
 
 void waitForButtonPress();
 
@@ -207,6 +211,12 @@ void printProgressBar(progress_ctx_t *progressCtx, bool calcData, u64 chunkSize)
 void setProgressBarError(progress_ctx_t *progressCtx);
 
 void convertDataToHexString(const u8 *data, const u32 dataSize, char *outBuf, const u32 outBufSize);
+
+bool checkIfFileExists(const char *path);
+
+bool yesNoPrompt(const char *message);
+
+bool checkIfDumpedNspContainsConsoleData(const char *nspPath);
 
 void removeDirectory(const char *path);
 
