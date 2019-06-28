@@ -20,16 +20,24 @@
 
 #define SMOOTHING_FACTOR                (double)0.05
 
+typedef enum {
+    BATCH_SOURCE_ALL = 0,
+    BATCH_SOURCE_SDCARD,
+    BATCH_SOURCE_EMMC
+} batchModeSourceStorage;
+
 void workaroundPartitionZeroAccess();
 bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool trimDump, bool calcCrc);
-bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleIndex, bool isFat32, bool calcCrc, bool removeConsoleData, bool tiklessDump);
+bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleIndex, bool isFat32, bool calcCrc, bool removeConsoleData, bool tiklessDump, bool batch);
+bool dumpNintendoSubmissionPackageBatch(bool dumpAppTitles, bool dumpPatchTitles, bool dumpAddOnTitles, bool isFat32, bool removeConsoleData, bool tiklessDump, bool skipDumpedTitles, batchModeSourceStorage batchModeSrc);
 bool dumpRawHfs0Partition(u32 partition, bool doSplitting);
-bool dumpHfs0PartitionData(u32 partition);
-bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename);
-bool dumpExeFsSectionData(u32 appIndex, bool doSplitting);
-bool dumpFileFromExeFsSection(u32 appIndex, u32 fileIndex, bool doSplitting);
-bool dumpRomFsSectionData(u32 appIndex);
-bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting);
+bool dumpHfs0PartitionData(u32 partition, bool doSplitting);
+bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename, bool doSplitting);
+bool dumpExeFsSectionData(u32 titleIndex, bool usePatch, bool doSplitting);
+bool dumpFileFromExeFsSection(u32 titleIndex, u32 fileIndex, bool usePatch, bool doSplitting);
+bool dumpRomFsSectionData(u32 titleIndex, bool usePatch, bool doSplitting);
+bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, bool usePatch, bool doSplitting);
+bool dumpCurrentDirFromRomFsSection(u32 titleIndex, bool usePatch, bool doSplitting);
 bool dumpGameCardCertificate();
 
 #endif

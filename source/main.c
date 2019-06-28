@@ -108,6 +108,9 @@ int main(int argc, char *argv[])
                                             /* Init RomFS context */
                                             initRomFsContext();
                                             
+                                            /* Init BKTR context */
+                                            initBktrContext();
+                                            
                                             /* Make sure output directories exist */
                                             createOutputDirectories();
                                             
@@ -217,6 +220,9 @@ int main(int argc, char *argv[])
                                                     case resultRomFsSectionBrowserCopyFile:
                                                         uiSetState(stateRomFsSectionBrowserCopyFile);
                                                         break;
+                                                    case resultRomFsSectionBrowserCopyDir:
+                                                        uiSetState(stateRomFsSectionBrowserCopyDir);
+                                                        break;
                                                     case resultDumpGameCardCertificate:
                                                         uiSetState(stateDumpGameCardCertificate);
                                                         break;
@@ -228,6 +234,12 @@ int main(int argc, char *argv[])
                                                         break;
                                                     case resultShowSdCardEmmcOrphanPatchAddOnMenu:
                                                         uiSetState(stateSdCardEmmcOrphanPatchAddOnMenu);
+                                                        break;
+                                                    case resultShowSdCardEmmcBatchModeMenu:
+                                                        uiSetState(stateSdCardEmmcBatchModeMenu);
+                                                        break;
+                                                    case resultSdCardEmmcBatchDump:
+                                                        uiSetState(stateSdCardEmmcBatchDump);
                                                         break;
                                                     case resultShowUpdateMenu:
                                                         uiSetState(stateUpdateMenu);

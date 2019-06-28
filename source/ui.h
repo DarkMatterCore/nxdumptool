@@ -23,7 +23,7 @@
 #define UPWARDS_ARROW           "\xE2\x86\x91"
 #define DOWNWARDS_ARROW         "\xE2\x86\x93"
 
-#define COMMON_MAX_ELEMENTS     8
+#define COMMON_MAX_ELEMENTS     9
 #define HFS0_MAX_ELEMENTS       14
 #define ROMFS_MAX_ELEMENTS      12
 #define SDCARD_MAX_ELEMENTS     3
@@ -40,6 +40,7 @@
 // UTF-16
 #define NINTENDO_FONT_A         "\xE0\xA0"
 #define NINTENDO_FONT_B         "\xE0\xA1"
+#define NINTENDO_FONT_X         "\xE0\xA2"
 #define NINTENDO_FONT_Y         "\xE0\xA3"
 #define NINTENDO_FONT_L         "\xE0\xA4"
 #define NINTENDO_FONT_R         "\xE0\xA5"
@@ -86,10 +87,13 @@ typedef enum {
     resultShowRomFsSectionBrowser,
     resultRomFsSectionBrowserChangeDir,
     resultRomFsSectionBrowserCopyFile,
+    resultRomFsSectionBrowserCopyDir,
     resultDumpGameCardCertificate,
     resultShowSdCardEmmcMenu,
     resultShowSdCardEmmcTitleMenu,
     resultShowSdCardEmmcOrphanPatchAddOnMenu,
+    resultShowSdCardEmmcBatchModeMenu,
+    resultSdCardEmmcBatchDump,
     resultShowUpdateMenu,
     resultUpdateNSWDBXml,
     resultUpdateApplication,
@@ -130,10 +134,13 @@ typedef enum {
     stateRomFsSectionBrowser,
     stateRomFsSectionBrowserChangeDir,
     stateRomFsSectionBrowserCopyFile,
+    stateRomFsSectionBrowserCopyDir,
     stateDumpGameCardCertificate,
     stateSdCardEmmcMenu,
     stateSdCardEmmcTitleMenu,
     stateSdCardEmmcOrphanPatchAddOnMenu,
+    stateSdCardEmmcBatchModeMenu,
+    stateSdCardEmmcBatchDump,
     stateUpdateMenu,
     stateUpdateNSWDBXml,
     stateUpdateApplication

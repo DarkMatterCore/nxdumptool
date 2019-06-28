@@ -1,11 +1,13 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <mbedtls/base64.h>
 
 #include "keys.h"
 #include "util.h"
 #include "ui.h"
 #include "rsa.h"
+#include "nso.h"
 
 /* Extern variables */
 
@@ -14,6 +16,7 @@ extern int font_height;
 
 extern exefs_ctx_t exeFsContext;
 extern romfs_ctx_t romFsContext;
+extern bktr_ctx_t bktrContext;
 
 extern char strbuf[NAME_BUF_LEN * 4];
 
@@ -128,12 +131,12 @@ void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_i
     u32 i;
     char tmp[NAME_BUF_LEN] = {'\0'};
     
-    sprintf(out, "\xEF\xBB\xBF<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" \
-                 "<ContentMeta>\r\n" \
-                 "    <Type>%s</Type>\r\n" \
-                 "    <Id>0x%016lx</Id>\r\n" \
-                 "    <Version>%u</Version>\r\n" \
-                 "    <RequiredDownloadSystemVersion>%u</RequiredDownloadSystemVersion>\r\n", \
+    sprintf(out, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
+                 "<ContentMeta>\n" \
+                 "  <Type>%s</Type>\n" \
+                 "  <Id>0x%016lx</Id>\n" \
+                 "  <Version>%u</Version>\n" \
+                 "  <RequiredDownloadSystemVersion>%u</RequiredDownloadSystemVersion>\n", \
                  getTitleType(xml_program_info->type), \
                  xml_program_info->title_id, \
                  xml_program_info->version, \
@@ -141,13 +144,14 @@ void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_i
     
     for(i = 0; i < xml_program_info->nca_cnt; i++)
     {
-        sprintf(tmp, "    <Content>\r\n" \
-                     "        <Type>%s</Type>\r\n" \
-                     "        <Id>%s</Id>\r\n" \
-                     "        <Size>%lu</Size>\r\n" \
-                     "        <Hash>%s</Hash>\r\n" \
-                     "        <KeyGeneration>%u</KeyGeneration>\r\n" \
-                     "    </Content>\r\n", \
+        sprintf(tmp, "  <Content>\n" \
+                     "    <Type>%s</Type>\n" \
+                     "    <Id>%s</Id>\n" \
+                     "    <Size>%lu</Size>\n" \
+                     "    <Hash>%s</Hash>\n" \
+                     "    <KeyGeneration>%u</KeyGeneration>\n" \
+                     "    <IdOffset>0</IdOffset>\n" \
+                     "  </Content>\n", \
                      getContentType(xml_content_info[i].type), \
                      xml_content_info[i].nca_id_str, \
                      xml_content_info[i].size, \
@@ -157,11 +161,11 @@ void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_i
         strcat(out, tmp);
     }
     
-    sprintf(tmp, "    <Digest>%s</Digest>\r\n" \
-                 "    <KeyGenerationMin>%u</KeyGenerationMin>\r\n" \
-                 "    <%s>%u</%s>\r\n" \
-                 "    <%s>0x%016lx</%s>\r\n" \
-                 "</ContentMeta>\r\n", \
+    sprintf(tmp, "  <Digest>%s</Digest>\n" \
+                 "  <KeyGenerationMin>%u</KeyGenerationMin>\n" \
+                 "  <%s>%u</%s>\n" \
+                 "  <%s>0x%016lx</%s>\n" \
+                 "</ContentMeta>", \
                  xml_program_info->digest_str, \
                  xml_program_info->min_keyblob, \
                  getRequiredMinTitleType(xml_program_info->type), \
@@ -265,7 +269,26 @@ static void nca_update_ctr(unsigned char *ctr, u64 ofs)
     }
 }
 
-bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, u64 offset, void *outBuf, size_t bufSize, Aes128CtrContext *ctx, bool encrypt)
+/* Updates the CTR for a bktr offset. */
+static void nca_update_bktr_ctr(unsigned char *ctr, u32 ctr_val, u64 ofs)
+{
+    ofs >>= 4;
+    unsigned int i;
+    
+    for(i = 0; i < 0x8; i++)
+    {
+        ctr[0x10 - i - 1] = (unsigned char)(ofs & 0xFF);
+        ofs >>= 8;
+    }
+    
+    for(i = 0; i < 0x4; i++)
+    {
+        ctr[0x8 - i - 1] = (unsigned char)(ctr_val & 0xFF);
+        ctr_val >>= 8;
+    }
+}
+
+bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *ctx, u64 offset, void *outBuf, size_t bufSize, bool encrypt)
 {
     if (!ncmStorage || !ncaId || !outBuf || !bufSize || !ctx)
     {
@@ -321,6 +344,246 @@ bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *nc
     memcpy(outBuf, tmp_buf + (offset - block_start_offset), bufSize);
     
     free(tmp_buf);
+    
+    return true;
+}
+
+bktr_relocation_bucket_t *bktr_get_relocation_bucket(bktr_relocation_block_t *block, u32 i)
+{
+    return (bktr_relocation_bucket_t*)((u8*)block->buckets + ((sizeof(bktr_relocation_bucket_t) + sizeof(bktr_relocation_entry_t)) * (u64)i));
+}
+
+// Get a relocation entry from offset and relocation block
+bktr_relocation_entry_t *bktr_get_relocation(bktr_relocation_block_t *block, u64 offset)
+{
+    // Weak check for invalid offset
+    if (offset > block->total_size)
+    {
+        uiDrawString("Error: too big offset looked up in BKTR relocation table!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return NULL;
+    }
+    
+    u32 i, bucket_num = 0;
+    
+    for(i = 1; i < block->num_buckets; i++)
+    {
+        if (block->bucket_virtual_offsets[i] <= offset) bucket_num++;
+    }
+    
+    bktr_relocation_bucket_t *bucket = bktr_get_relocation_bucket(block, bucket_num);
+    
+    // Check for edge case, short circuit
+    if (bucket->num_entries == 1) return &(bucket->entries[0]);
+    
+    // Binary search
+    u32 low = 0, high = (bucket->num_entries - 1);
+    
+    while(low <= high)
+    {
+        u32 mid = ((low + high) / 2);
+        
+        if (bucket->entries[mid].virt_offset > offset)
+        {
+            // Too high
+            high = (mid - 1);
+        } else {
+            // block->entries[mid].offset <= offset
+            
+            // Check for success
+            if (mid == (bucket->num_entries - 1) || bucket->entries[mid + 1].virt_offset > offset) return &(bucket->entries[mid]);
+            
+            low = (mid + 1);
+        }
+    }
+    
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to find offset 0x%016lX in BKTR relocation table!", offset);
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+    return NULL;
+}
+
+bktr_subsection_bucket_t *bktr_get_subsection_bucket(bktr_subsection_block_t *block, u32 i)
+{
+    return (bktr_subsection_bucket_t*)((u8*)block->buckets + ((sizeof(bktr_subsection_bucket_t) + sizeof(bktr_subsection_entry_t)) * (u64)i));
+}
+
+// Get a subsection entry from offset and subsection block
+bktr_subsection_entry_t *bktr_get_subsection(bktr_subsection_block_t *block, u64 offset)
+{
+    // If offset is past the virtual, we're reading from the BKTR_HEADER subsection
+    bktr_subsection_bucket_t *last_bucket = bktr_get_subsection_bucket(block, block->num_buckets - 1);
+    if (offset >= last_bucket->entries[last_bucket->num_entries].offset) return &(last_bucket->entries[last_bucket->num_entries]);
+    
+    u32 i, bucket_num = 0;
+    
+    for(i = 1; i < block->num_buckets; i++)
+    {
+        if (block->bucket_physical_offsets[i] <= offset) bucket_num++;
+    }
+    
+    bktr_subsection_bucket_t *bucket = bktr_get_subsection_bucket(block, bucket_num);
+    
+    // Check for edge case, short circuit
+    if (bucket->num_entries == 1) return &(bucket->entries[0]);
+    
+    // Binary search
+    u32 low = 0, high = (bucket->num_entries - 1);
+    
+    while (low <= high)
+    {
+        u32 mid = ((low + high) / 2);
+        
+        if (bucket->entries[mid].offset > offset)
+        {
+            // Too high
+            high = (mid - 1);
+        } else {
+            // block->entries[mid].offset <= offset
+            
+            // Check for success
+            if (mid == (bucket->num_entries - 1) || bucket->entries[mid + 1].offset > offset) return &(bucket->entries[mid]);
+            
+            low = (mid + 1);
+        }
+    }
+    
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to find offset 0x%016lX in BKTR subsection table!", offset);
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+    return NULL;
+}
+
+bool bktrSectionSeek(u64 offset)
+{
+    if (!bktrContext.section_offset || !bktrContext.section_size || !bktrContext.relocation_block || !bktrContext.subsection_block)
+    {
+        uiDrawString("Error: invalid parameters to seek within NCA BKTR section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    bktr_relocation_entry_t *reloc = bktr_get_relocation(bktrContext.relocation_block, offset);
+    if (!reloc) return false;
+    
+    // No better way to do this than to make all BKTR seeking virtual
+    bktrContext.virtual_seek = offset;
+    
+    u64 section_ofs = (offset - reloc->virt_offset + reloc->phys_offset);
+    
+    if (reloc->is_patch)
+    {
+        // Seeked within the patch RomFS
+        bktrContext.bktr_seek = section_ofs;
+        bktrContext.base_seek = 0;
+    } else {
+        // Seeked within the base RomFS
+        bktrContext.bktr_seek = 0;
+        bktrContext.base_seek = section_ofs;
+    }
+    
+    return true;
+}
+
+bool bktrSectionPhysicalRead(void *outBuf, size_t bufSize)
+{
+    if (!bktrContext.section_offset || !bktrContext.section_size || !bktrContext.relocation_block || !bktrContext.subsection_block || !outBuf || !bufSize)
+    {
+        uiDrawString("Error: invalid parameters to perform physical block read from NCA BKTR section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    Result result;
+    unsigned char ctr[0x10];
+    u8 *tmp_buf = NULL;
+    
+    bktr_subsection_entry_t *subsec = bktr_get_subsection(bktrContext.subsection_block, bktrContext.bktr_seek);
+    if (!subsec) return false;
+    
+    bktr_subsection_entry_t *next_subsec = (subsec + 1);
+    
+    u64 base_offset = (bktrContext.section_offset + bktrContext.bktr_seek);
+    
+    memcpy(ctr, bktrContext.aes_ctx.ctr, 0x10);
+    nca_update_bktr_ctr(ctr, subsec->ctr_val, base_offset);
+    aes128CtrContextResetCtr(&(bktrContext.aes_ctx), ctr);
+    
+    u64 virt_seek = bktrContext.virtual_seek;
+    
+    if ((bktrContext.bktr_seek + bufSize) <= next_subsec->offset)
+    {
+        // Easy path, reading *only* within the subsection
+        u64 block_start_offset = (base_offset - (base_offset % 0x10));
+        u64 block_end_offset = (u64)round_up(base_offset + bufSize, 0x10);
+        u64 block_size = (block_end_offset - block_start_offset);
+        
+        tmp_buf = malloc(block_size);
+        if (!tmp_buf)
+        {
+            uiDrawString("Error: unable to allocate memory for the temporary NCA BKTR section block read buffer!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            return false;
+        }
+        
+        if (R_FAILED(result = ncmContentStorageReadContentIdFile(&(bktrContext.ncmStorage), &(bktrContext.ncaId), block_start_offset, tmp_buf, block_size)))
+        {
+            free(tmp_buf);
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "BKTR: failed to read encrypted %lu bytes block at offset 0x%016lX! (0x%08X)", block_size, block_start_offset, result);
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            return false;
+        }
+        
+        // Decrypt
+        aes128CtrCrypt(&(bktrContext.aes_ctx), tmp_buf, tmp_buf, block_size);
+        
+        memcpy(outBuf, tmp_buf + (base_offset - block_start_offset), bufSize);
+        
+        free(tmp_buf);
+    } else {
+        // Sad path
+        u64 within_subsection = (next_subsec->offset - bktrContext.bktr_seek);
+        
+        if (!readBktrSectionBlock(virt_seek, outBuf, within_subsection)) return false;
+        
+        if (!readBktrSectionBlock(virt_seek + within_subsection, (u8*)outBuf + within_subsection, bufSize - within_subsection)) return false;
+    }
+    
+    return true;
+}
+
+bool readBktrSectionBlock(u64 offset, void *outBuf, size_t bufSize)
+{
+    if (!bktrContext.section_offset || !bktrContext.section_size || !bktrContext.relocation_block || !bktrContext.subsection_block || !romFsContext.section_offset || !romFsContext.section_size || !outBuf || !bufSize)
+    {
+        uiDrawString("Error: invalid parameters to read block from NCA BKTR section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (!loadNcaKeyset()) return false;
+    
+    if (!bktrSectionSeek(offset)) return false;
+    
+    bktr_relocation_entry_t *reloc = bktr_get_relocation(bktrContext.relocation_block, bktrContext.virtual_seek);
+    if (!reloc) return false;
+    
+    bktr_relocation_entry_t *next_reloc = (reloc + 1);
+    
+    u64 virt_seek = bktrContext.virtual_seek;
+    
+    // Perform read operation
+    if ((bktrContext.virtual_seek + bufSize) <= next_reloc->virt_offset)
+    {
+        // Easy path: We're reading *only* within the current relocation
+        
+        if (reloc->is_patch)
+        {
+            if (!bktrSectionPhysicalRead(outBuf, bufSize)) return false;
+        } else {
+            // Nice and easy read from the base RomFS
+            if (!processNcaCtrSectionBlock(&(romFsContext.ncmStorage), &(romFsContext.ncaId), &(romFsContext.aes_ctx), romFsContext.section_offset + bktrContext.base_seek, outBuf, bufSize, false)) return false;
+        }
+    } else {
+        u64 within_relocation = (next_reloc->virt_offset - bktrContext.virtual_seek);
+        
+        if (!readBktrSectionBlock(virt_seek, outBuf, within_relocation)) return false;
+        
+        if (!readBktrSectionBlock(virt_seek + within_relocation, (u8*)outBuf + within_relocation, bufSize - within_relocation)) return false;
+    }
     
     return true;
 }
@@ -591,7 +854,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
     memcpy(ctr_key, xml_content_info->decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), NCA_KEY_AREA_KEY_SIZE);
     aes128CtrContextCreate(&aes_ctx, ctr_key, ctr);
     
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_offset, &nca_pfs0_header, sizeof(pfs0_header), &aes_ctx, false))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_offset, &nca_pfs0_header, sizeof(pfs0_header), false))
     {
         breaks++;
         uiDrawString("Failed to read Program NCA section #0 PFS0 partition header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -618,7 +881,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
         return false;
     }
     
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_offset + sizeof(pfs0_header), nca_pfs0_entries, (u64)nca_pfs0_header.file_cnt * sizeof(pfs0_entry_table), &aes_ctx, false))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_offset + sizeof(pfs0_header), nca_pfs0_entries, (u64)nca_pfs0_header.file_cnt * sizeof(pfs0_entry_table), false))
     {
         breaks++;
         uiDrawString("Failed to read Program NCA section #0 PFS0 partition entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -634,7 +897,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
         u64 nca_pfs0_cur_file_offset = (nca_pfs0_data_offset + nca_pfs0_entries[i].file_offset);
         
         // Read and decrypt NPDM header
-        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_cur_file_offset, &npdm_header, sizeof(npdm_t), &aes_ctx, false))
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_cur_file_offset, &npdm_header, sizeof(npdm_t), false))
         {
             breaks++;
             snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read Program NCA section #0 PFS0 entry #%u!", i);
@@ -681,7 +944,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
     }
     
     // Read and decrypt block
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, block_start_offset[0], block_data[0], block_size[0], &aes_ctx, false))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, block_start_offset[0], block_data[0], block_size[0], false))
     {
         breaks++;
         uiDrawString("Failed to read Program NCA section #0 PFS0 NPDM block 0!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -723,7 +986,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
             return false;
         }
         
-        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, block_start_offset[1], block_data[1], block_size[1], &aes_ctx, false))
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, block_start_offset[1], block_data[1], block_size[1], false))
         {
             breaks++;
             uiDrawString("Failed to read Program NCA section #0 PFS0 NPDM block 1!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -746,7 +1009,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
         return false;
     }
     
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, hash_table_offset, hash_table, dec_nca_header->fs_headers[0].pfs0_superblock.hash_table_size, &aes_ctx, false))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, hash_table_offset, hash_table, dec_nca_header->fs_headers[0].pfs0_superblock.hash_table_size, false))
     {
         breaks++;
         uiDrawString("Failed to read Program NCA section #0 PFS0 hash table!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -778,7 +1041,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
     }
     
     // Reencrypt relevant data blocks
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, block_start_offset[0], block_data[0], block_size[0], &aes_ctx, true))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, block_start_offset[0], block_data[0], block_size[0], true))
     {
         breaks++;
         uiDrawString("Failed to encrypt Program NCA section #0 PFS0 NPDM block 0!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -790,7 +1053,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
     
     if (block_hash_table_offset != block_hash_table_end_offset)
     {
-        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, block_start_offset[1], block_data[1], block_size[1], &aes_ctx, true))
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, block_start_offset[1], block_data[1], block_size[1], true))
         {
             breaks++;
             uiDrawString("Failed to encrypt Program NCA section #0 PFS0 NPDM block 1!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -801,7 +1064,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
         }
     }
     
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, hash_table_offset, hash_table, dec_nca_header->fs_headers[0].pfs0_superblock.hash_table_size, &aes_ctx, true))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, hash_table_offset, hash_table, dec_nca_header->fs_headers[0].pfs0_superblock.hash_table_size, true))
     {
         breaks++;
         uiDrawString("Failed to encrypt Program NCA section #0 PFS0 hash table!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -829,6 +1092,8 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
         output->block_offset[1] = block_start_offset[1];
         output->block_size[1] = block_size[1];
     }
+    
+    output->acid_pubkey_offset = (acid_pubkey_offset - block_start_offset[0]);
     
     return true;
 }
@@ -1214,7 +1479,7 @@ bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
         
         nca_pfs0_offset = (section_offset + dec_nca_header->fs_headers[exefs_index].pfs0_superblock.pfs0_offset);
         
-        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_offset, &nca_pfs0_header, sizeof(pfs0_header), &aes_ctx, false)) return false;
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_offset, &nca_pfs0_header, sizeof(pfs0_header), false)) return false;
         
         if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC || !nca_pfs0_header.file_cnt || !nca_pfs0_header.str_table_size) continue;
         
@@ -1223,7 +1488,7 @@ bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
         nca_pfs0_entries = calloc(nca_pfs0_header.file_cnt, sizeof(pfs0_entry_table));
         if (!nca_pfs0_entries) continue;
         
-        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_entries_offset, nca_pfs0_entries, (u64)nca_pfs0_header.file_cnt * sizeof(pfs0_entry_table), &aes_ctx, false))
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_entries_offset, nca_pfs0_entries, (u64)nca_pfs0_header.file_cnt * sizeof(pfs0_entry_table), false))
         {
             free(nca_pfs0_entries);
             return false;
@@ -1239,7 +1504,7 @@ bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
             continue;
         }
         
-        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, nca_pfs0_str_table_offset, nca_pfs0_str_table, (u64)nca_pfs0_header.str_table_size, &aes_ctx, false))
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_str_table_offset, nca_pfs0_str_table, (u64)nca_pfs0_header.str_table_size, false))
         {
             free(nca_pfs0_str_table);
             free(nca_pfs0_entries);
@@ -1368,14 +1633,14 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     
     if (bswap_32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic) != IVFC_MAGIC)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid magic word for NCA RomFS section! Wrong KAEK? (0x%08X)", bswap_32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic));
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid IVFC magic word for NCA RomFS section! Wrong KAEK? (0x%08X)", bswap_32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic));
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
     }
     
     if (dec_nca_header->fs_headers[romfs_index].crypt_type != NCA_FS_HEADER_CRYPT_CTR)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid AES crypt type for NCA RomFS section! (0x%02X)", dec_nca_header->fs_headers[0].crypt_type);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid AES crypt type for NCA RomFS section! (0x%02X)", dec_nca_header->fs_headers[romfs_index].crypt_type);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
     }
@@ -1390,7 +1655,7 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     }
     
     // First read the RomFS header
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, romfs_offset, &romFsHeader, sizeof(romfs_header), &aes_ctx, false))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, romfs_offset, &romFsHeader, sizeof(romfs_header), false))
     {
         breaks++;
         uiDrawString("Failed to read NCA RomFS section header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1431,7 +1696,7 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
         return false;
     }
     
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, romfs_dirtable_offset, romfs_dir_entries, romfs_dirtable_size, &aes_ctx, false))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, romfs_dirtable_offset, romfs_dir_entries, romfs_dirtable_size, false))
     {
         breaks++;
         uiDrawString("Failed to read NCA RomFS section directory entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1447,7 +1712,7 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
         return false;
     }
     
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, romfs_filetable_offset, romfs_file_entries, romfs_filetable_size, &aes_ctx, false))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, romfs_filetable_offset, romfs_file_entries, romfs_filetable_size, false))
     {
         breaks++;
         uiDrawString("Failed to read NCA RomFS section file entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1461,6 +1726,8 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     memcpy(&(romFsContext.ncmStorage), ncmStorage, sizeof(NcmContentStorage));
     memcpy(&(romFsContext.ncaId), ncaId, sizeof(NcmNcaId));
     memcpy(&(romFsContext.aes_ctx), &aes_ctx, sizeof(Aes128CtrContext));
+    romFsContext.section_offset = section_offset;
+    romFsContext.section_size = section_size;
     romFsContext.romfs_offset = romfs_offset;
     romFsContext.romfs_size = romfs_size;
     romFsContext.romfs_dirtable_offset = romfs_dirtable_offset;
@@ -1472,6 +1739,613 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     romFsContext.romfs_filedata_offset = romfs_filedata_offset;
     
     return true;
+}
+
+bool readBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
+{
+    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !romFsContext.section_offset || !romFsContext.section_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_file_entries)
+    {
+        uiDrawString("Error: invalid parameters to read BKTR section from NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    u32 i;
+    
+    u8 bktr_index;
+    bool found_bktr = false, success = false;
+    
+    romfs_header romFsHeader;
+    
+    initBktrContext();
+    
+    memcpy(&(bktrContext.ncmStorage), ncmStorage, sizeof(NcmContentStorage));
+    memcpy(&(bktrContext.ncaId), ncaId, sizeof(NcmNcaId));
+    
+    for(bktr_index = 0; bktr_index < 4; bktr_index++)
+    {
+        if (dec_nca_header->fs_headers[bktr_index].partition_type == NCA_FS_HEADER_PARTITION_ROMFS && dec_nca_header->fs_headers[bktr_index].fs_type == NCA_FS_HEADER_FSTYPE_ROMFS)
+        {
+            found_bktr = true;
+            break;
+        }
+    }
+    
+    if (!found_bktr)
+    {
+        uiDrawString("Error: NCA doesn't hold a BKTR section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    bktrContext.section_offset = ((u64)dec_nca_header->section_entries[bktr_index].media_start_offset * (u64)MEDIA_UNIT_SIZE);
+    bktrContext.section_size = (((u64)dec_nca_header->section_entries[bktr_index].media_end_offset * (u64)MEDIA_UNIT_SIZE) - bktrContext.section_offset);
+    
+    if (!bktrContext.section_offset || bktrContext.section_offset < NCA_FULL_HEADER_LENGTH || !bktrContext.section_size)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid offset/size for NCA BKTR section! (#%u)", bktr_index);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    // Generate initial CTR
+    unsigned char ctr[0x10];
+    u64 ofs = (bktrContext.section_offset >> 4);
+    
+    for(i = 0; i < 0x8; i++)
+    {
+        ctr[i] = dec_nca_header->fs_headers[bktr_index].section_ctr[0x08 - i - 1];
+        ctr[0x10 - i - 1] = (unsigned char)(ofs & 0xFF);
+        ofs >>= 8;
+    }
+    
+    u8 ctr_key[NCA_KEY_AREA_KEY_SIZE];
+    memcpy(ctr_key, decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), NCA_KEY_AREA_KEY_SIZE);
+    aes128CtrContextCreate(&(bktrContext.aes_ctx), ctr_key, ctr);
+    
+    memcpy(&(bktrContext.superblock), &(dec_nca_header->fs_headers[bktr_index].bktr_superblock), sizeof(bktr_superblock_t));
+    
+    if (bswap_32(bktrContext.superblock.ivfc_header.magic) != IVFC_MAGIC)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid IVFC magic word for NCA BKTR section! Wrong KAEK? (0x%08X)", bswap_32(bktrContext.superblock.ivfc_header.magic));
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (dec_nca_header->fs_headers[bktr_index].crypt_type != NCA_FS_HEADER_CRYPT_BKTR)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid AES crypt type for NCA BKTR section! (0x%02X)", dec_nca_header->fs_headers[bktr_index].crypt_type);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (bswap_32(bktrContext.superblock.relocation_header.magic) != BKTR_MAGIC || bswap_32(bktrContext.superblock.subsection_header.magic) != BKTR_MAGIC)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid BKTR magic word for NCA BKTR relocation/subsection header! (0x%02X | 0x%02X)", bswap_32(bktrContext.superblock.relocation_header.magic), bswap_32(bktrContext.superblock.subsection_header.magic));
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if ((bktrContext.superblock.relocation_header.offset + bktrContext.superblock.relocation_header.size) != bktrContext.superblock.subsection_header.offset || (bktrContext.superblock.subsection_header.offset + bktrContext.superblock.subsection_header.size) != bktrContext.section_size)
+    {
+        uiDrawString("Error: invalid layout for NCA BKTR section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    // Allocate space for an extra (fake) relocation entry, to simplify our logic
+    bktrContext.relocation_block = calloc(1, bktrContext.superblock.relocation_header.size + ((0x3FF0 / sizeof(u64)) * sizeof(bktr_relocation_entry_t)));
+    if (!bktrContext.relocation_block)
+    {
+        uiDrawString("Error: unable to allocate memory for NCA BKTR relocation header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    // Allocate space for an extra (fake) subsection entry, to simplify our logic
+    bktrContext.subsection_block = calloc(1, bktrContext.superblock.subsection_header.size + ((0x3FF0 / sizeof(u64)) * sizeof(bktr_subsection_entry_t)) + sizeof(bktr_subsection_entry_t));
+    if (!bktrContext.subsection_block)
+    {
+        uiDrawString("Error: unable to allocate memory for NCA BKTR subsection header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // Read the relocation header
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &(bktrContext.aes_ctx), bktrContext.section_offset + bktrContext.superblock.relocation_header.offset, bktrContext.relocation_block, bktrContext.superblock.relocation_header.size, false))
+    {
+        breaks++;
+        uiDrawString("Failed to read NCA BKTR relocation header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // Read the subsection header
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &(bktrContext.aes_ctx), bktrContext.section_offset + bktrContext.superblock.subsection_header.offset, bktrContext.subsection_block, bktrContext.superblock.subsection_header.size, false))
+    {
+        breaks++;
+        uiDrawString("Failed to read NCA BKTR subsection header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (bktrContext.subsection_block->total_size != bktrContext.superblock.subsection_header.offset)
+    {
+        uiDrawString("Error: invalid NCA BKTR subsection header size!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // This simplifies logic greatly...
+    for(i = (bktrContext.relocation_block->num_buckets - 1); i > 0; i--)
+    {
+        bktr_relocation_bucket_t tmp_bucket;
+        memcpy(&tmp_bucket, &(bktrContext.relocation_block->buckets[i]), sizeof(bktr_relocation_bucket_t));
+        memcpy(bktr_get_relocation_bucket(bktrContext.relocation_block, i), &tmp_bucket, sizeof(bktr_relocation_bucket_t));
+    }
+    
+    for(i = 0; (i + 1) < bktrContext.relocation_block->num_buckets; i++)
+    {
+        bktr_relocation_bucket_t *cur_bucket = bktr_get_relocation_bucket(bktrContext.relocation_block, i);
+        cur_bucket->entries[cur_bucket->num_entries].virt_offset = bktrContext.relocation_block->bucket_virtual_offsets[i + 1];
+    }
+    
+    for(i = (bktrContext.subsection_block->num_buckets - 1); i > 0; i--)
+    {
+        bktr_subsection_bucket_t tmp_bucket;
+        memcpy(&tmp_bucket, &(bktrContext.subsection_block->buckets[i]), sizeof(bktr_subsection_bucket_t));
+        memcpy(bktr_get_subsection_bucket(bktrContext.subsection_block, i), &tmp_bucket, sizeof(bktr_subsection_bucket_t));
+    }
+    
+    for(i = 0; (i + 1) < bktrContext.subsection_block->num_buckets; i++)
+    {
+        bktr_subsection_bucket_t *cur_bucket = bktr_get_subsection_bucket(bktrContext.subsection_block, i);
+        bktr_subsection_bucket_t *next_bucket = bktr_get_subsection_bucket(bktrContext.subsection_block, i + 1);
+        cur_bucket->entries[cur_bucket->num_entries].offset = next_bucket->entries[0].offset;
+        cur_bucket->entries[cur_bucket->num_entries].ctr_val = next_bucket->entries[0].ctr_val;
+    }
+    
+    bktr_relocation_bucket_t *last_reloc_bucket = bktr_get_relocation_bucket(bktrContext.relocation_block, bktrContext.relocation_block->num_buckets - 1);
+    bktr_subsection_bucket_t *last_subsec_bucket = bktr_get_subsection_bucket(bktrContext.subsection_block, bktrContext.subsection_block->num_buckets - 1);
+    last_reloc_bucket->entries[last_reloc_bucket->num_entries].virt_offset = bktrContext.relocation_block->total_size;
+    last_subsec_bucket->entries[last_subsec_bucket->num_entries].offset = bktrContext.superblock.relocation_header.offset;
+    last_subsec_bucket->entries[last_subsec_bucket->num_entries].ctr_val = dec_nca_header->fs_headers[bktr_index].section_ctr_low;
+    last_subsec_bucket->entries[last_subsec_bucket->num_entries + 1].offset = bktrContext.section_size;
+    last_subsec_bucket->entries[last_subsec_bucket->num_entries + 1].ctr_val = 0;
+    
+    // Parse RomFS section
+    bktrContext.romfs_offset = dec_nca_header->fs_headers[bktr_index].bktr_superblock.ivfc_header.level_headers[IVFC_MAX_LEVEL - 1].logical_offset;
+    bktrContext.romfs_size = dec_nca_header->fs_headers[bktr_index].bktr_superblock.ivfc_header.level_headers[IVFC_MAX_LEVEL - 1].hash_data_size;
+    
+    // Do not check the RomFS size, because it reflects the full patched RomFS image
+    if (!bktrContext.romfs_offset || bktrContext.romfs_size < ROMFS_HEADER_SIZE || (bktrContext.section_offset + bktrContext.romfs_offset) > (bktrContext.section_offset + bktrContext.section_size))
+    {
+        uiDrawString("Error: invalid offset/size for NCA BKTR RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (!readBktrSectionBlock(bktrContext.romfs_offset, &romFsHeader, sizeof(romfs_header)))
+    {
+        breaks++;
+        uiDrawString("Failed to read NCA BKTR RomFS section header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (romFsHeader.headerSize != ROMFS_HEADER_SIZE)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid header size for NCA BKTR RomFS section! (0x%016lX at 0x%016lX)", romFsHeader.headerSize, bktrContext.section_offset + bktrContext.romfs_offset);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    bktrContext.romfs_dirtable_offset = (bktrContext.romfs_offset + romFsHeader.dirTableOff);
+    bktrContext.romfs_dirtable_size = romFsHeader.dirTableSize;
+    
+    bktrContext.romfs_filetable_offset = (bktrContext.romfs_offset + romFsHeader.fileTableOff);
+    bktrContext.romfs_filetable_size = romFsHeader.fileTableSize;
+    
+    // Then again, do not check these offsets/sizes, because they reflect the patched RomFS image
+    if (!bktrContext.romfs_dirtable_offset || !bktrContext.romfs_dirtable_size || !bktrContext.romfs_filetable_offset || !bktrContext.romfs_filetable_size)
+    {
+        uiDrawString("Error: invalid directory/file table for NCA BKTR RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    bktrContext.romfs_filedata_offset = (bktrContext.romfs_offset + romFsHeader.fileDataOff);
+    
+    if (!bktrContext.romfs_filedata_offset)
+    {
+        uiDrawString("Error: invalid file data block offset for NCA BKTR RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    bktrContext.romfs_dir_entries = calloc(1, bktrContext.romfs_dirtable_size);
+    if (!bktrContext.romfs_dir_entries)
+    {
+        uiDrawString("Error: unable to allocate memory for NCA BKTR RomFS section directory entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (!readBktrSectionBlock(bktrContext.romfs_dirtable_offset, bktrContext.romfs_dir_entries, bktrContext.romfs_dirtable_size))
+    {
+        breaks++;
+        uiDrawString("Failed to read NCA BKTR RomFS section directory entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    bktrContext.romfs_file_entries = calloc(1, bktrContext.romfs_filetable_size);
+    if (!bktrContext.romfs_file_entries)
+    {
+        uiDrawString("Error: unable to allocate memory for NCA BKTR RomFS section file entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (!readBktrSectionBlock(bktrContext.romfs_filetable_offset, bktrContext.romfs_file_entries, bktrContext.romfs_filetable_size))
+    {
+        breaks++;
+        uiDrawString("Failed to read NCA RomFS section file entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    success = true;
+    
+out:
+    if (!success)
+    {
+        if (bktrContext.romfs_file_entries != NULL)
+        {
+            free(bktrContext.romfs_file_entries);
+            bktrContext.romfs_file_entries = NULL;
+        }
+        
+        if (bktrContext.romfs_dir_entries != NULL)
+        {
+            free(bktrContext.romfs_dir_entries);
+            bktrContext.romfs_dir_entries = NULL;
+        }
+        
+        if (bktrContext.subsection_block != NULL)
+        {
+            free(bktrContext.subsection_block);
+            bktrContext.subsection_block = NULL;
+        }
+        
+        if (bktrContext.relocation_block != NULL)
+        {
+            free(bktrContext.relocation_block);
+            bktrContext.relocation_block = NULL;
+        }
+    }
+    
+    // The caller function must free the data pointers from the bktrContext struct
+    
+    return success;
+}
+
+bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, nca_program_mod_data *program_mod_data, char **outBuf, u64 *outBufSize)
+{
+    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !program_mod_data || !outBuf || !outBufSize)
+    {
+        uiDrawString("Error: invalid parameters to generate \"programinfo.xml\"!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (dec_nca_header->fs_headers[0].partition_type != NCA_FS_HEADER_PARTITION_PFS0 || dec_nca_header->fs_headers[0].fs_type != NCA_FS_HEADER_FSTYPE_PFS0)
+    {
+        uiDrawString("Error: Program NCA section #0 doesn't hold a PFS0 partition!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (!dec_nca_header->fs_headers[0].pfs0_superblock.pfs0_size)
+    {
+        uiDrawString("Error: invalid size for PFS0 partition in Program NCA section #0!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (dec_nca_header->fs_headers[0].crypt_type != NCA_FS_HEADER_CRYPT_CTR)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid AES crypt type for Program NCA section #0! (0x%02X)", dec_nca_header->fs_headers[0].crypt_type);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    u32 i;
+    
+    bool proceed = true, success = false;
+    
+    u64 section_offset;
+    u64 nca_pfs0_offset;
+    
+    pfs0_header nca_pfs0_header;
+    pfs0_entry_table *nca_pfs0_entries = NULL;
+    char *nca_pfs0_str_table = NULL;
+    
+    u64 nca_pfs0_str_table_offset;
+    u64 nca_pfs0_data_offset;
+    
+    Aes128CtrContext aes_ctx;
+    
+    char *programInfoXml = NULL;
+    char tmp[NAME_BUF_LEN] = {'\0'};
+    
+    u32 npdmEntry = 0;
+    npdm_t npdm_header;
+    u8 *npdm_acid_section = NULL;
+    
+    u64 npdm_acid_section_b64_size = 0;
+    char *npdm_acid_section_b64 = NULL;
+    
+    u32 acid_flags = 0;
+    
+    section_offset = ((u64)dec_nca_header->section_entries[0].media_start_offset * (u64)MEDIA_UNIT_SIZE);
+    nca_pfs0_offset = (section_offset + dec_nca_header->fs_headers[0].pfs0_superblock.pfs0_offset);
+    
+    if (!section_offset || section_offset < NCA_FULL_HEADER_LENGTH || !nca_pfs0_offset)
+    {
+        uiDrawString("Error: invalid offsets for Program NCA section #0!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    // Generate initial CTR
+    unsigned char ctr[0x10];
+    u64 ofs = (section_offset >> 4);
+    
+    for(i = 0; i < 0x8; i++)
+    {
+        ctr[i] = dec_nca_header->fs_headers[0].section_ctr[0x08 - i - 1];
+        ctr[0x10 - i - 1] = (unsigned char)(ofs & 0xFF);
+        ofs >>= 8;
+    }
+    
+    u8 ctr_key[NCA_KEY_AREA_KEY_SIZE];
+    memcpy(ctr_key, decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), NCA_KEY_AREA_KEY_SIZE);
+    aes128CtrContextCreate(&aes_ctx, ctr_key, ctr);
+    
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_offset, &nca_pfs0_header, sizeof(pfs0_header), false))
+    {
+        breaks++;
+        uiDrawString("Failed to read Program NCA section #0 PFS0 partition header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)", bswap_32(nca_pfs0_header.magic));
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (!nca_pfs0_header.file_cnt || !nca_pfs0_header.str_table_size)
+    {
+        uiDrawString("Error: Program NCA section #0 PFS0 partition is empty! Wrong KAEK?", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    nca_pfs0_entries = calloc(nca_pfs0_header.file_cnt, sizeof(pfs0_entry_table));
+    if (!nca_pfs0_entries)
+    {
+        uiDrawString("Error: unable to allocate memory for Program NCA section #0 PFS0 partition entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_offset + sizeof(pfs0_header), nca_pfs0_entries, (u64)nca_pfs0_header.file_cnt * sizeof(pfs0_entry_table), false))
+    {
+        breaks++;
+        uiDrawString("Failed to read Program NCA section #0 PFS0 partition entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    nca_pfs0_str_table_offset = (nca_pfs0_offset + sizeof(pfs0_header) + ((u64)nca_pfs0_header.file_cnt * sizeof(pfs0_entry_table)));
+    
+    nca_pfs0_str_table = calloc((u64)nca_pfs0_header.str_table_size, sizeof(char));
+    if (!nca_pfs0_str_table)
+    {
+        uiDrawString("Error: unable to allocate memory for Program NCA section #0 PFS0 string table!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_str_table_offset, nca_pfs0_str_table, (u64)nca_pfs0_header.str_table_size, false))
+    {
+        breaks++;
+        uiDrawString("Failed to read Program NCA section #0 PFS0 string table!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    nca_pfs0_data_offset = (nca_pfs0_str_table_offset + (u64)nca_pfs0_header.str_table_size);
+    
+    // Allocate memory for the programinfo.xml contents, making sure there's enough space
+    programInfoXml = calloc(0xA00000, sizeof(char));
+    if (!programInfoXml)
+    {
+        uiDrawString("Error: unable to allocate memory for the \"programinfo.xml\" contents!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    sprintf(programInfoXml, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
+                            "<ProgramInfo>\n" \
+                            "  <SdkVersion>%u_%u_%u</SdkVersion>\n", dec_nca_header->sdk_major, dec_nca_header->sdk_minor, dec_nca_header->sdk_micro);
+    
+    // Retrieve the main.npdm contents
+    bool found_npdm = false;
+    for(i = 0; i < nca_pfs0_header.file_cnt; i++)
+    {
+        char *curFilename = (nca_pfs0_str_table + nca_pfs0_entries[i].filename_offset);
+        
+        if (strlen(curFilename) == 9 && !strncasecmp(curFilename, "main.npdm", 9) && nca_pfs0_entries[i].file_size > 0)
+        {
+            found_npdm = true;
+            npdmEntry = i;
+            break;
+        }
+    }
+    
+    if (!found_npdm)
+    {
+        uiDrawString("Error: unable to allocate memory for the \"programinfo.xml\" contents!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // Read the META header from the NPDM
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_data_offset + nca_pfs0_entries[npdmEntry].file_offset, &npdm_header, sizeof(npdm_t), false))
+    {
+        breaks++;
+        uiDrawString("Failed to read NPDM entry header from Program NCA section #0 PFS0!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (bswap_32(npdm_header.magic) != META_MAGIC)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid NPDM META magic word! (0x%08X)", bswap_32(npdm_header.magic));
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // Allocate memory for the ACID section
+    npdm_acid_section = malloc(npdm_header.acid_size);
+    if (!npdm_acid_section)
+    {
+        uiDrawString("Error: unable to allocate memory for the Program NCA NPDM ACID section contents!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_data_offset + nca_pfs0_entries[npdmEntry].file_offset + (u64)npdm_header.acid_offset, npdm_acid_section, (u64)npdm_header.acid_size, false))
+    {
+        breaks++;
+        uiDrawString("Failed to read ACID section from Program NCA NPDM!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // If we're dealing with a gamecard title, replace the ACID public key with the patched one
+    if (program_mod_data->block_mod_cnt > 0) memcpy(npdm_acid_section + (u64)NPDM_SIGNATURE_SIZE, rsa_get_public_key(), (u64)NPDM_SIGNATURE_SIZE);
+    
+    sprintf(tmp, "  <BuildTarget>%u</BuildTarget>\n", ((npdm_header.mmu_flags & 0x01) ? 64 : 32));
+    strcat(programInfoXml, tmp);
+    
+    // Default this one to Release
+    strcat(programInfoXml, "  <BuildType>Release</BuildType>\n");
+    
+    // Retrieve the Base64 conversion length for the whole ACID section
+    mbedtls_base64_encode(NULL, 0, &npdm_acid_section_b64_size, npdm_acid_section, (u64)npdm_header.acid_size);
+    if (npdm_acid_section_b64_size <= (u64)npdm_header.acid_size)
+    {
+        uiDrawString("Error: invalid Base64 conversion length for the ACID section from Program NCA NPDM!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    npdm_acid_section_b64 = calloc(npdm_acid_section_b64_size + 1, sizeof(char));
+    if (!npdm_acid_section_b64)
+    {
+        uiDrawString("Error: unable to allocate memory for the Base64 converted ACID section from Program NCA NPDM!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // Perform the Base64 conversion
+    if (mbedtls_base64_encode((unsigned char*)npdm_acid_section_b64, npdm_acid_section_b64_size + 1, &npdm_acid_section_b64_size, npdm_acid_section, (u64)npdm_header.acid_size) != 0)
+    {
+        uiDrawString("Error: Base64 conversion failed for the ACID section from Program NCA NPDM!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    strcat(programInfoXml, "  <Desc>");
+    strcat(programInfoXml, npdm_acid_section_b64);
+    strcat(programInfoXml, "</Desc>\n");
+    
+    // TO-DO: Add more ACID flags?
+    
+    acid_flags = *((u32*)(&(npdm_acid_section[0x20C])));
+    
+    strcat(programInfoXml, "  <DescFlags>\n");
+    
+    sprintf(tmp, "    <Production>%s</Production>\n", ((acid_flags & 0x01) ? "true" : "false"));
+    strcat(programInfoXml, tmp);
+    
+    sprintf(tmp, "    <UnqualifiedApproval>%s</UnqualifiedApproval>\n", ((acid_flags & 0x02) ? "true" : "false"));
+    strcat(programInfoXml, tmp);
+    
+    strcat(programInfoXml, "  </DescFlags>\n");
+    
+    // Middleware list
+    strcat(programInfoXml, "  <MiddlewareList>\n");
+    
+    for(i = 0; i < nca_pfs0_header.file_cnt; i++)
+    {
+        nso_header_t nsoHeader;
+        char *curFilename = (nca_pfs0_str_table + nca_pfs0_entries[i].filename_offset);
+        u64 curFileOffset = (nca_pfs0_data_offset + nca_pfs0_entries[i].file_offset);
+        
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, curFileOffset, &nsoHeader, sizeof(nso_header_t), false))
+        {
+            breaks++;
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read 0x%016lX bytes from \"%s\" in Program NCA section #0 PFS0 partition!", sizeof(nso_header_t), curFilename);
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            proceed = false;
+            break;
+        }
+        
+        // Check if we're dealing with a NSO
+        if (bswap_32(nsoHeader.magic) != NSO_MAGIC) continue;
+        
+        // Retrieve middleware list from this NSO
+        if (!retrieveMiddlewareListFromNso(ncmStorage, ncaId, &aes_ctx, curFilename, curFileOffset, &nsoHeader, programInfoXml))
+        {
+            proceed = false;
+            break;
+        }
+    }
+    
+    if (!proceed) goto out;
+    
+    strcat(programInfoXml, "  </MiddlewareList>\n");
+    
+    // Leave these fields empty (for now)
+    strcat(programInfoXml, "  <DebugApiList />\n");
+    strcat(programInfoXml, "  <PrivateApiList />\n");
+    
+    // Symbols list from main NSO
+    strcat(programInfoXml, "  <UnresolvedApiList>\n");
+    
+    for(i = 0; i < nca_pfs0_header.file_cnt; i++)
+    {
+        nso_header_t nsoHeader;
+        char *curFilename = (nca_pfs0_str_table + nca_pfs0_entries[i].filename_offset);
+        u64 curFileOffset = (nca_pfs0_data_offset + nca_pfs0_entries[i].file_offset);
+        
+        if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, curFileOffset, &nsoHeader, sizeof(nso_header_t), false))
+        {
+            breaks++;
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read 0x%016lX bytes from \"%s\" in Program NCA section #0 PFS0 partition!", sizeof(nso_header_t), curFilename);
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            proceed = false;
+            break;
+        }
+        
+        // Check if we're dealing with the main NSO
+        if (strlen(curFilename) != 4 || strncmp(curFilename, "main", 4) != 0 || bswap_32(nsoHeader.magic) != NSO_MAGIC) continue;
+        
+        // Retrieve symbols list from main NSO
+        if (!retrieveSymbolsListFromNso(ncmStorage, ncaId, &aes_ctx, curFilename, curFileOffset, &nsoHeader, programInfoXml)) proceed = false;
+        
+        break;
+    }
+    
+    if (!proceed) goto out;
+    
+    strcat(programInfoXml, "  </UnresolvedApiList>\n");
+    
+    // Leave this field empty (for now)
+    strcat(programInfoXml, "  <FsAccessControlData />\n");
+    
+    strcat(programInfoXml, "</ProgramInfo>");
+    
+    *outBuf = programInfoXml;
+    *outBufSize = strlen(programInfoXml);
+    
+    success = true;
+    
+out:
+    if (npdm_acid_section_b64) free(npdm_acid_section_b64);
+    
+    if (npdm_acid_section) free(npdm_acid_section);
+    
+    if (!success && programInfoXml) free(programInfoXml);
+    
+    if (nca_pfs0_str_table) free(nca_pfs0_str_table);
+    
+    if (nca_pfs0_entries) free(nca_pfs0_entries);
+    
+    return success;
 }
 
 char *getNacpLangName(u8 val)
@@ -1959,9 +2833,29 @@ char *getNacpRequiredNetworkServiceLicenseOnLaunchFlag(u8 val)
     return out;
 }
 
-bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf)
+char *getNacpJitConfigurationFlag(u64 flag)
 {
-    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !outBuf)
+    char *out = NULL;
+    
+    switch(flag)
+    {
+        case 0:
+            out = "None";
+            break;
+        case 1:
+            out = "Enabled";
+            break;
+        default:
+            out = "Unknown";
+            break;
+    }
+    
+    return out;
+}
+
+bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **out_nacp_xml, u64 *out_nacp_xml_size, nacp_icons_ctx **out_nacp_icons_ctx, u8 *out_nacp_icons_ctx_cnt)
+{
+    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !out_nacp_xml || !out_nacp_xml_size || !out_nacp_icons_ctx || !out_nacp_icons_ctx_cnt)
     {
         uiDrawString("Error: invalid parameters to generate NACP XML!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
@@ -1974,8 +2868,25 @@ bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
     nacp_t controlNacp;
     char *nacpXml = NULL;
     
-    u8 i;
+    u8 i = 0, j = 0;
     char tmp[NAME_BUF_LEN] = {'\0'};
+    
+    u8 nacpIconCnt = 0;
+    nacp_icons_ctx *nacpIcons = NULL;
+    
+    bool found_icon = false;
+    u8 languageIconHash[0x20];
+    char languageIconHashStr[0x21];
+    
+    char ncaIdStr[0x21] = {'\0'};
+    convertDataToHexString(ncaId->c, 0x10, ncaIdStr, 0x21);
+    
+    char dataStr[100] = {'\0'};
+    
+    u8 null_key[0x10];
+    memset(null_key, 0, 0x10);
+    
+    bool availableSDC = false, availableRDC = false;
     
     if (!readRomFsEntryFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys)) return false;
     
@@ -1995,14 +2906,14 @@ bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
     
     if (!found_nacp)
     {
-        uiDrawString("Error: unable to find control.nacp file in Control NCA RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: unable to find \"control.nacp\" file in Control NCA RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, romFsContext.romfs_filedata_offset + entry->dataOff, &controlNacp, sizeof(nacp_t), &(romFsContext.aes_ctx), false))
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &(romFsContext.aes_ctx), romFsContext.romfs_filedata_offset + entry->dataOff, &controlNacp, sizeof(nacp_t), false))
     {
         breaks++;
-        uiDrawString("Failed to read Control.nacp from RomFS section in Control NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Failed to read \"control.nacp\" from RomFS section in Control NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
@@ -2014,18 +2925,18 @@ bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
         goto out;
     }
     
-    sprintf(nacpXml, "\xEF\xBB\xBF<?xml version=\"1.0\" encoding=\"utf-8\"?>\r\n" \
-                     "<Application>\r\n");
+    sprintf(nacpXml, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
+                     "<Application>\n");
     
     for(i = 0; i < 16; i++)
     {
         if (strlen(controlNacp.lang[i].name) || strlen(controlNacp.lang[i].author))
         {
-            sprintf(tmp, "    <Title>\r\n" \
-                         "        <Language>%s</Language>\r\n" \
-                         "        <Name>%s</Name>\r\n" \
-                         "        <Publisher>%s</Publisher>\r\n" \
-                         "    </Title>\r\n", \
+            sprintf(tmp, "  <Title>\n" \
+                         "    <Language>%s</Language>\n" \
+                         "    <Name>%s</Name>\n" \
+                         "    <Publisher>%s</Publisher>\n" \
+                         "  </Title>\n", \
                          getNacpLangName(i), \
                          controlNacp.lang[i].name, \
                          controlNacp.lang[i].author);
@@ -2036,19 +2947,19 @@ bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
     
     if (strlen(controlNacp.Isbn))
     {
-        sprintf(tmp, "    <Isbn>%s</Isbn>\r\n", controlNacp.Isbn);
+        sprintf(tmp, "  <Isbn>%s</Isbn>\n", controlNacp.Isbn);
         strcat(nacpXml, tmp);
     } else {
-        strcat(nacpXml, "    <Isbn/>\r\n");
+        strcat(nacpXml, "  <Isbn />\n");
     }
     
-    sprintf(tmp, "    <StartupUserAccount>%s</StartupUserAccount>\r\n", getNacpStartupUserAccount(controlNacp.StartupUserAccount));
+    sprintf(tmp, "  <StartupUserAccount>%s</StartupUserAccount>\n", getNacpStartupUserAccount(controlNacp.StartupUserAccount));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <UserAccountSwitchLock>%s</UserAccountSwitchLock>\r\n", getNacpUserAccountSwitchLock(controlNacp.UserAccountSwitchLock));
+    sprintf(tmp, "  <UserAccountSwitchLock>%s</UserAccountSwitchLock>\n", getNacpUserAccountSwitchLock(controlNacp.UserAccountSwitchLock));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <ParentalControl>%s</ParentalControl>\r\n", getNacpParentalControlFlag(controlNacp.ParentalControlFlag));
+    sprintf(tmp, "  <ParentalControl>%s</ParentalControl>\n", getNacpParentalControlFlag(controlNacp.ParentalControlFlag));
     strcat(nacpXml, tmp);
     
     for(i = 0; i < 16; i++)
@@ -2056,31 +2967,32 @@ bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
         u8 bit = (u8)((controlNacp.SupportedLanguageFlag >> i) & 0x1);
         if (bit)
         {
-            sprintf(tmp, "    <SupportedLanguage>%s</SupportedLanguage>\r\n", getNacpLangName(i));
+            sprintf(tmp, "  <SupportedLanguage>%s</SupportedLanguage>\n", getNacpLangName(i));
             strcat(nacpXml, tmp);
+            nacpIconCnt++;
         }
     }
     
-    sprintf(tmp, "    <Screenshot>%s</Screenshot>\r\n", getNacpScreenshot(controlNacp.Screenshot));
+    sprintf(tmp, "  <Screenshot>%s</Screenshot>\n", getNacpScreenshot(controlNacp.Screenshot));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <VideoCapture>%s</VideoCapture>\r\n", getNacpVideoCapture(controlNacp.VideoCapture));
+    sprintf(tmp, "  <VideoCapture>%s</VideoCapture>\n", getNacpVideoCapture(controlNacp.VideoCapture));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <PresenceGroupId>0x%016lx</PresenceGroupId>\r\n", controlNacp.PresenceGroupId);
+    sprintf(tmp, "  <PresenceGroupId>0x%016lx</PresenceGroupId>\n", controlNacp.PresenceGroupId);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <DisplayVersion>%s</DisplayVersion>\r\n", controlNacp.DisplayVersion);
+    sprintf(tmp, "  <DisplayVersion>%s</DisplayVersion>\n", controlNacp.DisplayVersion);
     strcat(nacpXml, tmp);
     
     for(i = 0; i < 32; i++)
     {
         if (controlNacp.RatingAge[i] != 0xFF)
         {
-            sprintf(tmp, "    <Rating>\r\n" \
-                         "        <Organization>%s</Organization>\r\n" \
-                         "        <Age>%u</Age>\r\n" \
-                         "    </Rating>\r\n", \
+            sprintf(tmp, "  <Rating>\n" \
+                         "    <Organization>%s</Organization>\n" \
+                         "    <Age>%u</Age>\n" \
+                         "  </Rating>\n", \
                          getNacpRatingAgeOrganizationName(i), \
                          controlNacp.RatingAge[i]);
             
@@ -2088,130 +3000,359 @@ bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
         }
     }
     
-    sprintf(tmp, "    <DataLossConfirmation>%s</DataLossConfirmation>\r\n", getNacpDataLossConfirmation(controlNacp.DataLossConfirmation));
+    sprintf(tmp, "  <DataLossConfirmation>%s</DataLossConfirmation>\n", getNacpDataLossConfirmation(controlNacp.DataLossConfirmation));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <PlayLogPolicy>%s</PlayLogPolicy>\r\n", getNacpPlayLogPolicy(controlNacp.PlayLogPolicy));
+    sprintf(tmp, "  <PlayLogPolicy>%s</PlayLogPolicy>\n", getNacpPlayLogPolicy(controlNacp.PlayLogPolicy));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <SaveDataOwnerId>0x%016lx</SaveDataOwnerId>\r\n", controlNacp.SaveDataOwnerId);
+    sprintf(tmp, "  <SaveDataOwnerId>0x%016lx</SaveDataOwnerId>\n", controlNacp.SaveDataOwnerId);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <UserAccountSaveDataSize>0x%016lx</UserAccountSaveDataSize>\r\n", controlNacp.UserAccountSaveDataSize);
+    sprintf(tmp, "  <UserAccountSaveDataSize>0x%016lx</UserAccountSaveDataSize>\n", controlNacp.UserAccountSaveDataSize);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <UserAccountSaveDataJournalSize>0x%016lx</UserAccountSaveDataJournalSize>\r\n", controlNacp.UserAccountSaveDataJournalSize);
+    sprintf(tmp, "  <UserAccountSaveDataJournalSize>0x%016lx</UserAccountSaveDataJournalSize>\n", controlNacp.UserAccountSaveDataJournalSize);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <DeviceSaveDataSize>0x%016lx</DeviceSaveDataSize>\r\n", controlNacp.DeviceSaveDataSize);
+    sprintf(tmp, "  <DeviceSaveDataSize>0x%016lx</DeviceSaveDataSize>\n", controlNacp.DeviceSaveDataSize);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <DeviceSaveDataJournalSize>0x%016lx</DeviceSaveDataJournalSize>\r\n", controlNacp.DeviceSaveDataJournalSize);
+    sprintf(tmp, "  <DeviceSaveDataJournalSize>0x%016lx</DeviceSaveDataJournalSize>\n", controlNacp.DeviceSaveDataJournalSize);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <BcatDeliveryCacheStorageSize>0x%016lx</BcatDeliveryCacheStorageSize>\r\n", controlNacp.BcatDeliveryCacheStorageSize);
+    sprintf(tmp, "  <BcatDeliveryCacheStorageSize>0x%016lx</BcatDeliveryCacheStorageSize>\n", controlNacp.BcatDeliveryCacheStorageSize);
     strcat(nacpXml, tmp);
     
     if (strlen(controlNacp.ApplicationErrorCodeCategory))
     {
-        sprintf(tmp, "    <ApplicationErrorCodeCategory>%s</ApplicationErrorCodeCategory>\r\n", controlNacp.ApplicationErrorCodeCategory);
+        sprintf(tmp, "  <ApplicationErrorCodeCategory>%s</ApplicationErrorCodeCategory>\n", controlNacp.ApplicationErrorCodeCategory);
         strcat(nacpXml, tmp);
     } else {
-        strcat(nacpXml, "    <ApplicationErrorCodeCategory/>\r\n");
+        strcat(nacpXml, "  <ApplicationErrorCodeCategory />\n");
     }
     
-    sprintf(tmp, "    <AddOnContentBaseId>0x%016lx</AddOnContentBaseId>\r\n", controlNacp.AddOnContentBaseId);
+    sprintf(tmp, "  <AddOnContentBaseId>0x%016lx</AddOnContentBaseId>\n", controlNacp.AddOnContentBaseId);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <LogoType>%s</LogoType>\r\n", getNacpLogoType(controlNacp.LogoType));
+    sprintf(tmp, "  <LogoType>%s</LogoType>\n", getNacpLogoType(controlNacp.LogoType));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <LocalCommunicationId>0x%016lx</LocalCommunicationId>\r\n", controlNacp.LocalCommunicationId[0]);
+    for(i = 0; i < 8; i++)
+    {
+        if (controlNacp.LocalCommunicationId[i] != 0)
+        {
+            sprintf(tmp, "  <LocalCommunicationId>0x%016lx</LocalCommunicationId>\n", controlNacp.LocalCommunicationId[i]);
+            strcat(nacpXml, tmp);
+        }
+    }
+    
+    sprintf(tmp, "  <LogoHandling>%s</LogoHandling>\n", getNacpLogoHandling(controlNacp.LogoHandling));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <LogoHandling>%s</LogoHandling>\r\n", getNacpLogoHandling(controlNacp.LogoHandling));
-    strcat(nacpXml, tmp);
+    if (nacpIconCnt)
+    {
+        nacpIcons = calloc(nacpIconCnt, sizeof(nacp_icons_ctx));
+        if (!nacpIcons)
+        {
+            uiDrawString("Error: unable to allocate memory for the NACP icons!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            goto out;
+        }
+        
+        for(i = 0; i < 16; i++)
+        {
+            u8 bit = (u8)((controlNacp.SupportedLanguageFlag >> i) & 0x1);
+            if (bit)
+            {
+                // Retrieve the icon file for this language and calculate its SHA-256 checksum
+                found_icon = false;
+                
+                memset(languageIconHash, 0, 0x20);
+                memset(languageIconHashStr, 0, 0x21);
+                
+                entryOffset = 0;
+                sprintf(tmp, "icon_%s.dat", getNacpLangName(i));
+                
+                while(entryOffset < romFsContext.romfs_filetable_size)
+                {
+                    entry = (romfs_file*)((u8*)romFsContext.romfs_file_entries + entryOffset);
+                    
+                    if (entry->parent == 0 && entry->nameLen == strlen(tmp) && !strncasecmp((char*)entry->name, tmp, strlen(tmp)) && entry->dataSize <= 0x20000)
+                    {
+                        found_icon = true;
+                        break;
+                    }
+                    
+                    entryOffset += round_up(ROMFS_NONAME_FILEENTRY_SIZE + entry->nameLen, 4);
+                }
+                
+                if (!found_icon)
+                {
+                    nacpIconCnt--;
+                    continue;
+                }
+                
+                strcat(nacpXml, "  <Icon>\n");
+                
+                sprintf(tmp, "    <Language>%s</Language>\n", getNacpLangName(i));
+                strcat(nacpXml, tmp);
+                
+                // Fill details for our NACP icon context
+                sprintf(nacpIcons[j].filename, "%s.nx.%s.jpg", ncaIdStr, getNacpLangName(i));
+                nacpIcons[j].icon_size = entry->dataSize;
+                
+                if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &(romFsContext.aes_ctx), romFsContext.romfs_filedata_offset + entry->dataOff, nacpIcons[j].icon_data, nacpIcons[j].icon_size, false))
+                {
+                    breaks++;
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read \"%s\" from RomFS section in Control NCA!", tmp);
+                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    goto out;
+                }
+                
+                sha256CalculateHash(languageIconHash, nacpIcons[j].icon_data, nacpIcons[j].icon_size);
+                
+                // Only retrieve the first half from the SHA-256 checksum
+                convertDataToHexString(languageIconHash, 0x10, languageIconHashStr, 0x21);
+                
+                // Now print the hash
+                sprintf(tmp, "    <NxIconHash>%s</NxIconHash>\n", languageIconHashStr);
+                strcat(nacpXml, tmp);
+                
+                strcat(nacpXml, "  </Icon>\n");
+                
+                j++;
+            }
+        }
+    }
     
-    sprintf(tmp, "    <SeedForPseudoDeviceId>0x%016lx</SeedForPseudoDeviceId>\r\n", controlNacp.SeedForPseudoDeviceId);
+    sprintf(tmp, "  <SeedForPseudoDeviceId>0x%016lx</SeedForPseudoDeviceId>\n", controlNacp.SeedForPseudoDeviceId);
     strcat(nacpXml, tmp);
     
     if (strlen(controlNacp.BcatPassphrase))
     {
-        sprintf(tmp, "    <BcatPassphrase>%s</BcatPassphrase>\r\n", controlNacp.BcatPassphrase);
+        sprintf(tmp, "  <BcatPassphrase>%s</BcatPassphrase>\n", controlNacp.BcatPassphrase);
         strcat(nacpXml, tmp);
     } else {
-        strcat(nacpXml, "    <BcatPassphrase/>\r\n");
+        strcat(nacpXml, "  <BcatPassphrase />\n");
     }
     
-    sprintf(tmp, "    <StartupUserAccountOption>%s</StartupUserAccountOption>\r\n", getNacpStartupUserAccountOptionFlag(controlNacp.StartupUserAccountOptionFlag));
+    sprintf(tmp, "  <StartupUserAccountOption>%s</StartupUserAccountOption>\n", getNacpStartupUserAccountOptionFlag(controlNacp.StartupUserAccountOptionFlag));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <AddOnContentRegistrationType>%s</AddOnContentRegistrationType>\r\n", getNacpAddOnContentRegistrationType(controlNacp.AddOnContentRegistrationType));
+    sprintf(tmp, "  <AddOnContentRegistrationType>%s</AddOnContentRegistrationType>\n", getNacpAddOnContentRegistrationType(controlNacp.AddOnContentRegistrationType));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <UserAccountSaveDataSizeMax>0x%016lx</UserAccountSaveDataSizeMax>\r\n", controlNacp.UserAccountSaveDataSizeMax);
+    sprintf(tmp, "  <UserAccountSaveDataSizeMax>0x%016lx</UserAccountSaveDataSizeMax>\n", controlNacp.UserAccountSaveDataSizeMax);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <UserAccountSaveDataJournalSizeMax>0x%016lx</UserAccountSaveDataJournalSizeMax>\r\n", controlNacp.UserAccountSaveDataJournalSizeMax);
+    sprintf(tmp, "  <UserAccountSaveDataJournalSizeMax>0x%016lx</UserAccountSaveDataJournalSizeMax>\n", controlNacp.UserAccountSaveDataJournalSizeMax);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <DeviceSaveDataSizeMax>0x%016lx</DeviceSaveDataSizeMax>\r\n", controlNacp.DeviceSaveDataSizeMax);
+    sprintf(tmp, "  <DeviceSaveDataSizeMax>0x%016lx</DeviceSaveDataSizeMax>\n", controlNacp.DeviceSaveDataSizeMax);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <DeviceSaveDataJournalSizeMax>0x%016lx</DeviceSaveDataJournalSizeMax>\r\n", controlNacp.DeviceSaveDataJournalSizeMax);
+    sprintf(tmp, "  <DeviceSaveDataJournalSizeMax>0x%016lx</DeviceSaveDataJournalSizeMax>\n", controlNacp.DeviceSaveDataJournalSizeMax);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <TemporaryStorageSize>0x%016lx</TemporaryStorageSize>\r\n", controlNacp.TemporaryStorageSize);
+    sprintf(tmp, "  <TemporaryStorageSize>0x%016lx</TemporaryStorageSize>\n", controlNacp.TemporaryStorageSize);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <CacheStorageSize>0x%016lx</CacheStorageSize>\r\n", controlNacp.CacheStorageSize);
+    sprintf(tmp, "  <CacheStorageSize>0x%016lx</CacheStorageSize>\n", controlNacp.CacheStorageSize);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <CacheStorageJournalSize>0x%016lx</CacheStorageJournalSize>\r\n", controlNacp.CacheStorageJournalSize);
+    sprintf(tmp, "  <CacheStorageJournalSize>0x%016lx</CacheStorageJournalSize>\n", controlNacp.CacheStorageJournalSize);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <CacheStorageDataAndJournalSizeMax>0x%016lx</CacheStorageDataAndJournalSizeMax>\r\n", controlNacp.CacheStorageDataAndJournalSizeMax);
+    sprintf(tmp, "  <CacheStorageDataAndJournalSizeMax>0x%016lx</CacheStorageDataAndJournalSizeMax>\n", controlNacp.CacheStorageDataAndJournalSizeMax);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <CacheStorageIndexMax>0x%04x</CacheStorageIndexMax>\r\n", controlNacp.CacheStorageIndexMax);
+    sprintf(tmp, "  <CacheStorageIndexMax>0x%04x</CacheStorageIndexMax>\n", controlNacp.CacheStorageIndexMax);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <Hdcp>%s</Hdcp>\r\n", getNacpHdcp(controlNacp.Hdcp));
+    sprintf(tmp, "  <Hdcp>%s</Hdcp>\n", getNacpHdcp(controlNacp.Hdcp));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <CrashReport>%s</CrashReport>\r\n", getNacpCrashReport(controlNacp.CrashReport));
+    sprintf(tmp, "  <CrashReport>%s</CrashReport>\n", getNacpCrashReport(controlNacp.CrashReport));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <RuntimeAddOnContentInstall>%s</RuntimeAddOnContentInstall>\r\n", getNacpRuntimeAddOnContentInstall(controlNacp.RuntimeAddOnContentInstall));
+    sprintf(tmp, "  <RuntimeAddOnContentInstall>%s</RuntimeAddOnContentInstall>\n", getNacpRuntimeAddOnContentInstall(controlNacp.RuntimeAddOnContentInstall));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <PlayLogQueryableApplicationId>0x%016lx</PlayLogQueryableApplicationId>\r\n", controlNacp.PlayLogQueryableApplicationId[0]);
+    sprintf(tmp, "  <PlayLogQueryableApplicationId>0x%016lx</PlayLogQueryableApplicationId>\n", controlNacp.PlayLogQueryableApplicationId[0]);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <PlayLogQueryCapability>%s</PlayLogQueryCapability>\r\n", getNacpPlayLogQueryCapability(controlNacp.PlayLogQueryCapability));
+    sprintf(tmp, "  <PlayLogQueryCapability>%s</PlayLogQueryCapability>\n", getNacpPlayLogQueryCapability(controlNacp.PlayLogQueryCapability));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <Repair>%s</Repair>\r\n", getNacpRepairFlag(controlNacp.RepairFlag));
+    sprintf(tmp, "  <Repair>%s</Repair>\n", getNacpRepairFlag(controlNacp.RepairFlag));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <Attribute>%s</Attribute>\r\n", getNacpAttributeFlag(controlNacp.AttributeFlag));
+    sprintf(tmp, "  <Attribute>%s</Attribute>\n", getNacpAttributeFlag(controlNacp.AttributeFlag));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <ProgramIndex>%u</ProgramIndex>\r\n", controlNacp.ProgramIndex);
+    sprintf(tmp, "  <ProgramIndex>%u</ProgramIndex>\n", controlNacp.ProgramIndex);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "    <RequiredNetworkServiceLicenseOnLaunch>%s</RequiredNetworkServiceLicenseOnLaunch>\r\n", getNacpRequiredNetworkServiceLicenseOnLaunchFlag(controlNacp.RequiredNetworkServiceLicenseOnLaunchFlag));
+    sprintf(tmp, "  <RequiredNetworkServiceLicenseOnLaunch>%s</RequiredNetworkServiceLicenseOnLaunch>\n", getNacpRequiredNetworkServiceLicenseOnLaunchFlag(controlNacp.RequiredNetworkServiceLicenseOnLaunchFlag));
     strcat(nacpXml, tmp);
     
-    strcat(nacpXml, "</Application>\r\n");
+    // Check if we actually have valid NeighborDetectionClientConfiguration values
+    availableSDC = (controlNacp.SendDataConfiguration.id != 0 && memcmp(controlNacp.SendDataConfiguration.key, null_key, 0x10) != 0);
     
-    *outBuf = nacpXml;
+    for(i = 0; i < 16; i++)
+    {
+        if (controlNacp.ReceivableDataConfiguration[i].id != 0 && memcmp(controlNacp.ReceivableDataConfiguration[i].key, null_key, 0x10) != 0)
+        {
+            availableRDC = true;
+            break;
+        }
+    }
+    
+    if (availableSDC || availableRDC)
+    {
+        strcat(nacpXml, "  <NeighborDetectionClientConfiguration>\n");
+        
+        if (availableSDC)
+        {
+            convertDataToHexString(controlNacp.SendDataConfiguration.key, 0x10, dataStr, 100);
+            
+            sprintf(tmp, "    <SendDataConfiguration>\n" \
+                         "      <DataId>0x%016lx</DataId>\n" \
+                         "      <Key>%s</Key>\n" \
+                         "    </SendDataConfiguration>\n", \
+                         controlNacp.SendDataConfiguration.id, \
+                         dataStr);
+            
+            strcat(nacpXml, tmp);
+        }
+        
+        if (availableRDC)
+        {
+            for(i = 0; i < 16; i++)
+            {
+                if (controlNacp.ReceivableDataConfiguration[i].id != 0 && memcmp(controlNacp.ReceivableDataConfiguration[i].key, null_key, 0x10) != 0)
+                {
+                    convertDataToHexString(controlNacp.ReceivableDataConfiguration[i].key, 0x10, dataStr, 100);
+                    
+                    sprintf(tmp, "    <ReceivableDataConfiguration>\n" \
+                                 "      <DataId>0x%016lx</DataId>\n" \
+                                 "      <Key>%s</Key>\n" \
+                                 "    </ReceivableDataConfiguration>\n", \
+                                 controlNacp.ReceivableDataConfiguration[i].id, \
+                                 dataStr);
+                    
+                    strcat(nacpXml, tmp);
+                }
+            }
+        }
+        
+        strcat(nacpXml, "  </NeighborDetectionClientConfiguration>\n");
+    }
+    
+    sprintf(tmp, "  <JitConfiguration>\n" \
+                 "    <IsEnabled>%s</IsEnabled>\n" \
+                 "    <MemorySize>0x%016lx</MemorySize>\n" \
+                 "  </JitConfiguration>\n", \
+                 getNacpJitConfigurationFlag(controlNacp.JitConfigurationFlag), \
+                 controlNacp.JitMemorySize);
+    
+    strcat(nacpXml, tmp);
+    
+    strcat(nacpXml, "</Application>");
+    
+    *out_nacp_xml = nacpXml;
+    *out_nacp_xml_size = strlen(nacpXml);
+    
+    if (nacpIconCnt)
+    {
+        *out_nacp_icons_ctx = nacpIcons;
+        *out_nacp_icons_ctx_cnt = nacpIconCnt;
+    }
     
     success = true;
     
 out:
+    if (!success)
+    {
+        if (nacpIcons != NULL) free(nacpIcons);
+        
+        if (nacpXml != NULL) free(nacpXml);
+    }
+    
     // Manually free these pointers
-    // Calling freeRomFsContext() would also close the ncmStorage handle and the gamecard IStorage instance (if available)
+    // Calling freeRomFsContext() would also close the ncmStorage handle
+    free(romFsContext.romfs_dir_entries);
+    romFsContext.romfs_dir_entries = NULL;
+    
+    free(romFsContext.romfs_file_entries);
+    romFsContext.romfs_file_entries = NULL;
+    
+    return success;
+}
+
+bool retrieveLegalInfoXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf, u64 *outBufSize)
+{
+    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !outBuf)
+    {
+        uiDrawString("Error: invalid parameters to retrieve \"legalinfo.xml\"!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    u64 entryOffset = 0;
+    romfs_file *entry = NULL;
+    bool found_legalinfo = false, success = false;
+    
+    u64 legalInfoXmlSize = 0;
+    char *legalInfoXml = NULL;
+    
+    if (!readRomFsEntryFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys)) return false;
+    
+    // Look for the legalinfo.xml file
+    while(entryOffset < romFsContext.romfs_filetable_size)
+    {
+        entry = (romfs_file*)((u8*)romFsContext.romfs_file_entries + entryOffset);
+        
+        if (entry->parent == 0 && entry->nameLen == 13 && !strncasecmp((char*)entry->name, "legalinfo.xml", 13))
+        {
+            found_legalinfo = true;
+            break;
+        }
+        
+        entryOffset += round_up(ROMFS_NONAME_FILEENTRY_SIZE + entry->nameLen, 4);
+    }
+    
+    if (!found_legalinfo)
+    {
+        uiDrawString("Error: unable to find \"legalinfo.xml\" file in Manual NCA RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // Allocate memory for the legalinfo.xml contents
+    legalInfoXmlSize = entry->dataSize;
+    legalInfoXml = calloc(legalInfoXmlSize, sizeof(char));
+    if (!legalInfoXml)
+    {
+        uiDrawString("Error: unable to allocate memory for the \"legalinfo.xml\" contents!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &(romFsContext.aes_ctx), romFsContext.romfs_filedata_offset + entry->dataOff, legalInfoXml, legalInfoXmlSize, false))
+    {
+        breaks++;
+        uiDrawString("Failed to read \"legalinfo.xml\" from RomFS section in Manual NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    *outBuf = legalInfoXml;
+    *outBufSize = legalInfoXmlSize;
+    
+    success = true;
+    
+out:
+    if (!success && legalInfoXml != NULL) free(legalInfoXml);
+    
+    // Manually free these pointers
+    // Calling freeRomFsContext() would also close the ncmStorage handle
     free(romFsContext.romfs_dir_entries);
     romFsContext.romfs_dir_entries = NULL;
     

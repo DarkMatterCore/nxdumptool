@@ -23,6 +23,8 @@
 
 extern AppletType programAppletType;
 
+extern bool runningSxOs;
+
 extern bool gameCardInserted;
 
 extern char gameCardSizeStr[32], trimmedCardSizeStr[32];
@@ -43,17 +45,25 @@ extern FsStorageId *titleAppStorageId;
 extern u32 titlePatchCount;
 extern u64 *titlePatchTitleID;
 extern u32 *titlePatchVersion;
-extern FsStorageId *titleAppStorageId;
+extern FsStorageId *titlePatchStorageId;
 
 extern u32 titleAddOnCount;
 extern u64 *titleAddOnTitleID;
 extern u32 *titleAddOnVersion;
-extern FsStorageId *titleAppStorageId;
+extern FsStorageId *titleAddOnStorageId;
 
 extern char **titleName;
 extern char **titleAuthor;
 extern char **titleAppVersionStr;
 extern u8 **titleIcon;
+
+extern u32 sdCardTitleAppCount;
+extern u32 sdCardTitlePatchCount;
+extern u32 sdCardTitleAddOnCount;
+
+extern u32 nandUserTitleAppCount;
+extern u32 nandUserTitlePatchCount;
+extern u32 nandUserTitleAddOnCount;
 
 extern char gameCardUpdateVersionStr[128];
 
@@ -95,7 +105,8 @@ curMenuType menuType;
 static bool orphanMode = false;
 
 static char titleSelectorStr[NAME_BUF_LEN] = {'\0'};
-static char dumpedNspInfoStr[NAME_BUF_LEN] = {'\0'};
+static char exeFsAndRomFsPatchSelectorStr[NAME_BUF_LEN] = {'\0'};
+static char dumpedContentInfoStr[NAME_BUF_LEN] = {'\0'};
 
 static u32 selectedAppInfoIndex = 0;
 static u32 selectedAppIndex;
@@ -105,10 +116,15 @@ static u32 selectedPartitionIndex;
 static u32 selectedFileIndex;
 
 static nspDumpType selectedNspDumpType;
+static batchModeSourceStorage batchModeSrc;
+
+static bool exeFsAndRomFsUpdateFlag = false;
 
 static bool highlight = false;
 
 static bool isFat32 = false, dumpCert = false, trimDump = false, calcCrc = true, setXciArchiveBit = false, removeConsoleData = false, tiklessDump = false;
+
+static bool dumpAppTitles = false, dumpPatchTitles = false, dumpAddOnTitles = false, skipDumpedTitles = false;
 
 static char statusMessage[2048] = {'\0'};
 static int statusMessageFadeout = 0;
@@ -125,7 +141,7 @@ static const char *dirHighlightIconPath = "romfs:/browser/dir_highlight.jpg";
 static u8 *dirHighlightIconBuf = NULL;
 
 static const char *fileNormalIconPath = "romfs:/browser/file_normal.jpg";
-static u8 *fileNormalIconBuf = NULL;
+u8 *fileNormalIconBuf = NULL;
 
 static const char *fileHighlightIconPath = "romfs:/browser/file_highlight.jpg";
 static u8 *fileHighlightIconBuf = NULL;
@@ -134,8 +150,9 @@ static const char *appHeadline = "NXDumpTool v" APP_VERSION ".\nOriginal codebas
 static const char *appControlsCommon = "[ " NINTENDO_FONT_DPAD " / " NINTENDO_FONT_LSTICK " / " NINTENDO_FONT_RSTICK " ] Move | [ " NINTENDO_FONT_A " ] Select | [ " NINTENDO_FONT_B " ] Back | [ " NINTENDO_FONT_PLUS " ] Exit";
 static const char *appControlsGameCardMultiApp = "[ " NINTENDO_FONT_DPAD " / " NINTENDO_FONT_LSTICK " / " NINTENDO_FONT_RSTICK " ] Move | [ " NINTENDO_FONT_A " ] Select | [ " NINTENDO_FONT_B " ] Back | [ " NINTENDO_FONT_L " / " NINTENDO_FONT_R " / " NINTENDO_FONT_ZL " / " NINTENDO_FONT_ZR " ] Change displayed base application info | [ " NINTENDO_FONT_PLUS " ] Exit";
 static const char *appControlsNoContent = "[ " NINTENDO_FONT_B " ] Back | [ " NINTENDO_FONT_PLUS " ] Exit";
-static const char *appControlsSdCardEmmcFull = "[ " NINTENDO_FONT_DPAD " / " NINTENDO_FONT_LSTICK " / " NINTENDO_FONT_RSTICK " ] Move | [ " NINTENDO_FONT_A " ] Select | [ " NINTENDO_FONT_B " ] Back | [ " NINTENDO_FONT_Y " ] Dump installed content with missing base application | [ " NINTENDO_FONT_PLUS " ] Exit";
-static const char *appControlsSdCardEmmcNoApp = "[ " NINTENDO_FONT_B " ] Back | [ " NINTENDO_FONT_Y " ] Dump installed content with missing base application | [ " NINTENDO_FONT_PLUS " ] Exit";
+static const char *appControlsSdCardEmmcFull = "[ " NINTENDO_FONT_DPAD " / " NINTENDO_FONT_LSTICK " / " NINTENDO_FONT_RSTICK " ] Move | [ " NINTENDO_FONT_A " ] Select | [ " NINTENDO_FONT_B " ] Back | [ " NINTENDO_FONT_X " ] Batch mode | [ " NINTENDO_FONT_Y " ] Dump installed content with missing base application | [ " NINTENDO_FONT_PLUS " ] Exit";
+static const char *appControlsSdCardEmmcNoApp = "[ " NINTENDO_FONT_B " ] Back | [ " NINTENDO_FONT_X " ] Batch mode | [ " NINTENDO_FONT_Y " ] Dump installed content with missing base application | [ " NINTENDO_FONT_PLUS " ] Exit";
+static const char *appControlsRomFs = "[ " NINTENDO_FONT_DPAD " / " NINTENDO_FONT_LSTICK " / " NINTENDO_FONT_RSTICK " ] Move | [ " NINTENDO_FONT_A " ] Select | [ " NINTENDO_FONT_B " ] Back | [ " NINTENDO_FONT_Y " ] Dump current directory | [ " NINTENDO_FONT_PLUS " ] Exit";
 
 static const char *mainMenuItems[] = { "Dump gamecard content", "Dump SD card / eMMC (NANDUSER) content", "Update options" };
 static const char *gameCardMenuItems[] = { "Cartridge Image (XCI) dump", "Nintendo Submission Package (NSP) dump", "HFS0 options", "ExeFS options", "RomFS options", "Dump gamecard certificate" };
@@ -150,13 +167,14 @@ static const char *hfs0PartitionDumpType1MenuItems[] = { "Dump HFS0 partition 0 
 static const char *hfs0PartitionDumpType2MenuItems[] = { "Dump HFS0 partition 0 (Update)", "Dump HFS0 partition 1 (Logo)", "Dump HFS0 partition 2 (Normal)", "Dump HFS0 partition 3 (Secure)" };
 static const char *hfs0BrowserType1MenuItems[] = { "Browse HFS0 partition 0 (Update)", "Browse HFS0 partition 1 (Normal)", "Browse HFS0 partition 2 (Secure)" };
 static const char *hfs0BrowserType2MenuItems[] = { "Browse HFS0 partition 0 (Update)", "Browse HFS0 partition 1 (Logo)", "Browse HFS0 partition 2 (Normal)", "Browse HFS0 partition 3 (Secure)" };
-static const char *exeFsMenuItems[] = { "ExeFS section data dump", "Browse ExeFS section" };
-static const char *exeFsSectionDumpMenuItems[] = { "Start ExeFS data dump process", "Bundled application to dump: " };
-static const char *exeFsSectionBrowserMenuItems[] = { "Browse ExeFS section", "Bundled application to browse: " };
-static const char *romFsMenuItems[] = { "RomFS section data dump", "Browse RomFS section" };
-static const char *romFsSectionDumpMenuItems[] = { "Start RomFS data dump process", "Bundled application to dump: " };
-static const char *romFsSectionBrowserMenuItems[] = { "Browse RomFS section", "Bundled application to browse: " };
+static const char *exeFsMenuItems[] = { "ExeFS section data dump", "Browse ExeFS section", "Use update: " };
+static const char *exeFsSectionDumpMenuItems[] = { "Start ExeFS data dump process", "Base application to dump: ", "Use update: " };
+static const char *exeFsSectionBrowserMenuItems[] = { "Browse ExeFS section", "Base application to browse: ", "Use update: " };
+static const char *romFsMenuItems[] = { "RomFS section data dump", "Browse RomFS section", "Use update: " };
+static const char *romFsSectionDumpMenuItems[] = { "Start RomFS data dump process", "Base application to dump: ", "Use update: " };
+static const char *romFsSectionBrowserMenuItems[] = { "Browse RomFS section", "Base application to browse: ", "Use update: " };
 static const char *sdCardEmmcMenuItems[] = { "Nintendo Submission Package (NSP) dump", "ExeFS options", "RomFS options" };
+static const char *batchModeMenuItems[] = { "Start batch dump process", "Dump base applications: ", "Dump updates: ", "Dump DLCs: ", "Split output dumps (FAT32 support): ", "Remove console specific data: ", "Generate ticket-less dumps: ", "Skip already dumped titles: ", "Source storage: " };
 static const char *updateMenuItems[] = { "Update NSWDB.COM XML database", "Update application" };
 
 void uiFill(int x, int y, int width, int height, u8 r, u8 g, u8 b)
@@ -702,7 +720,7 @@ void uiPrintHeadline()
 
 void uiPrintOption(int x, int y, int endPosition, bool leftArrow, bool rightArrow, int r, int g, int b)
 {
-    if (!strlen(strbuf) || endPosition < OPTIONS_X_END_POS || endPosition >= (FB_WIDTH - 8)) return;
+    if (!strlen(strbuf) || x < 8 || x >= OPTIONS_X_END_POS || y < 8 || y >= (FB_HEIGHT - 8 - font_height) || endPosition < OPTIONS_X_END_POS || endPosition >= (FB_WIDTH - 8)) return;
     
     int xpos = x;
     char *option = strbuf;
@@ -711,21 +729,6 @@ void uiPrintOption(int x, int y, int endPosition, bool leftArrow, bool rightArro
     if (leftArrow) uiDrawString("<", xpos, y, 255, 255, 255);
     
     xpos += uiGetStrWidth("<");
-    
-    // Check if we're dealing with a long title selector string
-    if (strlen(option) > 3 && optionStrWidth >= (endPosition - xpos - (font_height * 2)))
-    {
-        while(optionStrWidth >= (endPosition - xpos - (font_height * 2)))
-        {
-            option++;
-            optionStrWidth = uiGetStrWidth(option);
-        }
-        
-        option[0] = option[1] = option[2] = '.';
-        optionStrWidth = uiGetStrWidth(option);
-        
-        snprintf(titleSelectorStr, sizeof(titleSelectorStr) / sizeof(titleSelectorStr[0]), option);
-    }
     
     xpos += (((endPosition - xpos) / 2) - (optionStrWidth / 2));
     
@@ -736,6 +739,31 @@ void uiPrintOption(int x, int y, int endPosition, bool leftArrow, bool rightArro
         xpos = endPosition;
         
         uiDrawString(">", xpos, y, 255, 255, 255);
+    }
+}
+
+void uiTruncateOptionStr(char *str, int x, int y, int endPosition)
+{
+    if (!str || !strlen(str) || x < 8 || x >= OPTIONS_X_END_POS || y < 8 || y >= (FB_HEIGHT - 8 - font_height) || endPosition < OPTIONS_X_END_POS || endPosition >= (FB_WIDTH - 8)) return;
+    
+    int xpos = x;
+    char *option = str;
+    u32 optionStrWidth = uiGetStrWidth(option);
+    
+    // Check if we're dealing with a long title selector string
+    if (optionStrWidth >= (endPosition - xpos - (font_height * 2)))
+    {
+        while(optionStrWidth >= (endPosition - xpos - (font_height * 2)))
+        {
+            option++;
+            optionStrWidth = uiGetStrWidth(option);
+        }
+        
+        option[0] = option[1] = option[2] = '.';
+        
+        memmove(str, option, strlen(option));
+        
+        str[strlen(option)] = '\0';
     }
 }
 
@@ -778,6 +806,9 @@ int uiInit()
     menuType = MENUTYPE_MAIN;
     cursor = 0;
     scroll = 0;
+    
+    /* Check if we're running under SX OS */
+    runningSxOs = checkSxOsServices();
     
     /* Initialize pl service */
     rc = plInitialize();
@@ -1054,6 +1085,7 @@ void uiSetState(UIState state)
     }
     
     titleSelectorStr[0] = '\0';
+    exeFsAndRomFsPatchSelectorStr[0] = '\0';
 }
 
 UIState uiGetState()
@@ -1085,10 +1117,12 @@ UIResult uiProcess()
     const char *upwardsArrow = UPWARDS_ARROW;
     const char *downwardsArrow = DOWNWARDS_ARROW;
     
+    bool forcedXciDump = false;
+    
     uiPrintHeadline();
     loadTitleInfo();
     
-    if (uiState == stateMainMenu || uiState == stateGameCardMenu || uiState == stateXciDumpMenu || uiState == stateNspDumpMenu || uiState == stateNspAppDumpMenu || uiState == stateNspPatchDumpMenu || uiState == stateNspAddOnDumpMenu || uiState == stateHfs0Menu || uiState == stateRawHfs0PartitionDumpMenu || uiState == stateHfs0PartitionDataDumpMenu || uiState == stateHfs0BrowserMenu || uiState == stateHfs0Browser || uiState == stateExeFsMenu || uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu || uiState == stateExeFsSectionBrowser || uiState == stateRomFsMenu || uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu || uiState == stateRomFsSectionBrowser || uiState == stateSdCardEmmcMenu || uiState == stateSdCardEmmcTitleMenu || uiState == stateSdCardEmmcOrphanPatchAddOnMenu || uiState == stateUpdateMenu)
+    if (uiState == stateMainMenu || uiState == stateGameCardMenu || uiState == stateXciDumpMenu || uiState == stateNspDumpMenu || uiState == stateNspAppDumpMenu || uiState == stateNspPatchDumpMenu || uiState == stateNspAddOnDumpMenu || uiState == stateHfs0Menu || uiState == stateRawHfs0PartitionDumpMenu || uiState == stateHfs0PartitionDataDumpMenu || uiState == stateHfs0BrowserMenu || uiState == stateHfs0Browser || uiState == stateExeFsMenu || uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu || uiState == stateExeFsSectionBrowser || uiState == stateRomFsMenu || uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu || uiState == stateRomFsSectionBrowser || uiState == stateSdCardEmmcMenu || uiState == stateSdCardEmmcTitleMenu || uiState == stateSdCardEmmcOrphanPatchAddOnMenu || uiState == stateSdCardEmmcBatchModeMenu || uiState == stateUpdateMenu)
     {
         switch(menuType)
         {
@@ -1096,10 +1130,15 @@ UIResult uiProcess()
                 uiDrawString(appControlsCommon, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                 break;
             case MENUTYPE_GAMECARD:
-                uiDrawString((!gameCardInserted ? appControlsNoContent : (titleAppCount > 1 ? appControlsGameCardMultiApp : appControlsCommon)), 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                if (uiState == stateRomFsSectionBrowser && strlen(curRomFsPath) > 1)
+                {
+                    uiDrawString(appControlsRomFs, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                } else {
+                    uiDrawString((!gameCardInserted ? appControlsNoContent : (titleAppCount > 1 ? appControlsGameCardMultiApp : appControlsCommon)), 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                }
                 break;
             case MENUTYPE_SDCARD_EMMC:
-                if (uiState == stateSdCardEmmcOrphanPatchAddOnMenu)
+                if (uiState == stateSdCardEmmcOrphanPatchAddOnMenu || uiState == stateSdCardEmmcBatchModeMenu)
                 {
                     uiDrawString(appControlsCommon, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                 } else {
@@ -1108,6 +1147,10 @@ UIResult uiProcess()
                         if (uiState == stateSdCardEmmcMenu && ((titlePatchCount && checkOrphanPatchOrAddOn(false)) || (titleAddOnCount && checkOrphanPatchOrAddOn(true))))
                         {
                             uiDrawString(appControlsSdCardEmmcFull, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        } else
+                        if (uiState == stateRomFsSectionBrowser && strlen(curRomFsPath) > 1)
+                        {
+                            uiDrawString(appControlsRomFs, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                         } else {
                             uiDrawString(appControlsCommon, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                         }
@@ -1140,6 +1183,8 @@ UIResult uiProcess()
                 {
                     if (hfs0_partition_cnt == GAMECARD_TYPE1_PARTITION_CNT || hfs0_partition_cnt == GAMECARD_TYPE2_PARTITION_CNT)
                     {
+                        forcedXciDump = true;
+                        
                         if (titleAppCount > 0)
                         {
                             uiDrawString("Error: unable to retrieve the gamecard Title ID!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1167,6 +1212,12 @@ UIResult uiProcess()
                 uiDrawString("Gamecard is not inserted!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
             }
             
+            if (forcedXciDump)
+            {
+                breaks += 2;
+                uiDrawString("Press " NINTENDO_FONT_Y " to dump the cartridge image to \"gamecard.xci\".", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            }
+            
             uiUpdateStatusMsg();
             uiRefreshDisplay();
             
@@ -1183,6 +1234,30 @@ UIResult uiProcess()
             {
                 res = resultShowMainMenu;
                 menuType = MENUTYPE_MAIN;
+            }
+            
+            // Forced XCI dump
+            if ((keysDown & KEY_Y) && forcedXciDump)
+            {
+                uiPrintHeadline();
+                
+                uiDrawString(gameCardMenuItems[0], 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+                breaks++;
+                
+                uiRefreshDisplay();
+                
+                // Set default options
+                isFat32 = true;
+                setXciArchiveBit = false;
+                dumpCert = true;
+                trimDump = false;
+                calcCrc = false;
+                
+                dumpCartridgeImage(isFat32, setXciArchiveBit, dumpCert, trimDump, calcCrc);
+                
+                waitForButtonPress();
+                
+                uiUpdateFreeSpace();
             }
             
             return res;
@@ -1231,9 +1306,9 @@ UIResult uiProcess()
         }
     }
     
-    if (uiState == stateMainMenu || uiState == stateGameCardMenu || uiState == stateXciDumpMenu || uiState == stateNspDumpMenu || uiState == stateNspAppDumpMenu || uiState == stateNspPatchDumpMenu || uiState == stateNspAddOnDumpMenu || uiState == stateHfs0Menu || uiState == stateRawHfs0PartitionDumpMenu || uiState == stateHfs0PartitionDataDumpMenu || uiState == stateHfs0BrowserMenu || uiState == stateHfs0Browser || uiState == stateExeFsMenu || uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu || uiState == stateExeFsSectionBrowser || uiState == stateRomFsMenu || uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu || uiState == stateRomFsSectionBrowser || uiState == stateSdCardEmmcMenu || uiState == stateSdCardEmmcTitleMenu || uiState == stateSdCardEmmcOrphanPatchAddOnMenu || uiState == stateUpdateMenu)
+    if (uiState == stateMainMenu || uiState == stateGameCardMenu || uiState == stateXciDumpMenu || uiState == stateNspDumpMenu || uiState == stateNspAppDumpMenu || uiState == stateNspPatchDumpMenu || uiState == stateNspAddOnDumpMenu || uiState == stateHfs0Menu || uiState == stateRawHfs0PartitionDumpMenu || uiState == stateHfs0PartitionDataDumpMenu || uiState == stateHfs0BrowserMenu || uiState == stateHfs0Browser || uiState == stateExeFsMenu || uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu || uiState == stateExeFsSectionBrowser || uiState == stateRomFsMenu || uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu || uiState == stateRomFsSectionBrowser || uiState == stateSdCardEmmcMenu || uiState == stateSdCardEmmcTitleMenu || uiState == stateSdCardEmmcOrphanPatchAddOnMenu || uiState == stateSdCardEmmcBatchModeMenu || uiState == stateUpdateMenu)
     {
-        if ((menuType == MENUTYPE_GAMECARD && uiState != stateHfs0Browser && uiState != stateExeFsSectionBrowser && uiState != stateRomFsSectionBrowser) || (menuType == MENUTYPE_SDCARD_EMMC && !orphanMode && uiState != stateSdCardEmmcMenu && uiState != stateExeFsSectionBrowser && uiState != stateRomFsSectionBrowser))
+        if ((menuType == MENUTYPE_GAMECARD && uiState != stateHfs0Browser && uiState != stateExeFsSectionBrowser && uiState != stateRomFsSectionBrowser) || (menuType == MENUTYPE_SDCARD_EMMC && !orphanMode && uiState != stateSdCardEmmcMenu && uiState != stateSdCardEmmcBatchModeMenu && uiState != stateExeFsSectionBrowser && uiState != stateRomFsSectionBrowser))
         {
             if (menuType == MENUTYPE_GAMECARD)
             {
@@ -1287,7 +1362,7 @@ UIResult uiProcess()
                 
                 for(patch = 0; patch < titlePatchCount; patch++)
                 {
-                    if ((titleAppTitleID[selectedAppInfoIndex] | APPLICATION_PATCH_BITMASK) == titlePatchTitleID[patch])
+                    if ((titleAppTitleID[selectedAppInfoIndex] | APPLICATION_PATCH_BITMASK) == titlePatchTitleID[patch] && ((menuType == MENUTYPE_GAMECARD && titleAppStorageId[selectedAppInfoIndex] == titlePatchStorageId[patch]) || menuType == MENUTYPE_SDCARD_EMMC))
                     {
                         if (patchCnt > 0) strcat(strbuf, ", v");
                         
@@ -1340,9 +1415,8 @@ UIResult uiProcess()
                 
                 if (titleAppCount > 1)
                 {
-                    breaks++;
                     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Base application count: %u | Base application currently displayed: %u", titleAppCount, selectedAppInfoIndex + 1);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                    uiDrawString(strbuf, (FB_WIDTH / 2) - (FB_WIDTH / 8), (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
                 }
                 
                 breaks++;
@@ -1352,173 +1426,212 @@ UIResult uiProcess()
                 
                 if (strlen(gameCardUpdateVersionStr))
                 {
-                    breaks++;
                     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Bundled FW update: %s", gameCardUpdateVersionStr);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                    uiDrawString(strbuf, (FB_WIDTH / 2) - (FB_WIDTH / 8), (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
                 }
                 
-                if (titlePatchCount > 0)
-                {
-                    breaks++;
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Total bundled update(s): %u", titlePatchCount);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
-                }
+                breaks++;
                 
-                if (titleAddOnCount > 0)
+                if (titleAppCount > 1 && (titlePatchCount > 0 || titleAddOnCount > 0))
                 {
-                    breaks++;
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Total bundled DLC(s): %u", titleAddOnCount);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
-                }
-            } else
-            if (menuType == MENUTYPE_SDCARD_EMMC)
-            {
-                if (!strlen(dumpedNspInfoStr))
-                {
-                    // Look for dumped content in the SD card
-                    char *dumpName = NULL;
-                    char dumpPath[NAME_BUF_LEN] = {'\0'}, tmpStr[64] = {'\0'};
-                    bool dumpedBase = false, dumpedBaseConsoleData = false;
-                    
-                    u32 patchCnt = 0, addOnCnt = 0;
-                    u32 patchCntConsoleData = 0, addOnCntConsoleData = 0;
-                    
-                    snprintf(dumpedNspInfoStr, sizeof(dumpedNspInfoStr) / sizeof(dumpedNspInfoStr[0]), "Content already dumped: ");
-                    
-                    // First look for a dumped base application
-                    dumpName = generateNSPDumpName(DUMP_APP_NSP, selectedAppInfoIndex);
-                    if (dumpName)
-                    {
-                        snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
-                        
-                        free(dumpName);
-                        dumpName = NULL;
-                        
-                        if (checkIfFileExists(dumpPath))
-                        {
-                            dumpedBase = true;
-                            dumpedBaseConsoleData = checkIfDumpedNspContainsConsoleData(dumpPath);
-                        }
-                    }
-                    
-                    // Look for dumped updates
                     if (titlePatchCount > 0)
                     {
-                        for(patch = 0; patch < titlePatchCount; patch++)
-                        {
-                            if ((titleAppTitleID[selectedAppInfoIndex] | APPLICATION_PATCH_BITMASK) == titlePatchTitleID[patch])
-                            {
-                                dumpName = generateNSPDumpName(DUMP_PATCH_NSP, patch);
-                                if (dumpName)
-                                {
-                                    snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
-                                    
-                                    free(dumpName);
-                                    dumpName = NULL;
-                                    
-                                    if (checkIfFileExists(dumpPath))
-                                    {
-                                        patchCnt++;
-                                        if (checkIfDumpedNspContainsConsoleData(dumpPath)) patchCntConsoleData++;
-                                    }
-                                }
-                            }
-                        }
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Total bundled update(s): %u", titlePatchCount);
+                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
                     }
                     
-                    // Look for dumped DLCs
                     if (titleAddOnCount > 0)
                     {
-                        for(addon = 0; addon < titleAddOnCount; addon++)
-                        {
-                            if ((titleAppTitleID[selectedAppInfoIndex] & APPLICATION_ADDON_BITMASK) == (titleAddOnTitleID[addon] & APPLICATION_ADDON_BITMASK))
-                            {
-                                dumpName = generateNSPDumpName(DUMP_ADDON_NSP, addon);
-                                if (dumpName)
-                                {
-                                    snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
-                                    
-                                    free(dumpName);
-                                    dumpName = NULL;
-                                    
-                                    if (checkIfFileExists(dumpPath))
-                                    {
-                                        addOnCnt++;
-                                        if (checkIfDumpedNspContainsConsoleData(dumpPath)) addOnCntConsoleData++;
-                                    }
-                                }
-                            }
-                        }
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Total bundled DLC(s): %u", titleAddOnCount);
+                        uiDrawString(strbuf, (titlePatchCount > 0 ? ((FB_WIDTH / 2) - (FB_WIDTH / 8)) : 8), (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
                     }
                     
-                    if (!dumpedBase && !patchCnt && !addOnCnt)
+                    breaks++;
+                }
+            }
+            
+            if (!strlen(dumpedContentInfoStr))
+            {
+                // Look for dumped content in the SD card
+                char *dumpName = NULL;
+                char dumpPath[NAME_BUF_LEN] = {'\0'}, tmpStr[64] = {'\0'};
+                bool dumpedXci = false, dumpedXciCertificate = false, dumpedBase = false, dumpedBaseConsoleData = false;
+                
+                u32 patchCnt = 0, addOnCnt = 0;
+                u32 patchCntConsoleData = 0, addOnCntConsoleData = 0;
+                
+                snprintf(dumpedContentInfoStr, sizeof(dumpedContentInfoStr) / sizeof(dumpedContentInfoStr[0]), "Content already dumped: ");
+                
+                if (menuType == MENUTYPE_GAMECARD)
+                {
+                    char *xciName = generateFullDumpName();
+                    if (xciName)
                     {
-                        strcat(dumpedNspInfoStr, "NONE");
-                    } else {
-                        if (dumpedBase)
+                        // First check if an unsplitted XCI dump is available
+                        snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.xci", XCI_DUMP_PATH, xciName);
+                        if (!(dumpedXci = checkIfFileExists(dumpPath)))
                         {
-                            strcat(dumpedNspInfoStr, "BASE");
-                            
-                            if (dumpedBaseConsoleData)
-                            {
-                                strcat(dumpedNspInfoStr, " (with console data)");
-                            } else {
-                                strcat(dumpedNspInfoStr, " (without console data)");
-                            }
+                            // Check if a splitted XCI dump is available
+                            snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.xc0", XCI_DUMP_PATH, xciName);
+                            dumpedXci = checkIfFileExists(dumpPath);
                         }
                         
-                        if (patchCnt)
-                        {
-                            if (patchCntConsoleData)
-                            {
-                                if (patchCntConsoleData == patchCnt)
-                                {
-                                    if (patchCnt > 1)
-                                    {
-                                        snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u UPD (all with console data)", patchCnt);
-                                    } else {
-                                        snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "UPD (with console data)");
-                                    }
-                                } else {
-                                    snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u UPD (%u with console data)", patchCnt, patchCntConsoleData);
-                                }
-                            } else {
-                                if (patchCnt > 1)
-                                {
-                                    snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u UPD (all without console data)", patchCnt);
-                                } else {
-                                    snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "UPD (without console data)");
-                                }
-                            }
-                            
-                            if (dumpedBase) strcat(dumpedNspInfoStr, ", ");
-                            
-                            strcat(dumpedNspInfoStr, tmpStr);
-                        }
+                        free(xciName);
+                        xciName = NULL;
                         
-                        if (addOnCnt)
+                        if (dumpedXci) dumpedXciCertificate = checkIfDumpedXciContainsCertificate(dumpPath);
+                    }
+                }
+                
+                // Now search for dumped NSPs
+                
+                // Look for a dumped base application
+                dumpName = generateNSPDumpName(DUMP_APP_NSP, selectedAppInfoIndex);
+                if (dumpName)
+                {
+                    snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+                    
+                    free(dumpName);
+                    dumpName = NULL;
+                    
+                    if (checkIfFileExists(dumpPath))
+                    {
+                        dumpedBase = true;
+                        dumpedBaseConsoleData = checkIfDumpedNspContainsConsoleData(dumpPath);
+                    }
+                }
+                
+                // Look for dumped updates
+                if (titlePatchCount > 0)
+                {
+                    for(patch = 0; patch < titlePatchCount; patch++)
+                    {
+                        if ((titleAppTitleID[selectedAppInfoIndex] | APPLICATION_PATCH_BITMASK) == titlePatchTitleID[patch])
                         {
-                            if (addOnCntConsoleData)
+                            dumpName = generateNSPDumpName(DUMP_PATCH_NSP, patch);
+                            if (dumpName)
                             {
-                                if (addOnCntConsoleData == addOnCnt)
+                                snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+                                
+                                free(dumpName);
+                                dumpName = NULL;
+                                
+                                if (checkIfFileExists(dumpPath))
                                 {
-                                    snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u DLC (%s console data)", addOnCnt, (addOnCnt > 1 ? "all with" : "with"));
-                                } else {
-                                    snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u DLC (%u with console data)", addOnCnt, addOnCntConsoleData);
+                                    patchCnt++;
+                                    if (checkIfDumpedNspContainsConsoleData(dumpPath)) patchCntConsoleData++;
                                 }
-                            } else {
-                                snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u DLC (%s console data)", addOnCnt, (addOnCnt > 1 ? "all without" : "without"));
                             }
-                            
-                            if (dumpedBase || patchCnt) strcat(dumpedNspInfoStr, ", ");
-                            
-                            strcat(dumpedNspInfoStr, tmpStr);
                         }
                     }
                 }
                 
-                uiDrawString(dumpedNspInfoStr, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                // Look for dumped DLCs
+                if (titleAddOnCount > 0)
+                {
+                    for(addon = 0; addon < titleAddOnCount; addon++)
+                    {
+                        if ((titleAppTitleID[selectedAppInfoIndex] & APPLICATION_ADDON_BITMASK) == (titleAddOnTitleID[addon] & APPLICATION_ADDON_BITMASK))
+                        {
+                            dumpName = generateNSPDumpName(DUMP_ADDON_NSP, addon);
+                            if (dumpName)
+                            {
+                                snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+                                
+                                free(dumpName);
+                                dumpName = NULL;
+                                
+                                if (checkIfFileExists(dumpPath))
+                                {
+                                    addOnCnt++;
+                                    if (checkIfDumpedNspContainsConsoleData(dumpPath)) addOnCntConsoleData++;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (!dumpedXci && !dumpedBase && !patchCnt && !addOnCnt)
+                {
+                    strcat(dumpedContentInfoStr, "NONE");
+                } else {
+                    if (dumpedXci)
+                    {
+                        strcat(dumpedContentInfoStr, "XCI");
+                        
+                        if (dumpedXciCertificate)
+                        {
+                            strcat(dumpedContentInfoStr, " (with cert)");
+                        } else {
+                            strcat(dumpedContentInfoStr, " (without cert)");
+                        }
+                    }
+                    
+                    if (dumpedBase)
+                    {
+                        if (dumpedXci) strcat(dumpedContentInfoStr, ", ");
+                        
+                        strcat(dumpedContentInfoStr, "BASE");
+                        
+                        if (dumpedBaseConsoleData)
+                        {
+                            strcat(dumpedContentInfoStr, " (with console data)");
+                        } else {
+                            strcat(dumpedContentInfoStr, " (without console data)");
+                        }
+                    }
+                    
+                    if (patchCnt)
+                    {
+                        if (patchCntConsoleData)
+                        {
+                            if (patchCntConsoleData == patchCnt)
+                            {
+                                if (patchCnt > 1)
+                                {
+                                    snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u UPD (all with console data)", patchCnt);
+                                } else {
+                                    snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "UPD (with console data)");
+                                }
+                            } else {
+                                snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u UPD (%u with console data)", patchCnt, patchCntConsoleData);
+                            }
+                        } else {
+                            if (patchCnt > 1)
+                            {
+                                snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u UPD (all without console data)", patchCnt);
+                            } else {
+                                snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "UPD (without console data)");
+                            }
+                        }
+                        
+                        if (dumpedBase) strcat(dumpedContentInfoStr, ", ");
+                        
+                        strcat(dumpedContentInfoStr, tmpStr);
+                    }
+                    
+                    if (addOnCnt)
+                    {
+                        if (addOnCntConsoleData)
+                        {
+                            if (addOnCntConsoleData == addOnCnt)
+                            {
+                                snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u DLC (%s console data)", addOnCnt, (addOnCnt > 1 ? "all with" : "with"));
+                            } else {
+                                snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u DLC (%u with console data)", addOnCnt, addOnCntConsoleData);
+                            }
+                        } else {
+                            snprintf(tmpStr, sizeof(tmpStr) / sizeof(tmpStr[0]), "%u DLC (%s console data)", addOnCnt, (addOnCnt > 1 ? "all without" : "without"));
+                        }
+                        
+                        if (dumpedBase || patchCnt) strcat(dumpedContentInfoStr, ", ");
+                        
+                        strcat(dumpedContentInfoStr, tmpStr);
+                    }
+                }
             }
+            
+            uiDrawString(dumpedContentInfoStr, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
             
             breaks += 2;
         } else
@@ -1533,13 +1646,13 @@ UIResult uiProcess()
             uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
             breaks++;
             
-            if (!strlen(dumpedNspInfoStr))
+            if (!strlen(dumpedContentInfoStr))
             {
                 // Look for dumped content in the SD card
                 char *dumpName = NULL;
                 char dumpPath[NAME_BUF_LEN] = {'\0'};
                 
-                snprintf(dumpedNspInfoStr, sizeof(dumpedNspInfoStr) / sizeof(dumpedNspInfoStr[0]), "Title already dumped: ");
+                snprintf(dumpedContentInfoStr, sizeof(dumpedContentInfoStr) / sizeof(dumpedContentInfoStr[0]), "Title already dumped: ");
                 
                 if (uiState == stateNspPatchDumpMenu)
                 {
@@ -1559,26 +1672,26 @@ UIResult uiProcess()
                     
                     if (checkIfFileExists(dumpPath))
                     {
-                        strcat(dumpedNspInfoStr, "Yes");
+                        strcat(dumpedContentInfoStr, "Yes");
                         
                         if (checkIfDumpedNspContainsConsoleData(dumpPath))
                         {
-                            strcat(dumpedNspInfoStr, " (with console data)");
+                            strcat(dumpedContentInfoStr, " (with console data)");
                         } else {
-                            strcat(dumpedNspInfoStr, " (without console data)");
+                            strcat(dumpedContentInfoStr, " (without console data)");
                         }
                     } else {
-                        strcat(dumpedNspInfoStr, "No");
+                        strcat(dumpedContentInfoStr, "No");
                     }
                 } else {
-                    strcat(dumpedNspInfoStr, "No");
+                    strcat(dumpedContentInfoStr, "No");
                 }
             }
             
-            uiDrawString(dumpedNspInfoStr, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+            uiDrawString(dumpedContentInfoStr, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
             breaks += 2;
         } else {
-            dumpedNspInfoStr[0] = '\0';
+            dumpedContentInfoStr[0] = '\0';
         }
         
         switch(uiState)
@@ -1701,8 +1814,14 @@ UIResult uiProcess()
                 uiDrawString(exeFsMenuItems[1], 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
                 breaks++;
                 
-                convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", exeFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+                if (!exeFsAndRomFsUpdateFlag)
+                {
+                    convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", exeFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+                } else {
+                    retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update to browse: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+                }
+                
                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
                 breaks += 2;
                 
@@ -1738,8 +1857,14 @@ UIResult uiProcess()
                 uiDrawString(romFsMenuItems[1], 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
                 breaks++;
                 
-                convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", romFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+                if (!exeFsAndRomFsUpdateFlag)
+                {
+                    convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", romFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+                } else {
+                    retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update to browse: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+                }
+                
                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
                 breaks += 2;
                 
@@ -1789,7 +1914,7 @@ UIResult uiProcess()
                 uiDrawString("Dump installed content with missing base application", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
                 breaks += 2;
                 
-                uiDrawString("Hint: gamecard updates can be found in this section.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                uiDrawString("Hint: updates for gamecard titles can be found in this section.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                 
                 if (menuItemsCount)
                 {
@@ -1797,6 +1922,13 @@ UIResult uiProcess()
                     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Title count: %d | Current title: %d", menuItemsCount, cursor + 1);
                     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                 }
+                
+                break;
+            case stateSdCardEmmcBatchModeMenu:
+                menu = batchModeMenuItems;
+                menuItemsCount = (sizeof(batchModeMenuItems) / sizeof(batchModeMenuItems[0]));
+                
+                uiDrawString("Batch mode", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
                 
                 break;
             case stateUpdateMenu:
@@ -1863,6 +1995,42 @@ UIResult uiProcess()
                 
                 // Avoid printing the "Generate ticket-less dump" option in the NSP dump menus if we're dealing with a SD/eMMC title and the "Remove console specific data" option is disabled
                 if (menuType == MENUTYPE_SDCARD_EMMC && (uiState == stateNspAppDumpMenu || uiState == stateNspPatchDumpMenu || uiState == stateNspAddOnDumpMenu) && i == 4 && !removeConsoleData)
+                {
+                    j--;
+                    continue;
+                }
+                
+                // Avoid printing the "Dump base applications", "Dump updates" and/or "Dump DLCs" options in the batch mode menu if we're dealing with a storage source that doesn't hold any title belonging to the current category
+                if (uiState == stateSdCardEmmcBatchModeMenu && ((batchModeSrc == BATCH_SOURCE_ALL && ((!titleAppCount && i == 1) || (!titlePatchCount && i == 2) || (!titleAddOnCount && i == 3))) || (batchModeSrc == BATCH_SOURCE_SDCARD && ((!sdCardTitleAppCount && i == 1) || (!sdCardTitlePatchCount && i == 2) || (!sdCardTitleAddOnCount && i == 3))) || (batchModeSrc == BATCH_SOURCE_EMMC && ((!nandUserTitleAppCount && i == 1) || (!nandUserTitlePatchCount && i == 2) || (!nandUserTitleAddOnCount && i == 3)))))
+                {
+                    j--;
+                    continue;
+                }
+                
+                // Avoid printing the "Generate ticket-less dumps" option in the batch mode menu if the "Remove console specific data" option is disabled
+                if (uiState == stateSdCardEmmcBatchModeMenu && i == 6 && !removeConsoleData)
+                {
+                    j--;
+                    continue;
+                }
+                
+                // Avoid printing the "Source storage" option in the batch mode menu if we only have titles available in a single source storage device
+                if (uiState == stateSdCardEmmcBatchModeMenu && i == 8 && ((!sdCardTitleAppCount && !sdCardTitlePatchCount && !sdCardTitleAddOnCount) || (!nandUserTitleAppCount && !nandUserTitlePatchCount && !nandUserTitleAddOnCount)))
+                {
+                    j--;
+                    continue;
+                }
+                
+                // Avoid printing the "Use update" option in the ExeFS and RomFS menus if we're dealing with a gamecard and either its base application count is greater than 1 or it has no available patches
+                // Also avoid printing it if we're dealing with a SD/eMMC title and it has no available patches
+                if ((uiState == stateExeFsMenu || uiState == stateRomFsMenu) && i == 2 && ((menuType == MENUTYPE_GAMECARD && (titleAppCount > 1 || !checkIfBaseApplicationHasPatchOrAddOn(0, false))) || (menuType == MENUTYPE_SDCARD_EMMC && !checkIfBaseApplicationHasPatchOrAddOn(selectedAppInfoIndex, false))))
+                {
+                    j--;
+                    continue;
+                }
+                
+                // Avoid printing the "Use update" option in the ExeFS/RomFS data dump and browser menus if we're not dealing with a gamecard, if the base application count is equal to or less than 1, or if the selected base application has no available patches
+                if ((uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu || uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu) && i == 2 && (menuType != MENUTYPE_GAMECARD || titleAppCount <= 1 || !checkIfBaseApplicationHasPatchOrAddOn(selectedAppIndex, false)))
                 {
                     j--;
                     continue;
@@ -1977,6 +2145,7 @@ UIResult uiProcess()
                                     // Print application name
                                     convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
                                     snprintf(titleSelectorStr, sizeof(titleSelectorStr) / sizeof(titleSelectorStr[0]), "%s v%s", titleName[selectedAppIndex], versionStr);
+                                    uiTruncateOptionStr(titleSelectorStr, xpos, ypos, OPTIONS_X_END_POS_NSP);
                                 }
                                 
                                 leftArrowCondition = (menuType == MENUTYPE_GAMECARD && titleAppCount > 1 && selectedAppIndex > 0);
@@ -1989,6 +2158,7 @@ UIResult uiProcess()
                                     // Find a matching application to print its name
                                     // Otherwise, just print the Title ID
                                     retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, (menuType == MENUTYPE_GAMECARD), NULL, titleSelectorStr, sizeof(titleSelectorStr) / sizeof(titleSelectorStr[0]));
+                                    uiTruncateOptionStr(titleSelectorStr, xpos, ypos, OPTIONS_X_END_POS_NSP);
                                 }
                                 
                                 leftArrowCondition = ((menuType == MENUTYPE_GAMECARD && titlePatchCount > 0 && selectedPatchIndex > 0) || (menuType == MENUTYPE_SDCARD_EMMC && !orphanMode && retrievePreviousPatchOrAddOnIndexFromBaseApplication(selectedPatchIndex, selectedAppInfoIndex, false) != selectedPatchIndex));
@@ -2001,6 +2171,7 @@ UIResult uiProcess()
                                     // Find a matching application to print its name and Title ID
                                     // Otherwise, just print the Title ID
                                     retrieveDescriptionForPatchOrAddOn(titleAddOnTitleID[selectedAddOnIndex], titleAddOnVersion[selectedAddOnIndex], true, (menuType == MENUTYPE_GAMECARD), NULL, titleSelectorStr, sizeof(titleSelectorStr) / sizeof(titleSelectorStr[0]));
+                                    uiTruncateOptionStr(titleSelectorStr, xpos, ypos, OPTIONS_X_END_POS_NSP);
                                 }
                                 
                                 leftArrowCondition = ((menuType == MENUTYPE_GAMECARD && titleAddOnCount > 0 && selectedAddOnIndex > 0) || (menuType == MENUTYPE_SDCARD_EMMC && !orphanMode && retrievePreviousPatchOrAddOnIndexFromBaseApplication(selectedAddOnIndex, selectedAppInfoIndex, true) != selectedAddOnIndex));
@@ -2026,7 +2197,97 @@ UIResult uiProcess()
                     }
                 }
                 
-                // Print ExeFS/RomFS menus settings values
+                // Print settings values for the batch mode menu
+                if (uiState == stateSdCardEmmcBatchModeMenu && i > 0)
+                {
+                    switch(i)
+                    {
+                        case 1: // Dump base applications
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s", (dumpAppTitles ? "Yes" : "No"));
+                            uiPrintOption(xpos, ypos, OPTIONS_X_END_POS, dumpAppTitles, !dumpAppTitles, (dumpAppTitles ? 0 : 255), (dumpAppTitles ? 255 : 0), 0);
+                            break;
+                        case 2: // Dump updates
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s", (dumpPatchTitles ? "Yes" : "No"));
+                            uiPrintOption(xpos, ypos, OPTIONS_X_END_POS, dumpPatchTitles, !dumpPatchTitles, (dumpPatchTitles ? 0 : 255), (dumpPatchTitles ? 255 : 0), 0);
+                            break;
+                        case 3: // Dump DLCs
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s", (dumpAddOnTitles ? "Yes" : "No"));
+                            uiPrintOption(xpos, ypos, OPTIONS_X_END_POS, dumpAddOnTitles, !dumpAddOnTitles, (dumpAddOnTitles ? 0 : 255), (dumpAddOnTitles ? 255 : 0), 0);
+                            break;
+                        case 4: // Split output dumps (FAT32 support)
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s", (isFat32 ? "Yes" : "No"));
+                            uiPrintOption(xpos, ypos, OPTIONS_X_END_POS, isFat32, !isFat32, (isFat32 ? 0 : 255), (isFat32 ? 255 : 0), 0);
+                            break;
+                        case 5: // Remove console specific data
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s", (removeConsoleData ? "Yes" : "No"));
+                            uiPrintOption(xpos, ypos, OPTIONS_X_END_POS, removeConsoleData, !removeConsoleData, (removeConsoleData ? 0 : 255), (removeConsoleData ? 255 : 0), 0);
+                            break;
+                        case 6: // Generate ticket-less dumps
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s", (tiklessDump ? "Yes" : "No"));
+                            uiPrintOption(xpos, ypos, OPTIONS_X_END_POS, tiklessDump, !tiklessDump, (tiklessDump ? 0 : 255), (tiklessDump ? 255 : 0), 0);
+                            break;
+                        case 7: // Skip dumped titles
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s", (skipDumpedTitles ? "Yes" : "No"));
+                            uiPrintOption(xpos, ypos, OPTIONS_X_END_POS, skipDumpedTitles, !skipDumpedTitles, (skipDumpedTitles ? 0 : 255), (skipDumpedTitles ? 255 : 0), 0);
+                            break;
+                        case 8: // Source storage
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s", (batchModeSrc == BATCH_SOURCE_ALL ? "All (SD card + eMMC)" : (batchModeSrc == BATCH_SOURCE_SDCARD ? "SD card" : "eMMC")));
+                            
+                            leftArrowCondition = (batchModeSrc != BATCH_SOURCE_ALL);
+                            rightArrowCondition = (batchModeSrc != BATCH_SOURCE_EMMC);                            
+                            
+                            uiPrintOption(xpos, ypos, OPTIONS_X_END_POS_NSP, leftArrowCondition, rightArrowCondition, 255, 255, 255);
+                            
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                
+                // Print settings values for ExeFS/RomFS menus
+                if ((uiState == stateExeFsMenu || uiState == stateRomFsMenu) && i > 1)
+                {
+                    u32 appIndex = (menuType == MENUTYPE_GAMECARD ? 0 : selectedAppInfoIndex);
+                    
+                    switch(i)
+                    {
+                        case 2: // Use update
+                            if (exeFsAndRomFsUpdateFlag)
+                            {
+                                if (!strlen(exeFsAndRomFsPatchSelectorStr))
+                                {
+                                    // Find a matching application to print its name
+                                    // Otherwise, just print the Title ID
+                                    retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, (menuType == MENUTYPE_GAMECARD && titleAppCount > 1), NULL, exeFsAndRomFsPatchSelectorStr, sizeof(exeFsAndRomFsPatchSelectorStr) / sizeof(exeFsAndRomFsPatchSelectorStr[0]));
+                                    
+                                    // Concatenate patch source storage
+                                    strcat(exeFsAndRomFsPatchSelectorStr, (titlePatchStorageId[selectedPatchIndex] == FsStorageId_GameCard ? " (gamecard)" : (titlePatchStorageId[selectedPatchIndex] == FsStorageId_SdCard ? " (SD card)" : "(eMMC)")));
+                                    
+                                    uiTruncateOptionStr(exeFsAndRomFsPatchSelectorStr, xpos, ypos, OPTIONS_X_END_POS_NSP);
+                                }
+                                
+                                leftArrowCondition = true;
+                                rightArrowCondition = (((menuType == MENUTYPE_GAMECARD && titleAppCount == 1) || menuType == MENUTYPE_SDCARD_EMMC) && retrieveNextPatchOrAddOnIndexFromBaseApplication(selectedPatchIndex, appIndex, false) != selectedPatchIndex);
+                                
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), exeFsAndRomFsPatchSelectorStr);
+                                
+                                uiPrintOption(xpos, ypos, OPTIONS_X_END_POS_NSP, leftArrowCondition, rightArrowCondition, 255, 255, 255);
+                            } else {
+                                leftArrowCondition = false;
+                                rightArrowCondition = (((menuType == MENUTYPE_GAMECARD && titleAppCount == 1) || menuType == MENUTYPE_SDCARD_EMMC) && checkIfBaseApplicationHasPatchOrAddOn(appIndex, false));
+                                
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "No");
+                                
+                                uiPrintOption(xpos, ypos, OPTIONS_X_END_POS_NSP, leftArrowCondition, rightArrowCondition, 255, 0, 0);
+                            }
+                            
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                
+                // Print settings values for ExeFS/RomFS submenus
                 if ((uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu || uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu) && i > 0)
                 {
                     switch(i)
@@ -2037,6 +2298,7 @@ UIResult uiProcess()
                                 // Print application name
                                 convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
                                 snprintf(titleSelectorStr, sizeof(titleSelectorStr) / sizeof(titleSelectorStr[0]), "%s v%s", titleName[selectedAppIndex], versionStr);
+                                uiTruncateOptionStr(titleSelectorStr, xpos, ypos, OPTIONS_X_END_POS_NSP);
                             }
                             
                             leftArrowCondition = (menuType == MENUTYPE_GAMECARD && titleAppCount > 1 && selectedAppIndex > 0);
@@ -2045,6 +2307,38 @@ UIResult uiProcess()
                             snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), titleSelectorStr);
                             
                             uiPrintOption(xpos, ypos, OPTIONS_X_END_POS_NSP, leftArrowCondition, rightArrowCondition, 255, 255, 255);
+                            
+                            break;
+                        case 2: // Use update
+                            if (exeFsAndRomFsUpdateFlag)
+                            {
+                                if (!strlen(exeFsAndRomFsPatchSelectorStr))
+                                {
+                                    // Find a matching application to print its name
+                                    // Otherwise, just print the Title ID
+                                    retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, (menuType == MENUTYPE_GAMECARD), NULL, exeFsAndRomFsPatchSelectorStr, sizeof(exeFsAndRomFsPatchSelectorStr) / sizeof(exeFsAndRomFsPatchSelectorStr[0]));
+                                    
+                                    // Concatenate patch source storage
+                                    strcat(exeFsAndRomFsPatchSelectorStr, (titlePatchStorageId[selectedPatchIndex] == FsStorageId_GameCard ? " (gamecard)" : (titlePatchStorageId[selectedPatchIndex] == FsStorageId_SdCard ? " (SD card)" : "(eMMC)")));
+                                    
+                                    uiTruncateOptionStr(exeFsAndRomFsPatchSelectorStr, xpos, ypos, OPTIONS_X_END_POS_NSP);
+                                }
+                                
+                                leftArrowCondition = true;
+                                rightArrowCondition = (menuType == MENUTYPE_GAMECARD && titleAppCount > 1 && retrieveNextPatchOrAddOnIndexFromBaseApplication(selectedPatchIndex, selectedAppIndex, false) != selectedPatchIndex);
+                                
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), exeFsAndRomFsPatchSelectorStr);
+                                
+                                uiPrintOption(xpos, ypos, OPTIONS_X_END_POS_NSP, leftArrowCondition, rightArrowCondition, 255, 255, 255);
+                            } else {
+                                leftArrowCondition = false;
+                                rightArrowCondition = (menuType == MENUTYPE_GAMECARD && titleAppCount > 1 && checkIfBaseApplicationHasPatchOrAddOn(selectedAppIndex, false));
+                                
+                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "No");
+                                
+                                uiPrintOption(xpos, ypos, OPTIONS_X_END_POS_NSP, leftArrowCondition, rightArrowCondition, 255, 0, 0);
+                            }
+                            
                             break;
                         default:
                             break;
@@ -2092,15 +2386,17 @@ UIResult uiProcess()
                     if (selectedAppInfoIndex > 0)
                     {
                         selectedAppInfoIndex--;
-                    } else {
-                        selectedAppInfoIndex = 0;
+                        dumpedContentInfoStr[0] = '\0';
                     }
                 }
                 
                 if ((keysDown & KEY_R) || (keysDown & KEY_ZR))
                 {
-                    selectedAppInfoIndex++;
-                    if (selectedAppInfoIndex >= titleAppCount) selectedAppInfoIndex = (titleAppCount - 1);
+                    if ((selectedAppInfoIndex + 1) < titleAppCount)
+                    {
+                        selectedAppInfoIndex++;
+                        dumpedContentInfoStr[0] = '\0';
+                    }
                 }
             }
             
@@ -2360,13 +2656,262 @@ UIResult uiProcess()
                                 {
                                     if (!orphanMode)
                                     {
-                                        u32 newIndex = retrieveNextPatchOrAddOnIndexFromBaseApplication(selectedAddOnIndex, selectedAppInfoIndex, false);
+                                        u32 newIndex = retrieveNextPatchOrAddOnIndexFromBaseApplication(selectedAddOnIndex, selectedAppInfoIndex, true);
                                         if (newIndex != selectedAddOnIndex)
                                         {
                                             selectedAddOnIndex = newIndex;
                                             titleSelectorStr[0] = '\0';
                                         }
                                     }
+                                }
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                
+                // Go up
+                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                {
+                    scrollAmount = -1;
+                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                }
+                
+                // Go down
+                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                {
+                    scrollAmount = 1;
+                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                }
+            } else
+            if (uiState == stateSdCardEmmcBatchModeMenu)
+            {
+                // Select
+                if ((keysDown & KEY_A) && cursor == 0 && (dumpAppTitles || dumpPatchTitles || dumpAddOnTitles)) res = resultSdCardEmmcBatchDump;
+                
+                // Back
+                if (keysDown & KEY_B) res = resultShowSdCardEmmcMenu;
+                
+                // Change option to false
+                if (keysDown & KEY_LEFT)
+                {
+                    switch(cursor)
+                    {
+                        case 1: // Dump base applications
+                            dumpAppTitles = false;
+                            break;
+                        case 2: // Dump updates
+                            dumpPatchTitles = false;
+                            break;
+                        case 3: // Dump DLCs
+                            dumpAddOnTitles = false;
+                            break;
+                        case 4: // Split output dumps (FAT32 support)
+                            isFat32 = false;
+                            break;
+                        case 5: // Remove console specific data
+                            removeConsoleData = tiklessDump = false;
+                            break;
+                        case 6: // Generate ticket-less dumps
+                            tiklessDump = false;
+                            break;
+                        case 7: // Skip already dumped titles
+                            skipDumpedTitles = false;
+                            break;
+                        case 8: // Source storage
+                            if (batchModeSrc != BATCH_SOURCE_ALL)
+                            {
+                                batchModeSrc--;
+                                
+                                if (batchModeSrc == BATCH_SOURCE_ALL)
+                                {
+                                    dumpAppTitles = (titleAppCount > 0);
+                                    dumpPatchTitles = (titlePatchCount > 0);
+                                    dumpAddOnTitles = (titleAddOnCount > 0);
+                                } else
+                                if (batchModeSrc == BATCH_SOURCE_SDCARD)
+                                {
+                                    dumpAppTitles = (sdCardTitleAppCount > 0);
+                                    dumpPatchTitles = (sdCardTitlePatchCount > 0);
+                                    dumpAddOnTitles = (sdCardTitleAddOnCount > 0);
+                                } else
+                                if (batchModeSrc == BATCH_SOURCE_EMMC)
+                                {
+                                    dumpAppTitles = (nandUserTitleAppCount > 0);
+                                    dumpPatchTitles = (nandUserTitlePatchCount > 0);
+                                    dumpAddOnTitles = (nandUserTitleAddOnCount > 0);
+                                }
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                
+                // Change option to true
+                if (keysDown & KEY_RIGHT)
+                {
+                    switch(cursor)
+                    {
+                        case 1: // Dump base applications
+                            dumpAppTitles = true;
+                            break;
+                        case 2: // Dump updates
+                            dumpPatchTitles = true;
+                            break;
+                        case 3: // Dump DLCs
+                            dumpAddOnTitles = true;
+                            break;
+                        case 4: // Split output dumps (FAT32 support)
+                            isFat32 = true;
+                            break;
+                        case 5: // Remove console specific data
+                            removeConsoleData = true;
+                            break;
+                        case 6: // Generate ticket-less dumps
+                            tiklessDump = true;
+                            break;
+                        case 7: // Skip already dumped titles
+                            skipDumpedTitles = true;
+                            break;
+                        case 8: // Source storage
+                            if (batchModeSrc != BATCH_SOURCE_EMMC)
+                            {
+                                batchModeSrc++;
+                                
+                                if (batchModeSrc == BATCH_SOURCE_ALL)
+                                {
+                                    dumpAppTitles = (titleAppCount > 0);
+                                    dumpPatchTitles = (titlePatchCount > 0);
+                                    dumpAddOnTitles = (titleAddOnCount > 0);
+                                } else
+                                if (batchModeSrc == BATCH_SOURCE_SDCARD)
+                                {
+                                    dumpAppTitles = (sdCardTitleAppCount > 0);
+                                    dumpPatchTitles = (sdCardTitlePatchCount > 0);
+                                    dumpAddOnTitles = (sdCardTitleAddOnCount > 0);
+                                } else
+                                if (batchModeSrc == BATCH_SOURCE_EMMC)
+                                {
+                                    dumpAppTitles = (nandUserTitleAppCount > 0);
+                                    dumpPatchTitles = (nandUserTitlePatchCount > 0);
+                                    dumpAddOnTitles = (nandUserTitleAddOnCount > 0);
+                                }
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                
+                // Go up
+                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                {
+                    scrollAmount = -1;
+                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                }
+                
+                // Go down
+                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                {
+                    scrollAmount = 1;
+                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                }
+            } else
+            if (uiState == stateExeFsMenu || uiState == stateRomFsMenu)
+            {
+                // Select
+                if (keysDown & KEY_A)
+                {
+                    // Reset option to its default value
+                    selectedAppIndex = (menuType == MENUTYPE_GAMECARD ? 0 : selectedAppInfoIndex);
+                    
+                    switch(cursor)
+                    {
+                        case 0:
+                            if (uiState == stateExeFsMenu)
+                            {
+                                res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowExeFsSectionDataDumpMenu : resultDumpExeFsSectionData);
+                            } else {
+                                res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowRomFsSectionDataDumpMenu : resultDumpRomFsSectionData);
+                            }
+                            break;
+                        case 1:
+                            if (uiState == stateExeFsMenu)
+                            {
+                                res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowExeFsSectionBrowserMenu : resultExeFsSectionBrowserGetList);
+                            } else {
+                                res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowRomFsSectionBrowserMenu : resultRomFsSectionBrowserGetEntries);
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                
+                // Back
+                if (keysDown & KEY_B)
+                {
+                    if (menuType == MENUTYPE_GAMECARD)
+                    {
+                        freePatchesFromSdCardAndEmmc();
+                        res = resultShowGameCardMenu;
+                    } else {
+                        res = resultShowSdCardEmmcTitleMenu;
+                    }
+                }
+                
+                // Go left
+                if (keysDown & KEY_LEFT)
+                {
+                    switch(cursor)
+                    {
+                        case 2: // Use update
+                            if ((menuType == MENUTYPE_GAMECARD && titleAppCount == 1 && checkIfBaseApplicationHasPatchOrAddOn(0, false)) || (menuType == MENUTYPE_SDCARD_EMMC && checkIfBaseApplicationHasPatchOrAddOn(selectedAppInfoIndex, false)))
+                            {
+                                if (exeFsAndRomFsUpdateFlag)
+                                {
+                                    u32 appIndex = (menuType == MENUTYPE_GAMECARD ? 0 : selectedAppInfoIndex);
+                                    u32 newIndex = retrievePreviousPatchOrAddOnIndexFromBaseApplication(selectedPatchIndex, appIndex, false);
+                                    
+                                    if (newIndex != selectedPatchIndex)
+                                    {
+                                        selectedPatchIndex = newIndex;
+                                        exeFsAndRomFsPatchSelectorStr[0] = '\0';
+                                    } else {
+                                        exeFsAndRomFsUpdateFlag = false;
+                                    }
+                                }
+                            }
+                            break;
+                        default:
+                            break;
+                    }
+                }
+                
+                // Go right
+                if (keysDown & KEY_RIGHT)
+                {
+                    switch(cursor)
+                    {
+                        case 2: // Use update
+                            if ((menuType == MENUTYPE_GAMECARD && titleAppCount == 1 && checkIfBaseApplicationHasPatchOrAddOn(0, false)) || (menuType == MENUTYPE_SDCARD_EMMC && checkIfBaseApplicationHasPatchOrAddOn(selectedAppInfoIndex, false)))
+                            {
+                                u32 appIndex = (menuType == MENUTYPE_GAMECARD ? 0 : selectedAppInfoIndex);
+                                
+                                if (exeFsAndRomFsUpdateFlag)
+                                {
+                                    u32 newIndex = retrieveNextPatchOrAddOnIndexFromBaseApplication(selectedPatchIndex, appIndex, false);
+                                    if (newIndex != selectedPatchIndex)
+                                    {
+                                        selectedPatchIndex = newIndex;
+                                        exeFsAndRomFsPatchSelectorStr[0] = '\0';
+                                    }
+                                } else {
+                                    exeFsAndRomFsUpdateFlag = true;
+                                    selectedPatchIndex = retrieveFirstPatchOrAddOnIndexFromBaseApplication(appIndex, false);
+                                    exeFsAndRomFsPatchSelectorStr[0] = '\0';
                                 }
                             }
                             break;
@@ -2405,7 +2950,7 @@ UIResult uiProcess()
                 }
                 
                 // Back
-                if (keysDown & KEY_B) res = (menuType == MENUTYPE_GAMECARD ? resultShowGameCardMenu : resultShowSdCardEmmcTitleMenu);
+                if (keysDown & KEY_B) res = ((uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu) ? resultShowExeFsMenu : resultShowRomFsMenu);
                 
                 // Change option to false
                 if (keysDown & KEY_LEFT)
@@ -2419,6 +2964,24 @@ UIResult uiProcess()
                                 {
                                     selectedAppIndex--;
                                     titleSelectorStr[0] = '\0';
+                                    
+                                    exeFsAndRomFsUpdateFlag = false;
+                                }
+                            }
+                            break;
+                        case 2: // Use update
+                            if (menuType == MENUTYPE_GAMECARD && titleAppCount > 1 && checkIfBaseApplicationHasPatchOrAddOn(selectedAppIndex, false))
+                            {
+                                if (exeFsAndRomFsUpdateFlag)
+                                {
+                                    u32 newIndex = retrievePreviousPatchOrAddOnIndexFromBaseApplication(selectedPatchIndex, selectedAppIndex, false);
+                                    if (newIndex != selectedPatchIndex)
+                                    {
+                                        selectedPatchIndex = newIndex;
+                                        exeFsAndRomFsPatchSelectorStr[0] = '\0';
+                                    } else {
+                                        exeFsAndRomFsUpdateFlag = false;
+                                    }
                                 }
                             }
                             break;
@@ -2439,6 +3002,26 @@ UIResult uiProcess()
                                 {
                                     selectedAppIndex++;
                                     titleSelectorStr[0] = '\0';
+                                    
+                                    exeFsAndRomFsUpdateFlag = false;
+                                }
+                            }
+                            break;
+                        case 2: // Use update
+                            if (menuType == MENUTYPE_GAMECARD && titleAppCount > 1 && checkIfBaseApplicationHasPatchOrAddOn(selectedAppIndex, false))
+                            {
+                                if (exeFsAndRomFsUpdateFlag)
+                                {
+                                    u32 newIndex = retrieveNextPatchOrAddOnIndexFromBaseApplication(selectedPatchIndex, selectedAppIndex, false);
+                                    if (newIndex != selectedPatchIndex)
+                                    {
+                                        selectedPatchIndex = newIndex;
+                                        exeFsAndRomFsPatchSelectorStr[0] = '\0';
+                                    }
+                                } else {
+                                    exeFsAndRomFsUpdateFlag = true;
+                                    selectedPatchIndex = retrieveFirstPatchOrAddOnIndexFromBaseApplication(selectedAppIndex, false);
+                                    exeFsAndRomFsPatchSelectorStr[0] = '\0';
                                 }
                             }
                             break;
@@ -2518,10 +3101,15 @@ UIResult uiProcess()
                                 res = resultShowHfs0Menu;
                                 break;
                             case 3:
-                                res = resultShowExeFsMenu;
-                                break;
                             case 4:
-                                res = resultShowRomFsMenu;
+                                loadPatchesFromSdCardAndEmmc();
+                                
+                                res = (cursor == 3 ? resultShowExeFsMenu : resultShowRomFsMenu);
+                                
+                                // Reset options to their default values
+                                exeFsAndRomFsUpdateFlag = false;
+                                selectedPatchIndex = 0;
+                                
                                 break;
                             case 5:
                                 res = resultDumpGameCardCertificate;
@@ -2614,23 +3202,6 @@ UIResult uiProcess()
                         selectedFileIndex = (u32)cursor;
                         res = resultHfs0BrowserCopyFile;
                     } else
-                    if (uiState == stateExeFsMenu)
-                    {
-                        // Reset option to its default value
-                        selectedAppIndex = (menuType == MENUTYPE_GAMECARD ? 0 : selectedAppInfoIndex);
-                        
-                        switch(cursor)
-                        {
-                            case 0:
-                                res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowExeFsSectionDataDumpMenu : resultDumpExeFsSectionData);
-                                break;
-                            case 1:
-                                res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowExeFsSectionBrowserMenu : resultExeFsSectionBrowserGetList);
-                                break;
-                            default:
-                                break;
-                        }
-                    } else
                     if (uiState == stateExeFsSectionBrowser)
                     {
                         if (menu && menuItemsCount)
@@ -2638,23 +3209,6 @@ UIResult uiProcess()
                             // Save selected file index
                             selectedFileIndex = (u32)cursor;
                             res = resultExeFsSectionBrowserCopyFile;
-                        }
-                    } else
-                    if (uiState == stateRomFsMenu)
-                    {
-                        // Reset option to its default value
-                        selectedAppIndex = (menuType == MENUTYPE_GAMECARD ? 0 : selectedAppInfoIndex);
-                        
-                        switch(cursor)
-                        {
-                            case 0:
-                                res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowRomFsSectionDataDumpMenu : resultDumpRomFsSectionData);
-                                break;
-                            case 1:
-                                res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowRomFsSectionBrowserMenu : resultRomFsSectionBrowserGetEntries);
-                                break;
-                            default:
-                                break;
                         }
                     } else
                     if (uiState == stateRomFsSectionBrowser)
@@ -2692,10 +3246,13 @@ UIResult uiProcess()
                                 }
                                 break;
                             case 1:
-                                res = resultShowExeFsMenu;
-                                break;
                             case 2:
-                                res = resultShowRomFsMenu;
+                                res = (cursor == 1 ? resultShowExeFsMenu : resultShowRomFsMenu);
+                                
+                                // Reset options to their default values
+                                exeFsAndRomFsUpdateFlag = false;
+                                selectedPatchIndex = 0;
+                                
                                 break;
                             default:
                                 break;
@@ -2747,7 +3304,7 @@ UIResult uiProcess()
                         res = resultShowMainMenu;
                         menuType = MENUTYPE_MAIN;
                     } else
-                    if (menuType == MENUTYPE_GAMECARD && (uiState == stateNspDumpMenu || uiState == stateHfs0Menu || uiState == stateExeFsMenu || uiState == stateRomFsMenu))
+                    if (menuType == MENUTYPE_GAMECARD && (uiState == stateNspDumpMenu || uiState == stateHfs0Menu))
                     {
                         res = resultShowGameCardMenu;
                     } else
@@ -2766,19 +3323,11 @@ UIResult uiProcess()
                         
                         res = resultShowHfs0BrowserMenu;
                     } else
-                    if (uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu)
-                    {
-                        res = resultShowExeFsMenu;
-                    } else
                     if (uiState == stateExeFsSectionBrowser)
                     {
                         freeExeFsContext();
                         
                         res = ((menuType == MENUTYPE_GAMECARD && titleAppCount > 1) ? resultShowExeFsSectionBrowserMenu : resultShowExeFsMenu);
-                    } else
-                    if (uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu)
-                    {
-                        res = resultShowRomFsMenu;
                     } else
                     if (uiState == stateRomFsSectionBrowser)
                     {
@@ -2793,6 +3342,8 @@ UIResult uiProcess()
                                 free(romFsBrowserEntries);
                                 romFsBrowserEntries = NULL;
                             }
+                            
+                            if (exeFsAndRomFsUpdateFlag) freeBktrContext();
                             
                             freeRomFsContext();
                             
@@ -2824,11 +3375,41 @@ UIResult uiProcess()
                     }
                 }
                 
-                // SD/eMMC menu: Dump installed content with missing base application
-                if (uiState == stateSdCardEmmcMenu && ((titleAppCount && ((titlePatchCount && checkOrphanPatchOrAddOn(false)) || (titleAddOnCount && checkOrphanPatchOrAddOn(true)))) || (!titleAppCount && (titlePatchCount || titleAddOnCount))) && (keysDown & KEY_Y))
+                // Special action #1
+                if (keysDown & KEY_Y)
                 {
-                    res = resultShowSdCardEmmcOrphanPatchAddOnMenu;
-                    orphanMode = true;
+                    if (uiState == stateSdCardEmmcMenu && ((titleAppCount && ((titlePatchCount && checkOrphanPatchOrAddOn(false)) || (titleAddOnCount && checkOrphanPatchOrAddOn(true)))) || (!titleAppCount && (titlePatchCount || titleAddOnCount))))
+                    {
+                        // SD/eMMC menu: Dump installed content with missing base application
+                        res = resultShowSdCardEmmcOrphanPatchAddOnMenu;
+                        orphanMode = true;
+                    } else
+                    if (uiState == stateRomFsSectionBrowser && strlen(curRomFsPath) > 1)
+                    {
+                        // RomFS section browser: dump current directory
+                        res = resultRomFsSectionBrowserCopyDir;
+                    }
+                }
+                
+                // Special action #2
+                if (keysDown & KEY_X)
+                {
+                    if (uiState == stateSdCardEmmcMenu && (titleAppCount || titlePatchCount || titleAddOnCount))
+                    {
+                        // Batch mode
+                        res = resultShowSdCardEmmcBatchModeMenu;
+                        
+                        // Reset options to their default values
+                        dumpAppTitles = (titleAppCount > 0);
+                        dumpPatchTitles = (titlePatchCount > 0);
+                        dumpAddOnTitles = (titleAddOnCount > 0);
+                        isFat32 = false;
+                        calcCrc = false;
+                        removeConsoleData = false;
+                        tiklessDump = false;
+                        skipDumpedTitles = true;
+                        batchModeSrc = BATCH_SOURCE_ALL;
+                    }
                 }
                 
                 if (menu && menuItemsCount)
@@ -2962,6 +3543,72 @@ UIResult uiProcess()
                     }
                 }
                 
+                // Avoid placing the cursor on the "Dump base applications", "Dump updates" and/or "Dump DLCs" options in the batch mode menu if we're dealing with a storage source that doesn't hold any title belonging to the current category
+                if (uiState == stateSdCardEmmcBatchModeMenu && ((batchModeSrc == BATCH_SOURCE_ALL && ((!titleAppCount && cursor == 1) || (!titlePatchCount && cursor == 2) || (!titleAddOnCount && cursor == 3))) || (batchModeSrc == BATCH_SOURCE_SDCARD && ((!sdCardTitleAppCount && cursor == 1) || (!sdCardTitlePatchCount && cursor == 2) || (!sdCardTitleAddOnCount && cursor == 3))) || (batchModeSrc == BATCH_SOURCE_EMMC && ((!nandUserTitleAppCount && cursor == 1) || (!nandUserTitlePatchCount && cursor == 2) || (!nandUserTitleAddOnCount && cursor == 3)))))
+                {
+                    if (scrollAmount > 0)
+                    {
+                        cursor++;
+                    } else
+                    if (scrollAmount < 0)
+                    {
+                        cursor--;
+                    }
+                }
+                
+                // Avoid placing the cursor on the "Generate ticket-less dumps" option in the batch mode menu if the "Remove console specific data" option is disabled
+                if (uiState == stateSdCardEmmcBatchModeMenu && cursor == 6 && !removeConsoleData)
+                {
+                    if (scrollAmount > 0)
+                    {
+                        cursor++;
+                    } else
+                    if (scrollAmount < 0)
+                    {
+                        cursor--;
+                    }
+                }
+                
+                // Avoid placing the cursor on the "Source storage" option in the batch mode menu if we only have titles available in a single source storage device
+                if (uiState == stateSdCardEmmcBatchModeMenu && cursor == 8 && ((!sdCardTitleAppCount && !sdCardTitlePatchCount && !sdCardTitleAddOnCount) || (!nandUserTitleAppCount && !nandUserTitlePatchCount && !nandUserTitleAddOnCount)))
+                {
+                    if (scrollAmount > 0)
+                    {
+                        cursor = (scrollWithKeysDown ? 0 : 7);
+                    } else
+                    if (scrollAmount < 0)
+                    {
+                        cursor--;
+                    }
+                }
+                
+                // Avoid placing the cursor on the "Use update" option in the ExeFS and RomFS menus if we're dealing with a gamecard and either its base application count is greater than 1 or it has no available patches
+                // Also avoid placing the cursor on it if we're dealing with a SD/eMMC title and it has no available patches
+                if ((uiState == stateExeFsMenu || uiState == stateRomFsMenu) && cursor == 2 && ((menuType == MENUTYPE_GAMECARD && (titleAppCount > 1 || !checkIfBaseApplicationHasPatchOrAddOn(0, false))) || (menuType == MENUTYPE_SDCARD_EMMC && !checkIfBaseApplicationHasPatchOrAddOn(selectedAppInfoIndex, false))))
+                {
+                    if (scrollAmount > 0)
+                    {
+                        cursor = (scrollWithKeysDown ? 0 : 1);
+                    } else
+                    if (scrollAmount < 0)
+                    {
+                        cursor = 0;
+                    }
+                }
+                
+                // Avoid placing the cursor on the "Use update" option in the ExeFS/RomFS data dump and browser menus if we're not dealing with a gamecard, if the base application count is equal to or less than 1, or if the selected base application has no available patches
+                if ((uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu || uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu) && cursor == 2 && (menuType != MENUTYPE_GAMECARD || titleAppCount <= 1 || !checkIfBaseApplicationHasPatchOrAddOn(selectedAppIndex, false)))
+                {
+                    if (scrollAmount > 0)
+                    {
+                        cursor = (scrollWithKeysDown ? 0 : 1);
+                    } else
+                    if (scrollAmount < 0)
+                    {
+                        cursor = 0;
+                    }
+                }
+                
                 // Avoid placing the cursor on the parent directory entry ("..") in the RomFS browser if we're currently at the root directory
                 if (uiState == stateRomFsSectionBrowser && cursor == 0 && strlen(curRomFsPath) <= 1)
                 {
@@ -3012,6 +3659,8 @@ UIResult uiProcess()
         
         uiUpdateFreeSpace();
         res = resultShowXciDumpMenu;
+        
+        dumpedContentInfoStr[0] = '\0';
     } else
     if (uiState == stateDumpNsp)
     {
@@ -3067,13 +3716,79 @@ UIResult uiProcess()
         
         uiRefreshDisplay();
         
-        dumpNintendoSubmissionPackage(selectedNspDumpType, (selectedNspDumpType == DUMP_APP_NSP ? selectedAppIndex : (selectedNspDumpType == DUMP_PATCH_NSP ? selectedPatchIndex : selectedAddOnIndex)), isFat32, calcCrc, removeConsoleData, tiklessDump);
+        dumpNintendoSubmissionPackage(selectedNspDumpType, (selectedNspDumpType == DUMP_APP_NSP ? selectedAppIndex : (selectedNspDumpType == DUMP_PATCH_NSP ? selectedPatchIndex : selectedAddOnIndex)), isFat32, calcCrc, removeConsoleData, tiklessDump, false);
         
         waitForButtonPress();
         
         uiUpdateFreeSpace();
         
         res = (selectedNspDumpType == DUMP_APP_NSP ? resultShowNspAppDumpMenu : (selectedNspDumpType == DUMP_PATCH_NSP ? resultShowNspPatchDumpMenu : resultShowNspAddOnDumpMenu));
+        
+        dumpedContentInfoStr[0] = '\0';
+    } else
+    if (uiState == stateSdCardEmmcBatchDump)
+    {
+        uiDrawString("Batch dump", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+        breaks++;
+        
+        menu = batchModeMenuItems;
+        
+        if ((batchModeSrc == BATCH_SOURCE_ALL && titleAppCount) || (batchModeSrc == BATCH_SOURCE_SDCARD && sdCardTitleAppCount) || (batchModeSrc == BATCH_SOURCE_EMMC && nandUserTitleAppCount))
+        {
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s", menu[1], (dumpAppTitles ? "Yes" : "No"));
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+            breaks++;
+        }
+        
+        if ((batchModeSrc == BATCH_SOURCE_ALL && titlePatchCount) || (batchModeSrc == BATCH_SOURCE_SDCARD && sdCardTitlePatchCount) || (batchModeSrc == BATCH_SOURCE_EMMC && nandUserTitlePatchCount))
+        {
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s", menu[2], (dumpPatchTitles ? "Yes" : "No"));
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+            breaks++;
+        }
+        
+        if ((batchModeSrc == BATCH_SOURCE_ALL && titleAddOnCount) || (batchModeSrc == BATCH_SOURCE_SDCARD && sdCardTitleAddOnCount) || (batchModeSrc == BATCH_SOURCE_EMMC && nandUserTitleAddOnCount))
+        {
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s", menu[3], (dumpAddOnTitles ? "Yes" : "No"));
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+            breaks++;
+        }
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s", menu[4], (isFat32 ? "Yes" : "No"));
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+        breaks++;
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s", menu[5], (removeConsoleData ? "Yes" : "No"));
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+        breaks++;
+        
+        if (removeConsoleData)
+        {
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s", menu[6], (tiklessDump ? "Yes" : "No"));
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+            breaks++;
+        }
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s", menu[7], (skipDumpedTitles ? "Yes" : "No"));
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+        
+        if ((sdCardTitleAppCount || sdCardTitlePatchCount || sdCardTitleAddOnCount) && (nandUserTitleAppCount || nandUserTitlePatchCount || nandUserTitleAddOnCount))
+        {
+            breaks++;
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s", menu[8], (batchModeSrc == BATCH_SOURCE_ALL ? "All (SD card + eMMC)" : (batchModeSrc == BATCH_SOURCE_SDCARD ? "SD card" : "eMMC")));
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+        }
+        
+        breaks += 2;
+        uiRefreshDisplay();
+        
+        dumpNintendoSubmissionPackageBatch(dumpAppTitles, dumpPatchTitles, dumpAddOnTitles, isFat32, removeConsoleData, tiklessDump, skipDumpedTitles, batchModeSrc);
+        
+        waitForButtonPress();
+        
+        uiUpdateFreeSpace();
+        
+        res = resultShowSdCardEmmcBatchModeMenu;
     } else
     if (uiState == stateDumpRawHfs0Partition)
     {
@@ -3098,7 +3813,7 @@ UIResult uiProcess()
         
         uiRefreshDisplay();
         
-        dumpHfs0PartitionData(selectedPartitionIndex);
+        dumpHfs0PartitionData(selectedPartitionIndex, true);
         
         waitForButtonPress();
         
@@ -3129,7 +3844,7 @@ UIResult uiProcess()
         
         uiRefreshDisplay();
         
-        dumpFileFromHfs0Partition(selectedPartitionIndex, selectedFileIndex, filenames[selectedFileIndex]);
+        dumpFileFromHfs0Partition(selectedPartitionIndex, selectedFileIndex, filenames[selectedFileIndex], true);
         
         waitForButtonPress();
         
@@ -3141,14 +3856,20 @@ UIResult uiProcess()
         uiDrawString(exeFsMenuItems[0], 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks++;
         
-        convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", exeFsSectionDumpMenuItems[1], titleName[selectedAppIndex], versionStr);
+        if (!exeFsAndRomFsUpdateFlag)
+        {
+            convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", exeFsSectionDumpMenuItems[1], titleName[selectedAppIndex], versionStr);
+        } else {
+            retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update to dump: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+        }
+        
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks += 2;
         
         uiRefreshDisplay();
         
-        dumpExeFsSectionData(selectedAppIndex, true);
+        dumpExeFsSectionData((!exeFsAndRomFsUpdateFlag ? selectedAppIndex : selectedPatchIndex), exeFsAndRomFsUpdateFlag, true);
         
         waitForButtonPress();
         
@@ -3161,8 +3882,14 @@ UIResult uiProcess()
         uiDrawString(exeFsMenuItems[1], 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks++;
         
-        convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", exeFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+        if (!exeFsAndRomFsUpdateFlag)
+        {
+            convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", exeFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+        } else {
+            retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update to browse: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+        }
+        
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks += 2;
         
@@ -3171,7 +3898,7 @@ UIResult uiProcess()
         
         bool exefs_fail = false;
         
-        if (readProgramNcaExeFsOrRomFs(selectedAppIndex, false))
+        if (readProgramNcaExeFsOrRomFs((!exeFsAndRomFsUpdateFlag ? selectedAppIndex : selectedPatchIndex), exeFsAndRomFsUpdateFlag, false))
         {
             if (getExeFsFileList())
             {
@@ -3197,14 +3924,20 @@ UIResult uiProcess()
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks++;
         
-        convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Base application: %s v%s", titleName[selectedAppIndex], versionStr);
+        if (!exeFsAndRomFsUpdateFlag)
+        {
+            convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Base application: %s v%s", titleName[selectedAppIndex], versionStr);
+        } else {
+            retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+        }
+        
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks += 2;
         
         uiRefreshDisplay();
         
-        dumpFileFromExeFsSection(selectedAppIndex, selectedFileIndex, true);
+        dumpFileFromExeFsSection((!exeFsAndRomFsUpdateFlag ? selectedAppIndex : selectedPatchIndex), selectedFileIndex, exeFsAndRomFsUpdateFlag, true);
         
         waitForButtonPress();
         
@@ -3218,12 +3951,21 @@ UIResult uiProcess()
         
         convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", romFsSectionDumpMenuItems[1], titleName[selectedAppIndex], versionStr);
+        
+        if (!exeFsAndRomFsUpdateFlag)
+        {
+            convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", romFsSectionDumpMenuItems[1], titleName[selectedAppIndex], versionStr);
+        } else {
+            retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update to dump: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+        }
+        
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks += 2;
         
         uiRefreshDisplay();
         
-        dumpRomFsSectionData(selectedAppIndex);
+        dumpRomFsSectionData((!exeFsAndRomFsUpdateFlag ? selectedAppIndex : selectedPatchIndex), exeFsAndRomFsUpdateFlag, true);
         
         waitForButtonPress();
         
@@ -3236,8 +3978,14 @@ UIResult uiProcess()
         uiDrawString(romFsMenuItems[1], 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks++;
         
-        convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", romFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+        if (!exeFsAndRomFsUpdateFlag)
+        {
+            convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", romFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+        } else {
+            retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update to browse: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+        }
+        
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks += 2;
         
@@ -3246,12 +3994,13 @@ UIResult uiProcess()
         
         bool romfs_fail = false;
         
-        if (readProgramNcaExeFsOrRomFs(selectedAppIndex, true))
+        if (readProgramNcaExeFsOrRomFs((!exeFsAndRomFsUpdateFlag ? selectedAppIndex : selectedPatchIndex), exeFsAndRomFsUpdateFlag, true))
         {
-            if (getRomFsFileList(0))
+            if (getRomFsFileList(0, exeFsAndRomFsUpdateFlag))
             {
                 res = resultShowRomFsSectionBrowser;
             } else {
+                if (exeFsAndRomFsUpdateFlag) freeBktrContext();
                 freeRomFsContext();
                 romfs_fail = true;
             }
@@ -3271,8 +4020,14 @@ UIResult uiProcess()
         uiDrawString(romFsMenuItems[1], 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks++;
         
-        convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", romFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+        if (!exeFsAndRomFsUpdateFlag)
+        {
+            convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%s%s v%s", romFsSectionBrowserMenuItems[1], titleName[selectedAppIndex], versionStr);
+        } else {
+            retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update to browse: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+        }
+        
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks += 2;
         
@@ -3280,7 +4035,7 @@ UIResult uiProcess()
         
         if (romFsBrowserEntries[selectedFileIndex].type == ROMFS_ENTRY_DIR)
         {
-            if (getRomFsFileList(romFsBrowserEntries[selectedFileIndex].offset))
+            if (getRomFsFileList(romFsBrowserEntries[selectedFileIndex].offset, exeFsAndRomFsUpdateFlag))
             {
                 res = resultShowRomFsSectionBrowser;
             } else {
@@ -3300,6 +4055,8 @@ UIResult uiProcess()
                 romFsBrowserEntries = NULL;
             }
             
+            if (exeFsAndRomFsUpdateFlag) freeBktrContext();
+            
             freeRomFsContext();
             
             breaks += 2;
@@ -3313,8 +4070,14 @@ UIResult uiProcess()
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks++;
         
-        convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Base application: %s v%s", titleName[selectedAppIndex], versionStr);
+        if (!exeFsAndRomFsUpdateFlag)
+        {
+            convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Base application: %s v%s", titleName[selectedAppIndex], versionStr);
+        } else {
+            retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+        }
+        
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         breaks += 2;
         
@@ -3322,11 +4085,37 @@ UIResult uiProcess()
         
         if (romFsBrowserEntries[selectedFileIndex].type == ROMFS_ENTRY_FILE)
         {
-            dumpFileFromRomFsSection(selectedAppIndex, romFsBrowserEntries[selectedFileIndex].offset, true);
+            dumpFileFromRomFsSection((!exeFsAndRomFsUpdateFlag ? selectedAppIndex : selectedPatchIndex), romFsBrowserEntries[selectedFileIndex].offset, exeFsAndRomFsUpdateFlag, true);
         } else {
             // Unexpected condition
             uiDrawString("Error: the selected entry is not a file!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
         }
+        
+        waitForButtonPress();
+        
+        uiUpdateFreeSpace();
+        res = resultShowRomFsSectionBrowser;
+    } else
+    if (uiState == stateRomFsSectionBrowserCopyDir)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Manual Directory Dump: romfs:%s (RomFS)", curRomFsPath);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+        breaks++;
+        
+        if (!exeFsAndRomFsUpdateFlag)
+        {
+            convertTitleVersionToDecimal(titleAppVersion[selectedAppIndex], versionStr, sizeof(versionStr));
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Base application: %s v%s", titleName[selectedAppIndex], versionStr);
+        } else {
+            retrieveDescriptionForPatchOrAddOn(titlePatchTitleID[selectedPatchIndex], titlePatchVersion[selectedPatchIndex], false, true, "Update: ", strbuf, sizeof(strbuf) / sizeof(strbuf[0]));
+        }
+        
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 115, 115, 255);
+        breaks += 2;
+        
+        uiRefreshDisplay();
+        
+        dumpCurrentDirFromRomFsSection((!exeFsAndRomFsUpdateFlag ? selectedAppIndex : selectedPatchIndex), exeFsAndRomFsUpdateFlag, true);
         
         waitForButtonPress();
         

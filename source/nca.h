@@ -37,6 +37,8 @@
 #define IVFC_MAGIC                      (u32)0x49564643     // "IVFC"
 #define IVFC_MAX_LEVEL                  6
 
+#define BKTR_MAGIC                      (u32)0x424B5452     // "BKTR"
+
 #define ROMFS_HEADER_SIZE               0x50
 #define ROMFS_ENTRY_EMPTY               (u32)0xFFFFFFFF
 
@@ -53,7 +55,9 @@
 
 #define NSP_NCA_FILENAME_LENGTH         0x25                // NCA ID + ".nca" + NULL terminator
 #define NSP_CNMT_FILENAME_LENGTH        0x2A                // NCA ID + ".cnmt.nca" / ".cnmt.xml" + NULL terminator
-#define NSP_NACP_FILENAME_LENGTH        0x2A                // NCA ID + ".nacp.xml" + NULL terminator
+#define NSP_PROGRAM_XML_FILENAME_LENGTH 0x31                // NCA ID + ".programinfo.xml" + NULL terminator
+#define NSP_NACP_XML_FILENAME_LENGTH    0x2A                // NCA ID + ".nacp.xml" + NULL terminator
+#define NSP_LEGAL_XML_FILENAME_LENGTH   0x2F                // NCA ID + ".legalinfo.xml" + NULL terminator
 #define NSP_TIK_FILENAME_LENGTH         0x25                // Rights ID + ".tik" + NULL terminator
 #define NSP_CERT_FILENAME_LENGTH        0x26                // Rights ID + ".cert" + NULL terminator
 
@@ -131,6 +135,22 @@ typedef struct {
     u8 _0xE0[0x58];
 } PACKED romfs_superblock_t;
 
+typedef struct {
+    u64 offset;
+    u64 size;
+    u32 magic; /* "BKTR" */
+    u32 _0x14; /* Version? */
+    u32 num_entries;
+    u32 _0x1C; /* Reserved? */
+} PACKED bktr_header_t;
+
+typedef struct {
+    ivfc_hdr_t ivfc_header;
+    u8 _0xE0[0x18];
+    bktr_header_t relocation_header;
+    bktr_header_t subsection_header;
+} PACKED bktr_superblock_t;
+
 /* NCA FS header. */
 typedef struct {
     u8 _0x0;
@@ -142,6 +162,7 @@ typedef struct {
     union { /* FS-specific superblock. Size = 0x138. */
         pfs0_superblock_t pfs0_superblock;
         romfs_superblock_t romfs_superblock;
+        bktr_superblock_t bktr_superblock;
     };
     union {
         u8 section_ctr[0x8];
@@ -259,6 +280,7 @@ typedef struct {
     u8 *block_data[2];
     u64 block_offset[2]; // Relative to NCA start
     u64 block_size[2];
+    u64 acid_pubkey_offset; // Relative to block_data[0] start
 } PACKED nca_program_mod_data;
 
 typedef struct {
@@ -320,6 +342,8 @@ typedef struct {
     NcmContentStorage ncmStorage;
     NcmNcaId ncaId;
     Aes128CtrContext aes_ctx;
+    u64 section_offset; // Relative to NCA start
+    u64 section_size;
     u64 romfs_offset; // Relative to NCA start
     u64 romfs_size;
     u64 romfs_dirtable_offset; // Relative to NCA start
@@ -332,9 +356,85 @@ typedef struct {
 } PACKED romfs_ctx_t;
 
 typedef struct {
+    u64 virt_offset;
+    u64 phys_offset;
+    u32 is_patch;
+} PACKED bktr_relocation_entry_t;
+
+typedef struct {
+    u32 _0x0;
+    u32 num_entries;
+    u64 virtual_offset_end;
+    bktr_relocation_entry_t entries[0x3FF0 / sizeof(bktr_relocation_entry_t)];
+    u8 padding[0x3FF0 % sizeof(bktr_relocation_entry_t)];
+} PACKED bktr_relocation_bucket_t;
+
+typedef struct {
+    u32 _0x0;
+    u32 num_buckets;
+    u64 total_size;
+    u64 bucket_virtual_offsets[0x3FF0 / sizeof(u64)];
+    bktr_relocation_bucket_t buckets[];
+} PACKED bktr_relocation_block_t;
+
+typedef struct {
+    u64 offset;
+    u32 _0x8;
+    u32 ctr_val;
+} PACKED bktr_subsection_entry_t;
+
+typedef struct {
+    u32 _0x0;
+    u32 num_entries;
+    u64 physical_offset_end;
+    bktr_subsection_entry_t entries[0x3FF];
+} PACKED bktr_subsection_bucket_t;
+
+typedef struct {
+    u32 _0x0;
+    u32 num_buckets;
+    u64 total_size;
+    u64 bucket_physical_offsets[0x3FF0 / sizeof(u64)];
+    bktr_subsection_bucket_t buckets[];
+} PACKED bktr_subsection_block_t;
+
+typedef struct {
+    NcmContentStorage ncmStorage;
+    NcmNcaId ncaId;
+    Aes128CtrContext aes_ctx;
+    u64 section_offset; // Relative to NCA start
+    u64 section_size;
+    bktr_superblock_t superblock;
+    bktr_relocation_block_t *relocation_block;
+    bktr_subsection_block_t *subsection_block;
+    u64 virtual_seek; // Relative to section start
+    u64 bktr_seek; // Relative to section start (patch BKTR section)
+    u64 base_seek; // Relative to section start (base application RomFS section)
+    u64 romfs_offset; // Relative to section start
+    u64 romfs_size;
+    u64 romfs_dirtable_offset; // Relative to section start
+    u64 romfs_dirtable_size;
+    romfs_dir *romfs_dir_entries;
+    u64 romfs_filetable_offset; // Relative to section start
+    u64 romfs_filetable_size;
+    romfs_file *romfs_file_entries;
+    u64 romfs_filedata_offset; // Relative to section start
+} PACKED bktr_ctx_t;
+
+typedef struct {
     u8 type; // 1 = Dir, 2 = File
     u64 offset; // Relative to directory/file table, depending on type
 } PACKED romfs_browser_entry;
+
+typedef struct {
+    u64 id;
+    u8 key[0x10];
+} PACKED send_data_configuration;
+
+typedef struct {
+    u64 id;
+    u8 key[0x10];
+} PACKED receivable_data_configurations;
 
 typedef struct {
     NacpLanguageEntry lang[16];
@@ -364,7 +464,7 @@ typedef struct {
     u8 LogoType;
     u8 LogoHandling;
     u8 RuntimeAddOnContentInstall;
-    u8 _0x30F3[0x3];
+    u8 Reserved_0x30F3[0x3];
     u8 CrashReport;
     u8 Hdcp;
     u64 SeedForPseudoDeviceId;
@@ -380,14 +480,25 @@ typedef struct {
     u64 CacheStorageJournalSize;
     u64 CacheStorageDataAndJournalSizeMax;
     u16 CacheStorageIndexMax;
-    u8 reserved_0x318a[0x6];
+    u8 Reserved_0x318A[0x6];
     u64 PlayLogQueryableApplicationId[0x10];
     u8 PlayLogQueryCapability;
     u8 RepairFlag;
     u8 ProgramIndex;
     u8 RequiredNetworkServiceLicenseOnLaunchFlag;
-    u8 Reserved[0xDEC];
+    u8 Reserved_0x3214[0x4];
+    send_data_configuration SendDataConfiguration;
+    receivable_data_configurations ReceivableDataConfiguration[0x10];
+    u64 JitConfigurationFlag;
+    u64 JitMemorySize;
+    u8 Reserved[0xC40];
 } PACKED nacp_t;
+
+typedef struct {
+    char filename[100];
+    u64 icon_size;
+    u8 icon_data[0x20000];
+} PACKED nacp_icons_ctx;
 
 void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, char *out);
 
@@ -395,7 +506,9 @@ void convertNcaSizeToU64(const u8 size[0x6], u64 *out);
 
 void convertU64ToNcaSize(const u64 size, u8 out[0x6]);
 
-bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, u64 offset, void *outBuf, size_t bufSize, Aes128CtrContext *ctx, bool encrypt);
+bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *ctx, u64 offset, void *outBuf, size_t bufSize, bool encrypt);
+
+bool readBktrSectionBlock(u64 offset, void *outBuf, size_t bufSize);
 
 bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize);
 
@@ -411,6 +524,12 @@ bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
 
 bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
-bool generateNacpXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf);
+bool readBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
+
+bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, nca_program_mod_data *program_mod_data, char **outBuf, u64 *outBufSize);
+
+bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **out_nacp_xml, u64 *out_nacp_xml_size, nacp_icons_ctx **out_nacp_icons_ctx, u8 *out_nacp_icons_ctx_cnt);
+
+bool retrieveLegalInfoXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf, u64 *outBufSize);
 
 #endif

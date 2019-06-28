@@ -17,6 +17,8 @@
 
 /* Extern variables */
 
+extern bool runningSxOs;
+
 extern FsDeviceOperator fsOperatorInstance;
 
 extern nca_keyset_t nca_keyset;
@@ -26,7 +28,7 @@ extern u64 freeSpace;
 extern int breaks;
 extern int font_height;
 
-extern u64 trimmedCardSize;
+extern u64 gameCardSize, trimmedCardSize;
 extern char trimmedCardSizeStr[32];
 
 extern u8 *hfs0_header;
@@ -58,10 +60,18 @@ extern AppletType programAppletType;
 
 extern exefs_ctx_t exeFsContext;
 extern romfs_ctx_t romFsContext;
+extern bktr_ctx_t bktrContext;
 
 extern char curRomFsPath[NAME_BUF_LEN];
+extern u32 curRomFsDirOffset;
 
 extern char strbuf[NAME_BUF_LEN * 4];
+
+extern char *filenameBuffer;
+extern char *filenames[FILENAME_MAX_CNT];
+extern int filenamesCount;
+
+extern u8 *fileNormalIconBuf;
 
 void workaroundPartitionZeroAccess()
 {
@@ -96,12 +106,19 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
     
     size_t write_res;
     
-    char *dumpName = generateDumpFullName();
+    char *dumpName = generateFullDumpName();
     if (!dumpName)
     {
-        uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        breaks += 2;
-        return false;
+        // We're probably dealing with a forced XCI dump
+        dumpName = calloc(16, sizeof(char));
+        if (!dumpName)
+        {
+            uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            breaks += 2;
+            return false;
+        }
+        
+        sprintf(dumpName, "gamecard");
     }
     
     for(partition = 0; partition < ISTORAGE_PARTITION_CNT; partition++)
@@ -110,43 +127,60 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
         breaks++;*/
         
-        workaroundPartitionZeroAccess();
-        
-        if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
+        if (partition == (ISTORAGE_PARTITION_CNT - 1) && runningSxOs)
         {
-            /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle succeeded: 0x%08X", handle.value);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-            breaks++;*/
+            // Total size for IStorage instances is maxed out under SX OS, so let's manually reduce the size for the last instance
             
-            if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, partition)))
+            u64 partitionSizesSum = 0;
+            for(int i = 0; i < (ISTORAGE_PARTITION_CNT - 1); i++) partitionSizesSum += partitionSizes[i];
+            
+            // Substract the total ECC block size as well as the size for previous IStorage instances
+            partitionSizes[partition] = ((gameCardSize - ((gameCardSize / GAMECARD_ECC_BLOCK_SIZE) * GAMECARD_ECC_DATA_SIZE)) - partitionSizesSum);
+            
+            xciDataSize += partitionSizes[partition];
+            convertSize(partitionSizes[partition], partitionSizesStr[partition], sizeof(partitionSizesStr[partition]) / sizeof(partitionSizesStr[partition][0]));
+            /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u size: %s (%lu bytes).", partition, partitionSizesStr[partition], partitionSizes[partition]);
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            breaks += 2;*/
+        } else {
+            workaroundPartitionZeroAccess();
+            
+            if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
             {
-                /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage succeeded: 0x%08X", handle.value);
+                /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle succeeded: 0x%08X", handle.value);
                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
                 breaks++;*/
                 
-                if (R_SUCCEEDED(result = fsStorageGetSize(&gameCardStorage, &(partitionSizes[partition]))))
+                if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, partition)))
                 {
-                    xciDataSize += partitionSizes[partition];
-                    convertSize(partitionSizes[partition], partitionSizesStr[partition], sizeof(partitionSizesStr[partition]) / sizeof(partitionSizesStr[partition][0]));
-                    /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u size: %s (%lu bytes).", partition, partitionSizesStr[partition], partitionSizes[partition]);
+                    /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage succeeded: 0x%08X", handle.value);
                     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                    breaks += 2;*/
+                    breaks++;*/
+                    
+                    if (R_SUCCEEDED(result = fsStorageGetSize(&gameCardStorage, &(partitionSizes[partition]))))
+                    {
+                        xciDataSize += partitionSizes[partition];
+                        convertSize(partitionSizes[partition], partitionSizesStr[partition], sizeof(partitionSizesStr[partition]) / sizeof(partitionSizesStr[partition][0]));
+                        /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u size: %s (%lu bytes).", partition, partitionSizesStr[partition], partitionSizes[partition]);
+                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        breaks += 2;*/
+                    } else {
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageGetSize failed! (0x%08X)", result);
+                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        proceed = false;
+                    }
+                    
+                    fsStorageClose(&gameCardStorage);
                 } else {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageGetSize failed! (0x%08X)", result);
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage failed! (0x%08X)", result);
                     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                     proceed = false;
                 }
-                
-                fsStorageClose(&gameCardStorage);
             } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage failed! (0x%08X)", result);
+                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle failed! (0x%08X)", result);
                 uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                 proceed = false;
             }
-        } else {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            proceed = false;
         }
         
         uiRefreshDisplay();
@@ -437,7 +471,6 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
                             if (!proceed)
                             {
                                 setProgressBarError(&progressCtx);
-                                if (fat32_error) breaks += 2;
                                 break;
                             }
                         }
@@ -445,6 +478,7 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
                         free(buf);
                         
                         breaks = (progressCtx.line_offset + 2);
+                        if (fat32_error) breaks += 2;
                     } else {
                         uiDrawString("Failed to allocate memory for the dump process!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                     }
@@ -541,7 +575,7 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
     return success;
 }
 
-bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleIndex, bool isFat32, bool calcCrc, bool removeConsoleData, bool tiklessDump)
+bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleIndex, bool isFat32, bool calcCrc, bool removeConsoleData, bool tiklessDump, bool batch)
 {
     Result result;
     u32 i = 0, j = 0;
@@ -599,8 +633,20 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     bool cnmtFound = false;
     char *cnmtXml = NULL;
     
+    u32 programNcaIndex = 0;
+    u64 programInfoXmlSize = 0;
+    char *programInfoXml = NULL;
+    
     u32 nacpNcaIndex = 0;
+    u64 nacpXmlSize = 0;
     char *nacpXml = NULL;
+    
+    u8 nacpIconCnt = 0;
+    nacp_icons_ctx *nacpIcons = NULL;
+    
+    u32 legalInfoNcaIndex = 0;
+    u64 legalInfoXmlSize = 0;
+    char *legalInfoXml = NULL;
     
     u32 nspFileCount = 0;
     pfs0_header nspPfs0Header;
@@ -725,9 +771,12 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         }
     }
     
-    uiDrawString("Retrieving information from encrypted NCA content files...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-    uiRefreshDisplay();
-    breaks++;
+    if (!batch)
+    {
+        uiDrawString("Retrieving information from encrypted NCA content files...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        uiRefreshDisplay();
+        breaks++;
+    }
     
     titleList = calloc(1, titleListSize);
     if (!titleList)
@@ -896,7 +945,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             {
                 if (!has_rights_id)
                 {
-                    // We're could be dealing with a custom XCI mounted through SX OS, so let's change back the content distribution method
+                    // We could be dealing with a custom XCI mounted through SX OS, so let's change back the content distribution method
                     dec_nca_header.distribution = 0;
                 } else {
                     if (!rights_info.retrieved_tik)
@@ -910,12 +959,6 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                         
                         memcpy(rights_info.enc_titlekey, rights_info.tik_data.titlekey_block, 0x10);
                         
-                        rights_info.retrieved_tik = true;
-                    }
-                    
-                    // Mess with the NCA header if we're dealing with a content with a populated rights ID field and if tiklessDump is true (removeConsoleData is ignored)
-                    if (tiklessDump)
-                    {
                         // Load external keys
                         if (!loadExternalKeys())
                         {
@@ -931,9 +974,15 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                         aes128ContextCreate(&titlekey_aes_ctx, nca_keyset.titlekeks[crypto_type], false);
                         aes128DecryptBlock(&titlekey_aes_ctx, rights_info.dec_titlekey, rights_info.enc_titlekey);
                         
-                        memset(xml_content_info[i].decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
-                        memcpy(xml_content_info[i].decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info.dec_titlekey, 0x10);
-                        
+                        rights_info.retrieved_tik = true;
+                    }
+                    
+                    memset(xml_content_info[i].decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
+                    memcpy(xml_content_info[i].decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info.dec_titlekey, 0x10);
+                    
+                    // Mess with the NCA header if we're dealing with a content with a populated rights ID field and if tiklessDump is true (removeConsoleData is ignored)
+                    if (tiklessDump)
+                    {
                         // Generate new encrypted NCA key area using titlekey
                         if (!generateEncryptedNcaKeyAreaWithTitlekey(&dec_nca_header, xml_content_info[i].decrypted_nca_keys))
                         {
@@ -943,6 +992,16 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                         
                         // Remove rights ID from NCA
                         memset(dec_nca_header.rights_id, 0, 0x10);
+                        
+                        // Patch ACID pubkey and recreate NCA NPDM signature if we're dealing with the Program NCA
+                        if (xml_content_info[i].type == NcmContentType_Program)
+                        {
+                            if (!processProgramNca(&ncmStorage, &ncaId, &dec_nca_header, &(xml_content_info[i]), &ncaProgramMod))
+                            {
+                                proceed = false;
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -961,15 +1020,49 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                 
                 // Remove rights ID from NCA
                 memset(dec_nca_header.rights_id, 0, 0x10);
+                
+                // Patch ACID pubkey and recreate NCA NPDM signature if we're dealing with the Program NCA
+                if (xml_content_info[i].type == NcmContentType_Program)
+                {
+                    if (!processProgramNca(&ncmStorage, &ncaId, &dec_nca_header, &(xml_content_info[i]), &ncaProgramMod))
+                    {
+                        proceed = false;
+                        break;
+                    }
+                }
             }
         }
         
-        // Generate NACP XML
+        // Generate programinfo.xml
+        if (!programInfoXml && xml_content_info[i].type == NcmContentType_Program)
+        {
+            programNcaIndex = i;
+            
+            if (!generateProgramInfoXml(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &ncaProgramMod, &programInfoXml, &programInfoXmlSize))
+            {
+                proceed = false;
+                break;
+            }
+        }
+        
+        // Retrieve NACP data (XML and icons)
         if (!nacpXml && xml_content_info[i].type == NcmContentType_Icon)
         {
             nacpNcaIndex = i;
             
-            if (!generateNacpXmlFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &nacpXml))
+            if (!retrieveNacpDataFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &nacpXml, &nacpXmlSize, &nacpIcons, &nacpIconCnt))
+            {
+                proceed = false;
+                break;
+            }
+        }
+        
+        // Retrieve legalinfo.xml
+        if (!legalInfoXml && xml_content_info[i].type == NcmContentType_Info)
+        {
+            legalInfoNcaIndex = i;
+            
+            if (!retrieveLegalInfoXmlFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &legalInfoXml, &legalInfoXmlSize))
             {
                 proceed = false;
                 break;
@@ -1040,9 +1133,9 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     generateCnmtXml(&xml_program_info, xml_content_info, cnmtXml);
     
-    bool includeCertAndTik = (rights_info.has_rights_id && !tiklessDump);
+    bool includeTikAndCert = (rights_info.has_rights_id && !tiklessDump);
     
-    if (includeCertAndTik)
+    if (includeTikAndCert)
     {
         if (curStorageId == FsStorageId_GameCard)
         {
@@ -1084,11 +1177,11 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         // Retrieve cert file
         if (!retrieveCertData(rights_info.cert_data, (rights_info.tik_data.titlekey_type == ETICKET_TITLEKEY_PERSONALIZED))) goto out;
         
-        // File count = NCA count + CNMT XML + cert + tik
+        // File count = NCA count + CNMT XML + tik + cert
         nspFileCount = (titleNcaCount + 3);
         
         // Calculate PFS0 String Table size
-        nspPfs0StrTableSize = (((nspFileCount - 4) * NSP_NCA_FILENAME_LENGTH) + (NSP_CNMT_FILENAME_LENGTH * 2) + NSP_CERT_FILENAME_LENGTH + NSP_TIK_FILENAME_LENGTH);
+        nspPfs0StrTableSize = (((nspFileCount - 4) * NSP_NCA_FILENAME_LENGTH) + (NSP_CNMT_FILENAME_LENGTH * 2) + NSP_TIK_FILENAME_LENGTH + NSP_CERT_FILENAME_LENGTH);
     } else {
         // File count = NCA count + CNMT XML
         nspFileCount = (titleNcaCount + 1);
@@ -1097,11 +1190,35 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         nspPfs0StrTableSize = (((nspFileCount - 2) * NSP_NCA_FILENAME_LENGTH) + (NSP_CNMT_FILENAME_LENGTH * 2));
     }
     
+    // Add our programinfo.xml if we created it
+    if (programInfoXml)
+    {
+        nspFileCount++;
+        nspPfs0StrTableSize += NSP_PROGRAM_XML_FILENAME_LENGTH;
+    }
+    
     // Add our NACP XML if we created it
     if (nacpXml)
     {
+        // Add icons if we retrieved them
+        if (nacpIcons && nacpIconCnt)
+        {
+            for(i = 0; i < nacpIconCnt; i++)
+            {
+                nspFileCount++;
+                nspPfs0StrTableSize += (strlen(nacpIcons[i].filename) + 1);
+            }
+        }
+        
         nspFileCount++;
-        nspPfs0StrTableSize += NSP_NACP_FILENAME_LENGTH;
+        nspPfs0StrTableSize += NSP_NACP_XML_FILENAME_LENGTH;
+    }
+    
+    // Add our legalinfo.xml if we retrieved it
+    if (legalInfoXml)
+    {
+        nspFileCount++;
+        nspPfs0StrTableSize += NSP_LEGAL_XML_FILENAME_LENGTH;
     }
     
     // Start NSP creation
@@ -1130,25 +1247,48 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     }
     
     // Determine our full NSP header size
-    full_nsp_header_size = (sizeof(pfs0_header) + (nspFileCount * sizeof(pfs0_entry_table)) + nspPfs0StrTableSize);
+    full_nsp_header_size = (sizeof(pfs0_header) + ((u64)nspFileCount * sizeof(pfs0_entry_table)) + nspPfs0StrTableSize);
+    
+    // Round up our full NSP header size to a 0x10-byte boundary
+    if (!(full_nsp_header_size % 0x10)) full_nsp_header_size++; // If it's already rounded, add more padding
     full_nsp_header_size = round_up(full_nsp_header_size, 0x10);
     
     // Determine our String Table size
-    nspPfs0Header.str_table_size = (full_nsp_header_size - (sizeof(pfs0_header) + (nspFileCount * sizeof(pfs0_entry_table))));
+    nspPfs0Header.str_table_size = (full_nsp_header_size - (sizeof(pfs0_header) + ((u64)nspFileCount * sizeof(pfs0_entry_table))));
     
     // Calculate total dump size
     progressCtx.totalSize = full_nsp_header_size;
-    progressCtx.totalSize += strlen(cnmtXml);
-    if (nacpXml) progressCtx.totalSize += strlen(nacpXml);
-    if (includeCertAndTik) progressCtx.totalSize += (ETICKET_CERT_FILE_SIZE + ETICKET_TIK_FILE_SIZE);
+    
     for(i = 0; i < titleNcaCount; i++) progressCtx.totalSize += xml_content_info[i].size;
     
-    breaks++;
+    progressCtx.totalSize += strlen(cnmtXml);
+    
+    if (programInfoXml) progressCtx.totalSize += programInfoXmlSize;
+    
+    if (nacpXml)
+    {
+        if (nacpIcons && nacpIconCnt)
+        {
+            for(i = 0; i < nacpIconCnt; i++) progressCtx.totalSize += nacpIcons[i].icon_size;
+        }
+        
+        progressCtx.totalSize += nacpXmlSize;
+    }
+    
+    if (legalInfoXml) progressCtx.totalSize += legalInfoXmlSize;
+    
+    if (includeTikAndCert) progressCtx.totalSize += (ETICKET_TIK_FILE_SIZE + ETICKET_CERT_FILE_SIZE);
+    
     convertSize(progressCtx.totalSize, progressCtx.totalSizeStr, sizeof(progressCtx.totalSizeStr) / sizeof(progressCtx.totalSizeStr[0]));
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Total NSP dump size: %s (%lu bytes).", progressCtx.totalSizeStr, progressCtx.totalSize);
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-    uiRefreshDisplay();
-    breaks++;
+    
+    if (!batch)
+    {
+        breaks++;
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Total NSP dump size: %s (%lu bytes).", progressCtx.totalSizeStr, progressCtx.totalSize);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        uiRefreshDisplay();
+        breaks++;
+    }
     
     if (progressCtx.totalSize > freeSpace)
     {
@@ -1160,7 +1300,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
     
     // Check if the dump already exists
-    if (checkIfFileExists(dumpPath))
+    if (!batch && checkIfFileExists(dumpPath))
     {
         // Ask the user if they want to proceed anyway
         int cur_breaks = breaks;
@@ -1207,11 +1347,14 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    breaks++;
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump procedure started. Hold %s to cancel.", NINTENDO_FONT_B);
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-    uiRefreshDisplay();
-    breaks += 2;
+    if (!batch)
+    {
+        breaks++;
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump procedure started. Hold %s to cancel.", NINTENDO_FONT_B);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        uiRefreshDisplay();
+        breaks += 2;
+    }
     
     if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
     {
@@ -1220,49 +1363,18 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     }
     
     // Write placeholder zeroes
-    write_res = fwrite(buf, 1, full_nsp_header_size + strlen(cnmtXml), outFile);
-    if (write_res != (full_nsp_header_size + strlen(cnmtXml)))
+    write_res = fwrite(buf, 1, full_nsp_header_size, outFile);
+    if (write_res != full_nsp_header_size)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes placeholder data to file offset 0x%016lX! (wrote %lu bytes)", full_nsp_header_size + strlen(cnmtXml), (u64)0, write_res);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes placeholder data to file offset 0x%016lX! (wrote %lu bytes)", full_nsp_header_size, (u64)0, write_res);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    progressCtx.curOffset = (full_nsp_header_size + strlen(cnmtXml));
-    
-    // Write our NACP XML
-    if (nacpXml)
-    {
-        write_res = fwrite(nacpXml, 1, strlen(nacpXml), outFile);
-        if (write_res != strlen(nacpXml))
-        {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes NACP XML to file offset 0x%016lX! (wrote %lu bytes)", strlen(nacpXml), progressCtx.curOffset, write_res);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            goto out;
-        }
-        
-        progressCtx.curOffset += strlen(nacpXml);
-    }
-    
-    if (includeCertAndTik)
-    {
-        memcpy(buf, rights_info.cert_data, ETICKET_CERT_FILE_SIZE);
-        memcpy(buf + ETICKET_CERT_FILE_SIZE, &(rights_info.tik_data), ETICKET_TIK_FILE_SIZE);
-        
-        // Write cert / tik
-        write_res = fwrite(buf, 1, ETICKET_CERT_FILE_SIZE + ETICKET_TIK_FILE_SIZE, outFile);
-        if (write_res != (ETICKET_CERT_FILE_SIZE + ETICKET_TIK_FILE_SIZE))
-        {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %u bytes cert + tik to file offset 0x%016lX! (wrote %lu bytes)", ETICKET_CERT_FILE_SIZE + ETICKET_TIK_FILE_SIZE, progressCtx.curOffset, write_res);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            goto out;
-        }
-        
-        progressCtx.curOffset += (ETICKET_CERT_FILE_SIZE + ETICKET_TIK_FILE_SIZE);
-    }
+    progressCtx.curOffset = full_nsp_header_size;
     
     // Calculate DUMP_BUFFER_SIZE block numbers for the modified Program NCA data blocks
-    if (selectedNspDumpType != DUMP_PATCH_NSP && ncaProgramMod.block_mod_cnt > 0)
+    if (ncaProgramMod.block_mod_cnt > 0)
     {
         hash_table_dump_buffer_start = ((ncaProgramMod.hash_table_offset / DUMP_BUFFER_SIZE) * DUMP_BUFFER_SIZE);
         hash_table_dump_buffer_end = (((ncaProgramMod.hash_table_offset + ncaProgramMod.hash_table_size) / DUMP_BUFFER_SIZE) * DUMP_BUFFER_SIZE);
@@ -1315,7 +1427,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             if (nca_offset == 0) memcpy(buf, xml_content_info[i].encrypted_header_mod, NCA_FULL_HEADER_LENGTH);
             
             // Replace modified Program NCA data blocks
-            if (curStorageId == FsStorageId_GameCard && xml_content_info[i].type == NcmContentType_Program && selectedNspDumpType != DUMP_PATCH_NSP && ncaProgramMod.block_mod_cnt > 0)
+            if (ncaProgramMod.block_mod_cnt > 0 && xml_content_info[i].type == NcmContentType_Program)
             {
                 u64 program_nca_prev_write;
                 u64 program_nca_next_write;
@@ -1487,16 +1599,12 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     if (!proceed) goto out;
     
-    dumping = false;
-    
-    breaks = (progressCtx.line_offset + 2);
-    
     uiFill(0, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
     
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(dumpPath, '/' ) + 1);
     uiDrawString(strbuf, 8, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     
-    uiDrawString("Writing PFS0 header, CNMT XML and CNMT NCA...", 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiDrawString("Writing PFS0 header...", 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     
     uiRefreshDisplay();
     
@@ -1515,34 +1623,59 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     for(i = 0; i < nspFileCount; i++)
     {
-        // If dealing with a title with rights ID, reserve the first four entries for the CNMT XML, NACP XML (if available), cert and tik
-        // Otherwise, just reserve the first entry for the CNMT XML
-        
-        char ncaFileName[50] = {'\0'};
+        char ncaFileName[100] = {'\0'};
         u64 cur_file_size = 0;
         
-        if (i == 0)
+        if (i < titleNcaCount)
         {
-            // CNMT XML
+            // Always reserve the first titleNcaCount entries for our NCA contents
+            sprintf(ncaFileName, "%s.%s", xml_content_info[i].nca_id_str, (i == cnmtNcaIndex ? "cnmt.nca" : "nca"));
+            cur_file_size = xml_content_info[i].size;
+        } else
+        if (i == titleNcaCount)
+        {
+            // Reserve the entry right after our NCA contents for the CNMT XML
             sprintf(ncaFileName, "%s.cnmt.xml", xml_content_info[cnmtNcaIndex].nca_id_str);
             cur_file_size = strlen(cnmtXml);
         } else {
-            if (nacpXml && i == 1)
+            // Deal with additional files packed into the PFS0, in the following order:
+            // programinfo.xml (if available)
+            // NACP icons (if available)
+            // NACP XML (if available)
+            // legalinfo.xml (if available)
+            // Ticket (if available)
+            // Certificate chain (if available)
+            
+            if (programInfoXml && i == (titleNcaCount + 1))
             {
-                // NACP XML
+                // programinfo.xml entry
+                sprintf(ncaFileName, "%s.programinfo.xml", xml_content_info[programNcaIndex].nca_id_str);
+                cur_file_size = programInfoXmlSize;
+            } else
+            if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleNcaCount + nacpIconCnt)) || (programInfoXml && i <= (titleNcaCount + 1 + nacpIconCnt))))
+            {
+                // NACP icon entry
+                u32 icon_idx = (!programInfoXml ? (i - (titleNcaCount + 1)) : (i - (titleNcaCount + 2)));
+                sprintf(ncaFileName, nacpIcons[icon_idx].filename);
+                cur_file_size = nacpIcons[icon_idx].icon_size;
+            } else
+            if (nacpXml && ((!programInfoXml && i == (titleNcaCount + nacpIconCnt + 1)) || (programInfoXml && i == (titleNcaCount + 1 + nacpIconCnt + 1))))
+            {
+                // NACP XML entry
+                // If there are no icons, this will effectively make it the next entry after the CNMT XML
                 sprintf(ncaFileName, "%s.nacp.xml", xml_content_info[nacpNcaIndex].nca_id_str);
-                cur_file_size = strlen(nacpXml);
+                cur_file_size = nacpXmlSize;
+            } else
+            if (legalInfoXml && ((!includeTikAndCert && i == (nspFileCount - 1)) || (includeTikAndCert && i == (nspFileCount - 3))))
+            {
+                // legalinfo.xml entry
+                // If none of the previous conditions are met, assume we're dealing with a legalinfo.xml depending on the includeTikAndCert and counter values
+                sprintf(ncaFileName, "%s.legalinfo.xml", xml_content_info[legalInfoNcaIndex].nca_id_str);
+                cur_file_size = legalInfoXmlSize;
             } else {
-                if (includeCertAndTik && ((!nacpXml && (i == 1 || i == 2)) || (nacpXml && (i == 2 || i == 3))))
-                {
-                    // cert / tik
-                    sprintf(ncaFileName, "%s", (((!nacpXml && i == 1) || (nacpXml && i == 2)) ? rights_info.cert_filename : rights_info.tik_filename));
-                    cur_file_size = (((!nacpXml && i == 1) || (nacpXml && i == 2)) ? ETICKET_CERT_FILE_SIZE : ETICKET_TIK_FILE_SIZE);
-                } else {
-                    u32 cnt_idx = (i - (includeCertAndTik ? 3 : 1) - (nacpXml ? 1 : 0));
-                    sprintf(ncaFileName, "%s.%s", xml_content_info[cnt_idx].nca_id_str, (cnt_idx == cnmtNcaIndex ? "cnmt.nca" : "nca"));
-                    cur_file_size = xml_content_info[cnt_idx].size;
-                }
+                // tik/cert entry
+                sprintf(ncaFileName, "%s", (i == (nspFileCount - 2) ? rights_info.tik_filename : rights_info.cert_filename));
+                cur_file_size = (i == (nspFileCount - 2) ? ETICKET_TIK_FILE_SIZE : ETICKET_CERT_FILE_SIZE);
             }
         }
         
@@ -1556,11 +1689,10 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         filename_offset += (strlen(ncaFileName) + 1);
     }
     
-    // Write our full PFS0 header + CNMT XML
+    // Write our full PFS0 header
     memcpy(buf, &nspPfs0Header, sizeof(pfs0_header));
-    memcpy(buf + sizeof(pfs0_header), nspPfs0EntryTable, nspFileCount * sizeof(pfs0_entry_table));
-    memcpy(buf + sizeof(pfs0_header) + (nspFileCount * sizeof(pfs0_entry_table)), nspPfs0StrTable, nspPfs0Header.str_table_size);
-    memcpy(buf + full_nsp_header_size, cnmtXml, strlen(cnmtXml));
+    memcpy(buf + sizeof(pfs0_header), nspPfs0EntryTable, (u64)nspFileCount * sizeof(pfs0_entry_table));
+    memcpy(buf + sizeof(pfs0_header) + ((u64)nspFileCount * sizeof(pfs0_entry_table)), nspPfs0StrTable, nspPfs0Header.str_table_size);
     
     if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
     {
@@ -1576,23 +1708,22 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         if (!outFile)
         {
             setProgressBarError(&progressCtx);
-            uiDrawString("Failed to re-open output file for part #0!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString("Failed to re-open output file for part #0!", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
             goto out;
         }
     } else {
         rewind(outFile);
     }
     
-    write_res = fwrite(buf, 1, full_nsp_header_size + strlen(cnmtXml), outFile);
-    if (write_res != (full_nsp_header_size + strlen(cnmtXml)))
+    write_res = fwrite(buf, 1, full_nsp_header_size, outFile);
+    if (write_res != full_nsp_header_size)
     {
         setProgressBarError(&progressCtx);
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes PFS0 header + CNMT XML to file offset 0x%016lX! (wrote %lu bytes)", full_nsp_header_size + strlen(cnmtXml), (u64)0, write_res);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes PFS0 header to file offset 0x%016lX! (wrote %lu bytes)", full_nsp_header_size, (u64)0, write_res);
+        uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    // Now let's write our modified CNMT NCA
     if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
     {
         if (outFile)
@@ -1608,95 +1739,226 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         {
             setProgressBarError(&progressCtx);
             snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to re-open output file for part #%u!", splitIndex);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            goto out;
-        }
-        
-        fseek(outFile, 0, SEEK_END);
-        
-        // This is a pain
-        u64 cur_file_size = (progressCtx.curOffset - (splitIndex * SPLIT_FILE_NSP_PART_SIZE));
-        if ((cur_file_size + xml_content_info[cnmtNcaIndex].size) > SPLIT_FILE_NSP_PART_SIZE)
-        {
-            u64 new_file_chunk_size = ((progressCtx.curOffset + xml_content_info[cnmtNcaIndex].size) - ((splitIndex + 1) * SPLIT_FILE_NSP_PART_SIZE));
-            u64 old_file_chunk_size = (xml_content_info[cnmtNcaIndex].size - new_file_chunk_size);
-            
-            if (old_file_chunk_size > 0)
-            {
-                write_res = fwrite(cnmtNcaBuf, 1, old_file_chunk_size, outFile);
-                if (write_res != old_file_chunk_size)
-                {
-                    setProgressBarError(&progressCtx);
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes CNMT NCA chunk #1 from offset 0x%016lX to part #%02u! (wrote %lu bytes)", old_file_chunk_size, progressCtx.curOffset, splitIndex, write_res);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                    goto out;
-                }
-            }
-            
-            fclose(outFile);
-            outFile = NULL;
-            
-            if (new_file_chunk_size > 0)
-            {
-                splitIndex++;
-                snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp/%02u", NSP_DUMP_PATH, dumpName, splitIndex);
-                
-                outFile = fopen(dumpPath, "wb");
-                if (!outFile)
-                {
-                    setProgressBarError(&progressCtx);
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                    goto out;
-                }
-                
-                uiFill(0, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-                
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(dumpPath, '/' ) + 1);
-                uiDrawString(strbuf, 8, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                
-                uiRefreshDisplay();
-                
-                write_res = fwrite(cnmtNcaBuf + old_file_chunk_size, 1, new_file_chunk_size, outFile);
-                if (write_res != new_file_chunk_size)
-                {
-                    setProgressBarError(&progressCtx);
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes CNMT NCA chunk #2 from offset 0x%016lX to part #%02u! (wrote %lu bytes)", new_file_chunk_size, progressCtx.curOffset + old_file_chunk_size, splitIndex, write_res);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                    goto out;
-                }
-            }
-        } else {
-            write_res = fwrite(cnmtNcaBuf, 1, xml_content_info[cnmtNcaIndex].size, outFile);
-            if (write_res != xml_content_info[cnmtNcaIndex].size)
-            {
-                setProgressBarError(&progressCtx);
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes CNMT NCA to file offset 0x%016lX! (wrote %lu bytes)", xml_content_info[cnmtNcaIndex].size, progressCtx.curOffset, write_res);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                goto out;
-            }
-        }
-    } else {
-        fseek(outFile, 0, SEEK_END);
-        
-        write_res = fwrite(cnmtNcaBuf, 1, xml_content_info[cnmtNcaIndex].size, outFile);
-        if (write_res != xml_content_info[cnmtNcaIndex].size)
-        {
-            setProgressBarError(&progressCtx);
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes CNMT NCA to file offset 0x%016lX! (wrote %lu bytes)", xml_content_info[cnmtNcaIndex].size, progressCtx.curOffset, write_res);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            
-            if ((progressCtx.curOffset + xml_content_info[cnmtNcaIndex].size) > FAT32_FILESIZE_LIMIT)
-            {
-                breaks += 2;
-                uiDrawString("You're probably using a FAT32 partition. Make sure to enable the \"Split output dump\" option.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-            }
-            
+            uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
             goto out;
         }
     }
     
-    progressCtx.curOffset += xml_content_info[cnmtNcaIndex].size;
+    fseek(outFile, 0, SEEK_END);
+    
+    // Now let's write the rest of the data, including our modified CNMT NCA
+    for(i = (titleNcaCount - 1); i < nspFileCount; i++)
+    {
+        n = DUMP_BUFFER_SIZE;
+        
+        char ncaFileName[100] = {'\0'};
+        u64 cur_file_size = 0;
+        
+        if (i == (titleNcaCount - 1))
+        {
+            // CNMT NCA
+            sprintf(ncaFileName, "%s.cnmt.nca", xml_content_info[i].nca_id_str);
+            cur_file_size = xml_content_info[cnmtNcaIndex].size;
+        } else
+        if (i == titleNcaCount)
+        {
+            // CNMT XML
+            sprintf(ncaFileName, "%s.cnmt.xml", xml_content_info[cnmtNcaIndex].nca_id_str);
+            cur_file_size = strlen(cnmtXml);
+        } else {
+            if (programInfoXml && i == (titleNcaCount + 1))
+            {
+                // programinfo.xml entry
+                sprintf(ncaFileName, "%s.programinfo.xml", xml_content_info[programNcaIndex].nca_id_str);
+                cur_file_size = programInfoXmlSize;
+            } else
+            if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleNcaCount + nacpIconCnt)) || (programInfoXml && i <= (titleNcaCount + 1 + nacpIconCnt))))
+            {
+                // NACP icon entry
+                u32 icon_idx = (!programInfoXml ? (i - (titleNcaCount + 1)) : (i - (titleNcaCount + 2)));
+                sprintf(ncaFileName, nacpIcons[icon_idx].filename);
+                cur_file_size = nacpIcons[icon_idx].icon_size;
+            } else
+            if (nacpXml && ((!programInfoXml && i == (titleNcaCount + nacpIconCnt + 1)) || (programInfoXml && i == (titleNcaCount + 1 + nacpIconCnt + 1))))
+            {
+                // NACP XML entry
+                sprintf(ncaFileName, "%s.nacp.xml", xml_content_info[nacpNcaIndex].nca_id_str);
+                cur_file_size = nacpXmlSize;
+            } else
+            if (legalInfoXml && ((!includeTikAndCert && i == (nspFileCount - 1)) || (includeTikAndCert && i == (nspFileCount - 3))))
+            {
+                // legalinfo.xml entry
+                sprintf(ncaFileName, "%s.legalinfo.xml", xml_content_info[legalInfoNcaIndex].nca_id_str);
+                cur_file_size = legalInfoXmlSize;
+            } else {
+                // tik/cert entry
+                sprintf(ncaFileName, "%s", (i == (nspFileCount - 2) ? rights_info.tik_filename : rights_info.cert_filename));
+                cur_file_size = (i == (nspFileCount - 2) ? ETICKET_TIK_FILE_SIZE : ETICKET_CERT_FILE_SIZE);
+            }
+        }
+        
+        for(nca_offset = 0; nca_offset < cur_file_size; nca_offset += n, progressCtx.curOffset += n)
+        {
+            uiFill(0, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+            
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(dumpPath, '/' ) + 1);
+            uiDrawString(strbuf, 8, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Writing \"%s\"...", ncaFileName);
+            uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            
+            uiRefreshDisplay();
+            
+            if (DUMP_BUFFER_SIZE > (cur_file_size - nca_offset)) n = (cur_file_size - nca_offset);
+            
+            // Retrieve data from its respective source
+            if (i == (titleNcaCount - 1))
+            {
+                // CNMT NCA
+                memcpy(buf, cnmtNcaBuf + nca_offset, n);
+            } else
+            if (i == titleNcaCount)
+            {
+                // CNMT XML
+                memcpy(buf, cnmtXml + nca_offset, n);
+            } else {
+                if (programInfoXml && i == (titleNcaCount + 1))
+                {
+                    // programinfo.xml entry
+                    memcpy(buf, programInfoXml + nca_offset, n);
+                } else
+                if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleNcaCount + nacpIconCnt)) || (programInfoXml && i <= (titleNcaCount + 1 + nacpIconCnt))))
+                {
+                    // NACP icon entry
+                    u32 icon_idx = (!programInfoXml ? (i - (titleNcaCount + 1)) : (i - (titleNcaCount + 2)));
+                    memcpy(buf, nacpIcons[icon_idx].icon_data + nca_offset, n);
+                } else
+                if (nacpXml && ((!programInfoXml && i == (titleNcaCount + nacpIconCnt + 1)) || (programInfoXml && i == (titleNcaCount + 1 + nacpIconCnt + 1))))
+                {
+                    // NACP XML entry
+                    memcpy(buf, nacpXml + nca_offset, n);
+                } else
+                if (legalInfoXml && ((!includeTikAndCert && i == (nspFileCount - 1)) || (includeTikAndCert && i == (nspFileCount - 3))))
+                {
+                    // legalinfo.xml entry
+                    memcpy(buf, legalInfoXml + nca_offset, n);
+                } else {
+                    // tik/cert entry
+                    if (i == (nspFileCount - 2))
+                    {
+                        memcpy(buf, (u8*)(&(rights_info.tik_data)) + nca_offset, n);
+                    } else {
+                        memcpy(buf, rights_info.cert_data + nca_offset, n);
+                    }
+                }
+            }
+            
+            if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && (progressCtx.curOffset + n) >= ((splitIndex + 1) * SPLIT_FILE_NSP_PART_SIZE))
+            {
+                u64 new_file_chunk_size = ((progressCtx.curOffset + n) - ((splitIndex + 1) * SPLIT_FILE_NSP_PART_SIZE));
+                u64 old_file_chunk_size = (n - new_file_chunk_size);
+                
+                if (old_file_chunk_size > 0)
+                {
+                    write_res = fwrite(buf, 1, old_file_chunk_size, outFile);
+                    if (write_res != old_file_chunk_size)
+                    {
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", old_file_chunk_size, progressCtx.curOffset, splitIndex, write_res);
+                        uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        proceed = false;
+                        break;
+                    }
+                }
+                
+                fclose(outFile);
+                outFile = NULL;
+                
+                if (new_file_chunk_size > 0 || (progressCtx.curOffset + n) < progressCtx.totalSize)
+                {
+                    splitIndex++;
+                    snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp/%02u", NSP_DUMP_PATH, dumpName, splitIndex);
+                    
+                    outFile = fopen(dumpPath, "wb");
+                    if (!outFile)
+                    {
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
+                        uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        proceed = false;
+                        break;
+                    }
+                    
+                    if (new_file_chunk_size > 0)
+                    {
+                        write_res = fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile);
+                        if (write_res != new_file_chunk_size)
+                        {
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", new_file_chunk_size, progressCtx.curOffset + old_file_chunk_size, splitIndex, write_res);
+                            uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                            proceed = false;
+                            break;
+                        }
+                    }
+                }
+            } else {
+                write_res = fwrite(buf, 1, n, outFile);
+                if (write_res != n)
+                {
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX! (wrote %lu bytes)", n, progressCtx.curOffset, write_res);
+                    uiDrawString(strbuf, 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    
+                    if ((progressCtx.curOffset + n) > FAT32_FILESIZE_LIMIT)
+                    {
+                        uiDrawString("You're probably using a FAT32 partition. Make sure to enable the \"Split output dump\" option.", 8, ((progressCtx.line_offset + 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        fat32_error = true;
+                    }
+                    
+                    proceed = false;
+                    break;
+                }
+            }
+            
+            printProgressBar(&progressCtx, true, n);
+            
+            if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+            {
+                hidScanInput();
+                
+                u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+                if (keysDown & KEY_B)
+                {
+                    uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    proceed = false;
+                    break;
+                }
+            }
+        }
+        
+        if (!proceed)
+        {
+            setProgressBarError(&progressCtx);
+            break;
+        }
+        
+        // Support empty files
+        if (!cur_file_size)
+        {
+            uiFill(0, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+            
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), strrchr(dumpPath, '/' ) + 1);
+            uiDrawString(strbuf, 8, ((progressCtx.line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Writing \"%s\"...", ncaFileName);
+            uiDrawString(strbuf, 8, ((progressCtx.line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            
+            printProgressBar(&progressCtx, false, 0);
+        }
+    }
+    
+    if (!proceed) goto out;
+    
+    dumping = false;
+    
+    breaks = (progressCtx.line_offset + 2);
     
     if (progressCtx.curOffset < progressCtx.totalSize)
     {
@@ -1709,21 +1971,24 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     success = true;
     
     // Finalize dump
-    timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
-    progressCtx.now -= progressCtx.start;
+    if (!batch)
+    {
+        timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
+        progressCtx.now -= progressCtx.start;
+        
+        progressCtx.progress = 100;
+        progressCtx.remainingTime = 0;
+        
+        printProgressBar(&progressCtx, false, 0);
+        
+        formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+        
+        uiRefreshDisplay();
+    }
     
-    progressCtx.progress = 100;
-    progressCtx.remainingTime = 0;
-    
-    printProgressBar(&progressCtx, false, 0);
-    
-    formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
-    
-    uiRefreshDisplay();
-    
-    if (calcCrc)
+    if (!batch && calcCrc)
     {
         breaks += 2;
         uiDrawString("CRC32 checksum calculation will begin in 5 seconds...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
@@ -1918,13 +2183,19 @@ out:
     
     if (cnmtNcaBuf) free(cnmtNcaBuf);
     
-    if (ncaProgramMod.block_mod_cnt == 2 && ncaProgramMod.block_data[1]) free(ncaProgramMod.block_data[1]);
+    if (ncaProgramMod.block_data[1]) free(ncaProgramMod.block_data[1]);
     
     if (ncaProgramMod.block_data[0]) free(ncaProgramMod.block_data[0]);
     
     if (ncaProgramMod.hash_table) free(ncaProgramMod.hash_table);
     
+    if (legalInfoXml) free(legalInfoXml);
+    
+    if (nacpIcons) free(nacpIcons);
+    
     if (nacpXml) free(nacpXml);
+    
+    if (programInfoXml) free(programInfoXml);
     
     serviceClose(&(ncmStorage.s));
     
@@ -1953,9 +2224,425 @@ out:
     
     free(dumpName);
     
-    breaks += 2;
+    if (!batch) breaks += 2;
     
     return success;
+}
+
+bool dumpNintendoSubmissionPackageBatch(bool dumpAppTitles, bool dumpPatchTitles, bool dumpAddOnTitles, bool isFat32, bool removeConsoleData, bool tiklessDump, bool skipDumpedTitles, batchModeSourceStorage batchModeSrc)
+{
+    if ((!dumpAppTitles && !dumpPatchTitles && !dumpAddOnTitles) || (batchModeSrc == BATCH_SOURCE_ALL && ((dumpAppTitles && !titleAppCount) || (dumpPatchTitles && !titlePatchCount) || (dumpAddOnTitles && !titleAddOnCount))) || (batchModeSrc == BATCH_SOURCE_SDCARD && ((dumpAppTitles && !sdCardTitleAppCount) || (dumpPatchTitles && !sdCardTitlePatchCount) || (dumpAddOnTitles && !sdCardTitleAddOnCount))) || (batchModeSrc == BATCH_SOURCE_EMMC && ((dumpAppTitles && !nandUserTitleAppCount) || (dumpPatchTitles && !nandUserTitlePatchCount) || (dumpAddOnTitles && !nandUserTitleAddOnCount))))
+    {
+        uiDrawString("Error: invalid parameters to perform batch NSP dump!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    u32 i, j;
+    
+    u32 totalTitleCount = 0, totalAppCount = 0, totalPatchCount = 0, totalAddOnCount = 0;
+    
+    u32 titleCount, titleIndex;
+    
+    char *dumpName = NULL;
+    char dumpPath[NAME_BUF_LEN * 2] = {'\0'};
+    char curName[NAME_BUF_LEN * 2] = {'\0'};
+    
+    int initial_breaks = breaks, cur_breaks;
+    
+    const u32 maxSummaryFileCount = 6;
+    u32 summaryPage = 0;
+    
+    memset(filenameBuffer, 0, FILENAME_BUFFER_SIZE);
+    filenamesCount = 0;
+    
+    char *nextFilename = filenameBuffer;
+    
+    bool proceed = true;
+    
+    if (dumpAppTitles)
+    {
+        titleCount = (batchModeSrc == BATCH_SOURCE_ALL ? titleAppCount : (batchModeSrc == BATCH_SOURCE_SDCARD ? sdCardTitleAppCount : nandUserTitleAppCount));
+        
+        for(i = 0; i < titleCount; i++)
+        {
+            titleIndex = ((batchModeSrc == BATCH_SOURCE_ALL || batchModeSrc == BATCH_SOURCE_SDCARD) ? i : (i + sdCardTitleAppCount));
+            
+            dumpName = generateNSPDumpName(DUMP_APP_NSP, titleIndex);
+            if (!dumpName)
+            {
+                uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                breaks += 2;
+                return false;
+            }
+            
+            snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+            
+            free(dumpName);
+            dumpName = NULL;
+            
+            // Check if this title has already been dumped
+            if (skipDumpedTitles && checkIfFileExists(dumpPath)) continue;
+            
+            snprintf(curName, sizeof(curName) / sizeof(curName[0]), strrchr(dumpPath, '/') + 1);
+            
+            // Fix entry name length
+            u32 strWidth = uiGetStrWidth(curName);
+            
+            if ((8 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+            {
+                while((8 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+                {
+                    curName[strlen(curName) - 1] = '\0';
+                    strWidth = uiGetStrWidth(curName);
+                }
+                
+                strcat(curName, "...");
+            }
+            
+            addStringToFilenameBuffer(curName, &nextFilename);
+            
+            totalAppCount++;
+        }
+        
+        totalTitleCount += totalAppCount;
+    }
+    
+    if (dumpPatchTitles)
+    {
+        titleCount = (batchModeSrc == BATCH_SOURCE_ALL ? titlePatchCount : (batchModeSrc == BATCH_SOURCE_SDCARD ? sdCardTitlePatchCount : nandUserTitlePatchCount));
+        
+        for(i = 0; i < titleCount; i++)
+        {
+            titleIndex = ((batchModeSrc == BATCH_SOURCE_ALL || batchModeSrc == BATCH_SOURCE_SDCARD) ? i : (i + sdCardTitlePatchCount));
+            
+            dumpName = generateNSPDumpName(DUMP_PATCH_NSP, titleIndex);
+            if (!dumpName)
+            {
+                uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                breaks += 2;
+                return false;
+            }
+            
+            snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+            
+            free(dumpName);
+            dumpName = NULL;
+            
+            // Check if this title has already been dumped
+            if (skipDumpedTitles && checkIfFileExists(dumpPath)) continue;
+            
+            snprintf(curName, sizeof(curName) / sizeof(curName[0]), strrchr(dumpPath, '/') + 1);
+            
+            // Fix entry name length
+            u32 strWidth = uiGetStrWidth(curName);
+            
+            if ((8 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+            {
+                while((8 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+                {
+                    curName[strlen(curName) - 1] = '\0';
+                    strWidth = uiGetStrWidth(curName);
+                }
+                
+                strcat(curName, "...");
+            }
+            
+            addStringToFilenameBuffer(curName, &nextFilename);
+            
+            totalPatchCount++;
+        }
+        
+        totalTitleCount += totalPatchCount;
+    }
+    
+    if (dumpAddOnTitles)
+    {
+        titleCount = (batchModeSrc == BATCH_SOURCE_ALL ? titleAddOnCount : (batchModeSrc == BATCH_SOURCE_SDCARD ? sdCardTitleAddOnCount : nandUserTitleAddOnCount));
+        
+        for(i = 0; i < titleCount; i++)
+        {
+            titleIndex = ((batchModeSrc == BATCH_SOURCE_ALL || batchModeSrc == BATCH_SOURCE_SDCARD) ? i : (i + sdCardTitleAddOnCount));
+            
+            dumpName = generateNSPDumpName(DUMP_ADDON_NSP, titleIndex);
+            if (!dumpName)
+            {
+                uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                breaks += 2;
+                return false;
+            }
+            
+            snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+            
+            free(dumpName);
+            dumpName = NULL;
+            
+            // Check if this title has already been dumped
+            if (skipDumpedTitles && checkIfFileExists(dumpPath)) continue;
+            
+            snprintf(curName, sizeof(curName) / sizeof(curName[0]), strrchr(dumpPath, '/') + 1);
+            
+            // Fix entry name length
+            u32 strWidth = uiGetStrWidth(curName);
+            
+            if ((8 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+            {
+                while((8 + strWidth) >= (FB_WIDTH - (font_height * 5)))
+                {
+                    curName[strlen(curName) - 1] = '\0';
+                    strWidth = uiGetStrWidth(curName);
+                }
+                
+                strcat(curName, "...");
+            }
+            
+            addStringToFilenameBuffer(curName, &nextFilename);
+            
+            totalAddOnCount++;
+        }
+        
+        totalTitleCount += totalAddOnCount;
+    }
+    
+    if (!totalTitleCount)
+    {
+        uiDrawString("You have already dumped all titles matching the selected settings!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        breaks += 2;
+        return false;
+    }
+    
+    // Display summary
+    uiDrawString("Summary:", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    breaks += 2;
+    
+    strbuf[0] = '\0';
+    
+    if (totalAppCount)
+    {
+        snprintf(curName, sizeof(curName) / sizeof(curName[0]), "BASE: %u", totalAppCount);
+        strcat(strbuf, curName);
+    }
+    
+    if (totalPatchCount)
+    {
+        if (totalAppCount) strcat(strbuf, " | ");
+        snprintf(curName, sizeof(curName) / sizeof(curName[0]), "UPD: %u", totalPatchCount);
+        strcat(strbuf, curName);
+    }
+    
+    if (totalAddOnCount)
+    {
+        if (totalAppCount || totalPatchCount) strcat(strbuf, " | ");
+        snprintf(curName, sizeof(curName) / sizeof(curName[0]), "DLC: %u", totalAddOnCount);
+        strcat(strbuf, curName);
+    }
+    
+    strcat(strbuf, " | ");
+    snprintf(curName, sizeof(curName) / sizeof(curName[0]), "Total: %u", totalTitleCount);
+    strcat(strbuf, curName);
+    
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    breaks++;
+    
+    while(true)
+    {
+        cur_breaks = breaks;
+        
+        uiFill(0, 8 + (cur_breaks * (font_height + (font_height / 4))), FB_WIDTH, FB_HEIGHT - (8 + (cur_breaks * (font_height + (font_height / 4)))), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+        
+        if (totalTitleCount > maxSummaryFileCount)
+        {
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Current page: %u", summaryPage + 1);
+            uiDrawString(strbuf, 8, (cur_breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            cur_breaks++;
+        }
+        
+        cur_breaks++;
+        
+        for(i = (summaryPage * maxSummaryFileCount); i < ((summaryPage * maxSummaryFileCount) + maxSummaryFileCount); i++)
+        {
+            if (i >= totalTitleCount) break;
+            uiDrawIcon(fileNormalIconBuf, BROWSER_ICON_DIMENSION, BROWSER_ICON_DIMENSION, 8, 8 + (cur_breaks * (font_height + (font_height / 4))) + (font_height / 8));
+            uiDrawString(filenames[i], BROWSER_ICON_DIMENSION + 8, (cur_breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            cur_breaks++;
+        }
+        
+        cur_breaks++;
+        
+        if (totalTitleCount > maxSummaryFileCount)
+        {
+            uiDrawString("[ " NINTENDO_FONT_L " / " NINTENDO_FONT_R " / " NINTENDO_FONT_ZL " / " NINTENDO_FONT_ZR " ] Change page | [ " NINTENDO_FONT_A " ] Proceed | [ " NINTENDO_FONT_B " ] Cancel", 8, (cur_breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        } else {
+            uiDrawString("[ " NINTENDO_FONT_A " ] Proceed | [ " NINTENDO_FONT_B " ] Cancel", 8, (cur_breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        }
+        
+        uiRefreshDisplay();
+        
+        hidScanInput();
+        
+        u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        
+        if (keysDown & KEY_A)
+        {
+            proceed = true;
+            break;
+        } else
+        if (keysDown & KEY_B)
+        {
+            proceed = false;
+            break;
+        } else
+        if (((keysDown & KEY_L) || (keysDown & KEY_ZL)) && totalTitleCount > maxSummaryFileCount)
+        {
+            if (summaryPage > 0) summaryPage--;
+        } else
+        if (((keysDown & KEY_R) || (keysDown & KEY_ZR)) && totalTitleCount > maxSummaryFileCount)
+        {
+            if (((summaryPage * maxSummaryFileCount) + maxSummaryFileCount) < totalTitleCount) summaryPage++;
+        }
+    }
+    
+    if (!proceed)
+    {
+        breaks = (cur_breaks + 2);
+        uiDrawString("Process canceled", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    breaks = initial_breaks;
+    uiFill(0, 8 + (breaks * (font_height + (font_height / 4))), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4)))), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+    
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump procedure started. Hold %s to cancel.", NINTENDO_FONT_B);
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    breaks += 2;
+    
+    initial_breaks = breaks;
+    
+    j = 0;
+    
+    if (totalAppCount)
+    {
+        titleCount = (batchModeSrc == BATCH_SOURCE_ALL ? titleAppCount : (batchModeSrc == BATCH_SOURCE_SDCARD ? sdCardTitleAppCount : nandUserTitleAppCount));
+        
+        for(i = 0; i < titleCount; i++)
+        {
+            breaks = initial_breaks;
+            uiFill(0, 8 + (breaks * (font_height + (font_height / 4))), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4)))), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+            
+            titleIndex = ((batchModeSrc == BATCH_SOURCE_ALL || batchModeSrc == BATCH_SOURCE_SDCARD) ? i : (i + sdCardTitleAppCount));
+            
+            dumpName = generateNSPDumpName(DUMP_APP_NSP, titleIndex);
+            if (!dumpName)
+            {
+                uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                breaks += 2;
+                return false;
+            }
+            
+            snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+            
+            free(dumpName);
+            dumpName = NULL;
+            
+            // Check if this title has already been dumped
+            if (skipDumpedTitles && checkIfFileExists(dumpPath)) continue;
+            
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Title: %u / %u.", j + 1, totalTitleCount);
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            uiRefreshDisplay();
+            breaks += 2;
+            
+            // Dump title
+            if (!dumpNintendoSubmissionPackage(DUMP_APP_NSP, titleIndex, isFat32, false, removeConsoleData, tiklessDump, true)) return false;
+            
+            j++;
+        }
+    }
+    
+    if (totalPatchCount)
+    {
+        titleCount = (batchModeSrc == BATCH_SOURCE_ALL ? titlePatchCount : (batchModeSrc == BATCH_SOURCE_SDCARD ? sdCardTitlePatchCount : nandUserTitlePatchCount));
+        
+        for(i = 0; i < titleCount; i++)
+        {
+            breaks = initial_breaks;
+            uiFill(0, 8 + (breaks * (font_height + (font_height / 4))), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4)))), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+            
+            titleIndex = ((batchModeSrc == BATCH_SOURCE_ALL || batchModeSrc == BATCH_SOURCE_SDCARD) ? i : (i + sdCardTitlePatchCount));
+            
+            dumpName = generateNSPDumpName(DUMP_PATCH_NSP, titleIndex);
+            if (!dumpName)
+            {
+                uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                breaks += 2;
+                return false;
+            }
+            
+            snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+            
+            free(dumpName);
+            dumpName = NULL;
+            
+            // Check if this title has already been dumped
+            if (skipDumpedTitles && checkIfFileExists(dumpPath)) continue;
+            
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Title: %u / %u.", j + 1, totalTitleCount);
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            uiRefreshDisplay();
+            breaks += 2;
+            
+            // Dump title
+            if (!dumpNintendoSubmissionPackage(DUMP_PATCH_NSP, titleIndex, isFat32, false, removeConsoleData, tiklessDump, true)) return false;
+            
+            j++;
+        }
+    }
+    
+    if (totalAddOnCount)
+    {
+        titleCount = (batchModeSrc == BATCH_SOURCE_ALL ? titleAddOnCount : (batchModeSrc == BATCH_SOURCE_SDCARD ? sdCardTitleAddOnCount : nandUserTitleAddOnCount));
+        
+        for(i = 0; i < titleCount; i++)
+        {
+            breaks = initial_breaks;
+            uiFill(0, 8 + (breaks * (font_height + (font_height / 4))), FB_WIDTH, FB_HEIGHT - (8 + (breaks * (font_height + (font_height / 4)))), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+            
+            titleIndex = ((batchModeSrc == BATCH_SOURCE_ALL || batchModeSrc == BATCH_SOURCE_SDCARD) ? i : (i + sdCardTitleAddOnCount));
+            
+            dumpName = generateNSPDumpName(DUMP_ADDON_NSP, titleIndex);
+            if (!dumpName)
+            {
+                uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                breaks += 2;
+                return false;
+            }
+            
+            snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
+            
+            free(dumpName);
+            dumpName = NULL;
+            
+            // Check if this title has already been dumped
+            if (skipDumpedTitles && checkIfFileExists(dumpPath)) continue;
+            
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Title: %u / %u.", j + 1, totalTitleCount);
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            uiRefreshDisplay();
+            breaks += 2;
+            
+            // Dump title
+            if (!dumpNintendoSubmissionPackage(DUMP_ADDON_NSP, titleIndex, isFat32, false, removeConsoleData, tiklessDump, true)) return false;
+            
+            j++;
+        }
+    }
+    
+    uiDrawString("Process successfully completed!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+    
+    breaks += 2;
+    
+    return true;
 }
 
 bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
@@ -1976,7 +2663,7 @@ bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
     
     size_t write_res;
     
-    char *dumpName = generateDumpFullName();
+    char *dumpName = generateFullDumpName();
     if (!dumpName)
     {
         uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1998,7 +2685,7 @@ bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
         // * The "update" (0) partition, the "logo" (1) partition and the "normal" (2) partition (for gamecard type 0x02)
         // The IStorage instance returned for partition == 1 contains the "secure" partition (which can either be 2 or 3 depending on the gamecard type)
         // This ugly hack makes sure we just dump the *actual* raw HFS0 partition, without preceding data, padding, etc.
-        // Oddly enough, IFileSystem instances actually points to the specified partition ID filesystem. I don't understand why it doesn't work like that for IStorage, but whatever
+        // Oddly enough, IFileSystem instances actually point to the specified partition ID filesystem. I don't understand why it doesn't work like that for IStorage, but whatever
         // NOTE: Using partition == 2 returns error 0x149002, and using higher values probably do so, too
         
         if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, HFS0_TO_ISTORAGE_IDX(hfs0_partition_cnt, partition))))
@@ -2392,6 +3079,7 @@ bool copyFileFromHfs0(u32 partition, const char* source, const char* dest, const
                         if (!success)
                         {
                             setProgressBarError(progressCtx);
+                            breaks = (progressCtx->line_offset + 2);
                             if (fat32_error) breaks += 2;
                         }
                         
@@ -2495,7 +3183,7 @@ bool copyHfs0Contents(u32 partition, hfs0_entry_table *partitionEntryTable, prog
     return success;
 }
 
-bool dumpHfs0PartitionData(u32 partition)
+bool dumpHfs0PartitionData(u32 partition, bool doSplitting)
 {
     bool success = false;
     u32 i;
@@ -2505,7 +3193,7 @@ bool dumpHfs0PartitionData(u32 partition)
     progress_ctx_t progressCtx;
     memset(&progressCtx, 0, sizeof(progress_ctx_t));
     
-    char *dumpName = generateDumpFullName();
+    char *dumpName = generateFullDumpName();
     if (!dumpName)
     {
         uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -2550,12 +3238,12 @@ bool dumpHfs0PartitionData(u32 partition)
                     
                     progressCtx.line_offset = (breaks + 4);
                     
-                    success = copyHfs0Contents(partition, entryTable, &progressCtx, dumpPath, true);
-                    
-                    breaks = (progressCtx.line_offset + 2);
+                    success = copyHfs0Contents(partition, entryTable, &progressCtx, dumpPath, doSplitting);
                     
                     if (success)
                     {
+                        breaks = (progressCtx.line_offset + 2);
+                        
                         timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
                         progressCtx.now -= progressCtx.start;
                         
@@ -2592,7 +3280,7 @@ bool dumpHfs0PartitionData(u32 partition)
     return success;
 }
 
-bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename)
+bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename, bool doSplitting)
 {
     if (!partitionHfs0Header)
     {
@@ -2611,7 +3299,7 @@ bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename)
     progress_ctx_t progressCtx;
     memset(&progressCtx, 0, sizeof(progress_ctx_t));
     
-    char *dumpName = generateDumpFullName();
+    char *dumpName = generateFullDumpName();
     if (!dumpName)
     {
         uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -2685,12 +3373,12 @@ bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename)
                     progressCtx.line_offset = (breaks + 4);
                     timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
                     
-                    success = copyFileFromHfs0(partition, filename, destCopyPath, file_offset, file_size, &progressCtx, true);
-                    
-                    breaks = (progressCtx.line_offset + 2);
+                    success = copyFileFromHfs0(partition, filename, destCopyPath, file_offset, file_size, &progressCtx, doSplitting);
                     
                     if (success)
                     {
+                        breaks = (progressCtx.line_offset + 2);
+                        
                         timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
                         progressCtx.now -= progressCtx.start;
                         
@@ -2718,7 +3406,7 @@ bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename)
     return success;
 }
 
-bool dumpExeFsSectionData(u32 appIndex, bool doSplitting)
+bool dumpExeFsSectionData(u32 titleIndex, bool usePatch, bool doSplitting)
 {
     u64 n;
     FILE *outFile;
@@ -2737,21 +3425,21 @@ bool dumpExeFsSectionData(u32 appIndex, bool doSplitting)
     u32 i;
     u64 offset;
     
-    if (!titleAppCount)
+    if ((!usePatch && !titleAppCount) || (usePatch && !titlePatchCount))
     {
-        uiDrawString("Error: invalid application count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid title count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
-    if (appIndex > (titleAppCount - 1))
+    if ((!usePatch && titleIndex > (titleAppCount - 1)) || (usePatch && titleIndex > (titlePatchCount - 1)))
     {
-        uiDrawString("Error: invalid application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
-    char *dumpName = generateNSPDumpName(DUMP_APP_NSP, appIndex);
+    char *dumpName = generateNSPDumpName((!usePatch ? DUMP_APP_NSP : DUMP_PATCH_NSP), titleIndex);
     if (!dumpName)
     {
         uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -2759,11 +3447,17 @@ bool dumpExeFsSectionData(u32 appIndex, bool doSplitting)
         return false;
     }
     
-    // Remove " (BASE)"
-    dumpName[strlen(dumpName) - 7] = '\0';
+    if (!usePatch)
+    {
+        // Remove " (BASE)"
+        dumpName[strlen(dumpName) - 7] = '\0';
+    } else {
+        // Remove " (UPD)"
+        dumpName[strlen(dumpName) - 6] = '\0';
+    }
     
     // Retrieve ExeFS from Program NCA
-    if (!readProgramNcaExeFsOrRomFs(appIndex, false))
+    if (!readProgramNcaExeFsOrRomFs(titleIndex, usePatch, false))
     {
         free(dumpName);
         breaks += 2;
@@ -2773,7 +3467,6 @@ bool dumpExeFsSectionData(u32 appIndex, bool doSplitting)
     // Calculate total dump size
     if (!calculateExeFsExtractedDataSize(&(progressCtx.totalSize))) goto out;
     
-    breaks++;
     convertSize(progressCtx.totalSize, progressCtx.totalSizeStr, sizeof(progressCtx.totalSizeStr) / sizeof(progressCtx.totalSizeStr[0]));
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Extracted ExeFS dump size: %s (%lu bytes).", progressCtx.totalSizeStr, progressCtx.totalSize);
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
@@ -2861,7 +3554,7 @@ bool dumpExeFsSectionData(u32 appIndex, bool doSplitting)
             if (DUMP_BUFFER_SIZE > (exeFsContext.exefs_entries[i].file_size - offset)) n = (exeFsContext.exefs_entries[i].file_size - offset);
             
             breaks = (progressCtx.line_offset + 2);
-            proceed = processNcaCtrSectionBlock(&(exeFsContext.ncmStorage), &(exeFsContext.ncaId), exeFsContext.exefs_data_offset + exeFsContext.exefs_entries[i].file_offset + offset, buf, n, &(exeFsContext.aes_ctx), false);
+            proceed = processNcaCtrSectionBlock(&(exeFsContext.ncmStorage), &(exeFsContext.ncaId), &(exeFsContext.aes_ctx), exeFsContext.exefs_data_offset + exeFsContext.exefs_entries[i].file_offset + offset, buf, n, false);
             breaks = (progressCtx.line_offset - 4);
             
             if (!proceed) break;
@@ -3009,9 +3702,9 @@ out:
     return success;
 }
 
-bool dumpFileFromExeFsSection(u32 appIndex, u32 fileIndex, bool doSplitting)
+bool dumpFileFromExeFsSection(u32 titleIndex, u32 fileIndex, bool usePatch, bool doSplitting)
 {
-    if (!exeFsContext.exefs_header.file_cnt || fileIndex > (exeFsContext.exefs_header.file_cnt - 1) || !exeFsContext.exefs_entries || !exeFsContext.exefs_str_table || exeFsContext.exefs_data_offset <= exeFsContext.exefs_offset || appIndex > (titleAppCount - 1))
+    if (!exeFsContext.exefs_header.file_cnt || fileIndex > (exeFsContext.exefs_header.file_cnt - 1) || !exeFsContext.exefs_entries || !exeFsContext.exefs_str_table || exeFsContext.exefs_data_offset <= exeFsContext.exefs_offset || (!usePatch && titleIndex > (titleAppCount - 1)) || (usePatch && titleIndex > (titlePatchCount - 1)))
     {
         uiDrawString("Error: invalid parameters to parse file entry from ExeFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
@@ -3042,7 +3735,7 @@ bool dumpFileFromExeFsSection(u32 appIndex, u32 fileIndex, bool doSplitting)
         return false;
     }
     
-    char *dumpName = generateNSPDumpName(DUMP_APP_NSP, appIndex);
+    char *dumpName = generateNSPDumpName((!usePatch ? DUMP_APP_NSP : DUMP_PATCH_NSP), titleIndex);
     if (!dumpName)
     {
         uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -3050,8 +3743,14 @@ bool dumpFileFromExeFsSection(u32 appIndex, u32 fileIndex, bool doSplitting)
         return false;
     }
     
-    // Remove " (BASE)"
-    dumpName[strlen(dumpName) - 7] = '\0';
+    if (!usePatch)
+    {
+        // Remove " (BASE)"
+        dumpName[strlen(dumpName) - 7] = '\0';
+    } else {
+        // Remove " (UPD)"
+        dumpName[strlen(dumpName) - 6] = '\0';
+    }
     
     // Generate output path
     snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s", EXEFS_DUMP_PATH, dumpName);
@@ -3146,7 +3845,7 @@ bool dumpFileFromExeFsSection(u32 appIndex, u32 fileIndex, bool doSplitting)
         if (DUMP_BUFFER_SIZE > (progressCtx.totalSize - progressCtx.curOffset)) n = (progressCtx.totalSize - progressCtx.curOffset);
         
         breaks = (progressCtx.line_offset + 2);
-        proceed = processNcaCtrSectionBlock(&(exeFsContext.ncmStorage), &(exeFsContext.ncaId), exeFsContext.exefs_data_offset + exeFsContext.exefs_entries[fileIndex].file_offset + progressCtx.curOffset, buf, n, &(exeFsContext.aes_ctx), false);
+        proceed = processNcaCtrSectionBlock(&(exeFsContext.ncmStorage), &(exeFsContext.ncaId), &(exeFsContext.aes_ctx), exeFsContext.exefs_data_offset + exeFsContext.exefs_entries[fileIndex].file_offset + progressCtx.curOffset, buf, n, false);
         breaks = (progressCtx.line_offset - 2);
         
         if (!proceed) break;
@@ -3294,9 +3993,9 @@ out:
     return success;
 }
 
-bool recursiveDumpRomFsFile(u32 file_offset, char *romfs_path, char *output_path, progress_ctx_t *progressCtx, bool doSplitting)
+bool recursiveDumpRomFsFile(u32 file_offset, char *romfs_path, char *output_path, progress_ctx_t *progressCtx, bool usePatch, bool doSplitting)
 {
-    if (!romFsContext.romfs_filetable_size || file_offset > romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries || !romfs_path || !output_path || !progressCtx)
+    if ((!usePatch && (!romFsContext.romfs_filetable_size || file_offset > romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries)) || (usePatch && (!bktrContext.romfs_filetable_size || file_offset > bktrContext.romfs_filetable_size || !bktrContext.romfs_file_entries)) || !romfs_path || !output_path || !progressCtx)
     {
         uiDrawString("Error: invalid parameters to parse file entry from RomFS section!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
@@ -3317,7 +4016,7 @@ bool recursiveDumpRomFsFile(u32 file_offset, char *romfs_path, char *output_path
     
     char tmp_idx[5];
     
-    romfs_file *entry = (romfs_file*)((u8*)romFsContext.romfs_file_entries + file_offset);
+    romfs_file *entry = (!usePatch ? (romfs_file*)((u8*)romFsContext.romfs_file_entries + file_offset) : (romfs_file*)((u8*)bktrContext.romfs_file_entries + file_offset));
     
     // Check if we're dealing with a nameless file
     if (!entry->nameLen)
@@ -3378,7 +4077,14 @@ bool recursiveDumpRomFsFile(u32 file_offset, char *romfs_path, char *output_path
         if (DUMP_BUFFER_SIZE > (entry->dataSize - off)) n = (entry->dataSize - off);
         
         breaks = (progressCtx->line_offset + 2);
-        proceed = processNcaCtrSectionBlock(&(romFsContext.ncmStorage), &(romFsContext.ncaId), romFsContext.romfs_filedata_offset + entry->dataOff + off, buf, n, &(romFsContext.aes_ctx), false);
+        
+        if (!usePatch)
+        {
+            proceed = processNcaCtrSectionBlock(&(romFsContext.ncmStorage), &(romFsContext.ncaId), &(romFsContext.aes_ctx), romFsContext.romfs_filedata_offset + entry->dataOff + off, buf, n, false);
+        } else {
+            proceed = readBktrSectionBlock(bktrContext.romfs_filedata_offset + entry->dataOff + off, buf, n);
+        }
+        
         breaks = (progressCtx->line_offset - 4);
         
         if (!proceed) break;
@@ -3482,22 +4188,26 @@ out:
     
     if (outFile) fclose(outFile);
     
-    if (!success && fat32_error) breaks += 2;
+    if (!success)
+    {
+        breaks = (progressCtx->line_offset + 2);
+        if (fat32_error) breaks += 2;
+    }
     
     romfs_path[orig_romfs_path_len] = '\0';
     output_path[orig_output_path_len] = '\0';
     
     if (success)
     {
-        if (entry->sibling != ROMFS_ENTRY_EMPTY) success = recursiveDumpRomFsFile(entry->sibling, romfs_path, output_path, progressCtx, true);
+        if (entry->sibling != ROMFS_ENTRY_EMPTY) success = recursiveDumpRomFsFile(entry->sibling, romfs_path, output_path, progressCtx, usePatch, doSplitting);
     }
     
     return success;
 }
 
-bool recursiveDumpRomFsDir(u32 dir_offset, char *romfs_path, char *output_path, progress_ctx_t *progressCtx)
+bool recursiveDumpRomFsDir(u32 dir_offset, char *romfs_path, char *output_path, progress_ctx_t *progressCtx, bool usePatch, bool dumpSiblingDir, bool doSplitting)
 {
-    if (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries || !romfs_path || !output_path || !progressCtx)
+    if ((!usePatch && (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries)) || (usePatch && (!bktrContext.romfs_dirtable_size || dir_offset > bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries || !bktrContext.romfs_filetable_size || !bktrContext.romfs_file_entries)) || !romfs_path || !output_path || !progressCtx)
     {
         uiDrawString("Error: invalid parameters to parse directory entry from RomFS section!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
@@ -3506,7 +4216,7 @@ bool recursiveDumpRomFsDir(u32 dir_offset, char *romfs_path, char *output_path, 
     size_t orig_romfs_path_len = strlen(romfs_path);
     size_t orig_output_path_len = strlen(output_path);
     
-    romfs_dir *entry = (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + dir_offset);
+    romfs_dir *entry = (!usePatch ? (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + dir_offset) : (romfs_dir*)((u8*)bktrContext.romfs_dir_entries + dir_offset));
     
     // Check if we're dealing with a nameless directory that's not the root directory
     if (!entry->nameLen && dir_offset > 0)
@@ -3535,7 +4245,7 @@ bool recursiveDumpRomFsDir(u32 dir_offset, char *romfs_path, char *output_path, 
     
     if (entry->childFile != ROMFS_ENTRY_EMPTY)
     {
-        if (!recursiveDumpRomFsFile(entry->childFile, romfs_path, output_path, progressCtx, true))
+        if (!recursiveDumpRomFsFile(entry->childFile, romfs_path, output_path, progressCtx, usePatch, doSplitting))
         {
             romfs_path[orig_romfs_path_len] = '\0';
             output_path[orig_output_path_len] = '\0';
@@ -3545,7 +4255,7 @@ bool recursiveDumpRomFsDir(u32 dir_offset, char *romfs_path, char *output_path, 
     
     if (entry->childDir != ROMFS_ENTRY_EMPTY)
     {
-        if (!recursiveDumpRomFsDir(entry->childDir, romfs_path, output_path, progressCtx))
+        if (!recursiveDumpRomFsDir(entry->childDir, romfs_path, output_path, progressCtx, usePatch, true, doSplitting))
         {
             romfs_path[orig_romfs_path_len] = '\0';
             output_path[orig_output_path_len] = '\0';
@@ -3556,15 +4266,15 @@ bool recursiveDumpRomFsDir(u32 dir_offset, char *romfs_path, char *output_path, 
     romfs_path[orig_romfs_path_len] = '\0';
     output_path[orig_output_path_len] = '\0';
     
-    if (entry->sibling != ROMFS_ENTRY_EMPTY)
+    if (dumpSiblingDir && entry->sibling != ROMFS_ENTRY_EMPTY)
     {
-        if (!recursiveDumpRomFsDir(entry->sibling, romfs_path, output_path, progressCtx)) return false;
+        if (!recursiveDumpRomFsDir(entry->sibling, romfs_path, output_path, progressCtx, usePatch, true, doSplitting)) return false;
     }
     
     return true;
 }
 
-bool dumpRomFsSectionData(u32 appIndex)
+bool dumpRomFsSectionData(u32 titleIndex, bool usePatch, bool doSplitting)
 {
     progress_ctx_t progressCtx;
     memset(&progressCtx, 0, sizeof(progress_ctx_t));
@@ -3573,21 +4283,21 @@ bool dumpRomFsSectionData(u32 appIndex)
     
     bool success = false;
     
-    if (!titleAppCount)
+    if ((!usePatch && !titleAppCount) || (usePatch && !titlePatchCount))
     {
-        uiDrawString("Error: invalid application count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid title count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
-    if (appIndex > (titleAppCount - 1))
+    if ((!usePatch && titleIndex > (titleAppCount - 1)) || (usePatch && titleIndex > (titlePatchCount - 1)))
     {
-        uiDrawString("Error: invalid application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
-    char *dumpName = generateNSPDumpName(DUMP_APP_NSP, appIndex);
+    char *dumpName = generateNSPDumpName((!usePatch ? DUMP_APP_NSP : DUMP_PATCH_NSP), titleIndex);
     if (!dumpName)
     {
         uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -3595,11 +4305,17 @@ bool dumpRomFsSectionData(u32 appIndex)
         return false;
     }
     
-    // Remove " (BASE)"
-    dumpName[strlen(dumpName) - 7] = '\0';
+    if (!usePatch)
+    {
+        // Remove " (BASE)"
+        dumpName[strlen(dumpName) - 7] = '\0';
+    } else {
+        // Remove " (UPD)"
+        dumpName[strlen(dumpName) - 6] = '\0';
+    }
     
     // Retrieve RomFS from Program NCA
-    if (!readProgramNcaExeFsOrRomFs(appIndex, true))
+    if (!readProgramNcaExeFsOrRomFs(titleIndex, usePatch, true))
     {
         free(dumpName);
         breaks += 2;
@@ -3607,9 +4323,8 @@ bool dumpRomFsSectionData(u32 appIndex)
     }
     
     // Calculate total dump size
-    if (!calculateRomFsExtractedDataSize(&(progressCtx.totalSize))) goto out;
+    if (!calculateRomFsFullExtractedSize(usePatch, &(progressCtx.totalSize))) goto out;
     
-    breaks++;
     convertSize(progressCtx.totalSize, progressCtx.totalSizeStr, sizeof(progressCtx.totalSizeStr) / sizeof(progressCtx.totalSizeStr[0]));
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Extracted RomFS dump size: %s (%lu bytes).", progressCtx.totalSizeStr, progressCtx.totalSize);
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
@@ -3642,12 +4357,12 @@ bool dumpRomFsSectionData(u32 appIndex)
     progressCtx.line_offset = (breaks + 4);
     timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
     
-    success = recursiveDumpRomFsDir(0, romFsPath, dumpPath, &progressCtx);
-    
-    breaks = (progressCtx.line_offset + 2);
+    success = recursiveDumpRomFsDir(0, romFsPath, dumpPath, &progressCtx, usePatch, true, doSplitting);
     
     if (success)
     {
+        breaks = (progressCtx.line_offset + 2);
+        
         timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
         progressCtx.now -= progressCtx.start;
         
@@ -3660,6 +4375,8 @@ bool dumpRomFsSectionData(u32 appIndex)
     }
     
 out:
+    if (usePatch) freeBktrContext();
+    
     freeRomFsContext();
     
     free(dumpName);
@@ -3669,9 +4386,9 @@ out:
     return success;
 }
 
-bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting)
+bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, bool usePatch, bool doSplitting)
 {
-    if (!romFsContext.romfs_filetable_size || file_offset > romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries || appIndex > (titleAppCount - 1))
+    if (!romFsContext.romfs_filetable_size || file_offset > romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries || (!usePatch && titleIndex > (titleAppCount - 1)) || (usePatch && titleIndex > (titlePatchCount - 1)))
     {
         uiDrawString("Error: invalid parameters to parse file entry from RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
@@ -3692,7 +4409,7 @@ bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting)
     
     size_t write_res;
     
-    romfs_file *entry = (romfs_file*)((u8*)romFsContext.romfs_file_entries + file_offset);
+    romfs_file *entry = (!usePatch ? (romfs_file*)((u8*)romFsContext.romfs_file_entries + file_offset) : (romfs_file*)((u8*)bktrContext.romfs_file_entries + file_offset));
     
     // Check if we're dealing with a nameless file
     if (!entry->nameLen)
@@ -3702,7 +4419,7 @@ bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting)
         return false;
     }
     
-    char *dumpName = generateNSPDumpName(DUMP_APP_NSP, appIndex);
+    char *dumpName = generateNSPDumpName((!usePatch ? DUMP_APP_NSP : DUMP_PATCH_NSP), titleIndex);
     if (!dumpName)
     {
         uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -3710,8 +4427,14 @@ bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting)
         return false;
     }
     
-    // Remove " (BASE)"
-    dumpName[strlen(dumpName) - 7] = '\0';
+    if (!usePatch)
+    {
+        // Remove " (BASE)"
+        dumpName[strlen(dumpName) - 7] = '\0';
+    } else {
+        // Remove " (UPD)"
+        dumpName[strlen(dumpName) - 6] = '\0';
+    }
     
     // Generate output path
     snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s", ROMFS_DUMP_PATH, dumpName);
@@ -3840,7 +4563,14 @@ bool dumpFileFromRomFsSection(u32 appIndex, u32 file_offset, bool doSplitting)
         if (DUMP_BUFFER_SIZE > (progressCtx.totalSize - progressCtx.curOffset)) n = (progressCtx.totalSize - progressCtx.curOffset);
         
         breaks = (progressCtx.line_offset + 2);
-        proceed = processNcaCtrSectionBlock(&(romFsContext.ncmStorage), &(romFsContext.ncaId), romFsContext.romfs_filedata_offset + entry->dataOff + progressCtx.curOffset, buf, n, &(romFsContext.aes_ctx), false);
+        
+        if (!usePatch)
+        {
+            proceed = processNcaCtrSectionBlock(&(romFsContext.ncmStorage), &(romFsContext.ncaId), &(romFsContext.aes_ctx), romFsContext.romfs_filedata_offset + entry->dataOff + progressCtx.curOffset, buf, n, false);
+        } else {
+            proceed = readBktrSectionBlock(bktrContext.romfs_filedata_offset + entry->dataOff + progressCtx.curOffset, buf, n);
+        }
+        
         breaks = (progressCtx.line_offset - 2);
         
         if (!proceed) break;
@@ -3988,6 +4718,141 @@ out:
     return success;
 }
 
+bool dumpCurrentDirFromRomFsSection(u32 titleIndex, bool usePatch, bool doSplitting)
+{
+    progress_ctx_t progressCtx;
+    memset(&progressCtx, 0, sizeof(progress_ctx_t));
+    
+    char romFsPath[NAME_BUF_LEN * 2] = {'\0'}, dumpPath[NAME_BUF_LEN * 2] = {'\0'};
+    
+    bool success = false;
+    
+    if ((!usePatch && !titleAppCount) || (usePatch && !titlePatchCount))
+    {
+        uiDrawString("Error: invalid title count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    if ((!usePatch && titleIndex > (titleAppCount - 1)) || (usePatch && titleIndex > (titlePatchCount - 1)))
+    {
+        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    char *dumpName = generateNSPDumpName((!usePatch ? DUMP_APP_NSP : DUMP_PATCH_NSP), titleIndex);
+    if (!dumpName)
+    {
+        uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    if (!usePatch)
+    {
+        // Remove " (BASE)"
+        dumpName[strlen(dumpName) - 7] = '\0';
+    } else {
+        // Remove " (UPD)"
+        dumpName[strlen(dumpName) - 6] = '\0';
+    }
+    
+    // Calculate total dump size
+    if (!calculateRomFsExtractedDirSize(curRomFsDirOffset, usePatch, &(progressCtx.totalSize))) goto out;
+    
+    convertSize(progressCtx.totalSize, progressCtx.totalSizeStr, sizeof(progressCtx.totalSizeStr) / sizeof(progressCtx.totalSizeStr[0]));
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Extracted RomFS directory size: %s (%lu bytes).", progressCtx.totalSizeStr, progressCtx.totalSize);
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiRefreshDisplay();
+    breaks++;
+    
+    if (progressCtx.totalSize > freeSpace)
+    {
+        uiDrawString("Error: not enough free space available in the SD card.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (strlen(curRomFsPath) > 1) snprintf(romFsPath, sizeof(romFsPath) / sizeof(romFsPath[0]), curRomFsPath);
+    
+    // Prepare output dump path
+    snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s", ROMFS_DUMP_PATH, dumpName);
+    mkdir(dumpPath, 0744);
+    
+    // Create subdirectories
+    char *tmp1 = NULL;
+    char *tmp2 = NULL;
+    size_t cur_len;
+    
+    tmp1 = strchr(curRomFsPath, '/');
+    
+    while(tmp1 != NULL)
+    {
+        tmp1++;
+        
+        if (!strlen(tmp1)) break;
+        
+        tmp2 = strchr(tmp1, '/');
+        if (tmp2 != NULL)
+        {
+            strcat(dumpPath, "/");
+            
+            cur_len = strlen(dumpPath);
+            
+            strncat(dumpPath, tmp1, tmp2 - tmp1);
+            
+            removeIllegalCharacters(dumpPath + cur_len);
+            
+            mkdir(dumpPath, 0744);
+            
+            tmp1 = tmp2;
+        } else {
+            // Skip last entry
+            tmp1 = NULL;
+        }
+    }
+    
+    // Start dump process
+    breaks++;
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump procedure started. Hold %s to cancel.", NINTENDO_FONT_B);
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiRefreshDisplay();
+    breaks += 2;
+    
+    if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+    {
+        uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+    }
+    
+    progressCtx.line_offset = (breaks + 4);
+    timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.start));
+    
+    success = recursiveDumpRomFsDir(curRomFsDirOffset, romFsPath, dumpPath, &progressCtx, usePatch, false, doSplitting);
+    
+    if (success)
+    {
+        breaks = (progressCtx.line_offset + 2);
+        
+        timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx.now));
+        progressCtx.now -= progressCtx.start;
+        
+        formatETAString(progressCtx.now, progressCtx.etaInfo, sizeof(progressCtx.etaInfo) / sizeof(progressCtx.etaInfo[0]));
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+    } else {
+        setProgressBarError(&progressCtx);
+        removeDirectory(dumpPath);
+    }
+    
+out:
+    free(dumpName);
+    
+    breaks += 2;
+    
+    return success;
+}
+
 bool dumpGameCardCertificate()
 {
     u32 crc = 0;
@@ -4000,7 +4865,7 @@ bool dumpGameCardCertificate()
     u8 buf[CERT_SIZE];
     size_t write_res;
     
-    char *dumpName = generateDumpFullName();
+    char *dumpName = generateFullDumpName();
     if (!dumpName)
     {
         uiDrawString("Error: unable to generate output dump name!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);

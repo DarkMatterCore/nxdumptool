@@ -43,6 +43,9 @@
 #define GAMECARD_SIZE_ADDR              0x10D
 #define GAMECARD_DATAEND_ADDR           0x118
 
+#define GAMECARD_ECC_BLOCK_SIZE         (u64)0x200                              // 512 bytes
+#define GAMECARD_ECC_DATA_SIZE          (u64)0x24                               // 36 bytes
+
 #define HFS0_OFFSET_ADDR                0x130
 #define HFS0_SIZE_ADDR                  0x138
 #define HFS0_MAGIC                      (u32)0x48465330                         // "HFS0"
@@ -136,6 +139,10 @@ bool isGameCardInserted();
 
 void fsGameCardDetectionThreadFunc(void *arg);
 
+bool isServiceRunning(const char *serviceName);
+
+bool checkSxOsServices();
+
 void delay(u8 seconds);
 
 void formatETAString(u64 curTime, char *output, u32 outSize);
@@ -148,7 +155,15 @@ void initRomFsContext();
 
 void freeRomFsContext();
 
+void initBktrContext();
+
+void freeBktrContext();
+
 void freeGlobalData();
+
+bool loadPatchesFromSdCardAndEmmc();
+
+void freePatchesFromSdCardAndEmmc();
 
 void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize);
 
@@ -170,13 +185,15 @@ bool getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename
 
 bool calculateExeFsExtractedDataSize(u64 *out);
 
-bool calculateRomFsExtractedDataSize(u64 *out);
+bool calculateRomFsFullExtractedSize(bool usePatch, u64 *out);
 
-bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs);
+bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out);
+
+bool readProgramNcaExeFsOrRomFs(u32 titleIndex, bool usePatch, bool readRomFs);
 
 bool getExeFsFileList();
 
-bool getRomFsFileList(u32 dir_offset);
+bool getRomFsFileList(u32 dir_offset, bool usePatch);
 
 int getSdCardFreeSpace(u64 *out);
 
@@ -184,7 +201,7 @@ void convertSize(u64 size, char *out, int bufsize);
 
 void addStringToFilenameBuffer(const char *string, char **nextFilename);
 
-char *generateDumpFullName();
+char *generateFullDumpName();
 
 char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex);
 
@@ -215,6 +232,8 @@ void convertDataToHexString(const u8 *data, const u32 dataSize, char *outBuf, co
 bool checkIfFileExists(const char *path);
 
 bool yesNoPrompt(const char *message);
+
+bool checkIfDumpedXciContainsCertificate(const char *xciPath);
 
 bool checkIfDumpedNspContainsConsoleData(const char *nspPath);
 

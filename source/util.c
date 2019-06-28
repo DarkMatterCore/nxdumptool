@@ -65,6 +65,8 @@ UEvent exitEvent;
 
 AppletType programAppletType;
 
+bool runningSxOs = false;
+
 bool gameCardInserted;
 
 u64 gameCardSize = 0, trimmedCardSize = 0;
@@ -105,6 +107,10 @@ u32 nandUserTitleAppCount = 0;
 u32 nandUserTitlePatchCount = 0;
 u32 nandUserTitleAddOnCount = 0;
 
+static bool sdCardAndEmmcTitleInfoLoaded = false;
+
+u32 gameCardSdCardEmmcPatchCount = 0;
+
 char **titleName = NULL;
 char **fixedTitleName = NULL;
 char **titleAuthor = NULL;
@@ -113,8 +119,10 @@ u8 **titleIcon = NULL;
 
 exefs_ctx_t exeFsContext;
 romfs_ctx_t romFsContext;
+bktr_ctx_t bktrContext;
 
 char curRomFsPath[NAME_BUF_LEN] = {'\0'};
+u32 curRomFsDirOffset = 0;
 romfs_browser_entry *romFsBrowserEntries = NULL;
 
 orphan_patch_addon_entry *orphanEntries = NULL;
@@ -152,6 +160,25 @@ void fsGameCardDetectionThreadFunc(void *arg)
     }
     
     waitMulti(&idx, 0, waiterForEvent(&fsGameCardKernelEvent), waiterForUEvent(&exitEvent));
+}
+
+bool isServiceRunning(const char *serviceName)
+{
+    if (!serviceName || !strlen(serviceName)) return false;
+    
+    Handle handle;
+    bool running = R_FAILED(smRegisterService(&handle, serviceName, false, 1));
+    
+    svcCloseHandle(handle);
+    
+    if (!running) smUnregisterService(serviceName);
+    
+    return running;
+}
+
+bool checkSxOsServices()
+{
+    return (isServiceRunning("tx") && !isServiceRunning("rnx"));
 }
 
 void delay(u8 seconds)
@@ -237,6 +264,8 @@ void initRomFsContext()
     memset(&(romFsContext.ncmStorage), 0, sizeof(NcmContentStorage));
     memset(&(romFsContext.ncaId), 0, sizeof(NcmNcaId));
     memset(&(romFsContext.aes_ctx), 0, sizeof(Aes128CtrContext));
+    romFsContext.section_offset = 0;
+    romFsContext.section_size = 0;
     romFsContext.romfs_offset = 0;
     romFsContext.romfs_size = 0;
     romFsContext.romfs_dirtable_offset = 0;
@@ -264,6 +293,61 @@ void freeRomFsContext()
     {
         free(romFsContext.romfs_file_entries);
         romFsContext.romfs_file_entries = NULL;
+    }
+}
+
+void initBktrContext()
+{
+    memset(&(bktrContext.ncmStorage), 0, sizeof(NcmContentStorage));
+    memset(&(bktrContext.ncaId), 0, sizeof(NcmNcaId));
+    memset(&(bktrContext.aes_ctx), 0, sizeof(Aes128CtrContext));
+    bktrContext.section_offset = 0;
+    bktrContext.section_size = 0;
+    memset(&(bktrContext.superblock), 0, sizeof(bktr_superblock_t));
+    bktrContext.relocation_block = NULL;
+    bktrContext.subsection_block = NULL;
+    bktrContext.virtual_seek = 0;
+    bktrContext.bktr_seek = 0;
+    bktrContext.base_seek = 0;
+    bktrContext.romfs_offset = 0;
+    bktrContext.romfs_size = 0;
+    bktrContext.romfs_dirtable_offset = 0;
+    bktrContext.romfs_dirtable_size = 0;
+    bktrContext.romfs_dir_entries = NULL;
+    bktrContext.romfs_filetable_offset = 0;
+    bktrContext.romfs_filetable_size = 0;
+    bktrContext.romfs_file_entries = NULL;
+    bktrContext.romfs_filedata_offset = 0;
+}
+
+void freeBktrContext()
+{
+    // Remember to close this NCM service resource
+    serviceClose(&(bktrContext.ncmStorage.s));
+    memset(&(bktrContext.ncmStorage), 0, sizeof(NcmContentStorage));
+    
+    if (bktrContext.relocation_block != NULL)
+    {
+        free(bktrContext.relocation_block);
+        bktrContext.relocation_block = NULL;
+    }
+    
+    if (bktrContext.subsection_block != NULL)
+    {
+        free(bktrContext.subsection_block);
+        bktrContext.subsection_block = NULL;
+    }
+    
+    if (bktrContext.romfs_dir_entries != NULL)
+    {
+        free(bktrContext.romfs_dir_entries);
+        bktrContext.romfs_dir_entries = NULL;
+    }
+    
+    if (bktrContext.romfs_file_entries != NULL)
+    {
+        free(bktrContext.romfs_file_entries);
+        bktrContext.romfs_file_entries = NULL;
     }
 }
 
@@ -412,6 +496,8 @@ void freeGlobalData()
     
     freeRomFsContext();
     
+    freeBktrContext();
+    
     if (romFsBrowserEntries != NULL)
     {
         free(romFsBrowserEntries);
@@ -433,7 +519,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
         return false;
     }
     
-    bool success = false, proceed = true, freeBuf = false;
+    bool success = false, proceed = true, memError = false;
     
     Result result;
     
@@ -441,8 +527,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
     NcmApplicationContentMetaKey *titleListTmp = NULL;
     size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
     
-    u32 written = 0;
-    u32 total = 0;
+    u32 written = 0, total = 0;
     
     u64 *titleIDs = NULL, *tmpTIDs = NULL;
     u32 *versions = NULL, *tmpVersions = NULL;
@@ -512,19 +597,11 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
                                 
                                 success = true;
                             } else {
-                                if (tmpTIDs != NULL)
-                                {
-                                    titleAppTitleID = tmpTIDs;
-                                    free(tmpTIDs);
-                                }
+                                if (tmpTIDs != NULL) titleAppTitleID = tmpTIDs;
                                 
-                                if (tmpVersions != NULL)
-                                {
-                                    titleAppVersion = tmpVersions;
-                                    free(tmpVersions);
-                                }
+                                if (tmpVersions != NULL) titleAppVersion = tmpVersions;
                                 
-                                freeBuf = true;
+                                memError = true;
                             }
                         } else
                         if (filter == META_DB_PATCH)
@@ -545,19 +622,11 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
                                 
                                 success = true;
                             } else {
-                                if (tmpTIDs != NULL)
-                                {
-                                    titlePatchTitleID = tmpTIDs;
-                                    free(tmpTIDs);
-                                }
+                                if (tmpTIDs != NULL) titlePatchTitleID = tmpTIDs;
                                 
-                                if (tmpVersions != NULL)
-                                {
-                                    titlePatchVersion = tmpVersions;
-                                    free(tmpVersions);
-                                }
+                                if (tmpVersions != NULL) titlePatchVersion = tmpVersions;
                                 
-                                freeBuf = true;
+                                memError = true;
                             }
                         } else
                         if (filter == META_DB_ADDON)
@@ -578,33 +647,22 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
                                 
                                 success = true;
                             } else {
-                                if (tmpTIDs != NULL)
-                                {
-                                    titleAddOnTitleID = tmpTIDs;
-                                    free(tmpTIDs);
-                                }
+                                if (tmpTIDs != NULL) titleAddOnTitleID = tmpTIDs;
                                 
-                                if (tmpVersions != NULL)
-                                {
-                                    titleAddOnVersion = tmpVersions;
-                                    free(tmpVersions);
-                                }
+                                if (tmpVersions != NULL) titleAddOnVersion = tmpVersions;
                                 
-                                freeBuf = true;
+                                memError = true;
                             }
                         }
                     } else {
-                        freeBuf = true;
+                        memError = true;
                     }
                     
-                    if (freeBuf)
-                    {
-                        if (titleIDs != NULL) free(titleIDs);
-                        
-                        if (versions != NULL) free(versions);
-                        
-                        uiStatusMsg("listTitlesByType: failed to allocate memory for TID/version buffer! (0x%02X filter).", filter);
-                    }
+                    if (titleIDs != NULL) free(titleIDs);
+                    
+                    if (versions != NULL) free(versions);
+                    
+                    if (memError) uiStatusMsg("listTitlesByType: failed to allocate memory for TID/version buffer! (0x%02X filter).", filter);
                 }
             } else {
                 // There are no titles that match the provided filter in the opened storage device
@@ -629,6 +687,9 @@ bool getTitleIDAndVersionList(FsStorageId curStorageId)
         uiStatusMsg("getTitleIDAndVersionList: invalid storage ID!");
         return false;
     }
+    
+    /* Check if the SD card is really mounted */
+    if (curStorageId == FsStorageId_SdCard && fsdevGetDefaultFileSystem() == NULL) return true;
     
     bool listApp = false, listPatch = false, listAddOn = false, success = false;
     
@@ -696,10 +757,198 @@ bool getTitleIDAndVersionList(FsStorageId curStorageId)
         
         serviceClose(&(ncmDb.s));
     } else {
-        uiStatusMsg("getTitleIDAndVersionList: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
+        if (curStorageId == FsStorageId_SdCard && result == 0x21005)
+        {
+            // If the SD card is mounted, but is isn't currently used by HOS because of some weird reason, just filter this particular error and continue
+            // This can occur when using the "Nintendo" directory from a different console, or when the "sdmc:/Nintendo/Contents/private" file is corrupted
+            success = true;
+        } else {
+            uiStatusMsg("getTitleIDAndVersionList: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
+        }
     }
     
     return success;
+}
+
+bool loadPatchesFromSdCardAndEmmc()
+{
+    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID) return false;
+    
+    u32 i, j;
+    
+    Result result;
+    NcmContentMetaDatabase ncmDb;
+    
+    NcmApplicationContentMetaKey *titleList;
+    NcmApplicationContentMetaKey *titleListTmp;
+    size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
+    
+    u32 written, total;
+    
+    u64 *titleIDs, *tmpTIDs;
+    u32 *versions, *tmpVersions;
+    FsStorageId *tmpStorages;
+    
+    bool proceed;
+    
+    for(i = 0; i < 2; i++)
+    {
+        FsStorageId curStorageId = (i == 0 ? FsStorageId_SdCard : FsStorageId_NandUser);
+        
+        /* Check if the SD card is really mounted */
+        if (curStorageId == FsStorageId_SdCard && fsdevGetDefaultFileSystem() == NULL) continue;
+        
+        memset(&ncmDb, 0, sizeof(NcmContentMetaDatabase));
+        
+        titleList = titleListTmp = NULL;
+        
+        written = total = 0;
+        
+        titleIDs = tmpTIDs = NULL;
+        versions = tmpVersions = NULL;
+        tmpStorages = NULL;
+        
+        proceed = true;
+        
+        if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+        {
+            titleList = calloc(1, titleListSize);
+            if (titleList)
+            {
+                if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, META_DB_PATCH, titleList, titleListSize, &written, &total)) && written && total)
+                {
+                    if (total > written)
+                    {
+                        titleListSize *= total;
+                        titleListTmp = realloc(titleList, titleListSize);
+                        if (titleListTmp)
+                        {
+                            titleList = titleListTmp;
+                            memset(titleList, 0, titleListSize);
+                            
+                            if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, META_DB_PATCH, titleList, titleListSize, &written, &total)))
+                            {
+                                if (written != total) proceed = false;
+                            } else {
+                                proceed = false;
+                            }
+                        } else {
+                            proceed = false;
+                        }
+                    }
+                    
+                    if (proceed)
+                    {
+                        titleIDs = calloc(total, sizeof(u64));
+                        versions = calloc(total, sizeof(u32));
+                        
+                        if (titleIDs != NULL && versions != NULL)
+                        {
+                            for(j = 0; j < total; j++)
+                            {
+                                titleIDs[j] = titleList[j].metaRecord.titleId;
+                                versions[j] = titleList[j].metaRecord.version;
+                            }
+                            
+                            // If ptr == NULL, realloc will essentially act as a malloc
+                            tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount + total) * sizeof(u64));
+                            tmpVersions = realloc(titlePatchVersion, (titlePatchCount + total) * sizeof(u32));
+                            tmpStorages = realloc(titlePatchStorageId, (titlePatchCount + total) * sizeof(FsStorageId));
+                            
+                            if (tmpTIDs != NULL && tmpVersions != NULL && tmpStorages != NULL)
+                            {
+                                titlePatchTitleID = tmpTIDs;
+                                memcpy(titlePatchTitleID + titlePatchCount, titleIDs, total * sizeof(u64));
+                                
+                                titlePatchVersion = tmpVersions;
+                                memcpy(titlePatchVersion + titlePatchCount, versions, total * sizeof(u32));
+                                
+                                titlePatchStorageId = tmpStorages;
+                                for(j = titlePatchCount; j < (titlePatchCount + total); j++) titlePatchStorageId[j] = curStorageId;
+                                
+                                titlePatchCount += total;
+                                
+                                gameCardSdCardEmmcPatchCount += total;
+                                
+                                if (curStorageId == FsStorageId_SdCard)
+                                {
+                                    sdCardTitlePatchCount = total;
+                                } else {
+                                    nandUserTitlePatchCount = total;
+                                }
+                            } else {
+                                if (tmpTIDs != NULL) titlePatchTitleID = tmpTIDs;
+                                
+                                if (tmpVersions != NULL) titlePatchVersion = tmpVersions;
+                                
+                                if (tmpStorages != NULL) titlePatchStorageId = tmpStorages;
+                            }
+                        }
+                        
+                        if (titleIDs != NULL) free(titleIDs);
+                        
+                        if (versions != NULL) free(versions);
+                    }
+                }
+                
+                free(titleList);
+            }
+            
+            serviceClose(&(ncmDb.s));
+        }
+    }
+    
+    if (gameCardSdCardEmmcPatchCount) return true;
+    
+    return false;
+}
+
+void freePatchesFromSdCardAndEmmc()
+{
+    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID || !titlePatchCount || !titlePatchTitleID || !titlePatchVersion || !titlePatchStorageId || !gameCardSdCardEmmcPatchCount) return;
+    
+    u64 *tmpTIDs = NULL;
+    u32 *tmpVersions = NULL;
+    FsStorageId *tmpStorages = NULL;
+    
+    if ((titlePatchCount - gameCardSdCardEmmcPatchCount) > 0)
+    {
+        tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(u64));
+        tmpVersions = realloc(titlePatchVersion, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(u32));
+        tmpStorages = realloc(titlePatchStorageId, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(FsStorageId));
+        
+        if (tmpTIDs != NULL && tmpVersions != NULL && tmpStorages != NULL)
+        {
+            titlePatchTitleID = tmpTIDs;
+            
+            titlePatchVersion = tmpVersions;
+            
+            titlePatchStorageId = tmpStorages;
+        } else {
+            if (tmpTIDs != NULL) titlePatchTitleID = tmpTIDs;
+            
+            if (tmpVersions != NULL) titlePatchVersion = tmpVersions;
+            
+            if (tmpStorages != NULL) titlePatchStorageId = tmpStorages;
+        }
+    } else {
+        free(titlePatchTitleID);
+        titlePatchTitleID = NULL;
+        
+        free(titlePatchVersion);
+        titlePatchVersion = NULL;
+        
+        free(titlePatchStorageId);
+        titlePatchStorageId = NULL;
+    }
+    
+    titlePatchCount -= gameCardSdCardEmmcPatchCount;
+    
+    gameCardSdCardEmmcPatchCount = 0;
+    
+    sdCardTitlePatchCount = 0;
+    
+    nandUserTitlePatchCount = 0;
 }
 
 void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize)
@@ -1043,6 +1292,7 @@ void loadTitleInfo()
     if (menuType == MENUTYPE_MAIN)
     {
         freeGlobalData();
+        sdCardAndEmmcTitleInfoLoaded = false;
         return;
     }
     
@@ -1075,7 +1325,7 @@ void loadTitleInfo()
     } else
     if (menuType == MENUTYPE_SDCARD_EMMC)
     {
-        if (titleAppCount || titlePatchCount || titleAddOnCount) return;
+        if (titleAppCount || titlePatchCount || titleAddOnCount || sdCardAndEmmcTitleInfoLoaded) return;
         
         uiPleaseWait(1);
         
@@ -1096,6 +1346,8 @@ void loadTitleInfo()
                 proceed = true;
             }
         }
+        
+        sdCardAndEmmcTitleInfoLoaded = true;
     }
     
     if (proceed && titleAppCount > 0)
@@ -1479,19 +1731,23 @@ bool calculateExeFsExtractedDataSize(u64 *out)
     return true;
 }
 
-bool calculateRomFsExtractedDataSize(u64 *out)
+bool calculateRomFsFullExtractedSize(bool usePatch, u64 *out)
 {
-    if (!romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries || !out)
+    if ((!usePatch && (!romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries)) || (usePatch && (!bktrContext.romfs_filetable_size || !bktrContext.romfs_file_entries)) || !out)
     {
         uiDrawString("Error: invalid parameters to calculate extracted data size for the RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
     }
     
-    u64 offset = 0, totalSize = 0;
+    u64 offset = 0;
+    u64 totalSize = 0;
     
-    while(offset < romFsContext.romfs_filetable_size)
+    u64 filetableSize = (!usePatch ? romFsContext.romfs_filetable_size : bktrContext.romfs_filetable_size);
+    romfs_file *fileEntries = (!usePatch ? romFsContext.romfs_file_entries : bktrContext.romfs_file_entries);
+    
+    while(offset < filetableSize)
     {
-        romfs_file *entry = (romfs_file*)((u8*)romFsContext.romfs_file_entries + offset);
+        romfs_file *entry = (romfs_file*)((u8*)fileEntries + offset);
         
         totalSize += entry->dataSize;
         
@@ -1503,15 +1759,72 @@ bool calculateRomFsExtractedDataSize(u64 *out)
     return true;
 }
 
-bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
+bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out)
+{
+    if ((!usePatch && (!romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries || dir_offset > romFsContext.romfs_dirtable_size)) || (usePatch && (!bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries || !bktrContext.romfs_filetable_size || !bktrContext.romfs_file_entries || dir_offset > bktrContext.romfs_dirtable_size)) || !out)
+    {
+        uiDrawString("Error: invalid parameters to calculate extracted size for the current RomFS directory!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    u64 totalSize = 0, childDirSize = 0;
+    romfs_file *fileEntry = NULL;
+    romfs_dir *childDirEntry = NULL;
+    romfs_dir *dirEntry = (!usePatch ? (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + dir_offset) : (romfs_dir*)((u8*)bktrContext.romfs_dir_entries + dir_offset));
+    
+    // Check if we're dealing with a nameless directory that's not the root directory
+    if (!dirEntry->nameLen && dir_offset > 0)
+    {
+        uiDrawString("Error: directory entry without name in RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        return false;
+    }
+    
+    if (dirEntry->childFile != ROMFS_ENTRY_EMPTY)
+    {
+        fileEntry = (!usePatch ? (romfs_file*)((u8*)romFsContext.romfs_file_entries + dirEntry->childFile) : (romfs_file*)((u8*)bktrContext.romfs_file_entries + dirEntry->childFile));
+        
+        totalSize += fileEntry->dataSize;
+        
+        while(fileEntry->sibling != ROMFS_ENTRY_EMPTY)
+        {
+            fileEntry = (!usePatch ? (romfs_file*)((u8*)romFsContext.romfs_file_entries + fileEntry->sibling) : (romfs_file*)((u8*)bktrContext.romfs_file_entries + fileEntry->sibling));
+            
+            totalSize += fileEntry->dataSize;
+        }
+    }
+    
+    if (dirEntry->childDir != ROMFS_ENTRY_EMPTY)
+    {
+        if (!calculateRomFsExtractedDirSize(dirEntry->childDir, usePatch, &childDirSize)) return false;
+        
+        totalSize += childDirSize;
+        
+        childDirEntry = (!usePatch ? (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + dirEntry->childDir) : (romfs_dir*)((u8*)bktrContext.romfs_dir_entries + dirEntry->childDir));
+        
+        while(childDirEntry->sibling != ROMFS_ENTRY_EMPTY)
+        {
+            if (!calculateRomFsExtractedDirSize(childDirEntry->sibling, usePatch, &childDirSize)) return false;
+            
+            totalSize += childDirSize;
+            
+            childDirEntry = (!usePatch ? (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + childDirEntry->sibling) : (romfs_dir*)((u8*)bktrContext.romfs_dir_entries + childDirEntry->sibling));
+        }
+    }
+    
+    *out = totalSize;
+    
+    return true;
+}
+
+bool readProgramNcaExeFsOrRomFs(u32 titleIndex, bool usePatch, bool readRomFs)
 {
     Result result;
     u32 i = 0;
     u32 written = 0;
     u32 total = 0;
-    u32 appCount = 0;
-    u32 ncmAppIndex = 0;
-    u32 appNcaCount = 0;
+    u32 titleCount = 0;
+    u32 ncmTitleIndex = 0;
+    u32 titleNcaCount = 0;
     u32 partition = 0;
     
     FsStorageId curStorageId;
@@ -1527,9 +1840,9 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     NcmContentStorage ncmStorage;
     memset(&ncmStorage, 0, sizeof(NcmContentStorage));
     
-    NcmApplicationContentMetaKey *appList = NULL;
-    NcmContentRecord *appContentRecords = NULL;
-    size_t appListSize = sizeof(NcmApplicationContentMetaKey);
+    NcmApplicationContentMetaKey *titleList = NULL;
+    NcmContentRecord *titleContentRecords = NULL;
+    size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
     
     NcmNcaId ncaId;
     char ncaIdStr[33] = {'\0'};
@@ -1540,14 +1853,14 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     
     bool success = false, foundProgram = false;
     
-    if (!titleAppStorageId)
+    if ((!usePatch && !titleAppStorageId) || (usePatch && !titlePatchStorageId))
     {
         uiDrawString("Error: title storage ID unavailable!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
-    curStorageId = titleAppStorageId[appIndex];
+    curStorageId = (!usePatch ? titleAppStorageId[titleIndex] : titlePatchStorageId[titleIndex]);
     
     if (curStorageId != FsStorageId_GameCard && curStorageId != FsStorageId_SdCard && curStorageId != FsStorageId_NandUser)
     {
@@ -1559,39 +1872,55 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     switch(curStorageId)
     {
         case FsStorageId_GameCard:
-            appCount = titleAppCount;
-            ncmAppIndex = appIndex;
+            titleCount = (!usePatch ? titleAppCount : titlePatchCount);
+            ncmTitleIndex = titleIndex;
             break;
         case FsStorageId_SdCard:
-            appCount = sdCardTitleAppCount;
-            ncmAppIndex = appIndex;
+            titleCount = (!usePatch ? sdCardTitleAppCount : sdCardTitlePatchCount);
+            
+            if (menuType == MENUTYPE_SDCARD_EMMC)
+            {
+                ncmTitleIndex = titleIndex;
+            } else {
+                // Patches loaded using loadPatchesFromSdCardAndEmmc()
+                ncmTitleIndex = (titleIndex - (titlePatchCount - gameCardSdCardEmmcPatchCount)); // Substract gamecard patch count
+            }
+            
             break;
         case FsStorageId_NandUser:
-            appCount = nandUserTitleAppCount;
-            ncmAppIndex = (appIndex - sdCardTitleAppCount);
+            titleCount = (!usePatch ? nandUserTitleAppCount : nandUserTitlePatchCount);
+            
+            if (menuType == MENUTYPE_SDCARD_EMMC)
+            {
+                ncmTitleIndex = (titleIndex - (!usePatch ? sdCardTitleAppCount : sdCardTitlePatchCount)); // Substract SD card patch count
+            } else {
+                // Patches loaded using loadPatchesFromSdCardAndEmmc()
+                ncmTitleIndex = (titleIndex - ((titlePatchCount - gameCardSdCardEmmcPatchCount) + sdCardTitlePatchCount)); // Substract gamecard + SD card patch count
+            }
+            
             break;
         default:
             break;
     }
     
-    if (!appCount)
+    if (!titleCount)
     {
-        uiDrawString("Error: invalid base application count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid title type count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
-    if (ncmAppIndex > (appCount - 1))
+    if (ncmTitleIndex > (titleCount - 1))
     {
-        uiDrawString("Error: invalid base application index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         breaks += 2;
         return false;
     }
     
-    appListSize *= appCount;
+    titleListSize *= titleCount;
     
     // If we're dealing with a gamecard, call workaroundPartitionZeroAccess() and read the secure partition header. Otherwise, ncmContentStorageReadContentIdFile() will fail with error 0x00171002
-    if (curStorageId == FsStorageId_GameCard)
+    if (curStorageId == FsStorageId_GameCard && !partitionHfs0Header)
     {
         partition = (hfs0_partition_cnt - 1); // Select the secure partition
         
@@ -1610,12 +1939,13 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
         }
     }
     
-    uiDrawString("Looking for the Program NCA...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Looking for the Program NCA (%s)...", (!usePatch ? "base application" : "update"));
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     uiRefreshDisplay();
     breaks++;
     
-    appList = calloc(1, appListSize);
-    if (!appList)
+    titleList = calloc(1, titleListSize);
+    if (!titleList)
     {
         uiDrawString("Error: unable to allocate memory for the ApplicationContentMetaKey struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
@@ -1628,7 +1958,9 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, META_DB_REGULAR_APPLICATION, appList, appListSize, &written, &total)))
+    u8 filter = (!usePatch ? META_DB_REGULAR_APPLICATION : META_DB_PATCH);
+    
+    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, filter, titleList, titleListSize, &written, &total)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1648,23 +1980,23 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(appList[ncmAppIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
+    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    appNcaCount = (u32)(contentRecordsHeader.numContentRecords);
+    titleNcaCount = (u32)(contentRecordsHeader.numContentRecords);
     
-    appContentRecords = calloc(appNcaCount, sizeof(NcmContentRecord));
-    if (!appContentRecords)
+    titleContentRecords = calloc(titleNcaCount, sizeof(NcmContentRecord));
+    if (!titleContentRecords)
     {
         uiDrawString("Error: unable to allocate memory for the ContentRecord struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(appList[ncmAppIndex].metaRecord), 0, appContentRecords, appNcaCount * sizeof(NcmContentRecord), &written)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1678,12 +2010,12 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
         goto out;
     }
     
-    for(i = 0; i < appNcaCount; i++)
+    for(i = 0; i < titleNcaCount; i++)
     {
-        if (appContentRecords[i].type == NcmContentType_Program)
+        if (titleContentRecords[i].type == NcmContentType_Program)
         {
-            memcpy(&ncaId, &(appContentRecords[i].ncaId), sizeof(NcmNcaId));
-            convertDataToHexString(appContentRecords[i].ncaId.c, 16, ncaIdStr, 33);
+            memcpy(&ncaId, &(titleContentRecords[i].ncaId), sizeof(NcmNcaId));
+            convertDataToHexString(titleContentRecords[i].ncaId.c, 16, ncaIdStr, 33);
             foundProgram = true;
             break;
         }
@@ -1700,10 +2032,10 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     uiRefreshDisplay();
     breaks += 2;
     
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Retrieving %s...", (!readRomFs ? "ExeFS entries" : "RomFS entry tables"));
+    /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Retrieving %s...", (!readRomFs ? "ExeFS entries" : "RomFS entry tables"));
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     uiRefreshDisplay();
-    breaks++;
+    breaks++;*/
     
     if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
     {
@@ -1713,21 +2045,21 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
     }
     
     // Decrypt the NCA header
-    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, NULL, decrypted_nca_keys, (curStorageId != FsStorageId_GameCard))) goto out;
+    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, NULL, decrypted_nca_keys, (curStorageId != FsStorageId_GameCard || (curStorageId == FsStorageId_GameCard && usePatch)))) goto out;
     
-    bool has_rights_id = false;
-    
-    for(i = 0; i < 0x10; i++)
+    if (curStorageId == FsStorageId_GameCard && !usePatch)
     {
-        if (dec_nca_header.rights_id[i] != 0)
+        bool has_rights_id = false;
+        
+        for(i = 0; i < 0x10; i++)
         {
-            has_rights_id = true;
-            break;
+            if (dec_nca_header.rights_id[i] != 0)
+            {
+                has_rights_id = true;
+                break;
+            }
         }
-    }
-    
-    if (curStorageId == FsStorageId_GameCard)
-    {
+        
         if (has_rights_id)
         {
             uiDrawString("Error: Rights ID field in Program NCA header not empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1740,20 +2072,47 @@ bool readProgramNcaExeFsOrRomFs(u32 appIndex, bool readRomFs)
         // Read file entries from the ExeFS section
         if (!readExeFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
     } else {
-        // Read directory and file tables from the RomFS section
-        if (!readRomFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
+        if (!usePatch)
+        {
+            // Read directory and file tables from the RomFS section
+            if (!readRomFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
+        } else {
+            // Look for the base application title index
+            u32 appIndex;
+            
+            for(i = 0; i < titleAppCount; i++)
+            {
+                if (checkIfPatchOrAddOnBelongsToBaseApplication(titleIndex, i, false))
+                {
+                    appIndex = i;
+                    break;
+                }
+            }
+            
+            if (i == titleAppCount)
+            {
+                uiDrawString("Error: unable to find base application title index for the selected update!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                goto out;
+            }
+            
+            // Read directory and file tables from the RomFS section in the Program NCA from the base application
+            if (!readProgramNcaExeFsOrRomFs(appIndex, false, true)) goto out;
+            
+            // Read BKTR entry data in the Program NCA from the update
+            if (!readBktrEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
+        }
     }
     
     success = true;
     
 out:
-    if (appContentRecords) free(appContentRecords);
+    if (titleContentRecords) free(titleContentRecords);
     
     if (!success) serviceClose(&(ncmStorage.s));
     
     serviceClose(&(ncmDb.s));
     
-    if (appList) free(appList);
+    if (titleList) free(titleList);
     
     if (curStorageId == FsStorageId_GameCard)
     {
@@ -1802,24 +2161,24 @@ bool getExeFsFileList()
     return true;
 }
 
-bool getRomFsParentDir(u32 dir_offset, u32 *out)
+bool getRomFsParentDir(u32 dir_offset, bool usePatch, u32 *out)
 {
-    if (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries)
+    if ((!usePatch && (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries)) || (usePatch && (!bktrContext.romfs_dirtable_size || dir_offset > bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries)))
     {
         uiDrawString("Error: invalid parameters to retrieve parent RomFS section directory!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
     }
     
-    romfs_dir *entry = (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + dir_offset);
+    romfs_dir *entry = (!usePatch ? (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + dir_offset) : (romfs_dir*)((u8*)bktrContext.romfs_dir_entries + dir_offset));
     
     *out = entry->parent;
     
     return true;
 }
 
-bool generateCurrentRomFsPath(u32 dir_offset)
+bool generateCurrentRomFsPath(u32 dir_offset, bool usePatch)
 {
-    if (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries)
+    if ((!usePatch && (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries)) || (usePatch && (!bktrContext.romfs_dirtable_size || dir_offset > bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries)))
     {
         uiDrawString("Error: invalid parameters to generate current RomFS section path!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
@@ -1828,7 +2187,7 @@ bool generateCurrentRomFsPath(u32 dir_offset)
     // Generate current path if we're not dealing with the root directory
     if (dir_offset)
     {
-        romfs_dir *entry = (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + dir_offset);
+        romfs_dir *entry = (!usePatch ? (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + dir_offset) : (romfs_dir*)((u8*)bktrContext.romfs_dir_entries + dir_offset));
         
         if (!entry->nameLen)
         {
@@ -1839,7 +2198,7 @@ bool generateCurrentRomFsPath(u32 dir_offset)
         // Check if we're not a root dir child
         if (entry->parent)
         {
-            if (!generateCurrentRomFsPath(entry->parent)) return false;
+            if (!generateCurrentRomFsPath(entry->parent, usePatch)) return false;
         }
         
         // Concatenate entry name
@@ -1852,7 +2211,7 @@ bool generateCurrentRomFsPath(u32 dir_offset)
     return true;
 }
 
-bool getRomFsFileList(u32 dir_offset)
+bool getRomFsFileList(u32 dir_offset, bool usePatch)
 {
     u64 entryOffset = 0;
     u32 dirEntryCnt = 1; // Always add the parent directory entry ("..")
@@ -1860,6 +2219,9 @@ bool getRomFsFileList(u32 dir_offset)
     u32 totalEntryCnt = 0;
     u32 i = 1;
     u32 romFsParentDir = 0;
+    
+    u64 dirTableSize;
+    u64 fileTableSize;
     
     if (romFsBrowserEntries != NULL)
     {
@@ -1869,22 +2231,25 @@ bool getRomFsFileList(u32 dir_offset)
     
     memset(curRomFsPath, 0, NAME_BUF_LEN);
     
-    if (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries)
+    if ((!usePatch && (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries)) || (usePatch && (!bktrContext.romfs_dirtable_size || dir_offset > bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries || !bktrContext.romfs_filetable_size || !bktrContext.romfs_file_entries)))
     {
         uiDrawString("Error: invalid parameters to retrieve RomFS section filelist!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
     }
     
-    if (!getRomFsParentDir(dir_offset, &romFsParentDir)) return false;
+    if (!getRomFsParentDir(dir_offset, usePatch, &romFsParentDir)) return false;
     
-    if (!generateCurrentRomFsPath(dir_offset)) return false;
+    if (!generateCurrentRomFsPath(dir_offset, usePatch)) return false;
+    
+    dirTableSize = (!usePatch ? romFsContext.romfs_dirtable_size : bktrContext.romfs_dirtable_size);
+    fileTableSize = (!usePatch ? romFsContext.romfs_filetable_size : bktrContext.romfs_filetable_size);
     
     // First count the directory entries
     entryOffset = ROMFS_NONAME_DIRENTRY_SIZE; // Always skip the first entry (root directory)
     
-    while(entryOffset < romFsContext.romfs_dirtable_size)
+    while(entryOffset < dirTableSize)
     {
-        romfs_dir *entry = (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + entryOffset);
+        romfs_dir *entry = (!usePatch ? (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + entryOffset) : (romfs_dir*)((u8*)bktrContext.romfs_dir_entries + entryOffset));
         
         if (!entry->nameLen)
         {
@@ -1901,9 +2266,9 @@ bool getRomFsFileList(u32 dir_offset)
     // Now count the file entries
     entryOffset = 0;
     
-    while(entryOffset < romFsContext.romfs_filetable_size)
+    while(entryOffset < fileTableSize)
     {
-        romfs_file *entry = (romfs_file*)((u8*)romFsContext.romfs_file_entries + entryOffset);
+        romfs_file *entry = (!usePatch ? (romfs_file*)((u8*)romFsContext.romfs_file_entries + entryOffset) : (romfs_file*)((u8*)bktrContext.romfs_file_entries + entryOffset));
         
         if (!entry->nameLen)
         {
@@ -1947,13 +2312,13 @@ bool getRomFsFileList(u32 dir_offset)
     addStringToFilenameBuffer("..", &nextFilename);
     
     // First add the directory entries
-    if (dirEntryCnt > 1)
+    if ((!romFsParentDir && dirEntryCnt > 1) || (romFsParentDir && dirEntryCnt > 0))
     {
         entryOffset = ROMFS_NONAME_DIRENTRY_SIZE; // Always skip the first entry (root directory)
         
-        while(entryOffset < romFsContext.romfs_dirtable_size)
+        while(entryOffset < dirTableSize)
         {
-            romfs_dir *entry = (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + entryOffset);
+            romfs_dir *entry = (!usePatch ? (romfs_dir*)((u8*)romFsContext.romfs_dir_entries + entryOffset) : (romfs_dir*)((u8*)bktrContext.romfs_dir_entries + entryOffset));
             
             // Only add entries inside the directory we're looking in
             if (entry->parent == dir_offset)
@@ -1991,9 +2356,9 @@ bool getRomFsFileList(u32 dir_offset)
     {
         entryOffset = 0;
         
-        while(entryOffset < romFsContext.romfs_filetable_size)
+        while(entryOffset < fileTableSize)
         {
-            romfs_file *entry = (romfs_file*)((u8*)romFsContext.romfs_file_entries + entryOffset);
+            romfs_file *entry = (!usePatch ? (romfs_file*)((u8*)romFsContext.romfs_file_entries + entryOffset) : (romfs_file*)((u8*)bktrContext.romfs_file_entries + entryOffset));
             
             // Only add entries inside the directory we're looking in
             if (entry->parent == dir_offset)
@@ -2025,6 +2390,9 @@ bool getRomFsFileList(u32 dir_offset)
             entryOffset += round_up(ROMFS_NONAME_FILEENTRY_SIZE + entry->nameLen, 4);
         }
     }
+    
+    // Update current RomFS directory offset
+    curRomFsDirOffset = dir_offset;
     
     return true;
 }
@@ -2108,7 +2476,7 @@ void addStringToFilenameBuffer(const char *string, char **nextFilename)
     *nextFilename += FILENAME_LENGTH;
 }
 
-char *generateDumpFullName()
+char *generateFullDumpName()
 {
     if (!titleAppCount || !fixedTitleName || !titleAppTitleID || !titleAppVersion) return NULL;
     
@@ -2622,6 +2990,46 @@ bool yesNoPrompt(const char *message)
     }
     
     return ret;
+}
+
+bool checkIfDumpedXciContainsCertificate(const char *xciPath)
+{
+    if (!xciPath || !strlen(xciPath)) return false;
+    
+    FILE *xciFile = NULL;
+    u64 xciSize = 0;
+    
+    size_t read_bytes;
+    
+    u8 xci_cert[CERT_SIZE];
+    
+    u8 xci_cert_wiped[CERT_SIZE];
+    memset(xci_cert_wiped, 0xFF, CERT_SIZE);
+    
+    xciFile = fopen(xciPath, "rb");
+    if (!xciFile) return false;
+    
+    fseek(xciFile, 0, SEEK_END);
+    xciSize = ftell(xciFile);
+    rewind(xciFile);
+    
+    if (xciSize < (size_t)(CERT_OFFSET + CERT_SIZE))
+    {
+        fclose(xciFile);
+        return false;
+    }
+    
+    fseek(xciFile, CERT_OFFSET, SEEK_SET);
+    
+    read_bytes = fread(xci_cert, 1, CERT_SIZE, xciFile);
+    
+    fclose(xciFile);
+    
+    if (read_bytes != (size_t)CERT_SIZE) return false;
+    
+    if (memcmp(xci_cert, xci_cert_wiped, CERT_SIZE) != 0) return true;
+    
+    return false;
 }
 
 bool checkIfDumpedNspContainsConsoleData(const char *nspPath)
