@@ -1047,6 +1047,7 @@ void loadTitleInfo()
     }
     
     bool proceed = false, freeBuf = false;
+    static bool searchedEmmc = false;
     
     if (menuType == MENUTYPE_GAMECARD)
     {
@@ -1075,7 +1076,7 @@ void loadTitleInfo()
     } else
     if (menuType == MENUTYPE_SDCARD_EMMC)
     {
-        if (titleAppCount || titlePatchCount || titleAddOnCount) return;
+        if (titleAppCount || titlePatchCount || titleAddOnCount || searchedEmmc) return;
         
         uiPleaseWait(1);
         
@@ -1096,6 +1097,7 @@ void loadTitleInfo()
                 proceed = true;
             }
         }
+        searchedEmmc = true;
     }
     
     if (proceed && titleAppCount > 0)
