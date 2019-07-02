@@ -1082,19 +1082,19 @@ void loadTitleInfo()
         
         freeTitleInfo();
         
-        if (getTitleIDAndVersionList(FsStorageId_SdCard))
+        if (getTitleIDAndVersionList(FsStorageId_NandUser))
         {
-            sdCardTitleAppCount = titleAppCount;
-            sdCardTitlePatchCount = titlePatchCount;
-            sdCardTitleAddOnCount = titleAddOnCount;
-            
-            if (getTitleIDAndVersionList(FsStorageId_NandUser))
-            {
-                nandUserTitleAppCount = (titleAppCount - sdCardTitleAppCount);
-                nandUserTitlePatchCount = (titlePatchCount - sdCardTitlePatchCount);
-                nandUserTitleAddOnCount = (titleAddOnCount - sdCardTitleAddOnCount);
+            nandUserTitleAppCount = titleAppCount;
+            nandUserTitlePatchCount = titlePatchCount;
+            nandUserTitleAddOnCount = titleAddOnCount;
                 
-                proceed = true;
+            proceed = true;
+            
+            if (getTitleIDAndVersionList(FsStorageId_SdCard))
+            {
+                sdCardTitleAppCount = (titleAppCount - nandUserTitleAppCount);
+                sdCardTitlePatchCount = (titlePatchCount - nandUserTitlePatchCount);
+                sdCardTitleAddOnCount = (titleAddOnCount - nandUserTitleAddOnCount);
             }
         }
         searchedEmmc = true;
