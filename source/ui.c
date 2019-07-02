@@ -2360,7 +2360,7 @@ UIResult uiProcess()
                                 {
                                     if (!orphanMode)
                                     {
-                                        u32 newIndex = retrieveNextPatchOrAddOnIndexFromBaseApplication(selectedAddOnIndex, selectedAppInfoIndex, false);
+                                        u32 newIndex = retrieveNextPatchOrAddOnIndexFromBaseApplication(selectedAddOnIndex, selectedAppInfoIndex, true);
                                         if (newIndex != selectedAddOnIndex)
                                         {
                                             selectedAddOnIndex = newIndex;
