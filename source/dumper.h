@@ -13,12 +13,14 @@
 
 #define SPLIT_FILE_XCI_PART_SIZE        (u64)0xFFFF8000     // 4 GiB - 0x8000 (4294934528 bytes) (based on XCI-Cutter)
 #define SPLIT_FILE_NSP_PART_SIZE        (u64)0xFFFF0000     // 4 GiB - 0x10000 (4294901760 bytes) (based on splitNSP.py)
-#define SPLIT_FILE_GENERIC_PART_SIZE    SPLIT_FILE_XCI_PART_SIZE
+#define SPLIT_FILE_GENERIC_PART_SIZE    SPLIT_FILE_NSP_PART_SIZE
 
 #define CERT_OFFSET                     0x7000
 #define CERT_SIZE                       0x200
 
 #define SMOOTHING_FACTOR                (double)0.05
+
+#define CANCEL_BTN_SEC_HOLD             2                   // The cancel button must be held for at least CANCEL_BTN_SEC_HOLD seconds to cancel an ongoing operation
 
 typedef enum {
     BATCH_SOURCE_ALL = 0,

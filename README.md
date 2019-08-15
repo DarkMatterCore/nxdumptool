@@ -4,24 +4,25 @@ Nintendo Switch Dump Tool
 Main features
 --------------
 
-* Generates full Cartridge Image dumps (XCI) with optional certificate removal and optional trimming.
+* Generates full Cartridge Image dumps (XCI) with optional certificate removal and/or trimming.
 * Generates installable Nintendo Submission Packages (NSP) from base applications, updates and DLCs stored in the inserted gamecard, SD card and eMMC storage devices.
     * The generated dumps follow the `AuditingTool` format from Scene releases.
+    * Capable of generating ticket-less (standard crypto) dumps.
+    * Capable of generating dumps from installed updates/DLCs with missing base applications (orphan titles).
 * Compatible with multigame carts.
 * CRC32 checksum calculation for XCI/NSP dumps.
 * Full XCI dump verification using XML database from NSWDB.COM (NSWreleases.xml).
-* XML database and in-app update via libcurl.
-* Precise HFS0 raw partition dumping, using the root HFS0 header from the game card.
-* HFS0 partition file data dumping.
-* HFS0 partition file browser with manual file dump support.
-* Program NCA ExeFS section file data dumping.
-* Program NCA ExeFS section file browser with manual file dump support.
-* Program NCA RomFS section file data dumping.
-* Program NCA RomFS section file browser with manual file dump support.
-* Manual game card certificate dump.
+* XML database and in-app update capabilities via libcurl.
+* Precise HFS0 raw partition dumping, using the root HFS0 header from the gamecard.
+* HFS0 partition file data dumping + browser with manual file dump support.
+* Program NCA ExeFS/RomFS section file data dumping + browser with manual file dump support.
+    * Compatible with both base applications and updates (if available).
+    * Supports manual RomFS directory dumping.
+* Manual gamecard certificate dump.
 * Free SD card space checks in place.
 * File splitting support for all operations.
-* Game card metadata retrieval using NCM and NS services.
+    * Capable of storing split XCI/NSP dumps in directories with the archive bit set.
+* Metadata retrieval using NCM and NS services.
 * Dump speed calculation, ETA calculation and progress bar.
 
 Operations related to installed SD/eMMC titles require a keys file located at "sdmc:/switch/prod.keys". Use [Lockpick_RCM](https://github.com/shchmue/Lockpick_RCM) to generate it.
@@ -57,6 +58,15 @@ If you like my work and you'd like to support me in any way, it's not necessary,
 
 Changelog
 --------------
+
+**v1.1.4:**
+* Fixed building with latest libnx release.
+* Optimized RomFS recursive file dump function to not rely on code recursion as much as before, avoiding stack memory exhaustion problems. Fixes crashes while dumping RomFS data from games with lots of file entries.
+* Reduced max part size for split files to `0xFFFF0000` bytes in all operations (except for XCI dumps when the "Create directory with archive bit set" option is disabled). Fixes file access problems if the parts are used inside a directory with the archive bit set.
+* Removed the `removeDirectory()` function. `fsdevDeleteDirectoryRecursively()` is now used instead.
+* If a HFS0/ExeFS/RomFS data dump operation is cancelled or fails, a message telling the user to wait until the output directory is fully deleted will now be displayed.
+* Improved the cancel button detection mechanism. Regardless of the ongoing operation, holding the button for 2 seconds will now consistently cancel it.
+* Progress bar movement is now smoother.
 
 **v1.1.3:**
 * General changes to the NSP dumping procedure:
@@ -238,9 +248,9 @@ Big thanks to PatrickD85, unvaluablespace, wartutor and Slim45 for testing these
 
 **v1.0.5:**
 
-* Fixed game card version reading (now using the ncm service instead of retrieving it from the cached Control.nacp).
-* Added ability to read and identify FW update versions bundled with game cards.
-* In case an error occurs while reading the game card Title ID, the application will also display the FW version update bundled with it along with an explanation.
+* Fixed gamecard version reading (now using the ncm service instead of retrieving it from the cached Control.nacp).
+* Added ability to read and identify FW update versions bundled with gamecards.
+* In case an error occurs while reading the gamecard Title ID, the application will also display the FW version update bundled with it along with an explanation.
 * Removed output XCI dump renaming based on the XML database from nswdb.com.
 * Output naming scheme changed. Characters out of the ASCII range are replaced with underscores:
 	- XCI dump: "sdmc:/[GameName] v[GameVersion] ([TitleID]).xci".

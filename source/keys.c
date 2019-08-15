@@ -837,7 +837,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     Result result;
     u32 common_count, personalized_count, ids_written;
-    NcmRightsId *common_rights_ids = NULL, *personalized_rights_ids = NULL;
+    FsRightsId *common_rights_ids = NULL, *personalized_rights_ids = NULL;
     
     bool foundRightsId = false;
     u8 rightsIdType = 0; // 1 = Common, 2 = Personalized
@@ -894,7 +894,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (common_count)
     {
-        common_rights_ids = calloc(common_count, sizeof(NcmRightsId));
+        common_rights_ids = calloc(common_count, sizeof(FsRightsId));
         if (!common_rights_ids)
         {
             uiDrawString("Error: failed to allocate memory for common tickets' rights IDs!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -902,7 +902,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
             return false;
         }
         
-        if (R_FAILED(result = esListCommonTicket(&ids_written, common_rights_ids, common_count * sizeof(NcmRightsId))))
+        if (R_FAILED(result = esListCommonTicket(&ids_written, common_rights_ids, common_count * sizeof(FsRightsId))))
         {
             snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: esListCommonTicket failed! (0x%08X)", result);
             uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -926,7 +926,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (!foundRightsId && personalized_count)
     {
-        personalized_rights_ids = calloc(personalized_count, sizeof(NcmRightsId));
+        personalized_rights_ids = calloc(personalized_count, sizeof(FsRightsId));
         if (!personalized_rights_ids)
         {
             uiDrawString("Error: failed to allocate memory for personalized tickets' rights IDs!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -934,7 +934,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
             return false;
         }
         
-        if (R_FAILED(result = esListPersonalizedTicket(&ids_written, personalized_rights_ids, personalized_count * sizeof(NcmRightsId))))
+        if (R_FAILED(result = esListPersonalizedTicket(&ids_written, personalized_rights_ids, personalized_count * sizeof(FsRightsId))))
         {
             snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: esListPersonalizedTicket failed! (0x%08X)", result);
             uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -1005,7 +1005,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (!testKeyPair(E, D, N)) return false;
     
-    if (R_FAILED(result = fsOpenBisStorage(&fatFsStorage, BIS_SYSTEM_PARTITION)))
+    if (R_FAILED(result = fsOpenBisStorage(&fatFsStorage, FsBisStorageId_System)))
     {
         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to open BIS System partition! (0x%08X)", result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);

@@ -493,9 +493,6 @@ void uiDrawString(const char *string, int x, int y, u8 r, u8 g, u8 b)
     u32 tmpx = (x <= 8 ? 8 : (x + 8));
     u32 tmpy = (font_height + (y <= 8 ? 8 : (y + 8)));
     FT_Error ret = 0;
-    FT_UInt glyph_index;
-    FT_GlyphSlot standardFontSlot = standardFontFace->glyph;
-    FT_GlyphSlot nintendoExtFontSlot = nintendoExtFontFace->glyph;
     
     u32 i;
     u32 str_size = strlen(string);
@@ -549,43 +546,39 @@ void uiDrawString(const char *string, int x, int y, u8 r, u8 g, u8 b)
         
         if (useNintendoExt)
         {
-            glyph_index = FT_Get_Char_Index(nintendoExtFontFace, tmpchar);
-            
-            ret = FT_Load_Glyph(nintendoExtFontFace, glyph_index, FT_LOAD_DEFAULT);
+            ret = FT_Load_Char(nintendoExtFontFace, tmpchar, FT_LOAD_DEFAULT);
             if (ret == 0) ret = FT_Render_Glyph(nintendoExtFontFace->glyph, FT_RENDER_MODE_NORMAL);
             
             if (ret) break;
             
-            if ((tmpx + (nintendoExtFontSlot->advance.x >> 6)) >= (FB_WIDTH - 8))
+            if ((tmpx + (nintendoExtFontFace->glyph->advance.x >> 6)) >= (FB_WIDTH - 8))
             {
                 tmpx = 8;
                 tmpy += ((font_height + (font_height / 4)) + (font_height / 8));
                 breaks++;
             }
             
-            uiDrawChar(&nintendoExtFontSlot->bitmap, tmpx + nintendoExtFontSlot->bitmap_left, tmpy - nintendoExtFontSlot->bitmap_top, r, g, b);
+            uiDrawChar(&nintendoExtFontFace->glyph->bitmap, tmpx + nintendoExtFontFace->glyph->bitmap_left, tmpy - nintendoExtFontFace->glyph->bitmap_top, r, g, b);
             
-            tmpx += (nintendoExtFontSlot->advance.x >> 6);
-            tmpy += (nintendoExtFontSlot->advance.y >> 6);
+            tmpx += (nintendoExtFontFace->glyph->advance.x >> 6);
+            tmpy += (nintendoExtFontFace->glyph->advance.y >> 6);
         } else {
-            glyph_index = FT_Get_Char_Index(standardFontFace, tmpchar);
-            
-            ret = FT_Load_Glyph(standardFontFace, glyph_index, FT_LOAD_DEFAULT);
+            ret = FT_Load_Char(standardFontFace, tmpchar, FT_LOAD_DEFAULT);
             if (ret == 0) ret = FT_Render_Glyph(standardFontFace->glyph, FT_RENDER_MODE_NORMAL);
             
             if (ret) break;
             
-            if ((tmpx + (standardFontSlot->advance.x >> 6)) >= (FB_WIDTH - 8))
+            if ((tmpx + (standardFontFace->glyph->advance.x >> 6)) >= (FB_WIDTH - 8))
             {
                 tmpx = 8;
                 tmpy += ((font_height + (font_height / 4)) + (font_height / 8));
                 breaks++;
             }
             
-            uiDrawChar(&standardFontSlot->bitmap, tmpx + standardFontSlot->bitmap_left, tmpy - standardFontSlot->bitmap_top, r, g, b);
+            uiDrawChar(&standardFontFace->glyph->bitmap, tmpx + standardFontFace->glyph->bitmap_left, tmpy - standardFontFace->glyph->bitmap_top, r, g, b);
             
-            tmpx += (standardFontSlot->advance.x >> 6);
-            tmpy += (standardFontSlot->advance.y >> 6);
+            tmpx += (standardFontFace->glyph->advance.x >> 6);
+            tmpy += (standardFontFace->glyph->advance.y >> 6);
         }
     }
 }
@@ -595,9 +588,6 @@ u32 uiGetStrWidth(const char *string)
     if (!string || !strlen(string)) return 0;
     
     FT_Error ret = 0;
-    FT_UInt glyph_index;
-    FT_GlyphSlot standardFontSlot = standardFontFace->glyph;
-    FT_GlyphSlot nintendoExtFontSlot = nintendoExtFontFace->glyph;
     
     u32 i;
     u32 str_size = strlen(string);
@@ -631,23 +621,19 @@ u32 uiGetStrWidth(const char *string)
         
         if (useNintendoExt)
         {
-            glyph_index = FT_Get_Char_Index(nintendoExtFontFace, tmpchar);
-            
-            ret = FT_Load_Glyph(nintendoExtFontFace, glyph_index, FT_LOAD_DEFAULT);
+            ret = FT_Load_Char(nintendoExtFontFace, tmpchar, FT_LOAD_DEFAULT);
             if (ret == 0) ret = FT_Render_Glyph(nintendoExtFontFace->glyph, FT_RENDER_MODE_NORMAL);
             
             if (ret) break;
             
-            width += (nintendoExtFontSlot->advance.x >> 6);
+            width += (nintendoExtFontFace->glyph->advance.x >> 6);
         } else {
-            glyph_index = FT_Get_Char_Index(standardFontFace, tmpchar);
-            
-            ret = FT_Load_Glyph(standardFontFace, glyph_index, FT_LOAD_DEFAULT);
+            ret = FT_Load_Char(standardFontFace, tmpchar, FT_LOAD_DEFAULT);
             if (ret == 0) ret = FT_Render_Glyph(standardFontFace->glyph, FT_RENDER_MODE_NORMAL);
             
             if (ret) break;
             
-            width += (standardFontSlot->advance.x >> 6);
+            width += (standardFontFace->glyph->advance.x >> 6);
         }
     }
     

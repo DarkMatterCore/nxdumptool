@@ -95,7 +95,7 @@ Result esCountPersonalizedTicket(u32 *num_tickets)
     return rc;
 }
 
-Result esListCommonTicket(u32 *numRightsIdsWritten, NcmRightsId *outBuf, size_t bufSize)
+Result esListCommonTicket(u32 *numRightsIdsWritten, FsRightsId *outBuf, size_t bufSize)
 {
     IpcCommand c;
     ipcInitialize(&c);
@@ -135,7 +135,7 @@ Result esListCommonTicket(u32 *numRightsIdsWritten, NcmRightsId *outBuf, size_t 
     return rc;
 }
 
-Result esListPersonalizedTicket(u32 *numRightsIdsWritten, NcmRightsId *outBuf, size_t bufSize)
+Result esListPersonalizedTicket(u32 *numRightsIdsWritten, FsRightsId *outBuf, size_t bufSize)
 {
     IpcCommand c;
     ipcInitialize(&c);

@@ -2908,7 +2908,7 @@ void printProgressBar(progress_ctx_t *progressCtx, bool calcData, u64 chunkSize)
     uiDrawString(strbuf, font_height * 2, (progressCtx->line_offset * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     
     uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, FB_WIDTH / 2, (font_height + (font_height / 4)), 0, 0, 0);
-    uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, (((u32)progressCtx->progress * ((u32)FB_WIDTH / 2)) / 100), (font_height + (font_height / 4)), 0, 255, 0);
+    uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, (((progressCtx->curOffset + chunkSize) * (u64)(FB_WIDTH / 2)) / progressCtx->totalSize), (font_height + (font_height / 4)), 0, 255, 0);
     
     uiFill(FB_WIDTH - (FB_WIDTH / 4), (progressCtx->line_offset * (font_height + (font_height / 4))) + 8, FB_WIDTH / 4, (font_height + (font_height / 4)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
     snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%u%% [%s / %s]", progressCtx->progress, progressCtx->curOffsetStr, progressCtx->totalSizeStr);
@@ -2923,6 +2923,35 @@ void setProgressBarError(progress_ctx_t *progressCtx)
     
     uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, FB_WIDTH / 2, (font_height + (font_height / 4)), 0, 0, 0);
     uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, (((u32)progressCtx->progress * ((u32)FB_WIDTH / 2)) / 100), (font_height + (font_height / 4)), 255, 0, 0);
+}
+
+bool cancelProcessCheck(progress_ctx_t *progressCtx)
+{
+    if (!progressCtx) return false;
+    
+    hidScanInput();
+    
+    progressCtx->cancelBtnState = (hidKeysHeld(CONTROLLER_P1_AUTO) & KEY_B);
+    
+    if (progressCtx->cancelBtnState && progressCtx->cancelBtnState != progressCtx->cancelBtnStatePrev)
+    {
+        // Cancel button has just been pressed
+        timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx->cancelStartTmr));
+    } else
+    if (progressCtx->cancelBtnState && progressCtx->cancelBtnState == progressCtx->cancelBtnStatePrev && progressCtx->cancelStartTmr)
+    {
+        // If the cancel button has been held up to this point, check if at least CANCEL_BTN_SEC_HOLD seconds have passed
+        // Only perform this check if cancelStartTmr has already been set to a value greater than zero
+        timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx->cancelEndTmr));
+        
+        if ((progressCtx->cancelEndTmr - progressCtx->cancelStartTmr) >= CANCEL_BTN_SEC_HOLD) return true;
+    } else {
+        progressCtx->cancelStartTmr = progressCtx->cancelEndTmr = 0;
+    }
+    
+    progressCtx->cancelBtnStatePrev = progressCtx->cancelBtnState;
+    
+    return false;
 }
 
 void convertDataToHexString(const u8 *data, const u32 dataSize, char *outBuf, const u32 outBufSize)
@@ -3148,34 +3177,21 @@ bool checkIfDumpedNspContainsConsoleData(const char *nspPath)
     return false;
 }
 
-void removeDirectory(const char *path)
+void removeDirectoryWithVerbose(const char *path, const char *msg)
 {
-    if (!path || !strlen(path)) return;
+    if (!path || !strlen(path) || !msg || !strlen(msg)) return;
     
-    struct dirent *ent;
-    char cur_path[NAME_BUF_LEN] = {'\0'};
+    breaks += 2;
     
-    DIR *dir = opendir(path);
-    if (dir)
-    {
-        while((ent = readdir(dir)) != NULL)
-        {
-            if ((strlen(ent->d_name) == 1 && !strcmp(ent->d_name, ".")) || (strlen(ent->d_name) == 2 && !strcmp(ent->d_name, ".."))) continue;
-            
-            snprintf(cur_path, sizeof(cur_path) / sizeof(cur_path[0]), "%s/%s", path, ent->d_name);
-            
-            if (ent->d_type == DT_DIR)
-            {
-                removeDirectory(cur_path);
-            } else {
-                unlink(cur_path);
-            }
-        }
-        
-        closedir(dir);
-        
-        rmdir(path);
-    }
+    uiDrawString(msg, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiRefreshDisplay();
+    
+    fsdevDeleteDirectoryRecursively(path);
+    
+    uiFill(0, (breaks * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 2)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+    uiRefreshDisplay();
+    
+    breaks -= 2;
 }
 
 bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u64 gc_tid, u32 crc)

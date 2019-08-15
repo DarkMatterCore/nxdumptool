@@ -18,7 +18,7 @@
 #define MiB                             (1024.0 * KiB)
 #define GiB                             (1024.0 * MiB)
 
-#define NAME_BUF_LEN                    4096
+#define NAME_BUF_LEN                    1024
 
 #define SOCK_BUFFERSIZE                 65536
 
@@ -128,6 +128,10 @@ typedef struct {
     char etaInfo[32];
     double lastSpeed;
     double averageSpeed;
+    u32 cancelBtnState;
+    u32 cancelBtnStatePrev;
+    u64 cancelStartTmr;
+    u64 cancelEndTmr;
 } PACKED progress_ctx_t;
 
 typedef struct {
@@ -227,6 +231,8 @@ void printProgressBar(progress_ctx_t *progressCtx, bool calcData, u64 chunkSize)
 
 void setProgressBarError(progress_ctx_t *progressCtx);
 
+bool cancelProcessCheck(progress_ctx_t *progressCtx);
+
 void convertDataToHexString(const u8 *data, const u32 dataSize, char *outBuf, const u32 outBufSize);
 
 bool checkIfFileExists(const char *path);
@@ -237,7 +243,7 @@ bool checkIfDumpedXciContainsCertificate(const char *xciPath);
 
 bool checkIfDumpedNspContainsConsoleData(const char *nspPath);
 
-void removeDirectory(const char *path);
+void removeDirectoryWithVerbose(const char *path, const char *msg);
 
 void gameCardDumpNSWDBCheck(u32 crc);
 

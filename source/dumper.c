@@ -106,6 +106,8 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
     
     size_t write_res;
     
+    u64 part_size = (!setXciArchiveBit ? SPLIT_FILE_XCI_PART_SIZE : SPLIT_FILE_NSP_PART_SIZE);
+    
     char *dumpName = generateFullDumpName();
     if (!dumpName)
     {
@@ -254,7 +256,7 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
                     // Since we may actually be dealing with an existing directory with the archive bit set or unset, let's try both
                     // Better safe than sorry
                     unlink(filename);
-                    removeDirectory(filename);
+                    fsdevDeleteDirectoryRecursively(filename);
                     
                     mkdir(filename, 0744);
                     
@@ -354,9 +356,9 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
                                             }
                                         }
                                         
-                                        if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && (progressCtx.curOffset + n) >= ((splitIndex + 1) * SPLIT_FILE_XCI_PART_SIZE))
+                                        if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && (progressCtx.curOffset + n) >= ((splitIndex + 1) * part_size))
                                         {
-                                            u64 new_file_chunk_size = ((progressCtx.curOffset + n) - ((splitIndex + 1) * SPLIT_FILE_XCI_PART_SIZE));
+                                            u64 new_file_chunk_size = ((progressCtx.curOffset + n) - ((splitIndex + 1) * part_size));
                                             u64 old_file_chunk_size = (n - new_file_chunk_size);
                                             
                                             if (old_file_chunk_size > 0)
@@ -426,12 +428,9 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
                                         
                                         printProgressBar(&progressCtx, true, n);
                                         
-                                        if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+                                        if ((progressCtx.curOffset + n) < progressCtx.totalSize)
                                         {
-                                            hidScanInput();
-                                            
-                                            u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                                            if (keysDown & KEY_B)
+                                            if (cancelProcessCheck(&progressCtx))
                                             {
                                                 uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                                                 proceed = false;
@@ -546,7 +545,7 @@ bool dumpCartridgeImage(bool isFat32, bool setXciArchiveBit, bool dumpCert, bool
                             if (setXciArchiveBit)
                             {
                                 snprintf(filename, sizeof(filename) / sizeof(filename[0]), "%s%s.xci", XCI_DUMP_PATH, dumpName);
-                                removeDirectory(filename);
+                                fsdevDeleteDirectoryRecursively(filename);
                             } else {
                                 for(u8 i = 0; i <= splitIndex; i++)
                                 {
@@ -1322,7 +1321,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     // Since we may actually be dealing with an existing directory with the archive bit set or unset, let's try both
     // Better safe than sorry
     unlink(dumpPath);
-    removeDirectory(dumpPath);
+    fsdevDeleteDirectoryRecursively(dumpPath);
     
     if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
     {
@@ -1556,12 +1555,9 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             
             printProgressBar(&progressCtx, true, n);
             
-            if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+            if ((progressCtx.curOffset + n) < progressCtx.totalSize)
             {
-                hidScanInput();
-                
-                u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                if (keysDown & KEY_B)
+                if (cancelProcessCheck(&progressCtx))
                 {
                     uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                     proceed = false;
@@ -1919,12 +1915,9 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             
             printProgressBar(&progressCtx, true, n);
             
-            if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+            if ((progressCtx.curOffset + n) < progressCtx.totalSize)
             {
-                hidScanInput();
-                
-                u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                if (keysDown & KEY_B)
+                if (cancelProcessCheck(&progressCtx))
                 {
                     uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                     proceed = false;
@@ -2101,12 +2094,9 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                 
                 printProgressBar(&progressCtx, true, n);
                 
-                if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+                if ((progressCtx.curOffset + n) < progressCtx.totalSize)
                 {
-                    hidScanInput();
-                    
-                    u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                    if (keysDown & KEY_B)
+                    if (cancelProcessCheck(&progressCtx))
                     {
                         uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                         proceed = false;
@@ -2168,7 +2158,7 @@ out:
             
             if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
             {
-                removeDirectory(dumpPath);
+                fsdevDeleteDirectoryRecursively(dumpPath);
             } else {
                 unlink(dumpPath);
             }
@@ -2832,12 +2822,9 @@ bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
                                     
                                     printProgressBar(&progressCtx, true, n);
                                     
-                                    if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+                                    if ((progressCtx.curOffset + n) < progressCtx.totalSize)
                                     {
-                                        hidScanInput();
-                                        
-                                        u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                                        if (keysDown & KEY_B)
+                                        if (cancelProcessCheck(&progressCtx))
                                         {
                                             uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                                             break;
@@ -3048,12 +3035,9 @@ bool copyFileFromHfs0(u32 partition, const char* source, const char* dest, const
                             
                             printProgressBar(progressCtx, true, n);
                             
-                            if ((off + n) < size && ((off / DUMP_BUFFER_SIZE) % 10) == 0)
+                            if ((off + n) < size || (progressCtx->curOffset + n) < progressCtx->totalSize)
                             {
-                                hidScanInput();
-                                
-                                u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                                if (keysDown & KEY_B)
+                                if (cancelProcessCheck(progressCtx))
                                 {
                                     uiDrawString("Process canceled.", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                                     break;
@@ -3251,7 +3235,7 @@ bool dumpHfs0PartitionData(u32 partition, bool doSplitting)
                         snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Process successfully completed after %s!", progressCtx.etaInfo);
                         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
                     } else {
-                        removeDirectory(dumpPath);
+                        removeDirectoryWithVerbose(dumpPath, "Deleting output directory. Please wait...");
                     }
                 } else {
                     uiDrawString("Error: not enough free space available in the SD card.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -3629,12 +3613,9 @@ bool dumpExeFsSectionData(u32 titleIndex, bool usePatch, bool doSplitting)
             
             printProgressBar(&progressCtx, true, n);
             
-            if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+            if ((progressCtx.curOffset + n) < progressCtx.totalSize)
             {
-                hidScanInput();
-                
-                u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-                if (keysDown & KEY_B)
+                if (cancelProcessCheck(&progressCtx))
                 {
                     uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                     proceed = false;
@@ -3686,8 +3667,8 @@ bool dumpExeFsSectionData(u32 titleIndex, bool usePatch, bool doSplitting)
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
     } else {
         setProgressBarError(&progressCtx);
-        removeDirectory(dumpPath);
         if (fat32_error) breaks += 2;
+        removeDirectoryWithVerbose(dumpPath, "Deleting output directory. Please wait...");
     }
     
 out:
@@ -3916,12 +3897,9 @@ bool dumpFileFromExeFsSection(u32 titleIndex, u32 fileIndex, bool usePatch, bool
         
         printProgressBar(&progressCtx, true, n);
         
-        if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+        if ((progressCtx.curOffset + n) < progressCtx.totalSize)
         {
-            hidScanInput();
-            
-            u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-            if (keysDown & KEY_B)
+            if (cancelProcessCheck(&progressCtx))
             {
                 uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                 break;
@@ -4010,183 +3988,203 @@ bool recursiveDumpRomFsFile(u32 file_offset, char *romfs_path, char *output_path
     u8 splitIndex = 0;
     bool proceed = true, success = false, fat32_error = false;
     
+    u32 romfs_file_offset = file_offset;
+    romfs_file *entry = NULL;
+    
     u64 off = 0;
     
     size_t write_res;
     
     char tmp_idx[5];
     
-    romfs_file *entry = (!usePatch ? (romfs_file*)((u8*)romFsContext.romfs_file_entries + file_offset) : (romfs_file*)((u8*)bktrContext.romfs_file_entries + file_offset));
-    
-    // Check if we're dealing with a nameless file
-    if (!entry->nameLen)
-    {
-        uiDrawString("Error: file entry without name in RomFS section!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        return false;
-    }
-    
-    if ((orig_romfs_path_len + 1 + entry->nameLen) >= (NAME_BUF_LEN * 2) || (orig_output_path_len + 1 + entry->nameLen) >= (NAME_BUF_LEN * 2))
-    {
-        uiDrawString("Error: RomFS section file path is too long!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        return false;
-    }
-    
-    // Generate current path
-    strcat(romfs_path, "/");
-    strncat(romfs_path, (char*)entry->name, entry->nameLen);
-    
-    strcat(output_path, "/");
-    strncat(output_path, (char*)entry->name, entry->nameLen);
-    removeIllegalCharacters(output_path + orig_output_path_len + 1);
-    
-    // Start dump process
-    uiFill(0, ((progressCtx->line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-    
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying \"romfs:%s\"...", romfs_path);
-    uiDrawString(strbuf, 8, ((progressCtx->line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-    
-    if (entry->dataSize > FAT32_FILESIZE_LIMIT && doSplitting)
-    {
-        sprintf(tmp_idx, ".%02u", splitIndex);
-        strcat(output_path, tmp_idx);
-    }
-    
-    outFile = fopen(output_path, "wb");
-    if (!outFile)
-    {
-        uiDrawString("Failed to open output file!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-        goto out;
-    }
-    
     buf = malloc(DUMP_BUFFER_SIZE);
     if (!buf)
     {
         uiDrawString("Failed to allocate memory for the dump process!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-        goto out;
+        return false;
     }
     
-    for(off = 0; off < entry->dataSize; off += n, progressCtx->curOffset += n)
+    while(romfs_file_offset != ROMFS_ENTRY_EMPTY)
     {
-        uiFill(0, ((progressCtx->line_offset - 2) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+        romfs_path[orig_romfs_path_len] = '\0';
+        output_path[orig_output_path_len] = '\0';
         
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(output_path, '/') + 1);
-        uiDrawString(strbuf, 8, ((progressCtx->line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        entry = (!usePatch ? (romfs_file*)((u8*)romFsContext.romfs_file_entries + romfs_file_offset) : (romfs_file*)((u8*)bktrContext.romfs_file_entries + romfs_file_offset));
         
-        uiRefreshDisplay();
-        
-        if (DUMP_BUFFER_SIZE > (entry->dataSize - off)) n = (entry->dataSize - off);
-        
-        breaks = (progressCtx->line_offset + 2);
-        
-        if (!usePatch)
+        // Check if we're dealing with a nameless file
+        if (!entry->nameLen)
         {
-            proceed = processNcaCtrSectionBlock(&(romFsContext.ncmStorage), &(romFsContext.ncaId), &(romFsContext.aes_ctx), romFsContext.romfs_filedata_offset + entry->dataOff + off, buf, n, false);
-        } else {
-            proceed = readBktrSectionBlock(bktrContext.romfs_filedata_offset + entry->dataOff + off, buf, n);
+            uiDrawString("Error: file entry without name in RomFS section!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            break;
         }
         
-        breaks = (progressCtx->line_offset - 4);
-        
-        if (!proceed) break;
-        
-        if (entry->dataSize > FAT32_FILESIZE_LIMIT && doSplitting && (off + n) >= ((splitIndex + 1) * SPLIT_FILE_GENERIC_PART_SIZE))
+        if ((orig_romfs_path_len + 1 + entry->nameLen) >= (NAME_BUF_LEN * 2) || (orig_output_path_len + 1 + entry->nameLen) >= (NAME_BUF_LEN * 2))
         {
-            u64 new_file_chunk_size = ((off + n) - ((splitIndex + 1) * SPLIT_FILE_GENERIC_PART_SIZE));
-            u64 old_file_chunk_size = (n - new_file_chunk_size);
+            uiDrawString("Error: RomFS section file path is too long!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            break;
+        }
+        
+        // Generate current path
+        strcat(romfs_path, "/");
+        strncat(romfs_path, (char*)entry->name, entry->nameLen);
+        
+        strcat(output_path, "/");
+        strncat(output_path, (char*)entry->name, entry->nameLen);
+        removeIllegalCharacters(output_path + orig_output_path_len + 1);
+        
+        // Start dump process
+        uiFill(0, ((progressCtx->line_offset - 4) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 4, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+        
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying \"romfs:%s\"...", romfs_path);
+        uiDrawString(strbuf, 8, ((progressCtx->line_offset - 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        
+        if (entry->dataSize > FAT32_FILESIZE_LIMIT && doSplitting)
+        {
+            sprintf(tmp_idx, ".%02u", splitIndex);
+            strcat(output_path, tmp_idx);
+        }
+        
+        outFile = fopen(output_path, "wb");
+        if (!outFile)
+        {
+            uiDrawString("Failed to open output file!", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            break;
+        }
+        
+        n = DUMP_BUFFER_SIZE;
+        splitIndex = 0;
+        
+        for(off = 0; off < entry->dataSize; off += n, progressCtx->curOffset += n)
+        {
+            uiFill(0, ((progressCtx->line_offset - 2) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
             
-            if (old_file_chunk_size > 0)
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(output_path, '/') + 1);
+            uiDrawString(strbuf, 8, ((progressCtx->line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            
+            uiRefreshDisplay();
+            
+            if (DUMP_BUFFER_SIZE > (entry->dataSize - off)) n = (entry->dataSize - off);
+            
+            breaks = (progressCtx->line_offset + 2);
+            
+            if (!usePatch)
             {
-                write_res = fwrite(buf, 1, old_file_chunk_size, outFile);
-                if (write_res != old_file_chunk_size)
-                {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", old_file_chunk_size, off, splitIndex, write_res);
-                    uiDrawString(strbuf, 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                    break;
-                }
+                proceed = processNcaCtrSectionBlock(&(romFsContext.ncmStorage), &(romFsContext.ncaId), &(romFsContext.aes_ctx), romFsContext.romfs_filedata_offset + entry->dataOff + off, buf, n, false);
+            } else {
+                proceed = readBktrSectionBlock(bktrContext.romfs_filedata_offset + entry->dataOff + off, buf, n);
             }
             
-            fclose(outFile);
-            outFile = NULL;
+            breaks = (progressCtx->line_offset - 4);
             
-            if (new_file_chunk_size > 0 || (off + n) < entry->dataSize)
+            if (!proceed) break;
+            
+            if (entry->dataSize > FAT32_FILESIZE_LIMIT && doSplitting && (off + n) >= ((splitIndex + 1) * SPLIT_FILE_GENERIC_PART_SIZE))
             {
-                char *tmp = strrchr(output_path, '.');
-                if (tmp != NULL) *tmp = '\0';
+                u64 new_file_chunk_size = ((off + n) - ((splitIndex + 1) * SPLIT_FILE_GENERIC_PART_SIZE));
+                u64 old_file_chunk_size = (n - new_file_chunk_size);
                 
-                splitIndex++;
-                sprintf(tmp_idx, ".%02u", splitIndex);
-                strcat(output_path, tmp_idx);
-                
-                outFile = fopen(output_path, "wb");
-                if (!outFile)
+                if (old_file_chunk_size > 0)
                 {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
-                    uiDrawString(strbuf, 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                    break;
-                }
-                
-                if (new_file_chunk_size > 0)
-                {
-                    write_res = fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile);
-                    if (write_res != new_file_chunk_size)
+                    write_res = fwrite(buf, 1, old_file_chunk_size, outFile);
+                    if (write_res != old_file_chunk_size)
                     {
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", new_file_chunk_size, off + old_file_chunk_size, splitIndex, write_res);
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", old_file_chunk_size, off, splitIndex, write_res);
                         uiDrawString(strbuf, 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        proceed = false;
                         break;
                     }
                 }
-            }
-        } else {
-            write_res = fwrite(buf, 1, n, outFile);
-            if (write_res != n)
-            {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX! (wrote %lu bytes)", n, off, write_res);
-                uiDrawString(strbuf, 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                 
-                if ((off + n) > FAT32_FILESIZE_LIMIT)
+                fclose(outFile);
+                outFile = NULL;
+                
+                if (new_file_chunk_size > 0 || (off + n) < entry->dataSize)
                 {
-                    uiDrawString("You're probably using a FAT32 partition. Make sure to enable file splitting.", 8, ((progressCtx->line_offset + 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                    fat32_error = true;
+                    char *tmp = strrchr(output_path, '.');
+                    if (tmp != NULL) *tmp = '\0';
+                    
+                    splitIndex++;
+                    sprintf(tmp_idx, ".%02u", splitIndex);
+                    strcat(output_path, tmp_idx);
+                    
+                    outFile = fopen(output_path, "wb");
+                    if (!outFile)
+                    {
+                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open output file for part #%u!", splitIndex);
+                        uiDrawString(strbuf, 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        proceed = false;
+                        break;
+                    }
+                    
+                    if (new_file_chunk_size > 0)
+                    {
+                        write_res = fwrite(buf + old_file_chunk_size, 1, new_file_chunk_size, outFile);
+                        if (write_res != new_file_chunk_size)
+                        {
+                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX to part #%02u! (wrote %lu bytes)", new_file_chunk_size, off + old_file_chunk_size, splitIndex, write_res);
+                            uiDrawString(strbuf, 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                            proceed = false;
+                            break;
+                        }
+                    }
                 }
-                
-                break;
+            } else {
+                write_res = fwrite(buf, 1, n, outFile);
+                if (write_res != n)
+                {
+                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to write %lu bytes chunk from offset 0x%016lX! (wrote %lu bytes)", n, off, write_res);
+                    uiDrawString(strbuf, 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    
+                    if ((off + n) > FAT32_FILESIZE_LIMIT)
+                    {
+                        uiDrawString("You're probably using a FAT32 partition. Make sure to enable file splitting.", 8, ((progressCtx->line_offset + 4) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        fat32_error = true;
+                    }
+                    
+                    proceed = false;
+                    break;
+                }
             }
-        }
-        
-        printProgressBar(progressCtx, true, n);
-        
-        if ((off + n) < entry->dataSize && ((off / DUMP_BUFFER_SIZE) % 10) == 0)
-        {
-            hidScanInput();
             
-            u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-            if (keysDown & KEY_B)
+            printProgressBar(progressCtx, true, n);
+            
+            if ((off + n) < entry->dataSize || (progressCtx->curOffset + n) < progressCtx->totalSize)
             {
-                uiDrawString("Process canceled.", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                break;
+                if (cancelProcessCheck(progressCtx))
+                {
+                    uiDrawString("Process canceled.", 8, ((progressCtx->line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    proceed = false;
+                    break;
+                }
             }
         }
+        
+        if (outFile)
+        {
+            fclose(outFile);
+            outFile = NULL;
+        }
+        
+        if (!proceed || off < entry->dataSize) break;
+        
+        // Support empty files
+        if (!entry->dataSize)
+        {
+            uiFill(0, ((progressCtx->line_offset - 2) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+            
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(output_path, '/') + 1);
+            uiDrawString(strbuf, 8, ((progressCtx->line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            
+            if (progressCtx->totalSize == entry->dataSize) progressCtx->progress = 100;
+            
+            printProgressBar(progressCtx, false, 0);
+        }
+        
+        romfs_file_offset = entry->sibling;
+        if (romfs_file_offset == ROMFS_ENTRY_EMPTY) success = true;
     }
     
-    if (off >= entry->dataSize) success = true;
-    
-    // Support empty files
-    if (!entry->dataSize)
-    {
-        uiFill(0, ((progressCtx->line_offset - 2) * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 4)) * 2, BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-        
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Output file: \"%s\".", strrchr(output_path, '/') + 1);
-        uiDrawString(strbuf, 8, ((progressCtx->line_offset - 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-        
-        if (progressCtx->totalSize == entry->dataSize) progressCtx->progress = 100;
-        
-        printProgressBar(progressCtx, false, 0);
-    }
-    
-out:
-    if (buf) free(buf);
-    
-    if (outFile) fclose(outFile);
+    free(buf);
     
     if (!success)
     {
@@ -4196,11 +4194,6 @@ out:
     
     romfs_path[orig_romfs_path_len] = '\0';
     output_path[orig_output_path_len] = '\0';
-    
-    if (success)
-    {
-        if (entry->sibling != ROMFS_ENTRY_EMPTY) success = recursiveDumpRomFsFile(entry->sibling, romfs_path, output_path, progressCtx, usePatch, doSplitting);
-    }
     
     return success;
 }
@@ -4371,7 +4364,7 @@ bool dumpRomFsSectionData(u32 titleIndex, bool usePatch, bool doSplitting)
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
     } else {
         setProgressBarError(&progressCtx);
-        removeDirectory(dumpPath);
+        removeDirectoryWithVerbose(dumpPath, "Deleting output directory. Please wait...");
     }
     
 out:
@@ -4641,12 +4634,9 @@ bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, bool usePatch, bo
         
         printProgressBar(&progressCtx, true, n);
         
-        if ((progressCtx.curOffset + n) < progressCtx.totalSize && ((progressCtx.curOffset / DUMP_BUFFER_SIZE) % 10) == 0)
+        if ((progressCtx.curOffset + n) < progressCtx.totalSize)
         {
-            hidScanInput();
-            
-            u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
-            if (keysDown & KEY_B)
+            if (cancelProcessCheck(&progressCtx))
             {
                 uiDrawString("Process canceled.", 8, ((progressCtx.line_offset + 2) * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
                 break;
@@ -4773,7 +4763,14 @@ bool dumpCurrentDirFromRomFsSection(u32 titleIndex, bool usePatch, bool doSplitt
         goto out;
     }
     
-    if (strlen(curRomFsPath) > 1) snprintf(romFsPath, sizeof(romFsPath) / sizeof(romFsPath[0]), curRomFsPath);
+    if (strlen(curRomFsPath) > 1)
+    {
+        // Copy the whole current path and remove the last element (current directory) from it
+        // It will be re-added later
+        snprintf(romFsPath, sizeof(romFsPath) / sizeof(romFsPath[0]), curRomFsPath);
+        char *slash = strrchr(romFsPath, '/');
+        if (slash) *slash = '\0';
+    }
     
     // Prepare output dump path
     snprintf(dumpPath, sizeof(dumpPath) / sizeof(dumpPath[0]), "%s%s", ROMFS_DUMP_PATH, dumpName);
@@ -4842,7 +4839,7 @@ bool dumpCurrentDirFromRomFsSection(u32 titleIndex, bool usePatch, bool doSplitt
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
     } else {
         setProgressBarError(&progressCtx);
-        removeDirectory(dumpPath);
+        removeDirectoryWithVerbose(dumpPath, "Deleting output directory. Please wait...");
     }
     
 out:
