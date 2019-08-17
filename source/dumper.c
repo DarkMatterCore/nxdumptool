@@ -4472,12 +4472,6 @@ bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, bool usePatch, bo
     strncat(dumpPath, (char*)entry->name, entry->nameLen);
     removeIllegalCharacters(dumpPath + cur_len);
     
-    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
-    {
-        sprintf(tmp_idx, ".%02u", splitIndex);
-        strcat(dumpPath, tmp_idx);
-    }
-    
     progressCtx.totalSize = entry->dataSize;
     convertSize(progressCtx.totalSize, progressCtx.totalSizeStr, sizeof(progressCtx.totalSizeStr) / sizeof(progressCtx.totalSizeStr[0]));
     
@@ -4492,6 +4486,12 @@ bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, bool usePatch, bo
     }
     
     breaks++;
+    
+    if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && doSplitting)
+    {
+        sprintf(tmp_idx, ".%02u", splitIndex);
+        strcat(dumpPath, tmp_idx);
+    }
     
     // Check if the dump already exists
     if (checkIfFileExists(dumpPath))
@@ -4523,7 +4523,12 @@ bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, bool usePatch, bo
     }
     
     // Start dump process
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying \"romfs:%s/%.*s\"...", curRomFsPath, entry->nameLen, entry->name);
+    if (strlen(curRomFsPath) > 1)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying \"romfs:%s/%.*s\"...", curRomFsPath, entry->nameLen, entry->name);
+    } else {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Copying \"romfs:/%.*s\"...", entry->nameLen, entry->name);
+    }
     uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     breaks += 2;
     

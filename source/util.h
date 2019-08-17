@@ -18,7 +18,7 @@
 #define MiB                             (1024.0 * KiB)
 #define GiB                             (1024.0 * MiB)
 
-#define NAME_BUF_LEN                    1024
+#define NAME_BUF_LEN                    4096
 
 #define SOCK_BUFFERSIZE                 65536
 

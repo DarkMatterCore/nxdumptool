@@ -62,6 +62,7 @@ Changelog
 **v1.1.4:**
 * Fixed building with latest libnx release.
 * Optimized RomFS recursive file dump function to not rely on code recursion as much as before, avoiding stack memory exhaustion problems. Fixes crashes while dumping RomFS data from games with lots of file entries.
+* Fixed a bug that made file splitting not take place while manually dumping a file bigger than 4 GiB from the RomFS section of any title.
 * Reduced max part size for split files to `0xFFFF0000` bytes in all operations (except for XCI dumps when the "Create directory with archive bit set" option is disabled). Fixes file access problems if the parts are used inside a directory with the archive bit set.
 * Removed the `removeDirectory()` function. `fsdevDeleteDirectoryRecursively()` is now used instead.
 * If a HFS0/ExeFS/RomFS data dump operation is cancelled or fails, a message telling the user to wait until the output directory is fully deleted will now be displayed.
