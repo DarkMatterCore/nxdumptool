@@ -46,6 +46,9 @@ int main(int argc, char *argv[])
     /* Initialize UI */
     if (!uiInit()) return -1;
     
+    /* Enable CPU boost mode */
+    appletSetCpuBoostMode(ApmCpuBoostMode_Type1);
+    
     int ret = 0;
     Result result;
     
@@ -362,6 +365,9 @@ int main(int argc, char *argv[])
         delay(5);
         ret = -2;
     }
+    
+    /* Disable CPU boost mode */
+    appletSetCpuBoostMode(ApmCpuBoostMode_Disabled);
     
     /* Free global resources */
     freeGlobalData();

@@ -19,10 +19,6 @@
 #define HIGHLIGHT_FONT_COLOR_G  255
 #define HIGHLIGHT_FONT_COLOR_B  197
 
-// UTF-8
-#define UPWARDS_ARROW           "\xE2\x86\x91"
-#define DOWNWARDS_ARROW         "\xE2\x86\x93"
-
 #define COMMON_MAX_ELEMENTS     9
 #define HFS0_MAX_ELEMENTS       14
 #define ROMFS_MAX_ELEMENTS      12
@@ -37,20 +33,24 @@
 
 #define BROWSER_ICON_DIMENSION  16
 
-// UTF-16
-#define NINTENDO_FONT_A         "\xE0\xA0"
-#define NINTENDO_FONT_B         "\xE0\xA1"
-#define NINTENDO_FONT_X         "\xE0\xA2"
-#define NINTENDO_FONT_Y         "\xE0\xA3"
-#define NINTENDO_FONT_L         "\xE0\xA4"
-#define NINTENDO_FONT_R         "\xE0\xA5"
-#define NINTENDO_FONT_ZL        "\xE0\xA6"
-#define NINTENDO_FONT_ZR        "\xE0\xA7"
-#define NINTENDO_FONT_DPAD      "\xE0\xAA"
-#define NINTENDO_FONT_PLUS      "\xE0\xB5"
-#define NINTENDO_FONT_HOME      "\xE0\xB9"
-#define NINTENDO_FONT_LSTICK    "\xE0\xC1"
-#define NINTENDO_FONT_RSTICK    "\xE0\xC2"
+// UTF-8 sequences
+
+#define UPWARDS_ARROW           "\xE2\x86\x91"
+#define DOWNWARDS_ARROW         "\xE2\x86\x93"
+
+#define NINTENDO_FONT_A         "\xEE\x82\xA0"
+#define NINTENDO_FONT_B         "\xEE\x82\xA1"
+#define NINTENDO_FONT_X         "\xEE\x82\xA2"
+#define NINTENDO_FONT_Y         "\xEE\x82\xA3"
+#define NINTENDO_FONT_L         "\xEE\x82\xA4"
+#define NINTENDO_FONT_R         "\xEE\x82\xA5"
+#define NINTENDO_FONT_ZL        "\xEE\x82\xA6"
+#define NINTENDO_FONT_ZR        "\xEE\x82\xA7"
+#define NINTENDO_FONT_DPAD      "\xEE\x82\xAA"
+#define NINTENDO_FONT_PLUS      "\xEE\x82\xB5"
+#define NINTENDO_FONT_HOME      "\xEE\x82\xB9"
+#define NINTENDO_FONT_LSTICK    "\xEE\x83\x81"
+#define NINTENDO_FONT_RSTICK    "\xEE\x83\x82"
 
 typedef enum {
     resultNone,

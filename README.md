@@ -9,14 +9,15 @@ Main features
     * The generated dumps follow the `AuditingTool` format from Scene releases.
     * Capable of generating ticket-less (standard crypto) dumps.
     * Capable of generating dumps from installed updates/DLCs with missing base applications (orphan titles).
+    * Batch mode available.
 * Compatible with multigame carts.
 * CRC32 checksum calculation for XCI/NSP dumps.
 * Full XCI dump verification using XML database from NSWDB.COM (NSWreleases.xml).
 * XML database and in-app update capabilities via libcurl.
 * Precise HFS0 raw partition dumping, using the root HFS0 header from the gamecard.
 * HFS0 partition file data dumping + browser with manual file dump support.
-* Program NCA ExeFS/RomFS section file data dumping + browser with manual file dump support.
-    * Compatible with both base applications and updates (if available).
+* Program NCA ExeFS/RomFS section & Data NCA RomFS section file data dumping + browser with manual file dump support.
+    * Compatible with base applications, updates and DLCs (if available).
     * Supports manual RomFS directory dumping.
 * Manual gamecard certificate dump.
 * Free SD card space checks in place.
@@ -58,6 +59,18 @@ If you like my work and you'd like to support me in any way, it's not necessary,
 
 Changelog
 --------------
+
+**v1.1.5:**
+* Built with latest libnx release, in order to fix HID problems under HOS 9.0.0+.
+* Added support for Korean and Chinese character sets.
+* Added browsing/dumping support for RomFS sections in Data NCAs from DLCs.
+    * Compatible with orphan DLCs (Y button) as well.
+* Output directories for ExeFS/RomFS operations are now properly tagged as "(BASE)", "(UPD)" or "(DLC)" (RomFS only), depending on the title type being processed.
+* Some measures have been taken to help speed up dumping operations:
+    * CPU boost mode type 1 is now used with `appletSetCpuBoostMode` - only effective under HOS 7.0.0+!
+    * Removed the need for dynamic memory allocations in NCA AES-CTR block decryption/encryption steps.
+    * Although these changes get me some extra ~4 MiB/s in most operations, keep in mind this doesn't do much to help with RomFS dumps from titles with lots of (small) file entries. Even so, although the calculated ETA can sometimes be discouraging, the dump most likely *won't* take that much time - just let the process advance until it hits bigger files. Sequential write speeds for the inserted SD card still play a huge role in these cases.
+* Moved base output directory from "sdmc:/nxdumptool/" to "sdmc:/switch/nxdumptool/". Both the NSWreleases.xml file and the NRO binary are also expected to be inside this directory.
 
 **v1.1.4:**
 * Fixed building with latest libnx release.

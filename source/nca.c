@@ -22,6 +22,8 @@ extern char strbuf[NAME_BUF_LEN * 4];
 
 extern nca_keyset_t nca_keyset;
 
+extern u8 *ncaCtrBuf;
+
 char *getTitleType(u8 type)
 {
     char *out = NULL;
@@ -301,7 +303,6 @@ bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *nc
     
     Result result;
     unsigned char ctr[0x10];
-    u8 *tmp_buf = NULL;
     
     char nca_id[33] = {'\0'};
     convertDataToHexString(ncaId->c, 16, nca_id, 33);
@@ -310,40 +311,39 @@ bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *nc
     u64 block_end_offset = (u64)round_up(offset + bufSize, 0x10);
     u64 block_size = (block_end_offset - block_start_offset);
     
-    tmp_buf = malloc(block_size);
-    if (!tmp_buf)
-    {
-        uiDrawString("Error: unable to allocate memory for the temporary NCA section block read buffer!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        return false;
-    }
+    u64 block_size_used = (block_size > NCA_CTR_BUFFER_SIZE ? NCA_CTR_BUFFER_SIZE : block_size);
+    u64 output_block_size = (block_size > NCA_CTR_BUFFER_SIZE ? (NCA_CTR_BUFFER_SIZE - (offset - block_start_offset)) : bufSize);
     
-    if (R_FAILED(result = ncmContentStorageReadContentIdFile(ncmStorage, ncaId, block_start_offset, tmp_buf, block_size)))
+    if (R_FAILED(result = ncmContentStorageReadContentIdFile(ncmStorage, ncaId, block_start_offset, ncaCtrBuf, block_size_used)))
     {
-        free(tmp_buf);
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read encrypted %lu bytes block at offset 0x%016lX from NCA \"%s\"! (0x%08X)", block_size, block_start_offset, nca_id, result);
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read encrypted %lu bytes block at offset 0x%016lX from NCA \"%s\"! (0x%08X)", block_size_used, block_start_offset, nca_id, result);
         uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
         return false;
     }
     
+    // Update CTR
     memcpy(ctr, ctx->ctr, 0x10);
     nca_update_ctr(ctr, block_start_offset);
-    
-    // Decrypt
     aes128CtrContextResetCtr(ctx, ctr);
-    aes128CtrCrypt(ctx, tmp_buf, tmp_buf, block_size);
+    
+    // Decrypt CTR block
+    aes128CtrCrypt(ctx, ncaCtrBuf, ncaCtrBuf, block_size_used);
     
     if (encrypt)
     {
-        memcpy(tmp_buf + (offset - block_start_offset), outBuf, bufSize);
+        // Copy data to be encrypted
+        memcpy(ncaCtrBuf + (offset - block_start_offset), outBuf, output_block_size);
         
-        // Encrypt
+        // Reset CTR
         aes128CtrContextResetCtr(ctx, ctr);
-        aes128CtrCrypt(ctx, tmp_buf, tmp_buf, block_size);
+        
+        // Encrypt CTR block
+        aes128CtrCrypt(ctx, ncaCtrBuf, ncaCtrBuf, block_size_used);
     }
     
-    memcpy(outBuf, tmp_buf + (offset - block_start_offset), bufSize);
+    memcpy(outBuf, ncaCtrBuf + (offset - block_start_offset), output_block_size);
     
-    free(tmp_buf);
+    if (block_size > NCA_CTR_BUFFER_SIZE) return processNcaCtrSectionBlock(ncmStorage, ncaId, ctx, offset + output_block_size, outBuf + output_block_size, bufSize - output_block_size, encrypt);
     
     return true;
 }
@@ -491,7 +491,6 @@ bool bktrSectionPhysicalRead(void *outBuf, size_t bufSize)
     
     Result result;
     unsigned char ctr[0x10];
-    u8 *tmp_buf = NULL;
     
     bktr_subsection_entry_t *subsec = bktr_get_subsection(bktrContext.subsection_block, bktrContext.bktr_seek);
     if (!subsec) return false;
@@ -499,10 +498,6 @@ bool bktrSectionPhysicalRead(void *outBuf, size_t bufSize)
     bktr_subsection_entry_t *next_subsec = (subsec + 1);
     
     u64 base_offset = (bktrContext.section_offset + bktrContext.bktr_seek);
-    
-    memcpy(ctr, bktrContext.aes_ctx.ctr, 0x10);
-    nca_update_bktr_ctr(ctr, subsec->ctr_val, base_offset);
-    aes128CtrContextResetCtr(&(bktrContext.aes_ctx), ctr);
     
     u64 virt_seek = bktrContext.virtual_seek;
     
@@ -513,27 +508,40 @@ bool bktrSectionPhysicalRead(void *outBuf, size_t bufSize)
         u64 block_end_offset = (u64)round_up(base_offset + bufSize, 0x10);
         u64 block_size = (block_end_offset - block_start_offset);
         
-        tmp_buf = malloc(block_size);
-        if (!tmp_buf)
+        u64 output_offset = 0;
+        u64 ctr_buf_offset = (base_offset - block_start_offset);
+        u64 output_block_size = (block_size > NCA_CTR_BUFFER_SIZE ? (NCA_CTR_BUFFER_SIZE - (base_offset - block_start_offset)) : bufSize);
+        
+        while(block_size > 0)
         {
-            uiDrawString("Error: unable to allocate memory for the temporary NCA BKTR section block read buffer!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            return false;
+            u64 block_size_used = (block_size > NCA_CTR_BUFFER_SIZE ? NCA_CTR_BUFFER_SIZE : block_size);
+            
+            if (R_FAILED(result = ncmContentStorageReadContentIdFile(&(bktrContext.ncmStorage), &(bktrContext.ncaId), block_start_offset, ncaCtrBuf, block_size_used)))
+            {
+                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "BKTR: failed to read encrypted %lu bytes block at offset 0x%016lX! (0x%08X)", block_size_used, block_start_offset, result);
+                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                return false;
+            }
+            
+            // Update BKTR CTR
+            memcpy(ctr, bktrContext.aes_ctx.ctr, 0x10);
+            nca_update_bktr_ctr(ctr, subsec->ctr_val, block_start_offset);
+            aes128CtrContextResetCtr(&(bktrContext.aes_ctx), ctr);
+            
+            // Decrypt CTR block
+            aes128CtrCrypt(&(bktrContext.aes_ctx), ncaCtrBuf, ncaCtrBuf, block_size_used);
+            memcpy(outBuf + output_offset, ncaCtrBuf + ctr_buf_offset, output_block_size);
+            
+            block_start_offset += block_size_used;
+            block_size -= block_size_used;
+            
+            if (block_size)
+            {
+                output_offset += output_block_size;
+                ctr_buf_offset = 0;
+                output_block_size = (block_size > NCA_CTR_BUFFER_SIZE ? NCA_CTR_BUFFER_SIZE : ((base_offset + bufSize) - block_start_offset));
+            }
         }
-        
-        if (R_FAILED(result = ncmContentStorageReadContentIdFile(&(bktrContext.ncmStorage), &(bktrContext.ncaId), block_start_offset, tmp_buf, block_size)))
-        {
-            free(tmp_buf);
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "BKTR: failed to read encrypted %lu bytes block at offset 0x%016lX! (0x%08X)", block_size, block_start_offset, result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-            return false;
-        }
-        
-        // Decrypt
-        aes128CtrCrypt(&(bktrContext.aes_ctx), tmp_buf, tmp_buf, block_size);
-        
-        memcpy(outBuf, tmp_buf + (base_offset - block_start_offset), bufSize);
-        
-        free(tmp_buf);
     } else {
         // Sad path
         u64 within_subsection = (next_subsec->offset - bktrContext.bktr_seek);
@@ -2146,7 +2154,7 @@ bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
     nca_pfs0_data_offset = (nca_pfs0_str_table_offset + (u64)nca_pfs0_header.str_table_size);
     
     // Allocate memory for the programinfo.xml contents, making sure there's enough space
-    programInfoXml = calloc(0xA00000, sizeof(char));
+    programInfoXml = calloc(NSP_XML_BUFFER_SIZE, sizeof(char));
     if (!programInfoXml)
     {
         uiDrawString("Error: unable to allocate memory for the \"programinfo.xml\" contents!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
@@ -2918,7 +2926,7 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaI
     }
     
     // Make sure that the output buffer for our NACP XML is big enough
-    nacpXml = calloc(NAME_BUF_LEN * 4, sizeof(char));
+    nacpXml = calloc(NSP_XML_BUFFER_SIZE, sizeof(char));
     if (!nacpXml)
     {
         uiDrawString("Error: unable to allocate memory for the NACP XML!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);

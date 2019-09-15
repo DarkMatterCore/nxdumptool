@@ -6,13 +6,14 @@
 #include <switch.h>
 #include "nca.h"
 
-#define OUTPUT_DUMP_BASE_PATH           "sdmc:/nxdumptool/"
-#define XCI_DUMP_PATH                   (OUTPUT_DUMP_BASE_PATH "XCI/")
-#define NSP_DUMP_PATH                   (OUTPUT_DUMP_BASE_PATH "NSP/")
-#define HFS0_DUMP_PATH                  (OUTPUT_DUMP_BASE_PATH "HFS0/")
-#define EXEFS_DUMP_PATH                 (OUTPUT_DUMP_BASE_PATH "ExeFS/")
-#define ROMFS_DUMP_PATH                 (OUTPUT_DUMP_BASE_PATH "RomFS/")
-#define CERT_DUMP_PATH                  (OUTPUT_DUMP_BASE_PATH "Certificate/")
+#define APP_BASE_PATH                   "sdmc:/switch/"
+#define NXDUMPTOOL_BASE_PATH            APP_BASE_PATH "nxdumptool/"
+#define XCI_DUMP_PATH                   NXDUMPTOOL_BASE_PATH "XCI/"
+#define NSP_DUMP_PATH                   NXDUMPTOOL_BASE_PATH "NSP/"
+#define HFS0_DUMP_PATH                  NXDUMPTOOL_BASE_PATH "HFS0/"
+#define EXEFS_DUMP_PATH                 NXDUMPTOOL_BASE_PATH "ExeFS/"
+#define ROMFS_DUMP_PATH                 NXDUMPTOOL_BASE_PATH "RomFS/"
+#define CERT_DUMP_PATH                  NXDUMPTOOL_BASE_PATH "Certificate/"
 
 #define KiB                             (1024.0)
 #define MiB                             (1024.0 * KiB)
@@ -21,6 +22,12 @@
 #define NAME_BUF_LEN                    4096
 
 #define SOCK_BUFFERSIZE                 65536
+
+#define DUMP_BUFFER_SIZE                (u64)0x100000		                    // 1 MiB (1048576 bytes)
+
+#define NCA_CTR_BUFFER_SIZE             DUMP_BUFFER_SIZE                        // 1 MiB (1048576 bytes)
+
+#define NSP_XML_BUFFER_SIZE             (u64)0xA00000                           // 10 MiB (10485760 bytes)
 
 #define META_DB_REGULAR_APPLICATION     0x80
 #define META_DB_PATCH                   0x81
@@ -74,29 +81,6 @@
 /* Reference: https://switchbrew.org/wiki/Title_list */
 #define GAMECARD_UPDATE_TITLEID         (u64)0x0100000000000816
 
-#define SYSUPDATE_100                   (u32)450
-#define SYSUPDATE_200                   (u32)65796
-#define SYSUPDATE_210                   (u32)131162
-#define SYSUPDATE_220                   (u32)196628
-#define SYSUPDATE_230                   (u32)262164
-#define SYSUPDATE_300                   (u32)201327002
-#define SYSUPDATE_301                   (u32)201392178
-#define SYSUPDATE_302                   (u32)201457684
-#define SYSUPDATE_400                   (u32)268435656
-#define SYSUPDATE_401                   (u32)268501002
-#define SYSUPDATE_410                   (u32)269484082
-#define SYSUPDATE_500                   (u32)335544750
-#define SYSUPDATE_501                   (u32)335609886
-#define SYSUPDATE_502                   (u32)335675432
-#define SYSUPDATE_510                   (u32)336592976
-#define SYSUPDATE_600                   (u32)402653544
-#define SYSUPDATE_601                   (u32)402718730
-#define SYSUPDATE_610                   (u32)403701850
-#define SYSUPDATE_620                   (u32)404750376
-#define SYSUPDATE_700                   (u32)469762248
-#define SYSUPDATE_701                   (u32)469827614
-#define SYSUPDATE_800                   (u32)536871442
-
 #define NACP_ICON_SQUARE_DIMENSION      256
 #define NACP_ICON_DOWNSCALED            96
 
@@ -134,6 +118,12 @@ typedef struct {
     u64 cancelEndTmr;
 } PACKED progress_ctx_t;
 
+typedef enum {
+    ROMFS_TYPE_APP = 0,
+    ROMFS_TYPE_PATCH,
+    ROMFS_TYPE_ADDON
+} selectedRomFsType;
+
 typedef struct {
     u32 index;
     u8 type; // 1 = Patch, 2 = AddOn
@@ -165,9 +155,9 @@ void freeBktrContext();
 
 void freeGlobalData();
 
-bool loadPatchesFromSdCardAndEmmc();
+bool loadTitlesFromSdCardAndEmmc(u8 titleType);
 
-void freePatchesFromSdCardAndEmmc();
+void freeTitlesFromSdCardAndEmmc(u8 titleType);
 
 void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize);
 
@@ -193,7 +183,9 @@ bool calculateRomFsFullExtractedSize(bool usePatch, u64 *out);
 
 bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out);
 
-bool readProgramNcaExeFsOrRomFs(u32 titleIndex, bool usePatch, bool readRomFs);
+bool readNcaExeFsSection(u32 titleIndex, bool usePatch);
+
+bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType);
 
 bool getExeFsFileList();
 
@@ -224,6 +216,8 @@ u32 retrieveFirstPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn);
 u32 retrievePreviousPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 appIndex, bool addOn);
 
 u32 retrieveNextPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 appIndex, bool addOn);
+
+u32 retrieveLastPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn);
 
 void waitForButtonPress();
 

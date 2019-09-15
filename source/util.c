@@ -34,8 +34,8 @@ extern curMenuType menuType;
 /* Constants */
 
 const char *nswReleasesXmlUrl = "http://nswdb.com/xml.php";
-const char *nswReleasesXmlTmpPath = OUTPUT_DUMP_BASE_PATH "NSWreleases.xml.tmp";
-const char *nswReleasesXmlPath = OUTPUT_DUMP_BASE_PATH "NSWreleases.xml";
+const char *nswReleasesXmlTmpPath = NXDUMPTOOL_BASE_PATH "NSWreleases.xml.tmp";
+const char *nswReleasesXmlPath = NXDUMPTOOL_BASE_PATH "NSWreleases.xml";
 const char *nswReleasesRootElement = "releases";
 const char *nswReleasesChildren = "release";
 const char *nswReleasesChildrenImageSize = "imagesize";
@@ -44,7 +44,7 @@ const char *nswReleasesChildrenImgCrc = "imgcrc";
 const char *nswReleasesChildrenReleaseName = "releasename";
 
 const char *githubReleasesApiUrl = "https://api.github.com/repos/DarkMatterCore/nxdumptool/releases/latest";
-const char *nxDumpToolPath = "sdmc:/switch/nxdumptool.nro";
+const char *nxDumpToolPath = "sdmc:/switch/nxdumptool/nxdumptool.nro";
 const char *userAgent = "nxdumptool/" APP_VERSION " (Nintendo Switch)";
 
 /* Statically allocated variables */
@@ -109,7 +109,7 @@ u32 nandUserTitleAddOnCount = 0;
 
 static bool sdCardAndEmmcTitleInfoLoaded = false;
 
-u32 gameCardSdCardEmmcPatchCount = 0;
+u32 gameCardSdCardEmmcPatchCount = 0, gameCardSdCardEmmcAddOnCount = 0;
 
 char **titleName = NULL;
 char **fixedTitleName = NULL;
@@ -124,6 +124,9 @@ bktr_ctx_t bktrContext;
 char curRomFsPath[NAME_BUF_LEN] = {'\0'};
 u32 curRomFsDirOffset = 0;
 romfs_browser_entry *romFsBrowserEntries = NULL;
+
+u8 *dumpBuf = NULL;
+u8 *ncaCtrBuf = NULL;
 
 orphan_patch_addon_entry *orphanEntries = NULL;
 
@@ -770,9 +773,11 @@ bool getTitleIDAndVersionList(FsStorageId curStorageId)
     return success;
 }
 
-bool loadPatchesFromSdCardAndEmmc()
+bool loadTitlesFromSdCardAndEmmc(u8 titleType)
 {
-    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID) return false;
+    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID || (titleType != META_DB_PATCH && titleType != META_DB_ADDON)) return false;
+    
+    if ((titleType == META_DB_PATCH && gameCardSdCardEmmcPatchCount) || (titleType == META_DB_ADDON && gameCardSdCardEmmcAddOnCount)) return true;
     
     u32 i, j;
     
@@ -815,7 +820,7 @@ bool loadPatchesFromSdCardAndEmmc()
             titleList = calloc(1, titleListSize);
             if (titleList)
             {
-                if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, META_DB_PATCH, titleList, titleListSize, &written, &total)) && written && total)
+                if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, titleType, titleList, titleListSize, &written, &total)) && written && total)
                 {
                     if (total > written)
                     {
@@ -826,7 +831,7 @@ bool loadPatchesFromSdCardAndEmmc()
                             titleList = titleListTmp;
                             memset(titleList, 0, titleListSize);
                             
-                            if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, META_DB_PATCH, titleList, titleListSize, &written, &total)))
+                            if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, titleType, titleList, titleListSize, &written, &total)))
                             {
                                 if (written != total) proceed = false;
                             } else {
@@ -850,38 +855,75 @@ bool loadPatchesFromSdCardAndEmmc()
                                 versions[j] = titleList[j].metaRecord.version;
                             }
                             
-                            // If ptr == NULL, realloc will essentially act as a malloc
-                            tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount + total) * sizeof(u64));
-                            tmpVersions = realloc(titlePatchVersion, (titlePatchCount + total) * sizeof(u32));
-                            tmpStorages = realloc(titlePatchStorageId, (titlePatchCount + total) * sizeof(FsStorageId));
-                            
-                            if (tmpTIDs != NULL && tmpVersions != NULL && tmpStorages != NULL)
+                            if (titleType == META_DB_PATCH)
                             {
-                                titlePatchTitleID = tmpTIDs;
-                                memcpy(titlePatchTitleID + titlePatchCount, titleIDs, total * sizeof(u64));
+                                // If ptr == NULL, realloc will essentially act as a malloc
+                                tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount + total) * sizeof(u64));
+                                tmpVersions = realloc(titlePatchVersion, (titlePatchCount + total) * sizeof(u32));
+                                tmpStorages = realloc(titlePatchStorageId, (titlePatchCount + total) * sizeof(FsStorageId));
                                 
-                                titlePatchVersion = tmpVersions;
-                                memcpy(titlePatchVersion + titlePatchCount, versions, total * sizeof(u32));
-                                
-                                titlePatchStorageId = tmpStorages;
-                                for(j = titlePatchCount; j < (titlePatchCount + total); j++) titlePatchStorageId[j] = curStorageId;
-                                
-                                titlePatchCount += total;
-                                
-                                gameCardSdCardEmmcPatchCount += total;
-                                
-                                if (curStorageId == FsStorageId_SdCard)
+                                if (tmpTIDs != NULL && tmpVersions != NULL && tmpStorages != NULL)
                                 {
-                                    sdCardTitlePatchCount = total;
+                                    titlePatchTitleID = tmpTIDs;
+                                    memcpy(titlePatchTitleID + titlePatchCount, titleIDs, total * sizeof(u64));
+                                    
+                                    titlePatchVersion = tmpVersions;
+                                    memcpy(titlePatchVersion + titlePatchCount, versions, total * sizeof(u32));
+                                    
+                                    titlePatchStorageId = tmpStorages;
+                                    for(j = titlePatchCount; j < (titlePatchCount + total); j++) titlePatchStorageId[j] = curStorageId;
+                                    
+                                    titlePatchCount += total;
+                                    
+                                    gameCardSdCardEmmcPatchCount += total;
+                                    
+                                    if (curStorageId == FsStorageId_SdCard)
+                                    {
+                                        sdCardTitlePatchCount = total;
+                                    } else {
+                                        nandUserTitlePatchCount = total;
+                                    }
                                 } else {
-                                    nandUserTitlePatchCount = total;
+                                    if (tmpTIDs != NULL) titlePatchTitleID = tmpTIDs;
+                                    
+                                    if (tmpVersions != NULL) titlePatchVersion = tmpVersions;
+                                    
+                                    if (tmpStorages != NULL) titlePatchStorageId = tmpStorages;
                                 }
                             } else {
-                                if (tmpTIDs != NULL) titlePatchTitleID = tmpTIDs;
+                                // If ptr == NULL, realloc will essentially act as a malloc
+                                tmpTIDs = realloc(titleAddOnTitleID, (titleAddOnCount + total) * sizeof(u64));
+                                tmpVersions = realloc(titleAddOnVersion, (titleAddOnCount + total) * sizeof(u32));
+                                tmpStorages = realloc(titleAddOnStorageId, (titleAddOnCount + total) * sizeof(FsStorageId));
                                 
-                                if (tmpVersions != NULL) titlePatchVersion = tmpVersions;
-                                
-                                if (tmpStorages != NULL) titlePatchStorageId = tmpStorages;
+                                if (tmpTIDs != NULL && tmpVersions != NULL && tmpStorages != NULL)
+                                {
+                                    titleAddOnTitleID = tmpTIDs;
+                                    memcpy(titleAddOnTitleID + titleAddOnCount, titleIDs, total * sizeof(u64));
+                                    
+                                    titleAddOnVersion = tmpVersions;
+                                    memcpy(titleAddOnVersion + titleAddOnCount, versions, total * sizeof(u32));
+                                    
+                                    titleAddOnStorageId = tmpStorages;
+                                    for(j = titleAddOnCount; j < (titleAddOnCount + total); j++) titleAddOnStorageId[j] = curStorageId;
+                                    
+                                    titleAddOnCount += total;
+                                    
+                                    gameCardSdCardEmmcAddOnCount += total;
+                                    
+                                    if (curStorageId == FsStorageId_SdCard)
+                                    {
+                                        sdCardTitleAddOnCount = total;
+                                    } else {
+                                        nandUserTitleAddOnCount = total;
+                                    }
+                                } else {
+                                    if (tmpTIDs != NULL) titleAddOnTitleID = tmpTIDs;
+                                    
+                                    if (tmpVersions != NULL) titleAddOnVersion = tmpVersions;
+                                    
+                                    if (tmpStorages != NULL) titleAddOnStorageId = tmpStorages;
+                                }
                             }
                         }
                         
@@ -898,67 +940,109 @@ bool loadPatchesFromSdCardAndEmmc()
         }
     }
     
-    if (gameCardSdCardEmmcPatchCount) return true;
+    if ((titleType == META_DB_PATCH && gameCardSdCardEmmcPatchCount) || (titleType == META_DB_ADDON && gameCardSdCardEmmcAddOnCount)) return true;
     
     return false;
 }
 
-void freePatchesFromSdCardAndEmmc()
+void freeTitlesFromSdCardAndEmmc(u8 titleType)
 {
-    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID || !titlePatchCount || !titlePatchTitleID || !titlePatchVersion || !titlePatchStorageId || !gameCardSdCardEmmcPatchCount) return;
+    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID || (titleType != META_DB_PATCH && titleType != META_DB_ADDON) || (titleType == META_DB_PATCH && (!titlePatchCount || !titlePatchTitleID || !titlePatchVersion || !titlePatchStorageId || !gameCardSdCardEmmcPatchCount)) || (titleType == META_DB_ADDON && (!titleAddOnCount || !titleAddOnTitleID || !titleAddOnVersion || !titleAddOnStorageId || !gameCardSdCardEmmcAddOnCount))) return;
     
     u64 *tmpTIDs = NULL;
     u32 *tmpVersions = NULL;
     FsStorageId *tmpStorages = NULL;
     
-    if ((titlePatchCount - gameCardSdCardEmmcPatchCount) > 0)
+    if (titleType == META_DB_PATCH)
     {
-        tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(u64));
-        tmpVersions = realloc(titlePatchVersion, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(u32));
-        tmpStorages = realloc(titlePatchStorageId, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(FsStorageId));
-        
-        if (tmpTIDs != NULL && tmpVersions != NULL && tmpStorages != NULL)
+        if ((titlePatchCount - gameCardSdCardEmmcPatchCount) > 0)
         {
-            titlePatchTitleID = tmpTIDs;
+            tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(u64));
+            tmpVersions = realloc(titlePatchVersion, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(u32));
+            tmpStorages = realloc(titlePatchStorageId, (titlePatchCount - gameCardSdCardEmmcPatchCount) * sizeof(FsStorageId));
             
-            titlePatchVersion = tmpVersions;
-            
-            titlePatchStorageId = tmpStorages;
+            if (tmpTIDs != NULL && tmpVersions != NULL && tmpStorages != NULL)
+            {
+                titlePatchTitleID = tmpTIDs;
+                
+                titlePatchVersion = tmpVersions;
+                
+                titlePatchStorageId = tmpStorages;
+            } else {
+                if (tmpTIDs != NULL) titlePatchTitleID = tmpTIDs;
+                
+                if (tmpVersions != NULL) titlePatchVersion = tmpVersions;
+                
+                if (tmpStorages != NULL) titlePatchStorageId = tmpStorages;
+            }
         } else {
-            if (tmpTIDs != NULL) titlePatchTitleID = tmpTIDs;
+            free(titlePatchTitleID);
+            titlePatchTitleID = NULL;
             
-            if (tmpVersions != NULL) titlePatchVersion = tmpVersions;
+            free(titlePatchVersion);
+            titlePatchVersion = NULL;
             
-            if (tmpStorages != NULL) titlePatchStorageId = tmpStorages;
+            free(titlePatchStorageId);
+            titlePatchStorageId = NULL;
         }
+        
+        titlePatchCount -= gameCardSdCardEmmcPatchCount;
+        
+        gameCardSdCardEmmcPatchCount = 0;
+        
+        sdCardTitlePatchCount = 0;
+        
+        nandUserTitlePatchCount = 0;
     } else {
-        free(titlePatchTitleID);
-        titlePatchTitleID = NULL;
+        if ((titleAddOnCount - gameCardSdCardEmmcAddOnCount) > 0)
+        {
+            tmpTIDs = realloc(titleAddOnTitleID, (titleAddOnCount - gameCardSdCardEmmcAddOnCount) * sizeof(u64));
+            tmpVersions = realloc(titleAddOnVersion, (titleAddOnCount - gameCardSdCardEmmcAddOnCount) * sizeof(u32));
+            tmpStorages = realloc(titleAddOnStorageId, (titleAddOnCount - gameCardSdCardEmmcAddOnCount) * sizeof(FsStorageId));
+            
+            if (tmpTIDs != NULL && tmpVersions != NULL && tmpStorages != NULL)
+            {
+                titleAddOnTitleID = tmpTIDs;
+                
+                titleAddOnVersion = tmpVersions;
+                
+                titleAddOnStorageId = tmpStorages;
+            } else {
+                if (tmpTIDs != NULL) titleAddOnTitleID = tmpTIDs;
+                
+                if (tmpVersions != NULL) titleAddOnVersion = tmpVersions;
+                
+                if (tmpStorages != NULL) titleAddOnStorageId = tmpStorages;
+            }
+        } else {
+            free(titleAddOnTitleID);
+            titleAddOnTitleID = NULL;
+            
+            free(titleAddOnVersion);
+            titleAddOnVersion = NULL;
+            
+            free(titleAddOnStorageId);
+            titleAddOnStorageId = NULL;
+        }
         
-        free(titlePatchVersion);
-        titlePatchVersion = NULL;
+        titleAddOnCount -= gameCardSdCardEmmcAddOnCount;
         
-        free(titlePatchStorageId);
-        titlePatchStorageId = NULL;
+        gameCardSdCardEmmcAddOnCount = 0;
+        
+        sdCardTitleAddOnCount = 0;
+        
+        nandUserTitleAddOnCount = 0;
     }
-    
-    titlePatchCount -= gameCardSdCardEmmcPatchCount;
-    
-    gameCardSdCardEmmcPatchCount = 0;
-    
-    sdCardTitlePatchCount = 0;
-    
-    nandUserTitlePatchCount = 0;
 }
 
 void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize)
 {
     u8 major = (u8)((version >> 26) & 0x3F);
-    u8 middle = (u8)((version >> 20) & 0x3F);
-    u8 minor = (u8)((version >> 16) & 0xF);
-    u16 build = (u16)version;
+    u8 minor = (u8)((version >> 20) & 0x3F);
+    u8 micro = (u8)((version >> 16) & 0xF);
+    u16 bugfix = (u16)version;
     
-    snprintf(versionBuf, versionBufSize, "%u (%u.%u.%u.%u)", version, major, middle, minor, build);
+    snprintf(versionBuf, versionBufSize, "%u (%u.%u.%u.%u)", version, major, minor, micro, bugfix);
 }
 
 bool getTitleControlNacp(u64 titleID, char *nameBuf, int nameBufSize, char *authorBuf, int authorBufSize, u8 **iconBuf)
@@ -1021,7 +1105,8 @@ void removeIllegalCharacters(char *name)
 
 void createOutputDirectories()
 {
-    mkdir(OUTPUT_DUMP_BASE_PATH, 0744);
+    mkdir(APP_BASE_PATH, 0744);
+    mkdir(NXDUMPTOOL_BASE_PATH, 0744);
     mkdir(XCI_DUMP_PATH, 0744); 
     mkdir(NSP_DUMP_PATH, 0744);
     mkdir(HFS0_DUMP_PATH, 0744);
@@ -1204,81 +1289,12 @@ void getGameCardUpdateInfo()
     {
         if (gameCardUpdateTitleID == GAMECARD_UPDATE_TITLEID)
         {
-            char decimalVersion[64] = {'\0'};
-            convertTitleVersionToDecimal(gameCardUpdateVersion, decimalVersion, sizeof(decimalVersion));
+            u8 major = (u8)((gameCardUpdateVersion >> 26) & 0x3F);
+            u8 minor = (u8)((gameCardUpdateVersion >> 20) & 0x3F);
+            u8 micro = (u8)((gameCardUpdateVersion >> 16) & 0xF);
+            u16 bugfix = (u16)gameCardUpdateVersion;
             
-            switch(gameCardUpdateVersion)
-            {
-                case SYSUPDATE_100:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "1.0.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_200:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "2.0.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_210:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "2.1.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_220:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "2.2.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_230:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "2.3.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_300:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "3.0.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_301:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "3.0.1 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_302:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "3.0.2 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_400:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "4.0.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_401:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "4.0.1 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_410:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "4.1.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_500:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "5.0.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_501:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "5.0.1 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_502:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "5.0.2 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_510:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "5.1.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_600:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "6.0.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_601:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "6.0.1 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_610:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "6.1.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_620:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "6.2.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_700:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "7.0.0 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_701:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "7.0.1 - v%s", decimalVersion);
-                    break;
-                case SYSUPDATE_800:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "8.0.0 - v%s", decimalVersion);
-                    break;
-                default:
-                    snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "UNKNOWN - v%s", decimalVersion);
-                    break;
-            }
+            snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "%u.%u.%u (bugfix %u) - v%u", major, minor, micro, bugfix, gameCardUpdateVersion);
         } else {
             uiStatusMsg("getGameCardUpdateInfo: update Title ID mismatch! %016lX != %016lX", gameCardUpdateTitleID, GAMECARD_UPDATE_TITLEID);
         }
@@ -1816,7 +1832,7 @@ bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out)
     return true;
 }
 
-bool readProgramNcaExeFsOrRomFs(u32 titleIndex, bool usePatch, bool readRomFs)
+bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
 {
     Result result;
     u32 i = 0;
@@ -1882,7 +1898,7 @@ bool readProgramNcaExeFsOrRomFs(u32 titleIndex, bool usePatch, bool readRomFs)
             {
                 ncmTitleIndex = titleIndex;
             } else {
-                // Patches loaded using loadPatchesFromSdCardAndEmmc()
+                // Patches loaded using loadTitlesFromSdCardAndEmmc()
                 ncmTitleIndex = (titleIndex - (titlePatchCount - gameCardSdCardEmmcPatchCount)); // Substract gamecard patch count
             }
             
@@ -1894,7 +1910,7 @@ bool readProgramNcaExeFsOrRomFs(u32 titleIndex, bool usePatch, bool readRomFs)
             {
                 ncmTitleIndex = (titleIndex - (!usePatch ? sdCardTitleAppCount : sdCardTitlePatchCount)); // Substract SD card patch count
             } else {
-                // Patches loaded using loadPatchesFromSdCardAndEmmc()
+                // Patches loaded using loadTitlesFromSdCardAndEmmc()
                 ncmTitleIndex = (titleIndex - ((titlePatchCount - gameCardSdCardEmmcPatchCount) + sdCardTitlePatchCount)); // Substract gamecard + SD card patch count
             }
             
@@ -2032,8 +2048,7 @@ bool readProgramNcaExeFsOrRomFs(u32 titleIndex, bool usePatch, bool readRomFs)
     uiRefreshDisplay();
     breaks += 2;
     
-    /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Retrieving %s...", (!readRomFs ? "ExeFS entries" : "RomFS entry tables"));
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    /*uiDrawString("Retrieving ExeFS entries...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
     uiRefreshDisplay();
     breaks++;*/
     
@@ -2067,40 +2082,339 @@ bool readProgramNcaExeFsOrRomFs(u32 titleIndex, bool usePatch, bool readRomFs)
         }
     }
     
-    if (!readRomFs)
+    // Read file entries from the ExeFS section
+    success = readExeFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys);
+    
+out:
+    if (titleContentRecords) free(titleContentRecords);
+    
+    if (!success) serviceClose(&(ncmStorage.s));
+    
+    serviceClose(&(ncmDb.s));
+    
+    if (titleList) free(titleList);
+    
+    if (curStorageId == FsStorageId_GameCard)
     {
-        // Read file entries from the ExeFS section
-        if (!readExeFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
-    } else {
-        if (!usePatch)
+        if (partitionHfs0Header)
         {
-            // Read directory and file tables from the RomFS section
-            if (!readRomFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
-        } else {
-            // Look for the base application title index
-            u32 appIndex;
+            free(partitionHfs0Header);
+            partitionHfs0Header = NULL;
+            partitionHfs0HeaderOffset = 0;
+            partitionHfs0HeaderSize = 0;
+            partitionHfs0FileCount = 0;
+            partitionHfs0StrTableSize = 0;
+        }
+    }
+    
+    return success;
+}
+
+bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
+{
+    Result result;
+    u32 i = 0;
+    u32 written = 0;
+    u32 total = 0;
+    u32 titleCount = 0;
+    u32 ncmTitleIndex = 0;
+    u32 titleNcaCount = 0;
+    u32 partition = 0;
+    
+    FsStorageId curStorageId;
+    
+    NcmContentMetaDatabase ncmDb;
+    memset(&ncmDb, 0, sizeof(NcmContentMetaDatabase));
+    
+    NcmContentMetaRecordsHeader contentRecordsHeader;
+    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaRecordsHeader));
+    
+    u64 contentRecordsHeaderReadSize = 0;
+    
+    NcmContentStorage ncmStorage;
+    memset(&ncmStorage, 0, sizeof(NcmContentStorage));
+    
+    NcmApplicationContentMetaKey *titleList = NULL;
+    NcmContentRecord *titleContentRecords = NULL;
+    size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
+    
+    NcmNcaId ncaId;
+    char ncaIdStr[33] = {'\0'};
+    u8 ncaHeader[NCA_FULL_HEADER_LENGTH] = {0};
+    nca_header_t dec_nca_header;
+    
+    u8 decrypted_nca_keys[NCA_KEY_AREA_SIZE];
+    
+    bool success = false, foundNca = false;
+    
+    if ((curRomFsType == ROMFS_TYPE_APP && !titleAppStorageId) || (curRomFsType == ROMFS_TYPE_PATCH && !titlePatchStorageId) || (curRomFsType == ROMFS_TYPE_ADDON && !titlePatchStorageId))
+    {
+        uiDrawString("Error: title storage ID unavailable!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    curStorageId = (curRomFsType == ROMFS_TYPE_APP ? titleAppStorageId[titleIndex] : (curRomFsType == ROMFS_TYPE_PATCH ? titlePatchStorageId[titleIndex] : titleAddOnStorageId[titleIndex]));
+    
+    if (curStorageId != FsStorageId_GameCard && curStorageId != FsStorageId_SdCard && curStorageId != FsStorageId_NandUser)
+    {
+        uiDrawString("Error: invalid title storage ID!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    switch(curStorageId)
+    {
+        case FsStorageId_GameCard:
+            titleCount = (curRomFsType == ROMFS_TYPE_APP ? titleAppCount : (curRomFsType == ROMFS_TYPE_PATCH ? titlePatchCount : titleAddOnCount));
+            ncmTitleIndex = titleIndex;
+            break;
+        case FsStorageId_SdCard:
+            titleCount = (curRomFsType == ROMFS_TYPE_APP ? sdCardTitleAppCount : (curRomFsType == ROMFS_TYPE_PATCH ? sdCardTitlePatchCount : sdCardTitleAddOnCount));
             
-            for(i = 0; i < titleAppCount; i++)
+            if (menuType == MENUTYPE_SDCARD_EMMC)
             {
-                if (checkIfPatchOrAddOnBelongsToBaseApplication(titleIndex, i, false))
+                ncmTitleIndex = titleIndex;
+            } else {
+                // Titles loaded using loadTitlesFromSdCardAndEmmc()
+                if (curRomFsType == ROMFS_TYPE_PATCH)
                 {
-                    appIndex = i;
-                    break;
+                    ncmTitleIndex = (titleIndex - (titlePatchCount - gameCardSdCardEmmcPatchCount)); // Substract gamecard patch count
+                } else
+                if (curRomFsType == ROMFS_TYPE_ADDON)
+                {
+                    ncmTitleIndex = (titleIndex - (titleAddOnCount - gameCardSdCardEmmcAddOnCount)); // Substract gamecard add-on count
                 }
             }
             
-            if (i == titleAppCount)
+            break;
+        case FsStorageId_NandUser:
+            titleCount = (curRomFsType == ROMFS_TYPE_APP ? nandUserTitleAppCount : (curRomFsType == ROMFS_TYPE_PATCH ? nandUserTitlePatchCount : nandUserTitleAddOnCount));
+            
+            if (menuType == MENUTYPE_SDCARD_EMMC)
             {
-                uiDrawString("Error: unable to find base application title index for the selected update!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-                goto out;
+                if (curRomFsType == ROMFS_TYPE_APP)
+                {
+                    ncmTitleIndex = (titleIndex - sdCardTitleAppCount); // Substract SD card app count
+                } else
+                if (curRomFsType == ROMFS_TYPE_PATCH)
+                {
+                    ncmTitleIndex = (titleIndex - sdCardTitlePatchCount); // Substract SD card patch count
+                } else
+                if (curRomFsType == ROMFS_TYPE_ADDON)
+                {
+                    ncmTitleIndex = (titleIndex - sdCardTitleAddOnCount); // Substract SD card add-on count
+                }
+            } else {
+                // Titles loaded using loadTitlesFromSdCardAndEmmc()
+                if (curRomFsType == ROMFS_TYPE_PATCH)
+                {
+                    ncmTitleIndex = (titleIndex - ((titlePatchCount - gameCardSdCardEmmcPatchCount) + sdCardTitlePatchCount)); // Substract gamecard + SD card patch count
+                } else
+                if (curRomFsType == ROMFS_TYPE_ADDON)
+                {
+                    ncmTitleIndex = (titleIndex - ((titleAddOnCount - gameCardSdCardEmmcAddOnCount) + sdCardTitleAddOnCount)); // Substract gamecard + SD card add-on count
+                }
             }
             
-            // Read directory and file tables from the RomFS section in the Program NCA from the base application
-            if (!readProgramNcaExeFsOrRomFs(appIndex, false, true)) goto out;
-            
-            // Read BKTR entry data in the Program NCA from the update
-            if (!readBktrEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
+            break;
+        default:
+            break;
+    }
+    
+    if (!titleCount)
+    {
+        uiDrawString("Error: invalid title type count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    if (ncmTitleIndex > (titleCount - 1))
+    {
+        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        breaks += 2;
+        return false;
+    }
+    
+    titleListSize *= titleCount;
+    
+    // If we're dealing with a gamecard, call workaroundPartitionZeroAccess() and read the secure partition header. Otherwise, ncmContentStorageReadContentIdFile() will fail with error 0x00171002
+    if (curStorageId == FsStorageId_GameCard && !partitionHfs0Header)
+    {
+        partition = (hfs0_partition_cnt - 1); // Select the secure partition
+        
+        workaroundPartitionZeroAccess();
+        
+        if (!getPartitionHfs0Header(partition))
+        {
+            breaks += 2;
+            return false;
         }
+        
+        if (!partitionHfs0FileCount)
+        {
+            uiDrawString("The Secure HFS0 partition is empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            goto out;
+        }
+    }
+    
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Looking for the %s NCA (%s)...", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), (curRomFsType == ROMFS_TYPE_APP ? "base application" : (curRomFsType == ROMFS_TYPE_PATCH ? "update" : "DLC")));
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiRefreshDisplay();
+    breaks++;
+    
+    titleList = calloc(1, titleListSize);
+    if (!titleList)
+    {
+        uiDrawString("Error: unable to allocate memory for the ApplicationContentMetaKey struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (R_FAILED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    u8 filter = (curRomFsType == ROMFS_TYPE_APP ? META_DB_REGULAR_APPLICATION : (curRomFsType == ROMFS_TYPE_PATCH ? META_DB_PATCH : META_DB_ADDON));
+    
+    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, filter, titleList, titleListSize, &written, &total)))
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (!written || !total)
+    {
+        uiDrawString("Error: ncmContentMetaDatabaseListApplication wrote no entries to output buffer!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (written != total)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, total);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    titleNcaCount = (u32)(contentRecordsHeader.numContentRecords);
+    
+    titleContentRecords = calloc(titleNcaCount, sizeof(NcmContentRecord));
+    if (!titleContentRecords)
+    {
+        uiDrawString("Error: unable to allocate memory for the ContentRecord struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    if (R_FAILED(result = ncmOpenContentStorage(curStorageId, &ncmStorage)))
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmOpenContentStorage failed! (0x%08X)", result);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    for(i = 0; i < titleNcaCount; i++)
+    {
+        if (((curRomFsType == ROMFS_TYPE_APP || curRomFsType == ROMFS_TYPE_PATCH) && titleContentRecords[i].type == NcmContentType_Program) || (curRomFsType == ROMFS_TYPE_ADDON && titleContentRecords[i].type == NcmContentType_Data))
+        {
+            memcpy(&ncaId, &(titleContentRecords[i].ncaId), sizeof(NcmNcaId));
+            convertDataToHexString(titleContentRecords[i].ncaId.c, 16, ncaIdStr, 33);
+            foundNca = true;
+            break;
+        }
+    }
+    
+    if (!foundNca)
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to find %s NCA!", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found %s NCA: \"%s.nca\".", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), ncaIdStr);
+    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiRefreshDisplay();
+    breaks += 2;
+    
+    /*uiDrawString("Retrieving RomFS entry tables...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiRefreshDisplay();
+    breaks++;*/
+    
+    if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
+    {
+        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read header from %s NCA! (0x%08X)", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), result);
+        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        goto out;
+    }
+    
+    // Decrypt the NCA header
+    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, NULL, decrypted_nca_keys, (curStorageId != FsStorageId_GameCard || (curStorageId == FsStorageId_GameCard && curRomFsType == ROMFS_TYPE_PATCH)))) goto out;
+    
+    if (curStorageId == FsStorageId_GameCard && curRomFsType != ROMFS_TYPE_PATCH)
+    {
+        bool has_rights_id = false;
+        
+        for(i = 0; i < 0x10; i++)
+        {
+            if (dec_nca_header.rights_id[i] != 0)
+            {
+                has_rights_id = true;
+                break;
+            }
+        }
+        
+        if (has_rights_id)
+        {
+            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: Rights ID field in %s NCA header not empty!", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
+            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            goto out;
+        }
+    }
+    
+    if (curRomFsType != ROMFS_TYPE_PATCH)
+    {
+        // Read directory and file tables from the RomFS section
+        if (!readRomFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
+    } else {
+        // Look for the base application title index
+        u32 appIndex;
+        
+        for(i = 0; i < titleAppCount; i++)
+        {
+            if (checkIfPatchOrAddOnBelongsToBaseApplication(titleIndex, i, false))
+            {
+                appIndex = i;
+                break;
+            }
+        }
+        
+        if (i == titleAppCount)
+        {
+            uiDrawString("Error: unable to find base application title index for the selected update!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            goto out;
+        }
+        
+        // Read directory and file tables from the RomFS section in the Program NCA from the base application
+        if (!readNcaRomFsSection(appIndex, ROMFS_TYPE_APP)) goto out;
+        
+        // Read BKTR entry data in the Program NCA from the update
+        if (!readBktrEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys)) goto out;
     }
     
     success = true;
@@ -2864,6 +3178,21 @@ u32 retrieveNextPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 ap
     }
     
     return retTitleIndex;
+}
+
+u32 retrieveLastPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn)
+{
+    if (!titleAppCount || appIndex > (titleAppCount - 1) || !titleAppTitleID || (!addOn && (!titlePatchCount || !titlePatchTitleID)) || (addOn && (!titleAddOnCount || !titleAddOnTitleID))) return 0;
+    
+    u32 titleIndex;
+    u32 count = (!addOn ? titlePatchCount : titleAddOnCount);
+    
+    for(titleIndex = count; titleIndex > 0; titleIndex--)
+    {
+        if (checkIfPatchOrAddOnBelongsToBaseApplication(titleIndex - 1, appIndex, addOn)) return (titleIndex - 1);
+    }
+    
+    return 0;
 }
 
 void waitForButtonPress()
