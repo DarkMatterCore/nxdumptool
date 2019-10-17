@@ -15,7 +15,7 @@
 extern int breaks;
 extern int font_height;
 
-extern char strbuf[NAME_BUF_LEN * 4];
+extern char strbuf[NAME_BUF_LEN];
 
 /* Statically allocated variables */
 
@@ -117,7 +117,7 @@ bool retrieveProcessMemory(keyLocation *location)
 {
     if (!location || !location->titleID || !location->mask)
     {
-        uiDrawString("Error: invalid parameters to retrieve process memory.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve process memory.");
         return false;
     }
     
@@ -134,22 +134,19 @@ bool retrieveProcessMemory(keyLocation *location)
         
         if (R_FAILED(result = pmdmntGetTitlePid(&pid, location->titleID)))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: pmdmntGetTitlePid failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: pmdmntGetTitlePid failed! (0x%08X)", result);
             return false;
         }
         
         if (R_FAILED(result = svcDebugActiveProcess(&debug_handle, pid)))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: svcDebugActiveProcess failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcDebugActiveProcess failed! (0x%08X)", result);
             return false;
         }
         
         if (R_FAILED(result = svcGetDebugEvent((u8*)&d, debug_handle)))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: svcGetDebugEvent failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcGetDebugEvent failed! (0x%08X)", result);
             return false;
         }
     } else {
@@ -159,8 +156,7 @@ bool retrieveProcessMemory(keyLocation *location)
         
         if (R_FAILED(result = svcGetProcessList(&num_processes, pids, 300)))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: svcGetProcessList failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcGetProcessList failed! (0x%08X)", result);
             return false;
         }
         
@@ -175,8 +171,7 @@ bool retrieveProcessMemory(keyLocation *location)
         
         if (i == (num_processes - 1))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to retrieve debug handle for process with Title ID %016lX!", location->titleID);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to retrieve debug handle for process with Title ID %016lX!", location->titleID);
             if (debug_handle) svcCloseHandle(debug_handle);
             return false;
         }
@@ -198,8 +193,7 @@ bool retrieveProcessMemory(keyLocation *location)
     {
         if (R_FAILED(result = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr)))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: svcQueryDebugProcessMemory failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcQueryDebugProcessMemory failed! (0x%08X)", result);
             success = false;
             break;
         }
@@ -222,8 +216,7 @@ bool retrieveProcessMemory(keyLocation *location)
     {
         if (R_FAILED(result = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr)))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: svcQueryDebugProcessMemory failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcQueryDebugProcessMemory failed! (0x%08X)", result);
             success = false;
             break;
         }
@@ -235,8 +228,7 @@ bool retrieveProcessMemory(keyLocation *location)
             dataTmp = realloc(location->data, location->dataSize + mem_info.size);
             if (!dataTmp)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to resize key location data buffer to %lu bytes.", location->dataSize + mem_info.size);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to resize key location data buffer to %lu bytes.", location->dataSize + mem_info.size);
                 success = false;
                 break;
             }
@@ -248,8 +240,7 @@ bool retrieveProcessMemory(keyLocation *location)
             
             if (R_FAILED(result = svcReadDebugProcessMemory(location->data + location->dataSize, debug_handle, mem_info.addr, mem_info.size)))
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: svcReadDebugProcessMemory failed! (0x%08X)", result);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcReadDebugProcessMemory failed! (0x%08X)", result);
                 success = false;
                 break;
             }
@@ -275,12 +266,12 @@ bool findKeyInProcessMemory(const keyLocation *location, const keyInfo *findKey,
 {
     if (!location || !location->data || !location->dataSize || !findKey || !strlen(findKey->name) || !findKey->size)
     {
-        uiDrawString("Error: invalid parameters to locate key in process memory.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to locate key in process memory.");
         return false;
     }
     
     u64 i;
-    u8 temp_hash[SHA256_HASH_LENGTH];
+    u8 temp_hash[SHA256_HASH_SIZE];
     bool found = false;
     
     // Hash every key-length-sized byte chunk in data until it matches a key hash
@@ -290,7 +281,7 @@ bool findKeyInProcessMemory(const keyLocation *location, const keyInfo *findKey,
         
         sha256CalculateHash(temp_hash, location->data + i, findKey->size);
         
-        if (!memcmp(temp_hash, findKey->hash, SHA256_HASH_LENGTH))
+        if (!memcmp(temp_hash, findKey->hash, SHA256_HASH_SIZE))
         {
             // Jackpot
             memcpy(out, location->data + i, findKey->size);
@@ -299,11 +290,7 @@ bool findKeyInProcessMemory(const keyLocation *location, const keyInfo *findKey,
         }
     }
     
-    if (!found)
-    {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to locate key \"%s\" in process memory!", findKey->name);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-    }
+    if (!found) uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to locate key \"%s\" in process memory!", findKey->name);
     
     return found;
 }
@@ -312,7 +299,7 @@ bool findFSRodataKeys(keyLocation *location)
 {
     if (!location || location->titleID != FS_TID || location->mask != SEG_RODATA || !location->data || !location->dataSize)
     {
-        uiDrawString("Error: invalid parameters to locate keys in FS RODATA segment.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to locate keys in FS RODATA segment.");
         return false;
     }
     
@@ -352,15 +339,13 @@ bool loadMemoryKeys()
     // Derive NCA header key
     if (R_FAILED(result = splCryptoInitialize()))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to initialize the spl:crypto service! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the spl:crypto service! (0x%08X)", result);
         return false;
     }
     
     if (R_FAILED(result = splCryptoGenerateAesKek(nca_keyset.header_kek_source, 0, 0, nca_keyset.header_kek)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: splCryptoGenerateAesKek(header_kek_source) failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKek(header_kek_source) failed! (0x%08X)", result);
         splCryptoExit();
         return false;
     }
@@ -369,16 +354,14 @@ bool loadMemoryKeys()
     
     if (R_FAILED(result = splCryptoGenerateAesKey(nca_keyset.header_kek, nca_keyset.header_key_source + 0x00, nca_keyset.header_key + 0x00)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: splCryptoGenerateAesKey(header_key_source + 0x00) failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKey(header_key_source + 0x00) failed! (0x%08X)", result);
         splCryptoExit();
         return false;
     }
     
     if (R_FAILED(result = splCryptoGenerateAesKey(nca_keyset.header_kek, nca_keyset.header_key_source + 0x10, nca_keyset.header_key + 0x10)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: splCryptoGenerateAesKey(header_key_source + 0x10) failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKey(header_key_source + 0x10) failed! (0x%08X)", result);
         splCryptoExit();
         return false;
     }
@@ -396,7 +379,7 @@ bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out)
 {
     if (!dec_nca_header || dec_nca_header->kaek_ind > 2 || !out)
     {
-        uiDrawString("Error: invalid parameters to decrypt NCA key area.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to decrypt NCA key area.");
         return false;
     }
     
@@ -408,7 +391,7 @@ bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out)
     u8 crypto_type = (dec_nca_header->crypto_type2 > dec_nca_header->crypto_type ? dec_nca_header->crypto_type2 : dec_nca_header->crypto_type);
     if (crypto_type > 0x20)
     {
-        uiDrawString("Error: invalid NCA keyblob index.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NCA keyblob index.");
         return false;
     }
     
@@ -416,15 +399,13 @@ bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out)
     
     if (R_FAILED(result = splCryptoInitialize()))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to initialize the spl:crypto service! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the spl:crypto service! (0x%08X)", result);
         return false;
     }
     
     if (R_FAILED(result = splCryptoGenerateAesKek(kek_source, crypto_type, 0, tmp_kek)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: splCryptoGenerateAesKek(kek_source) failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKek(kek_source) failed! (0x%08X)", result);
         splCryptoExit();
         return false;
     }
@@ -436,8 +417,7 @@ bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out)
     {
         if (R_FAILED(result = splCryptoGenerateAesKey(tmp_kek, dec_nca_header->nca_keys[i], decrypted_nca_keys[i])))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: splCryptoGenerateAesKey(nca_kaek_%02u) failed! (0x%08X)", i, result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKey(nca_kaek_%02u) failed! (0x%08X)", i, result);
             success = false;
             break;
         }
@@ -602,8 +582,7 @@ int parse_hex_key(unsigned char *key, const char *hex, unsigned int len)
 {
     if (strlen(hex) != (2 * len))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: key (%s) must be %u hex digits!", hex, 2 * len);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: key (%s) must be %u hex digits!", hex, 2 * len);
         return 0;
     }
     
@@ -612,8 +591,7 @@ int parse_hex_key(unsigned char *key, const char *hex, unsigned int len)
     {
         if (!ishex(hex[i]))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: key (%s) must be %u hex digits!", hex, 2 * len);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: key (%s) must be %u hex digits!", hex, 2 * len);
             return 0;
         }
     }
@@ -704,8 +682,7 @@ bool loadExternalKeys()
     FILE *keysFile = fopen(keysFilePath, "rb");
     if (!keysFile)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to open \"%s\" to retrieve \"eticket_rsa_kek\", titlekeks and KAEKs!", keysFilePath);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to open \"%s\" to retrieve \"eticket_rsa_kek\", titlekeks and KAEKs!", keysFilePath);
         return false;
     }
     
@@ -715,12 +692,7 @@ bool loadExternalKeys()
     
     if (ret < 1)
     {
-        if (ret == -1)
-        {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to parse necessary keys from \"%s\"! (keys file empty?)", keysFilePath);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-        }
-        
+        if (ret == -1) uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to parse necessary keys from \"%s\"! (keys file empty?)", keysFilePath);
         return false;
     }
     
@@ -731,7 +703,7 @@ bool testKeyPair(const void *E, const void *D, const void *N)
 {
     if (!E || !D || !N)
     {
-        uiDrawString("Error: invalid parameters to test RSA key pair.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to test RSA key pair.");
         return false;
     }
     
@@ -747,15 +719,13 @@ bool testKeyPair(const void *E, const void *D, const void *N)
     
     if (R_FAILED(result = splUserExpMod(X, N, D, 0x100, Y)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: splUserExpMod failed! (testKeyPair #1) (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splUserExpMod failed! (testKeyPair #1) (0x%08X)", result);
         return false;
     }
     
     if (R_FAILED(result = splUserExpMod(Y, N, E, 4, Z)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: splUserExpMod failed! (testKeyPair #2) (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splUserExpMod failed! (testKeyPair #2) (0x%08X)", result);
         return false;
     }
     
@@ -763,7 +733,7 @@ bool testKeyPair(const void *E, const void *D, const void *N)
     {
         if (X[i] != Z[i])
         {
-            uiDrawString("Error: invalid RSA key pair!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid RSA key pair!");
             return false;
         }
     }
@@ -804,7 +774,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
 {
     if (!dec_nca_header || dec_nca_header->kaek_ind > 2 || (!out_tik && !out_dec_key && !out_enc_key))
     {
-        uiDrawString("Error: invalid parameters to retrieve NCA ticket and/or titlekey.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve NCA ticket and/or titlekey.");
         return false;
     }
     
@@ -822,7 +792,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (!has_rights_id)
     {
-        uiDrawString("Error: NCA doesn't use titlekey crypto.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: NCA doesn't use titlekey crypto.");
         return false;
     }
     
@@ -831,7 +801,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (crypto_type >= 0x20)
     {
-        uiDrawString("Error: invalid NCA keyblob index.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NCA keyblob index.");
         return false;
     }
     
@@ -864,30 +834,27 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (R_FAILED(result = esInitialize()))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to initialize the ES service! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the ES service! (0x%08X)", result);
         return false;
     }
     
     if (R_FAILED(result = esCountCommonTicket(&common_count)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: esCountCommonTicket failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: esCountCommonTicket failed! (0x%08X)", result);
         esExit();
         return false;
     }
     
     if (R_FAILED(result = esCountPersonalizedTicket(&personalized_count)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: esCountPersonalizedTicket failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: esCountPersonalizedTicket failed! (0x%08X)", result);
         esExit();
         return false;
     }
     
     if (!common_count && !personalized_count)
     {
-        uiDrawString("Error: no tickets available!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: no tickets available!");
         esExit();
         return false;
     }
@@ -897,15 +864,14 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
         common_rights_ids = calloc(common_count, sizeof(FsRightsId));
         if (!common_rights_ids)
         {
-            uiDrawString("Error: failed to allocate memory for common tickets' rights IDs!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to allocate memory for common tickets' rights IDs!");
             esExit();
             return false;
         }
         
         if (R_FAILED(result = esListCommonTicket(&ids_written, common_rights_ids, common_count * sizeof(FsRightsId))))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: esListCommonTicket failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: esListCommonTicket failed! (0x%08X)", result);
             free(common_rights_ids);
             esExit();
             return false;
@@ -929,15 +895,14 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
         personalized_rights_ids = calloc(personalized_count, sizeof(FsRightsId));
         if (!personalized_rights_ids)
         {
-            uiDrawString("Error: failed to allocate memory for personalized tickets' rights IDs!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to allocate memory for personalized tickets' rights IDs!");
             esExit();
             return false;
         }
         
         if (R_FAILED(result = esListPersonalizedTicket(&ids_written, personalized_rights_ids, personalized_count * sizeof(FsRightsId))))
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: esListPersonalizedTicket failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: esListPersonalizedTicket failed! (0x%08X)", result);
             free(personalized_rights_ids);
             esExit();
             return false;
@@ -960,15 +925,14 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (!foundRightsId || (rightsIdType != 1 && rightsIdType != 2))
     {
-        uiDrawString("Error: NCA rights ID unavailable in this console!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: NCA rights ID unavailable in this console!");
         return false;
     }
     
     // Get extended eTicket RSA key from PRODINFO
     if (R_FAILED(result = setcalInitialize()))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to initialize the set:cal service! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the set:cal service! (0x%08X)", result);
         return false;
     }
     
@@ -978,8 +942,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (R_FAILED(result))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: setcalGetEticketDeviceKey failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: setcalGetEticketDeviceKey failed! (0x%08X)", result);
         return false;
     }
     
@@ -995,7 +958,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     // The value is stored use big endian byte order
     if (bswap_32(*((u32*)(&(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x200])))) != SIGTYPE_RSA2048_SHA1)
     {
-        uiDrawString("Error: invalid public RSA exponent for eTicket data! Wrong keys?", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid public RSA exponent for eTicket data! Wrong keys?");
         return false;
     }
     
@@ -1007,8 +970,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (R_FAILED(result = fsOpenBisStorage(&fatFsStorage, FsBisStorageId_System)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to open BIS System partition! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to open BIS System partition! (0x%08X)", result);
         return false;
     }
     
@@ -1016,8 +978,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     fr = f_mount(&fs, "sys", 1);
     if (fr != FR_OK)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to mount BIS System partition! (%u)", fr);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to mount BIS System partition! (%u)", fr);
         fsStorageClose(&fatFsStorage);
         return false;
     }
@@ -1025,8 +986,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     fr = f_chdir("/save");
     if (fr != FR_OK)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to change BIS System partition directory! (%u)", fr);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to change BIS System partition directory! (%u)", fr);
         f_unmount("sys");
         fsStorageClose(&fatFsStorage);
         return false;
@@ -1035,8 +995,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     fr = f_open(&eTicketSave, (rightsIdType == 1 ? COMMON_ETICKET_FILENAME : PERSONALIZED_ETICKET_FILENAME), FA_READ | FA_OPEN_EXISTING);
     if (fr != FR_OK)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to open ES %s eTicket save! (%u)", (rightsIdType == 1 ? "common" : "personalized"), fr);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to open ES %s eTicket save! (%u)", (rightsIdType == 1 ? "common" : "personalized"), fr);
         f_unmount("sys");
         fsStorageClose(&fatFsStorage);
         return false;
@@ -1067,8 +1026,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
                     
                     if (R_FAILED(result = splUserExpMod(titleKeyBlock, N, D, 0x100, M)))
                     {
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: splUserExpMod failed! (titleKeyBlock) (0x%08X)", result);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splUserExpMod failed! (titleKeyBlock) (0x%08X)", result);
                         proceed = false;
                         break;
                     }
@@ -1083,7 +1041,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
                     // Verify if it starts with a null string hash
                     if (memcmp(db, null_hash, 0x20) != 0)
                     {
-                        uiDrawString("Error: titlekey decryption failed! Wrong keys?", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: titlekey decryption failed! Wrong keys?");
                         proceed = false;
                         break;
                     }
@@ -1106,7 +1064,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     
     if (!foundEticket)
     {
-        uiDrawString("Error: unable to find a matching eTicket entry for NCA rights ID!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to find a matching eTicket entry for NCA rights ID!");
         return false;
     }
     
@@ -1132,7 +1090,7 @@ bool generateEncryptedNcaKeyAreaWithTitlekey(nca_header_t *dec_nca_header, u8 *d
 {
     if (!dec_nca_header || dec_nca_header->kaek_ind > 2 || !decrypted_nca_keys || !nca_keyset.ext_key_cnt)
     {
-        uiDrawString("Error: invalid parameters to generate encrypted NCA key area using titlekey!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to generate encrypted NCA key area using titlekey!");
         return false;
     }
     
@@ -1144,7 +1102,7 @@ bool generateEncryptedNcaKeyAreaWithTitlekey(nca_header_t *dec_nca_header, u8 *d
     
     if (crypto_type >= 0x20)
     {
-        uiDrawString("Error: invalid NCA keyblob index.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NCA keyblob index.");
         return false;
     }
     
@@ -1177,7 +1135,7 @@ bool readCertsFromApplicationRomFs()
         certFile = fopen(path, "rb");
         if (!certFile)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "readCertsFromApplicationRomFs: failed to open file \"%s\".\n", path);
+            snprintf(strbuf, MAX_ELEMENTS(strbuf), "readCertsFromApplicationRomFs: failed to open file \"%s\".\n", path);
             return false;
         }
         
@@ -1187,7 +1145,7 @@ bool readCertsFromApplicationRomFs()
         
         if (certSize != expected_size)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "readCertsFromApplicationRomFs: invalid file size for \"%s\".\n", path);
+            snprintf(strbuf, MAX_ELEMENTS(strbuf), "readCertsFromApplicationRomFs: invalid file size for \"%s\".\n", path);
             return false;
         }
         
@@ -1197,7 +1155,7 @@ bool readCertsFromApplicationRomFs()
         
         if (read_bytes != expected_size)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "readCertsFromApplicationRomFs: error reading file \"%s\".\n", path);
+            snprintf(strbuf, MAX_ELEMENTS(strbuf), "readCertsFromApplicationRomFs: error reading file \"%s\".\n", path);
             return false;
         }
         
@@ -1205,7 +1163,7 @@ bool readCertsFromApplicationRomFs()
         
         if (memcmp(tmp_hash, hash_ptr, 0x20) != 0)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "readCertsFromApplicationRomFs: invalid hash for file \"%s\".\n", path);
+            snprintf(strbuf, MAX_ELEMENTS(strbuf), "readCertsFromApplicationRomFs: invalid hash for file \"%s\".\n", path);
             return false;
         }
     }
@@ -1217,8 +1175,7 @@ bool retrieveCertData(u8 *out_cert, bool personalized)
 {
     if (!out_cert)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid parameters to retrieve %s ticket certificate chain.", (!personalized ? "common" : "personalized"));
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve %s ticket certificate chain.", (!personalized ? "common" : "personalized"));
         return false;
     }
     

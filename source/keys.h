@@ -12,8 +12,6 @@
 #define SEG_RODATA                      BIT(1)
 #define SEG_DATA                        BIT(2)
 
-#define SHA256_HASH_LENGTH              0x20
-
 #define ETICKET_DEVKEY_DATA_SIZE        0x244
 #define ETICKET_DEVKEY_CTR_OFFSET       0x4
 #define ETICKET_DEVKEY_RSA_OFFSET       0x14
@@ -34,7 +32,7 @@ typedef struct {
 
 typedef struct {
     char name[128];
-    u8 hash[SHA256_HASH_LENGTH];
+    u8 hash[SHA256_HASH_SIZE];
     u64 size;
 } PACKED keyInfo;
 

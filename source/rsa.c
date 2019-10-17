@@ -16,8 +16,6 @@
 extern int breaks;
 extern int font_height;
 
-extern char strbuf[NAME_BUF_LEN * 4];
-
 bool rsa_sign(void* input, size_t input_size, unsigned char* output, size_t output_size)
 {
     unsigned char hash[32];
@@ -58,16 +56,13 @@ bool rsa_sign(void* input, size_t input_size, unsigned char* output, size_t outp
                 memcpy(output, buf, output_size);
                 success = true;
             } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "rsa_sign: mbedtls_pk_sign failed! (%d)", ret);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "rsa_sign: mbedtls_pk_sign failed! (%d)", ret);
             }
         } else {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "rsa_sign: mbedtls_pk_parse_key failed! (%d)", ret);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "rsa_sign: mbedtls_pk_parse_key failed! (%d)", ret);
         }
     } else {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "rsa_sign: mbedtls_ctr_drbg_seed failed! (%d)", ret);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "rsa_sign: mbedtls_ctr_drbg_seed failed! (%d)", ret);
     }
     
     mbedtls_ctr_drbg_free(&ctr_drbg);

@@ -280,7 +280,6 @@ typedef struct {
     u8 *block_data[2];
     u64 block_offset[2]; // Relative to NCA start
     u64 block_size[2];
-    u64 acid_pubkey_offset; // Relative to block_data[0] start
 } PACKED nca_program_mod_data;
 
 typedef struct {

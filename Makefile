@@ -33,7 +33,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 VERSION_MAJOR := 1
 VERSION_MINOR := 1
-VERSION_MICRO := 5
+VERSION_MICRO := 6
 
 APP_TITLE	:=	nxdumptool
 APP_AUTHOR	:=	MCMrARM, DarkMatterCore

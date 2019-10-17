@@ -60,6 +60,40 @@ If you like my work and you'd like to support me in any way, it's not necessary,
 Changelog
 --------------
 
+**v1.1.6:**
+* Added sequential dump support: it is now possible to start a XCI/NSP dump procedure even if there's not enough space available in the SD card!
+    * No setting has to be modified in order to enable this feature - the application will automatically ask the user if they want to use this mode if there's not enough space for the full dump.
+    * At least 1 GiB (2^30 bytes) of free space must be available in order to trigger this feature.
+    * A file-based checkpoint system is used to keep track of the already dumped parts (à la Hekate).
+    * The part(s) generated in each run must be transferred to a PC before continuing the process - except for the `.xci.seq`/`.nsp.seq` files used to keep track of the current dump status.
+    * NSPs generated using this method will also include a `.nsp.hdr` file, which holds the PFS0 header data. The information from this header is filled after writing all the NCAs, thus it is saved as an additional file. This *must* be used as the first file (placed before `.nsp.00`) when merging all the parts into a full NSP.
+    * The following options are ignored when this feature is triggered:
+        * `Split output dump (FAT32 support)` (XCI/NSP). File splitting *will* take place, regardless of the filesystem used by the SD card. Additionally, the creation of a directory with the archive bit set isn't performed with NSP dumps.
+        * `Create directory with archive bit set` (XCI only).
+        * `CRC32 checksum calculation` (NSP only). CRC32 checksum calculation is still available for XCI dumps.
+    * This feature is *not* compatible with batch dump operations.
+* General changes to batch dump operations:
+    * Entries from the summary list displayed in the batch dump menu can now be manually excluded from the dump operation before starting it.
+        * It is possible to disable all entries, enable all entries and/or handpick specific titles from the summary list, thus letting the user further customize the batch dump process.
+    * A new option has been added to keep track of previous successful dumps created using batch mode: "Remember dumped titles".
+        * If enabled, a 0-byte file will be created for each successful dump in a separate subdirectory.
+        * These files act as an override: they will make the application skip the titles they represent in later batch mode operations even if the "Skip already dumped titles" option is disabled.
+        * This is specially useful if someone wants to skip titles that have already been successfully dumped using batch mode - even more so if their NSPs have already been moved or deleted from the SD card.
+        * To restore the original behaviour, simply delete the contents from the "BatchOverrides" subdirectory inside "NSP".
+    * Free storage space is now properly recalculated after each successful dump during a batch mode operation.
+* UI code cleanup:
+    * `uiDrawString()`, `uiGetStrWidth()` and `uiPrintOption()` are now compatible with variable argument lists, removing the need to format a string beforehand and pass its variable to any of those functions.
+    * Preprocessor definitions are now used to specify RGB colors and for calculating vertical line coordinates, greatly simplifying calls to UI functions.
+    * Menu code now properly waits for any user input before drawing changes to the screen.
+    * Other minor coordinate fixes.
+* The application is now capable of automatically reading/saving dump settings from/to a configuration file.
+* The "Split output dump" option is, once again, enabled by default. FAT32 is the recommended filesystem for Switch SD cards if someone wants to use homebrew applications, so it's only logical to do this.
+* Filenames for NACP icons in NSPs now properly reflect the NCA ID from its respective content file if it was modified.
+* Fixed a bug that prevented to dump a specific file in the RomFS section from any update.
+* Fixed a bug in the RomFS block collision check code that prevented to generate NSP dumps from certain titles with a RomFS section in Control/Manual NCAs that falls under an edge case that wasn't being handled properly. Thanks to [Zet-sensei](https://github.com/Zet-sensei) for reporting this problem!
+
+Thanks to [FennecTECH](https://github.com/fennectech) for providing with testing!
+
 **v1.1.5:**
 * Built with latest libnx release, in order to fix HID problems under HOS 9.0.0+.
 * Added support for Korean and Chinese character sets.

@@ -33,6 +33,8 @@ extern curMenuType menuType;
 
 /* Constants */
 
+const char *configPath = NXDUMPTOOL_BASE_PATH "config.bin";
+
 const char *nswReleasesXmlUrl = "http://nswdb.com/xml.php";
 const char *nswReleasesXmlTmpPath = NXDUMPTOOL_BASE_PATH "NSWreleases.xml.tmp";
 const char *nswReleasesXmlPath = NXDUMPTOOL_BASE_PATH "NSWreleases.xml";
@@ -44,10 +46,12 @@ const char *nswReleasesChildrenImgCrc = "imgcrc";
 const char *nswReleasesChildrenReleaseName = "releasename";
 
 const char *githubReleasesApiUrl = "https://api.github.com/repos/DarkMatterCore/nxdumptool/releases/latest";
-const char *nxDumpToolPath = "sdmc:/switch/nxdumptool/nxdumptool.nro";
+const char *nxDumpToolPath = NXDUMPTOOL_BASE_PATH "nxdumptool.nro";
 const char *userAgent = "nxdumptool/" APP_VERSION " (Nintendo Switch)";
 
 /* Statically allocated variables */
+
+dumpOptions dumpCfg;
 
 static char *result_buf = NULL;
 static size_t result_sz = 0;
@@ -130,9 +134,70 @@ u8 *ncaCtrBuf = NULL;
 
 orphan_patch_addon_entry *orphanEntries = NULL;
 
-char strbuf[NAME_BUF_LEN * 4] = {'\0'};
+char strbuf[NAME_BUF_LEN] = {'\0'};
 
 char appLaunchPath[NAME_BUF_LEN] = {'\0'};
+
+void loadConfig()
+{
+    // Set default configuration values
+    memset(&dumpCfg, 0x00, sizeof(dumpOptions));
+    
+    dumpCfg.xciDumpCfg.isFat32 = true;
+    dumpCfg.xciDumpCfg.calcCrc = true;
+    
+    dumpCfg.nspDumpCfg.isFat32 = true;
+    
+    dumpCfg.batchDumpCfg.isFat32 = true;
+    dumpCfg.batchDumpCfg.skipDumpedTitles = true;
+    dumpCfg.batchDumpCfg.batchModeSrc = BATCH_SOURCE_ALL;
+    
+    FILE *configFile = fopen(configPath, "rb");
+    if (!configFile) return;
+    
+    fseek(configFile, 0, SEEK_END);
+    size_t configFileSize = ftell(configFile);
+    rewind(configFile);
+    
+    if (configFileSize != sizeof(dumpOptions))
+    {
+        fclose(configFile);
+        unlink(configPath);
+        return;
+    }
+    
+    dumpOptions tmpCfg;
+    size_t read_res = fread(&tmpCfg, 1, sizeof(dumpOptions), configFile);
+    fclose(configFile);
+    
+    if (read_res != sizeof(dumpOptions))
+    {
+        unlink(configPath);
+        return;
+    }
+    
+    memcpy(&dumpCfg, &tmpCfg, sizeof(dumpOptions));
+    
+    // Check if the configuration is correct
+    if (dumpCfg.xciDumpCfg.setXciArchiveBit && !dumpCfg.xciDumpCfg.isFat32) dumpCfg.xciDumpCfg.setXciArchiveBit = false;
+    
+    if (dumpCfg.nspDumpCfg.tiklessDump && !dumpCfg.nspDumpCfg.removeConsoleData) dumpCfg.nspDumpCfg.tiklessDump = false;
+    
+    if (dumpCfg.batchDumpCfg.tiklessDump && !dumpCfg.batchDumpCfg.removeConsoleData) dumpCfg.batchDumpCfg.tiklessDump = false;
+    
+    if (dumpCfg.batchDumpCfg.batchModeSrc >= BATCH_SOURCE_CNT) dumpCfg.batchDumpCfg.batchModeSrc = BATCH_SOURCE_ALL;
+}
+
+void saveConfig()
+{
+    FILE *configFile = fopen(configPath, "wb");
+    if (!configFile) return;
+    
+    size_t write_res = fwrite(&dumpCfg, 1, sizeof(dumpOptions), configFile);
+    fclose(configFile);
+    
+    if (write_res != sizeof(dumpOptions)) unlink(configPath);
+}
 
 bool isGameCardInserted()
 {
@@ -1113,6 +1178,7 @@ void createOutputDirectories()
     mkdir(EXEFS_DUMP_PATH, 0744);
     mkdir(ROMFS_DUMP_PATH, 0744);
     mkdir(CERT_DUMP_PATH, 0744);
+    mkdir(BATCH_OVERRIDES_PATH, 0744);
 }
 
 void strtrim(char *str)
@@ -1193,11 +1259,11 @@ bool getRootHfs0Header()
             return false;
     }
     
-    convertSize(gameCardSize, gameCardSizeStr, sizeof(gameCardSizeStr) / sizeof(gameCardSizeStr[0]));
+    convertSize(gameCardSize, gameCardSizeStr, MAX_ELEMENTS(gameCardSizeStr));
     
     memcpy(&trimmedCardSize, gamecard_header + GAMECARD_DATAEND_ADDR, sizeof(u64));
     trimmedCardSize = (GAMECARD_HEADER_SIZE + (trimmedCardSize * MEDIA_UNIT_SIZE));
-    convertSize(trimmedCardSize, trimmedCardSizeStr, sizeof(trimmedCardSizeStr) / sizeof(trimmedCardSizeStr[0]));
+    convertSize(trimmedCardSize, trimmedCardSizeStr, MAX_ELEMENTS(trimmedCardSizeStr));
     
     memcpy(&hfs0_offset, gamecard_header + HFS0_OFFSET_ADDR, sizeof(u64));
     memcpy(&hfs0_size, gamecard_header + HFS0_SIZE_ADDR, sizeof(u64));
@@ -1294,7 +1360,7 @@ void getGameCardUpdateInfo()
             u8 micro = (u8)((gameCardUpdateVersion >> 16) & 0xF);
             u16 bugfix = (u16)gameCardUpdateVersion;
             
-            snprintf(gameCardUpdateVersionStr, sizeof(gameCardUpdateVersionStr) / sizeof(gameCardUpdateVersionStr[0]), "%u.%u.%u (bugfix %u) - v%u", major, minor, micro, bugfix, gameCardUpdateVersion);
+            snprintf(gameCardUpdateVersionStr, MAX_ELEMENTS(gameCardUpdateVersionStr), "%u.%u.%u (bugfix %u) - v%u", major, minor, micro, bugfix, gameCardUpdateVersion);
         } else {
             uiStatusMsg("getGameCardUpdateInfo: update Title ID mismatch! %016lX != %016lX", gameCardUpdateTitleID, GAMECARD_UPDATE_TITLEID);
         }
@@ -1503,15 +1569,13 @@ bool getPartitionHfs0Header(u32 partition)
         
         if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
         {
-            /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle succeeded: 0x%08X", handle.value);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "GetGameCardHandle succeeded: 0x%08X", handle.value);
             breaks++;*/
             
             // Same ugly hack from dumpRawHfs0Partition()
             if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, HFS0_TO_ISTORAGE_IDX(hfs0_partition_cnt, partition))))
             {
-                /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage succeeded: 0x%08X", handle);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "OpenGameCardStorage succeeded: 0x%08X", handle);
                 breaks++;*/
                 
                 // First read MEDIA_UNIT_SIZE bytes
@@ -1527,20 +1591,16 @@ bool getPartitionHfs0Header(u32 partition)
                         memcpy(&partitionHfs0StrTableSize, buf + HFS0_STR_TABLE_SIZE_ADDR, sizeof(u32));
                         partitionHfs0HeaderSize = (HFS0_ENTRY_TABLE_ADDR + (sizeof(hfs0_entry_table) * partitionHfs0FileCount) + partitionHfs0StrTableSize);
                         
-                        /*snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u HFS0 header offset (relative to IStorage instance): 0x%016lX", partition, partitionHfs0HeaderOffset);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Partition #%u HFS0 header offset (relative to IStorage instance): 0x%016lX", partition, partitionHfs0HeaderOffset);
                         breaks++;
                         
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u HFS0 header size: %lu bytes", partition, partitionHfs0HeaderSize);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Partition #%u HFS0 header size: %lu bytes", partition, partitionHfs0HeaderSize);
                         breaks++;
                         
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u file count: %u", partition, partitionHfs0FileCount);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Partition #%u file count: %u", partition, partitionHfs0FileCount);
                         breaks++;
                         
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u string table size: %u bytes", partition, partitionHfs0StrTableSize);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Partition #%u string table size: %u bytes", partition, partitionHfs0StrTableSize);
                         breaks++;
                         
                         uiRefreshDisplay();*/
@@ -1570,45 +1630,35 @@ bool getPartitionHfs0Header(u32 partition)
                                     partitionHfs0FileCount = 0;
                                     partitionHfs0StrTableSize = 0;
                                     
-                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionHfs0HeaderOffset);
-                                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionHfs0HeaderOffset);
                                 }
                             }
                             
-                            /*if (success)
-                            {
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Partition #%u HFS0 header successfully retrieved!", partition);
-                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-                            }*/
+                            //if (success) uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Partition #%u HFS0 header successfully retrieved!", partition);
                         } else {
                             partitionHfs0HeaderOffset = 0;
                             partitionHfs0HeaderSize = 0;
                             partitionHfs0FileCount = 0;
                             partitionHfs0StrTableSize = 0;
                             
-                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to allocate memory for the HFS0 header from partition #%u!", partition);
-                            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to allocate memory for the HFS0 header from partition #%u!", partition);
                         }
                     } else {
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Magic word mismatch! 0x%08X != 0x%08X", magic, HFS0_MAGIC);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Magic word mismatch! 0x%08X != 0x%08X", magic, HFS0_MAGIC);
                     }
                 } else {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionHfs0HeaderOffset);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionHfs0HeaderOffset);
                 }
                 
                 fsStorageClose(&gameCardStorage);
             } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "OpenGameCardStorage failed! (0x%08X)", result);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "OpenGameCardStorage failed! (0x%08X)", result);
             }
         } else {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "GetGameCardHandle failed! (0x%08X)", result);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "GetGameCardHandle failed! (0x%08X)", result);
         }
     } else {
-        uiDrawString("Error: unable to get partition details from the root HFS0 header!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to get partition details from the root HFS0 header!");
     }
     
     return success;
@@ -1624,22 +1674,21 @@ bool getHfs0FileList(u32 partition)
     
     if (!partitionHfs0Header)
     {
-        uiDrawString("HFS0 partition header information unavailable!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "HFS0 partition header information unavailable!");
         breaks += 2;
         return false;
     }
     
     if (!partitionHfs0FileCount)
     {
-        uiDrawString("The selected partition is empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "The selected partition is empty!");
         breaks += 2;
         return false;
     }
     
     if (partitionHfs0FileCount > FILENAME_MAX_CNT)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "HFS0 partition contains more than %u files! (%u entries)", FILENAME_MAX_CNT, partitionHfs0FileCount);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "HFS0 partition contains more than %u files! (%u entries)", FILENAME_MAX_CNT, partitionHfs0FileCount);
         breaks += 2;
         return false;
     }
@@ -1647,7 +1696,7 @@ bool getHfs0FileList(u32 partition)
     hfs0_entry_table *entryTable = calloc(partitionHfs0FileCount, sizeof(hfs0_entry_table));
     if (!entryTable)
     {
-        uiDrawString("Unable to allocate memory for the HFS0 file entries!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Unable to allocate memory for the HFS0 file entries!");
         breaks += 2;
         return false;
     }
@@ -1680,7 +1729,7 @@ bool getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename
 {
     if (!partitionHfs0Header || !partitionHfs0FileCount || !partitionHfs0HeaderSize || !gameCardStorage || !filename || !outBuf || !outBufSize)
     {
-        uiDrawString("Error: invalid parameters to retrieve file from HFS0 partition!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve file from HFS0 partition!");
         return NULL;
     }
     
@@ -1700,16 +1749,14 @@ bool getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename
             
             if (outBufSize > tmp_hfs0_entry.file_size)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: file \"%s\" is smaller than expected! (0x%016lX < 0x%016lX)", filename, tmp_hfs0_entry.file_size, outBufSize);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: file \"%s\" is smaller than expected! (0x%016lX < 0x%016lX)", filename, tmp_hfs0_entry.file_size, outBufSize);
                 proceed = false;
                 break;
             }
             
             if (R_FAILED(result = fsStorageRead(gameCardStorage, partitionHfs0HeaderSize + tmp_hfs0_entry.file_offset, outBuf, outBufSize)))
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to read file \"%s\" from the HFS0 partition!", filename);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to read file \"%s\" from the HFS0 partition!", filename);
                 proceed = false;
                 break;
             }
@@ -1720,11 +1767,7 @@ bool getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename
         }
     }
     
-    if (proceed && !found)
-    {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to find file \"%s\" in the HFS0 partition!", filename);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
-    }
+    if (proceed && !found) uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to find file \"%s\" in the HFS0 partition!", filename);
     
     return success;
 }
@@ -1733,7 +1776,7 @@ bool calculateExeFsExtractedDataSize(u64 *out)
 {
     if (!exeFsContext.exefs_header.file_cnt || !exeFsContext.exefs_entries || !out)
     {
-        uiDrawString("Error: invalid parameters to calculate extracted data size for the ExeFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to calculate extracted data size for the ExeFS section!");
         return false;
     }
     
@@ -1751,7 +1794,7 @@ bool calculateRomFsFullExtractedSize(bool usePatch, u64 *out)
 {
     if ((!usePatch && (!romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries)) || (usePatch && (!bktrContext.romfs_filetable_size || !bktrContext.romfs_file_entries)) || !out)
     {
-        uiDrawString("Error: invalid parameters to calculate extracted data size for the RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to calculate extracted data size for the RomFS section!");
         return false;
     }
     
@@ -1779,7 +1822,7 @@ bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out)
 {
     if ((!usePatch && (!romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries || dir_offset > romFsContext.romfs_dirtable_size)) || (usePatch && (!bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries || !bktrContext.romfs_filetable_size || !bktrContext.romfs_file_entries || dir_offset > bktrContext.romfs_dirtable_size)) || !out)
     {
-        uiDrawString("Error: invalid parameters to calculate extracted size for the current RomFS directory!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to calculate extracted size for the current RomFS directory!");
         return false;
     }
     
@@ -1791,7 +1834,7 @@ bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out)
     // Check if we're dealing with a nameless directory that's not the root directory
     if (!dirEntry->nameLen && dir_offset > 0)
     {
-        uiDrawString("Error: directory entry without name in RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: directory entry without name in RomFS section!");
         return false;
     }
     
@@ -1871,7 +1914,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     
     if ((!usePatch && !titleAppStorageId) || (usePatch && !titlePatchStorageId))
     {
-        uiDrawString("Error: title storage ID unavailable!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: title storage ID unavailable!");
         breaks += 2;
         return false;
     }
@@ -1880,7 +1923,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     
     if (curStorageId != FsStorageId_GameCard && curStorageId != FsStorageId_SdCard && curStorageId != FsStorageId_NandUser)
     {
-        uiDrawString("Error: invalid title storage ID!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title storage ID!");
         breaks += 2;
         return false;
     }
@@ -1921,14 +1964,14 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     
     if (!titleCount)
     {
-        uiDrawString("Error: invalid title type count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title type count!");
         breaks += 2;
         return false;
     }
     
     if (ncmTitleIndex > (titleCount - 1))
     {
-        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title index!");
         breaks += 2;
         return false;
     }
@@ -1950,27 +1993,25 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         
         if (!partitionHfs0FileCount)
         {
-            uiDrawString("The Secure HFS0 partition is empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "The Secure HFS0 partition is empty!");
             goto out;
         }
     }
     
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Looking for the Program NCA (%s)...", (!usePatch ? "base application" : "update"));
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Looking for the Program NCA (%s)...", (!usePatch ? "base application" : "update"));
     uiRefreshDisplay();
     breaks++;
     
     titleList = calloc(1, titleListSize);
     if (!titleList)
     {
-        uiDrawString("Error: unable to allocate memory for the ApplicationContentMetaKey struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ApplicationContentMetaKey struct!");
         goto out;
     }
     
     if (R_FAILED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
         goto out;
     }
     
@@ -1978,28 +2019,25 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     
     if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, filter, titleList, titleListSize, &written, &total)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         goto out;
     }
     
     if (!written || !total)
     {
-        uiDrawString("Error: ncmContentMetaDatabaseListApplication wrote no entries to output buffer!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication wrote no entries to output buffer!");
         goto out;
     }
     
     if (written != total)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, total);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, total);
         goto out;
     }
     
     if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
         goto out;
     }
     
@@ -2008,21 +2046,19 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     titleContentRecords = calloc(titleNcaCount, sizeof(NcmContentRecord));
     if (!titleContentRecords)
     {
-        uiDrawString("Error: unable to allocate memory for the ContentRecord struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ContentRecord struct!");
         goto out;
     }
     
     if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         goto out;
     }
     
     if (R_FAILED(result = ncmOpenContentStorage(curStorageId, &ncmStorage)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmOpenContentStorage failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentStorage failed! (0x%08X)", result);
         goto out;
     }
     
@@ -2031,7 +2067,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         if (titleContentRecords[i].type == NcmContentType_Program)
         {
             memcpy(&ncaId, &(titleContentRecords[i].ncaId), sizeof(NcmNcaId));
-            convertDataToHexString(titleContentRecords[i].ncaId.c, 16, ncaIdStr, 33);
+            convertDataToHexString(titleContentRecords[i].ncaId.c, SHA256_HASH_SIZE / 2, ncaIdStr, 33);
             foundProgram = true;
             break;
         }
@@ -2039,23 +2075,21 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     
     if (!foundProgram)
     {
-        uiDrawString("Error: unable to find Program NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to find Program NCA!");
         goto out;
     }
     
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found Program NCA: \"%s.nca\".", ncaIdStr);
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Found Program NCA: \"%s.nca\".", ncaIdStr);
     uiRefreshDisplay();
     breaks += 2;
     
-    /*uiDrawString("Retrieving ExeFS entries...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Retrieving ExeFS entries...");
     uiRefreshDisplay();
     breaks++;*/
     
     if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read header from Program NCA! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read header from Program NCA! (0x%08X)", result);
         goto out;
     }
     
@@ -2077,7 +2111,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         
         if (has_rights_id)
         {
-            uiDrawString("Error: Rights ID field in Program NCA header not empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: Rights ID field in Program NCA header not empty!");
             goto out;
         }
     }
@@ -2149,7 +2183,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     
     if ((curRomFsType == ROMFS_TYPE_APP && !titleAppStorageId) || (curRomFsType == ROMFS_TYPE_PATCH && !titlePatchStorageId) || (curRomFsType == ROMFS_TYPE_ADDON && !titlePatchStorageId))
     {
-        uiDrawString("Error: title storage ID unavailable!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: title storage ID unavailable!");
         breaks += 2;
         return false;
     }
@@ -2158,7 +2192,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     
     if (curStorageId != FsStorageId_GameCard && curStorageId != FsStorageId_SdCard && curStorageId != FsStorageId_NandUser)
     {
-        uiDrawString("Error: invalid title storage ID!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title storage ID!");
         breaks += 2;
         return false;
     }
@@ -2224,14 +2258,14 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     
     if (!titleCount)
     {
-        uiDrawString("Error: invalid title type count!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title type count!");
         breaks += 2;
         return false;
     }
     
     if (ncmTitleIndex > (titleCount - 1))
     {
-        uiDrawString("Error: invalid title index!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title index!");
         breaks += 2;
         return false;
     }
@@ -2253,27 +2287,25 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         
         if (!partitionHfs0FileCount)
         {
-            uiDrawString("The Secure HFS0 partition is empty!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "The Secure HFS0 partition is empty!");
             goto out;
         }
     }
     
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Looking for the %s NCA (%s)...", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), (curRomFsType == ROMFS_TYPE_APP ? "base application" : (curRomFsType == ROMFS_TYPE_PATCH ? "update" : "DLC")));
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Looking for the %s NCA (%s)...", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), (curRomFsType == ROMFS_TYPE_APP ? "base application" : (curRomFsType == ROMFS_TYPE_PATCH ? "update" : "DLC")));
     uiRefreshDisplay();
     breaks++;
     
     titleList = calloc(1, titleListSize);
     if (!titleList)
     {
-        uiDrawString("Error: unable to allocate memory for the ApplicationContentMetaKey struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ApplicationContentMetaKey struct!");
         goto out;
     }
     
     if (R_FAILED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
         goto out;
     }
     
@@ -2281,28 +2313,25 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     
     if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, filter, titleList, titleListSize, &written, &total)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         goto out;
     }
     
     if (!written || !total)
     {
-        uiDrawString("Error: ncmContentMetaDatabaseListApplication wrote no entries to output buffer!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication wrote no entries to output buffer!");
         goto out;
     }
     
     if (written != total)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, total);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, total);
         goto out;
     }
     
     if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
         goto out;
     }
     
@@ -2311,21 +2340,19 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     titleContentRecords = calloc(titleNcaCount, sizeof(NcmContentRecord));
     if (!titleContentRecords)
     {
-        uiDrawString("Error: unable to allocate memory for the ContentRecord struct!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ContentRecord struct!");
         goto out;
     }
     
     if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         goto out;
     }
     
     if (R_FAILED(result = ncmOpenContentStorage(curStorageId, &ncmStorage)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: ncmOpenContentStorage failed! (0x%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentStorage failed! (0x%08X)", result);
         goto out;
     }
     
@@ -2334,7 +2361,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         if (((curRomFsType == ROMFS_TYPE_APP || curRomFsType == ROMFS_TYPE_PATCH) && titleContentRecords[i].type == NcmContentType_Program) || (curRomFsType == ROMFS_TYPE_ADDON && titleContentRecords[i].type == NcmContentType_Data))
         {
             memcpy(&ncaId, &(titleContentRecords[i].ncaId), sizeof(NcmNcaId));
-            convertDataToHexString(titleContentRecords[i].ncaId.c, 16, ncaIdStr, 33);
+            convertDataToHexString(titleContentRecords[i].ncaId.c, SHA256_HASH_SIZE / 2, ncaIdStr, 33);
             foundNca = true;
             break;
         }
@@ -2342,24 +2369,21 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     
     if (!foundNca)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to find %s NCA!", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to find %s NCA!", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
         goto out;
     }
     
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found %s NCA: \"%s.nca\".", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), ncaIdStr);
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Found %s NCA: \"%s.nca\".", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), ncaIdStr);
     uiRefreshDisplay();
     breaks += 2;
     
-    /*uiDrawString("Retrieving RomFS entry tables...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Retrieving RomFS entry tables...");
     uiRefreshDisplay();
     breaks++;*/
     
     if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read header from %s NCA! (0x%08X)", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read header from %s NCA! (0x%08X)", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), result);
         goto out;
     }
     
@@ -2381,8 +2405,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         
         if (has_rights_id)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: Rights ID field in %s NCA header not empty!", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: Rights ID field in %s NCA header not empty!", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
             goto out;
         }
     }
@@ -2406,7 +2429,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         
         if (i == titleAppCount)
         {
-            uiDrawString("Error: unable to find base application title index for the selected update!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to find base application title index for the selected update!");
             goto out;
         }
         
@@ -2448,14 +2471,13 @@ bool getExeFsFileList()
 {
     if (!exeFsContext.exefs_header.file_cnt || !exeFsContext.exefs_entries || !exeFsContext.exefs_str_table)
     {
-        uiDrawString("Error: invalid parameters to retrieve ExeFS section filelist!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve ExeFS section filelist!");
         return false;
     }
     
     if (exeFsContext.exefs_header.file_cnt > FILENAME_MAX_CNT)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "ExeFS section contains more than %u entries! (%u entries)", FILENAME_MAX_CNT, exeFsContext.exefs_header.file_cnt);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "ExeFS section contains more than %u entries! (%u entries)", FILENAME_MAX_CNT, exeFsContext.exefs_header.file_cnt);
         return false;
     }
     
@@ -2479,7 +2501,7 @@ bool getRomFsParentDir(u32 dir_offset, bool usePatch, u32 *out)
 {
     if ((!usePatch && (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries)) || (usePatch && (!bktrContext.romfs_dirtable_size || dir_offset > bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries)))
     {
-        uiDrawString("Error: invalid parameters to retrieve parent RomFS section directory!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve parent RomFS section directory!");
         return false;
     }
     
@@ -2494,7 +2516,7 @@ bool generateCurrentRomFsPath(u32 dir_offset, bool usePatch)
 {
     if ((!usePatch && (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries)) || (usePatch && (!bktrContext.romfs_dirtable_size || dir_offset > bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries)))
     {
-        uiDrawString("Error: invalid parameters to generate current RomFS section path!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to generate current RomFS section path!");
         return false;
     }
     
@@ -2505,7 +2527,7 @@ bool generateCurrentRomFsPath(u32 dir_offset, bool usePatch)
         
         if (!entry->nameLen)
         {
-            uiDrawString("Error: directory entry without name in RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: directory entry without name in RomFS section!");
             return false;
         }
         
@@ -2547,7 +2569,7 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
     
     if ((!usePatch && (!romFsContext.romfs_dirtable_size || dir_offset > romFsContext.romfs_dirtable_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_filetable_size || !romFsContext.romfs_file_entries)) || (usePatch && (!bktrContext.romfs_dirtable_size || dir_offset > bktrContext.romfs_dirtable_size || !bktrContext.romfs_dir_entries || !bktrContext.romfs_filetable_size || !bktrContext.romfs_file_entries)))
     {
-        uiDrawString("Error: invalid parameters to retrieve RomFS section filelist!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve RomFS section filelist!");
         return false;
     }
     
@@ -2567,7 +2589,7 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
         
         if (!entry->nameLen)
         {
-            uiDrawString("Error: directory entry without name in RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: directory entry without name in RomFS section!");
             return false;
         }
         
@@ -2586,7 +2608,7 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
         
         if (!entry->nameLen)
         {
-            uiDrawString("Error: file entry without name in RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: file entry without name in RomFS section!");
             return false;
         }
         
@@ -2600,8 +2622,7 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
     
     if (totalEntryCnt > FILENAME_MAX_CNT)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Current RomFS dir contains more than %u entries! (%u entries)", FILENAME_MAX_CNT, totalEntryCnt);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Current RomFS dir contains more than %u entries! (%u entries)", FILENAME_MAX_CNT, totalEntryCnt);
         return false;
     }
     
@@ -2609,7 +2630,7 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
     romFsBrowserEntries = calloc(totalEntryCnt, sizeof(romfs_browser_entry));
     if (!romFsBrowserEntries)
     {
-        uiDrawString("Error: unable to allocate memory for file/dir attributes in RomFS section!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for file/dir attributes in RomFS section!");
         return false;
     }
     
@@ -2817,7 +2838,7 @@ char *generateFullDumpName()
             }
         }
         
-        snprintf(tmp, sizeof(tmp) / sizeof(tmp[0]), "%s v%u (%016lX)", fixedTitleName[i], highestVersion, titleAppTitleID[i]);
+        snprintf(tmp, MAX_ELEMENTS(tmp), "%s v%u (%016lX)", fixedTitleName[i], highestVersion, titleAppTitleID[i]);
         
         if ((strlen(fullname) + strlen(tmp) + 4) > strsize)
         {
@@ -2908,7 +2929,7 @@ void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, bo
     if (!outBuf || !outBufSize) return;
     
     char versionStr[128] = {'\0'};
-    convertTitleVersionToDecimal(version, versionStr, sizeof(versionStr));
+    convertTitleVersionToDecimal(version, versionStr, MAX_ELEMENTS(versionStr));
     
     if (!titleAppCount || !titleAppTitleID || !titleName || !*titleName || !addAppName)
     {
@@ -3020,8 +3041,8 @@ void generateOrphanPatchOrAddOnList()
             
             if (!foundMatch)
             {
-                convertTitleVersionToDecimal(titlePatchVersion[i], versionStr, sizeof(versionStr));
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%016lX v%s (Update)", titlePatchTitleID[i], versionStr);
+                convertTitleVersionToDecimal(titlePatchVersion[i], versionStr, MAX_ELEMENTS(versionStr));
+                snprintf(strbuf, MAX_ELEMENTS(strbuf), "%016lX v%s (Update)", titlePatchTitleID[i], versionStr);
                 addStringToFilenameBuffer(strbuf, &nextFilename);
                 
                 orphanPatchEntries[orphanEntryIndex].index = i;
@@ -3062,8 +3083,8 @@ void generateOrphanPatchOrAddOnList()
             
             if (!foundMatch)
             {
-                convertTitleVersionToDecimal(titleAddOnVersion[i], versionStr, sizeof(versionStr));
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%016lX v%s (DLC)", titleAddOnTitleID[i], versionStr);
+                convertTitleVersionToDecimal(titleAddOnVersion[i], versionStr, MAX_ELEMENTS(versionStr));
+                snprintf(strbuf, MAX_ELEMENTS(strbuf), "%016lX v%s (DLC)", titleAddOnTitleID[i], versionStr);
                 addStringToFilenameBuffer(strbuf, &nextFilename);
                 
                 orphanAddOnEntries[orphanEntryIndex].index = i;
@@ -3197,11 +3218,13 @@ u32 retrieveLastPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn)
 
 void waitForButtonPress()
 {
-    uiDrawString("Press any button to continue", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
-    uiRefreshDisplay();
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Press any button to continue");
     
     while(true)
     {
+        uiUpdateStatusMsg();
+        uiRefreshDisplay();
+        
         hidScanInput();
         
         u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
@@ -3219,7 +3242,10 @@ void printProgressBar(progress_ctx_t *progressCtx, bool calcData, u64 chunkSize)
     {
         timeGetCurrentTime(TimeType_LocalSystemClock, &(progressCtx->now));
         
-        progressCtx->lastSpeed = (((double)(progressCtx->curOffset + chunkSize) / (double)DUMP_BUFFER_SIZE) / (double)(progressCtx->now - progressCtx->start));
+        // Workaround to properly calculate speed for sequential dumps
+        u64 speedCurOffset = (progressCtx->seqDumpCurOffset ? progressCtx->seqDumpCurOffset : progressCtx->curOffset);
+        
+        progressCtx->lastSpeed = (((double)(speedCurOffset + chunkSize) / (double)DUMP_BUFFER_SIZE) / (double)(progressCtx->now - progressCtx->start));
         progressCtx->averageSpeed = ((SMOOTHING_FACTOR * progressCtx->lastSpeed) + ((1 - SMOOTHING_FACTOR) * progressCtx->averageSpeed));
         if (!isnormal(progressCtx->averageSpeed)) progressCtx->averageSpeed = SMOOTHING_FACTOR; // Very low values
         
@@ -3228,30 +3254,39 @@ void printProgressBar(progress_ctx_t *progressCtx, bool calcData, u64 chunkSize)
         progressCtx->progress = (u8)(((progressCtx->curOffset + chunkSize) * 100) / progressCtx->totalSize);
     }
     
-    formatETAString(progressCtx->remainingTime, progressCtx->etaInfo, sizeof(progressCtx->etaInfo) / sizeof(progressCtx->etaInfo[0]));
+    formatETAString(progressCtx->remainingTime, progressCtx->etaInfo, MAX_ELEMENTS(progressCtx->etaInfo));
     
-    convertSize(progressCtx->curOffset + chunkSize, progressCtx->curOffsetStr, sizeof(progressCtx->curOffsetStr) / sizeof(progressCtx->curOffsetStr[0]));
+    convertSize(progressCtx->curOffset + chunkSize, progressCtx->curOffsetStr, MAX_ELEMENTS(progressCtx->curOffsetStr));
     
-    uiFill(0, (progressCtx->line_offset * (font_height + (font_height / 4))) + 8, FB_WIDTH / 4, (font_height + (font_height / 4)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%.2lf MiB/s [ETA: %s]", progressCtx->averageSpeed, progressCtx->etaInfo);
-    uiDrawString(strbuf, font_height * 2, (progressCtx->line_offset * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiFill(0, (progressCtx->line_offset * LINE_HEIGHT) + 8, FB_WIDTH / 4, LINE_HEIGHT * 2, BG_COLOR_RGB);
+    uiDrawString(font_height * 2, STRING_Y_POS(progressCtx->line_offset), FONT_COLOR_RGB, "%.2lf MiB/s [ETA: %s]", progressCtx->averageSpeed, progressCtx->etaInfo);
     
-    uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, FB_WIDTH / 2, (font_height + (font_height / 4)), 0, 0, 0);
-    uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, (((progressCtx->curOffset + chunkSize) * (u64)(FB_WIDTH / 2)) / progressCtx->totalSize), (font_height + (font_height / 4)), 0, 255, 0);
+    if (progressCtx->totalSize && (progressCtx->curOffset + chunkSize) < progressCtx->totalSize)
+    {
+        uiFill(FB_WIDTH / 4, (progressCtx->line_offset * LINE_HEIGHT) + 10, FB_WIDTH / 2, LINE_HEIGHT, EMPTY_BAR_COLOR_RGB);
+        uiFill(FB_WIDTH / 4, (progressCtx->line_offset * LINE_HEIGHT) + 10, (((progressCtx->curOffset + chunkSize) * (u64)(FB_WIDTH / 2)) / progressCtx->totalSize), LINE_HEIGHT, FONT_COLOR_SUCCESS_RGB);
+    } else {
+        uiFill(FB_WIDTH / 4, (progressCtx->line_offset * LINE_HEIGHT) + 10, FB_WIDTH / 2, LINE_HEIGHT, FONT_COLOR_SUCCESS_RGB);
+    }
     
-    uiFill(FB_WIDTH - (FB_WIDTH / 4), (progressCtx->line_offset * (font_height + (font_height / 4))) + 8, FB_WIDTH / 4, (font_height + (font_height / 4)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "%u%% [%s / %s]", progressCtx->progress, progressCtx->curOffsetStr, progressCtx->totalSizeStr);
-    uiDrawString(strbuf, FB_WIDTH - (FB_WIDTH / 4) + (font_height * 2), (progressCtx->line_offset * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiFill(FB_WIDTH - (FB_WIDTH / 4), (progressCtx->line_offset * LINE_HEIGHT) + 8, FB_WIDTH / 4, LINE_HEIGHT * 2, BG_COLOR_RGB);
+    uiDrawString(FB_WIDTH - (FB_WIDTH / 4) + (font_height * 2), STRING_Y_POS(progressCtx->line_offset), FONT_COLOR_RGB, "%u%% [%s / %s]", progressCtx->progress, progressCtx->curOffsetStr, progressCtx->totalSizeStr);
     
     uiRefreshDisplay();
+    uiUpdateStatusMsg();
 }
 
 void setProgressBarError(progress_ctx_t *progressCtx)
 {
     if (!progressCtx) return;
     
-    uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, FB_WIDTH / 2, (font_height + (font_height / 4)), 0, 0, 0);
-    uiFill(FB_WIDTH / 4, (progressCtx->line_offset * (font_height + (font_height / 4))) + 10, (((u32)progressCtx->progress * ((u32)FB_WIDTH / 2)) / 100), (font_height + (font_height / 4)), 255, 0, 0);
+    if (progressCtx->totalSize && progressCtx->curOffset < progressCtx->totalSize)
+    {
+        uiFill(FB_WIDTH / 4, (progressCtx->line_offset * LINE_HEIGHT) + 10, FB_WIDTH / 2, LINE_HEIGHT, EMPTY_BAR_COLOR_RGB);
+        uiFill(FB_WIDTH / 4, (progressCtx->line_offset * LINE_HEIGHT) + 10, ((progressCtx->curOffset * (u64)(FB_WIDTH / 2)) / progressCtx->totalSize), LINE_HEIGHT, FONT_COLOR_ERROR_RGB);
+    } else {
+        uiFill(FB_WIDTH / 4, (progressCtx->line_offset * LINE_HEIGHT) + 10, FB_WIDTH / 2, LINE_HEIGHT, FONT_COLOR_ERROR_RGB);
+    }
 }
 
 bool cancelProcessCheck(progress_ctx_t *progressCtx)
@@ -3317,20 +3352,20 @@ bool yesNoPrompt(const char *message)
 {
     if (message && strlen(message))
     {
-        uiDrawString(message, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, message);
         breaks++;
     }
     
-    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "[ %s ] Yes | [ %s ] No", NINTENDO_FONT_A, NINTENDO_FONT_B);
-    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "[ %s ] Yes | [ %s ] No", NINTENDO_FONT_A, NINTENDO_FONT_B);
     breaks += 2;
-    
-    uiRefreshDisplay();
     
     bool ret = false;
     
     while(true)
     {
+        uiUpdateStatusMsg();
+        uiRefreshDisplay();
+        
         hidScanInput();
         
         u32 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
@@ -3512,12 +3547,12 @@ void removeDirectoryWithVerbose(const char *path, const char *msg)
     
     breaks += 2;
     
-    uiDrawString(msg, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, msg);
     uiRefreshDisplay();
     
     fsdevDeleteDirectoryRecursively(path);
     
-    uiFill(0, (breaks * (font_height + (font_height / 4))) + 8, FB_WIDTH, (font_height + (font_height / 2)), BG_COLOR_RGB, BG_COLOR_RGB, BG_COLOR_RGB);
+    uiFill(0, (breaks * LINE_HEIGHT) + 8, FB_WIDTH, (font_height + (font_height / 2)), BG_COLOR_RGB);
     uiRefreshDisplay();
     
     breaks -= 2;
@@ -3573,7 +3608,7 @@ bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u64 gc_tid, u32 crc)
             key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
             if (key)
             {
-                snprintf(xmlReleaseName, sizeof(xmlReleaseName) / sizeof(xmlReleaseName[0]), "%s", (char*)key);
+                snprintf(xmlReleaseName, MAX_ELEMENTS(xmlReleaseName), "%s", (char*)key);
                 xmlFree(key);
             }
         }
@@ -3583,31 +3618,25 @@ bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u64 gc_tid, u32 crc)
     
     /*if (xmlImageSize && xmlTitleID && strlen(xmlReleaseName))
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XML Image Size: %u.", xmlImageSize);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "XML Image Size: %u.", xmlImageSize);
         breaks++;
         
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XML Title ID: %016lX.", xmlTitleID);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "XML Title ID: %016lX.", xmlTitleID);
         breaks++;
         
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XML Image CRC32: %08X.", xmlCrc);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "XML Image CRC32: %08X.", xmlCrc);
         breaks++;
         
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "XML Release Name: %s.", xmlReleaseName);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "XML Release Name: %s.", xmlReleaseName);
         breaks += 2;
     }*/
     
     if (xmlImageSize == imageSize && xmlTitleID == gc_tid && xmlCrc == crc)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found matching Scene release: \"%s\" (CRC32: %08X). This is a good dump!", xmlReleaseName, xmlCrc);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_SUCCESS_RGB, "Found matching Scene release: \"%s\" (CRC32: %08X). This is a good dump!", xmlReleaseName, xmlCrc);
         found = true;
     } else {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Dump doesn't match Scene release: \"%s\"! (CRC32: %08X)", xmlReleaseName, xmlCrc);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Dump doesn't match Scene release: \"%s\"! (CRC32: %08X)", xmlReleaseName, xmlCrc);
     }
     
     breaks++;
@@ -3645,12 +3674,11 @@ void gameCardDumpNSWDBCheck(u32 crc)
         u32 i;
         for(i = 0; i < titleAppCount; i++)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "//%s/%s[.//%s='%016lX']", nswReleasesRootElement, nswReleasesChildren, nswReleasesChildrenTitleID, titleAppTitleID[i]);
+            snprintf(strbuf, MAX_ELEMENTS(strbuf), "//%s/%s[.//%s='%016lX']", nswReleasesRootElement, nswReleasesChildren, nswReleasesChildrenTitleID, titleAppTitleID[i]);
             xmlXPathObjectPtr nodeSet = getNodeSet(doc, (xmlChar*)strbuf);
             if (nodeSet)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Found %d %s with Title ID \"%016lX\".", nodeSet->nodesetval->nodeNr, (nodeSet->nodesetval->nodeNr > 1 ? "releases" : "release"), titleAppTitleID[i]);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Found %d %s with Title ID \"%016lX\".", nodeSet->nodesetval->nodeNr, (nodeSet->nodesetval->nodeNr > 1 ? "releases" : "release"), titleAppTitleID[i]);
                 breaks++;
                 
                 uiRefreshDisplay();
@@ -3668,16 +3696,14 @@ void gameCardDumpNSWDBCheck(u32 crc)
                 
                 if (!found)
                 {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "No checksum matches found in XML document for Title ID \"%016lX\"!", titleAppTitleID[i]);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "No checksum matches found in XML document for Title ID \"%016lX\"!", titleAppTitleID[i]);
                     if ((i + 1) < titleAppCount) breaks += 2;
                 } else {
                     breaks--;
                     break;
                 }
             } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "No records with Title ID \"%016lX\" found within the XML document!", titleAppTitleID[i]);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "No records with Title ID \"%016lX\" found within the XML document!", titleAppTitleID[i]);
                 if ((i + 1) < titleAppCount) breaks += 2;
             }
         }
@@ -3687,11 +3713,10 @@ void gameCardDumpNSWDBCheck(u32 crc)
         if (!found)
         {
             breaks++;
-            uiDrawString("This could either be a bad dump or an undumped cartridge.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "This could either be a bad dump or an undumped cartridge.");
         }
     } else {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to open and/or parse \"%s\"!", nswReleasesXmlPath);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to open and/or parse \"%s\"!", nswReleasesXmlPath);
     }
 }
 
@@ -3764,13 +3789,12 @@ void updateNSWDBXml()
             FILE *nswdbXml = fopen(nswReleasesXmlTmpPath, "wb");
             if (nswdbXml)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Downloading XML database from \"%s\", please wait...", nswReleasesXmlUrl);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Downloading XML database from \"%s\", please wait...", nswReleasesXmlUrl);
                 breaks += 2;
                 
                 if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
                 {
-                    uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.");
                     breaks += 2;
                 }
                 
@@ -3796,12 +3820,10 @@ void updateNSWDBXml()
                 
                 if (res == CURLE_OK && http_code >= 200 && http_code <= 299 && size > 0)
                 {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Successfully downloaded %.0lf bytes!", size);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_SUCCESS_RGB, "Successfully downloaded %.0lf bytes!", size);
                     success = true;
                 } else {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to request XML database! HTTP status code: %ld", http_code);
-                    uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to request XML database! HTTP status code: %ld", http_code);
                 }
                 
                 fclose(nswdbXml);
@@ -3814,19 +3836,17 @@ void updateNSWDBXml()
                     unlink(nswReleasesXmlTmpPath);
                 }
             } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to open \"%s\" in write mode!", nswReleasesXmlTmpPath);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to open \"%s\" in write mode!", nswReleasesXmlTmpPath);
             }
             
             curl_easy_cleanup(curl);
         } else {
-            uiDrawString("Error: failed to initialize CURL context!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize CURL context!");
         }
         
         networkDeinit();
     } else {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to initialize socket! (%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize socket! (%08X)", result);
     }
     
     breaks += 2;
@@ -3946,7 +3966,7 @@ void updateApplication()
 {
     if (envIsNso())
     {
-        uiDrawString("Error: unable to update application. It is not running as a NRO.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to update application. It is not running as a NRO.");
         breaks += 2;
         return;
     }
@@ -3967,8 +3987,7 @@ void updateApplication()
         curl = curl_easy_init();
         if (curl)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Requesting latest release information from \"%s\"...", githubReleasesApiUrl);
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Requesting latest release information from \"%s\"...", githubReleasesApiUrl);
             breaks++;
             
             uiRefreshDisplay();
@@ -3993,8 +4012,7 @@ void updateApplication()
             
             if (res == CURLE_OK && http_code >= 200 && http_code <= 299 && size > 0)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Parsing response JSON data from \"%s\"...", githubReleasesApiUrl);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Parsing response JSON data from \"%s\"...", githubReleasesApiUrl);
                 breaks++;
                 
                 uiRefreshDisplay();
@@ -4004,10 +4022,9 @@ void updateApplication()
                 {
                     if (json_object_object_get_ex(jobj, "name", &name) && json_object_get_type(name) == json_type_string)
                     {
-                        snprintf(releaseTag, sizeof(releaseTag) / sizeof(releaseTag[0]), json_object_get_string(name));
+                        snprintf(releaseTag, MAX_ELEMENTS(releaseTag), json_object_get_string(name));
                         
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Latest release: %s.", releaseTag);
-                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Latest release: %s.", releaseTag);
                         breaks++;
                         
                         uiRefreshDisplay();
@@ -4029,24 +4046,23 @@ void updateApplication()
                                 {
                                     if (json_object_object_get_ex(assets, "browser_download_url", &assets) && json_object_get_type(assets) == json_type_string)
                                     {
-                                        snprintf(downloadUrl, sizeof(downloadUrl) / sizeof(downloadUrl[0]), json_object_get_string(assets));
+                                        snprintf(downloadUrl, MAX_ELEMENTS(downloadUrl), json_object_get_string(assets));
                                         
-                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Download URL: \"%s\".", downloadUrl);
-                                        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Download URL: \"%s\".", downloadUrl);
                                         breaks++;
                                         
-                                        uiDrawString("Please wait...", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Please wait...");
                                         breaks += 2;
                                         
                                         if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
                                         {
-                                            uiDrawString("Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.");
                                             breaks += 2;
                                         }
                                         
                                         uiRefreshDisplay();
                                         
-                                        snprintf(nroPath, sizeof(nroPath) / sizeof(nroPath[0]), "%s.tmp", (strlen(appLaunchPath) ? appLaunchPath : nxDumpToolPath));
+                                        snprintf(nroPath, MAX_ELEMENTS(nroPath), "%s.tmp", (strlen(appLaunchPath) ? appLaunchPath : nxDumpToolPath));
                                         
                                         nxDumpToolNro = fopen(nroPath, "wb");
                                         if (nxDumpToolNro)
@@ -4076,21 +4092,19 @@ void updateApplication()
                                             {
                                                 success = true;
                                                 
-                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Successfully downloaded %.0lf bytes!", size);
-                                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_SUCCESS_RGB, "Successfully downloaded %.0lf bytes!", size);
                                                 breaks++;
                                                 
-                                                uiDrawString("Please restart the application to reflect the changes.", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 0, 255, 0);
+                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_SUCCESS_RGB, "Please restart the application to reflect the changes.");
                                             } else {
-                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to request latest update binary! HTTP status code: %ld", http_code);
-                                                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to request latest update binary! HTTP status code: %ld", http_code);
                                             }
                                             
                                             fclose(nxDumpToolNro);
                                             
                                             if (success)
                                             {
-                                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), nroPath);
+                                                snprintf(strbuf, MAX_ELEMENTS(strbuf), nroPath);
                                                 nroPath[strlen(nroPath) - 4] = '\0';
                                                 
                                                 unlink(nroPath);
@@ -4099,45 +4113,42 @@ void updateApplication()
                                                 unlink(nroPath);
                                             }
                                         } else {
-                                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to open \"%s\" in write mode!", nroPath);
-                                            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to open \"%s\" in write mode!", nroPath);
                                         }
                                     } else {
-                                        uiDrawString("Error: unable to parse download URL from JSON response!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to parse download URL from JSON response!");
                                     }
                                 } else {
-                                    uiDrawString("Error: unable to parse object at index 0 from \"assets\" array in JSON response!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to parse object at index 0 from \"assets\" array in JSON response!");
                                 }
                             } else {
-                                uiDrawString("Error: unable to parse \"assets\" array from JSON response!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to parse \"assets\" array from JSON response!");
                             }
                         } else {
-                            uiDrawString("You already have the latest version!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 255, 255);
+                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "You already have the latest version!");
                         }
                     } else {
-                        uiDrawString("Error: unable to parse version tag from JSON response!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to parse version tag from JSON response!");
                     }
                     
                     json_object_put(jobj);
                 } else {
-                    uiDrawString("Error: unable to parse JSON response!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to parse JSON response!");
                 }
             } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to request latest release information! HTTP status code: %ld", http_code);
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to request latest release information! HTTP status code: %ld", http_code);
             }
             
             if (result_buf) free(result_buf);
             
             curl_easy_cleanup(curl);
         } else {
-            uiDrawString("Error: failed to initialize CURL context!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize CURL context!");
         }
         
         networkDeinit();
     } else {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: failed to initialize socket! (%08X)", result);
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize socket! (%08X)", result);
     }
     
     breaks += 2;

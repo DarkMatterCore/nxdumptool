@@ -3,54 +3,65 @@
 #ifndef __UI_H__
 #define __UI_H__
 
-#define FB_WIDTH                1280
-#define FB_HEIGHT               720
+#define FB_WIDTH                    1280
+#define FB_HEIGHT                   720
 
-#define CHAR_PT_SIZE            12
-#define SCREEN_DPI_CNT          96
+#define CHAR_PT_SIZE                12
+#define SCREEN_DPI_CNT              96
 
-#define BG_COLOR_RGB            50
+#define LINE_HEIGHT                 (font_height + (font_height / 4))
+#define LINE_STRING_OFFSET          (font_height / 8)
 
-#define HIGHLIGHT_BG_COLOR_R    33
-#define HIGHLIGHT_BG_COLOR_G    34
-#define HIGHLIGHT_BG_COLOR_B    39
+#define STRING_DEFAULT_POS          8, 8
 
-#define HIGHLIGHT_FONT_COLOR_R  0
-#define HIGHLIGHT_FONT_COLOR_G  255
-#define HIGHLIGHT_FONT_COLOR_B  197
+#define STRING_X_POS                8
+#define STRING_Y_POS(x)             (((x) * LINE_HEIGHT) + LINE_STRING_OFFSET)
 
-#define COMMON_MAX_ELEMENTS     9
-#define HFS0_MAX_ELEMENTS       14
-#define ROMFS_MAX_ELEMENTS      12
-#define SDCARD_MAX_ELEMENTS     3
-#define ORPHAN_MAX_ELEMENTS     12
+#define BG_COLOR_RGB                50, 50, 50
+#define FONT_COLOR_RGB              255, 255, 255
 
-#define OPTIONS_X_START_POS     (35 * CHAR_PT_SIZE)
-#define OPTIONS_X_END_POS       (OPTIONS_X_START_POS + (6 * CHAR_PT_SIZE))
-#define OPTIONS_X_END_POS_NSP   (FB_WIDTH - (4 * CHAR_PT_SIZE))
+#define HIGHLIGHT_BG_COLOR_RGB      33, 34, 39
+#define HIGHLIGHT_FONT_COLOR_RGB    0, 255, 197
 
-#define TAB_WIDTH               4
+#define FONT_COLOR_SUCCESS_RGB      0, 255, 0
+#define FONT_COLOR_ERROR_RGB        255, 0, 0
+#define FONT_COLOR_TITLE_RGB        115, 115, 255
 
-#define BROWSER_ICON_DIMENSION  16
+#define EMPTY_BAR_COLOR_RGB         0, 0, 0
+
+#define COMMON_MAX_ELEMENTS         9
+#define HFS0_MAX_ELEMENTS           14
+#define ROMFS_MAX_ELEMENTS          12
+#define SDCARD_MAX_ELEMENTS         3
+#define ORPHAN_MAX_ELEMENTS         12
+#define BATCH_MAX_ELEMENTS          12
+
+#define OPTIONS_X_START_POS         (35 * CHAR_PT_SIZE)
+#define OPTIONS_X_END_POS           (OPTIONS_X_START_POS + (6 * CHAR_PT_SIZE))
+#define OPTIONS_X_END_POS_NSP       (FB_WIDTH - (4 * CHAR_PT_SIZE))
+
+#define TAB_WIDTH                   4
+
+#define BROWSER_ICON_DIMENSION      16
 
 // UTF-8 sequences
 
-#define UPWARDS_ARROW           "\xE2\x86\x91"
-#define DOWNWARDS_ARROW         "\xE2\x86\x93"
+#define UPWARDS_ARROW               "\xE2\x86\x91"
+#define DOWNWARDS_ARROW             "\xE2\x86\x93"
 
-#define NINTENDO_FONT_A         "\xEE\x82\xA0"
-#define NINTENDO_FONT_B         "\xEE\x82\xA1"
-#define NINTENDO_FONT_X         "\xEE\x82\xA2"
-#define NINTENDO_FONT_Y         "\xEE\x82\xA3"
-#define NINTENDO_FONT_L         "\xEE\x82\xA4"
-#define NINTENDO_FONT_R         "\xEE\x82\xA5"
-#define NINTENDO_FONT_ZL        "\xEE\x82\xA6"
-#define NINTENDO_FONT_ZR        "\xEE\x82\xA7"
-#define NINTENDO_FONT_DPAD      "\xEE\x82\xAA"
-#define NINTENDO_FONT_PLUS      "\xEE\x82\xB5"
-#define NINTENDO_FONT_HOME      "\xEE\x82\xB9"
-#define NINTENDO_FONT_LSTICK    "\xEE\x83\x81"
-#define NINTENDO_FONT_RSTICK    "\xEE\x83\x82"
+#define NINTENDO_FONT_A             "\xEE\x82\xA0"
+#define NINTENDO_FONT_B             "\xEE\x82\xA1"
+#define NINTENDO_FONT_X             "\xEE\x82\xA2"
+#define NINTENDO_FONT_Y             "\xEE\x82\xA3"
+#define NINTENDO_FONT_L             "\xEE\x82\xA4"
+#define NINTENDO_FONT_R             "\xEE\x82\xA5"
+#define NINTENDO_FONT_ZL            "\xEE\x82\xA6"
+#define NINTENDO_FONT_ZR            "\xEE\x82\xA7"
+#define NINTENDO_FONT_DPAD          "\xEE\x82\xAA"
+#define NINTENDO_FONT_PLUS          "\xEE\x82\xB5"
+#define NINTENDO_FONT_HOME          "\xEE\x82\xB9"
+#define NINTENDO_FONT_LSTICK        "\xEE\x83\x81"
+#define NINTENDO_FONT_RSTICK        "\xEE\x83\x82"
 
 typedef enum {
     resultNone,
@@ -160,9 +171,9 @@ bool uiLoadJpgFromMem(u8 *rawJpg, size_t rawJpgSize, int expectedWidth, int expe
 
 bool uiLoadJpgFromFile(const char *filename, int expectedWidth, int expectedHeight, int desiredWidth, int desiredHeight, u8 **outBuf);
 
-void uiDrawString(const char *string, int x, int y, u8 r, u8 g, u8 b);
+void uiDrawString(int x, int y, u8 r, u8 g, u8 b, const char *fmt, ...);
 
-u32 uiGetStrWidth(const char *string);
+u32 uiGetStrWidth(const char *fmt, ...);
 
 void uiRefreshDisplay();
 

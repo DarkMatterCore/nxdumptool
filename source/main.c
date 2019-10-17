@@ -21,8 +21,6 @@ extern UEvent exitEvent;
 
 extern bool gameCardInserted;
 
-extern char strbuf[NAME_BUF_LEN * 4];
-
 extern char appLaunchPath[NAME_BUF_LEN];
 
 extern nca_keyset_t nca_keyset;
@@ -37,7 +35,7 @@ int main(int argc, char *argv[])
         {
             if (strlen(argv[i]) > 10 && !strncasecmp(argv[i], "sdmc:/", 6) && !strncasecmp(argv[i] + strlen(argv[i]) - 4, ".nro", 4))
             {
-                snprintf(appLaunchPath, sizeof(appLaunchPath) / sizeof(appLaunchPath[0]), argv[i]);
+                snprintf(appLaunchPath, MAX_ELEMENTS(appLaunchPath), argv[i]);
                 break;
             }
         }
@@ -116,6 +114,9 @@ int main(int argc, char *argv[])
                                             
                                             /* Make sure output directories exist */
                                             createOutputDirectories();
+                                            
+                                            /* Load settings from configuration file */
+                                            loadConfig();
                                             
                                             /* Main application loop */
                                             bool exitLoop = false;
@@ -269,8 +270,7 @@ int main(int argc, char *argv[])
                                             /* Wait for the gamecard detection thread to exit */
                                             threadWaitForExit(&thread);
                                         } else {
-                                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to start gamecard detection thread! (0x%08X)", result);
-                                            uiDrawString(strbuf, 8, 8, 255, 255, 255);
+                                            uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to start gamecard detection thread! (0x%08X)", result);
                                             uiRefreshDisplay();
                                             delay(5);
                                             ret = -11;
@@ -279,8 +279,7 @@ int main(int argc, char *argv[])
                                         /* Close gamecard detection thread */
                                         threadClose(&thread);
                                     } else {
-                                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to create gamecard detection thread! (0x%08X)", result);
-                                        uiDrawString(strbuf, 8, 8, 255, 255, 255);
+                                        uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to create gamecard detection thread! (0x%08X)", result);
                                         uiRefreshDisplay();
                                         delay(5);
                                         ret = -10;
@@ -289,8 +288,7 @@ int main(int argc, char *argv[])
                                     /* Close gamecard detection kernel event */
                                     eventClose(&fsGameCardKernelEvent);
                                 } else {
-                                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to retrieve gamecard detection event handle! (0x%08X)", result);
-                                    uiDrawString(strbuf, 8, 8, 255, 255, 255);
+                                    uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to retrieve gamecard detection event handle! (0x%08X)", result);
                                     uiRefreshDisplay();
                                     delay(5);
                                     ret = -9;
@@ -299,8 +297,7 @@ int main(int argc, char *argv[])
                                 /* Close gamecard detection event notifier */
                                 fsEventNotifierClose(&fsGameCardEventNotifier);
                             } else {
-                                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open gamecard detection event notifier! (0x%08X)", result);
-                                uiDrawString(strbuf, 8, 8, 255, 255, 255);
+                                uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to open gamecard detection event notifier! (0x%08X)", result);
                                 uiRefreshDisplay();
                                 delay(5);
                                 ret = -8;
@@ -309,8 +306,7 @@ int main(int argc, char *argv[])
                             /* Close device operator */
                             fsDeviceOperatorClose(&fsOperatorInstance);
                         } else {
-                            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to open device operator! (0x%08X)", result);
-                            uiDrawString(strbuf, 8, 8, 255, 255, 255);
+                            uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to open device operator! (0x%08X)", result);
                             uiRefreshDisplay();
                             delay(5);
                             ret = -7;
@@ -319,8 +315,7 @@ int main(int argc, char *argv[])
                         /* Denitialize the pm:dmnt service */
                         pmdmntExit();
                     } else {
-                        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the pm:dmnt service! (0x%08X)", result);
-                        uiDrawString(strbuf, 8, 8, 255, 255, 255);
+                        uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to initialize the pm:dmnt service! (0x%08X)", result);
                         uiRefreshDisplay();
                         delay(5);
                         ret = -6;
@@ -329,8 +324,7 @@ int main(int argc, char *argv[])
                     /* Denitialize the spl service */
                     splExit();
                 } else {
-                    snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the spl service! (0x%08X)", result);
-                    uiDrawString(strbuf, 8, 8, 255, 255, 255);
+                    uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to initialize the spl service! (0x%08X)", result);
                     uiRefreshDisplay();
                     delay(5);
                     ret = -5;
@@ -339,8 +333,7 @@ int main(int argc, char *argv[])
                 /* Denitialize the csrng service */
                 csrngExit();
             } else {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the csrng service! (0x%08X)", result);
-                uiDrawString(strbuf, 8, 8, 255, 255, 255);
+                uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to initialize the csrng service! (0x%08X)", result);
                 uiRefreshDisplay();
                 delay(5);
                 ret = -4;
@@ -349,8 +342,7 @@ int main(int argc, char *argv[])
             /* Denitialize the ns service */
             nsExit();
         } else {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the ns service! (0x%08X)", result);
-            uiDrawString(strbuf, 8, 8, 255, 255, 255);
+            uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to initialize the ns service! (0x%08X)", result);
             uiRefreshDisplay();
             delay(5);
             ret = -3;
@@ -359,8 +351,7 @@ int main(int argc, char *argv[])
         /* Denitialize the ncm service */
         ncmExit();
     } else {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to initialize the ncm service! (0x%08X)", result);
-        uiDrawString(strbuf, 8, 8, 255, 255, 255);
+        uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_RGB, "Failed to initialize the ncm service! (0x%08X)", result);
         uiRefreshDisplay();
         delay(5);
         ret = -2;

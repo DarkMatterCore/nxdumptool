@@ -14,6 +14,7 @@
 #define EXEFS_DUMP_PATH                 NXDUMPTOOL_BASE_PATH "ExeFS/"
 #define ROMFS_DUMP_PATH                 NXDUMPTOOL_BASE_PATH "RomFS/"
 #define CERT_DUMP_PATH                  NXDUMPTOOL_BASE_PATH "Certificate/"
+#define BATCH_OVERRIDES_PATH            NSP_DUMP_PATH "BatchOverrides/"
 
 #define KiB                             (1024.0)
 #define MiB                             (1024.0 * KiB)
@@ -90,6 +91,8 @@
 #define ORPHAN_ENTRY_TYPE_PATCH         1
 #define ORPHAN_ENTRY_TYPE_ADDON         2
 
+#define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))          // Returns the max number of elements that can be stored in an array
+
 typedef struct {
     u64 file_offset;
     u64 file_size;
@@ -105,6 +108,7 @@ typedef struct {
     char totalSizeStr[32];
     u64 curOffset;
     char curOffsetStr[32];
+    u64 seqDumpCurOffset;
     u8 progress;
     u64 start;
     u64 now;
@@ -128,6 +132,50 @@ typedef struct {
     u32 index;
     u8 type; // 1 = Patch, 2 = AddOn
 } PACKED orphan_patch_addon_entry;
+
+typedef enum {
+    BATCH_SOURCE_ALL = 0,
+    BATCH_SOURCE_SDCARD,
+    BATCH_SOURCE_EMMC,
+    BATCH_SOURCE_CNT
+} batchModeSourceStorage;
+
+typedef struct {
+    bool isFat32;
+    bool keepCert;
+    bool trimDump;
+    bool calcCrc;
+    bool setXciArchiveBit;
+} PACKED xciOptions;
+
+typedef struct {
+    bool isFat32;
+    bool calcCrc;
+    bool removeConsoleData;
+    bool tiklessDump;
+} PACKED nspOptions;
+
+typedef struct {
+    bool dumpAppTitles;
+    bool dumpPatchTitles;
+    bool dumpAddOnTitles;
+    bool isFat32;
+    bool removeConsoleData;
+    bool tiklessDump;
+    bool skipDumpedTitles;
+    batchModeSourceStorage batchModeSrc;
+    bool rememberDumpedTitles;
+} PACKED batchOptions;
+
+typedef struct {
+    xciOptions xciDumpCfg;
+    nspOptions nspDumpCfg;
+    batchOptions batchDumpCfg;
+} PACKED dumpOptions;
+
+void loadConfig();
+
+void saveConfig();
 
 bool isGameCardInserted();
 

@@ -13,8 +13,6 @@
 extern int breaks;
 extern int font_height;
 
-extern char strbuf[NAME_BUF_LEN * 4];
-
 /* Statically allocated variables */
 
 static u8 *nsoBinaryData = NULL;
@@ -53,7 +51,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
 {
     if (!ncmStorage || !ncaId || !aes_ctx || !nso_base_offset || !nsoHeader)
     {
-        uiDrawString("Error: invalid parameters to load .text, .rodata and .data sections from NSO in Program NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to load .text, .rodata and .data sections from NSO in Program NCA!");
         return false;
     }
     
@@ -94,8 +92,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
         curCompressedSection = malloc(curCompressedSectionSize);
         if (!curCompressedSection)
         {
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to allocate memory for the compressed %s section from NSO in Program NCA!", (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the compressed %s section from NSO in Program NCA!", (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
             success = false;
             break;
         }
@@ -103,8 +100,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
         if (!processNcaCtrSectionBlock(ncmStorage, ncaId, aes_ctx, curCompressedSectionOffset, curCompressedSection, curCompressedSectionSize, false))
         {
             breaks++;
-            snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Failed to read 0x%016lX bytes %s section from NSO in Program NCA!", curCompressedSectionSize, (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
-            uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read 0x%016lX bytes %s section from NSO in Program NCA!", curCompressedSectionSize, (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
             free(curCompressedSection);
             success = false;
             break;
@@ -114,8 +110,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
         {
             if (curDecompressedSectionSize <= curCompressedSectionSize)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid decompressed size for %s section from NSO in Program NCA!", (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid decompressed size for %s section from NSO in Program NCA!", (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
                 free(curCompressedSection);
                 success = false;
                 break;
@@ -125,8 +120,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
             curDecompressedSection = malloc(curDecompressedSectionSize);
             if (!curDecompressedSection)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to allocate memory for the decompressed %s section from NSO in Program NCA!", (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the decompressed %s section from NSO in Program NCA!", (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
                 free(curCompressedSection);
                 success = false;
                 break;
@@ -134,8 +128,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
             
             if (LZ4_decompress_safe((const char*)curCompressedSection, (char*)curDecompressedSection, (int)curCompressedSectionSize, (int)curDecompressedSectionSize) != (int)curDecompressedSectionSize)
             {
-                snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: unable to allocate memory for the decompressed %s section from NSO in Program NCA!", (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
-                uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to decompress %s section from NSO in Program NCA!", (i == 0 ? ".text" : (i == 1 ? ".rodata" : ".data")));
                 free(curDecompressedSection);
                 free(curCompressedSection);
                 success = false;
@@ -190,7 +183,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
         u64 finalTextSectionSize = nsoTextSectionSize;
         u64 finalRodataSectionSize = nsoRodataSectionSize;
         
-        nsoBinaryDataSize = finalTextSectionSize = nsoTextSectionSize;
+        nsoBinaryDataSize = nsoTextSectionSize;
         
         if ((u64)nsoHeader->rodata_segment_header.memory_offset > nsoBinaryDataSize)
         {
@@ -232,7 +225,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
             nsoBinaryDataSectionOffset = (u64)nsoHeader->data_segment_header.memory_offset;
             nsoBinaryDataSectionSize = nsoDataSectionSize;
         } else {
-            uiDrawString("Error: unable to allocate memory for full decompressed NSO in Program NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate %lu bytes for full decompressed NSO in Program NCA!", nsoBinaryDataSize);
             nsoBinaryDataSize = 0;
             success = false;
         }
@@ -249,7 +242,7 @@ bool retrieveMiddlewareListFromNso(NcmContentStorage *ncmStorage, const NcmNcaId
 {
     if (!ncmStorage || !ncaId || !aes_ctx || !nso_filename || !strlen(nso_filename) || !nso_base_offset || !nsoHeader || !programInfoXml)
     {
-        uiDrawString("Error: invalid parameters to retrieve middleware list from NSO in Program NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve middleware list from NSO in Program NCA!");
         return false;
     }
     
@@ -300,7 +293,7 @@ bool retrieveSymbolsListFromNso(NcmContentStorage *ncmStorage, const NcmNcaId *n
 {
     if (!ncmStorage || !ncaId || !aes_ctx || !nso_filename || !strlen(nso_filename) || !nso_base_offset || !nsoHeader || !programInfoXml)
     {
-        uiDrawString("Error: invalid parameters to retrieve symbols list from NSO in Program NCA!", 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve symbols list from NSO in Program NCA!");
         return false;
     }
     
@@ -340,8 +333,7 @@ bool retrieveSymbolsListFromNso(NcmContentStorage *ncmStorage, const NcmNcaId *n
     
     if (bswap_32(mod_magic) != MOD_MAGIC)
     {
-        snprintf(strbuf, sizeof(strbuf) / sizeof(strbuf[0]), "Error: invalid MOD0 magic word in decompressed NSO from Program NCA! (0x%08X)", bswap_32(mod_magic));
-        uiDrawString(strbuf, 8, (breaks * (font_height + (font_height / 4))) + (font_height / 8), 255, 0, 0);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid MOD0 magic word in decompressed NSO from Program NCA! (0x%08X)", bswap_32(mod_magic));
         goto out;
     }
     
