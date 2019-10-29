@@ -30,10 +30,6 @@
 
 #define NSP_XML_BUFFER_SIZE             (u64)0xA00000                           // 10 MiB (10485760 bytes)
 
-#define META_DB_REGULAR_APPLICATION     0x80
-#define META_DB_PATCH                   0x81
-#define META_DB_ADDON                   0x82
-
 #define APPLICATION_PATCH_BITMASK       (u64)0x800
 #define APPLICATION_ADDON_BITMASK       (u64)0xFFFFFFFFFFFF0000
 
@@ -181,7 +177,7 @@ bool isGameCardInserted();
 
 void fsGameCardDetectionThreadFunc(void *arg);
 
-bool isServiceRunning(const char *serviceName);
+bool isServiceRunning(SmServiceName serviceName);
 
 bool checkSxOsServices();
 
@@ -203,9 +199,9 @@ void freeBktrContext();
 
 void freeGlobalData();
 
-bool loadTitlesFromSdCardAndEmmc(u8 titleType);
+bool loadTitlesFromSdCardAndEmmc(NcmContentMetaType titleType);
 
-void freeTitlesFromSdCardAndEmmc(u8 titleType);
+void freeTitlesFromSdCardAndEmmc(NcmContentMetaType titleType);
 
 void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize);
 

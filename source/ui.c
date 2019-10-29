@@ -3002,7 +3002,7 @@ UIResult uiProcess()
                 {
                     if (menuType == MENUTYPE_GAMECARD)
                     {
-                        freeTitlesFromSdCardAndEmmc(META_DB_PATCH);
+                        freeTitlesFromSdCardAndEmmc(NcmContentMetaType_Patch);
                         res = resultShowGameCardMenu;
                     } else {
                         res = resultShowSdCardEmmcTitleMenu;
@@ -3107,8 +3107,8 @@ UIResult uiProcess()
                 {
                     if (menuType == MENUTYPE_GAMECARD)
                     {
-                        freeTitlesFromSdCardAndEmmc(META_DB_PATCH);
-                        freeTitlesFromSdCardAndEmmc(META_DB_ADDON);
+                        freeTitlesFromSdCardAndEmmc(NcmContentMetaType_Patch);
+                        freeTitlesFromSdCardAndEmmc(NcmContentMetaType_AddOnContent);
                         res = resultShowGameCardMenu;
                     } else {
                         res = resultShowSdCardEmmcTitleMenu;
@@ -3518,7 +3518,7 @@ UIResult uiProcess()
                                 res = resultShowHfs0Menu;
                                 break;
                             case 3:
-                                loadTitlesFromSdCardAndEmmc(META_DB_PATCH);
+                                loadTitlesFromSdCardAndEmmc(NcmContentMetaType_Patch);
                                 
                                 res = resultShowExeFsMenu;
                                 
@@ -3528,8 +3528,8 @@ UIResult uiProcess()
                                 
                                 break;
                             case 4:
-                                loadTitlesFromSdCardAndEmmc(META_DB_PATCH);
-                                loadTitlesFromSdCardAndEmmc(META_DB_ADDON);
+                                loadTitlesFromSdCardAndEmmc(NcmContentMetaType_Patch);
+                                loadTitlesFromSdCardAndEmmc(NcmContentMetaType_AddOnContent);
                                 
                                 res = resultShowRomFsMenu;
                                 

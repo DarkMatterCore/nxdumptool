@@ -817,8 +817,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     Result result;
     u32 i = 0, j = 0;
-    u32 written = 0;
-    u32 total = 0;
+    s32 written = 0;
+    s32 total = 0;
     u32 titleCount = 0;
     u32 ncmTitleIndex = 0;
     u32 titleNcaCount = 0;
@@ -834,8 +834,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     NcmContentMetaDatabase ncmDb;
     memset(&ncmDb, 0, sizeof(NcmContentMetaDatabase));
     
-    NcmContentMetaRecordsHeader contentRecordsHeader;
-    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaRecordsHeader));
+    NcmContentMetaHeader contentRecordsHeader;
+    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaHeader));
     
     u64 contentRecordsHeaderReadSize = 0;
     
@@ -843,13 +843,13 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     memset(&ncmStorage, 0, sizeof(NcmContentStorage));
     
     NcmApplicationContentMetaKey *titleList = NULL;
-    NcmContentRecord *titleContentRecords = NULL;
+    NcmContentInfo *titleContentInfos = NULL;
     size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
     
     cnmt_xml_program_info xml_program_info;
     cnmt_xml_content_info *xml_content_info = NULL;
     
-    NcmNcaId ncaId;
+    NcmContentId ncaId;
     u8 ncaHeader[NCA_FULL_HEADER_LENGTH] = {0};
     nca_header_t dec_nca_header;
     
@@ -1114,15 +1114,15 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    if (R_FAILED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+    if (R_FAILED(result = ncmOpenContentMetaDatabase(&ncmDb, curStorageId)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
         goto out;
     }
-    
-    u8 filter = ((u8)selectedNspDumpType + META_DB_REGULAR_APPLICATION);
-    
-    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, filter, titleList, titleListSize, &written, &total)))
+    NcmContentMetaType filter = ((NcmContentMetaType)selectedNspDumpType + NcmContentMetaType_Application);
+
+
+    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, filter)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         goto out;
@@ -1140,22 +1140,22 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
+    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].key), &contentRecordsHeaderReadSize, &contentRecordsHeader, sizeof(NcmContentMetaHeader))))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
         goto out;
     }
     
-    titleNcaCount = (u32)(contentRecordsHeader.numContentRecords);
+    titleNcaCount = (u32)(contentRecordsHeader.content_meta_count);
     
-    titleContentRecords = calloc(titleNcaCount, sizeof(NcmContentRecord));
-    if (!titleContentRecords)
+    titleContentInfos = calloc(titleNcaCount, sizeof(NcmContentInfo));
+    if (!titleContentInfos)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ContentRecord struct!");
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount * sizeof(NcmContentInfo), &(titleList[ncmTitleIndex].key), 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         goto out;
@@ -1163,9 +1163,9 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     // Fill information for our CNMT XML
     memset(&xml_program_info, 0, sizeof(cnmt_xml_program_info));
-    xml_program_info.type = titleList[ncmTitleIndex].metaRecord.type;
-    xml_program_info.title_id = titleList[ncmTitleIndex].metaRecord.titleId;
-    xml_program_info.version = titleList[ncmTitleIndex].metaRecord.version;
+    xml_program_info.type = titleList[ncmTitleIndex].key.type;
+    xml_program_info.title_id = titleList[ncmTitleIndex].key.id;
+    xml_program_info.version = titleList[ncmTitleIndex].key.version;
     xml_program_info.nca_cnt = titleNcaCount;
     
     xml_content_info = calloc(titleNcaCount, sizeof(cnmt_xml_content_info));
@@ -1175,7 +1175,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    if (R_FAILED(result = ncmOpenContentStorage(curStorageId, &ncmStorage)))
+    if (R_FAILED(result = ncmOpenContentStorage(&ncmStorage, curStorageId)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentStorage failed! (0x%08X)", result);
         goto out;
@@ -1185,7 +1185,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     u32 titleRecordIndex;
     for(i = 0, titleRecordIndex = 0; titleRecordIndex < titleNcaCount; i++, titleRecordIndex++)
     {
-        if (!cnmtFound && titleContentRecords[titleRecordIndex].type == NcmContentType_CNMT)
+        if (!cnmtFound && titleContentInfos[titleRecordIndex].content_type == NcmContentType_Meta)
         {
             cnmtFound = true;
             cnmtNcaIndex = titleRecordIndex;
@@ -1194,7 +1194,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         }
         
         // Skip Delta Fragments or any other unknown content types if we're not dealing with Patch titles dumped from installed SD/eMMC (with tiklessDump disabled)
-        if (titleContentRecords[titleRecordIndex].type >= NCA_CONTENT_TYPE_DELTA && (curStorageId == FsStorageId_GameCard || selectedNspDumpType != DUMP_PATCH_NSP || tiklessDump))
+        if (titleContentInfos[titleRecordIndex].content_type >= NCA_CONTENT_TYPE_DELTA && (curStorageId == FsStorageId_GameCard || selectedNspDumpType != DUMP_PATCH_NSP || tiklessDump))
         {
             xml_program_info.nca_cnt--;
             i--;
@@ -1202,15 +1202,15 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         }
         
         // Fill information for our CNMT XML
-        xml_content_info[i].type = titleContentRecords[titleRecordIndex].type;
-        memcpy(xml_content_info[i].nca_id, titleContentRecords[titleRecordIndex].ncaId.c, SHA256_HASH_SIZE / 2); // Temporary
-        convertDataToHexString(titleContentRecords[titleRecordIndex].ncaId.c, SHA256_HASH_SIZE / 2, xml_content_info[i].nca_id_str, SHA256_HASH_SIZE + 1); // Temporary
-        convertNcaSizeToU64(titleContentRecords[titleRecordIndex].size, &(xml_content_info[i].size));
+        xml_content_info[i].type = titleContentInfos[titleRecordIndex].content_type;
+        memcpy(xml_content_info[i].nca_id, titleContentInfos[titleRecordIndex].content_id.c, SHA256_HASH_SIZE / 2); // Temporary
+        convertDataToHexString(titleContentInfos[titleRecordIndex].content_id.c, SHA256_HASH_SIZE / 2, xml_content_info[i].nca_id_str, SHA256_HASH_SIZE + 1); // Temporary
+        convertNcaSizeToU64(titleContentInfos[titleRecordIndex].size, &(xml_content_info[i].size));
         convertDataToHexString(xml_content_info[i].hash, SHA256_HASH_SIZE, xml_content_info[i].hash_str, (SHA256_HASH_SIZE * 2) + 1); // Temporary
         
-        memcpy(&ncaId, &(titleContentRecords[titleRecordIndex].ncaId), sizeof(NcmNcaId));
+        memcpy(&ncaId, &(titleContentInfos[titleRecordIndex].content_id), sizeof(NcmContentId));
         
-        if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
+        if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, ncaHeader, NCA_FULL_HEADER_LENGTH, &ncaId, 0)))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read header from NCA \"%s\"! (0x%08X)", xml_content_info[i].nca_id_str, result);
             proceed = false;
@@ -1368,7 +1368,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         }
         
         // Retrieve NACP data (XML and icons)
-        if (!nacpXml && xml_content_info[i].type == NcmContentType_Icon)
+        if (!nacpXml && xml_content_info[i].type == NcmContentType_Control)
         {
             nacpNcaIndex = i;
             
@@ -1380,7 +1380,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         }
         
         // Retrieve legalinfo.xml
-        if (!legalInfoXml && xml_content_info[i].type == NcmContentType_Info)
+        if (!legalInfoXml && xml_content_info[i].type == NcmContentType_Control)
         {
             legalInfoNcaIndex = i;
             
@@ -1411,13 +1411,13 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     titleNcaCount = xml_program_info.nca_cnt;
     
     // Fill information for our CNMT XML
-    xml_content_info[titleNcaCount - 1].type = titleContentRecords[cnmtNcaIndex].type;
-    memcpy(xml_content_info[titleNcaCount - 1].nca_id, titleContentRecords[cnmtNcaIndex].ncaId.c, SHA256_HASH_SIZE / 2); // Temporary
-    convertDataToHexString(titleContentRecords[cnmtNcaIndex].ncaId.c, SHA256_HASH_SIZE / 2, xml_content_info[titleNcaCount - 1].nca_id_str, SHA256_HASH_SIZE + 1); // Temporary
-    convertNcaSizeToU64(titleContentRecords[cnmtNcaIndex].size, &(xml_content_info[titleNcaCount - 1].size));
+    xml_content_info[titleNcaCount - 1].type = titleContentInfos[cnmtNcaIndex].content_type;
+    memcpy(xml_content_info[titleNcaCount - 1].nca_id, titleContentInfos[cnmtNcaIndex].content_id.c, SHA256_HASH_SIZE / 2); // Temporary
+    convertDataToHexString(titleContentInfos[cnmtNcaIndex].content_id.c, SHA256_HASH_SIZE / 2, xml_content_info[titleNcaCount - 1].nca_id_str, SHA256_HASH_SIZE + 1); // Temporary
+    convertNcaSizeToU64(titleContentInfos[cnmtNcaIndex].size, &(xml_content_info[titleNcaCount - 1].size));
     convertDataToHexString(xml_content_info[titleNcaCount - 1].hash, SHA256_HASH_SIZE, xml_content_info[titleNcaCount - 1].hash_str, (SHA256_HASH_SIZE * 2) + 1); // Temporary
     
-    memcpy(&ncaId, &(titleContentRecords[cnmtNcaIndex].ncaId), sizeof(NcmNcaId));
+    memcpy(&ncaId, &(titleContentInfos[cnmtNcaIndex].content_id), sizeof(NcmContentId));
     
     // Update CNMT index
     cnmtNcaIndex = (titleNcaCount - 1);
@@ -1429,7 +1429,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, cnmtNcaBuf, xml_content_info[cnmtNcaIndex].size)))
+    if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, cnmtNcaBuf, xml_content_info[cnmtNcaIndex].size, &ncaId, 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read CNMT NCA \"%s\"! (0x%08X)", xml_content_info[cnmtNcaIndex].nca_id_str, result);
         goto out;
@@ -1996,7 +1996,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                 }
             }
             
-            if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, nca_offset, dumpBuf, n)))
+            if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, dumpBuf, n, &ncaId, nca_offset)))
             {
                 uiDrawString(STRING_X_POS, STRING_Y_POS(progressCtx.line_offset + 2), FONT_COLOR_ERROR_RGB, "Failed to read %lu bytes chunk at offset 0x%016lX from NCA \"%s\"! (0x%08X)", n, nca_offset, xml_content_info[i].nca_id_str, result);
                 proceed = false;
@@ -2906,7 +2906,7 @@ out:
     
     if (xml_content_info) free(xml_content_info);
     
-    if (titleContentRecords) free(titleContentRecords);
+    if (titleContentInfos) free(titleContentInfos);
     
     serviceClose(&(ncmDb.s));
     
@@ -2971,7 +2971,7 @@ bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
     u32 titleCount, titleIndex;
     
     char *dumpName = NULL;
-    char dumpPath[NAME_BUF_LEN] = {'\0'};
+    char dumpPath[4150] = {'\0'};
     char summary_str[256] = {'\0'};
     
     int initial_breaks = breaks, cur_breaks;

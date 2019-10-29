@@ -15,14 +15,16 @@ Result fsOpenGameCardStorage(FsStorage* out, const FsGameCardHandle* handle, u32
 
     return serviceDispatchIn(fsGetServiceSession(), 30, in,
         .out_num_objects = 1,
-        .out_objects = out);
+        .out_objects = &out->s
+    );
 }
 
 Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier* out)
 {
     return serviceDispatch(fsGetServiceSession(), 501,
         .out_num_objects = 1,
-        .out_objects = out);
+        .out_objects = &out->s
+    );
 }
 
 // IDeviceOperator

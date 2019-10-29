@@ -15,7 +15,6 @@
 extern FsDeviceOperator fsOperatorInstance;
 
 extern FsEventNotifier fsGameCardEventNotifier;
-extern Handle fsGameCardEventHandle;
 extern Event fsGameCardKernelEvent;
 extern UEvent exitEvent;
 
@@ -78,22 +77,19 @@ int main(int argc, char *argv[])
                             result = fsOpenGameCardDetectionEventNotifier(&fsGameCardEventNotifier);
                             if (R_SUCCEEDED(result))
                             {
-                                /* Retrieve gamecard detection event handle */
-                                result = fsEventNotifierGetEventHandle(&fsGameCardEventNotifier, &fsGameCardEventHandle);
+                                /* Retrieve gamecard detection kernel event */
+                                result = fsEventNotifierGetEventHandle(&fsGameCardEventNotifier, &fsGameCardKernelEvent, false);
                                 if (R_SUCCEEDED(result))
                                 {
                                     /* Retrieve initial gamecard status */
                                     gameCardInserted = isGameCardInserted();
-                                    
-                                    /* Load gamecard detection kernel event */
-                                    eventLoadRemote(&fsGameCardKernelEvent, fsGameCardEventHandle, false);
                                     
                                     /* Create usermode exit event */
                                     ueventCreate(&exitEvent, false);
                                     
                                     /* Create gamecard detection thread */
                                     Thread thread;
-                                    result = threadCreate(&thread, fsGameCardDetectionThreadFunc, NULL, 0x10000, 0x2C, -2);
+                                    result = threadCreate(&thread, fsGameCardDetectionThreadFunc, NULL, NULL, 0x10000, 0x2C, -2);
                                     if (R_SUCCEEDED(result))
                                     {
                                         /* Start gamecard detection thread */

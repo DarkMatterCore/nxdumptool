@@ -28,13 +28,13 @@ char *getTitleType(u8 type)
     
     switch(type)
     {
-        case META_DB_REGULAR_APPLICATION:
+        case NcmContentMetaType_Application:
             out = "Application";
             break;
-        case META_DB_PATCH:
+        case NcmContentMetaType_Patch:
             out = "Patch";
             break;
-        case META_DB_ADDON:
+        case NcmContentMetaType_AddOnContent:
             out = "AddOnContent";
             break;
         default:
@@ -51,7 +51,7 @@ char *getContentType(u8 type)
     
     switch(type)
     {
-        case NcmContentType_CNMT:
+        case NcmContentType_Meta:
             out = "Meta";
             break;
         case NcmContentType_Program:
@@ -60,13 +60,13 @@ char *getContentType(u8 type)
         case NcmContentType_Data:
             out = "Data";
             break;
-        case NcmContentType_Icon:
+        case NcmContentType_Control:
             out = "Control";
             break;
-        case NcmContentType_Doc:
+        case NcmContentType_HtmlDocument:
             out = "HtmlDocument";
             break;
-        case NcmContentType_Info:
+        case NcmContentType_LegalInformation:
             out = "LegalInformation";
             break;
         case NCA_CONTENT_TYPE_DELTA:
@@ -86,11 +86,11 @@ char *getRequiredMinTitleType(u8 type)
     
     switch(type)
     {
-        case META_DB_REGULAR_APPLICATION:
-        case META_DB_PATCH:
+        case NcmContentMetaType_Application:
+        case NcmContentMetaType_Patch:
             out = "RequiredSystemVersion";
             break;
-        case META_DB_ADDON:
+        case NcmContentMetaType_AddOnContent:
             out = "RequiredApplicationVersion";
             break;
         default:
@@ -107,13 +107,13 @@ char *getReferenceTitleIDType(u8 type)
     
     switch(type)
     {
-        case META_DB_REGULAR_APPLICATION:
+        case NcmContentMetaType_Application:
             out = "PatchId";
             break;
-        case META_DB_PATCH:
+        case NcmContentMetaType_Patch:
             out = "OriginalId";
             break;
-        case META_DB_ADDON:
+        case NcmContentMetaType_AddOnContent:
             out = "ApplicationId";
             break;
         default:
@@ -287,7 +287,7 @@ static void nca_update_bktr_ctr(unsigned char *ctr, u32 ctr_val, u64 ofs)
     }
 }
 
-bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *ctx, u64 offset, void *outBuf, size_t bufSize, bool encrypt)
+bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, Aes128CtrContext *ctx, u64 offset, void *outBuf, size_t bufSize, bool encrypt)
 {
     if (!ncmStorage || !ncaId || !outBuf || !bufSize || !ctx)
     {
@@ -310,7 +310,7 @@ bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *nc
     u64 block_size_used = (block_size > NCA_CTR_BUFFER_SIZE ? NCA_CTR_BUFFER_SIZE : block_size);
     u64 output_block_size = (block_size > NCA_CTR_BUFFER_SIZE ? (NCA_CTR_BUFFER_SIZE - (offset - block_start_offset)) : bufSize);
     
-    if (R_FAILED(result = ncmContentStorageReadContentIdFile(ncmStorage, ncaId, block_start_offset, ncaCtrBuf, block_size_used)))
+    if (R_FAILED(result = ncmContentStorageReadContentIdFile(ncmStorage, ncaCtrBuf, block_size_used, ncaId, block_start_offset)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read encrypted %lu bytes block at offset 0x%016lX from NCA \"%s\"! (0x%08X)", block_size_used, block_start_offset, nca_id, result);
         return false;
@@ -509,7 +509,7 @@ bool bktrSectionPhysicalRead(void *outBuf, size_t bufSize)
         {
             u64 block_size_used = (block_size > NCA_CTR_BUFFER_SIZE ? NCA_CTR_BUFFER_SIZE : block_size);
             
-            if (R_FAILED(result = ncmContentStorageReadContentIdFile(&(bktrContext.ncmStorage), &(bktrContext.ncaId), block_start_offset, ncaCtrBuf, block_size_used)))
+            if (R_FAILED(result = ncmContentStorageReadContentIdFile(&(bktrContext.ncmStorage), ncaCtrBuf, block_size_used, &(bktrContext.ncaId), block_start_offset)))
             {
                 uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "BKTR: failed to read encrypted %lu bytes block at offset 0x%016lX! (0x%08X)", block_size_used, block_start_offset, result);
                 return false;
@@ -766,7 +766,7 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
     return true;
 }
 
-bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data *output)
+bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data *output)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !xml_content_info || !output)
     {
@@ -1400,7 +1400,7 @@ bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program
     return true;
 }
 
-bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
+bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys)
     {
@@ -1526,7 +1526,7 @@ bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     // Save data to output struct
     // The caller function must free these data pointers
     memcpy(&(exeFsContext.ncmStorage), ncmStorage, sizeof(NcmContentStorage));
-    memcpy(&(exeFsContext.ncaId), ncaId, sizeof(NcmNcaId));
+    memcpy(&(exeFsContext.ncaId), ncaId, sizeof(NcmContentId));
     memcpy(&(exeFsContext.aes_ctx), &aes_ctx, sizeof(Aes128CtrContext));
     exeFsContext.exefs_offset = nca_pfs0_offset;
     exeFsContext.exefs_size = dec_nca_header->fs_headers[exefs_index].pfs0_superblock.pfs0_size;
@@ -1540,7 +1540,7 @@ bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     return true;
 }
 
-bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
+bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys)
     {
@@ -1704,7 +1704,7 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     // Save data to output struct
     // The caller function must free these data pointers
     memcpy(&(romFsContext.ncmStorage), ncmStorage, sizeof(NcmContentStorage));
-    memcpy(&(romFsContext.ncaId), ncaId, sizeof(NcmNcaId));
+    memcpy(&(romFsContext.ncaId), ncaId, sizeof(NcmContentId));
     memcpy(&(romFsContext.aes_ctx), &aes_ctx, sizeof(Aes128CtrContext));
     romFsContext.section_offset = section_offset;
     romFsContext.section_size = section_size;
@@ -1721,7 +1721,7 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     return true;
 }
 
-bool readBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
+bool readBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !romFsContext.section_offset || !romFsContext.section_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_file_entries)
     {
@@ -1739,7 +1739,7 @@ bool readBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, 
     initBktrContext();
     
     memcpy(&(bktrContext.ncmStorage), ncmStorage, sizeof(NcmContentStorage));
-    memcpy(&(bktrContext.ncaId), ncaId, sizeof(NcmNcaId));
+    memcpy(&(bktrContext.ncaId), ncaId, sizeof(NcmContentId));
     
     for(bktr_index = 0; bktr_index < 4; bktr_index++)
     {
@@ -1989,7 +1989,7 @@ out:
     return success;
 }
 
-bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, nca_program_mod_data *program_mod_data, char **outBuf, u64 *outBufSize)
+bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, nca_program_mod_data *program_mod_data, char **outBuf, u64 *outBufSize)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !program_mod_data || !outBuf || !outBufSize)
     {
@@ -2823,7 +2823,7 @@ char *getNacpJitConfigurationFlag(u64 flag)
     return out;
 }
 
-bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **out_nacp_xml, u64 *out_nacp_xml_size, nacp_icons_ctx **out_nacp_icons_ctx, u8 *out_nacp_icons_ctx_cnt)
+bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **out_nacp_xml, u64 *out_nacp_xml_size, nacp_icons_ctx **out_nacp_icons_ctx, u8 *out_nacp_icons_ctx_cnt)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !out_nacp_xml || !out_nacp_xml_size || !out_nacp_icons_ctx || !out_nacp_icons_ctx_cnt)
     {
@@ -3259,7 +3259,7 @@ out:
     return success;
 }
 
-bool retrieveLegalInfoXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf, u64 *outBufSize)
+bool retrieveLegalInfoXmlFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf, u64 *outBufSize)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !outBuf)
     {

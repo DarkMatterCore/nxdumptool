@@ -132,9 +132,9 @@ bool retrieveProcessMemory(keyLocation *location)
         // If not a kernel process, get PID from pm:dmnt
         u64 pid;
         
-        if (R_FAILED(result = pmdmntGetTitlePid(&pid, location->titleID)))
+        if (R_FAILED(result = pmdmntGetProcessId(&pid, location->titleID)))
         {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: pmdmntGetTitlePid failed! (0x%08X)", result);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: pmdmntGetProcessId failed! (0x%08X)", result);
             return false;
         }
         

@@ -47,7 +47,7 @@ void freeNsoBinaryData()
     nsoBinaryDataSectionSize = 0;
 }
 
-bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *aes_ctx, u64 nso_base_offset, nso_header_t *nsoHeader)
+bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, Aes128CtrContext *aes_ctx, u64 nso_base_offset, nso_header_t *nsoHeader)
 {
     if (!ncmStorage || !ncaId || !aes_ctx || !nso_base_offset || !nsoHeader)
     {
@@ -238,7 +238,7 @@ bool loadNsoBinaryData(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes
     return success;
 }
 
-bool retrieveMiddlewareListFromNso(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *aes_ctx, const char *nso_filename, u64 nso_base_offset, nso_header_t *nsoHeader, char *programInfoXml)
+bool retrieveMiddlewareListFromNso(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, Aes128CtrContext *aes_ctx, const char *nso_filename, u64 nso_base_offset, nso_header_t *nsoHeader, char *programInfoXml)
 {
     if (!ncmStorage || !ncaId || !aes_ctx || !nso_filename || !strlen(nso_filename) || !nso_base_offset || !nsoHeader || !programInfoXml)
     {
@@ -289,7 +289,7 @@ bool retrieveMiddlewareListFromNso(NcmContentStorage *ncmStorage, const NcmNcaId
     return true;
 }
 
-bool retrieveSymbolsListFromNso(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *aes_ctx, const char *nso_filename, u64 nso_base_offset, nso_header_t *nsoHeader, char *programInfoXml)
+bool retrieveSymbolsListFromNso(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, Aes128CtrContext *aes_ctx, const char *nso_filename, u64 nso_base_offset, nso_header_t *nsoHeader, char *programInfoXml)
 {
     if (!ncmStorage || !ncaId || !aes_ctx || !nso_filename || !strlen(nso_filename) || !nso_base_offset || !nsoHeader || !programInfoXml)
     {

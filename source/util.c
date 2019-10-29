@@ -63,7 +63,7 @@ int filenamesCount = 0;
 
 FsDeviceOperator fsOperatorInstance;
 FsEventNotifier fsGameCardEventNotifier;
-Handle fsGameCardEventHandle;
+Event fsGameCardEvent;
 Event fsGameCardKernelEvent;
 UEvent exitEvent;
 
@@ -230,10 +230,8 @@ void fsGameCardDetectionThreadFunc(void *arg)
     waitMulti(&idx, 0, waiterForEvent(&fsGameCardKernelEvent), waiterForUEvent(&exitEvent));
 }
 
-bool isServiceRunning(const char *serviceName)
+bool isServiceRunning(SmServiceName serviceName)
 {
-    if (!serviceName || !strlen(serviceName)) return false;
-    
     Handle handle;
     bool running = R_FAILED(smRegisterService(&handle, serviceName, false, 1));
     
@@ -246,7 +244,9 @@ bool isServiceRunning(const char *serviceName)
 
 bool checkSxOsServices()
 {
-    return (isServiceRunning("tx") && !isServiceRunning("rnx"));
+    SmServiceName tx = { "tx" };
+    SmServiceName rnx = { "rnx" };
+    return (isServiceRunning(tx) && !isServiceRunning(rnx));
 }
 
 void delay(u8 seconds)
@@ -296,7 +296,7 @@ void freeStringsPtr(char **var)
 void initExeFsContext()
 {
     memset(&(exeFsContext.ncmStorage), 0, sizeof(NcmContentStorage));
-    memset(&(exeFsContext.ncaId), 0, sizeof(NcmNcaId));
+    memset(&(exeFsContext.ncaId), 0, sizeof(NcmContentId));
     memset(&(exeFsContext.aes_ctx), 0, sizeof(Aes128CtrContext));
     exeFsContext.exefs_offset = 0;
     exeFsContext.exefs_size = 0;
@@ -330,7 +330,7 @@ void freeExeFsContext()
 void initRomFsContext()
 {
     memset(&(romFsContext.ncmStorage), 0, sizeof(NcmContentStorage));
-    memset(&(romFsContext.ncaId), 0, sizeof(NcmNcaId));
+    memset(&(romFsContext.ncaId), 0, sizeof(NcmContentId));
     memset(&(romFsContext.aes_ctx), 0, sizeof(Aes128CtrContext));
     romFsContext.section_offset = 0;
     romFsContext.section_size = 0;
@@ -367,7 +367,7 @@ void freeRomFsContext()
 void initBktrContext()
 {
     memset(&(bktrContext.ncmStorage), 0, sizeof(NcmContentStorage));
-    memset(&(bktrContext.ncaId), 0, sizeof(NcmNcaId));
+    memset(&(bktrContext.ncaId), 0, sizeof(NcmContentId));
     memset(&(bktrContext.aes_ctx), 0, sizeof(Aes128CtrContext));
     bktrContext.section_offset = 0;
     bktrContext.section_size = 0;
@@ -579,9 +579,9 @@ void freeGlobalData()
     }
 }
 
-bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
+bool listTitlesByType(NcmContentMetaDatabase *ncmDb, NcmContentMetaType filter)
 {
-    if (!ncmDb || (filter != META_DB_REGULAR_APPLICATION && filter != META_DB_PATCH && filter != META_DB_ADDON))
+    if (!ncmDb || (filter != NcmContentMetaType_Application && filter != NcmContentMetaType_Patch && filter != NcmContentMetaType_AddOnContent))
     {
         uiStatusMsg("listTitlesByType: invalid parameters (0x%02X filter).", filter);
         return false;
@@ -595,7 +595,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
     NcmApplicationContentMetaKey *titleListTmp = NULL;
     size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
     
-    u32 written = 0, total = 0;
+    s32 written = 0, total = 0;
     
     u64 *titleIDs = NULL, *tmpTIDs = NULL;
     u32 *versions = NULL, *tmpVersions = NULL;
@@ -603,7 +603,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
     titleList = calloc(1, titleListSize);
     if (titleList)
     {
-        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, filter, titleList, titleListSize, &written, &total)))
+        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, &total, &written, titleList, titleListSize, filter)))
         {
             if (written && total)
             {
@@ -616,7 +616,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
                         titleList = titleListTmp;
                         memset(titleList, 0, titleListSize);
                         
-                        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, filter, titleList, titleListSize, &written, &total)))
+                        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, &total, &written, titleList, titleListSize, filter)))
                         {
                             if (written != total)
                             {
@@ -643,11 +643,11 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
                         u32 i;
                         for(i = 0; i < total; i++)
                         {
-                            titleIDs[i] = titleList[i].metaRecord.titleId;
-                            versions[i] = titleList[i].metaRecord.version;
+                            titleIDs[i] = titleList[i].key.id;
+                            versions[i] = titleList[i].key.version;
                         }
                         
-                        if (filter == META_DB_REGULAR_APPLICATION)
+                        if (filter == NcmContentMetaType_Application)
                         {
                             // If ptr == NULL, realloc will essentially act as a malloc
                             tmpTIDs = realloc(titleAppTitleID, (titleAppCount + total) * sizeof(u64));
@@ -672,7 +672,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
                                 memError = true;
                             }
                         } else
-                        if (filter == META_DB_PATCH)
+                        if (filter == NcmContentMetaType_Patch)
                         {
                             // If ptr == NULL, realloc will essentially act as a malloc
                             tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount + total) * sizeof(u64));
@@ -697,7 +697,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, u8 filter)
                                 memError = true;
                             }
                         } else
-                        if (filter == META_DB_ADDON)
+                        if (filter == NcmContentMetaType_AddOnContent)
                         {
                             // If ptr == NULL, realloc will essentially act as a malloc
                             tmpTIDs = realloc(titleAddOnTitleID, (titleAddOnCount + total) * sizeof(u64));
@@ -757,7 +757,7 @@ bool getTitleIDAndVersionList(FsStorageId curStorageId)
     }
     
     /* Check if the SD card is really mounted */
-    if (curStorageId == FsStorageId_SdCard && fsdevGetDefaultFileSystem() == NULL) return true;
+    if (curStorageId == FsStorageId_SdCard && fsdevGetDeviceFileSystem("sdmc:") == NULL) return true;
     
     bool listApp = false, listPatch = false, listAddOn = false, success = false;
     
@@ -768,9 +768,9 @@ bool getTitleIDAndVersionList(FsStorageId curStorageId)
     FsStorageId *tmpStorages = NULL;
     u32 curAppCount = titleAppCount, curPatchCount = titlePatchCount, curAddOnCount = titleAddOnCount;
     
-    if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+    if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(&ncmDb, curStorageId)))
     {
-        listApp = listTitlesByType(&ncmDb, META_DB_REGULAR_APPLICATION);
+        listApp = listTitlesByType(&ncmDb, NcmContentMetaType_Application);
         if (listApp && titleAppCount > curAppCount)
         {
             tmpStorages = realloc(titleAppStorageId, titleAppCount * sizeof(FsStorageId));
@@ -787,7 +787,7 @@ bool getTitleIDAndVersionList(FsStorageId curStorageId)
             }
         }
         
-        listPatch = listTitlesByType(&ncmDb, META_DB_PATCH);
+        listPatch = listTitlesByType(&ncmDb, NcmContentMetaType_Patch);
         if (listPatch && titlePatchCount > curPatchCount)
         {
             tmpStorages = realloc(titlePatchStorageId, titlePatchCount * sizeof(FsStorageId));
@@ -804,7 +804,7 @@ bool getTitleIDAndVersionList(FsStorageId curStorageId)
             }
         }
         
-        listAddOn = listTitlesByType(&ncmDb, META_DB_ADDON);
+        listAddOn = listTitlesByType(&ncmDb, NcmContentMetaType_AddOnContent);
         if (listAddOn && titleAddOnCount > curAddOnCount)
         {
             tmpStorages = realloc(titleAddOnStorageId, titleAddOnCount * sizeof(FsStorageId));
@@ -838,11 +838,11 @@ bool getTitleIDAndVersionList(FsStorageId curStorageId)
     return success;
 }
 
-bool loadTitlesFromSdCardAndEmmc(u8 titleType)
+bool loadTitlesFromSdCardAndEmmc(NcmContentMetaType titleType)
 {
-    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID || (titleType != META_DB_PATCH && titleType != META_DB_ADDON)) return false;
+    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID || (titleType != NcmContentMetaType_Patch && titleType != NcmContentMetaType_AddOnContent)) return false;
     
-    if ((titleType == META_DB_PATCH && gameCardSdCardEmmcPatchCount) || (titleType == META_DB_ADDON && gameCardSdCardEmmcAddOnCount)) return true;
+    if ((titleType == NcmContentMetaType_Patch && gameCardSdCardEmmcPatchCount) || (titleType == NcmContentMetaType_AddOnContent && gameCardSdCardEmmcAddOnCount)) return true;
     
     u32 i, j;
     
@@ -853,7 +853,7 @@ bool loadTitlesFromSdCardAndEmmc(u8 titleType)
     NcmApplicationContentMetaKey *titleListTmp;
     size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
     
-    u32 written, total;
+    s32 written, total;
     
     u64 *titleIDs, *tmpTIDs;
     u32 *versions, *tmpVersions;
@@ -866,7 +866,7 @@ bool loadTitlesFromSdCardAndEmmc(u8 titleType)
         FsStorageId curStorageId = (i == 0 ? FsStorageId_SdCard : FsStorageId_NandUser);
         
         /* Check if the SD card is really mounted */
-        if (curStorageId == FsStorageId_SdCard && fsdevGetDefaultFileSystem() == NULL) continue;
+        if (curStorageId == FsStorageId_SdCard && fsdevGetDeviceFileSystem("sdmc") == NULL) continue;
         
         memset(&ncmDb, 0, sizeof(NcmContentMetaDatabase));
         
@@ -880,12 +880,12 @@ bool loadTitlesFromSdCardAndEmmc(u8 titleType)
         
         proceed = true;
         
-        if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+        if (R_SUCCEEDED(result = ncmOpenContentMetaDatabase(&ncmDb, curStorageId)))
         {
             titleList = calloc(1, titleListSize);
             if (titleList)
             {
-                if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, titleType, titleList, titleListSize, &written, &total)) && written && total)
+                if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, titleType)) && written && total)
                 {
                     if (total > written)
                     {
@@ -896,7 +896,7 @@ bool loadTitlesFromSdCardAndEmmc(u8 titleType)
                             titleList = titleListTmp;
                             memset(titleList, 0, titleListSize);
                             
-                            if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, titleType, titleList, titleListSize, &written, &total)))
+                            if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, titleType)))
                             {
                                 if (written != total) proceed = false;
                             } else {
@@ -916,11 +916,11 @@ bool loadTitlesFromSdCardAndEmmc(u8 titleType)
                         {
                             for(j = 0; j < total; j++)
                             {
-                                titleIDs[j] = titleList[j].metaRecord.titleId;
-                                versions[j] = titleList[j].metaRecord.version;
+                                titleIDs[j] = titleList[j].key.id;
+                                versions[j] = titleList[j].key.version;
                             }
                             
-                            if (titleType == META_DB_PATCH)
+                            if (titleType == NcmContentMetaType_Patch)
                             {
                                 // If ptr == NULL, realloc will essentially act as a malloc
                                 tmpTIDs = realloc(titlePatchTitleID, (titlePatchCount + total) * sizeof(u64));
@@ -1005,20 +1005,20 @@ bool loadTitlesFromSdCardAndEmmc(u8 titleType)
         }
     }
     
-    if ((titleType == META_DB_PATCH && gameCardSdCardEmmcPatchCount) || (titleType == META_DB_ADDON && gameCardSdCardEmmcAddOnCount)) return true;
+    if ((titleType == NcmContentMetaType_Patch && gameCardSdCardEmmcPatchCount) || (titleType == NcmContentMetaType_AddOnContent && gameCardSdCardEmmcAddOnCount)) return true;
     
     return false;
 }
 
-void freeTitlesFromSdCardAndEmmc(u8 titleType)
+void freeTitlesFromSdCardAndEmmc(NcmContentMetaType titleType)
 {
-    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID || (titleType != META_DB_PATCH && titleType != META_DB_ADDON) || (titleType == META_DB_PATCH && (!titlePatchCount || !titlePatchTitleID || !titlePatchVersion || !titlePatchStorageId || !gameCardSdCardEmmcPatchCount)) || (titleType == META_DB_ADDON && (!titleAddOnCount || !titleAddOnTitleID || !titleAddOnVersion || !titleAddOnStorageId || !gameCardSdCardEmmcAddOnCount))) return;
+    if (menuType != MENUTYPE_GAMECARD || !titleAppCount || !titleAppTitleID || (titleType != NcmContentMetaType_Patch && titleType != NcmContentMetaType_AddOnContent) || (titleType == NcmContentMetaType_Patch && (!titlePatchCount || !titlePatchTitleID || !titlePatchVersion || !titlePatchStorageId || !gameCardSdCardEmmcPatchCount)) || (titleType == NcmContentMetaType_AddOnContent && (!titleAddOnCount || !titleAddOnTitleID || !titleAddOnVersion || !titleAddOnStorageId || !gameCardSdCardEmmcAddOnCount))) return;
     
     u64 *tmpTIDs = NULL;
     u32 *tmpVersions = NULL;
     FsStorageId *tmpStorages = NULL;
     
-    if (titleType == META_DB_PATCH)
+    if (titleType == NcmContentMetaType_Patch)
     {
         if ((titlePatchCount - gameCardSdCardEmmcPatchCount) > 0)
         {
@@ -1879,8 +1879,8 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
 {
     Result result;
     u32 i = 0;
-    u32 written = 0;
-    u32 total = 0;
+    s32 written = 0;
+    s32 total = 0;
     u32 titleCount = 0;
     u32 ncmTitleIndex = 0;
     u32 titleNcaCount = 0;
@@ -1891,8 +1891,8 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     NcmContentMetaDatabase ncmDb;
     memset(&ncmDb, 0, sizeof(NcmContentMetaDatabase));
     
-    NcmContentMetaRecordsHeader contentRecordsHeader;
-    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaRecordsHeader));
+    NcmContentMetaHeader contentRecordsHeader;
+    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaHeader));
     
     u64 contentRecordsHeaderReadSize = 0;
     
@@ -1900,10 +1900,10 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     memset(&ncmStorage, 0, sizeof(NcmContentStorage));
     
     NcmApplicationContentMetaKey *titleList = NULL;
-    NcmContentRecord *titleContentRecords = NULL;
+    NcmContentInfo *titleContentInfos = NULL;
     size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
     
-    NcmNcaId ncaId;
+    NcmContentId ncaId;
     char ncaIdStr[33] = {'\0'};
     u8 ncaHeader[NCA_FULL_HEADER_LENGTH] = {0};
     nca_header_t dec_nca_header;
@@ -2009,15 +2009,15 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         goto out;
     }
     
-    if (R_FAILED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+    if (R_FAILED(result = ncmOpenContentMetaDatabase(&ncmDb, curStorageId)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
         goto out;
     }
     
-    u8 filter = (!usePatch ? META_DB_REGULAR_APPLICATION : META_DB_PATCH);
+    NcmContentMetaType filter = (!usePatch ? NcmContentMetaType_Application : NcmContentMetaType_Patch);
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, filter, titleList, titleListSize, &written, &total)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, filter)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         goto out;
@@ -2035,28 +2035,28 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
+    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].key), &contentRecordsHeaderReadSize, &contentRecordsHeader, sizeof(NcmContentMetaHeader))))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
         goto out;
     }
     
-    titleNcaCount = (u32)(contentRecordsHeader.numContentRecords);
+    titleNcaCount = (u32)(contentRecordsHeader.content_meta_count);
     
-    titleContentRecords = calloc(titleNcaCount, sizeof(NcmContentRecord));
-    if (!titleContentRecords)
+    titleContentInfos = calloc(titleNcaCount, sizeof(NcmContentInfo));
+    if (!titleContentInfos)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ContentRecord struct!");
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount * sizeof(NcmContentInfo), &(titleList[ncmTitleIndex].key), 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         goto out;
     }
     
-    if (R_FAILED(result = ncmOpenContentStorage(curStorageId, &ncmStorage)))
+    if (R_FAILED(result = ncmOpenContentStorage(&ncmStorage, curStorageId)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentStorage failed! (0x%08X)", result);
         goto out;
@@ -2064,10 +2064,10 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     
     for(i = 0; i < titleNcaCount; i++)
     {
-        if (titleContentRecords[i].type == NcmContentType_Program)
+        if (titleContentInfos[i].content_type == NcmContentType_Program)
         {
-            memcpy(&ncaId, &(titleContentRecords[i].ncaId), sizeof(NcmNcaId));
-            convertDataToHexString(titleContentRecords[i].ncaId.c, SHA256_HASH_SIZE / 2, ncaIdStr, 33);
+            memcpy(&ncaId, &(titleContentInfos[i].content_id), sizeof(NcmContentId));
+            convertDataToHexString(titleContentInfos[i].content_id.c, SHA256_HASH_SIZE / 2, ncaIdStr, 33);
             foundProgram = true;
             break;
         }
@@ -2087,7 +2087,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     uiRefreshDisplay();
     breaks++;*/
     
-    if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
+    if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, ncaHeader, NCA_FULL_HEADER_LENGTH, &ncaId, 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read header from Program NCA! (0x%08X)", result);
         goto out;
@@ -2120,7 +2120,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     success = readExeFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys);
     
 out:
-    if (titleContentRecords) free(titleContentRecords);
+    if (titleContentInfos) free(titleContentInfos);
     
     if (!success) serviceClose(&(ncmStorage.s));
     
@@ -2148,8 +2148,8 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
 {
     Result result;
     u32 i = 0;
-    u32 written = 0;
-    u32 total = 0;
+    s32 written = 0;
+    s32 total = 0;
     u32 titleCount = 0;
     u32 ncmTitleIndex = 0;
     u32 titleNcaCount = 0;
@@ -2160,8 +2160,8 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     NcmContentMetaDatabase ncmDb;
     memset(&ncmDb, 0, sizeof(NcmContentMetaDatabase));
     
-    NcmContentMetaRecordsHeader contentRecordsHeader;
-    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaRecordsHeader));
+    NcmContentMetaHeader contentRecordsHeader;
+    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaHeader));
     
     u64 contentRecordsHeaderReadSize = 0;
     
@@ -2169,10 +2169,10 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     memset(&ncmStorage, 0, sizeof(NcmContentStorage));
     
     NcmApplicationContentMetaKey *titleList = NULL;
-    NcmContentRecord *titleContentRecords = NULL;
+    NcmContentInfo *titleContentInfos = NULL;
     size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
     
-    NcmNcaId ncaId;
+    NcmContentId ncaId;
     char ncaIdStr[33] = {'\0'};
     u8 ncaHeader[NCA_FULL_HEADER_LENGTH] = {0};
     nca_header_t dec_nca_header;
@@ -2303,15 +2303,15 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         goto out;
     }
     
-    if (R_FAILED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+    if (R_FAILED(result = ncmOpenContentMetaDatabase(&ncmDb, curStorageId)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
         goto out;
     }
     
-    u8 filter = (curRomFsType == ROMFS_TYPE_APP ? META_DB_REGULAR_APPLICATION : (curRomFsType == ROMFS_TYPE_PATCH ? META_DB_PATCH : META_DB_ADDON));
+    NcmContentMetaType filter = (curRomFsType == ROMFS_TYPE_APP ? NcmContentMetaType_Application : (curRomFsType == ROMFS_TYPE_PATCH ? NcmContentMetaType_Patch : NcmContentMetaType_AddOnContent));
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, filter, titleList, titleListSize, &written, &total)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, filter)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         goto out;
@@ -2329,28 +2329,28 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
+    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].key), &contentRecordsHeaderReadSize, &contentRecordsHeader, sizeof(NcmContentMetaHeader))))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
         goto out;
     }
     
-    titleNcaCount = (u32)(contentRecordsHeader.numContentRecords);
+    titleNcaCount = (u32)(contentRecordsHeader.content_meta_count);
     
-    titleContentRecords = calloc(titleNcaCount, sizeof(NcmContentRecord));
-    if (!titleContentRecords)
+    titleContentInfos = calloc(titleNcaCount, sizeof(NcmContentInfo));
+    if (!titleContentInfos)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ContentRecord struct!");
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount * sizeof(NcmContentInfo), &(titleList[ncmTitleIndex].key), 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         goto out;
     }
     
-    if (R_FAILED(result = ncmOpenContentStorage(curStorageId, &ncmStorage)))
+    if (R_FAILED(result = ncmOpenContentStorage(&ncmStorage, curStorageId)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentStorage failed! (0x%08X)", result);
         goto out;
@@ -2358,10 +2358,10 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     
     for(i = 0; i < titleNcaCount; i++)
     {
-        if (((curRomFsType == ROMFS_TYPE_APP || curRomFsType == ROMFS_TYPE_PATCH) && titleContentRecords[i].type == NcmContentType_Program) || (curRomFsType == ROMFS_TYPE_ADDON && titleContentRecords[i].type == NcmContentType_Data))
+        if (((curRomFsType == ROMFS_TYPE_APP || curRomFsType == ROMFS_TYPE_PATCH) && titleContentInfos[i].content_type == NcmContentType_Program) || (curRomFsType == ROMFS_TYPE_ADDON && titleContentInfos[i].content_type == NcmContentType_Data))
         {
-            memcpy(&ncaId, &(titleContentRecords[i].ncaId), sizeof(NcmNcaId));
-            convertDataToHexString(titleContentRecords[i].ncaId.c, SHA256_HASH_SIZE / 2, ncaIdStr, 33);
+            memcpy(&ncaId, &(titleContentInfos[i].content_id), sizeof(NcmContentId));
+            convertDataToHexString(titleContentInfos[i].content_id.c, SHA256_HASH_SIZE / 2, ncaIdStr, 33);
             foundNca = true;
             break;
         }
@@ -2381,7 +2381,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     uiRefreshDisplay();
     breaks++;*/
     
-    if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
+    if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, ncaHeader, NCA_FULL_HEADER_LENGTH, &ncaId, 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read header from %s NCA! (0x%08X)", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), result);
         goto out;
@@ -2443,7 +2443,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     success = true;
     
 out:
-    if (titleContentRecords) free(titleContentRecords);
+    if (titleContentInfos) free(titleContentInfos);
     
     if (!success) serviceClose(&(ncmStorage.s));
     
@@ -2738,11 +2738,11 @@ int getSdCardFreeSpace(u64 *out)
     FsFileSystem *sdfs = NULL;
     u64 size = 0;
     int rc = 0;
-    
-    sdfs = fsdevGetDefaultFileSystem();
+
+    sdfs = fsdevGetDeviceFileSystem("sdmc:");
     if (!sdfs)
     {
-        uiStatusMsg("getSdCardFreeSpace: fsdevGetDefaultFileSystem failed!");
+        uiStatusMsg("getSdCardFreeSpace: fsdevGetDeviceFileSystem(\"sdmc:\") failed!");
         return rc;
     }
     
