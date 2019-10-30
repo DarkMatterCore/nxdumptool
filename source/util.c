@@ -2040,7 +2040,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         goto out;
     }
     
-    titleNcaCount = (u32)(contentRecordsHeader.content_meta_count);
+    titleNcaCount = (u32)(contentRecordsHeader.content_count);
     
     titleContentInfos = calloc(titleNcaCount, sizeof(NcmContentInfo));
     if (!titleContentInfos)

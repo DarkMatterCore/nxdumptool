@@ -1146,7 +1146,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    titleNcaCount = (u32)(contentRecordsHeader.content_meta_count);
+    titleNcaCount = (u32)(contentRecordsHeader.content_count);
     
     titleContentInfos = calloc(titleNcaCount, sizeof(NcmContentInfo));
     if (!titleContentInfos)
