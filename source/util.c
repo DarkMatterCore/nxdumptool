@@ -63,7 +63,6 @@ int filenamesCount = 0;
 
 FsDeviceOperator fsOperatorInstance;
 FsEventNotifier fsGameCardEventNotifier;
-Event fsGameCardEvent;
 Event fsGameCardKernelEvent;
 UEvent exitEvent;
 
@@ -603,7 +602,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, NcmContentMetaType filter)
     titleList = calloc(1, titleListSize);
     if (titleList)
     {
-        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, &total, &written, titleList, titleListSize, filter)))
+        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, &total, &written, titleList, 1, filter)))
         {
             if (written && total)
             {
@@ -616,7 +615,7 @@ bool listTitlesByType(NcmContentMetaDatabase *ncmDb, NcmContentMetaType filter)
                         titleList = titleListTmp;
                         memset(titleList, 0, titleListSize);
                         
-                        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, &total, &written, titleList, titleListSize, filter)))
+                        if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(ncmDb, &total, &written, titleList, total, filter)))
                         {
                             if (written != total)
                             {
@@ -885,7 +884,7 @@ bool loadTitlesFromSdCardAndEmmc(NcmContentMetaType titleType)
             titleList = calloc(1, titleListSize);
             if (titleList)
             {
-                if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, titleType)) && written && total)
+                if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, 1, titleType)) && written && total)
                 {
                     if (total > written)
                     {
@@ -896,7 +895,7 @@ bool loadTitlesFromSdCardAndEmmc(NcmContentMetaType titleType)
                             titleList = titleListTmp;
                             memset(titleList, 0, titleListSize);
                             
-                            if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, titleType)))
+                            if (R_SUCCEEDED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, total, titleType)))
                             {
                                 if (written != total) proceed = false;
                             } else {
@@ -2017,7 +2016,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     
     NcmContentMetaType filter = (!usePatch ? NcmContentMetaType_Application : NcmContentMetaType_Patch);
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, filter)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleCount, filter)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         goto out;
@@ -2050,7 +2049,7 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount * sizeof(NcmContentInfo), &(titleList[ncmTitleIndex].key), 0)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount, &(titleList[ncmTitleIndex].key), 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         goto out;
@@ -2311,7 +2310,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     
     NcmContentMetaType filter = (curRomFsType == ROMFS_TYPE_APP ? NcmContentMetaType_Application : (curRomFsType == ROMFS_TYPE_PATCH ? NcmContentMetaType_Patch : NcmContentMetaType_AddOnContent));
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, filter)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleCount, filter)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         goto out;
@@ -2335,7 +2334,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         goto out;
     }
     
-    titleNcaCount = (u32)(contentRecordsHeader.content_meta_count);
+    titleNcaCount = (u32)(contentRecordsHeader.content_count);
     
     titleContentInfos = calloc(titleNcaCount, sizeof(NcmContentInfo));
     if (!titleContentInfos)
@@ -2344,7 +2343,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount * sizeof(NcmContentInfo), &(titleList[ncmTitleIndex].key), 0)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount, &(titleList[ncmTitleIndex].key), 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         goto out;

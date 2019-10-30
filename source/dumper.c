@@ -1122,7 +1122,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     NcmContentMetaType filter = ((NcmContentMetaType)selectedNspDumpType + NcmContentMetaType_Application);
 
 
-    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleListSize, filter)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, &total, &written, titleList, titleCount, filter)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
         goto out;
@@ -1155,7 +1155,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount * sizeof(NcmContentInfo), &(titleList[ncmTitleIndex].key), 0)))
+    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &written, titleContentInfos, titleNcaCount, &(titleList[ncmTitleIndex].key), 0)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
         goto out;
