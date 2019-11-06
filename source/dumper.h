@@ -39,6 +39,8 @@ typedef struct {
     FsStorageId storageId;                          // Source storage from which the data is dumped
     bool removeConsoleData;                         // Original value for the "Remove console specific data" option. Overrides the selected setting in the current session
     bool tiklessDump;                               // Original value for the "Generate ticket-less dump" option. Overrides the selected setting in the current session. Ignored if removeConsoleData == false
+    bool npdmAcidRsaPatch;                          // Original value for the "Change NPDM RSA key/sig in Program NCA" option. Overrides the selected setting in the current session
+    bool preInstall;                                // Indicates if we're dealing with a preinstalled title - e.g. if the user already accepted the missing ticket prompt
     u8 partNumber;                                  // Next part number
     u32 nspFileCount;                               // PFS0 file count
     u32 ncaCount;                                   // NCA count
@@ -69,5 +71,6 @@ bool dumpRomFsSectionData(u32 titleIndex, selectedRomFsType curRomFsType, bool d
 bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, selectedRomFsType curRomFsType, bool doSplitting);
 bool dumpCurrentDirFromRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, bool doSplitting);
 bool dumpGameCardCertificate();
+bool dumpTicketFromTitle(u32 titleIndex, selectedTicketType curTikType, ticketOptions *tikDumpCfg);
 
 #endif

@@ -33,7 +33,7 @@
 /  2: Enable with LF-CRLF conversion. */
 
 
-#define FF_USE_FIND		2
+#define FF_USE_FIND		0
 /* This option switches filtered directory read functions, f_findfirst() and
 /  f_findnext(). (0:Disable, 1:Enable 2:Enable with matching altname[] too) */
 
@@ -68,7 +68,7 @@
 / Locale and Namespace Configurations
 /---------------------------------------------------------------------------*/
 
-#define FF_CODE_PAGE	932
+#define FF_CODE_PAGE	850
 /* This option specifies the OEM code page to be used on the target system.
 /  Incorrect code page setting can cause a file open failure.
 /
@@ -97,7 +97,7 @@
 */
 
 
-#define FF_USE_LFN		1
+#define FF_USE_LFN		3
 #define FF_MAX_LFN		255
 /* The FF_USE_LFN switches the support for LFN (long file name).
 /
@@ -137,7 +137,7 @@
 /  on character encoding. When LFN is not enabled, these options have no effect. */
 
 
-#define FF_STRF_ENCODE	3
+#define FF_STRF_ENCODE	0
 /* When FF_LFN_UNICODE >= 1 with LFN enabled, string I/O functions, f_gets(),
 /  f_putc(), f_puts and f_printf() convert the character encoding in it.
 /  This option selects assumption of character encoding ON THE FILE to be
@@ -150,7 +150,7 @@
 */
 
 
-#define FF_FS_RPATH		1
+#define FF_FS_RPATH		0
 /* This option configures support for relative path.
 /
 /   0: Disable relative path and remove related functions.
@@ -167,8 +167,8 @@
 /* Number of volumes (logical drives) to be used. (1-10) */
 
 
-#define FF_STR_VOLUME_ID	0
-#define FF_VOLUME_STRS		"RAM","NAND","CF","SD","SD2","USB","USB2","USB3"
+#define FF_STR_VOLUME_ID	1
+#define FF_VOLUME_STRS		"sys"
 /* FF_STR_VOLUME_ID switches support for volume ID in arbitrary strings.
 /  When FF_STR_VOLUME_ID is set to 1 or 2, arbitrary strings can be used as drive
 /  number in the path name. FF_VOLUME_STRS defines the volume ID strings for each
@@ -239,7 +239,7 @@
 #define FF_FS_NORTC		0
 #define FF_NORTC_MON	1
 #define FF_NORTC_MDAY	1
-#define FF_NORTC_YEAR	2018
+#define FF_NORTC_YEAR	2019
 /* The option FF_FS_NORTC switches timestamp functiton. If the system does not have
 /  any RTC function or valid timestamp is not needed, set FF_FS_NORTC = 1 to disable
 /  the timestamp function. Every object modified by FatFs will have a fixed timestamp

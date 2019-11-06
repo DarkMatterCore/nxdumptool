@@ -105,6 +105,8 @@ typedef enum {
     resultShowSdCardEmmcOrphanPatchAddOnMenu,
     resultShowSdCardEmmcBatchModeMenu,
     resultSdCardEmmcBatchDump,
+    resultShowTicketMenu,
+    resultDumpTicket,
     resultShowUpdateMenu,
     resultUpdateNSWDBXml,
     resultUpdateApplication,
@@ -152,6 +154,8 @@ typedef enum {
     stateSdCardEmmcOrphanPatchAddOnMenu,
     stateSdCardEmmcBatchModeMenu,
     stateSdCardEmmcBatchDump,
+    stateTicketMenu,
+    stateDumpTicket,
     stateUpdateMenu,
     stateUpdateNSWDBXml,
     stateUpdateApplication

@@ -20,9 +20,6 @@
 #define SIGTYPE_RSA2048_SHA1            (u32)0x10001
 #define SIGTYPE_RSA2048_SHA256          (u32)0x10004
 
-#define COMMON_ETICKET_FILENAME         "80000000000000e1"
-#define PERSONALIZED_ETICKET_FILENAME   "80000000000000e2"
-
 typedef struct {
     u64 titleID;
     u8 mask;
@@ -42,30 +39,31 @@ typedef struct {
     u32 total_key_cnt;                          /* Total key counter. */
     
     // Needed to decrypt the NCA header using AES-128-XTS
-    u8 header_kek_source[0x10];                 /* Seed for header kek. */
-    u8 header_key_source[0x20];                 /* Seed for NCA header key. */
-    u8 header_kek[0x10];                        /* NCA header kek. */
-    u8 header_key[0x20];                        /* NCA header key. */
+    u8 header_kek_source[0x10];                 /* Seed for header kek. Retrieved from the .rodata section in the FS sysmodule. */
+    u8 header_key_source[0x20];                 /* Seed for NCA header key. Retrieved from the .data section in the FS sysmodule. */
+    u8 header_kek[0x10];                        /* NCA header kek. Generated from header_kek_source. */
+    u8 header_key[0x20];                        /* NCA header key. Generated from header_kek and header_key_source. */
     
-    // Needed to derive the KAEK needed to decrypt the NCA key area
-    u8 key_area_key_application_source[0x10];   /* Seed for kaek 0. */
-    u8 key_area_key_ocean_source[0x10];         /* Seed for kaek 1. */
-    u8 key_area_key_system_source[0x10];        /* Seed for kaek 2. */
+    // Needed to derive the KAEK used to decrypt the NCA key area
+    u8 key_area_key_application_source[0x10];   /* Seed for kaek 0. Retrieved from the .rodata section in the FS sysmodule. */
+    u8 key_area_key_ocean_source[0x10];         /* Seed for kaek 1. Retrieved from the .rodata section in the FS sysmodule. */
+    u8 key_area_key_system_source[0x10];        /* Seed for kaek 2. Retrieved from the .rodata section in the FS sysmodule. */
     
-    // Needed to decrypt the title key block from an eTicket
+    // Needed to decrypt the title key block from an eTicket. Retrieved from the Lockpick_RCM keys file.
     u8 eticket_rsa_kek[0x10];                   /* eTicket RSA kek. */
     u8 titlekeks[0x20][0x10];                   /* Title key encryption keys. */
     
-    // Needed to reencrypt the NCA key area for tik-less NSP dumps
+    // Needed to reencrypt the NCA key area for tik-less NSP dumps. Retrieved from the Lockpick_RCM keys file.
     u8 key_area_keys[0x20][3][0x10];            /* Key area encryption keys. */
+    
+    // Needed to decrypt saves from system and application titles
+    u8 save_mac_key[0x10];
 } PACKED nca_keyset_t;
 
 bool loadMemoryKeys();
 bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out);
 bool loadExternalKeys();
-bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_enc_key, u8 *out_dec_key);
+int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_enc_key, u8 *out_dec_key);
 bool generateEncryptedNcaKeyAreaWithTitlekey(nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
-bool readCertsFromApplicationRomFs();
-bool retrieveCertData(u8 *out_cert, bool personalized);
 
 #endif

@@ -7,9 +7,13 @@ Main features
 * Generates full Cartridge Image dumps (XCI) with optional certificate removal and/or trimming.
 * Generates installable Nintendo Submission Packages (NSP) from base applications, updates and DLCs stored in the inserted gamecard, SD card and eMMC storage devices.
     * The generated dumps follow the `AuditingTool` format from Scene releases.
+    * Capable of generating dumps without console specific information (common ticket).
     * Capable of generating ticket-less (standard crypto) dumps.
     * Capable of generating dumps from installed updates/DLCs with missing base applications (orphan titles).
-    * Batch mode available.
+    * Compatible with game pre-installs.
+    * Batch mode available, with customizable dump settings.
+* Manual gamecard certificate dump.
+* Manual ticket dump from installed SD/eMMC titles + optional removal of console specific data.
 * Compatible with multigame carts.
 * CRC32 checksum calculation for XCI/NSP dumps.
 * Full XCI dump verification using XML database from NSWDB.COM (NSWreleases.xml).
@@ -19,14 +23,16 @@ Main features
 * Program NCA ExeFS/RomFS section & Data NCA RomFS section file data dumping + browser with manual file dump support.
     * Compatible with base applications, updates and DLCs (if available).
     * Supports manual RomFS directory dumping.
-* Manual gamecard certificate dump.
 * Free SD card space checks in place.
 * File splitting support for all operations.
     * Capable of storing split XCI/NSP dumps in directories with the archive bit set.
+* Sequential (multi-session) dump support, in case there's not enough storage space available for a XCI/NSP full dump.
 * Metadata retrieval using NCM and NS services.
 * Dump speed calculation, ETA calculation and progress bar.
 
 Operations related to installed SD/eMMC titles require a keys file located at "sdmc:/switch/prod.keys". Use [Lockpick_RCM](https://github.com/shchmue/Lockpick_RCM) to generate it.
+
+Please launch the application through title override (hold R while launching a game) whenever possible to avoid memory allocation problems.
 
 Thanks to
 --------------
@@ -46,9 +52,10 @@ Thanks to
 * The [LZ4 project](http://www.lz4.org), for the LZ4 C-code implementation (licensed under [BSD 2-Clause](https://github.com/lz4/lz4/blob/master/lib/LICENSE)).
 * [AnalogMan](https://github.com/AnalogMan151) and [0Liam](https://github.com/0Liam), for their constant support and ideas.
 * [RattletraPM](https://github.com/RattletraPM), for the awesome icon used in the application.
-* The GNOME project, from which the high contrast directory/file icons for the filebrowser modes were retrieved.
+* The GNOME project, from which the [high contrast icons](https://commons.wikimedia.org/wiki/GNOME_High_contrast_icons) were retrieved.
 * The folks from ReSwitched, for working towards the creation of a good homebrew ecosystem.
 * The Comfy Boyes, for being both awesome and supportive. You know who you are.
+* My girlfriend, for putting up with me even though I dedicate most of my free time to this little project, and for doing her best to cheer me up and keep me going. I love you.
 
 Donate
 --------------
@@ -59,6 +66,55 @@ If you like my work and you'd like to support me in any way, it's not necessary,
 
 Changelog
 --------------
+
+**v1.1.7:**
+* Tickets and RSA certificates are now properly parsed from their respective system savedata files, thanks to the efforts of [shchmue](https://github.com/shchmue)!
+    * Speeds up ticket / titlekey retrieval for NSP/ExeFS/RomFS operations.
+    * Removes the need to bundle RSA certificates inside the application. Yay!
+    * As a bonus, the new `XS00000024` personalized ticket certificate introduced in 9.0.0 is now supported. Thanks to [SimonTime](https://github.com/simontime) for providing insight on this matter!
+* Added NSP dump support for pre-installed titles.
+    * If the selected title uses titlekey crypto and no ticket for it can be found, a prompt will be displayed, asking the user if they want to proceed anyway (even though content decryption won't be possible).
+    * This prompt will *not* appear in batch dump operations. The dump procedure will always go ahead.
+    * Sequential NSP dump operations will only display the prompt during their first run.
+* Added a new Ticket submenu for SD/eMMC titles. It can be used to only dump the Ticket from a specific base application / update / DLC, without having to dump its entire NSP.
+    * Dumped tickets are stored in `sdmc:/switch/nxdumptool/Ticket`.
+    * A configurable option is also available to remove console specific data from dumped tickets.
+    * The encrypted + decrypted title key is displayed during the dumping process, along with the Rights ID for the title.
+    * Just so you know, if you want to dump tickets from base application updates bundled in gamecards, use the HFS0 browser.
+* Added an option in NSP/batch dump menus to control the replacement of the NPDM RSA key/sig in Program NCAs from base applications and updates:
+    * Up until now, replacing both the public RSA key in the ACID section from the main.npdm file (ExeFS) and the NPDM header signature (NCA header) has been the default, non-configurable behaviour whenever Program NCA modifications were needed.
+    * This option is enabled by default - if Program NCA modifications are needed, disabling this option will make the output NSP require ACID patches to function properly under any CFW (but at the same time, it will make the Program NCA verifiable by PC tools).
+    * The rest of the possible Program NCA modifications (content distribution change and/or Rights ID removal + key area replacement) will be applied when needed, even if this option is disabled.
+* Changes related to the orphan content menu (Y button):
+    * Parent base application name is now retrieved for orphan updates and DLCs whenever possible, and used in menus and output NSP dumps.
+    * Moved the orphan content hint from the orphan content menu to the SD/eMMC menu.
+* Changed application behaviour regarding the Lockpick_RCM keys file existence:
+    * SD/eMMC menu and NSP/ExeFS/RomFS related operations are now disabled if the keys file at "sdmc:/switch/prod.keys" is not available.
+    * An error message telling the user to run Lockpick_RCM will be displayed in the main menu if the keys file is not available.
+    * Additionally, error messages related to data decryption will now also suggest the user to run Lockpick_RCM.
+* Changes to the generated update NSPs (thanks to [The-4n](https://github.com/The-4n) and [suchmememanyskill](https://github.com/suchmememanyskill)):
+    * Delta Fragments are, again, always excluded from output NSP dumps, regardless of their source storage and the selected dump settings.
+    * Patch Extended Data is no longer wiped from the CNMT NCA in update NSPs - only the content records are replaced accordingly.
+    * Furthermore, content records from Delta Fragments are preserved as well.
+    * Fixed CNMT PFS0 block hash calculation when the total PFS0 size exceeds the hash block size from the PFS0 superblock in the NCA header. Removes the `0x236E02` / `2002-4535` error in Goldleaf about an invalid PFS0, triggered by update NSPs with long a CNMT PFS0 section.
+* Changes to the generated NSP XMLs:
+    * `RequiredDownloadSystemVersion` and `IdOffset` elements from the CNMT XML are now properly retrieved from their true locations in the CNMT NCA.
+    * Added support for the `RuntimeParameterDelivery` NACP field (introduced in HOS 9.X).
+    * Added support for the `IARCGeneric` value in the `RatingAge` NACP field (introduced in HOS 9.X).
+    * Fixed handling of `PlayLogQueryableApplicationId` values.
+    * Big thanks to [0Liam](https://github.com/0Liam) for documenting these changes!
+* Changes related to the application update feature:
+    * Added a forced update prompt if the application is already on the latest version.
+    * The application update option will now be disabled after a successful update.
+    * Removed the FS service reinitialize step after closing the application's RomFS at startup. This was done because `romfsExit()` didn't close all open file handles to the NRO when I tested it with libnx v2.2.0 some time ago, thus making the application update fail. Nonetheless, the problem has been fixed.
+* Fixed UI flickering when HFS0 partition data can't be retrieved from the gamecard.
+    * Furthermore, a warning about `nogc` spoofing is now displayed under this particular case.
+* Added an extra NSP offset validation step for sequential NSP dumps.
+* Minor codestyle fixes.
+
+Big thanks to [FennecTECH](https://github.com/fennectech) and `Hannah (Luna)#8459` for providing with **lots** of testing for this release!
+
+PSA: if you downloaded any new games from the eShop after updating to 9.0.0+ and used a previous release of nxdumptool to dump NSPs **with console specific data**, please redump them - their RSA certificate chain isn't the proper one. Dumps without console specific data (or without a ticket) are not affected by this.
 
 **v1.1.6:**
 * Added sequential dump support: it is now possible to start a XCI/NSP dump procedure even if there's not enough space available in the SD card!

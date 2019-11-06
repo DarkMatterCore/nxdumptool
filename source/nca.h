@@ -228,10 +228,13 @@ typedef struct {
     u32 version;
     u8 type;
     u8 unk1;
-    u16 table_offset;
-    u16 content_records_cnt;
-    u16 meta_records_cnt;
-    u8 unk2[12];
+    u16 extended_header_size;
+    u16 content_cnt;
+    u16 content_meta_cnt;
+    u8 attr;
+    u8 unk2[0x03];
+    u32 required_dl_sysver;
+    u8 unk3[0x04];
 } PACKED cnmt_header;
 
 typedef struct {
@@ -244,7 +247,7 @@ typedef struct {
     u8 nca_id[0x10];
     u8 size[6];
     u8 type;
-    u8 unk;
+    u8 id_offset;
 } PACKED cnmt_content_record;
 
 typedef struct {
@@ -253,8 +256,8 @@ typedef struct {
     u32 version;
     u32 required_dl_sysver;
     u32 nca_cnt;
-    u8 digest[32];
-    char digest_str[65];
+    u8 digest[SHA256_HASH_SIZE];
+    char digest_str[(SHA256_HASH_SIZE * 2) + 1];
     u8 min_keyblob;
     u32 min_sysver;
     u64 patch_tid;
@@ -262,12 +265,14 @@ typedef struct {
 
 typedef struct {
     u8 type;
-    u8 nca_id[16];
-    char nca_id_str[33];
+    u8 nca_id[SHA256_HASH_SIZE / 2];
+    char nca_id_str[SHA256_HASH_SIZE + 1];
     u64 size;
-    u8 hash[32];
-    char hash_str[65];
+    u8 hash[SHA256_HASH_SIZE];
+    char hash_str[(SHA256_HASH_SIZE * 2) + 1];
     u8 keyblob;
+    u8 id_offset;
+    u64 cnt_record_offset; // Relative to the start of the content record structs in the CNMT
     u8 decrypted_nca_keys[NCA_KEY_AREA_SIZE];
     u8 encrypted_header_mod[NCA_FULL_HEADER_LENGTH];
 } PACKED cnmt_xml_content_info;
@@ -286,6 +291,8 @@ typedef struct {
     u64 section_offset; // Relative to NCA start
     u64 section_size;
     u64 hash_table_offset; // Relative to NCA start
+    u64 hash_block_size;
+    u32 hash_block_cnt;
     u64 pfs0_offset; // Relative to NCA start
     u64 pfs0_size;
     u64 title_cnmt_offset; // Relative to NCA start
@@ -321,6 +328,7 @@ typedef struct {
     u8 cert_data[ETICKET_CERT_FILE_SIZE];
     rsa2048_sha256_ticket tik_data;
     bool retrieved_tik;
+    bool missing_tik;
 } PACKED title_rights_ctx;
 
 typedef struct {
@@ -463,7 +471,8 @@ typedef struct {
     u8 LogoType;
     u8 LogoHandling;
     u8 RuntimeAddOnContentInstall;
-    u8 Reserved_0x30F3[0x3];
+    u8 RuntimeParameterDelivery;
+    u8 Reserved_0x30F4[0x2];
     u8 CrashReport;
     u8 Hdcp;
     u64 SeedForPseudoDeviceId;
@@ -515,7 +524,7 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
 
 bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data *output);
 
-bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *output, title_rights_ctx *rights_info, bool replaceKeyArea);
+bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, u32 cnmtNcaIndex, nca_cnmt_mod_data *output, title_rights_ctx *rights_info, bool replaceKeyArea);
 
 bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *cnmt_mod);
 

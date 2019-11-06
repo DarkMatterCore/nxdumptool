@@ -9,11 +9,14 @@
 #include "ui.h"
 #include "es.h"
 #include "set_ext.h"
+#include "save.h"
 
 /* Extern variables */
 
 extern int breaks;
 extern int font_height;
+
+extern u8 *dumpBuf;
 
 extern char strbuf[NAME_BUF_LEN];
 
@@ -21,34 +24,9 @@ extern char strbuf[NAME_BUF_LEN];
 
 nca_keyset_t nca_keyset;
 
-FsStorage fatFsStorage;
+static u8 eticket_data[ETICKET_DEVKEY_DATA_SIZE];
+static bool setcal_eticket_retrieved = false;
 
-static const char *cert_CA00000003_path = "romfs:/certificate/CA00000003";
-static const char *cert_XS00000020_path = "romfs:/certificate/XS00000020";
-static const char *cert_XS00000021_path = "romfs:/certificate/XS00000021";
-
-static u8 cert_CA00000003_data[ETICKET_CA_CERT_SIZE];
-static u8 cert_XS00000020_data[ETICKET_XS_CERT_SIZE];
-static u8 cert_XS00000021_data[ETICKET_XS_CERT_SIZE];
-
-static const u8 cert_CA00000003_hash[0x20] = {
-    0x62, 0x69, 0x0E, 0xC0, 0x4C, 0x62, 0x9D, 0x08, 0x38, 0xBB, 0xDF, 0x65, 0xC5, 0xA6, 0xB0, 0x9A,
-    0x54, 0x94, 0x2C, 0x87, 0x0E, 0x01, 0x55, 0x73, 0xCF, 0x7D, 0x58, 0xF2, 0x59, 0xFE, 0x36, 0xFA
-};
-
-static const u8 cert_XS00000020_hash[0x20] = {
-    0x55, 0x23, 0x17, 0xD4, 0x4B, 0xAF, 0x4C, 0xF5, 0x31, 0x8E, 0xF5, 0xC6, 0x4E, 0x0F, 0x75, 0xD9,
-    0x75, 0xD4, 0x03, 0xFD, 0x7B, 0x93, 0x7B, 0xAB, 0x46, 0x7D, 0x37, 0x94, 0x62, 0x39, 0x33, 0xE9
-};
-
-static const u8 cert_XS00000021_hash[0x20] = {
-    0xDE, 0xFF, 0x96, 0x01, 0x42, 0x1E, 0x00, 0xC1, 0x52, 0x60, 0x5C, 0x9F, 0x42, 0xCD, 0x91, 0xD7,
-    0x90, 0x01, 0xC5, 0x7F, 0xC3, 0x27, 0x58, 0x4B, 0xD9, 0x6F, 0x71, 0x78, 0xC9, 0x44, 0xD0, 0xAD
-};
-
-static const char *keysFilePath = "sdmc:/switch/prod.keys";
-
-/* Variables related to the FS process */
 static keyLocation FSRodata = {
     FS_TID,
     SEG_RODATA,
@@ -132,19 +110,22 @@ bool retrieveProcessMemory(keyLocation *location)
         // If not a kernel process, get PID from pm:dmnt
         u64 pid;
         
-        if (R_FAILED(result = pmdmntGetTitlePid(&pid, location->titleID)))
+        result = pmdmntGetTitlePid(&pid, location->titleID);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: pmdmntGetTitlePid failed! (0x%08X)", result);
             return false;
         }
         
-        if (R_FAILED(result = svcDebugActiveProcess(&debug_handle, pid)))
+        result = svcDebugActiveProcess(&debug_handle, pid);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcDebugActiveProcess failed! (0x%08X)", result);
             return false;
         }
         
-        if (R_FAILED(result = svcGetDebugEvent((u8*)&d, debug_handle)))
+        result = svcGetDebugEvent((u8*)&d, debug_handle);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcGetDebugEvent failed! (0x%08X)", result);
             return false;
@@ -154,7 +135,8 @@ bool retrieveProcessMemory(keyLocation *location)
         u64 pids[300];
         u32 num_processes;
         
-        if (R_FAILED(result = svcGetProcessList(&num_processes, pids, 300)))
+        result = svcGetProcessList(&num_processes, pids, 300);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcGetProcessList failed! (0x%08X)", result);
             return false;
@@ -191,7 +173,8 @@ bool retrieveProcessMemory(keyLocation *location)
     // Locate "real" .text segment as Atmosphere emuMMC has two
     for(;;)
     {
-        if (R_FAILED(result = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr)))
+        result = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcQueryDebugProcessMemory failed! (0x%08X)", result);
             success = false;
@@ -214,7 +197,8 @@ bool retrieveProcessMemory(keyLocation *location)
 
     for(segment = 1; segment < BIT(3);)
     {
-        if (R_FAILED(result = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr)))
+        result = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcQueryDebugProcessMemory failed! (0x%08X)", result);
             success = false;
@@ -238,7 +222,8 @@ bool retrieveProcessMemory(keyLocation *location)
             
             memset(location->data + location->dataSize, 0, mem_info.size);
             
-            if (R_FAILED(result = svcReadDebugProcessMemory(location->data + location->dataSize, debug_handle, mem_info.addr, mem_info.size)))
+            result = svcReadDebugProcessMemory(location->data + location->dataSize, debug_handle, mem_info.addr, mem_info.size);
+            if (R_FAILED(result))
             {
                 uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: svcReadDebugProcessMemory failed! (0x%08X)", result);
                 success = false;
@@ -337,13 +322,15 @@ bool loadMemoryKeys()
     nca_keyset.memory_key_cnt++;
     
     // Derive NCA header key
-    if (R_FAILED(result = splCryptoInitialize()))
+    result = splCryptoInitialize();
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the spl:crypto service! (0x%08X)", result);
         return false;
     }
     
-    if (R_FAILED(result = splCryptoGenerateAesKek(nca_keyset.header_kek_source, 0, 0, nca_keyset.header_kek)))
+    result = splCryptoGenerateAesKek(nca_keyset.header_kek_source, 0, 0, nca_keyset.header_kek);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKek(header_kek_source) failed! (0x%08X)", result);
         splCryptoExit();
@@ -352,14 +339,16 @@ bool loadMemoryKeys()
     
     nca_keyset.memory_key_cnt++;
     
-    if (R_FAILED(result = splCryptoGenerateAesKey(nca_keyset.header_kek, nca_keyset.header_key_source + 0x00, nca_keyset.header_key + 0x00)))
+    result = splCryptoGenerateAesKey(nca_keyset.header_kek, nca_keyset.header_key_source + 0x00, nca_keyset.header_key + 0x00);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKey(header_key_source + 0x00) failed! (0x%08X)", result);
         splCryptoExit();
         return false;
     }
     
-    if (R_FAILED(result = splCryptoGenerateAesKey(nca_keyset.header_kek, nca_keyset.header_key_source + 0x10, nca_keyset.header_key + 0x10)))
+    result = splCryptoGenerateAesKey(nca_keyset.header_kek, nca_keyset.header_key_source + 0x10, nca_keyset.header_key + 0x10);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKey(header_key_source + 0x10) failed! (0x%08X)", result);
         splCryptoExit();
@@ -397,13 +386,15 @@ bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out)
     
     u8 *kek_source = (dec_nca_header->kaek_ind == 0 ? nca_keyset.key_area_key_application_source : (dec_nca_header->kaek_ind == 1 ? nca_keyset.key_area_key_ocean_source : nca_keyset.key_area_key_system_source));
     
-    if (R_FAILED(result = splCryptoInitialize()))
+    result = splCryptoInitialize();
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the spl:crypto service! (0x%08X)", result);
         return false;
     }
     
-    if (R_FAILED(result = splCryptoGenerateAesKek(kek_source, crypto_type, 0, tmp_kek)))
+    result = splCryptoGenerateAesKek(kek_source, crypto_type, 0, tmp_kek);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKek(kek_source) failed! (0x%08X)", result);
         splCryptoExit();
@@ -415,7 +406,8 @@ bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out)
     
     for(i = 0; i < NCA_KEY_AREA_KEY_CNT; i++)
     {
-        if (R_FAILED(result = splCryptoGenerateAesKey(tmp_kek, dec_nca_header->nca_keys[i], decrypted_nca_keys[i])))
+        result = splCryptoGenerateAesKey(tmp_kek, dec_nca_header->nca_keys[i], decrypted_nca_keys[i]);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splCryptoGenerateAesKey(nca_kaek_%02u) failed! (0x%08X)", i, result);
             success = false;
@@ -625,6 +617,11 @@ int readKeysFromFile(FILE *f)
             {
                 if (!parse_hex_key(nca_keyset.eticket_rsa_kek, value, sizeof(nca_keyset.eticket_rsa_kek))) return 0;
                 nca_keyset.ext_key_cnt++;
+            } else
+            if (strcasecmp(key, "save_mac_key") == 0)
+            {
+                if (!parse_hex_key(nca_keyset.save_mac_key, value, sizeof(nca_keyset.save_mac_key))) return 0;
+                nca_keyset.ext_key_cnt++;
             } else {
                 memset(test_name, 0, sizeof(test_name));
                 
@@ -679,10 +676,10 @@ bool loadExternalKeys()
     if (nca_keyset.ext_key_cnt > 0) return true;
     
     // Open keys file
-    FILE *keysFile = fopen(keysFilePath, "rb");
+    FILE *keysFile = fopen(KEYS_FILE_PATH, "rb");
     if (!keysFile)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to open \"%s\" to retrieve \"eticket_rsa_kek\", titlekeks and KAEKs!", keysFilePath);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to open \"%s\" to retrieve \"eticket_rsa_kek\", titlekeks and KAEKs!", KEYS_FILE_PATH);
         return false;
     }
     
@@ -692,7 +689,7 @@ bool loadExternalKeys()
     
     if (ret < 1)
     {
-        if (ret == -1) uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to parse necessary keys from \"%s\"! (keys file empty?)", keysFilePath);
+        if (ret == -1) uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to parse necessary keys from \"%s\"! (keys file empty?)", KEYS_FILE_PATH);
         return false;
     }
     
@@ -717,13 +714,15 @@ bool testKeyPair(const void *E, const void *D, const void *N)
     X[0xFE] = 0xBA;
     X[0xFF] = 0xBE;
     
-    if (R_FAILED(result = splUserExpMod(X, N, D, 0x100, Y)))
+    result = splUserExpMod(X, N, D, 0x100, Y);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splUserExpMod failed! (testKeyPair #1) (0x%08X)", result);
         return false;
     }
     
-    if (R_FAILED(result = splUserExpMod(Y, N, E, 4, Z)))
+    result = splUserExpMod(Y, N, E, 4, Z);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splUserExpMod failed! (testKeyPair #2) (0x%08X)", result);
         return false;
@@ -770,15 +769,17 @@ void mgf1(const u8 *data, size_t data_length, u8 *mask, size_t mask_length)
     free(data_counter);
 }
 
-bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_enc_key, u8 *out_dec_key)
+int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_enc_key, u8 *out_dec_key)
 {
+    int ret = -1;
+    
     if (!dec_nca_header || dec_nca_header->kaek_ind > 2 || (!out_tik && !out_dec_key && !out_enc_key))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve NCA ticket and/or titlekey.");
-        return false;
+        return ret;
     }
     
-    u32 i;
+    u32 i, j;
     bool has_rights_id = false;
     
     for(i = 0; i < 0x10; i++)
@@ -793,7 +794,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     if (!has_rights_id)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: NCA doesn't use titlekey crypto.");
-        return false;
+        return ret;
     }
     
     u8 crypto_type = (dec_nca_header->crypto_type2 > dec_nca_header->crypto_type ? dec_nca_header->crypto_type2 : dec_nca_header->crypto_type);
@@ -802,7 +803,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     if (crypto_type >= 0x20)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NCA keyblob index.");
-        return false;
+        return ret;
     }
     
     Result result;
@@ -812,51 +813,58 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     bool foundRightsId = false;
     u8 rightsIdType = 0; // 1 = Common, 2 = Personalized
     
-    u8 eticket_data[ETICKET_DEVKEY_DATA_SIZE];
-    memset(eticket_data, 0, ETICKET_DEVKEY_DATA_SIZE);
-    
     Aes128CtrContext eticket_aes_ctx;
     unsigned char ctr[0x10];
     
     u8 *D = NULL, *N = NULL, *E = NULL;
     
-    FATFS fs;
     FRESULT fr;
     FIL eTicketSave;
     
-    u64 offset = 0;
-    u8 eTicketEntry[ETICKET_ENTRY_SIZE], titleKeyBlock[0x100];
-    u32 read_bytes = 0;
+    save_ctx_t *save_ctx = NULL;
+    allocation_table_storage_ctx_t fat_storage;
+    save_fs_list_entry_t entry;
+    const char ticket_bin_path[SAVE_FS_LIST_MAX_NAME_LENGTH] = "/ticket.bin";
+    
+    u32 buf_size = (ETICKET_ENTRY_SIZE * 0x10);
+    u32 br = buf_size;
+    u64 total_br = 0;
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
+    
     bool foundEticket = false, proceed = true;
     
     u8 titlekey[0x10];
     Aes128Context titlekey_aes_ctx;
     
-    if (R_FAILED(result = esInitialize()))
+    result = esInitialize();
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the ES service! (0x%08X)", result);
-        return false;
+        return ret;
     }
     
-    if (R_FAILED(result = esCountCommonTicket(&common_count)))
+    result = esCountCommonTicket(&common_count);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: esCountCommonTicket failed! (0x%08X)", result);
         esExit();
-        return false;
+        return ret;
     }
     
-    if (R_FAILED(result = esCountPersonalizedTicket(&personalized_count)))
+    result = esCountPersonalizedTicket(&personalized_count);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: esCountPersonalizedTicket failed! (0x%08X)", result);
         esExit();
-        return false;
+        return ret;
     }
     
     if (!common_count && !personalized_count)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: no tickets available!");
         esExit();
-        return false;
+        return ret;
     }
     
     if (common_count)
@@ -866,15 +874,16 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to allocate memory for common tickets' rights IDs!");
             esExit();
-            return false;
+            return ret;
         }
         
-        if (R_FAILED(result = esListCommonTicket(&ids_written, common_rights_ids, common_count * sizeof(FsRightsId))))
+        result = esListCommonTicket(&ids_written, common_rights_ids, common_count * sizeof(FsRightsId));
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: esListCommonTicket failed! (0x%08X)", result);
             free(common_rights_ids);
             esExit();
-            return false;
+            return ret;
         }
         
         for(i = 0; i < common_count; i++)
@@ -897,15 +906,16 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to allocate memory for personalized tickets' rights IDs!");
             esExit();
-            return false;
+            return ret;
         }
         
-        if (R_FAILED(result = esListPersonalizedTicket(&ids_written, personalized_rights_ids, personalized_count * sizeof(FsRightsId))))
+        result = esListPersonalizedTicket(&ids_written, personalized_rights_ids, personalized_count * sizeof(FsRightsId));
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: esListPersonalizedTicket failed! (0x%08X)", result);
             free(personalized_rights_ids);
             esExit();
-            return false;
+            return ret;
         }
         
         for(i = 0; i < personalized_count; i++)
@@ -926,150 +936,195 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
     if (!foundRightsId || (rightsIdType != 1 && rightsIdType != 2))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: NCA rights ID unavailable in this console!");
-        return false;
-    }
-    
-    // Get extended eTicket RSA key from PRODINFO
-    if (R_FAILED(result = setcalInitialize()))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the set:cal service! (0x%08X)", result);
-        return false;
-    }
-    
-    result = setcalGetEticketDeviceKey(eticket_data);
-    
-    setcalExit();
-    
-    if (R_FAILED(result))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: setcalGetEticketDeviceKey failed! (0x%08X)", result);
-        return false;
+        ret = -2;
+        return ret;
     }
     
     // Load external keys
-    if (!loadExternalKeys()) return false;
+    if (!loadExternalKeys()) return ret;
     
-    // Decrypt eTicket RSA key
-    memcpy(ctr, eticket_data + ETICKET_DEVKEY_CTR_OFFSET, 0x10);
-    aes128CtrContextCreate(&eticket_aes_ctx, nca_keyset.eticket_rsa_kek, ctr);
-    aes128CtrCrypt(&eticket_aes_ctx, eticket_data + ETICKET_DEVKEY_RSA_OFFSET, eticket_data + ETICKET_DEVKEY_RSA_OFFSET, ETICKET_DEVKEY_RSA_SIZE);
-    
-    // Public exponent must use RSA-2048 SHA-1 signature method
-    // The value is stored use big endian byte order
-    if (bswap_32(*((u32*)(&(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x200])))) != SIGTYPE_RSA2048_SHA1)
+    if (!setcal_eticket_retrieved)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid public RSA exponent for eTicket data! Wrong keys?");
-        return false;
-    }
-    
-    D = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET]);
-    N = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x100]);
-    E = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x200]);
-    
-    if (!testKeyPair(E, D, N)) return false;
-    
-    if (R_FAILED(result = fsOpenBisStorage(&fatFsStorage, FsBisStorageId_System)))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to open BIS System partition! (0x%08X)", result);
-        return false;
+        // Get extended eTicket RSA key from PRODINFO
+        memset(eticket_data, 0, ETICKET_DEVKEY_DATA_SIZE);
+        
+        result = setcalInitialize();
+        if (R_FAILED(result))
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to initialize the set:cal service! (0x%08X)", result);
+            return ret;
+        }
+        
+        result = setcalGetEticketDeviceKey(eticket_data);
+        
+        setcalExit();
+        
+        if (R_FAILED(result))
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: setcalGetEticketDeviceKey failed! (0x%08X)", result);
+            return ret;
+        }
+        
+        // Decrypt eTicket RSA key
+        memcpy(ctr, eticket_data + ETICKET_DEVKEY_CTR_OFFSET, 0x10);
+        aes128CtrContextCreate(&eticket_aes_ctx, nca_keyset.eticket_rsa_kek, ctr);
+        aes128CtrCrypt(&eticket_aes_ctx, eticket_data + ETICKET_DEVKEY_RSA_OFFSET, eticket_data + ETICKET_DEVKEY_RSA_OFFSET, ETICKET_DEVKEY_RSA_SIZE);
+        
+        // Public exponent must use RSA-2048 SHA-1 signature method
+        // The value is stored use big endian byte order
+        if (bswap_32(*((u32*)(&(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x200])))) != SIGTYPE_RSA2048_SHA1)
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid public RSA exponent for eTicket data! Wrong keys?\nTry running Lockpick_RCM to generate the keys file from scratch.");
+            return ret;
+        }
+        
+        D = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET]);
+        N = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x100]);
+        E = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x200]);
+        
+        if (!testKeyPair(E, D, N)) return ret;
+        
+        setcal_eticket_retrieved = true;
+    } else {
+        D = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET]);
+        N = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x100]);
+        E = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x200]);
     }
     
     // FatFs is used to mount the BIS System partition and read the ES savedata files to avoid 0xE02 (file already in use) errors
-    fr = f_mount(&fs, "sys", 1);
-    if (fr != FR_OK)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to mount BIS System partition! (%u)", fr);
-        fsStorageClose(&fatFsStorage);
-        return false;
-    }
-    
-    fr = f_chdir("/save");
-    if (fr != FR_OK)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to change BIS System partition directory! (%u)", fr);
-        f_unmount("sys");
-        fsStorageClose(&fatFsStorage);
-        return false;
-    }
-    
-    fr = f_open(&eTicketSave, (rightsIdType == 1 ? COMMON_ETICKET_FILENAME : PERSONALIZED_ETICKET_FILENAME), FA_READ | FA_OPEN_EXISTING);
-    if (fr != FR_OK)
+    fr = f_open(&eTicketSave, (rightsIdType == 1 ? BIS_COMMON_TIK_SAVE_NAME : BIS_PERSONALIZED_TIK_SAVE_NAME), FA_READ | FA_OPEN_EXISTING);
+    if (fr)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to open ES %s eTicket save! (%u)", (rightsIdType == 1 ? "common" : "personalized"), fr);
-        f_unmount("sys");
-        fsStorageClose(&fatFsStorage);
-        return false;
+        return ret;
     }
     
-    while(true)
+    save_ctx = calloc(1, sizeof(save_ctx_t));
+    if (!save_ctx)
     {
-        fr = f_read(&eTicketSave, eTicketEntry, ETICKET_ENTRY_SIZE, &read_bytes);
-        if (fr || read_bytes != ETICKET_ENTRY_SIZE) break;
-        
-        // Only read eTicket entries with RSA-2048 SHA-256 signature method
-        if (*((u32*)eTicketEntry) == SIGTYPE_RSA2048_SHA256)
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to allocate memory for ticket savefile context!");
+        f_close(&eTicketSave);
+        return ret;
+    }
+    
+    save_ctx->file = &eTicketSave;
+    save_ctx->tool_ctx.action = 0;
+    memcpy(save_ctx->save_mac_key, nca_keyset.save_mac_key, 0x10);
+    
+    if (!save_process(save_ctx))
+    {
+        strcat(strbuf, "\nError: failed to process ticket savefile!");
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, strbuf);
+        free(save_ctx);
+        f_close(&eTicketSave);
+        return ret;
+    }
+    
+    if (!save_hierarchical_file_table_get_file_entry_by_path(&save_ctx->save_filesystem_core.file_table, ticket_bin_path, &entry))
+    {
+        snprintf(tmp, MAX_ELEMENTS(tmp), "\nError: failed to get file entry for \"%s\" in ticket savefile!", ticket_bin_path);
+        strcat(strbuf, tmp);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, strbuf);
+        save_free_contexts(save_ctx);
+        free(save_ctx);
+        f_close(&eTicketSave);
+        return ret;
+    }
+    
+    if (!save_open_fat_storage(&save_ctx->save_filesystem_core, &fat_storage, entry.value.save_file_info.start_block))
+    {
+        snprintf(tmp, MAX_ELEMENTS(tmp), "\nError: failed to open FAT storage at block 0x%X for \"%s\" in ticket savefile!", entry.value.save_file_info.start_block, ticket_bin_path);
+        strcat(strbuf, tmp);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, strbuf);
+        save_free_contexts(save_ctx);
+        free(save_ctx);
+        f_close(&eTicketSave);
+        return ret;
+    }
+    
+    while(br == buf_size && total_br < entry.value.save_file_info.length)
+    {
+        br = save_allocation_table_storage_read(&fat_storage, dumpBuf, total_br, buf_size);
+        if (br != buf_size)
         {
-            // Check if our current eTicket entry matches our rights ID
-            if (!memcmp(eTicketEntry + ETICKET_RIGHTSID_OFFSET, dec_nca_header->rights_id, 0x10))
-            {
-                foundEticket = true;
-                
-                if (rightsIdType == 1)
-                {
-                    // Common
-                    memcpy(titlekey, eTicketEntry + ETICKET_TITLEKEY_OFFSET, 0x10);
-                } else {
-                    // Personalized
-                    u8 M[0x100], salt[0x20], db[0xDF];
-                    
-                    memcpy(titleKeyBlock, eTicketEntry + ETICKET_TITLEKEY_OFFSET, 0x100);
-                    
-                    if (R_FAILED(result = splUserExpMod(titleKeyBlock, N, D, 0x100, M)))
-                    {
-                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splUserExpMod failed! (titleKeyBlock) (0x%08X)", result);
-                        proceed = false;
-                        break;
-                    }
-                    
-                    // Decrypt the titlekey
-                    mgf1(M + 0x21, 0xDF, salt, 0x20);
-                    for(i = 0; i < 0x20; i++) salt[i] ^= M[i + 1];
-                    
-                    mgf1(salt, 0x20, db, 0xDF);
-                    for(i = 0; i < 0xDF; i++) db[i] ^= M[i + 0x21];
-                    
-                    // Verify if it starts with a null string hash
-                    if (memcmp(db, null_hash, 0x20) != 0)
-                    {
-                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: titlekey decryption failed! Wrong keys?");
-                        proceed = false;
-                        break;
-                    }
-                    
-                    memcpy(titlekey, db + 0xCF, 0x10);
-                }
-                
-                break;
-            }
+            snprintf(tmp, MAX_ELEMENTS(tmp), "\nError: failed to read %u bytes chunk at offset 0x%lX from \"%s\" in ticket savefile!", buf_size, total_br, ticket_bin_path);
+            strcat(strbuf, tmp);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, strbuf);
+            proceed = false;
+            break;
         }
         
-        offset += ETICKET_ENTRY_SIZE;
+        if (dumpBuf[0] == 0) break;
+        
+        total_br += br;
+        
+        for(i = 0; i < buf_size; i += ETICKET_ENTRY_SIZE)
+        {
+            // Only read eTicket entries with RSA-2048 SHA-256 signature method
+            // Also check if our current eTicket entry matches our rights ID
+            if (*((u32*)(dumpBuf + i)) != SIGTYPE_RSA2048_SHA256 || memcmp(dumpBuf + i + ETICKET_RIGHTSID_OFFSET, dec_nca_header->rights_id, 0x10) != 0) continue;
+            
+            foundEticket = true;
+            
+            if (rightsIdType == 1)
+            {
+                // Common
+                memcpy(titlekey, dumpBuf + i + ETICKET_TITLEKEY_OFFSET, 0x10);
+            } else {
+                // Personalized
+                u8 M[0x100], salt[0x20], db[0xDF];
+                
+                u8 *titleKeyBlock = (dumpBuf + i + ETICKET_TITLEKEY_OFFSET);
+                
+                result = splUserExpMod(titleKeyBlock, N, D, 0x100, M);
+                if (R_FAILED(result))
+                {
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: splUserExpMod failed! (titleKeyBlock) (0x%08X)", result);
+                    proceed = false;
+                    break;
+                }
+                
+                // Decrypt the titlekey
+                mgf1(M + 0x21, 0xDF, salt, 0x20);
+                for(j = 0; j < 0x20; j++) salt[j] ^= M[j + 1];
+                
+                mgf1(salt, 0x20, db, 0xDF);
+                for(j = 0; j < 0xDF; j++) db[j] ^= M[j + 0x21];
+                
+                // Verify if it starts with a null string hash
+                if (memcmp(db, null_hash, 0x20) != 0)
+                {
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: titlekey decryption failed! Wrong keys?\nTry running Lockpick_RCM to generate the keys file from scratch.");
+                    proceed = false;
+                    break;
+                }
+                
+                memcpy(titlekey, db + 0xCF, 0x10);
+            }
+            
+            break;
+        }
+        
+        if (foundEticket) break;
     }
     
+    save_free_contexts(save_ctx);
+    free(save_ctx);
     f_close(&eTicketSave);
-    f_unmount("sys");
-    fsStorageClose(&fatFsStorage);
     
-    if (!proceed) return false;
+    if (!proceed) return ret;
     
     if (!foundEticket)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to find a matching eTicket entry for NCA rights ID!");
-        return false;
+        ret = -2;
+        return ret;
     }
     
+    ret = 0;
+    
     // Copy ticket data to output pointer
-    if (out_tik != NULL) memcpy(out_tik, eTicketEntry, ETICKET_TIK_FILE_SIZE);
+    if (out_tik != NULL) memcpy(out_tik, dumpBuf + i, ETICKET_TIK_FILE_SIZE);
     
     // Copy encrypted titlekey to output pointer
     // It is used in personalized -> common ticket conversion
@@ -1083,7 +1138,7 @@ bool retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_e
         aes128DecryptBlock(&titlekey_aes_ctx, out_dec_key, titlekey);
     }
     
-    return true;
+    return ret;
 }
 
 bool generateEncryptedNcaKeyAreaWithTitlekey(nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
@@ -1109,78 +1164,6 @@ bool generateEncryptedNcaKeyAreaWithTitlekey(nca_header_t *dec_nca_header, u8 *d
     aes128ContextCreate(&key_area_ctx, nca_keyset.key_area_keys[crypto_type][dec_nca_header->kaek_ind], true);
     
     for(i = 0; i < NCA_KEY_AREA_KEY_CNT; i++) aes128EncryptBlock(&key_area_ctx, dec_nca_header->nca_keys[i], decrypted_nca_keys + (i * NCA_KEY_AREA_KEY_SIZE));
-    
-    return true;
-}
-
-bool readCertsFromApplicationRomFs()
-{
-    FILE *certFile;
-    u64 certSize;
-    
-    u8 i;
-    size_t read_bytes;
-    u8 tmp_hash[0x20];
-    
-    for(i = 0; i < 3; i++)
-    {
-        const char *path = (i == 0 ? cert_CA00000003_path : (i == 1 ? cert_XS00000020_path : cert_XS00000021_path));
-        u8 *data_ptr = (i == 0 ? cert_CA00000003_data : (i == 1 ? cert_XS00000020_data : cert_XS00000021_data));
-        const u8 *hash_ptr = (i == 0 ? cert_CA00000003_hash : (i == 1 ? cert_XS00000020_hash : cert_XS00000021_hash));
-        u64 expected_size = (i == 0 ? ETICKET_CA_CERT_SIZE : ETICKET_XS_CERT_SIZE);
-        
-        certFile = NULL;
-        certSize = 0;
-        
-        certFile = fopen(path, "rb");
-        if (!certFile)
-        {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "readCertsFromApplicationRomFs: failed to open file \"%s\".\n", path);
-            return false;
-        }
-        
-        fseek(certFile, 0, SEEK_END);
-        certSize = ftell(certFile);
-        rewind(certFile);
-        
-        if (certSize != expected_size)
-        {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "readCertsFromApplicationRomFs: invalid file size for \"%s\".\n", path);
-            return false;
-        }
-        
-        read_bytes = fread(data_ptr, 1, expected_size, certFile);
-        
-        fclose(certFile);
-        
-        if (read_bytes != expected_size)
-        {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "readCertsFromApplicationRomFs: error reading file \"%s\".\n", path);
-            return false;
-        }
-        
-        sha256CalculateHash(tmp_hash, data_ptr, expected_size);
-        
-        if (memcmp(tmp_hash, hash_ptr, 0x20) != 0)
-        {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "readCertsFromApplicationRomFs: invalid hash for file \"%s\".\n", path);
-            return false;
-        }
-    }
-    
-    return true;
-}
-
-bool retrieveCertData(u8 *out_cert, bool personalized)
-{
-    if (!out_cert)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid parameters to retrieve %s ticket certificate chain.", (!personalized ? "common" : "personalized"));
-        return false;
-    }
-    
-    memcpy(out_cert, cert_CA00000003_data, ETICKET_CA_CERT_SIZE);
-    memcpy(out_cert + ETICKET_CA_CERT_SIZE, (!personalized ? cert_XS00000020_data : cert_XS00000021_data), ETICKET_XS_CERT_SIZE);
     
     return true;
 }

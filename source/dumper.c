@@ -14,6 +14,7 @@
 #include "ui.h"
 #include "nca.h"
 #include "keys.h"
+#include "save.h"
 
 /* Extern variables */
 
@@ -41,12 +42,18 @@ extern u64 partitionHfs0HeaderOffset, partitionHfs0HeaderSize;
 extern u32 partitionHfs0FileCount, partitionHfs0StrTableSize;
 
 extern u32 titleAppCount;
+extern u64 *titleAppTitleID;
+extern u32 *titleAppVersion;
 extern FsStorageId *titleAppStorageId;
 
 extern u32 titlePatchCount;
+extern u64 *titlePatchTitleID;
+extern u32 *titlePatchVersion;
 extern FsStorageId *titlePatchStorageId;
 
 extern u32 titleAddOnCount;
+extern u64 *titleAddOnTitleID;
+extern u32 *titleAddOnVersion;
 extern FsStorageId *titleAddOnStorageId;
 
 extern u32 sdCardTitleAppCount;
@@ -76,6 +83,10 @@ extern u8 *disabledNormalIconBuf;
 extern u8 *disabledHighlightIconBuf;
 
 extern u8 *dumpBuf;
+
+extern char strbuf[NAME_BUF_LEN];
+
+extern orphan_patch_addon_entry *orphanEntries;
 
 void workaroundPartitionZeroAccess()
 {
@@ -230,17 +241,20 @@ bool dumpCartridgeImage(xciOptions *xciDumpCfg)
         } else {
             workaroundPartitionZeroAccess();
             
-            if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
+            result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle);
+            if (R_SUCCEEDED(result))
             {
                 /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "GetGameCardHandle succeeded: 0x%08X", handle.value);
                 breaks++;*/
                 
-                if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, partition)))
+                result = fsOpenGameCardStorage(&gameCardStorage, &handle, partition);
+                if (R_SUCCEEDED(result))
                 {
                     /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "OpenGameCardStorage succeeded: 0x%08X", handle.value);
                     breaks++;*/
                     
-                    if (R_SUCCEEDED(result = fsStorageGetSize(&gameCardStorage, &(partitionSizes[partition]))))
+                    result = fsStorageGetSize(&gameCardStorage, &(partitionSizes[partition]));
+                    if (R_SUCCEEDED(result))
                     {
                         xciDataSize += partitionSizes[partition];
                         convertSize(partitionSizes[partition], partitionSizesStr[partition], MAX_ELEMENTS(partitionSizesStr[partition]));
@@ -464,14 +478,16 @@ bool dumpCartridgeImage(xciOptions *xciDumpCfg)
         
         workaroundPartitionZeroAccess();
         
-        if (R_FAILED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
+        result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(progressCtx.line_offset + 2), FONT_COLOR_ERROR_RGB, "GetGameCardHandle failed for partition #%u! (0x%08X)", partition, result);
             proceed = false;
             break;
         }
         
-        if (R_FAILED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, partition)))
+        result = fsOpenGameCardStorage(&gameCardStorage, &handle, partition);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(progressCtx.line_offset + 2), FONT_COLOR_ERROR_RGB, "OpenGameCardStorage failed for partition #%u! (0x%08X)", partition, result);
             proceed = false;
@@ -508,7 +524,8 @@ bool dumpCartridgeImage(xciOptions *xciDumpCfg)
                 }
             }
             
-            if (R_FAILED(result = fsStorageRead(&gameCardStorage, partitionOffset, dumpBuf, n)))
+            result = fsStorageRead(&gameCardStorage, partitionOffset, dumpBuf, n);
+            if (R_FAILED(result))
             {
                 uiDrawString(STRING_X_POS, STRING_Y_POS(progressCtx.line_offset + 2), FONT_COLOR_ERROR_RGB, "StorageRead failed (0x%08X) at offset 0x%016lX for partition #%u", result, partitionOffset, partition);
                 proceed = false;
@@ -755,7 +772,8 @@ bool dumpCartridgeImage(xciOptions *xciDumpCfg)
         if (progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32 && setXciArchiveBit)
         {
             snprintf(filename, MAX_ELEMENTS(filename), "%s%s.xci", XCI_DUMP_PATH, dumpName);
-            if (R_FAILED(result = fsdevSetArchiveBit(filename)))
+            result = fsdevSetArchiveBit(filename);
+            if (R_FAILED(result))
             {
                 breaks += 2;
                 uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Warning: failed to set archive bit on output directory! (0x%08X)", result);
@@ -814,37 +832,28 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     bool calcCrc = nspDumpCfg->calcCrc;
     bool removeConsoleData = nspDumpCfg->removeConsoleData;
     bool tiklessDump = nspDumpCfg->tiklessDump;
+    bool npdmAcidRsaPatch = nspDumpCfg->npdmAcidRsaPatch;
+    bool preInstall = false;
     
     Result result;
     u32 i = 0, j = 0;
-    u32 written = 0;
-    u32 total = 0;
-    u32 titleCount = 0;
-    u32 ncmTitleIndex = 0;
-    u32 titleNcaCount = 0;
-    u32 partition = 0;
     
     FsStorageId curStorageId;
+    u8 filter;
+    u32 titleCount = 0, ncmTitleIndex = 0;
+    
+    char dumpPath[NAME_BUF_LEN * 2] = {'\0'};
+    
+    NcmContentRecord *titleContentRecords = NULL;
+    u32 titleContentRecordsCnt = 0;
     
     FsGameCardHandle handle;
     
     FsStorage gameCardStorage;
     memset(&gameCardStorage, 0, sizeof(FsStorage));
     
-    NcmContentMetaDatabase ncmDb;
-    memset(&ncmDb, 0, sizeof(NcmContentMetaDatabase));
-    
-    NcmContentMetaRecordsHeader contentRecordsHeader;
-    memset(&contentRecordsHeader, 0, sizeof(NcmContentMetaRecordsHeader));
-    
-    u64 contentRecordsHeaderReadSize = 0;
-    
     NcmContentStorage ncmStorage;
     memset(&ncmStorage, 0, sizeof(NcmContentStorage));
-    
-    NcmApplicationContentMetaKey *titleList = NULL;
-    NcmContentRecord *titleContentRecords = NULL;
-    size_t titleListSize = sizeof(NcmApplicationContentMetaKey);
     
     cnmt_xml_program_info xml_program_info;
     cnmt_xml_content_info *xml_content_info = NULL;
@@ -896,8 +905,6 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     Sha256Context nca_hash_ctx;
     sha256ContextCreate(&nca_hash_ctx);
     
-    char dumpPath[NAME_BUF_LEN * 2] = {'\0'};
-    
     u64 n, nca_offset;
     FILE *outFile = NULL;
     u8 splitIndex = 0;
@@ -934,14 +941,16 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         return false;
     }
     
-    curStorageId = (selectedNspDumpType == DUMP_APP_NSP ? titleAppStorageId[titleIndex] : (selectedNspDumpType == DUMP_PATCH_NSP ? titlePatchStorageId[titleIndex] : titleAddOnStorageId[titleIndex]));
-    
-    if (curStorageId != FsStorageId_GameCard && curStorageId != FsStorageId_SdCard && curStorageId != FsStorageId_NandUser)
+    if ((selectedNspDumpType == DUMP_APP_NSP && titleIndex >= titleAppCount) || (selectedNspDumpType == DUMP_PATCH_NSP && titleIndex >= titlePatchCount) || (selectedNspDumpType == DUMP_ADDON_NSP && titleIndex >= titleAddOnCount))
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title storage ID!");
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title index!");
         breaks += 2;
         return false;
     }
+    
+    curStorageId = (selectedNspDumpType == DUMP_APP_NSP ? titleAppStorageId[titleIndex] : (selectedNspDumpType == DUMP_PATCH_NSP ? titlePatchStorageId[titleIndex] : titleAddOnStorageId[titleIndex]));
+    
+    filter = ((u8)selectedNspDumpType + META_DB_REGULAR_APPLICATION);
     
     switch(curStorageId)
     {
@@ -960,22 +969,6 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         default:
             break;
     }
-    
-    if (!titleCount)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title type count!");
-        breaks += 2;
-        return false;
-    }
-    
-    if (ncmTitleIndex > (titleCount - 1))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title index!");
-        breaks += 2;
-        return false;
-    }
-    
-    titleListSize *= titleCount;
     
     char *dumpName = generateNSPDumpName(selectedNspDumpType, titleIndex);
     if (!dumpName)
@@ -1031,6 +1024,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                                         calcCrc = false;
                                         removeConsoleData = seqNspCtx.removeConsoleData;
                                         tiklessDump = seqNspCtx.tiklessDump;
+                                        npdmAcidRsaPatch = seqNspCtx.npdmAcidRsaPatch;
+                                        preInstall = seqNspCtx.preInstall;
                                         splitIndex = seqNspCtx.partNumber;
                                         progressCtx.curOffset = ((u64)seqNspCtx.partNumber * SPLIT_FILE_SEQUENTIAL_SIZE);
                                     } else {
@@ -1071,35 +1066,6 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     u64 part_size = (seqDumpMode ? SPLIT_FILE_SEQUENTIAL_SIZE : SPLIT_FILE_NSP_PART_SIZE);
     
-    // If we're dealing with a gamecard, call workaroundPartitionZeroAccess() and read the secure partition header. Otherwise, ncmContentStorageReadContentIdFile() will fail with error 0x00171002
-    // Also open an IStorage instance for the HFS0 Secure partition, since we may also need it if we're dealing with a Patch with titlekey crypto, in order to retrieve the tik file
-    if (curStorageId == FsStorageId_GameCard)
-    {
-        partition = (hfs0_partition_cnt - 1); // Select the secure partition
-        
-        workaroundPartitionZeroAccess();
-        
-        if (!getPartitionHfs0Header(partition)) goto out;
-        
-        if (!partitionHfs0FileCount)
-        {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "The Secure HFS0 partition is empty!");
-            goto out;
-        }
-        
-        if (R_FAILED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
-        {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "GetGameCardHandle failed! (0x%08X)", result);
-            goto out;
-        }
-        
-        if (R_FAILED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, HFS0_TO_ISTORAGE_IDX(hfs0_partition_cnt, partition))))
-        {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "OpenGameCardStorage failed! (0x%08X)", result);
-            goto out;
-        }
-    }
-    
     if (!batch)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Retrieving information from encrypted NCA content files...");
@@ -1107,83 +1073,52 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         breaks++;
     }
     
-    titleList = calloc(1, titleListSize);
-    if (!titleList)
+    if (!retrieveNcaContentRecords(curStorageId, filter, titleCount, ncmTitleIndex, &titleContentRecords, &titleContentRecordsCnt)) goto out;
+    
+    // If we're dealing with a gamecard, open an IStorage instance for the HFS0 Secure partition. We may need it if we're dealing with a Patch with titlekey crypto, in order to retrieve the tik file
+    if (curStorageId == FsStorageId_GameCard)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ApplicationContentMetaKey struct!");
-        goto out;
+        result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle);
+        if (R_FAILED(result))
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "GetGameCardHandle failed! (0x%08X)", result);
+            goto out;
+        }
+        
+        u32 partition = (hfs0_partition_cnt - 1); // Select the secure partition
+        
+        result = fsOpenGameCardStorage(&gameCardStorage, &handle, HFS0_TO_ISTORAGE_IDX(hfs0_partition_cnt, partition));
+        if (R_FAILED(result))
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "OpenGameCardStorage failed! (0x%08X)", result);
+            goto out;
+        }
     }
     
-    if (R_FAILED(result = ncmOpenContentMetaDatabase(curStorageId, &ncmDb)))
+    result = ncmOpenContentStorage(curStorageId, &ncmStorage);
+    if (R_FAILED(result))
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentMetaDatabase failed! (0x%08X)", result);
-        goto out;
-    }
-    
-    u8 filter = ((u8)selectedNspDumpType + META_DB_REGULAR_APPLICATION);
-    
-    if (R_FAILED(result = ncmContentMetaDatabaseListApplication(&ncmDb, filter, titleList, titleListSize, &written, &total)))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication failed! (0x%08X)", result);
-        goto out;
-    }
-    
-    if (!written || !total)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListApplication wrote no entries to output buffer!");
-        goto out;
-    }
-    
-    if (written != total)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: title count mismatch in ncmContentMetaDatabaseListApplication (%u != %u)", written, total);
-        goto out;
-    }
-    
-    if (R_FAILED(result = ncmContentMetaDatabaseGet(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), sizeof(NcmContentMetaRecordsHeader), &contentRecordsHeader, &contentRecordsHeaderReadSize)))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseGet failed! (0x%08X)", result);
-        goto out;
-    }
-    
-    titleNcaCount = (u32)(contentRecordsHeader.numContentRecords);
-    
-    titleContentRecords = calloc(titleNcaCount, sizeof(NcmContentRecord));
-    if (!titleContentRecords)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the ContentRecord struct!");
-        goto out;
-    }
-    
-    if (R_FAILED(result = ncmContentMetaDatabaseListContentInfo(&ncmDb, &(titleList[ncmTitleIndex].metaRecord), 0, titleContentRecords, titleNcaCount * sizeof(NcmContentRecord), &written)))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmContentMetaDatabaseListContentInfo failed! (0x%08X)", result);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentStorage failed! (0x%08X)", result);
         goto out;
     }
     
     // Fill information for our CNMT XML
     memset(&xml_program_info, 0, sizeof(cnmt_xml_program_info));
-    xml_program_info.type = titleList[ncmTitleIndex].metaRecord.type;
-    xml_program_info.title_id = titleList[ncmTitleIndex].metaRecord.titleId;
-    xml_program_info.version = titleList[ncmTitleIndex].metaRecord.version;
-    xml_program_info.nca_cnt = titleNcaCount;
+    xml_program_info.type = filter;
+    xml_program_info.title_id = (selectedNspDumpType == DUMP_APP_NSP ? titleAppTitleID[titleIndex] : (selectedNspDumpType == DUMP_PATCH_NSP ? titlePatchTitleID[titleIndex] : titleAddOnTitleID[titleIndex]));
+    xml_program_info.version = (selectedNspDumpType == DUMP_APP_NSP ? titleAppVersion[titleIndex] : (selectedNspDumpType == DUMP_PATCH_NSP ? titlePatchVersion[titleIndex] : titleAddOnVersion[titleIndex]));
+    xml_program_info.nca_cnt = titleContentRecordsCnt;
     
-    xml_content_info = calloc(titleNcaCount, sizeof(cnmt_xml_content_info));
+    xml_content_info = calloc(titleContentRecordsCnt, sizeof(cnmt_xml_content_info));
     if (!xml_content_info)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for the CNMT XML content info struct!");
         goto out;
     }
     
-    if (R_FAILED(result = ncmOpenContentStorage(curStorageId, &ncmStorage)))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: ncmOpenContentStorage failed! (0x%08X)", result);
-        goto out;
-    }
-    
     // Fill our CNMT XML content records, leaving the CNMT NCA at the end
     u32 titleRecordIndex;
-    for(i = 0, titleRecordIndex = 0; titleRecordIndex < titleNcaCount; i++, titleRecordIndex++)
+    for(i = 0, titleRecordIndex = 0; titleRecordIndex < titleContentRecordsCnt; i++, titleRecordIndex++)
     {
         if (!cnmtFound && titleContentRecords[titleRecordIndex].type == NcmContentType_CNMT)
         {
@@ -1193,8 +1128,12 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             continue;
         }
         
-        // Skip Delta Fragments or any other unknown content types if we're not dealing with Patch titles dumped from installed SD/eMMC (with tiklessDump disabled)
-        if (titleContentRecords[titleRecordIndex].type >= NCA_CONTENT_TYPE_DELTA && (curStorageId == FsStorageId_GameCard || selectedNspDumpType != DUMP_PATCH_NSP || tiklessDump))
+        // Skip Delta Fragments or any other unknown content types
+        // Delta Fragments are used to update from a certain version to another version without needing to install the whole update
+        // For any dumping purposes, they're useless, because they just increase the size of the output dump. The more updates come out for a title, the more Delta Fragments there will be available for that title
+        // Also, since they're basically an eShop thing, they're not available in gamecards. So in this particular case, we need to skip them anyway
+        // However, their content records must be kept intact in the CNMT NCA
+        if (titleContentRecords[titleRecordIndex].type >= NCA_CONTENT_TYPE_DELTA)
         {
             xml_program_info.nca_cnt--;
             i--;
@@ -1210,7 +1149,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         
         memcpy(&ncaId, &(titleContentRecords[titleRecordIndex].ncaId), sizeof(NcmNcaId));
         
-        if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH)))
+        result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH);
+        if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read header from NCA \"%s\"! (0x%08X)", xml_content_info[i].nca_id_str, result);
             proceed = false;
@@ -1225,6 +1165,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             break;
         }
         
+        // Check if this particular content has a populated Rights ID field
         bool has_rights_id = false;
         
         for(j = 0; j < 0x10; j++)
@@ -1236,13 +1177,44 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             }
         }
         
+        // Check if the missing ticket flag is enabled
+        // If so, we may be dealing with a preinstalled title
+        if (curStorageId != FsStorageId_GameCard && has_rights_id && rights_info.missing_tik && !preInstall)
+        {
+            // Only display the pre-install prompt if we're not running a batch / sequential dump operation (excluding the first run of the latter)
+            if (!batch && !seqDumpMode)
+            {
+                int cur_breaks = breaks;
+                breaks += 2;
+                
+                proceed = yesNoPrompt("This is probably a pre-installed title, which explains why a ticket for it couldn't be found (even though its Rights ID field isn't empty).\nDo you want to proceed with the dump procedure anyway?\nBear in mind that no content decryption will be possible for this title in its current status.");
+                if (!proceed)
+                {
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Process canceled.");
+                    break;
+                } else {
+                    breaks = cur_breaks;
+                    preInstall = true;
+                }
+            }
+            
+            // Remove the prompt / error from the screen
+            uiFill(0, 8 + STRING_Y_POS(breaks), FB_WIDTH, FB_HEIGHT - (8 + STRING_Y_POS(breaks)), BG_COLOR_RGB);
+        }
+        
         // Fill information for our CNMT XML
         xml_content_info[i].keyblob = (dec_nca_header.crypto_type2 > dec_nca_header.crypto_type ? dec_nca_header.crypto_type2 : dec_nca_header.crypto_type);
         
         if (curStorageId == FsStorageId_GameCard)
         {
+            // Modify content distribution type
+            // It's always set to 1 (gamecard) in Applications and AddOns bundled in gamecards
+            // It's always set to 0 (download) in Patches bundled in gamecards. But if we're dealing with a custom XCI mounted through SX OS, we may need to change that
+            dec_nca_header.distribution = 0;
+            
             if (selectedNspDumpType == DUMP_APP_NSP || selectedNspDumpType == DUMP_ADDON_NSP) 
             {
+                // Application and AddOn titles don't have a populated Rights ID field when bundled in gamecards
                 if (has_rights_id)
                 {
                     uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: Rights ID field in NCA header not empty!");
@@ -1250,11 +1222,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                     break;
                 }
                 
-                // Modify distribution type
-                dec_nca_header.distribution = 0;
-                
-                // Patch ACID pubkey and recreate NCA NPDM signature if we're dealing with the Program NCA
-                if (xml_content_info[i].type == NcmContentType_Program)
+                // Patch ACID public RSA key and recreate the NCA NPDM signature if we're dealing with the Program NCA
+                if (xml_content_info[i].type == NcmContentType_Program && npdmAcidRsaPatch)
                 {
                     if (!processProgramNca(&ncmStorage, &ncaId, &dec_nca_header, &(xml_content_info[i]), &ncaProgramMod))
                     {
@@ -1265,19 +1234,22 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             } else
             if (selectedNspDumpType == DUMP_PATCH_NSP)
             {
-                if (!has_rights_id)
+                // Patch titles *do* have a populated Rights ID field and a ticket + certificate chain combination when bundled in gamecards
+                // Depending on the dump settings, we may need to change or remove that
+                // If no Rights ID is available, we may be dealing with a custom XCI mounted through SX OS. In this particular case, no further modification should be needed
+                if (has_rights_id)
                 {
-                    // We could be dealing with a custom XCI mounted through SX OS, so let's change back the content distribution method
-                    dec_nca_header.distribution = 0;
-                } else {
+                    // Check if we have retrieved the ticket from the HFS0 partition in the gamecard
                     if (!rights_info.retrieved_tik)
                     {
-                        // Retrieve tik file
-                        if (!getPartitionHfs0FileByName(&gameCardStorage, rights_info.tik_filename, (u8*)(&(rights_info.tik_data)), ETICKET_TIK_FILE_SIZE))
+                        // Retrieve ticket. We're going to use our own certificate chain down the road, there's no need to retrieve it as well
+                        if (!getFileFromHfs0PartitionByName(&gameCardStorage, rights_info.tik_filename, dumpBuf, ETICKET_TIK_FILE_SIZE))
                         {
                             proceed = false;
                             break;
                         }
+                        
+                        memcpy(&(rights_info.tik_data), dumpBuf, ETICKET_TIK_FILE_SIZE);
                         
                         memcpy(rights_info.enc_titlekey, rights_info.tik_data.titlekey_block, 0x10);
                         
@@ -1299,10 +1271,11 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                         rights_info.retrieved_tik = true;
                     }
                     
+                    // Save the decrypted NCA key area keys
                     memset(xml_content_info[i].decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
                     memcpy(xml_content_info[i].decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info.dec_titlekey, 0x10);
                     
-                    // Mess with the NCA header if we're dealing with a content with a populated rights ID field and if tiklessDump is true (removeConsoleData is ignored)
+                    // Mess with the NCA header if we're dealing with a NCA with a populated Rights ID field and if tiklessDump is true (removeConsoleData is ignored)
                     if (tiklessDump)
                     {
                         // Generate new encrypted NCA key area using titlekey
@@ -1312,11 +1285,11 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                             break;
                         }
                         
-                        // Remove rights ID from NCA
+                        // Remove Rights ID from NCA
                         memset(dec_nca_header.rights_id, 0, 0x10);
                         
                         // Patch ACID pubkey and recreate NCA NPDM signature if we're dealing with the Program NCA
-                        if (xml_content_info[i].type == NcmContentType_Program)
+                        if (xml_content_info[i].type == NcmContentType_Program && npdmAcidRsaPatch)
                         {
                             if (!processProgramNca(&ncmStorage, &ncaId, &dec_nca_header, &(xml_content_info[i]), &ncaProgramMod))
                             {
@@ -1330,8 +1303,9 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         } else
         if (curStorageId == FsStorageId_SdCard || curStorageId == FsStorageId_NandUser)
         {
-            // Only mess with the NCA header if we're dealing with a content with a populated rights ID field, and if both removeConsoleData and tiklessDump are true
-            if (has_rights_id && removeConsoleData && tiklessDump)
+            // Only mess with the NCA header if we're dealing with a content with a populated Rights ID field, and if both removeConsoleData and tiklessDump are true
+            // This will only be done if we were able to retrieve the ticket for this title
+            if (has_rights_id && rights_info.retrieved_tik && removeConsoleData && tiklessDump)
             {
                 // Generate new encrypted NCA key area using titlekey
                 if (!generateEncryptedNcaKeyAreaWithTitlekey(&dec_nca_header, xml_content_info[i].decrypted_nca_keys))
@@ -1344,7 +1318,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                 memset(dec_nca_header.rights_id, 0, 0x10);
                 
                 // Patch ACID pubkey and recreate NCA NPDM signature if we're dealing with the Program NCA
-                if (xml_content_info[i].type == NcmContentType_Program)
+                if (xml_content_info[i].type == NcmContentType_Program && npdmAcidRsaPatch)
                 {
                     if (!processProgramNca(&ncmStorage, &ncaId, &dec_nca_header, &(xml_content_info[i]), &ncaProgramMod))
                     {
@@ -1355,39 +1329,42 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             }
         }
         
-        // Generate programinfo.xml
-        if (!programInfoXml && xml_content_info[i].type == NcmContentType_Program)
+        if (!has_rights_id || (has_rights_id && rights_info.retrieved_tik))
         {
-            programNcaIndex = i;
-            
-            if (!generateProgramInfoXml(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &ncaProgramMod, &programInfoXml, &programInfoXmlSize))
+            // Generate programinfo.xml
+            if (!programInfoXml && xml_content_info[i].type == NcmContentType_Program)
             {
-                proceed = false;
-                break;
+                programNcaIndex = i;
+                
+                if (!generateProgramInfoXml(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &ncaProgramMod, &programInfoXml, &programInfoXmlSize))
+                {
+                    proceed = false;
+                    break;
+                }
             }
-        }
-        
-        // Retrieve NACP data (XML and icons)
-        if (!nacpXml && xml_content_info[i].type == NcmContentType_Icon)
-        {
-            nacpNcaIndex = i;
             
-            if (!retrieveNacpDataFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &nacpXml, &nacpXmlSize, &nacpIcons, &nacpIconCnt))
+            // Retrieve NACP data (XML and icons)
+            if (!nacpXml && xml_content_info[i].type == NcmContentType_Icon)
             {
-                proceed = false;
-                break;
+                nacpNcaIndex = i;
+                
+                if (!retrieveNacpDataFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &nacpXml, &nacpXmlSize, &nacpIcons, &nacpIconCnt))
+                {
+                    proceed = false;
+                    break;
+                }
             }
-        }
-        
-        // Retrieve legalinfo.xml
-        if (!legalInfoXml && xml_content_info[i].type == NcmContentType_Info)
-        {
-            legalInfoNcaIndex = i;
             
-            if (!retrieveLegalInfoXmlFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &legalInfoXml, &legalInfoXmlSize))
+            // Retrieve legalinfo.xml
+            if (!legalInfoXml && xml_content_info[i].type == NcmContentType_Info)
             {
-                proceed = false;
-                break;
+                legalInfoNcaIndex = i;
+                
+                if (!retrieveLegalInfoXmlFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &legalInfoXml, &legalInfoXmlSize))
+                {
+                    proceed = false;
+                    break;
+                }
             }
         }
         
@@ -1408,19 +1385,19 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     }
     
     // Update NCA counter just in case we found any delta fragments
-    titleNcaCount = xml_program_info.nca_cnt;
+    titleContentRecordsCnt = xml_program_info.nca_cnt;
     
     // Fill information for our CNMT XML
-    xml_content_info[titleNcaCount - 1].type = titleContentRecords[cnmtNcaIndex].type;
-    memcpy(xml_content_info[titleNcaCount - 1].nca_id, titleContentRecords[cnmtNcaIndex].ncaId.c, SHA256_HASH_SIZE / 2); // Temporary
-    convertDataToHexString(titleContentRecords[cnmtNcaIndex].ncaId.c, SHA256_HASH_SIZE / 2, xml_content_info[titleNcaCount - 1].nca_id_str, SHA256_HASH_SIZE + 1); // Temporary
-    convertNcaSizeToU64(titleContentRecords[cnmtNcaIndex].size, &(xml_content_info[titleNcaCount - 1].size));
-    convertDataToHexString(xml_content_info[titleNcaCount - 1].hash, SHA256_HASH_SIZE, xml_content_info[titleNcaCount - 1].hash_str, (SHA256_HASH_SIZE * 2) + 1); // Temporary
+    xml_content_info[titleContentRecordsCnt - 1].type = titleContentRecords[cnmtNcaIndex].type;
+    memcpy(xml_content_info[titleContentRecordsCnt - 1].nca_id, titleContentRecords[cnmtNcaIndex].ncaId.c, SHA256_HASH_SIZE / 2); // Temporary
+    convertDataToHexString(titleContentRecords[cnmtNcaIndex].ncaId.c, SHA256_HASH_SIZE / 2, xml_content_info[titleContentRecordsCnt - 1].nca_id_str, SHA256_HASH_SIZE + 1); // Temporary
+    convertNcaSizeToU64(titleContentRecords[cnmtNcaIndex].size, &(xml_content_info[titleContentRecordsCnt - 1].size));
+    convertDataToHexString(xml_content_info[titleContentRecordsCnt - 1].hash, SHA256_HASH_SIZE, xml_content_info[titleContentRecordsCnt - 1].hash_str, (SHA256_HASH_SIZE * 2) + 1); // Temporary
     
     memcpy(&ncaId, &(titleContentRecords[cnmtNcaIndex].ncaId), sizeof(NcmNcaId));
     
     // Update CNMT index
-    cnmtNcaIndex = (titleNcaCount - 1);
+    cnmtNcaIndex = (titleContentRecordsCnt - 1);
     
     cnmtNcaBuf = malloc(xml_content_info[cnmtNcaIndex].size);
     if (!cnmtNcaBuf)
@@ -1429,14 +1406,15 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         goto out;
     }
     
-    if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, cnmtNcaBuf, xml_content_info[cnmtNcaIndex].size)))
+    result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, cnmtNcaBuf, xml_content_info[cnmtNcaIndex].size);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read CNMT NCA \"%s\"! (0x%08X)", xml_content_info[cnmtNcaIndex].nca_id_str, result);
         goto out;
     }
     
     // Retrieve CNMT NCA data
-    if (!retrieveCnmtNcaData(curStorageId, selectedNspDumpType, cnmtNcaBuf, &xml_program_info, &(xml_content_info[cnmtNcaIndex]), &ncaCnmtMod, &rights_info, (removeConsoleData && tiklessDump))) goto out;
+    if (!retrieveCnmtNcaData(curStorageId, selectedNspDumpType, cnmtNcaBuf, &xml_program_info, xml_content_info, cnmtNcaIndex, &ncaCnmtMod, &rights_info, (removeConsoleData && tiklessDump))) goto out;
     
     // Generate a placeholder CNMT XML. It's length will be used to calculate the final output dump size
     /*breaks++;
@@ -1454,14 +1432,14 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     
     generateCnmtXml(&xml_program_info, xml_content_info, cnmtXml);
     
-    bool includeTikAndCert = (rights_info.has_rights_id && !tiklessDump);
+    bool includeTikAndCert = (rights_info.retrieved_tik && !tiklessDump);
     
     if (includeTikAndCert)
     {
         if (curStorageId == FsStorageId_GameCard)
         {
             // Ticket files from Patch titles bundled with gamecards have a different layout
-            // Let's convert it to a normal "common" ticket
+            // Let's convert it to a "normal" common ticket
             memset(rights_info.tik_data.signature, 0xFF, 0x100);
             
             memset((u8*)(&(rights_info.tik_data)) + 0x190, 0, 0x130);
@@ -1477,35 +1455,25 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         } else
         if (curStorageId == FsStorageId_SdCard || curStorageId == FsStorageId_NandUser)
         {
-            // Only mess with the ticket data if removeConsoleData is true, if tiklessDump is false and if we're dealing with a personalized ticket
-            if (removeConsoleData && rights_info.tik_data.titlekey_type == ETICKET_TITLEKEY_PERSONALIZED)
-            {
-                memset(rights_info.tik_data.signature, 0xFF, 0x100);
-                
-                memset(rights_info.tik_data.sig_issuer, 0, 0x40);
-                sprintf(rights_info.tik_data.sig_issuer, "Root-CA00000003-XS00000020");
-                
-                memset(rights_info.tik_data.titlekey_block, 0, 0x100);
-                memcpy(rights_info.tik_data.titlekey_block, rights_info.enc_titlekey, 0x10);
-                
-                rights_info.tik_data.titlekey_type = ETICKET_TITLEKEY_COMMON;
-                rights_info.tik_data.ticket_id = 0;
-                rights_info.tik_data.device_id = 0;
-                rights_info.tik_data.account_id = 0;
-            }
+            // Only mess with the ticket data if removeConsoleData is true, if tiklessDump is false and if we're dealing with a personalized ticket (checked in removeConsoleDataFromTicket())
+            if (removeConsoleData) removeConsoleDataFromTicket(&rights_info);
         }
         
         // Retrieve cert file
-        if (!retrieveCertData(rights_info.cert_data, (rights_info.tik_data.titlekey_type == ETICKET_TITLEKEY_PERSONALIZED))) goto out;
+        if (!retrieveCertData(rights_info.cert_data, (rights_info.tik_data.titlekey_type == ETICKET_TITLEKEY_PERSONALIZED)))
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, strbuf);
+            goto out;
+        }
         
         // File count = NCA count + CNMT XML + tik + cert
-        nspFileCount = (titleNcaCount + 3);
+        nspFileCount = (titleContentRecordsCnt + 3);
         
         // Calculate PFS0 String Table size
         nspPfs0StrTableSize = (((nspFileCount - 4) * NSP_NCA_FILENAME_LENGTH) + (NSP_CNMT_FILENAME_LENGTH * 2) + NSP_TIK_FILENAME_LENGTH + NSP_CERT_FILENAME_LENGTH);
     } else {
         // File count = NCA count + CNMT XML
-        nspFileCount = (titleNcaCount + 1);
+        nspFileCount = (titleContentRecordsCnt + 1);
         
         // Calculate PFS0 String Table size
         nspPfs0StrTableSize = (((nspFileCount - 2) * NSP_NCA_FILENAME_LENGTH) + (NSP_CNMT_FILENAME_LENGTH * 2));
@@ -1580,7 +1548,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     // Calculate total dump size
     progressCtx.totalSize = full_nsp_header_size;
     
-    for(i = 0; i < titleNcaCount; i++) progressCtx.totalSize += xml_content_info[i].size;
+    for(i = 0; i < titleContentRecordsCnt; i++) progressCtx.totalSize += xml_content_info[i].size;
     
     progressCtx.totalSize += strlen(cnmtXml);
     
@@ -1619,7 +1587,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                 {
                     // Check if the NCA count is valid
                     // The CNMT NCA is excluded from the hash list
-                    if (seqNspCtx.ncaCount == (titleNcaCount - 1))
+                    if (seqNspCtx.ncaCount == (titleContentRecordsCnt - 1))
                     {
                         // Check if the PFS0 file count is valid
                         if (seqNspCtx.nspFileCount == nspFileCount)
@@ -1627,129 +1595,186 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                             // Check if the current PFS0 file index is valid
                             if (seqNspCtx.fileIndex < nspFileCount)
                             {
-                                for(i = 0; i < nspFileCount; i++)
+                                // Check if we're really dealing with a title with a missing ticket if preInstall == true
+                                if (!seqNspCtx.preInstall || (seqNspCtx.preInstall && rights_info.missing_tik))
                                 {
-                                    if (i < seqNspCtx.fileIndex)
+                                    // Check if the current overall offset is aligned to SPLIT_FILE_SEQUENTIAL_SIZE
+                                    u64 curNspOffset = full_nsp_header_size;
+                                    
+                                    for(i = 0; i < seqNspCtx.fileIndex; i++)
                                     {
-                                        // Exclude the CNMT NCA
-                                        if (i < (titleNcaCount - 1))
+                                        if (i < titleContentRecordsCnt)
                                         {
-                                            // Fill information for our CNMT XML
-                                            memcpy(xml_content_info[i].nca_id, seqDumpNcaHashes + (i * SHA256_HASH_SIZE), SHA256_HASH_SIZE / 2);
-                                            convertDataToHexString(xml_content_info[i].nca_id, SHA256_HASH_SIZE / 2, xml_content_info[i].nca_id_str, SHA256_HASH_SIZE + 1);
-                                            memcpy(xml_content_info[i].hash, seqDumpNcaHashes + (i * SHA256_HASH_SIZE), SHA256_HASH_SIZE);
-                                            convertDataToHexString(xml_content_info[i].hash, SHA256_HASH_SIZE, xml_content_info[i].hash_str, (SHA256_HASH_SIZE * 2) + 1);
-                                        }
-                                    } else {
-                                        if (i < titleNcaCount)
-                                        {
-                                            // Check if the offset for the current NCA is valid
-                                            if (seqNspCtx.fileOffset < xml_content_info[i].size)
-                                            {
-                                                // Copy the SHA-256 context data, but only if we're not dealing with the CNMT NCA
-                                                // NCA ID/hash for the CNMT NCA is handled in patchCnmtNca()
-                                                if (i != cnmtNcaIndex) memcpy(&nca_hash_ctx, &(seqNspCtx.hashCtx), sizeof(Sha256Context));
-                                            } else {
-                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NCA offset in the sequential dump reference file!");
-                                                proceed = false;
-                                            }
+                                            curNspOffset += xml_content_info[i].size;
                                         } else
-                                        if (i == titleNcaCount)
+                                        if (i == titleContentRecordsCnt)
                                         {
-                                            // Check if the offset for the CNMT XML is valid
-                                            if (seqNspCtx.fileOffset >= strlen(cnmtXml))
-                                            {
-                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid CNMT XML offset in the sequential dump reference file!");
-                                                proceed = false;
-                                            }
+                                            curNspOffset += strlen(cnmtXml);
+                                        } else
+                                        if (programInfoXml && i == (titleContentRecordsCnt + 1))
+                                        {
+                                            curNspOffset += programInfoXmlSize;
+                                        } else
+                                        if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleContentRecordsCnt + nacpIconCnt)) || (programInfoXml && i <= (titleContentRecordsCnt + 1 + nacpIconCnt))))
+                                        {
+                                            u32 icon_idx = (!programInfoXml ? (i - (titleContentRecordsCnt + 1)) : (i - (titleContentRecordsCnt + 2)));
+                                            curNspOffset += nacpIcons[icon_idx].icon_size;
+                                        } else
+                                        if (nacpXml && ((!programInfoXml && i == (titleContentRecordsCnt + nacpIconCnt + 1)) || (programInfoXml && i == (titleContentRecordsCnt + 1 + nacpIconCnt + 1))))
+                                        {
+                                            curNspOffset += nacpXmlSize;
+                                        } else
+                                        if (legalInfoXml && ((!includeTikAndCert && i == (nspFileCount - 1)) || (includeTikAndCert && i == (nspFileCount - 3))))
+                                        {
+                                            curNspOffset += legalInfoXmlSize;
                                         } else {
-                                            if (programInfoXml && i == (titleNcaCount + 1))
+                                            if (i == (nspFileCount - 2))
                                             {
-                                                // Check if the offset for the programinfo.xml is valid
-                                                if (seqNspCtx.fileOffset >= programInfoXmlSize)
-                                                {
-                                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid programinfo.xml offset in the sequential dump reference file!");
-                                                    proceed = false;
-                                                }
-                                            } else
-                                            if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleNcaCount + nacpIconCnt)) || (programInfoXml && i <= (titleNcaCount + 1 + nacpIconCnt))))
+                                                curNspOffset += ETICKET_TIK_FILE_SIZE;
+                                            } else {
+                                                curNspOffset += ETICKET_CERT_FILE_SIZE;
+                                            }
+                                        }
+                                    }
+                                    
+                                    curNspOffset += seqNspCtx.fileOffset;
+                                    
+                                    if (!(curNspOffset % SPLIT_FILE_SEQUENTIAL_SIZE))
+                                    {
+                                        // Now check if the current PFS0 file entry offset is correct
+                                        // Probably overkill but it's better to be safe than sorry
+                                        
+                                        for(i = 0; i < nspFileCount; i++)
+                                        {
+                                            if (i < seqNspCtx.fileIndex)
                                             {
-                                                // Check if the offset for the NACP icon is valid
-                                                u32 icon_idx = (!programInfoXml ? (i - (titleNcaCount + 1)) : (i - (titleNcaCount + 2)));
-                                                if (seqNspCtx.fileOffset >= nacpIcons[icon_idx].icon_size)
+                                                // Exclude the CNMT NCA
+                                                if (i < (titleContentRecordsCnt - 1))
                                                 {
-                                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NACP icon offset in the sequential dump reference file!");
-                                                    proceed = false;
-                                                }
-                                            } else
-                                            if (nacpXml && ((!programInfoXml && i == (titleNcaCount + nacpIconCnt + 1)) || (programInfoXml && i == (titleNcaCount + 1 + nacpIconCnt + 1))))
-                                            {
-                                                // Check if the offset for the NACP XML is valid
-                                                if (seqNspCtx.fileOffset >= nacpXmlSize)
-                                                {
-                                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NACP XML offset in the sequential dump reference file!");
-                                                    proceed = false;
-                                                }
-                                            } else
-                                            if (legalInfoXml && ((!includeTikAndCert && i == (nspFileCount - 1)) || (includeTikAndCert && i == (nspFileCount - 3))))
-                                            {
-                                                // Check if the offset for the legalinfo.xml is valid
-                                                if (seqNspCtx.fileOffset >= legalInfoXmlSize)
-                                                {
-                                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid legalinfo.xml offset in the sequential dump reference file!");
-                                                    proceed = false;
+                                                    // Fill information for our CNMT XML
+                                                    memcpy(xml_content_info[i].nca_id, seqDumpNcaHashes + (i * SHA256_HASH_SIZE), SHA256_HASH_SIZE / 2);
+                                                    convertDataToHexString(xml_content_info[i].nca_id, SHA256_HASH_SIZE / 2, xml_content_info[i].nca_id_str, SHA256_HASH_SIZE + 1);
+                                                    memcpy(xml_content_info[i].hash, seqDumpNcaHashes + (i * SHA256_HASH_SIZE), SHA256_HASH_SIZE);
+                                                    convertDataToHexString(xml_content_info[i].hash, SHA256_HASH_SIZE, xml_content_info[i].hash_str, (SHA256_HASH_SIZE * 2) + 1);
                                                 }
                                             } else {
-                                                if (i == (nspFileCount - 2))
+                                                if (i < titleContentRecordsCnt)
                                                 {
-                                                    // Check if the offset for the ticket is valid
-                                                    if (seqNspCtx.fileOffset >= ETICKET_TIK_FILE_SIZE)
+                                                    // Check if the offset for the current NCA is valid
+                                                    if (seqNspCtx.fileOffset < xml_content_info[i].size)
                                                     {
-                                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid ticket offset in the sequential dump reference file!");
+                                                        // Copy the SHA-256 context data, but only if we're not dealing with the CNMT NCA
+                                                        // NCA ID/hash for the CNMT NCA is handled in patchCnmtNca()
+                                                        if (i != cnmtNcaIndex) memcpy(&nca_hash_ctx, &(seqNspCtx.hashCtx), sizeof(Sha256Context));
+                                                    } else {
+                                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NCA offset in the sequential dump reference file!");
+                                                        proceed = false;
+                                                    }
+                                                } else
+                                                if (i == titleContentRecordsCnt)
+                                                {
+                                                    // Check if the offset for the CNMT XML is valid
+                                                    if (seqNspCtx.fileOffset >= strlen(cnmtXml))
+                                                    {
+                                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid CNMT XML offset in the sequential dump reference file!");
                                                         proceed = false;
                                                     }
                                                 } else {
-                                                    // Check if the offset for the certificate chain is valid
-                                                    if (seqNspCtx.fileOffset >= ETICKET_CERT_FILE_SIZE)
+                                                    if (programInfoXml && i == (titleContentRecordsCnt + 1))
                                                     {
-                                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid certificate chain offset in the sequential dump reference file!");
-                                                        proceed = false;
+                                                        // Check if the offset for the programinfo.xml is valid
+                                                        if (seqNspCtx.fileOffset >= programInfoXmlSize)
+                                                        {
+                                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid programinfo.xml offset in the sequential dump reference file!");
+                                                            proceed = false;
+                                                        }
+                                                    } else
+                                                    if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleContentRecordsCnt + nacpIconCnt)) || (programInfoXml && i <= (titleContentRecordsCnt + 1 + nacpIconCnt))))
+                                                    {
+                                                        // Check if the offset for the NACP icon is valid
+                                                        u32 icon_idx = (!programInfoXml ? (i - (titleContentRecordsCnt + 1)) : (i - (titleContentRecordsCnt + 2)));
+                                                        if (seqNspCtx.fileOffset >= nacpIcons[icon_idx].icon_size)
+                                                        {
+                                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NACP icon offset in the sequential dump reference file!");
+                                                            proceed = false;
+                                                        }
+                                                    } else
+                                                    if (nacpXml && ((!programInfoXml && i == (titleContentRecordsCnt + nacpIconCnt + 1)) || (programInfoXml && i == (titleContentRecordsCnt + 1 + nacpIconCnt + 1))))
+                                                    {
+                                                        // Check if the offset for the NACP XML is valid
+                                                        if (seqNspCtx.fileOffset >= nacpXmlSize)
+                                                        {
+                                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NACP XML offset in the sequential dump reference file!");
+                                                            proceed = false;
+                                                        }
+                                                    } else
+                                                    if (legalInfoXml && ((!includeTikAndCert && i == (nspFileCount - 1)) || (includeTikAndCert && i == (nspFileCount - 3))))
+                                                    {
+                                                        // Check if the offset for the legalinfo.xml is valid
+                                                        if (seqNspCtx.fileOffset >= legalInfoXmlSize)
+                                                        {
+                                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid legalinfo.xml offset in the sequential dump reference file!");
+                                                            proceed = false;
+                                                        }
+                                                    } else {
+                                                        if (i == (nspFileCount - 2))
+                                                        {
+                                                            // Check if the offset for the ticket is valid
+                                                            if (seqNspCtx.fileOffset >= ETICKET_TIK_FILE_SIZE)
+                                                            {
+                                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid ticket offset in the sequential dump reference file!");
+                                                                proceed = false;
+                                                            }
+                                                        } else {
+                                                            // Check if the offset for the certificate chain is valid
+                                                            if (seqNspCtx.fileOffset >= ETICKET_CERT_FILE_SIZE)
+                                                            {
+                                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid certificate chain offset in the sequential dump reference file!");
+                                                                proceed = false;
+                                                            }
+                                                        }
                                                     }
                                                 }
+                                                
+                                                break;
                                             }
                                         }
                                         
-                                        break;
-                                    }
-                                }
-                                
-                                if (proceed)
-                                {
-                                    // Restore the modified Program NCA header
-                                    // The NPDM signature from the NCA header is generated using cryptographically secure random numbers, so the modified header is stored during the first sequential dump session
-                                    // If needed, it must be restored in later sessions
-                                    if (ncaProgramMod.block_mod_cnt) memcpy(xml_content_info[programNcaIndex].encrypted_header_mod, &(seqNspCtx.programNcaHeaderMod), NCA_FULL_HEADER_LENGTH);
-                                    
-                                    // Inform that we are resuming an already started sequential dump operation
-                                    breaks++;
-                                    
-                                    if (curStorageId == FsStorageId_GameCard)
-                                    {
-                                        if (selectedNspDumpType == DUMP_APP_NSP || selectedNspDumpType == DUMP_ADDON_NSP)
+                                        if (proceed)
                                         {
-                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Resuming previous sequential dump operation.");
-                                        } else {
-                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Resuming previous sequential dump operation. Configuration parameters overrided.");
+                                            // Restore the modified Program NCA header
+                                            // The NPDM signature from the NCA header is generated using cryptographically secure random numbers, so the modified header is stored during the first sequential dump session
+                                            // If needed, it must be restored in later sessions
+                                            if (ncaProgramMod.block_mod_cnt) memcpy(xml_content_info[programNcaIndex].encrypted_header_mod, &(seqNspCtx.programNcaHeaderMod), NCA_FULL_HEADER_LENGTH);
+                                            
+                                            // Inform that we are resuming an already started sequential dump operation
                                             breaks++;
-                                            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Generate ticket-less dump: %s.", (tiklessDump ? "Yes" : "No"));
+                                            
+                                            if (curStorageId == FsStorageId_GameCard)
+                                            {
+                                                if (selectedNspDumpType == DUMP_APP_NSP || selectedNspDumpType == DUMP_ADDON_NSP)
+                                                {
+                                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Resuming previous sequential dump operation.");
+                                                } else {
+                                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Resuming previous sequential dump operation. Configuration parameters overrided.");
+                                                    breaks++;
+                                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Generate ticket-less dump: %s.", (tiklessDump ? "Yes" : "No"));
+                                                }
+                                            } else {
+                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Resuming previous sequential dump operation. Configuration parameters overrided.");
+                                                breaks++;
+                                                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Remove console specific data: %s | Generate ticket-less dump: %s.", (removeConsoleData ? "Yes" : "No"), (tiklessDump ? "Yes" : "No"));
+                                            }
+                                            
+                                            breaks++;
                                         }
                                     } else {
-                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Resuming previous sequential dump operation. Configuration parameters overrided.");
-                                        breaks++;
-                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Remove console specific data: %s | Generate ticket-less dump: %s.", (removeConsoleData ? "Yes" : "No"), (tiklessDump ? "Yes" : "No"));
+                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: overall NSP dump offset isn't aligned to 0x%08X in the sequential dump reference file!", (u32)SPLIT_FILE_SEQUENTIAL_SIZE);
+                                        proceed = false;
                                     }
-                                    
-                                    breaks++;
+                                } else {
+                                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid title preinstall status in the sequential dump reference file!");
+                                    proceed = false;
                                 }
                             } else {
                                 uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid PFS0 file index in the sequential dump reference file!");
@@ -1760,7 +1785,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                             proceed = false;
                         }
                     } else {
-                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: NCA count mismatch in the sequential dump reference file! (%u != %u)", seqNspCtx.ncaCount, titleNcaCount - 1);
+                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: NCA count mismatch in the sequential dump reference file! (%u != %u)", seqNspCtx.ncaCount, titleContentRecordsCnt - 1);
                         proceed = false;
                     }
                 } else {
@@ -1774,9 +1799,9 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         } else {
             if (progressCtx.totalSize > freeSpace)
             {
-                // Check if we have at least (SPLIT_FILE_SEQUENTIAL_SIZE + (sizeof(sequentialNspCtx) + ((titleNcaCount - 1) * SHA256_HASH_SIZE))) of free space
+                // Check if we have at least (SPLIT_FILE_SEQUENTIAL_SIZE + (sizeof(sequentialNspCtx) + ((titleContentRecordsCnt - 1) * SHA256_HASH_SIZE))) of free space
                 // The CNMT NCA is excluded from the hash list
-                if (freeSpace >= (SPLIT_FILE_SEQUENTIAL_SIZE + (sizeof(sequentialNspCtx) + ((titleNcaCount - 1) * SHA256_HASH_SIZE))))
+                if (freeSpace >= (SPLIT_FILE_SEQUENTIAL_SIZE + (sizeof(sequentialNspCtx) + ((titleContentRecordsCnt - 1) * SHA256_HASH_SIZE))))
                 {
                     // Ask the user if they want to use the sequential dump mode
                     int cur_breaks = breaks;
@@ -1796,21 +1821,23 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                         part_size = SPLIT_FILE_SEQUENTIAL_SIZE;
                         
                         seqDumpMode = true;
-                        seqDumpFileSize = (sizeof(sequentialNspCtx) + ((titleNcaCount - 1) * SHA256_HASH_SIZE));
+                        seqDumpFileSize = (sizeof(sequentialNspCtx) + ((titleContentRecordsCnt - 1) * SHA256_HASH_SIZE));
                         
                         // Fill information in our sequential context
                         seqNspCtx.storageId = curStorageId;
                         seqNspCtx.removeConsoleData = removeConsoleData;
                         seqNspCtx.tiklessDump = tiklessDump;
+                        seqNspCtx.npdmAcidRsaPatch = npdmAcidRsaPatch;
+                        seqNspCtx.preInstall = preInstall;
                         seqNspCtx.nspFileCount = nspFileCount;
-                        seqNspCtx.ncaCount = (titleNcaCount - 1); // Exclude the CNMT NCA from the hash list
+                        seqNspCtx.ncaCount = (titleContentRecordsCnt - 1); // Exclude the CNMT NCA from the hash list
                         
                         // Store the modified Program NCA header
                         // The NPDM signature from the NCA header is generated using cryptographically secure random numbers, so we must store the modified header during the first sequential dump session
                         if (ncaProgramMod.block_mod_cnt) memcpy(&(seqNspCtx.programNcaHeaderMod), xml_content_info[programNcaIndex].encrypted_header_mod, NCA_FULL_HEADER_LENGTH);
                         
                         // Allocate memory for the NCA hashes
-                        seqDumpNcaHashes = calloc(1, (titleNcaCount - 1) * SHA256_HASH_SIZE);
+                        seqDumpNcaHashes = calloc(1, (titleContentRecordsCnt - 1) * SHA256_HASH_SIZE);
                         if (seqDumpNcaHashes)
                         {
                             // Create sequential reference file and keep the handle to it opened
@@ -1830,7 +1857,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                                         // Update free space
                                         freeSpace -= seqDumpFileSize;
                                     } else {
-                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to write %lu bytes chunk to the sequential dump reference file! (wrote %lu bytes)", titleNcaCount * SHA256_HASH_SIZE, write_res);
+                                        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: failed to write %lu bytes chunk to the sequential dump reference file! (wrote %lu bytes)", titleContentRecordsCnt * SHA256_HASH_SIZE, write_res);
                                         proceed = false;
                                         seqDumpFileRemove = true;
                                     }
@@ -1929,6 +1956,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         breaks += 2;
     }
     
+    memset(dumpBuf, 0, DUMP_BUFFER_SIZE);
+    
     if (seqDumpMode)
     {
         // Skip the PFS0 header in the first part file
@@ -1956,7 +1985,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     u64 startFileOffset;
     
     // Dump all NCAs excluding the CNMT NCA
-    for(i = startFileIndex; i < (titleNcaCount - 1); i++, startFileIndex++)
+    for(i = startFileIndex; i < (titleContentRecordsCnt - 1); i++, startFileIndex++)
     {
         n = DUMP_BUFFER_SIZE;
         
@@ -1996,7 +2025,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
                 }
             }
             
-            if (R_FAILED(result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, nca_offset, dumpBuf, n)))
+            result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, nca_offset, dumpBuf, n);
+            if (R_FAILED(result))
             {
                 uiDrawString(STRING_X_POS, STRING_Y_POS(progressCtx.line_offset + 2), FONT_COLOR_ERROR_RGB, "Failed to read %lu bytes chunk at offset 0x%016lX from NCA \"%s\"! (0x%08X)", n, nca_offset, xml_content_info[i].nca_id_str, result);
                 proceed = false;
@@ -2195,13 +2225,13 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         char ncaFileName[100] = {'\0'};
         u64 cur_file_size = 0;
         
-        if (i < titleNcaCount)
+        if (i < titleContentRecordsCnt)
         {
-            // Always reserve the first titleNcaCount entries for our NCA contents
+            // Always reserve the first titleContentRecordsCnt entries for our NCA contents
             sprintf(ncaFileName, "%s.%s", xml_content_info[i].nca_id_str, (i == cnmtNcaIndex ? "cnmt.nca" : "nca"));
             cur_file_size = xml_content_info[i].size;
         } else
-        if (i == titleNcaCount)
+        if (i == titleContentRecordsCnt)
         {
             // Reserve the entry right after our NCA contents for the CNMT XML
             sprintf(ncaFileName, "%s.cnmt.xml", xml_content_info[cnmtNcaIndex].nca_id_str);
@@ -2215,21 +2245,21 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             // Ticket (if available)
             // Certificate chain (if available)
             
-            if (programInfoXml && i == (titleNcaCount + 1))
+            if (programInfoXml && i == (titleContentRecordsCnt + 1))
             {
                 // programinfo.xml entry
                 sprintf(ncaFileName, "%s.programinfo.xml", xml_content_info[programNcaIndex].nca_id_str);
                 cur_file_size = programInfoXmlSize;
             } else
-            if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleNcaCount + nacpIconCnt)) || (programInfoXml && i <= (titleNcaCount + 1 + nacpIconCnt))))
+            if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleContentRecordsCnt + nacpIconCnt)) || (programInfoXml && i <= (titleContentRecordsCnt + 1 + nacpIconCnt))))
             {
                 // NACP icon entry
                 // Replace the NCA ID from its filename, since it could have changed
-                u32 icon_idx = (!programInfoXml ? (i - (titleNcaCount + 1)) : (i - (titleNcaCount + 2)));
+                u32 icon_idx = (!programInfoXml ? (i - (titleContentRecordsCnt + 1)) : (i - (titleContentRecordsCnt + 2)));
                 sprintf(ncaFileName, "%s%s", xml_content_info[nacpNcaIndex].nca_id_str, strchr(nacpIcons[icon_idx].filename, '.'));
                 cur_file_size = nacpIcons[icon_idx].icon_size;
             } else
-            if (nacpXml && ((!programInfoXml && i == (titleNcaCount + nacpIconCnt + 1)) || (programInfoXml && i == (titleNcaCount + 1 + nacpIconCnt + 1))))
+            if (nacpXml && ((!programInfoXml && i == (titleContentRecordsCnt + nacpIconCnt + 1)) || (programInfoXml && i == (titleContentRecordsCnt + 1 + nacpIconCnt + 1))))
             {
                 // NACP XML entry
                 // If there are no icons, this will effectively make it the next entry after the CNMT XML
@@ -2355,7 +2385,7 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         fseek(outFile, 0, SEEK_END);
     }
     
-    startFileIndex = ((seqDumpMode && seqNspCtx.fileIndex > (titleNcaCount - 1)) ? seqNspCtx.fileIndex : (titleNcaCount - 1));
+    startFileIndex = ((seqDumpMode && seqNspCtx.fileIndex > (titleContentRecordsCnt - 1)) ? seqNspCtx.fileIndex : (titleContentRecordsCnt - 1));
     
     // Now let's write the rest of the data, including our modified CNMT NCA
     for(i = startFileIndex; i < nspFileCount; i++, startFileIndex++)
@@ -2367,32 +2397,32 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
         char ncaFileName[100] = {'\0'};
         u64 cur_file_size = 0;
         
-        if (i == (titleNcaCount - 1))
+        if (i == (titleContentRecordsCnt - 1))
         {
             // CNMT NCA
             sprintf(ncaFileName, "%s.cnmt.nca", xml_content_info[i].nca_id_str);
             cur_file_size = xml_content_info[cnmtNcaIndex].size;
         } else
-        if (i == titleNcaCount)
+        if (i == titleContentRecordsCnt)
         {
             // CNMT XML
             sprintf(ncaFileName, "%s.cnmt.xml", xml_content_info[cnmtNcaIndex].nca_id_str);
             cur_file_size = strlen(cnmtXml);
         } else {
-            if (programInfoXml && i == (titleNcaCount + 1))
+            if (programInfoXml && i == (titleContentRecordsCnt + 1))
             {
                 // programinfo.xml entry
                 sprintf(ncaFileName, "%s.programinfo.xml", xml_content_info[programNcaIndex].nca_id_str);
                 cur_file_size = programInfoXmlSize;
             } else
-            if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleNcaCount + nacpIconCnt)) || (programInfoXml && i <= (titleNcaCount + 1 + nacpIconCnt))))
+            if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleContentRecordsCnt + nacpIconCnt)) || (programInfoXml && i <= (titleContentRecordsCnt + 1 + nacpIconCnt))))
             {
                 // NACP icon entry
-                u32 icon_idx = (!programInfoXml ? (i - (titleNcaCount + 1)) : (i - (titleNcaCount + 2)));
+                u32 icon_idx = (!programInfoXml ? (i - (titleContentRecordsCnt + 1)) : (i - (titleContentRecordsCnt + 2)));
                 sprintf(ncaFileName, nacpIcons[icon_idx].filename);
                 cur_file_size = nacpIcons[icon_idx].icon_size;
             } else
-            if (nacpXml && ((!programInfoXml && i == (titleNcaCount + nacpIconCnt + 1)) || (programInfoXml && i == (titleNcaCount + 1 + nacpIconCnt + 1))))
+            if (nacpXml && ((!programInfoXml && i == (titleContentRecordsCnt + nacpIconCnt + 1)) || (programInfoXml && i == (titleContentRecordsCnt + 1 + nacpIconCnt + 1))))
             {
                 // NACP XML entry
                 sprintf(ncaFileName, "%s.nacp.xml", xml_content_info[nacpNcaIndex].nca_id_str);
@@ -2443,28 +2473,28 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
             }
             
             // Retrieve data from its respective source
-            if (i == (titleNcaCount - 1))
+            if (i == (titleContentRecordsCnt - 1))
             {
                 // CNMT NCA
                 memcpy(dumpBuf, cnmtNcaBuf + nca_offset, n);
             } else
-            if (i == titleNcaCount)
+            if (i == titleContentRecordsCnt)
             {
                 // CNMT XML
                 memcpy(dumpBuf, cnmtXml + nca_offset, n);
             } else {
-                if (programInfoXml && i == (titleNcaCount + 1))
+                if (programInfoXml && i == (titleContentRecordsCnt + 1))
                 {
                     // programinfo.xml entry
                     memcpy(dumpBuf, programInfoXml + nca_offset, n);
                 } else
-                if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleNcaCount + nacpIconCnt)) || (programInfoXml && i <= (titleNcaCount + 1 + nacpIconCnt))))
+                if (nacpIcons && nacpIconCnt && ((!programInfoXml && i <= (titleContentRecordsCnt + nacpIconCnt)) || (programInfoXml && i <= (titleContentRecordsCnt + 1 + nacpIconCnt))))
                 {
                     // NACP icon entry
-                    u32 icon_idx = (!programInfoXml ? (i - (titleNcaCount + 1)) : (i - (titleNcaCount + 2)));
+                    u32 icon_idx = (!programInfoXml ? (i - (titleContentRecordsCnt + 1)) : (i - (titleContentRecordsCnt + 2)));
                     memcpy(dumpBuf, nacpIcons[icon_idx].icon_data + nca_offset, n);
                 } else
-                if (nacpXml && ((!programInfoXml && i == (titleNcaCount + nacpIconCnt + 1)) || (programInfoXml && i == (titleNcaCount + 1 + nacpIconCnt + 1))))
+                if (nacpXml && ((!programInfoXml && i == (titleContentRecordsCnt + nacpIconCnt + 1)) || (programInfoXml && i == (titleContentRecordsCnt + 1 + nacpIconCnt + 1))))
                 {
                     // NACP XML entry
                     memcpy(dumpBuf, nacpXml + nca_offset, n);
@@ -2755,7 +2785,8 @@ bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInd
     if (!seqDumpMode && progressCtx.totalSize > FAT32_FILESIZE_LIMIT && isFat32)
     {
         snprintf(dumpPath, MAX_ELEMENTS(dumpPath), "%s%s.nsp", NSP_DUMP_PATH, dumpName);
-        if (R_FAILED(result = fsdevSetArchiveBit(dumpPath))) 
+        result = fsdevSetArchiveBit(dumpPath);
+        if (R_FAILED(result)) 
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Warning: failed to set archive bit on output directory! (0x%08X)", result);
             breaks += 2;
@@ -2781,7 +2812,7 @@ out:
                 
                 // Copy the SHA-256 context data, but only if we're not dealing with the CNMT NCA
                 // NCA ID/hash for the CNMT NCA is handled in patchCnmtNca()
-                if (seqNspCtx.fileIndex < titleNcaCount && seqNspCtx.fileIndex != cnmtNcaIndex)
+                if (seqNspCtx.fileIndex < titleContentRecordsCnt && seqNspCtx.fileIndex != cnmtNcaIndex)
                 {
                     memcpy(&(seqNspCtx.hashCtx), &nca_hash_ctx, sizeof(Sha256Context));
                 } else {
@@ -2902,15 +2933,9 @@ out:
     
     if (programInfoXml) free(programInfoXml);
     
-    serviceClose(&(ncmStorage.s));
-    
     if (xml_content_info) free(xml_content_info);
     
-    if (titleContentRecords) free(titleContentRecords);
-    
-    serviceClose(&(ncmDb.s));
-    
-    if (titleList) free(titleList);
+    serviceClose(&(ncmStorage.s));
     
     if (curStorageId == FsStorageId_GameCard)
     {
@@ -2926,6 +2951,8 @@ out:
             partitionHfs0StrTableSize = 0;
         }
     }
+    
+    if (titleContentRecords) free(titleContentRecords);
     
     if (seqDumpNcaHashes) free(seqDumpNcaHashes);
     
@@ -2953,9 +2980,10 @@ bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
     bool isFat32 = batchDumpCfg->isFat32;
     bool removeConsoleData = batchDumpCfg->removeConsoleData;
     bool tiklessDump = batchDumpCfg->tiklessDump;
+    bool npdmAcidRsaPatch = batchDumpCfg->npdmAcidRsaPatch;
     bool skipDumpedTitles = batchDumpCfg->skipDumpedTitles;
-    batchModeSourceStorage batchModeSrc = batchDumpCfg->batchModeSrc;
     bool rememberDumpedTitles = batchDumpCfg->rememberDumpedTitles;
+    batchModeSourceStorage batchModeSrc = batchDumpCfg->batchModeSrc;
     
     if ((!dumpAppTitles && !dumpPatchTitles && !dumpAddOnTitles) || (batchModeSrc == BATCH_SOURCE_ALL && ((dumpAppTitles && !titleAppCount) || (dumpPatchTitles && !titlePatchCount) || (dumpAddOnTitles && !titleAddOnCount))) || (batchModeSrc == BATCH_SOURCE_SDCARD && ((dumpAppTitles && !sdCardTitleAppCount) || (dumpPatchTitles && !sdCardTitlePatchCount) || (dumpAddOnTitles && !sdCardTitleAddOnCount))) || (batchModeSrc == BATCH_SOURCE_EMMC && ((dumpAppTitles && !nandUserTitleAppCount) || (dumpPatchTitles && !nandUserTitlePatchCount) || (dumpAddOnTitles && !nandUserTitleAddOnCount))) || batchModeSrc >= BATCH_SOURCE_CNT)
     {
@@ -2971,7 +2999,7 @@ bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
     u32 titleCount, titleIndex;
     
     char *dumpName = NULL;
-    char dumpPath[NAME_BUF_LEN] = {'\0'};
+    char dumpPath[NAME_BUF_LEN * 2] = {'\0'};
     char summary_str[256] = {'\0'};
     
     int initial_breaks = breaks, cur_breaks;
@@ -2993,6 +3021,7 @@ bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
     nspDumpCfg.calcCrc = false;
     nspDumpCfg.removeConsoleData = removeConsoleData;
     nspDumpCfg.tiklessDump = tiklessDump;
+    nspDumpCfg.npdmAcidRsaPatch = npdmAcidRsaPatch;
     
     // Allocate memory for the batch entries
     if (dumpAppTitles) maxEntryCount += (batchModeSrc == BATCH_SOURCE_ALL ? titleAppCount : (batchModeSrc == BATCH_SOURCE_SDCARD ? sdCardTitleAppCount : nandUserTitleAppCount));
@@ -3073,6 +3102,9 @@ bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
         // Increase total title count
         totalTitleCount += totalAppCount;
     }
+    
+    // Retrieve information for orphan entries
+    generateOrphanPatchOrAddOnList();
     
     if (dumpPatchTitles)
     {
@@ -3212,7 +3244,7 @@ bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "You have already dumped all titles matching the selected settings!");
         breaks += 2;
-        return false;
+        goto out;
     }
     
     // Display summary controls
@@ -3424,7 +3456,7 @@ bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
         goto out;
     }
     
-    // Substract the disabled entries from the total title count
+    // Calculate the disabled entry count
     for(i = 0; i < totalTitleCount; i++)
     {
         if (!batchEntries[i].enabled) disabledEntryCount++;
@@ -3471,6 +3503,9 @@ bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
     
 out:
     free(batchEntries);
+    
+    freeOrphanPatchOrAddOnList();
+    
     return success;
 }
 
@@ -3503,7 +3538,8 @@ bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
     
     workaroundPartitionZeroAccess();
     
-    if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
+    result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle);
+    if (R_SUCCEEDED(result))
     {
         /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "GetGameCardHandle succeeded: 0x%08X", handle.value);
         breaks++;*/
@@ -3517,7 +3553,8 @@ bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
         // Oddly enough, IFileSystem instances actually point to the specified partition ID filesystem. I don't understand why it doesn't work like that for IStorage, but whatever
         // NOTE: Using partition == 2 returns error 0x149002, and using higher values probably do so, too
         
-        if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, HFS0_TO_ISTORAGE_IDX(hfs0_partition_cnt, partition))))
+        result = fsOpenGameCardStorage(&gameCardStorage, &handle, HFS0_TO_ISTORAGE_IDX(hfs0_partition_cnt, partition));
+        if (R_SUCCEEDED(result))
         {
             /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "OpenGameCardStorage succeeded: 0x%08X", handle.value);
             breaks++;*/
@@ -3584,7 +3621,8 @@ bool dumpRawHfs0Partition(u32 partition, bool doSplitting)
                                 
                                 if (n > (progressCtx.totalSize - progressCtx.curOffset)) n = (progressCtx.totalSize - progressCtx.curOffset);
                                 
-                                if (R_FAILED(result = fsStorageRead(&gameCardStorage, partitionOffset + progressCtx.curOffset, dumpBuf, n)))
+                                result = fsStorageRead(&gameCardStorage, partitionOffset + progressCtx.curOffset, dumpBuf, n);
+                                if (R_FAILED(result))
                                 {
                                     uiDrawString(STRING_X_POS, STRING_Y_POS(progressCtx.line_offset + 2), FONT_COLOR_ERROR_RGB, "StorageRead failed (0x%08X) at offset 0x%016lX", result, partitionOffset + progressCtx.curOffset);
                                     break;
@@ -3750,13 +3788,15 @@ bool copyFileFromHfs0(u32 partition, const char* source, const char* dest, const
     
     if ((destLen + 1) < NAME_BUF_LEN)
     {
-        if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
+        result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle);
+        if (R_SUCCEEDED(result))
         {
             /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "GetGameCardHandle succeeded: 0x%08X", handle.value);
             breaks++;*/
             
             // Same ugly hack from dumpRawHfs0Partition()
-            if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, HFS0_TO_ISTORAGE_IDX(hfs0_partition_cnt, partition))))
+            result = fsOpenGameCardStorage(&gameCardStorage, &handle, HFS0_TO_ISTORAGE_IDX(hfs0_partition_cnt, partition));
+            if (R_SUCCEEDED(result))
             {
                 /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "OpenGameCardStorage succeeded: 0x%08X", handle.value);
                 breaks++;*/
@@ -3776,7 +3816,8 @@ bool copyFileFromHfs0(u32 partition, const char* source, const char* dest, const
                         
                         if (n > (size - off)) n = (size - off);
                         
-                        if (R_FAILED(result = fsStorageRead(&gameCardStorage, file_offset + off, dumpBuf, n)))
+                        result = fsStorageRead(&gameCardStorage, file_offset + off, dumpBuf, n);
+                        if (R_FAILED(result))
                         {
                             uiDrawString(STRING_X_POS, STRING_Y_POS(progressCtx->line_offset + 2), FONT_COLOR_ERROR_RGB, "StorageRead failed (0x%08X) at offset 0x%016lX", result, file_offset + off);
                             break;
@@ -5544,19 +5585,22 @@ bool dumpGameCardCertificate()
     
     workaroundPartitionZeroAccess();
     
-    if (R_SUCCEEDED(result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle)))
+    result = fsDeviceOperatorGetGameCardHandle(&fsOperatorInstance, &handle);
+    if (R_SUCCEEDED(result))
     {
         /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "GetGameCardHandle succeeded: 0x%08X", handle.value);
         breaks++;*/
         
-        if (R_SUCCEEDED(result = fsOpenGameCardStorage(&gameCardStorage, &handle, 0)))
+        result = fsOpenGameCardStorage(&gameCardStorage, &handle, 0);
+        if (R_SUCCEEDED(result))
         {
             /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "OpenGameCardStorage succeeded: 0x%08X", handle.value);
             breaks++;*/
             
             if (CERT_SIZE <= freeSpace)
             {
-                if (R_SUCCEEDED(result = fsStorageRead(&gameCardStorage, CERT_OFFSET, dumpBuf, CERT_SIZE)))
+                result = fsStorageRead(&gameCardStorage, CERT_OFFSET, dumpBuf, CERT_SIZE);
+                if (R_SUCCEEDED(result))
                 {
                     // Calculate CRC32
                     crc32(dumpBuf, CERT_SIZE, &crc);
@@ -5629,6 +5673,259 @@ bool dumpGameCardCertificate()
     breaks += 2;
     
     free(dumpName);
+    
+    return success;
+}
+
+bool dumpTicketFromTitle(u32 titleIndex, selectedTicketType curTikType, ticketOptions *tikDumpCfg)
+{
+    if (!tikDumpCfg)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: invalid ticket dump configuration struct!");
+        breaks += 2;
+        return false;
+    }
+    
+    bool removeConsoleData = tikDumpCfg->removeConsoleData;
+    
+    u32 i = 0;
+    Result result;
+    
+    FsStorageId curStorageId;
+    u8 filter;
+    u32 titleCount = 0, ncmTitleIndex = 0;
+    
+    char *dumpName = NULL;
+    char dumpPath[NAME_BUF_LEN * 2] = {'\0'};
+    
+    NcmContentRecord *titleContentRecords = NULL;
+    u32 titleContentRecordsCnt = 0;
+    
+    NcmNcaId ncaId;
+    char ncaIdStr[SHA256_HASH_SIZE + 1] = {'\0'};
+    
+    NcmContentStorage ncmStorage;
+    memset(&ncmStorage, 0, sizeof(NcmContentStorage));
+    
+    u8 ncaHeader[NCA_FULL_HEADER_LENGTH] = {0};
+    nca_header_t dec_nca_header;
+    
+    u8 decrypted_nca_keys[NCA_KEY_AREA_SIZE];
+    
+    title_rights_ctx rights_info;
+    memset(&rights_info, 0, sizeof(title_rights_ctx));
+    
+    char encTitleKeyStr[0x21] = {'\0'};
+    char decTitleKeyStr[0x21] = {'\0'};
+    
+    FILE *outFile = NULL;
+    
+    bool success = false, proceed = true, foundRightsIdAndTik = false, removeFile = false;
+    
+    if (curTikType != TICKET_TYPE_APP && curTikType != TICKET_TYPE_PATCH && curTikType != TICKET_TYPE_ADDON)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: invalid ticket title type!");
+        goto out;
+    }
+    
+    if ((curTikType == TICKET_TYPE_APP && !titleAppStorageId) || (curTikType == TICKET_TYPE_PATCH && !titlePatchStorageId) || (curTikType == TICKET_TYPE_ADDON && !titlePatchStorageId))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: title storage ID unavailable!");
+        goto out;
+    }
+    
+    if ((curTikType == TICKET_TYPE_APP && titleIndex >= titleAppCount) || (curTikType == TICKET_TYPE_PATCH && titleIndex >= titlePatchCount) || (curTikType == TICKET_TYPE_ADDON && titleIndex >= titleAddOnCount))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: invalid title index!");
+        goto out;
+    }
+    
+    curStorageId = (curTikType == TICKET_TYPE_APP ? titleAppStorageId[titleIndex] : (curTikType == TICKET_TYPE_PATCH ? titlePatchStorageId[titleIndex] : titleAddOnStorageId[titleIndex]));
+    
+    filter = (curTikType == TICKET_TYPE_APP ? META_DB_REGULAR_APPLICATION : (curTikType == TICKET_TYPE_PATCH ? META_DB_PATCH : META_DB_ADDON));
+    
+    if (curStorageId == FsStorageId_GameCard)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: invalid title storage ID!");
+        goto out;
+    }
+    
+    if (sizeof(rsa2048_sha256_ticket) > freeSpace)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: not enough free space available in the SD card!");
+        goto out;
+    }
+    
+    switch(curStorageId)
+    {
+        case FsStorageId_SdCard:
+            titleCount = (curTikType == TICKET_TYPE_APP ? sdCardTitleAppCount : (curTikType == TICKET_TYPE_PATCH ? sdCardTitlePatchCount : sdCardTitleAddOnCount));
+            ncmTitleIndex = titleIndex;
+            break;
+        case FsStorageId_NandUser:
+            if (curTikType == TICKET_TYPE_APP)
+            {
+                titleCount = nandUserTitleAppCount;
+                ncmTitleIndex = (titleIndex - sdCardTitleAppCount); // Substract SD card app count
+            } else
+            if (curTikType == TICKET_TYPE_PATCH)
+            {
+                titleCount = nandUserTitlePatchCount;
+                ncmTitleIndex = (titleIndex - sdCardTitlePatchCount); // Substract SD card patch count
+            } else
+            if (curTikType == TICKET_TYPE_ADDON)
+            {
+                titleCount = nandUserTitleAddOnCount;
+                ncmTitleIndex = (titleIndex - sdCardTitleAddOnCount); // Substract SD card add-on count
+            }
+            
+            break;
+        default:
+            break;
+    }
+    
+    dumpName = generateNSPDumpName((nspDumpType)curTikType, titleIndex);
+    if (!dumpName)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: unable to generate output dump name!");
+        goto out;
+    }
+    
+    snprintf(dumpPath, MAX_ELEMENTS(dumpPath), "%s%s.tik", TICKET_PATH, dumpName);
+    
+    // Check if the dump already exists
+    if (checkIfFileExists(dumpPath))
+    {
+        // Ask the user if they want to proceed anyway
+        int cur_breaks = breaks;
+        
+        proceed = yesNoPrompt("You have already dumped this content. Do you wish to proceed anyway?");
+        if (!proceed)
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Process canceled.");
+            goto out;
+        } else {
+            // Remove the prompt from the screen
+            breaks = cur_breaks;
+            uiFill(0, 8 + STRING_Y_POS(breaks), FB_WIDTH, FB_HEIGHT - (8 + STRING_Y_POS(breaks)), BG_COLOR_RGB);
+        }
+    }
+    
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Retrieving Rights ID and Ticket for the selected %s...", (curTikType == TICKET_TYPE_APP ? "base application" : (curTikType == TICKET_TYPE_PATCH ? "update" : "DLC")));
+    uiRefreshDisplay();
+    breaks += 2;
+    
+    if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.");
+        breaks += 2;
+    }
+    
+    if (!retrieveNcaContentRecords(curStorageId, filter, titleCount, ncmTitleIndex, &titleContentRecords, &titleContentRecordsCnt)) goto out;
+    
+    result = ncmOpenContentStorage(curStorageId, &ncmStorage);
+    if (R_FAILED(result))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: ncmOpenContentStorage failed! (0x%08X)", result);
+        goto out;
+    }
+    
+    for(i = 0; i < titleContentRecordsCnt; i++)
+    {
+        memcpy(&ncaId, &(titleContentRecords[i].ncaId), sizeof(NcmNcaId));
+        convertDataToHexString(titleContentRecords[i].ncaId.c, SHA256_HASH_SIZE / 2, ncaIdStr, SHA256_HASH_SIZE + 1);
+        
+        result = ncmContentStorageReadContentIdFile(&ncmStorage, &ncaId, 0, ncaHeader, NCA_FULL_HEADER_LENGTH);
+        if (R_FAILED(result))
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: failed to read header from NCA \"%s\"! (0x%08X)", ncaIdStr, result);
+            proceed = false;
+            break;
+        }
+        
+        // Decrypt the NCA header
+        proceed = decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, &rights_info, decrypted_nca_keys, true);
+        if (!proceed) break;
+        
+        // Check if we hit the right spot
+        if (rights_info.has_rights_id && rights_info.retrieved_tik)
+        {
+            convertDataToHexString(rights_info.enc_titlekey, 0x10, encTitleKeyStr, 0x21);
+            convertDataToHexString(rights_info.dec_titlekey, 0x10, decTitleKeyStr, 0x21);
+            foundRightsIdAndTik = true;
+            break;
+        }
+    }
+    
+    if (!proceed) goto out;
+    
+    if (!foundRightsIdAndTik)
+    {
+        if (!rights_info.has_rights_id)
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: the selected %s doesn't use titlekey crypto! Rights ID field is empty in all the NCAs!", (curTikType == TICKET_TYPE_APP ? "base application" : (curTikType == TICKET_TYPE_PATCH ? "update" : "DLC")));
+            goto out;
+        }
+        
+        if (rights_info.missing_tik)
+        {
+            breaks++;
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: the selected %s uses titlekey crypto, but no ticket for it is available! This is probably a pre-install.", (curTikType == TICKET_TYPE_APP ? "base application" : (curTikType == TICKET_TYPE_PATCH ? "update" : "DLC")));
+            goto out;
+        }
+    }
+    
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Rights ID: \"%s\".", rights_info.rights_id_str);
+    breaks++;
+    
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Ticket type: %s (0x%02X).", (rights_info.tik_data.titlekey_type == ETICKET_TITLEKEY_COMMON ? "common" : (rights_info.tik_data.titlekey_type == ETICKET_TITLEKEY_PERSONALIZED ? "personalized" : "unknown")), rights_info.tik_data.titlekey_type);
+    breaks++;
+    
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Encrypted title key: \"%s\".", encTitleKeyStr);
+    breaks++;
+    
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Decrypted title key: \"%s\".", decTitleKeyStr);
+    breaks += 2;
+    
+    uiRefreshDisplay();
+    
+    // Only mess with the ticket data if removeConsoleData is true and if we're dealing with a personalized ticket (checked in removeConsoleDataFromTicket())
+    if (removeConsoleData) removeConsoleDataFromTicket(&rights_info);
+    
+    outFile = fopen(dumpPath, "wb");
+    if (!outFile)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: failed to open output file \"%s\"!", dumpPath);
+        goto out;
+    }
+    
+    size_t wr = fwrite(&(rights_info.tik_data), 1, sizeof(rsa2048_sha256_ticket), outFile);
+    if (wr != sizeof(rsa2048_sha256_ticket))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "dumpTicketFromTitle: failed to write %u bytes long ticket data to \"%s\"! Wrote %lu bytes.", sizeof(rsa2048_sha256_ticket), dumpPath, wr);
+        removeFile = true;
+        goto out;
+    }
+    
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_SUCCESS_RGB, "Process successfully finished!");
+    breaks++;
+    
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_SUCCESS_RGB, "Ticket saved to \"%s\".", dumpPath);
+    
+    success = true;
+    
+out:
+    breaks += 2;
+    
+    if (outFile) fclose(outFile);
+    
+    if (!success && removeFile) unlink(dumpPath);
+    
+    serviceClose(&(ncmStorage.s));
+    
+    if (titleContentRecords) free(titleContentRecords);
+    
+    if (dumpName) free(dumpName);
     
     return success;
 }

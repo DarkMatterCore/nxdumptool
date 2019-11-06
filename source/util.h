@@ -15,6 +15,9 @@
 #define ROMFS_DUMP_PATH                 NXDUMPTOOL_BASE_PATH "RomFS/"
 #define CERT_DUMP_PATH                  NXDUMPTOOL_BASE_PATH "Certificate/"
 #define BATCH_OVERRIDES_PATH            NSP_DUMP_PATH "BatchOverrides/"
+#define TICKET_PATH                     NXDUMPTOOL_BASE_PATH "Ticket/"
+
+#define KEYS_FILE_PATH                  APP_BASE_PATH "prod.keys"
 
 #define KiB                             (1024.0)
 #define MiB                             (1024.0 * KiB)
@@ -93,6 +96,11 @@
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))          // Returns the max number of elements that can be stored in an array
 
+#define BIS_MOUNT_NAME                  "sys:"
+#define BIS_CERT_SAVE_NAME              BIS_MOUNT_NAME "/save/80000000000000e0"
+#define BIS_COMMON_TIK_SAVE_NAME        BIS_MOUNT_NAME "/save/80000000000000e1"
+#define BIS_PERSONALIZED_TIK_SAVE_NAME  BIS_MOUNT_NAME "/save/80000000000000e2"
+
 typedef struct {
     u64 file_offset;
     u64 file_size;
@@ -128,10 +136,34 @@ typedef enum {
     ROMFS_TYPE_ADDON
 } selectedRomFsType;
 
+typedef enum {
+    TICKET_TYPE_APP = 0,
+    TICKET_TYPE_PATCH,
+    TICKET_TYPE_ADDON
+} selectedTicketType;
+
 typedef struct {
     u32 index;
     u8 type; // 1 = Patch, 2 = AddOn
+    char name[NACP_APPNAME_LEN + 1];
+    char fixedName[NACP_APPNAME_LEN + 1];
 } PACKED orphan_patch_addon_entry;
+
+typedef struct {
+    bool isFat32;
+    bool setXciArchiveBit;
+    bool keepCert;
+    bool trimDump;
+    bool calcCrc;
+} PACKED xciOptions;
+
+typedef struct {
+    bool isFat32;
+    bool calcCrc;
+    bool removeConsoleData;
+    bool tiklessDump;
+    bool npdmAcidRsaPatch;
+} PACKED nspOptions;
 
 typedef enum {
     BATCH_SOURCE_ALL = 0,
@@ -141,36 +173,27 @@ typedef enum {
 } batchModeSourceStorage;
 
 typedef struct {
-    bool isFat32;
-    bool keepCert;
-    bool trimDump;
-    bool calcCrc;
-    bool setXciArchiveBit;
-} PACKED xciOptions;
-
-typedef struct {
-    bool isFat32;
-    bool calcCrc;
-    bool removeConsoleData;
-    bool tiklessDump;
-} PACKED nspOptions;
-
-typedef struct {
     bool dumpAppTitles;
     bool dumpPatchTitles;
     bool dumpAddOnTitles;
     bool isFat32;
     bool removeConsoleData;
     bool tiklessDump;
+    bool npdmAcidRsaPatch;
     bool skipDumpedTitles;
-    batchModeSourceStorage batchModeSrc;
     bool rememberDumpedTitles;
+    batchModeSourceStorage batchModeSrc;
 } PACKED batchOptions;
+
+typedef struct {
+    bool removeConsoleData;
+} PACKED ticketOptions;
 
 typedef struct {
     xciOptions xciDumpCfg;
     nspOptions nspDumpCfg;
     batchOptions batchDumpCfg;
+    ticketOptions tikDumpCfg;
 } PACKED dumpOptions;
 
 void loadConfig();
@@ -180,6 +203,10 @@ void saveConfig();
 bool isGameCardInserted();
 
 void fsGameCardDetectionThreadFunc(void *arg);
+
+bool mountSysEmmcPartition();
+
+void unmountSysEmmcPartition();
 
 bool isServiceRunning(const char *serviceName);
 
@@ -223,13 +250,17 @@ bool getPartitionHfs0Header(u32 partition);
 
 bool getHfs0FileList(u32 partition);
 
-bool getPartitionHfs0FileByName(FsStorage *gameCardStorage, const char *filename, u8 *outBuf, u64 outBufSize);
+bool getFileFromHfs0PartitionByName(FsStorage *gameCardStorage, const char *filename, u8 *outBuf, u64 outBufSize);
 
 bool calculateExeFsExtractedDataSize(u64 *out);
 
 bool calculateRomFsFullExtractedSize(bool usePatch, u64 *out);
 
 bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out);
+
+bool retrieveNcaContentRecords(FsStorageId curStorageId, u8 filter, u32 titleCount, u32 titleIndex, NcmContentRecord **outContentRecords, u32 *outContentRecordsCnt);
+
+void removeConsoleDataFromTicket(title_rights_ctx *rights_info);
 
 bool readNcaExeFsSection(u32 titleIndex, bool usePatch);
 
@@ -252,6 +283,8 @@ char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex);
 void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, bool addAppName, const char *prefix, char *outBuf, size_t outBufSize);
 
 bool checkOrphanPatchOrAddOn(bool addOn);
+
+void freeOrphanPatchOrAddOnList();
 
 void generateOrphanPatchOrAddOnList();
 
@@ -291,6 +324,6 @@ void gameCardDumpNSWDBCheck(u32 crc);
 
 void updateNSWDBXml();
 
-void updateApplication();
+bool updateApplication();
 
 #endif

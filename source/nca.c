@@ -150,13 +150,14 @@ void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_i
                      "    <Size>%lu</Size>\n" \
                      "    <Hash>%s</Hash>\n" \
                      "    <KeyGeneration>%u</KeyGeneration>\n" \
-                     "    <IdOffset>0</IdOffset>\n" \
-                     "  </Content>\n", \
+                     "    <IdOffset>%u</IdOffset>\n" \
+                     "  </Content>\n",
                      getContentType(xml_content_info[i].type), \
                      xml_content_info[i].nca_id_str, \
                      xml_content_info[i].size, \
                      xml_content_info[i].hash_str, \
-                     xml_content_info[i].keyblob); \
+                     xml_content_info[i].keyblob, \
+                     (xml_content_info[i].type != NcmContentType_CNMT ? xml_content_info[i].id_offset : 0));
         
         strcat(out, tmp);
     }
@@ -300,8 +301,8 @@ bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *nc
     Result result;
     unsigned char ctr[0x10];
     
-    char nca_id[33] = {'\0'};
-    convertDataToHexString(ncaId->c, 16, nca_id, 33);
+    char nca_id[SHA256_HASH_SIZE + 1] = {'\0'};
+    convertDataToHexString(ncaId->c, SHA256_HASH_SIZE / 2, nca_id, SHA256_HASH_SIZE + 1);
     
     u64 block_start_offset = (offset - (offset % 0x10));
     u64 block_end_offset = (u64)round_up(offset + bufSize, 0x10);
@@ -310,7 +311,8 @@ bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *nc
     u64 block_size_used = (block_size > NCA_CTR_BUFFER_SIZE ? NCA_CTR_BUFFER_SIZE : block_size);
     u64 output_block_size = (block_size > NCA_CTR_BUFFER_SIZE ? (NCA_CTR_BUFFER_SIZE - (offset - block_start_offset)) : bufSize);
     
-    if (R_FAILED(result = ncmContentStorageReadContentIdFile(ncmStorage, ncaId, block_start_offset, ncaCtrBuf, block_size_used)))
+    result = ncmContentStorageReadContentIdFile(ncmStorage, ncaId, block_start_offset, ncaCtrBuf, block_size_used);
+    if (R_FAILED(result))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Failed to read encrypted %lu bytes block at offset 0x%016lX from NCA \"%s\"! (0x%08X)", block_size_used, block_start_offset, nca_id, result);
         return false;
@@ -509,7 +511,8 @@ bool bktrSectionPhysicalRead(void *outBuf, size_t bufSize)
         {
             u64 block_size_used = (block_size > NCA_CTR_BUFFER_SIZE ? NCA_CTR_BUFFER_SIZE : block_size);
             
-            if (R_FAILED(result = ncmContentStorageReadContentIdFile(&(bktrContext.ncmStorage), &(bktrContext.ncaId), block_start_offset, ncaCtrBuf, block_size_used)))
+            result = ncmContentStorageReadContentIdFile(&(bktrContext.ncmStorage), &(bktrContext.ncaId), block_start_offset, ncaCtrBuf, block_size_used);
+            if (R_FAILED(result))
             {
                 uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "BKTR: failed to read encrypted %lu bytes block at offset 0x%016lX! (0x%08X)", block_size_used, block_start_offset, result);
                 return false;
@@ -655,6 +658,8 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
     
     if (!loadNcaKeyset()) return false;
     
+    int ret;
+    
     u32 i;
     size_t crypt_res;
     Aes128XtsContext hdr_aes_ctx;
@@ -702,7 +707,7 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
             }
         }
     } else {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NCA magic word! Wrong header key? (0x%08X)", bswap_32(out->magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NCA magic word! Wrong header key? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", bswap_32(out->magic));
         return false;
     }
     
@@ -732,16 +737,28 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
                 
                 if (retrieveTitleKeyData)
                 {
-                    if (!retrieveNcaTikTitleKey(out, (u8*)(&(rights_info->tik_data)), rights_info->enc_titlekey, rights_info->dec_titlekey)) return false;
+                    ret = retrieveNcaTikTitleKey(out, (u8*)(&(rights_info->tik_data)), rights_info->enc_titlekey, rights_info->dec_titlekey);
                     
-                    memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
-                    memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info->dec_titlekey, 0x10);
-                    
-                    rights_info->retrieved_tik = true;
+                    if (ret >= 0)
+                    {
+                        memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
+                        memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info->dec_titlekey, 0x10);
+                        
+                        rights_info->retrieved_tik = true;
+                    } else {
+                        if (ret == -2)
+                        {
+                            // We are probably dealing with a pre-installed title
+                            // Let's enable our missing ticket flag - we'll use it to display a prompt asking the user if they want to proceed anyway
+                            rights_info->missing_tik = true;
+                        } else {
+                            return false;
+                        }
+                    }
                 }
             } else {
                 // Copy what we already have
-                if (retrieveTitleKeyData)
+                if (retrieveTitleKeyData && rights_info->retrieved_tik)
                 {
                     memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
                     memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info->dec_titlekey, 0x10);
@@ -753,7 +770,7 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
             {
                 u8 tmp_dec_titlekey[0x10];
                 
-                if (!retrieveNcaTikTitleKey(out, NULL, NULL, tmp_dec_titlekey)) return false;
+                if (retrieveNcaTikTitleKey(out, NULL, NULL, tmp_dec_titlekey) < 0) return false;
                 
                 memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
                 memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), tmp_dec_titlekey, 0x10);
@@ -854,13 +871,13 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
     
     if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)", bswap_32(nca_pfs0_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", bswap_32(nca_pfs0_header.magic));
         return false;
     }
     
     if (!nca_pfs0_header.file_cnt || !nca_pfs0_header.str_table_size)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: Program NCA section #0 PFS0 partition is empty! Wrong KAEK?");
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: Program NCA section #0 PFS0 partition is empty! Wrong KAEK?\nTry running Lockpick_RCM to generate the keys file from scratch.");
         return false;
     }
     
@@ -1085,7 +1102,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca
     return true;
 }
 
-bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *output, title_rights_ctx *rights_info, bool replaceKeyArea)
+bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, u32 cnmtNcaIndex, nca_cnmt_mod_data *output, title_rights_ctx *rights_info, bool replaceKeyArea)
 {
     if (!ncaBuf || !xml_program_info || !xml_content_info || !output || !rights_info)
     {
@@ -1095,7 +1112,7 @@ bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpTy
     
     nca_header_t dec_header;
     
-    u32 i;
+    u32 i, j, k = 0;
     
     u64 section_offset;
     u64 section_size;
@@ -1125,7 +1142,7 @@ bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpTy
     
     // Decrypt the NCA header
     // Don't retrieve the ticket and/or titlekey if we're dealing with a Patch with titlekey crypto bundled with the inserted gamecard
-    if (!decryptNcaHeader(ncaBuf, xml_content_info->size, &dec_header, rights_info, xml_content_info->decrypted_nca_keys, (curStorageId != FsStorageId_GameCard))) return false;
+    if (!decryptNcaHeader(ncaBuf, xml_content_info[cnmtNcaIndex].size, &dec_header, rights_info, xml_content_info[cnmtNcaIndex].decrypted_nca_keys, (curStorageId != FsStorageId_GameCard))) return false;
     
     if (dec_header.fs_headers[0].partition_type != NCA_FS_HEADER_PARTITION_PFS0 || dec_header.fs_headers[0].fs_type != NCA_FS_HEADER_FSTYPE_PFS0)
     {
@@ -1172,7 +1189,7 @@ bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpTy
         if (has_rights_id && replaceKeyArea)
         {
             // Generate new encrypted NCA key area using titlekey
-            if (!generateEncryptedNcaKeyAreaWithTitlekey(&dec_header, xml_content_info->decrypted_nca_keys)) return false;
+            if (!generateEncryptedNcaKeyAreaWithTitlekey(&dec_header, xml_content_info[cnmtNcaIndex].decrypted_nca_keys)) return false;
             
             // Remove rights ID from NCA
             memset(dec_header.rights_id, 0, 0x10);
@@ -1200,7 +1217,7 @@ bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpTy
     }
     
     u8 ctr_key[NCA_KEY_AREA_KEY_SIZE];
-    memcpy(ctr_key, xml_content_info->decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), NCA_KEY_AREA_KEY_SIZE);
+    memcpy(ctr_key, xml_content_info[cnmtNcaIndex].decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), NCA_KEY_AREA_KEY_SIZE);
     aes128CtrContextCreate(&aes_ctx, ctr_key, ctr);
     
     section_data = malloc(section_size);
@@ -1217,14 +1234,14 @@ bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpTy
     
     if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid magic word for CNMT NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)", bswap_32(nca_pfs0_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid magic word for CNMT NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", bswap_32(nca_pfs0_header.magic));
         free(section_data);
         return false;
     }
     
     if (!nca_pfs0_header.file_cnt || !nca_pfs0_header.str_table_size)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: CNMT NCA section #0 PFS0 partition is empty! Wrong KAEK?");
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: CNMT NCA section #0 PFS0 partition is empty! Wrong KAEK?\nTry running Lockpick_RCM to generate the keys file from scratch.");
         free(section_data);
         return false;
     }
@@ -1270,14 +1287,48 @@ bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpTy
     // Fill information for our CNMT XML
     digest_offset = (title_cnmt_offset + title_cnmt_size - (u64)SHA256_HASH_SIZE);
     memcpy(xml_program_info->digest, section_data + digest_offset, SHA256_HASH_SIZE);
-    convertDataToHexString(xml_program_info->digest, 32, xml_program_info->digest_str, 65);
-    xml_content_info->keyblob = (dec_header.crypto_type2 > dec_header.crypto_type ? dec_header.crypto_type2 : dec_header.crypto_type);
-    xml_program_info->min_keyblob = (rights_info->has_rights_id ? rights_info->rights_id[15] : xml_content_info->keyblob);
+    convertDataToHexString(xml_program_info->digest, SHA256_HASH_SIZE, xml_program_info->digest_str, (SHA256_HASH_SIZE * 2) + 1);
+    xml_content_info[cnmtNcaIndex].keyblob = (dec_header.crypto_type2 > dec_header.crypto_type ? dec_header.crypto_type2 : dec_header.crypto_type);
+    xml_program_info->required_dl_sysver = title_cnmt_header.required_dl_sysver;
+    xml_program_info->min_keyblob = (rights_info->has_rights_id ? rights_info->rights_id[15] : xml_content_info[cnmtNcaIndex].keyblob);
     xml_program_info->min_sysver = title_cnmt_extended_header.min_sysver;
     xml_program_info->patch_tid = title_cnmt_extended_header.patch_tid;
     
-    // Empty CNMT content records
-    memset(section_data + title_cnmt_offset + sizeof(cnmt_header) + (u64)title_cnmt_header.table_offset, 0, title_cnmt_size - sizeof(cnmt_header) - (u64)title_cnmt_header.table_offset - (u64)SHA256_HASH_SIZE);
+    // Retrieve the ID offset and content record offset for each of our NCAs (except the CNMT NCA)
+    // Also wipe each of the content records we're gonna replace (excluding Delta Fragments)
+    for(i = 0; i < (xml_program_info->nca_cnt - 1); i++) // Discard CNMT NCA
+    {
+        for(j = 0; j < title_cnmt_header.content_cnt; j++)
+        {
+            cnmt_content_record cnt_record;
+            memcpy(&cnt_record, section_data + title_cnmt_offset + sizeof(cnmt_header) + (u64)title_cnmt_header.extended_header_size + (j * sizeof(cnmt_content_record)), sizeof(cnmt_content_record));
+            
+            if (cnt_record.type == NCA_CONTENT_TYPE_DELTA) continue;
+            
+            if (!memcmp(xml_content_info[i].nca_id, cnt_record.nca_id, SHA256_HASH_SIZE / 2) || xml_content_info[i].type == cnt_record.type)
+            {
+                // Save ID offset and content record offset
+                xml_content_info[i].id_offset = cnt_record.id_offset;
+                xml_content_info[i].cnt_record_offset = (j * sizeof(cnmt_content_record));
+                
+                // Empty CNMT content record
+                memset(section_data + title_cnmt_offset + sizeof(cnmt_header) + (u64)title_cnmt_header.extended_header_size + (j * sizeof(cnmt_content_record)), 0, sizeof(cnmt_content_record));
+                
+                // Increase counter
+                k++;
+                
+                break;
+            }
+        }
+    }
+    
+    // Verify counter
+    if (k != (xml_program_info->nca_cnt - 1))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid content record entries in the CNMT NCA!");
+        free(section_data);
+        return false;
+    }
     
     // Replace input buffer data in-place
     memcpy(ncaBuf, &dec_header, NCA_FULL_HEADER_LENGTH);
@@ -1293,6 +1344,8 @@ bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpTy
     output->section_offset = section_offset;
     output->section_size = section_size;
     output->hash_table_offset = (section_offset + dec_header.fs_headers[0].pfs0_superblock.hash_table_offset);
+    output->hash_block_size = dec_header.fs_headers[0].pfs0_superblock.block_size;
+    output->hash_block_cnt = (dec_header.fs_headers[0].pfs0_superblock.hash_table_size / SHA256_HASH_SIZE);
     output->pfs0_offset = nca_pfs0_offset;
     output->pfs0_size = dec_header.fs_headers[0].pfs0_superblock.pfs0_size;
     output->title_cnmt_offset = title_cnmt_offset;
@@ -1310,52 +1363,47 @@ bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program
     }
     
     u32 i;
-    u32 nca_cnt;
+    
+    u32 nca_cnt = (xml_program_info->nca_cnt - 1); // Discard CNMT NCA
     
     cnmt_header title_cnmt_header;
-    cnmt_content_record *title_cnmt_content_records = NULL;
+    cnmt_content_record title_cnmt_content_record;
     u64 title_cnmt_content_records_offset;
-    
-    u8 pfs0_block_hash[SHA256_HASH_SIZE];
     
     nca_header_t dec_header;
     
     Aes128CtrContext aes_ctx;
     
-    // Update number of content records
-    nca_cnt = (xml_program_info->nca_cnt - 1); // Discard CNMT NCA
+    // Copy CNMT header
     memcpy(&title_cnmt_header, ncaBuf + cnmt_mod->title_cnmt_offset, sizeof(cnmt_header));
-    title_cnmt_header.content_records_cnt = (u16)nca_cnt;
-    memcpy(ncaBuf + cnmt_mod->title_cnmt_offset, &title_cnmt_header, sizeof(cnmt_header));
     
-    // Allocate memory for our content records
-    title_cnmt_content_records = calloc(nca_cnt, sizeof(cnmt_content_record));
-    if (!title_cnmt_content_records)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: unable to allocate memory for CNMT NCA content records!");
-        return false;
-    }
-    
-    title_cnmt_content_records_offset = (cnmt_mod->title_cnmt_offset + sizeof(cnmt_header) + (u64)title_cnmt_header.table_offset);
-    memcpy(title_cnmt_content_records, ncaBuf + title_cnmt_content_records_offset, (u64)nca_cnt * sizeof(cnmt_content_record));
+    // Calculate the start offset for the content records
+    title_cnmt_content_records_offset = (cnmt_mod->title_cnmt_offset + sizeof(cnmt_header) + (u64)title_cnmt_header.extended_header_size);
     
     // Write content records
     for(i = 0; i < nca_cnt; i++)
     {
-        memcpy(title_cnmt_content_records[i].hash, xml_content_info[i].hash, 32);
-        memcpy(title_cnmt_content_records[i].nca_id, xml_content_info[i].nca_id, 16);
-        convertU64ToNcaSize(xml_content_info[i].size, title_cnmt_content_records[i].size);
-        title_cnmt_content_records[i].type = xml_content_info[i].type;
+        memset(&title_cnmt_content_record, 0, sizeof(cnmt_content_record));
         
-        u64 cur_content_record = (title_cnmt_content_records_offset + ((u64)i * sizeof(cnmt_content_record)));
-        memcpy(ncaBuf + cur_content_record, &(title_cnmt_content_records[i]), sizeof(cnmt_content_record));
+        memcpy(title_cnmt_content_record.hash, xml_content_info[i].hash, SHA256_HASH_SIZE);
+        memcpy(title_cnmt_content_record.nca_id, xml_content_info[i].nca_id, SHA256_HASH_SIZE / 2);
+        convertU64ToNcaSize(xml_content_info[i].size, title_cnmt_content_record.size);
+        title_cnmt_content_record.type = xml_content_info[i].type;
+        title_cnmt_content_record.id_offset = xml_content_info[i].id_offset;
+        
+        memcpy(ncaBuf + title_cnmt_content_records_offset + xml_content_info[i].cnt_record_offset, &title_cnmt_content_record, sizeof(cnmt_content_record));
     }
     
-    free(title_cnmt_content_records);
-    
-    // Calculate block hash
-    sha256CalculateHash(pfs0_block_hash, ncaBuf + cnmt_mod->pfs0_offset, cnmt_mod->pfs0_size);
-    memcpy(ncaBuf + cnmt_mod->hash_table_offset, pfs0_block_hash, SHA256_HASH_SIZE);
+    // Recalculate block hashes
+    for(i = 0; i < cnmt_mod->hash_block_cnt; i++)
+    {
+        u64 blk_offset = ((u64)i * cnmt_mod->hash_block_size);
+        
+        u64 rest_size = (cnmt_mod->pfs0_size - blk_offset);
+        u64 blk_size = (rest_size > cnmt_mod->hash_block_size ? cnmt_mod->hash_block_size : rest_size);
+        
+        sha256CalculateHash(ncaBuf + cnmt_mod->hash_table_offset + (i * SHA256_HASH_SIZE), ncaBuf + cnmt_mod->pfs0_offset + blk_offset, blk_size);
+    }
     
     // Copy header to struct
     memcpy(&dec_header, ncaBuf, sizeof(nca_header_t));
@@ -1393,9 +1441,9 @@ bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program
     
     // Calculate CNMT NCA SHA-256 checksum and fill information for our CNMT XML
     sha256CalculateHash(xml_content_info[xml_program_info->nca_cnt - 1].hash, ncaBuf, ncaBufSize);
-    convertDataToHexString(xml_content_info[xml_program_info->nca_cnt - 1].hash, 32, xml_content_info[xml_program_info->nca_cnt - 1].hash_str, 65);
-    memcpy(xml_content_info[xml_program_info->nca_cnt - 1].nca_id, xml_content_info[xml_program_info->nca_cnt - 1].hash, 16);
-    convertDataToHexString(xml_content_info[xml_program_info->nca_cnt - 1].nca_id, SHA256_HASH_SIZE / 2, xml_content_info[xml_program_info->nca_cnt - 1].nca_id_str, 33);
+    convertDataToHexString(xml_content_info[xml_program_info->nca_cnt - 1].hash, SHA256_HASH_SIZE, xml_content_info[xml_program_info->nca_cnt - 1].hash_str, (SHA256_HASH_SIZE * 2) + 1);
+    memcpy(xml_content_info[xml_program_info->nca_cnt - 1].nca_id, xml_content_info[xml_program_info->nca_cnt - 1].hash, SHA256_HASH_SIZE / 2);
+    convertDataToHexString(xml_content_info[xml_program_info->nca_cnt - 1].nca_id, SHA256_HASH_SIZE / 2, xml_content_info[xml_program_info->nca_cnt - 1].nca_id_str, SHA256_HASH_SIZE + 1);
     
     return true;
 }
@@ -1517,7 +1565,7 @@ bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     
     if (!found_exefs)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: NCA doesn't hold an ExeFS section!");
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: NCA doesn't hold an ExeFS section! Wrong keys?\nTry running Lockpick_RCM to generate the keys file from scratch.");
         return false;
     }
     
@@ -1616,7 +1664,7 @@ bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId,
     
     if (bswap_32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic) != IVFC_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid IVFC magic word for NCA RomFS section! Wrong KAEK? (0x%08X)", bswap_32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid IVFC magic word for NCA RomFS section! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", bswap_32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic));
         return false;
     }
     
@@ -1784,7 +1832,7 @@ bool readBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, 
     
     if (bswap_32(bktrContext.superblock.ivfc_header.magic) != IVFC_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid IVFC magic word for NCA BKTR section! Wrong KAEK? (0x%08X)", bswap_32(bktrContext.superblock.ivfc_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid IVFC magic word for NCA BKTR section! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", bswap_32(bktrContext.superblock.ivfc_header.magic));
         return false;
     }
     
@@ -1796,7 +1844,7 @@ bool readBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, 
     
     if (bswap_32(bktrContext.superblock.relocation_header.magic) != BKTR_MAGIC || bswap_32(bktrContext.superblock.subsection_header.magic) != BKTR_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid BKTR magic word for NCA BKTR relocation/subsection header! (0x%02X | 0x%02X)", bswap_32(bktrContext.superblock.relocation_header.magic), bswap_32(bktrContext.superblock.subsection_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid BKTR magic word for NCA BKTR relocation/subsection header! Wrong KAEK? (0x%02X | 0x%02X)\nTry running Lockpick_RCM to generate the keys file from scratch.", bswap_32(bktrContext.superblock.relocation_header.magic), bswap_32(bktrContext.superblock.subsection_header.magic));
         return false;
     }
     
@@ -2076,13 +2124,13 @@ bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
     
     if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)", bswap_32(nca_pfs0_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", bswap_32(nca_pfs0_header.magic));
         return false;
     }
     
     if (!nca_pfs0_header.file_cnt || !nca_pfs0_header.str_table_size)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: Program NCA section #0 PFS0 partition is empty! Wrong KAEK?");
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: Program NCA section #0 PFS0 partition is empty! Wrong KAEK?\nTry running Lockpick_RCM to generate the keys file from scratch.");
         return false;
     }
     
@@ -2160,7 +2208,7 @@ bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId
     
     if (bswap_32(npdm_header.magic) != META_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NPDM META magic word! (0x%08X)", bswap_32(npdm_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Error: invalid NPDM META magic word! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", bswap_32(npdm_header.magic));
         goto out;
     }
     
@@ -2526,6 +2574,9 @@ char *getNacpRatingAgeOrganizationName(u8 val)
         case 11:
             out = "OFLC";
             break;
+        case 12:
+            out = "IARCGeneric";
+            break;
         default:
             out = "Unknown";
             break;
@@ -2708,6 +2759,29 @@ char *getNacpRuntimeAddOnContentInstall(u8 val)
             break;
         case 1:
             out = "AllowAppend";
+            break;
+        default:
+            out = "Unknown";
+            break;
+    }
+    
+    return out;
+}
+
+char *getNacpRuntimeParameterDelivery(u8 val)
+{
+    char *out = NULL;
+    
+    switch(val)
+    {
+        case 0:
+            out = "Always";
+            break;
+        case 1:
+            out = "AlwaysIfUserStateMatched";
+            break;
+        case 2:
+            out = "OnRestart";
             break;
         default:
             out = "Unknown";
@@ -3147,8 +3221,17 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaI
     sprintf(tmp, "  <RuntimeAddOnContentInstall>%s</RuntimeAddOnContentInstall>\n", getNacpRuntimeAddOnContentInstall(controlNacp.RuntimeAddOnContentInstall));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <PlayLogQueryableApplicationId>0x%016lx</PlayLogQueryableApplicationId>\n", controlNacp.PlayLogQueryableApplicationId[0]);
+    sprintf(tmp, "  <RuntimeParameterDelivery>%s</RuntimeParameterDelivery>\n", getNacpRuntimeParameterDelivery(controlNacp.RuntimeParameterDelivery));
     strcat(nacpXml, tmp);
+    
+    for(i = 0; i < 16; i++)
+    {
+        if (controlNacp.PlayLogQueryableApplicationId[i] != 0)
+        {
+            sprintf(tmp, "  <PlayLogQueryableApplicationId>0x%016lx</PlayLogQueryableApplicationId>\n", controlNacp.PlayLogQueryableApplicationId[i]);
+            strcat(nacpXml, tmp);
+        }
+    }
     
     sprintf(tmp, "  <PlayLogQueryCapability>%s</PlayLogQueryCapability>\n", getNacpPlayLogQueryCapability(controlNacp.PlayLogQueryCapability));
     strcat(nacpXml, tmp);
