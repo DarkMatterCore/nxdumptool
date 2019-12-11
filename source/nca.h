@@ -13,8 +13,6 @@
 #define NCA_SECTION_HEADER_CNT          4
 #define NCA_FULL_HEADER_LENGTH          (NCA_HEADER_LENGTH + (NCA_SECTION_HEADER_LENGTH * NCA_SECTION_HEADER_CNT))
 
-#define NCA_CONTENT_TYPE_DELTA          0x06
-
 #define NCA_AES_XTS_SECTOR_SIZE         0x200
 
 #define NCA_KEY_AREA_KEY_CNT            4
@@ -94,7 +92,7 @@ typedef struct {
     u64 file_size;
     u32 filename_offset;
     u32 reserved;
-} PACKED pfs0_entry_table;
+} PACKED pfs0_file_entry;
 
 typedef struct {
     u32 media_start_offset;
@@ -238,7 +236,7 @@ typedef struct {
 } PACKED cnmt_header;
 
 typedef struct {
-    u64 patch_tid;  /* Patch TID / Original TID / Application TID */
+    u64 patch_tid;  /* Patch TID / Application TID */
     u32 min_sysver; /* Minimum system/application version */
 } PACKED cnmt_extended_header;
 
@@ -332,22 +330,24 @@ typedef struct {
 } PACKED title_rights_ctx;
 
 typedef struct {
+    NcmStorageId storageId;
     NcmContentStorage ncmStorage;
-    NcmNcaId ncaId;
+    NcmContentId ncaId;
     Aes128CtrContext aes_ctx;
     u64 exefs_offset; // Relative to NCA start
     u64 exefs_size;
     pfs0_header exefs_header;
     u64 exefs_entries_offset; // Relative to NCA start
-    pfs0_entry_table *exefs_entries;
+    pfs0_file_entry *exefs_entries;
     u64 exefs_str_table_offset; // Relative to NCA start
     char *exefs_str_table;
     u64 exefs_data_offset; // Relative to NCA start
 } PACKED exefs_ctx_t;
 
 typedef struct {
+    NcmStorageId storageId;
     NcmContentStorage ncmStorage;
-    NcmNcaId ncaId;
+    NcmContentId ncaId;
     Aes128CtrContext aes_ctx;
     u64 section_offset; // Relative to NCA start
     u64 section_size;
@@ -406,8 +406,9 @@ typedef struct {
 } PACKED bktr_subsection_block_t;
 
 typedef struct {
+    NcmStorageId storageId;
     NcmContentStorage ncmStorage;
-    NcmNcaId ncaId;
+    NcmContentId ncaId;
     Aes128CtrContext aes_ctx;
     u64 section_offset; // Relative to NCA start
     u64 section_size;
@@ -428,9 +429,16 @@ typedef struct {
     u64 romfs_filedata_offset; // Relative to section start
 } PACKED bktr_ctx_t;
 
+// Used in HFS0 / ExeFS / RomFS browsers
+typedef struct {
+    u64 size;
+    char sizeStr[32];
+} PACKED browser_entry_size_info;
+
 typedef struct {
     u8 type; // 1 = Dir, 2 = File
     u64 offset; // Relative to directory/file table, depending on type
+    browser_entry_size_info sizeInfo; // Only used if type == 2
 } PACKED romfs_browser_entry;
 
 typedef struct {
@@ -514,7 +522,9 @@ void convertNcaSizeToU64(const u8 size[0x6], u64 *out);
 
 void convertU64ToNcaSize(const u64 size, u8 out[0x6]);
 
-bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *ctx, u64 offset, void *outBuf, size_t bufSize, bool encrypt);
+bool readNcaDataByContentId(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, u64 offset, void *outBuf, size_t bufSize);
+
+bool processNcaCtrSectionBlock(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, Aes128CtrContext *ctx, u64 offset, void *outBuf, size_t bufSize, bool encrypt);
 
 bool readBktrSectionBlock(u64 offset, void *outBuf, size_t bufSize);
 
@@ -522,22 +532,22 @@ bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize);
 
 bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title_rights_ctx *rights_info, u8 *decrypted_nca_keys, bool retrieveTitleKeyData);
 
-bool processProgramNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data *output);
+bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data *output);
 
-bool retrieveCnmtNcaData(FsStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, u32 cnmtNcaIndex, nca_cnmt_mod_data *output, title_rights_ctx *rights_info, bool replaceKeyArea);
+bool retrieveCnmtNcaData(NcmStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, u32 cnmtNcaIndex, nca_cnmt_mod_data *output, title_rights_ctx *rights_info);
 
 bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *cnmt_mod);
 
-bool readExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
+bool parseExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
-bool readRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
+bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
-bool readBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
+bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
-bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, nca_program_mod_data *program_mod_data, char **outBuf, u64 *outBufSize);
+bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, nca_program_mod_data *program_mod_data, char **outBuf, u64 *outBufSize);
 
-bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **out_nacp_xml, u64 *out_nacp_xml_size, nacp_icons_ctx **out_nacp_icons_ctx, u8 *out_nacp_icons_ctx_cnt);
+bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **out_nacp_xml, u64 *out_nacp_xml_size, nacp_icons_ctx **out_nacp_icons_ctx, u8 *out_nacp_icons_ctx_cnt);
 
-bool retrieveLegalInfoXmlFromNca(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf, u64 *outBufSize);
+bool retrieveLegalInfoXmlFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf, u64 *outBufSize);
 
 #endif

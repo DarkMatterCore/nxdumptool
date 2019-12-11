@@ -33,7 +33,7 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 VERSION_MAJOR := 1
 VERSION_MINOR := 1
-VERSION_MICRO := 7
+VERSION_MICRO := 8
 
 APP_TITLE	:=	nxdumptool
 APP_AUTHOR	:=	MCMrARM, DarkMatterCore
@@ -52,7 +52,7 @@ ROMFS       :=	romfs
 #---------------------------------------------------------------------------------
 ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS	:=	-g -Wall -O2 -ffunction-sections \
+CFLAGS	:=	-g -Wall -Wno-address-of-packed-member -O2 -ffunction-sections \
 			$(ARCH) $(DEFINES)
 
 CFLAGS	+=	$(INCLUDE) -D__SWITCH__ -D__LINUX_ERRNO_EXTENSIONS__ -DAPP_VERSION=\"${APP_VERSION}\"

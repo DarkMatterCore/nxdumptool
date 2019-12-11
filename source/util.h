@@ -19,23 +19,23 @@
 
 #define KEYS_FILE_PATH                  APP_BASE_PATH "prod.keys"
 
+#define CFW_PATH_ATMOSPHERE             "sdmc:/atmosphere/contents/"
+#define CFW_PATH_SXOS                   "sdmc:/sxos/titles/"
+#define CFW_PATH_REINX                  "sdmc:/ReiNX/titles/"
+
 #define KiB                             (1024.0)
 #define MiB                             (1024.0 * KiB)
 #define GiB                             (1024.0 * MiB)
 
 #define NAME_BUF_LEN                    4096
 
-#define SOCK_BUFFERSIZE                 65536
+#define DUMP_BUFFER_SIZE                (u64)0x400000		                    // 4 MiB (4194304 bytes)
 
-#define DUMP_BUFFER_SIZE                (u64)0x100000		                    // 1 MiB (1048576 bytes)
+#define GAMECARD_READ_BUFFER_SIZE       DUMP_BUFFER_SIZE                        // 4 MiB (4194304 bytes)
 
-#define NCA_CTR_BUFFER_SIZE             DUMP_BUFFER_SIZE                        // 1 MiB (1048576 bytes)
+#define NCA_CTR_BUFFER_SIZE             DUMP_BUFFER_SIZE                        // 4 MiB (4194304 bytes)
 
 #define NSP_XML_BUFFER_SIZE             (u64)0xA00000                           // 10 MiB (10485760 bytes)
-
-#define META_DB_REGULAR_APPLICATION     0x80
-#define META_DB_PATCH                   0x81
-#define META_DB_ADDON                   0x82
 
 #define APPLICATION_PATCH_BITMASK       (u64)0x800
 #define APPLICATION_ADDON_BITMASK       (u64)0xFFFFFFFFFFFF0000
@@ -48,32 +48,13 @@
 #define NACP_AUTHOR_LEN                 0x100
 #define VERSION_STR_LEN                 0x40
 
-#define GAMECARD_WAIT_TIME              3                                       // 3 seconds
-
-#define GAMECARD_HEADER_SIZE            0x200
-#define GAMECARD_SIZE_ADDR              0x10D
-#define GAMECARD_DATAEND_ADDR           0x118
-
-#define GAMECARD_ECC_BLOCK_SIZE         (u64)0x200                              // 512 bytes
-#define GAMECARD_ECC_DATA_SIZE          (u64)0x24                               // 36 bytes
-
-#define HFS0_OFFSET_ADDR                0x130
-#define HFS0_SIZE_ADDR                  0x138
-#define HFS0_MAGIC                      (u32)0x48465330                         // "HFS0"
-#define HFS0_FILE_COUNT_ADDR            0x04
-#define HFS0_STR_TABLE_SIZE_ADDR        0x08
-#define HFS0_ENTRY_TABLE_ADDR           0x10
-
 #define MEDIA_UNIT_SIZE                 0x200
 
-#define GAMECARD_TYPE1_PARTITION_CNT    3                                       // "update" (0), "normal" (1), "update" (2)
-#define GAMECARD_TYPE2_PARTITION_CNT    4                                       // "update" (0), "logo" (1), "normal" (2), "update" (3)
-#define GAMECARD_TYPE(x)                ((x) == GAMECARD_TYPE1_PARTITION_CNT ? "Type 0x01" : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? "Type 0x02" : "Unknown"))
-#define GAMECARD_TYPE1_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Normal" : ((x) == 2 ? "Secure" : "Unknown")))
-#define GAMECARD_TYPE2_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Logo" : ((x) == 2 ? "Normal" : ((x) == 3 ? "Secure" : "Unknown"))))
-#define GAMECARD_PARTITION_NAME(x, y)   ((x) == GAMECARD_TYPE1_PARTITION_CNT ? GAMECARD_TYPE1_PART_NAMES(y) : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? GAMECARD_TYPE2_PART_NAMES(y) : "Unknown"))
+#define ISTORAGE_PARTITION_CNT          2
 
-#define HFS0_TO_ISTORAGE_IDX(x, y)      ((x) == GAMECARD_TYPE1_PARTITION_CNT ? ((y) < 2 ? 0 : 1) : ((y) < 3 ? 0 : 1))
+#define GAMECARD_WAIT_TIME              3                                       // 3 seconds
+
+#define GAMECARD_HEADER_MAGIC           (u32)0x48454144                         // "HEAD"
 
 #define GAMECARD_SIZE_1GiB              (u64)0x40000000
 #define GAMECARD_SIZE_2GiB              (u64)0x80000000
@@ -82,8 +63,21 @@
 #define GAMECARD_SIZE_16GiB             (u64)0x400000000
 #define GAMECARD_SIZE_32GiB             (u64)0x800000000
 
-/* Reference: https://switchbrew.org/wiki/Title_list */
 #define GAMECARD_UPDATE_TITLEID         (u64)0x0100000000000816
+
+#define GAMECARD_ECC_BLOCK_SIZE         (u64)0x200                              // 512 bytes
+#define GAMECARD_ECC_DATA_SIZE          (u64)0x24                               // 36 bytes
+
+#define GAMECARD_TYPE1_PARTITION_CNT    3                                       // "update" (0), "normal" (1), "secure" (2)
+#define GAMECARD_TYPE2_PARTITION_CNT    4                                       // "update" (0), "logo" (1), "normal" (2), "secure" (3)
+#define GAMECARD_TYPE(x)                ((x) == GAMECARD_TYPE1_PARTITION_CNT ? "Type 0x01" : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? "Type 0x02" : "Unknown"))
+#define GAMECARD_TYPE1_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Normal" : ((x) == 2 ? "Secure" : "Unknown")))
+#define GAMECARD_TYPE2_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Logo" : ((x) == 2 ? "Normal" : ((x) == 3 ? "Secure" : "Unknown"))))
+#define GAMECARD_PARTITION_NAME(x, y)   ((x) == GAMECARD_TYPE1_PARTITION_CNT ? GAMECARD_TYPE1_PART_NAMES(y) : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? GAMECARD_TYPE2_PART_NAMES(y) : "Unknown"))
+
+#define HFS0_MAGIC                      (u32)0x48465330                         // "HFS0"
+
+#define HFS0_TO_ISTORAGE_IDX(x, y)      ((x) == GAMECARD_TYPE1_PARTITION_CNT ? ((y) < (GAMECARD_TYPE1_PARTITION_CNT - 1) ? 0 : 1) : ((y) < (GAMECARD_TYPE2_PARTITION_CNT - 1) ? 0 : 1))
 
 #define NACP_ICON_SQUARE_DIMENSION      256
 #define NACP_ICON_DOWNSCALED            96
@@ -95,11 +89,116 @@
 #define ORPHAN_ENTRY_TYPE_ADDON         2
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))          // Returns the max number of elements that can be stored in an array
+#define MAX_CHARACTERS(x)               (MAX_ELEMENTS((x)) - 1)                     // Returns the max number of characters that can be stored in char array while also leaving space for a NULL terminator
 
 #define BIS_MOUNT_NAME                  "sys:"
 #define BIS_CERT_SAVE_NAME              BIS_MOUNT_NAME "/save/80000000000000e0"
 #define BIS_COMMON_TIK_SAVE_NAME        BIS_MOUNT_NAME "/save/80000000000000e1"
 #define BIS_PERSONALIZED_TIK_SAVE_NAME  BIS_MOUNT_NAME "/save/80000000000000e2"
+
+#define SMOOTHING_FACTOR                (double)0.1
+
+#define CANCEL_BTN_SEC_HOLD             2                           // The cancel button must be held for at least CANCEL_BTN_SEC_HOLD seconds to cancel an ongoing operation
+
+typedef struct {
+    u8 signature[0x100];
+    u32 magic;
+    u32 secureAreaStartAddr;
+    u32 backupAreaStartAddr;
+    u8 titleKeyIndex;
+    u8 size;
+    u8 headerVersion;
+    u8 flags;
+    u64 packageId;
+    u64 validDataEndAddr;
+    u8 iv[0x10];
+    u64 rootHfs0HeaderOffset;
+    u64 rootHfs0HeaderSize;
+    u8 rootHfs0HeaderHash[SHA256_HASH_SIZE];
+    u8 initialDataHash[SHA256_HASH_SIZE];
+    u32 securityMode;
+    u32 t1KeyIndex;
+    u32 keyIndex;
+    u32 normalAreaEndAddr;
+    u8 encryptedInfoBlock[0x70];
+} PACKED gamecard_header_t;
+
+typedef struct {
+    u64 offset;
+    u64 size;
+    u8 *header;
+    u64 header_size;
+    u32 file_cnt;
+    u32 str_table_size;
+} PACKED hfs0_partition_info;
+
+typedef enum {
+    ISTORAGE_PARTITION_NONE = 0,
+    ISTORAGE_PARTITION_NORMAL,
+    ISTORAGE_PARTITION_SECURE,
+    ISTORAGE_PARTITION_INVALID
+} openIStoragePartition;
+
+typedef struct {
+    FsDeviceOperator fsOperatorInstance;
+    FsEventNotifier fsGameCardEventNotifier;
+    Event fsGameCardKernelEvent;
+    FsGameCardHandle fsGameCardHandle;
+    FsStorage fsGameCardStorage;
+    openIStoragePartition curIStorageIndex;
+    volatile bool isInserted;
+    gamecard_header_t header;
+    u8 *rootHfs0Header;
+    u32 hfs0PartitionCnt;
+    hfs0_partition_info *hfs0Partitions;
+    u64 size;
+    char sizeStr[32];
+    u64 trimmedSize;
+    char trimmedSizeStr[32];
+    u64 IStoragePartitionSizes[ISTORAGE_PARTITION_CNT];
+    u64 updateTitleId;
+    u32 updateVersion;
+    char updateVersionStr[64];
+} PACKED gamecard_ctx_t;
+
+typedef struct {
+    u64 titleId;
+    u32 version;
+    u32 ncmIndex;
+    NcmStorageId storageId;
+    char name[NACP_APPNAME_LEN];
+    char fixedName[NACP_APPNAME_LEN];
+    char author[NACP_AUTHOR_LEN];
+    char versionStr[VERSION_STR_LEN];
+    u8 *icon;
+    u64 contentSize;
+    char contentSizeStr[32];
+} PACKED base_app_ctx_t;
+
+typedef struct {
+    u64 titleId;
+    u32 version;
+    u32 ncmIndex;
+    NcmStorageId storageId;
+    char versionStr[VERSION_STR_LEN];
+    u64 contentSize;
+    char contentSizeStr[32];
+} PACKED patch_addon_ctx_t;
+
+typedef struct {
+    u32 index;
+    u8 type; // 1 = Patch, 2 = AddOn
+    char name[NACP_APPNAME_LEN];
+    char fixedName[NACP_APPNAME_LEN];
+    char orphanListStr[NACP_APPNAME_LEN * 2];
+} PACKED orphan_patch_addon_entry;
+
+typedef struct {
+    u32 magic;
+    u32 file_cnt;
+    u32 str_table_size;
+    u32 reserved;
+} PACKED hfs0_header;
 
 typedef struct {
     u64 file_offset;
@@ -108,7 +207,7 @@ typedef struct {
     u32 hashed_region_size;
     u64 reserved;
     u8 hashed_region_sha256[0x20];
-} PACKED hfs0_entry_table;
+} PACKED hfs0_file_entry;
 
 typedef struct {
     int line_offset;
@@ -143,26 +242,23 @@ typedef enum {
 } selectedTicketType;
 
 typedef struct {
-    u32 index;
-    u8 type; // 1 = Patch, 2 = AddOn
-    char name[NACP_APPNAME_LEN + 1];
-    char fixedName[NACP_APPNAME_LEN + 1];
-} PACKED orphan_patch_addon_entry;
-
-typedef struct {
     bool isFat32;
     bool setXciArchiveBit;
     bool keepCert;
     bool trimDump;
     bool calcCrc;
+    bool useNoIntroLookup;
+    bool useBrackets;
 } PACKED xciOptions;
 
 typedef struct {
     bool isFat32;
-    bool calcCrc;
+    bool useNoIntroLookup;
     bool removeConsoleData;
     bool tiklessDump;
     bool npdmAcidRsaPatch;
+    bool dumpDeltaFragments;
+    bool useBrackets;
 } PACKED nspOptions;
 
 typedef enum {
@@ -180,8 +276,11 @@ typedef struct {
     bool removeConsoleData;
     bool tiklessDump;
     bool npdmAcidRsaPatch;
+    bool dumpDeltaFragments;
     bool skipDumpedTitles;
     bool rememberDumpedTitles;
+    bool haltOnErrors;
+    bool useBrackets;
     batchModeSourceStorage batchModeSrc;
 } PACKED batchOptions;
 
@@ -190,67 +289,67 @@ typedef struct {
 } PACKED ticketOptions;
 
 typedef struct {
+    bool isFat32;
+    bool useLayeredFSDir;
+} PACKED ncaFsOptions;
+
+typedef struct {
     xciOptions xciDumpCfg;
     nspOptions nspDumpCfg;
     batchOptions batchDumpCfg;
     ticketOptions tikDumpCfg;
+    ncaFsOptions exeFsDumpCfg;
+    ncaFsOptions romFsDumpCfg;
 } PACKED dumpOptions;
 
 void loadConfig();
-
 void saveConfig();
 
-bool isGameCardInserted();
-
-void fsGameCardDetectionThreadFunc(void *arg);
-
-bool mountSysEmmcPartition();
-
-void unmountSysEmmcPartition();
-
-bool isServiceRunning(const char *serviceName);
-
-bool checkSxOsServices();
+void closeGameCardStoragePartition();
+Result openGameCardStoragePartition(openIStoragePartition partitionIndex);
+Result readGameCardStoragePartition(u64 off, void *buf, size_t len);
 
 void delay(u8 seconds);
 
-void formatETAString(u64 curTime, char *output, u32 outSize);
+void convertSize(u64 size, char *out, size_t outSize);
+void updateFreeSpace();
 
 void initExeFsContext();
-
 void freeExeFsContext();
 
 void initRomFsContext();
-
 void freeRomFsContext();
 
 void initBktrContext();
-
 void freeBktrContext();
 
-void freeGlobalData();
+void freeRomFsBrowserEntries();
+void freeHfs0ExeFsEntriesSizes();
 
-bool loadTitlesFromSdCardAndEmmc(u8 titleType);
+void consoleErrorScreen(const char *fmt, ...);
+bool initApplicationResources(int argc, char **argv);
+void deinitApplicationResources();
 
-void freeTitlesFromSdCardAndEmmc(u8 titleType);
+void formatETAString(u64 curTime, char *out, size_t outSize);
 
-void convertTitleVersionToDecimal(u32 version, char *versionBuf, size_t versionBufSize);
+void addStringToFilenameBuffer(const char *string);
+
+void generateSdCardEmmcTitleList();
+
+bool loadTitlesFromSdCardAndEmmc(NcmContentMetaType metaType);
+void freeTitlesFromSdCardAndEmmc(NcmContentMetaType metaType);
 
 void removeIllegalCharacters(char *name);
-
-void createOutputDirectories();
 
 void strtrim(char *str);
 
 void loadTitleInfo();
 
-bool getHfs0EntryDetails(u8 *hfs0Header, u64 hfs0HeaderOffset, u64 hfs0HeaderSize, u32 num_entries, u32 entry_idx, bool isRoot, u32 partitionIndex, u64 *out_offset, u64 *out_size);
-
-bool getPartitionHfs0Header(u32 partition);
+void truncateBrowserEntryName(char *str);
 
 bool getHfs0FileList(u32 partition);
 
-bool getFileFromHfs0PartitionByName(FsStorage *gameCardStorage, const char *filename, u8 *outBuf, u64 outBufSize);
+bool readFileFromSecureHfs0PartitionByName(const char *filename, u64 offset, void *outBuf, size_t bufSize);
 
 bool calculateExeFsExtractedDataSize(u64 *out);
 
@@ -258,7 +357,7 @@ bool calculateRomFsFullExtractedSize(bool usePatch, u64 *out);
 
 bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out);
 
-bool retrieveNcaContentRecords(FsStorageId curStorageId, u8 filter, u32 titleCount, u32 titleIndex, NcmContentRecord **outContentRecords, u32 *outContentRecordsCnt);
+bool retrieveContentInfosFromTitle(NcmStorageId storageId, NcmContentMetaType metaType, u32 titleCount, u32 titleIndex, NcmContentInfo **outContentInfos, u32 *outContentInfoCnt);
 
 void removeConsoleDataFromTicket(title_rights_ctx *rights_info);
 
@@ -270,21 +369,13 @@ bool getExeFsFileList();
 
 bool getRomFsFileList(u32 dir_offset, bool usePatch);
 
-int getSdCardFreeSpace(u64 *out);
+char *generateGameCardDumpName(bool useBrackets);
 
-void convertSize(u64 size, char *out, int bufsize);
+char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex, bool useBrackets);
 
-void addStringToFilenameBuffer(const char *string, char **nextFilename);
+void retrieveDescriptionForPatchOrAddOn(u32 titleIndex, bool addOn, bool addAppName, const char *prefix, char *outBuf, size_t outBufSize);
 
-char *generateFullDumpName();
-
-char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex);
-
-void retrieveDescriptionForPatchOrAddOn(u64 titleID, u32 version, bool addOn, bool addAppName, const char *prefix, char *outBuf, size_t outBufSize);
-
-bool checkOrphanPatchOrAddOn(bool addOn);
-
-void freeOrphanPatchOrAddOnList();
+u32 calculateOrphanPatchOrAddOnCount(bool addOn);
 
 void generateOrphanPatchOrAddOnList();
 
@@ -321,6 +412,8 @@ bool checkIfDumpedNspContainsConsoleData(const char *nspPath);
 void removeDirectoryWithVerbose(const char *path, const char *msg);
 
 void gameCardDumpNSWDBCheck(u32 crc);
+
+void noIntroDumpCheck(bool isDigital, u32 crc);
 
 void updateNSWDBXml();
 

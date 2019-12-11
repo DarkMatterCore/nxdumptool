@@ -16,8 +16,12 @@ Main features
 * Manual ticket dump from installed SD/eMMC titles + optional removal of console specific data.
 * Compatible with multigame carts.
 * CRC32 checksum calculation for XCI/NSP dumps.
-* Full XCI dump verification using XML database from NSWDB.COM (NSWreleases.xml).
-* XML database and in-app update capabilities via libcurl.
+* XCI/NSP dump verification through CRC32 checksum lookup.
+    * Using offline XML database from NSWDB.COM (NSWreleases.xml) (XCI only).
+    * Performing an online lookup against the No-Intro database.
+* Bundled-in update capabilities via libcurl.
+    * Update to the latest version by downloading it right from GitHub.
+    * Update the NSWDB.COM XML database.
 * Precise HFS0 raw partition dumping, using the root HFS0 header from the gamecard.
 * HFS0 partition file data dumping + browser with manual file dump support.
 * Program NCA ExeFS/RomFS section & Data NCA RomFS section file data dumping + browser with manual file dump support.
@@ -52,6 +56,8 @@ Thanks to
 * The [LZ4 project](http://www.lz4.org), for the LZ4 C-code implementation (licensed under [BSD 2-Clause](https://github.com/lz4/lz4/blob/master/lib/LICENSE)).
 * [AnalogMan](https://github.com/AnalogMan151) and [0Liam](https://github.com/0Liam), for their constant support and ideas.
 * [RattletraPM](https://github.com/RattletraPM), for the awesome icon used in the application.
+* [FennecTECH](https://github.com/fennectech), for testing / breaking stuff inside the application on a regular basis.
+* The folks from NSWDB.COM and No-Intro.org, for being kind enough to put up a HTTP(S) endpoint(s) to perform CRC32 checksum lookups.
 * The GNOME project, from which the [high contrast icons](https://commons.wikimedia.org/wiki/GNOME_High_contrast_icons) were retrieved.
 * The folks from ReSwitched, for working towards the creation of a good homebrew ecosystem.
 * The Comfy Boyes, for being both awesome and supportive. You know who you are.
@@ -66,6 +72,60 @@ If you like my work and you'd like to support me in any way, it's not necessary,
 
 Changelog
 --------------
+
+**v1.1.8:**
+* Added compatibility with latest devkitA64 and libnx releases. Thanks to [HookedBehemoth](https://github.com/HookedBehemoth) for porting the extra IPC calls used by the application to the new IPC system!
+* Now using global title contexts instead of global variables for each different title property (ID, version, source storage, etc.). Simplifies metadata retrieval functions.
+* Refactored the HFS0/IStorage parsing code, optimizing all gamecard reads performed by the application.
+* Increased dump buffer sizes to 4 MiB.
+* NCA content size is now calculated and displayed for all titles.
+    * Content size for updates and DLCs is displayed in the title selector from the NSP menus.
+    * Additionally, the application now displays the size for each title in the batch dump summary screen. Plus, an *approximate* total dump size is calculated according to the selected titles.
+    * Please bear in mind that the displayed information does not reflect output NSP dump sizes.
+* Changes to the HFS0, ExeFS and RomFS browsers:
+    * File sizes are now displayed for all file entries.
+    * Dumping a file/directory won't reset the cursor position anymore.
+* Displayed lists are now lexicographically sorted.
+* It is now possible to perform CRC32 checksum lookups using the No-Intro database. Big thanks to the folks from No-Intro.org!
+    * This new method requires a working Internet connection at runtime.
+    * For XCI dumps, this is merely offered as an alternative to the NSWDB.COM XML database method, without replacing it. A new option has been added to the XCI dump menu, which lets the user select the verification method they wish to use.
+    * For NSP dumps, on the other hand, this offers a way to actually validate dumps:
+        * The "CRC32 checksum calculation" feature, which was a bit pointless, has been entirely removed. The new "Verify dump using No-Intro database" option has taken its place.
+        * NSP dump verification is achieved by just calculating the CRC32 checksum from the output CNMT NCA and performing a lookup using the No-Intro database. This works because of the way CNMT data is handled by the application:
+            * The SHA-256 checksum for each NCA is always recalculated during the dump process, and the CNMT NCA is always patched afterwards. However, if no NCA modifications are performed, the CNMT NCA ends up being identical to its original counterpart, because the content records won't have changed at all.
+            * This lets the application verify the NSP dump by performing a CRC32 checksum lookup using the CNMT NCA data, as long as no NCA modifications take place.
+        * As such, this method only works with SD card / eMMC titles, as long as the "Generate ticket-less dump" option is disabled.
+        * This option doesn't appear in gamecard-related menus, and it's not compatible with batch dumps.
+* By popular demand, an option has been added in XCI, NSP and batch dump menus to change the naming scheme used with output files to the following:
+    * XCI dumps:
+        * Single game: `TitleName [TitleID][TitleVersion]`.
+        * Multigame: `TitleName1 [TitleID1][TitleVersion1] + TitleName2 [TitleID2][TitleVersion2] + ... + TitleNameN [TitleIDN][TitleVersionN]`.
+    * NSP/Batch dumps: `TitleName [TitleID][TitleVersion][TitleType]`.
+    * The "Remember dumped titles" feature available in batch mode isn't affected by this new setting - batch overrides will keep using the regular naming scheme.
+* Added an option to include delta fragment NCAs in output NSP dumps from installed SD/eMMC updates. It is disabled by default.
+* Added a small settings menu to the ExeFS/RomFS sections with the following options:
+    * `Split files bigger than 4 GiB (FAT32 support)`: unlike previous versions, it is now possible to control if file splitting will take place for ExeFS/RomFS file dumps, instead of always splitting them. If this option is enabled, files bigger than 4 GiB will now be split and stored in a subdirectory with the archive bit set (like NSPs).
+    * `Save data to CFW directory (LayeredFS)`: enabling this option will save output data to the directory from the CFW you're running, using the LayeredFS layout.
+* Added a new option to the batch mode menu to control if the batch dump process should halt on any errors. If disabled, it'll make the batch dump process wait for 5 seconds on any errors, then it will keep going.
+* Free SD card space is now always displayed on every UI state. It is also displayed and updated during batch mode operations.
+* ExeFS submenu is now available for updates in the orphan content list (Y button menu).
+* It is now possible to exit the application from the batch dump summary screen.
+* A warning is now displayed in the main menu if the application is launched using applet mode. NSP dumps from base applications and updates can fail if there's not enough heap available to hold the uncompressed `main` NSO while generating the `programinfo.xml`.
+* Improved XPath query used when looking for checksum matches in the NSWDB.COM XML database. Fixes CRC32 checksum lookup for multigame cartridges.
+* Empty RomFS directories are now properly handled by the RomFS browser.
+* Removed a BKTR RomFS section offset check that was causing trouble while trying to perform RomFS-related operations with some updates (e.g. Luigi's Mansion 3).
+* Physical IStorage reads are now performed to retrieve NCAs from gamecards, instead of using `ncmContentStorageReadContentIdFile()`. Fixes gamecard NSP/ExeFS/RomFS operations under FW versions < 4.0.0.
+* Fixed unaligned IStorage reads in manual file dumps files from HFS0 partitions in gamecards. Unaligned files dumped this way should no longer contain garbage data.
+* Fixed a memory leak in the XML database verification code.
+* Fixed an indexing bug in the RomFS browser that could potentially cause problems when performing any action from the root directory.
+* Fixed gamecard hotswapping in gamecard-related submenus.
+* Fixed a free SD card space check in sequential XCI/NSP dump procedures.
+* Fixed a bug where the output dump name wouldn't be generated for orphan content when no base applications are installed, preventing the NSP dump procedure from starting. Thanks to [snes878](https://github.com/snes878) for reporting this!
+* Fixed a bug that prevented to retrieve the ticket for a bundled-in gamecard update from the Secure HFS0 partition during a NSP dump procedure. Thanks to [snes878](https://github.com/snes878) for reporting this!
+* Fixed a bug where a NSP dump process would stop if no personalized ticket certificate is found in the ES system savefile (e.g. when no titles with personalized titlekey crypto have been downloaded from the eShop). Thanks to [satel](https://gbatemp.net/members/satel.27798/) for reporting this!
+* Fixed a bug where an empty orphan content list would have been generated if no base applications are installed. Thanks to `Newb_3DS#6287` for reporting this issue!
+
+Thanks to [FennecTECH](https://github.com/fennectech) and MUXI from PSXTools forums for providing with testing!
 
 **v1.1.7:**
 * Tickets and RSA certificates are now properly parsed from their respective system savedata files, thanks to the efforts of [shchmue](https://github.com/shchmue)!

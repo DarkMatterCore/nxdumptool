@@ -17,7 +17,7 @@ extern char strbuf[NAME_BUF_LEN];
 
 /* Statically allocated variables */
 
-static bool loadedCerts = false;
+static bool loadedCerts = false, personalizedCertAvailable = false;
 
 static const char *cert_CA00000003_path = "/certificate/CA00000003";
 static const char *cert_XS00000020_path = "/certificate/XS00000020";
@@ -69,7 +69,7 @@ bool save_duplex_storage_init(duplex_storage_ctx_t *ctx, duplex_fs_layer_info_t 
 {
     if (!ctx || !layer || !layer->data_a || !layer->data_b || !layer->info.block_size_power || !bitmap || !bitmap_size)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_duplex_storage_init: invalid parameters to initialize duplex storage!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to initialize duplex storage!", __func__);
         return false;
     }
     
@@ -82,7 +82,7 @@ bool save_duplex_storage_init(duplex_storage_ctx_t *ctx, duplex_fs_layer_info_t 
     ctx->bitmap.bitmap = calloc(1, bitmap_size >> 3);
     if (!ctx->bitmap.bitmap)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_duplex_storage_init: failed to allocate memory for duplex bitmap!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for duplex bitmap!", __func__);
         return false;
     }
     
@@ -119,7 +119,7 @@ u32 save_duplex_storage_read(duplex_storage_ctx_t *ctx, void *buffer, u64 offset
 {
     if (!ctx || !ctx->block_size || !ctx->bitmap.bitmap || !buffer || !count)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_duplex_storage_read: invalid parameters to read duplex storage data!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to read duplex storage data!", __func__);
         return 0;
     }
     
@@ -148,14 +148,14 @@ remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, remap_entr
 {
     if (!header || !header->map_segment_count || !map_entries || !num_map_entries)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_init_segments: invalid parameters to initialize remap segments!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to initialize remap segments!", __func__);
         return NULL;
     }
     
     remap_segment_ctx_t *segments = calloc(sizeof(remap_segment_ctx_t), header->map_segment_count);
     if (!segments)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_init_segments: failed to allocate initial memory for remap segments!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate initial memory for remap segments!", __func__);
         return NULL;
     }
     
@@ -169,7 +169,7 @@ remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, remap_entr
         seg->entries = calloc(1, sizeof(remap_entry_ctx_t));
         if (!seg->entries)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_init_segments: failed to allocate memory for remap segment entry #%u!", entry_idx);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for remap segment entry #%u!", __func__, entry_idx);
             goto out;
         }
         
@@ -187,7 +187,7 @@ remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, remap_entr
             seg->entries = calloc(1, sizeof(remap_entry_ctx_t));
             if (!seg->entries)
             {
-                snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_init_segments: failed to allocate memory for remap segment entry #%u!", entry_idx);
+                snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for remap segment entry #%u!", __func__, entry_idx);
                 goto out;
             }
             
@@ -247,7 +247,7 @@ remap_entry_ctx_t *save_remap_get_map_entry(remap_storage_ctx_t *ctx, u64 offset
 {
     if (!ctx || !ctx->header || !ctx->segments)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_get_map_entry: invalid parameters to retrieve map entry!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to retrieve map entry!", __func__);
         return NULL;
     }
     
@@ -261,7 +261,7 @@ remap_entry_ctx_t *save_remap_get_map_entry(remap_storage_ctx_t *ctx, u64 offset
         }
     }
     
-    snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_get_map_entry: unable to find map entry for offset 0x%lX!", offset);
+    snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: unable to find map entry for offset 0x%lX!", __func__, offset);
     return NULL;
 }
 
@@ -269,14 +269,17 @@ u32 save_remap_read(remap_storage_ctx_t *ctx, void *buffer, u64 offset, size_t c
 {
     if (!ctx || (ctx->type == STORAGE_BYTES && !ctx->file) || (ctx->type == STORAGE_DUPLEX && !ctx->duplex) || (ctx->type != STORAGE_BYTES && ctx->type != STORAGE_DUPLEX) || !buffer || !count)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_read: invalid parameters to read remap data!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to read remap data!", __func__);
         return 0;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     remap_entry_ctx_t *entry = save_remap_get_map_entry(ctx, offset);
     if (!entry)
     {
-        strcat(strbuf, "\nsave_remap_read: failed to retrieve map entry!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve map entry!", __func__);
+        strcat(strbuf, tmp);
         return 0;
     }
     
@@ -298,14 +301,14 @@ u32 save_remap_read(remap_storage_ctx_t *ctx, void *buffer, u64 offset, size_t c
                 fr = f_lseek(ctx->file, ctx->base_storage_offset + entry->physical_offset + entry_pos);
                 if (fr || f_tell(ctx->file) != (ctx->base_storage_offset + entry->physical_offset + entry_pos))
                 {
-                    snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_read: failed to seek to offset 0x%lX in savefile! (%u)", ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
+                    snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to seek to offset 0x%lX in savefile! (%u)", __func__, ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
                     return out_pos;
                 }
                 
                 fr = f_read(ctx->file, (u8*)buffer + out_pos, bytes_to_read, &br);
                 if (fr || br != bytes_to_read)
                 {
-                    snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_remap_read: failed to read %u bytes chunk from offset 0x%lX in savefile! (%u)", bytes_to_read, ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
+                    snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to read %u bytes chunk from offset 0x%lX in savefile! (%u)", __func__, bytes_to_read, ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
                     return (out_pos + br);
                 }
                 
@@ -314,7 +317,8 @@ u32 save_remap_read(remap_storage_ctx_t *ctx, void *buffer, u64 offset, size_t c
                 br = save_duplex_storage_read(ctx->duplex, (u8*)buffer + out_pos, ctx->base_storage_offset + entry->physical_offset + entry_pos, bytes_to_read);
                 if (br != bytes_to_read)
                 {
-                    strcat(strbuf, "\nsave_remap_read: failed to read remap data from duplex storage!");
+                    snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read remap data from duplex storage!", __func__);
+                    strcat(strbuf, tmp);
                     return (out_pos + br);
                 }
                 break;
@@ -336,7 +340,7 @@ u32 save_journal_storage_read(journal_storage_ctx_t *ctx, remap_storage_ctx_t *r
 {
     if (!ctx || !ctx->block_size || !remap || !buffer || !count)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_journal_storage_read: invalid parameters to read journal storage data!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to read journal storage data!", __func__);
         return 0;
     }
     
@@ -344,6 +348,8 @@ u32 save_journal_storage_read(journal_storage_ctx_t *ctx, remap_storage_ctx_t *r
     u32 out_pos = 0;
     u32 remaining = count;
     u32 br;
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     while(remaining)
     {
@@ -355,7 +361,8 @@ u32 save_journal_storage_read(journal_storage_ctx_t *ctx, remap_storage_ctx_t *r
         br = save_remap_read(remap, (u8*)buffer + out_pos, ctx->journal_data_offset + physical_offset, bytes_to_read);
         if (br != bytes_to_read)
         {
-            strcat(strbuf, "\nsave_journal_storage_read: invalid parameters to read journal storage data!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: invalid parameters to read journal storage data!", __func__);
+            strcat(strbuf, tmp);
             return (out_pos + br);
         }
         
@@ -371,7 +378,7 @@ bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_ctx_t *c
 {
     if (!ctx || !ctx->levels || !ivfc || !ivfc->num_levels)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_storage_init: invalid parameters to initialize IVFC storage!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to initialize IVFC storage!", __func__);
         return false;
     }
     
@@ -428,7 +435,7 @@ bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_ctx_t *c
     ctx->level_validities = calloc(sizeof(validity_t*), (ivfc->num_levels - 1));
     if (!ctx->level_validities)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_storage_init: failed to allocate memory for level validities!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for level validities!", __func__);
         goto out;
     }
     
@@ -445,7 +452,7 @@ bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_ctx_t *c
         level_data->block_validities = calloc(sizeof(validity_t), level_data->sector_count);
         if (!level_data->block_validities)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_storage_init: failed to allocate memory for block validities in IVFC level #%u!", i);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for block validities in IVFC level #%u!", __func__, i);
             goto out;
         }
         
@@ -486,12 +493,14 @@ size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u64 offse
 {
     if (!ctx || (ctx->type == STORAGE_BYTES && !ctx->save_ctx->file) || (ctx->type != STORAGE_BYTES && ctx->type != STORAGE_REMAP && ctx->type != STORAGE_JOURNAL) || !buffer || !count)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_level_fread: invalid parameters to read IVFC level data!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to read IVFC level data!", __func__);
         return 0;
     }
     
     UINT br = 0;
     FRESULT fr;
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     switch (ctx->type)
     {
@@ -499,14 +508,14 @@ size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u64 offse
             fr = f_lseek(ctx->save_ctx->file, ctx->hash_offset + offset);
             if (fr || f_tell(ctx->save_ctx->file) != (ctx->hash_offset + offset))
             {
-                snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_level_fread: failed to seek to offset 0x%lX in savefile! (%u)", ctx->hash_offset + offset, fr);
+                snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to seek to offset 0x%lX in savefile! (%u)", __func__, ctx->hash_offset + offset, fr);
                 return (size_t)br;
             }
             
             fr = f_read(ctx->save_ctx->file, buffer, count, &br);
             if (fr || br != count)
             {
-                snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_level_fread: failed to read IVFC level data from offset 0x%lX in savefile! (%u)", ctx->hash_offset + offset, fr);
+                snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to read IVFC level data from offset 0x%lX in savefile! (%u)", __func__, ctx->hash_offset + offset, fr);
                 return (size_t)br;
             }
             
@@ -515,7 +524,8 @@ size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u64 offse
             br = save_remap_read(&ctx->save_ctx->meta_remap_storage, buffer, ctx->data_offset + offset, count);
             if (br != count)
             {
-                strcat(strbuf, "\nsave_ivfc_level_fread: failed to read IVFC level data from remap storage!");
+                snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read IVFC level data from remap storage!", __func__);
+                strcat(strbuf, tmp);
                 return (size_t)br;
             }
             
@@ -524,7 +534,8 @@ size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u64 offse
             br = save_journal_storage_read(&ctx->save_ctx->journal_storage, &ctx->save_ctx->data_remap_storage, buffer, ctx->data_offset + offset, count);
             if (br != count)
             {
-                strcat(strbuf, "\nsave_ivfc_level_fread: failed to read IVFC level data from journal storage!");
+                snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read IVFC level data from journal storage!", __func__);
+                strcat(strbuf, tmp);
                 return (size_t)br;
             }
             
@@ -540,13 +551,13 @@ bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, void *buf
 {
     if (!ctx || !ctx->sector_size || (!ctx->next_level && !ctx->hash_storage && !ctx->base_storage) || !buffer || !count)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_storage_read: invalid parameters to read IVFC storage data!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to read IVFC storage data!", __func__);
         return false;
     }
     
     if (count > ctx->sector_size)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_storage_read: IVFC read exceeds sector size!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: IVFC read exceeds sector size!", __func__);
         return false;
     }
     
@@ -554,7 +565,7 @@ bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, void *buf
     
     if (ctx->block_validities[block_index] == VALIDITY_INVALID && verify)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_storage_read: hash error from previous check found at offset 0x%08X, count 0x%lX!", (u32)offset, count);
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: hash error from previous check found at offset 0x%08X, count 0x%lX!", __func__, (u32)offset, count);
         return false;
     }
     
@@ -562,17 +573,21 @@ bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, void *buf
     u8 zeroes[0x20] = {0};
     u64 hash_pos = (block_index * 0x20);
     
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
+    
     if (ctx->next_level)
     {
         if (!save_ivfc_storage_read(ctx->next_level, hash_buffer, hash_pos, 0x20, verify))
         {
-            strcat(strbuf, "\nsave_ivfc_storage_read: failed to read hash from next IVFC level!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read hash from next IVFC level!", __func__);
+            strcat(strbuf, tmp);
             return false;
         }
     } else {
         if (save_ivfc_level_fread(ctx->hash_storage, hash_buffer, hash_pos, 0x20) != 0x20)
         {
-            strcat(strbuf, "\nsave_ivfc_storage_read: failed to read hash from hash storage!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read hash from hash storage!", __func__);
+            strcat(strbuf, tmp);
             return false;
         }
     }
@@ -586,7 +601,8 @@ bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, void *buf
     
     if (save_ivfc_level_fread(ctx->base_storage, buffer, offset, count) != count)
     {
-        strcat(strbuf, "\nsave_ivfc_storage_read: failed to read IVFC level from base storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read IVFC level from base storage!", __func__);
+        strcat(strbuf, tmp);
         return false;
     }
     
@@ -597,7 +613,7 @@ bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, void *buf
     u8 *data_buffer = calloc(1, ctx->sector_size + 0x20);
     if (!data_buffer)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_storage_read: failed to allocate memory for data buffer!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for data buffer!", __func__);
         return false;
     }
     
@@ -613,7 +629,7 @@ bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, void *buf
 
     if (ctx->block_validities[block_index] == VALIDITY_INVALID && verify)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_storage_read: hash error from current check found at offset 0x%08X, count 0x%lX!", (u32)offset, count);
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: hash error from current check found at offset 0x%08X, count 0x%lX!", __func__, (u32)offset, count);
         return false;
     }
     
@@ -624,7 +640,7 @@ u32 save_allocation_table_read_entry_with_length(allocation_table_ctx_t *ctx, al
 {
     if (!ctx || !ctx->base_storage || !entry)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_read_entry_with_length: invalid parameters to read entry!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to read entry!", __func__);
         return 0;
     }
     
@@ -637,7 +653,7 @@ u32 save_allocation_table_read_entry_with_length(allocation_table_ctx_t *ctx, al
     {
         if ((entries[0].prev & 0x80000000) && entries[0].prev != 0x80000000)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_read_entry_with_length: invalid range entry in allocation table!");
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid range entry in allocation table!", __func__);
             return 0;
         }
     } else {
@@ -665,7 +681,7 @@ u32 save_allocation_table_get_list_length(allocation_table_ctx_t *ctx, u32 block
 {
     if (!ctx || !ctx->header->allocation_table_block_count)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_get_list_length: invalid parameters to calculate FAT list length!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to calculate FAT list length!", __func__);
         return 0;
     }
     
@@ -675,12 +691,15 @@ u32 save_allocation_table_get_list_length(allocation_table_ctx_t *ctx, u32 block
     u32 table_size = ctx->header->allocation_table_block_count;
     u32 nodes_iterated = 0;
     
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
+    
     while(entry.next != 0xFFFFFFFF)
     {
         u32 entry_length = save_allocation_table_read_entry_with_length(ctx, &entry);
         if (!entry_length)
         {
-            strcat(strbuf, "\nsave_allocation_table_get_list_length: failed to retrieve FAT entry length!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve FAT entry length!", __func__);
+            strcat(strbuf, tmp);
             return 0;
         }
         
@@ -689,7 +708,7 @@ u32 save_allocation_table_get_list_length(allocation_table_ctx_t *ctx, u32 block
         
         if (nodes_iterated > table_size)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_get_list_length: cycle detected in allocation table!");
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: cycle detected in allocation table!", __func__);
             return 0;
         }
     }
@@ -701,7 +720,7 @@ bool save_allocation_table_iterator_begin(allocation_table_iterator_ctx_t *ctx, 
 {
     if (!ctx || !table)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_iterator_begin: invalid parameters to initialize FAT interator!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to initialize FAT interator!", __func__);
         return false;
     }
     
@@ -712,10 +731,13 @@ bool save_allocation_table_iterator_begin(allocation_table_iterator_ctx_t *ctx, 
     allocation_table_entry_t entry;
     entry.next = initial_block;
     
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
+    
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
     if (!ctx->current_segment_size)
     {
-        strcat(strbuf, "\nsave_allocation_table_iterator_begin: failed to retrieve FAT entry length!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve FAT entry length!", __func__);
+        strcat(strbuf, tmp);
         return false;
     }
     
@@ -724,7 +746,7 @@ bool save_allocation_table_iterator_begin(allocation_table_iterator_ctx_t *ctx, 
     
     if (ctx->prev_block != 0xFFFFFFFF)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_iterator_begin: attempted to start FAT iteration from invalid block 0x%08X!", initial_block);
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: attempted to start FAT iteration from invalid block 0x%08X!", __func__, initial_block);
         return false;
     }
     
@@ -735,7 +757,7 @@ bool save_allocation_table_iterator_move_next(allocation_table_iterator_ctx_t *c
 {
     if (!ctx || ctx->next_block == 0xFFFFFFFF)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_iterator_move_next: invalid parameters to move iterator to the next block.");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to move iterator to the next block.", __func__);
         return false;
     }
     
@@ -745,10 +767,13 @@ bool save_allocation_table_iterator_move_next(allocation_table_iterator_ctx_t *c
     allocation_table_entry_t entry;
     entry.next = ctx->next_block;
     
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
+    
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
     if (!ctx->current_segment_size)
     {
-        strcat(strbuf, "\nsave_allocation_table_iterator_move_next: failed to retrieve current segment size!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve current segment size!", __func__);
+        strcat(strbuf, tmp);
         return false;
     }
     
@@ -762,7 +787,7 @@ bool save_allocation_table_iterator_move_prev(allocation_table_iterator_ctx_t *c
 {
     if (!ctx || ctx->prev_block == 0xFFFFFFFF)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_iterator_move_prev: invalid parameters to move iterator to the previous block.");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to move iterator to the previous block!", __func__);
         return false;
     }
     
@@ -771,10 +796,13 @@ bool save_allocation_table_iterator_move_prev(allocation_table_iterator_ctx_t *c
     allocation_table_entry_t entry;
     entry.next = ctx->prev_block;
     
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
+    
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
     if (!ctx->current_segment_size)
     {
-        strcat(strbuf, "\nsave_allocation_table_iterator_move_prev: failed to retrieve current segment size!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve current segment size!", __func__);
+        strcat(strbuf, tmp);
         return false;
     }
     
@@ -807,14 +835,17 @@ u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void
 {
     if (!ctx || !ctx->fat || !ctx->block_size || !buffer || !count)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_allocation_table_storage_read: invalid parameters to read data from FAT storage!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to read data from FAT storage!", __func__);
         return 0;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     allocation_table_iterator_ctx_t iterator;
     if (!save_allocation_table_iterator_begin(&iterator, ctx->fat, ctx->initial_block))
     {
-        strcat(strbuf, "\nsave_allocation_table_storage_read: failed to initialize FAT interator!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to initialize FAT interator!", __func__);
+        strcat(strbuf, tmp);
         return 0;
     }
     
@@ -822,14 +853,12 @@ u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void
     u32 out_pos = 0;
     u32 remaining = count;
     
-    char tmp[NAME_BUF_LEN / 2] = {'\0'};
-    
     while(remaining)
     {
         u32 block_num = (u32)(in_pos / ctx->block_size);
         if (!save_allocation_table_iterator_seek(&iterator, block_num))
         {
-            snprintf(tmp, MAX_ELEMENTS(tmp), "\nsave_allocation_table_storage_read: failed to seek to block #%u within offset 0x%lX!", block_num, offset);
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to seek to block #%u within offset 0x%lX!", __func__, block_num, offset);
             strcat(strbuf, tmp);
             return out_pos;
         }
@@ -849,7 +878,7 @@ u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void
             
             if (!save_ivfc_storage_read(&ctx->base_storage->integrity_storages[3], (u8*)buffer + out_pos + i, physical_offset + i, bytes_to_request, ctx->base_storage->data_level->save_ctx->tool_ctx.action & ACTION_VERIFY))
             {
-                snprintf(tmp, MAX_ELEMENTS(tmp), "\nsave_allocation_table_storage_read: failed to read %u bytes chunk from IVFC storage at physical offset 0x%lX!", bytes_to_request, physical_offset + i);
+                snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read %u bytes chunk from IVFC storage at physical offset 0x%lX!", __func__, bytes_to_request, physical_offset + i);
                 strcat(strbuf, tmp);
                 return (out_pos + bytes_to_read - chunk_remaining);
             }
@@ -869,15 +898,18 @@ u32 save_fs_list_get_capacity(save_filesystem_list_ctx_t *ctx)
 {
     if (!ctx)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_fs_list_get_capacity: invalid parameters to retrieve FS capacity!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to retrieve FS capacity!", __func__);
         return 0;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     if (!ctx->capacity)
     {
         if (save_allocation_table_storage_read(&ctx->storage, &ctx->capacity, 4, 4) != 4)
         {
-            strcat(strbuf, "\nsave_fs_list_get_capacity: failed to read FS capacity from FAT storage!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read FS capacity from FAT storage!", __func__);
+            strcat(strbuf, tmp);
             return 0;
         }
     }
@@ -889,14 +921,17 @@ u32 save_fs_list_read_entry(save_filesystem_list_ctx_t *ctx, u32 index, save_fs_
 {
     if (!ctx || !entry)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_fs_list_read_entry: invalid parameters to read FS entry!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to read FS entry!", __func__);
         return 0;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     u32 ret = save_allocation_table_storage_read(&ctx->storage, entry, index * SAVE_FS_LIST_ENTRY_SIZE, SAVE_FS_LIST_ENTRY_SIZE);
     if (ret != SAVE_FS_LIST_ENTRY_SIZE)
     {
-        strcat(strbuf, "\nsave_fs_list_read_entry: failed to read FS entry from FAT storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read FS entry from FAT storage!", __func__);
+        strcat(strbuf, tmp);
         return 0;
     }
     
@@ -907,26 +942,30 @@ bool save_fs_list_get_value(save_filesystem_list_ctx_t *ctx, u32 index, save_fs_
 {
     if (!ctx || !value)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_fs_list_get_value: invalid parameters to retrieve value for index!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to retrieve value for index!", __func__);
         return false;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     u32 capacity = save_fs_list_get_capacity(ctx);
     if (!capacity)
     {
-        strcat(strbuf, "\nsave_fs_list_get_value: failed to retrieve FS capacity!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve FS capacity!", __func__);
+        strcat(strbuf, tmp);
         return false;
     }
     
     if (index >= capacity)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_fs_list_get_value: provided index exceeds FS capacity!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: provided index exceeds FS capacity!", __func__);
         return false;
     }
     
     if (!save_fs_list_read_entry(ctx, index, value))
     {
-        strcat(strbuf, "\nsave_fs_list_get_value: failed to read FS entry!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read FS entry!", __func__);
+        strcat(strbuf, tmp);
         return false;
     }
     
@@ -942,21 +981,22 @@ u32 save_fs_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_key_t
     
     if (!ctx || !key)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_fs_get_index_from_key: invalid parameters to retrieve FS index from key!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to retrieve FS index from key!", __func__);
         goto out;
     }
     
     u32 capacity = save_fs_list_get_capacity(ctx);
     if (!capacity)
     {
-        strcat(strbuf, "\nsave_fs_get_index_from_key: failed to retrieve FS capacity!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve FS capacity!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
     save_fs_list_entry_t entry;
     if (!save_fs_list_read_entry(ctx, ctx->used_list_head_index, &entry))
     {
-        snprintf(tmp, MAX_ELEMENTS(tmp), "\nsave_fs_get_index_from_key: failed to read FS entry for initial index %u!", ctx->used_list_head_index);
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read FS entry for initial index %u!", __func__, ctx->used_list_head_index);
         strcat(strbuf, tmp);
         goto out;
     }
@@ -968,13 +1008,13 @@ u32 save_fs_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_key_t
     {
         if (index > capacity)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_fs_get_index_from_key: save entry index %d out of range!", index);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: save entry index %d out of range!", __func__, index);
             break;
         }
         
         if (!save_fs_list_read_entry(ctx, index, &entry))
         {
-            snprintf(tmp, MAX_ELEMENTS(tmp), "\nsave_fs_get_index_from_key: failed to read FS entry for index %u!", index);
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read FS entry for index %u!", __func__, index);
             strcat(strbuf, tmp);
             break;
         }
@@ -985,7 +1025,7 @@ u32 save_fs_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_key_t
         index = entry.next;
     }
     
-    if (!index) snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_fs_get_index_from_key: unable to find FS index from key!");
+    if (!index) snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: unable to find FS index from key!", __func__);
     
 out:
     *prev_index = 0xFFFFFFFF;
@@ -996,7 +1036,7 @@ bool save_hierarchical_file_table_find_path_recursive(hierarchical_save_file_tab
 {
     if (!ctx || !key || !path || !strlen(path))
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_hierarchical_file_table_find_path_recursive: invalid parameters to find FS path!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to find FS path!", __func__);
         return false;
     }
     
@@ -1029,7 +1069,7 @@ bool save_hierarchical_file_table_get_file_entry_by_path(hierarchical_save_file_
 {
     if (!ctx || !path || !strlen(path) || !entry)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_hierarchical_file_table_get_file_entry_by_path: invalid parameters to retrieve file entry!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to retrieve file entry!", __func__);
         return false;
     }
     
@@ -1038,7 +1078,7 @@ bool save_hierarchical_file_table_get_file_entry_by_path(hierarchical_save_file_
     save_entry_key_t key;
     if (!save_hierarchical_file_table_find_path_recursive(ctx, &key, path))
     {
-        snprintf(tmp, MAX_ELEMENTS(tmp), "\nsave_hierarchical_file_table_get_file_entry_by_path: unable to locate file \"%s\".", path);
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: unable to locate file \"%s\".", __func__, path);
         strcat(strbuf, tmp);
         return false;
     }
@@ -1046,14 +1086,14 @@ bool save_hierarchical_file_table_get_file_entry_by_path(hierarchical_save_file_
     u32 index = save_fs_get_index_from_key(&ctx->file_table, &key, NULL);
     if (index == 0xFFFFFFFF)
     {
-        snprintf(tmp, MAX_ELEMENTS(tmp), "\nsave_hierarchical_file_table_get_file_entry_by_path: unable to get table index for file \"%s\".", path);
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: unable to get table index for file \"%s\".", __func__, path);
         strcat(strbuf, tmp);
         return false;
     }
     
     if (!save_fs_list_get_value(&ctx->file_table, index, entry))
     {
-        snprintf(tmp, MAX_ELEMENTS(tmp), "\nsave_hierarchical_file_table_get_file_entry_by_path: unable to get file entry for \"%s\" from index.", path);
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: unable to get file entry for \"%s\" from index.", __func__, path);
         strcat(strbuf, tmp);
         return false;
     }
@@ -1065,9 +1105,11 @@ bool save_open_fat_storage(save_filesystem_ctx_t *ctx, allocation_table_storage_
 {
     if (!ctx || !ctx->base_storage || !storage_ctx)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_open_fat_storage: invalid parameters to open savefile FAT storage!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to open savefile FAT storage!", __func__);
         return false;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     storage_ctx->base_storage = ctx->base_storage;
     storage_ctx->fat = &ctx->allocation_table;
@@ -1081,7 +1123,8 @@ bool save_open_fat_storage(save_filesystem_ctx_t *ctx, allocation_table_storage_
         u32 fat_list_length = save_allocation_table_get_list_length(storage_ctx->fat, block_index);
         if (!fat_list_length)
         {
-            strcat(strbuf, "\nsave_open_fat_storage: failed to retrieve FAT list length!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve FAT list length!", __func__);
+            strcat(strbuf, tmp);
             return false;
         }
         
@@ -1095,9 +1138,11 @@ bool save_filesystem_init(save_filesystem_ctx_t *ctx, void *fat, save_fs_header_
 {
     if (!ctx || !fat || !save_fs_header || !fat_header)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_filesystem_init: invalid parameters to initialize savefile FS!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to initialize savefile FS!", __func__);
         return false;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     ctx->allocation_table.base_storage = fat;
     ctx->allocation_table.header = fat_header;
@@ -1106,13 +1151,15 @@ bool save_filesystem_init(save_filesystem_ctx_t *ctx, void *fat, save_fs_header_
     
     if (!save_open_fat_storage(ctx, &ctx->file_table.directory_table.storage, fat_header->directory_table_block))
     {
-        strcat(strbuf, "\nsave_filesystem_init: failed to open FAT directory storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to open FAT directory storage!", __func__);
+        strcat(strbuf, tmp);
         return false;
     }
     
     if (!save_open_fat_storage(ctx, &ctx->file_table.file_table.storage, fat_header->file_table_block))
     {
-        strcat(strbuf, "\nsave_filesystem_init: failed to open FAT file storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to open FAT file storage!", __func__);
+        strcat(strbuf, tmp);
         return false;
     }
     
@@ -1128,9 +1175,11 @@ validity_t save_ivfc_validate(hierarchical_integrity_verification_storage_ctx_t 
 {
     if (!ctx || !ivfc || !ivfc->num_levels)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_filesystem_verify: invalid parameters to verify savefile FS!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to verify savefile FS!", __func__);
         return VALIDITY_INVALID;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     validity_t result = VALIDITY_VALID;
     
@@ -1144,7 +1193,7 @@ validity_t save_ivfc_validate(hierarchical_integrity_verification_storage_ctx_t 
         u8 *buffer = calloc(1, block_size);
         if (!buffer)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_filesystem_verify: failed to allocate memory for input buffer!");
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for input buffer!", __func__);
             result = VALIDITY_INVALID;
             break;
         }
@@ -1156,7 +1205,8 @@ validity_t save_ivfc_validate(hierarchical_integrity_verification_storage_ctx_t 
                 u32 to_read = ((storage->_length - (block_size * j)) < block_size ? (storage->_length - (block_size * j)) : block_size);
                 if (!save_ivfc_storage_read(storage, buffer, block_size * j, to_read, 1))
                 {
-                    strcat(strbuf, "\nsave_ivfc_validate: failed to read IVFC storage data!");
+                    snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read IVFC storage data!", __func__);
+                    strcat(strbuf, tmp);
                     result = VALIDITY_INVALID;
                     break;
                 }
@@ -1181,7 +1231,7 @@ bool save_ivfc_set_level_validities(hierarchical_integrity_verification_storage_
 {
     if (!ctx || !ivfc || !ivfc->num_levels)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_set_level_validities: invalid parameters to set IVFC level validities!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to set IVFC level validities!", __func__);
         return false;
     }
     
@@ -1207,7 +1257,7 @@ bool save_ivfc_set_level_validities(hierarchical_integrity_verification_storage_
         if (success && level_validity == VALIDITY_INVALID) success = false;
     }
     
-    if (!success) snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_ivfc_set_level_validities: invalid IVFC level!");
+    if (!success) snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid IVFC level!", __func__);
     
     return success;
 }
@@ -1216,20 +1266,23 @@ validity_t save_filesystem_verify(save_ctx_t *ctx)
 {
     if (!ctx)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_filesystem_verify: invalid parameters to verify savefile FS!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to verify savefile FS!", __func__);
         return VALIDITY_INVALID;
     }
+    
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     
     validity_t journal_validity = save_ivfc_validate(&ctx->core_data_ivfc_storage, &ctx->header.data_ivfc_header);
     if (journal_validity == VALIDITY_INVALID)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_filesystem_verify: invalid core IVFC storage!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid core IVFC storage!", __func__);
         return journal_validity;
     }
     
     if (!save_ivfc_set_level_validities(&ctx->core_data_ivfc_storage, &ctx->header.data_ivfc_header))
     {
-        strcat(strbuf, "\nsave_filesystem_verify: invalid IVFC level in core IVFC storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: invalid IVFC level in core IVFC storage!", __func__);
+        strcat(strbuf, tmp);
         journal_validity = VALIDITY_INVALID;
         return journal_validity;
     }
@@ -1239,13 +1292,14 @@ validity_t save_filesystem_verify(save_ctx_t *ctx)
     validity_t fat_validity = save_ivfc_validate(&ctx->fat_ivfc_storage, &ctx->header.fat_ivfc_header);
     if (fat_validity == VALIDITY_INVALID)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_filesystem_verify: invalid FAT IVFC storage!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid FAT IVFC storage!", __func__);
         return fat_validity;
     }
     
     if (!save_ivfc_set_level_validities(&ctx->fat_ivfc_storage, &ctx->header.fat_ivfc_header))
     {
-        strcat(strbuf, "\nsave_filesystem_verify: invalid IVFC level in FAT IVFC storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: invalid IVFC level in FAT IVFC storage!", __func__);
+        strcat(strbuf, tmp);
         fat_validity = VALIDITY_INVALID;
         return fat_validity;
     }
@@ -1262,7 +1316,7 @@ bool save_process(save_ctx_t *ctx)
     
     if (!ctx || !ctx->file)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: invalid parameters to process savefile!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to process savefile!", __func__);
         return false;
     }
     
@@ -1270,13 +1324,15 @@ bool save_process(save_ctx_t *ctx)
     FRESULT fr;
     bool success = false;
     
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
+    
     /* Try to parse Header A. */
     f_rewind(ctx->file);
     
     fr = f_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
     if (fr || br != sizeof(ctx->header))
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to read savefile header A! (%u)", fr);
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to read savefile header A! (%u)", __func__, fr);
         return success;
     }
     
@@ -1288,14 +1344,14 @@ bool save_process(save_ctx_t *ctx)
         fr = f_lseek(ctx->file, 0x4000);
         if (fr || f_tell(ctx->file) != 0x4000)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to seek to offset 0x4000 in savefile! (%u)", fr);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to seek to offset 0x4000 in savefile! (%u)", __func__, fr);
             return success;
         }
         
         fr = f_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
         if (fr || br != sizeof(ctx->header))
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to read savefile header B! (%u)", fr);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to read savefile header B! (%u)", __func__, fr);
             return success;
         }
         
@@ -1303,7 +1359,7 @@ bool save_process(save_ctx_t *ctx)
         
         if (ctx->header_hash_validity == VALIDITY_INVALID)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: savefile header is invalid!");
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: savefile header is invalid!", __func__);
             return success;
         }
     }
@@ -1323,14 +1379,14 @@ bool save_process(save_ctx_t *ctx)
     ctx->data_remap_storage.map_entries = calloc(sizeof(remap_entry_ctx_t), ctx->data_remap_storage.header->map_entry_count);
     if (!ctx->data_remap_storage.map_entries)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for data remap storage entries!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for data remap storage entries!", __func__);
         return success;
     }
     
     fr = f_lseek(ctx->file, ctx->header.layout.file_map_entry_offset);
     if (fr || f_tell(ctx->file) != ctx->header.layout.file_map_entry_offset)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to seek to file map entry offset 0x%lX in savefile! (%u)", ctx->header.layout.file_map_entry_offset, fr);
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to seek to file map entry offset 0x%lX in savefile! (%u)", __func__, ctx->header.layout.file_map_entry_offset, fr);
         return success;
     }
     
@@ -1339,7 +1395,7 @@ bool save_process(save_ctx_t *ctx)
         fr = f_read(ctx->file, &ctx->data_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to read data remap storage entry #%u! (%u)", i, fr);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to read data remap storage entry #%u! (%u)", __func__, i, fr);
             goto out;
         }
         
@@ -1351,7 +1407,8 @@ bool save_process(save_ctx_t *ctx)
     ctx->data_remap_storage.segments = save_remap_init_segments(ctx->data_remap_storage.header, ctx->data_remap_storage.map_entries, ctx->data_remap_storage.header->map_entry_count);
     if (!ctx->data_remap_storage.segments)
     {
-        strcat(strbuf, "\nsave_process: failed to retrieve data remap storage segments!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve data remap storage segments!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1363,26 +1420,28 @@ bool save_process(save_ctx_t *ctx)
     ctx->duplex_layers[1].data_a = calloc(1, ctx->header.layout.duplex_l1_size);
     if (!ctx->duplex_layers[1].data_a)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for data_a block in duplex layer #1!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for data_a block in duplex layer #1!", __func__);
         goto out;
     }
     
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[1].data_a, ctx->header.layout.duplex_l1_offset_a, ctx->header.layout.duplex_l1_size) != ctx->header.layout.duplex_l1_size)
     {
-        strcat(strbuf, "\nsave_process: failed to read data_a block from duplex layer #1 in data remap storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read data_a block from duplex layer #1 in data remap storage!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
     ctx->duplex_layers[1].data_b = calloc(1, ctx->header.layout.duplex_l1_size);
     if (!ctx->duplex_layers[1].data_b)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for data_b block in duplex layer #1!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for data_b block in duplex layer #1!", __func__);
         goto out;
     }
     
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[1].data_b, ctx->header.layout.duplex_l1_offset_b, ctx->header.layout.duplex_l1_size) != ctx->header.layout.duplex_l1_size)
     {
-        strcat(strbuf, "\nsave_process: failed to read data_b block from duplex layer #1 in data remap storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read data_b block from duplex layer #1 in data remap storage!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1391,26 +1450,28 @@ bool save_process(save_ctx_t *ctx)
     ctx->duplex_layers[2].data_a = calloc(1, ctx->header.layout.duplex_data_size);
     if (!ctx->duplex_layers[2].data_a)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for data_a block in duplex layer #2!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for data_a block in duplex layer #2!", __func__);
         goto out;
     }
     
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[2].data_a, ctx->header.layout.duplex_data_offset_a, ctx->header.layout.duplex_data_size) != ctx->header.layout.duplex_data_size)
     {
-        strcat(strbuf, "\nsave_process: failed to read data_a block from duplex layer #2 in data remap storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read data_a block from duplex layer #2 in data remap storage!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
     ctx->duplex_layers[2].data_b = calloc(1, ctx->header.layout.duplex_data_size);
     if (!ctx->duplex_layers[2].data_b)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for data_b block in duplex layer #2!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for data_b block in duplex layer #2!", __func__);
         goto out;
     }
     
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[2].data_b, ctx->header.layout.duplex_data_offset_b, ctx->header.layout.duplex_data_size) != ctx->header.layout.duplex_data_size)
     {
-        strcat(strbuf, "\nsave_process: failed to read data_b block from duplex layer #2 in data remap storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read data_b block from duplex layer #2 in data remap storage!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1421,7 +1482,8 @@ bool save_process(save_ctx_t *ctx)
     
     if (!save_duplex_storage_init(&ctx->duplex_storage.layers[0], &ctx->duplex_layers[1], bitmap, ctx->header.layout.duplex_master_size))
     {
-        strcat(strbuf, "\nsave_process: failed to initialize duplex storage layer #0!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to initialize duplex storage layer #0!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1430,20 +1492,21 @@ bool save_process(save_ctx_t *ctx)
     bitmap = calloc(1, ctx->duplex_storage.layers[0]._length);
     if (!bitmap)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for duplex storage layer #0 bitmap!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for duplex storage layer #0 bitmap!", __func__);
         goto out;
     }
     
     if (save_duplex_storage_read(&ctx->duplex_storage.layers[0], bitmap, 0, ctx->duplex_storage.layers[0]._length) != ctx->duplex_storage.layers[0]._length)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to read duplex storage layer #0 bitmap!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to read duplex storage layer #0 bitmap!", __func__);
         free(bitmap);
         goto out;
     }
     
     if (!save_duplex_storage_init(&ctx->duplex_storage.layers[1], &ctx->duplex_layers[2], bitmap, ctx->duplex_storage.layers[0]._length))
     {
-        strcat(strbuf, "\nsave_process: failed to initialize duplex storage layer #1!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to initialize duplex storage layer #1!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1460,14 +1523,14 @@ bool save_process(save_ctx_t *ctx)
     ctx->meta_remap_storage.map_entries = calloc(sizeof(remap_entry_ctx_t), ctx->meta_remap_storage.header->map_entry_count);
     if (!ctx->meta_remap_storage.map_entries)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for meta remap storage entries!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for meta remap storage entries!", __func__);
         goto out;
     }
     
     fr = f_lseek(ctx->file, ctx->header.layout.meta_map_entry_offset);
     if (fr || f_tell(ctx->file) != ctx->header.layout.meta_map_entry_offset)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to seek to meta map entry offset 0x%lX in savefile! (%u)", ctx->header.layout.meta_map_entry_offset, fr);
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to seek to meta map entry offset 0x%lX in savefile! (%u)", __func__, ctx->header.layout.meta_map_entry_offset, fr);
         goto out;
     }
     
@@ -1476,7 +1539,7 @@ bool save_process(save_ctx_t *ctx)
         fr = f_read(ctx->file, &ctx->meta_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to read meta remap storage entry #%u! (%u)", i, fr);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to read meta remap storage entry #%u! (%u)", __func__, i, fr);
             goto out;
         }
         
@@ -1487,7 +1550,8 @@ bool save_process(save_ctx_t *ctx)
     ctx->meta_remap_storage.segments = save_remap_init_segments(ctx->meta_remap_storage.header, ctx->meta_remap_storage.map_entries, ctx->meta_remap_storage.header->map_entry_count);
     if (!ctx->meta_remap_storage.segments)
     {
-        strcat(strbuf, "\nsave_process: failed to retrieve meta remap storage segments!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to retrieve meta remap storage segments!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1495,13 +1559,14 @@ bool save_process(save_ctx_t *ctx)
     ctx->journal_map_info.map_storage = calloc(1, ctx->header.layout.journal_map_table_size);
     if (!ctx->journal_map_info.map_storage)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for journal map info!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for journal map info!", __func__);
         goto out;
     }
     
     if (save_remap_read(&ctx->meta_remap_storage, ctx->journal_map_info.map_storage, ctx->header.layout.journal_map_table_offset, ctx->header.layout.journal_map_table_size) != ctx->header.layout.journal_map_table_size)
     {
-        strcat(strbuf, "\nsave_process: failed to read map storage from journal map info in meta remap storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read map storage from journal map info in meta remap storage!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1516,7 +1581,7 @@ bool save_process(save_ctx_t *ctx)
     ctx->journal_storage.map.entries = calloc(sizeof(journal_map_entry_t), ctx->journal_storage.map.header->main_data_block_count);
     if (!ctx->journal_storage.map.entries)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for journal map storage entries!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for journal map storage entries!", __func__);
         goto out;
     }
     
@@ -1537,7 +1602,8 @@ bool save_process(save_ctx_t *ctx)
     
     if (!save_ivfc_storage_init(&ctx->core_data_ivfc_storage, ctx->header.layout.ivfc_master_hash_offset_a, &ctx->header.data_ivfc_header))
     {
-        strcat(strbuf, "\nsave_process: failed to initialize core IVFC storage!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to initialize core IVFC storage!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1547,13 +1613,14 @@ bool save_process(save_ctx_t *ctx)
         ctx->fat_storage = calloc(1, ctx->header.layout.fat_size);
         if (!ctx->fat_storage)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for FAT storage!");
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for FAT storage!", __func__);
             goto out;
         }
         
         if (save_remap_read(&ctx->meta_remap_storage, ctx->fat_storage, ctx->header.layout.fat_offset, ctx->header.layout.fat_size) != ctx->header.layout.fat_size)
         {
-            strcat(strbuf, "\nsave_process: failed to read FAT storage from meta remap storage!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read FAT storage from meta remap storage!", __func__);
+            strcat(strbuf, tmp);
             goto out;
         }
     } else {
@@ -1561,20 +1628,22 @@ bool save_process(save_ctx_t *ctx)
         
         if (!save_ivfc_storage_init(&ctx->fat_ivfc_storage, ctx->header.layout.fat_ivfc_master_hash_a, &ctx->header.fat_ivfc_header))
         {
-            strcat(strbuf, "\nsave_process: failed to initialize FAT storage (IVFC)!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to initialize FAT storage (IVFC)!", __func__);
+            strcat(strbuf, tmp);
             goto out;
         }
         
         ctx->fat_storage = calloc(1, ctx->fat_ivfc_storage._length);
         if (!ctx->fat_storage)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process: failed to allocate memory for FAT storage (IVFC)!");
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for FAT storage (IVFC)!", __func__);
             goto out;
         }
         
         if (save_remap_read(&ctx->meta_remap_storage, ctx->fat_storage, ctx->header.fat_ivfc_header.level_headers[ctx->header.fat_ivfc_header.num_levels - 2].logical_offset, ctx->fat_ivfc_storage._length) != ctx->fat_ivfc_storage._length)
         {
-            strcat(strbuf, "\nsave_process: failed to read FAT storage from meta remap storage (IVFC)!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to read FAT storage from meta remap storage (IVFC)!", __func__);
+            strcat(strbuf, tmp);
             goto out;
         }
     }
@@ -1583,7 +1652,8 @@ bool save_process(save_ctx_t *ctx)
     {
         if (save_filesystem_verify(ctx) == VALIDITY_INVALID)
         {
-            strcat(strbuf, "\nsave_process: savefile FS verification failed!");
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: savefile FS verification failed!", __func__);
+            strcat(strbuf, tmp);
             goto out;
         }
     }
@@ -1592,7 +1662,8 @@ bool save_process(save_ctx_t *ctx)
     ctx->save_filesystem_core.base_storage = &ctx->core_data_ivfc_storage;
     if (!save_filesystem_init(&ctx->save_filesystem_core, ctx->fat_storage, &ctx->header.save_header, &ctx->header.fat_header))
     {
-        strcat(strbuf, "\nsave_process: failed to initialize savefile FS!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to initialize savefile FS!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1608,7 +1679,7 @@ bool save_process_header(save_ctx_t *ctx)
 {
     if (!ctx)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process_header: invalid parameters to process savefile header!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to process savefile header!", __func__);
         return false;
     }
     
@@ -1617,7 +1688,7 @@ bool save_process_header(save_ctx_t *ctx)
         ctx->header.save_header.magic != MAGIC_SAVE || ctx->header.main_remap_header.magic != MAGIC_RMAP || \
         ctx->header.meta_remap_header.magic != MAGIC_RMAP)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "save_process_header: save header is corrupt!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: save header is corrupt!", __func__);
         return false;
     }
     
@@ -1795,7 +1866,7 @@ bool readCertsFromSystemSave()
     fr = f_open(&certSave, BIS_CERT_SAVE_NAME, FA_READ | FA_OPEN_EXISTING);
     if (fr != FR_OK)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "Error: failed to open \"%s\" savefile from BIS System partition! (%u)", BIS_CERT_SAVE_NAME, fr);
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to open \"%s\" savefile from BIS System partition! (%u)", __func__, BIS_CERT_SAVE_NAME, fr);
         goto out;
     }
     
@@ -1804,7 +1875,7 @@ bool readCertsFromSystemSave()
     save_ctx = calloc(1, sizeof(save_ctx_t));
     if (!save_ctx)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "Error: failed to allocate memory for savefile context!");
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for savefile context!", __func__);
         goto out;
     }
     
@@ -1815,7 +1886,8 @@ bool readCertsFromSystemSave()
     initSaveCtx = save_process(save_ctx);
     if (!initSaveCtx)
     {
-        strcat(strbuf, "\nError: failed to process system savefile!");
+        snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to process system savefile!", __func__);
+        strcat(strbuf, tmp);
         goto out;
     }
     
@@ -1834,7 +1906,7 @@ bool readCertsFromSystemSave()
         
         if (i < 2)
         {
-            snprintf(cert_path, MAX_ELEMENTS(cert_path), (i == 0 ? cert_CA00000003_path : cert_XS00000020_path));
+            snprintf(cert_path, MAX_CHARACTERS(cert_path), (i == 0 ? cert_CA00000003_path : cert_XS00000020_path));
             memcpy(cert_expected_hash, (i == 0 ? cert_CA00000003_hash : cert_XS00000020_hash), SHA256_HASH_SIZE);
             
             getFileEntry = save_hierarchical_file_table_get_file_entry_by_path(&save_ctx->save_filesystem_core.file_table, cert_path, &entry);
@@ -1845,11 +1917,11 @@ bool readCertsFromSystemSave()
                 switch(j)
                 {
                     case 0: // < 9.0.0
-                        snprintf(cert_path, MAX_ELEMENTS(cert_path), cert_XS00000021_path);
+                        snprintf(cert_path, MAX_CHARACTERS(cert_path), cert_XS00000021_path);
                         memcpy(cert_expected_hash, cert_XS00000021_hash, SHA256_HASH_SIZE);
                         break;
                     case 1: // >= 9.0.0
-                        snprintf(cert_path, MAX_ELEMENTS(cert_path), cert_XS00000024_path);
+                        snprintf(cert_path, MAX_CHARACTERS(cert_path), cert_XS00000024_path);
                         memcpy(cert_expected_hash, cert_XS00000024_hash, SHA256_HASH_SIZE);
                         break;
                     default:
@@ -1865,14 +1937,21 @@ bool readCertsFromSystemSave()
         
         if (!getFileEntry)
         {
-            snprintf(tmp, MAX_ELEMENTS(tmp), "\nError: failed to get file entry for \"%s\" in system savefile!", cert_path);
-            strcat(strbuf, tmp);
+            // Only print the error if we're dealing with either the root or common certificates. We may be dealing with a console without a personalized certificate
+            if (i < 2)
+            {
+                snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to get file entry for \"%s\" in system savefile!", __func__, cert_path);
+                strcat(strbuf, tmp);
+            } else {
+                success = loadedCerts = true;
+            }
+            
             goto out;
         }
         
         if (!save_open_fat_storage(&save_ctx->save_filesystem_core, &fat_storage, entry.value.save_file_info.start_block))
         {
-            snprintf(tmp, MAX_ELEMENTS(tmp), "\nError: failed to open FAT storage at block 0x%X for \"%s\" in system savefile!", entry.value.save_file_info.start_block, cert_path);
+            snprintf(tmp, MAX_CHARACTERS(tmp), "\n%s: failed to open FAT storage at block 0x%X for \"%s\" in system savefile!", __func__, entry.value.save_file_info.start_block, cert_path);
             strcat(strbuf, tmp);
             goto out;
         }
@@ -1880,14 +1959,14 @@ bool readCertsFromSystemSave()
         internalCertSize = entry.value.save_file_info.length;
         if (internalCertSize != cert_expected_size)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "Error: invalid size for \"%s\" in system savefile! (%lu != %lu)", cert_path, internalCertSize, cert_expected_size);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid size for \"%s\" in system savefile! (%lu != %lu)", __func__, cert_path, internalCertSize, cert_expected_size);
             goto out;
         }
         
         br = save_allocation_table_storage_read(&fat_storage, cert_data_ptr, 0, cert_expected_size);
         if (br != (UINT)cert_expected_size)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "Error: failed to read \"%s\" from system savefile!", cert_path);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to read \"%s\" from system savefile!", __func__, cert_path);
             goto out;
         }
         
@@ -1895,12 +1974,12 @@ bool readCertsFromSystemSave()
         
         if (memcmp(tmp_hash, cert_expected_hash, 0x20) != 0)
         {
-            snprintf(strbuf, MAX_ELEMENTS(strbuf), "Error: invalid hash for \"%s\" in system savefile!", cert_path);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid hash for \"%s\" in system savefile!", __func__, cert_path);
             goto out;
         }
     }
     
-    success = loadedCerts = true;
+    success = loadedCerts = personalizedCertAvailable = true;
     
 out:
     if (save_ctx)
@@ -1918,11 +1997,17 @@ bool retrieveCertData(u8 *out_cert, bool personalized)
 {
     if (!out_cert)
     {
-        snprintf(strbuf, MAX_ELEMENTS(strbuf), "Error: invalid parameters to retrieve %s ticket certificate chain.", (!personalized ? "common" : "personalized"));
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: invalid parameters to retrieve %s ticket certificate chain.", __func__, (!personalized ? "common" : "personalized"));
         return false;
     }
     
     if (!readCertsFromSystemSave()) return false;
+    
+    if (personalized && !personalizedCertAvailable)
+    {
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: personalized ticket RSA certificate requested but unavailable in ES system savefile!", __func__);
+        return false;
+    }
     
     memcpy(out_cert, cert_root_data, ETICKET_CA_CERT_SIZE);
     memcpy(out_cert + ETICKET_CA_CERT_SIZE, (!personalized ? cert_common_data : cert_personalized_data), ETICKET_XS_CERT_SIZE);

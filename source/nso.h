@@ -50,9 +50,9 @@ typedef struct {
 } PACKED nso_header_t;
 
 // Retrieves the middleware list from a NSO stored in a partition from a NCA file
-bool retrieveMiddlewareListFromNso(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *aes_ctx, const char *nso_filename, u64 nso_base_offset, nso_header_t *nsoHeader, char *programInfoXml);
+bool retrieveMiddlewareListFromNso(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, Aes128CtrContext *aes_ctx, const char *nso_filename, u64 nso_base_offset, nso_header_t *nsoHeader, char *programInfoXml);
 
 // Retrieves the symbols list from a NSO stored in a partition from a NCA file
-bool retrieveSymbolsListFromNso(NcmContentStorage *ncmStorage, const NcmNcaId *ncaId, Aes128CtrContext *aes_ctx, const char *nso_filename, u64 nso_base_offset, nso_header_t *nsoHeader, char *programInfoXml);
+bool retrieveSymbolsListFromNso(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, Aes128CtrContext *aes_ctx, const char *nso_filename, u64 nso_base_offset, nso_header_t *nsoHeader, char *programInfoXml);
 
 #endif

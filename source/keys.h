@@ -56,8 +56,8 @@ typedef struct {
     // Needed to reencrypt the NCA key area for tik-less NSP dumps. Retrieved from the Lockpick_RCM keys file.
     u8 key_area_keys[0x20][3][0x10];            /* Key area encryption keys. */
     
-    // Needed to decrypt saves from system and application titles
-    u8 save_mac_key[0x10];
+    // Console specific. Needed to calculate the AES CMAC for savefiles. Retrieved from the Lockpick_RCM keys file.
+    u8 save_mac_key[0x10];                      /* Savefile CMAC key */
 } PACKED nca_keyset_t;
 
 bool loadMemoryKeys();

@@ -34,7 +34,7 @@
 #define ROMFS_MAX_ELEMENTS          12
 #define SDCARD_MAX_ELEMENTS         3
 #define ORPHAN_MAX_ELEMENTS         12
-#define BATCH_MAX_ELEMENTS          12
+#define BATCH_MAX_ELEMENTS          14
 
 #define OPTIONS_X_START_POS         (35 * CHAR_PT_SIZE)
 #define OPTIONS_X_END_POS           (OPTIONS_X_START_POS + (6 * CHAR_PT_SIZE))
@@ -185,17 +185,17 @@ void uiStatusMsg(const char *fmt, ...);
 
 void uiUpdateStatusMsg();
 
-void uiPleaseWait(u8 wait);
+void uiClearStatusMsg();
 
-void uiUpdateFreeSpace();
+void uiPleaseWait(u8 wait);
 
 void uiClearScreen();
 
 void uiPrintHeadline();
 
-void uiDeinit();
+bool uiInit();
 
-int uiInit();
+void uiDeinit();
 
 void uiSetState(UIState state);
 

@@ -56,13 +56,13 @@ bool rsa_sign(void* input, size_t input_size, unsigned char* output, size_t outp
                 memcpy(output, buf, output_size);
                 success = true;
             } else {
-                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "rsa_sign: mbedtls_pk_sign failed! (%d)", ret);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: mbedtls_pk_sign failed! (%d)", __func__, ret);
             }
         } else {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "rsa_sign: mbedtls_pk_parse_key failed! (%d)", ret);
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: mbedtls_pk_parse_key failed! (%d)", __func__, ret);
         }
     } else {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "rsa_sign: mbedtls_ctr_drbg_seed failed! (%d)", ret);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: mbedtls_ctr_drbg_seed failed! (%d)", __func__, ret);
     }
     
     mbedtls_ctr_drbg_free(&ctr_drbg);

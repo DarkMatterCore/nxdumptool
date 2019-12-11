@@ -6,8 +6,6 @@
 #include <switch.h>
 #include "util.h"
 
-#define ISTORAGE_PARTITION_CNT          2
-
 #define FAT32_FILESIZE_LIMIT            (u64)0xFFFFFFFF             // 4 GiB - 1 (4294967295 bytes)
 
 #define SPLIT_FILE_XCI_PART_SIZE        (u64)0xFFFF8000             // 4 GiB - 0x8000 (4294934528 bytes) (based on XCI-Cutter)
@@ -17,12 +15,6 @@
 
 #define CERT_OFFSET                     0x7000
 #define CERT_SIZE                       0x200
-
-#define SMOOTHING_FACTOR                (double)0.1
-
-#define CANCEL_BTN_SEC_HOLD             2                           // The cancel button must be held for at least CANCEL_BTN_SEC_HOLD seconds to cancel an ongoing operation
-
-#define DUMP_NSP_CRC_WAIT               5                           // The user must wait for at least DUMP_NSP_CRC_WAIT seconds before the CRC32 checksum calculation process starts after the NSP dump process is finished
 
 typedef struct {
     bool keepCert;                                  // Original value for the "Keep certificate" option. Overrides the selected setting in the current session
@@ -36,7 +28,7 @@ typedef struct {
 } PACKED sequentialXciCtx;
 
 typedef struct {
-    FsStorageId storageId;                          // Source storage from which the data is dumped
+    NcmStorageId storageId;                          // Source storage from which the data is dumped
     bool removeConsoleData;                         // Original value for the "Remove console specific data" option. Overrides the selected setting in the current session
     bool tiklessDump;                               // Original value for the "Generate ticket-less dump" option. Overrides the selected setting in the current session. Ignored if removeConsoleData == false
     bool npdmAcidRsaPatch;                          // Original value for the "Change NPDM RSA key/sig in Program NCA" option. Overrides the selected setting in the current session
@@ -54,22 +46,23 @@ typedef struct {
     bool enabled;
     nspDumpType titleType;
     u32 titleIndex;
+    u64 contentSize;
+    char *contentSizeStr;
     char nspFilename[NAME_BUF_LEN];
     char truncatedNspFilename[NAME_BUF_LEN];
 } batchEntry;
 
-void workaroundPartitionZeroAccess();
-bool dumpCartridgeImage(xciOptions *xciDumpCfg);
-bool dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleIndex, nspOptions *nspDumpCfg, bool batch);
-bool dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg);
+bool dumpNXCardImage(xciOptions *xciDumpCfg);
+int dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleIndex, nspOptions *nspDumpCfg, bool batch);
+int dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg);
 bool dumpRawHfs0Partition(u32 partition, bool doSplitting);
 bool dumpHfs0PartitionData(u32 partition, bool doSplitting);
-bool dumpFileFromHfs0Partition(u32 partition, u32 file, char *filename, bool doSplitting);
-bool dumpExeFsSectionData(u32 titleIndex, bool usePatch, bool doSplitting);
-bool dumpFileFromExeFsSection(u32 titleIndex, u32 fileIndex, bool usePatch, bool doSplitting);
-bool dumpRomFsSectionData(u32 titleIndex, selectedRomFsType curRomFsType, bool doSplitting);
-bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, selectedRomFsType curRomFsType, bool doSplitting);
-bool dumpCurrentDirFromRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, bool doSplitting);
+bool dumpFileFromHfs0Partition(u32 partition, u32 fileIndex, char *filename, bool doSplitting);
+bool dumpExeFsSectionData(u32 titleIndex, bool usePatch, ncaFsOptions *exeFsDumpCfg);
+bool dumpFileFromExeFsSection(u32 titleIndex, u32 fileIndex, bool usePatch, ncaFsOptions *exeFsDumpCfg);
+bool dumpRomFsSectionData(u32 titleIndex, selectedRomFsType curRomFsType, ncaFsOptions *romFsDumpCfg);
+bool dumpFileFromRomFsSection(u32 titleIndex, u32 file_offset, selectedRomFsType curRomFsType, ncaFsOptions *romFsDumpCfg);
+bool dumpCurrentDirFromRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, ncaFsOptions *romFsDumpCfg);
 bool dumpGameCardCertificate();
 bool dumpTicketFromTitle(u32 titleIndex, selectedTicketType curTikType, ticketOptions *tikDumpCfg);
 

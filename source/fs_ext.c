@@ -1,4 +1,5 @@
 #include <switch/kernel/ipc.h>
+#include <switch/services/fs.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -7,124 +8,41 @@
 // IFileSystemProxy
 Result fsOpenGameCardStorage(FsStorage* out, const FsGameCardHandle* handle, u32 partition)
 {
-    IpcCommand c;
-    ipcInitialize(&c);
-    
     struct {
-        u64 magic;
-        u64 cmd_id;
         u32 handle;
         u32 partition;
-    } *raw;
+    } in = { handle->value, partition };
     
-    raw = serviceIpcPrepareHeader(fsGetServiceSession(), &c, sizeof(*raw));
-    
-    raw->magic = SFCI_MAGIC;
-    raw->cmd_id = 30;
-    raw->handle = handle->value;
-    raw->partition = partition;
-    
-    Result rc = serviceIpcDispatch(fsGetServiceSession());
-    
-    if (R_SUCCEEDED(rc))
-    {
-        IpcParsedCommand r;
-        
-        struct {
-            u64 magic;
-            u64 result;
-        } *resp;
-        
-        serviceIpcParse(fsGetServiceSession(), &r, sizeof(*resp));
-        resp = r.Raw;
-        
-        rc = resp->result;
-        
-        if (R_SUCCEEDED(rc)) serviceCreateSubservice(&out->s, fsGetServiceSession(), &r, 0);
-    }
-    
-    return rc;
+    return serviceDispatchIn(fsGetServiceSession(), 30, in,
+        .out_num_objects = 1,
+        .out_objects = &out->s
+    );
 }
 
 Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier* out)
 {
-    IpcCommand c;
-    ipcInitialize(&c);
-    
-    struct {
-        u64 magic;
-        u64 cmd_id;
-    } *raw;
-    
-    raw = serviceIpcPrepareHeader(fsGetServiceSession(), &c, sizeof(*raw));
-    
-    raw->magic = SFCI_MAGIC;
-    raw->cmd_id = 501;
-    
-    Result rc = serviceIpcDispatch(fsGetServiceSession());
-    
-    if (R_SUCCEEDED(rc))
-    {
-        IpcParsedCommand r;
-        
-        struct {
-            u64 magic;
-            u64 result;
-        } *resp;
-        
-        serviceIpcParse(fsGetServiceSession(), &r, sizeof(*resp));
-        resp = r.Raw;
-        
-        rc = resp->result;
-        
-        if (R_SUCCEEDED(rc)) serviceCreateSubservice(&out->s, fsGetServiceSession(), &r, 0);
-    }
-    
-    return rc;
+    return serviceDispatch(fsGetServiceSession(), 501,
+        .out_num_objects = 1,
+        .out_objects = &out->s
+    );
 }
 
 // IDeviceOperator
 Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator* d, const FsGameCardHandle* handle, u32* out_title_version, u64* out_title_id)
 {
-    IpcCommand c;
-    ipcInitialize(&c);
+    struct {
+        u32 handle;
+    } in = { handle->value };
     
     struct {
-        u64 magic;
-        u64 cmd_id;
-        u32 handle;
-    } *raw;
+        u32 title_ver;
+        u64 title_id;
+    } out;
     
-    raw = serviceIpcPrepareHeader(&d->s, &c, sizeof(*raw));
+    Result rc = serviceDispatchInOut(&d->s, 203, in, out);
     
-    raw->magic = SFCI_MAGIC;
-    raw->cmd_id = 203;
-    raw->handle = handle->value;
-    
-    Result rc = serviceIpcDispatch(&d->s);
-    
-    if (R_SUCCEEDED(rc))
-    {
-        IpcParsedCommand r;
-        
-        struct {
-            u64 magic;
-            u64 result;
-            u32 title_ver;
-            u64 title_id;
-        } *resp;
-        
-        serviceIpcParse(&d->s, &r, sizeof(*resp));
-        resp = r.Raw;
-        
-        rc = resp->result;
-        
-        if (R_SUCCEEDED(rc))
-        {
-            if (out_title_version != NULL) *out_title_version = resp->title_ver;
-            if (out_title_id != NULL) *out_title_id = resp->title_id;
-        }
-    }
+    if (R_SUCCEEDED(rc) && out_title_version) *out_title_version = out.title_ver;
+    if (R_SUCCEEDED(rc) && out_title_id) *out_title_id = out.title_id;
     
     return rc;
 }
