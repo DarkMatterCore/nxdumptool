@@ -42,10 +42,10 @@ Thanks to
 --------------
 
 * [MCMrARM](https://github.com/MCMrARM), for creating the original application.
-* [RSDuck](https://github.com/RSDuck), for vba-next-switch port. It's UI menu code was taken as a basis for this application.
+* [RSDuck](https://github.com/RSDuck), for vba-next-switch port. Its UI menu code was taken as a basis for this application.
 * [foen](https://github.com/foen), for giving me some pretty good hints about how to use the NCM service.
 * [yellows8](https://github.com/yellows8), for helping me fix a silly bug in my implementation of some NCM service IPC calls.
-* [SciresM](https://github.com/SciresM), for [hactool](https://github.com/SciresM/hactool) (licensed under [ISC](https://github.com/SciresM/hactool/blob/master/LICENSE)). It's NCA content handling procedures are reproduced in many parts of the application.
+* [SciresM](https://github.com/SciresM), for [hactool](https://github.com/SciresM/hactool) (licensed under [ISC](https://github.com/SciresM/hactool/blob/master/LICENSE)). Its NCA content handling procedures are reproduced in many parts of the application.
 * [The-4n](https://github.com/The-4n), for [4NXCI](https://github.com/The-4n/4NXCI) (licensed under [ISC](https://github.com/The-4n/4NXCI/blob/master/LICENSE)) and [hacPack](https://github.com/The-4n/hacPack) (licensed under [GPLv2](https://github.com/The-4n/hacPack/blob/master/LICENSE)). The NCA content patching procedure used in 4NXCI is replicated in the application, as well as the NACP XML generation from hacPack.
 * [shchmue](https://github.com/shchmue), for [Lockpick](https://github.com/shchmue/Lockpick) (licensed under [GPLv2](https://github.com/shchmue/Lockpick/blob/master/LICENSE)). It is used as a reference for the runtime key-collection algorithm needed for the NSP dump, ExeFS dump/browse and RomFS dump/browse procedures.
 * Björn Samuelsson, for his [public domain CRC32 checksum calculation C-code](http://home.thep.lu.se/~bjorn/crc).
