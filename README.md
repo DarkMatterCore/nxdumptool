@@ -1,4 +1,5 @@
 ﻿# nxdumptool
+<img width="200" src="icon.jpg">
 Nintendo Switch Dump Tool
 
 Main features
