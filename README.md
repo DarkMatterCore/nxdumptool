@@ -2,6 +2,10 @@
 <img width="200" src="icon.jpg">
 Nintendo Switch Dump Tool
 
+## The application is being rewritten from scratch using a temporary private repository to improve things such as code quality, code maintenance and code readability. Improvements such as a proper GUI with touchscreen support and threaded events will be added.
+
+## All the changes will be pushed to this repository once the new codebase reaches an usable + stable state. Sorry for any possible inconveniences.
+
 Main features
 --------------
 
