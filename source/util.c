@@ -26,6 +26,8 @@
 
 /* Extern variables */
 
+extern bool highlight;
+
 extern int breaks;
 extern int font_height;
 
@@ -34,31 +36,15 @@ extern int scroll;
 
 extern curMenuType menuType;
 
+extern u8 *fileNormalIconBuf;
+extern u8 *fileHighlightIconBuf;
+
 extern nca_keyset_t nca_keyset;
-
-/* Constants */
-
-const char *configPath = NXDUMPTOOL_BASE_PATH "config.bin";
-
-const char *noIntroDatQuickCheckUrl = "https://datomatic.no-intro.org/qchknsw.php";
-
-const char *nswReleasesXmlUrl = "http://nswdb.com/xml.php";
-const char *nswReleasesXmlTmpPath = NXDUMPTOOL_BASE_PATH "NSWreleases.xml.tmp";
-const char *nswReleasesXmlPath = NXDUMPTOOL_BASE_PATH "NSWreleases.xml";
-const char *nswReleasesRootElement = "releases";
-const char *nswReleasesChildren = "release";
-const char *nswReleasesChildrenTitleID = "titleid";
-const char *nswReleasesChildrenImgCrc = "imgcrc";
-const char *nswReleasesChildrenReleaseName = "releasename";
-
-const char *githubReleasesApiUrl = "https://api.github.com/repos/DarkMatterCore/nxdumptool/releases/latest";
-const char *nxDumpToolPath = NXDUMPTOOL_BASE_PATH "nxdumptool.nro";
-const char *userAgent = "nxdumptool/" APP_VERSION " (Nintendo Switch)";
 
 /* Statically allocated variables */
 
-static bool initNcm = false, initNs = false, initCsrng = false, initSpl = false, initPmdmnt = false, initPl = false;
-static bool openFsDevOp = false, openGcEvtNotifier = false, loadGcKernEvt = false, gcThreadInit = false;
+static bool initNcm = false, initNs = false, initCsrng = false, initSpl = false, initPmdmnt = false, initPl = false, initNet = false;
+static bool openFsDevOp = false, openGcEvtNotifier = false, loadGcKernEvt = false, gcThreadInit = false, homeBtnBlocked = false;
 
 dumpOptions dumpCfg;
 
@@ -67,7 +53,7 @@ bool keysFileAvailable = false;
 static pthread_t gameCardDetectionThread;
 static UEvent exitEvent;
 
-AppletType programAppletType;
+static AppletType programAppletType;
 
 char cfwDirStr[32] = {'\0'};
 
@@ -96,9 +82,8 @@ static char *result_buf = NULL;
 static size_t result_sz = 0;
 static size_t result_written = 0;
 
-char *filenameBuffer = NULL;
-char *filenames[FILENAME_MAX_CNT];
-int filenamesCount = 0;
+char **filenameBuffer = NULL;
+int filenameCount = 0, filenameIndex = 0;
 
 u8 *dumpBuf = NULL;
 u8 *gcReadBuf = NULL;
@@ -109,7 +94,7 @@ u32 orphanEntriesCnt = 0;
 
 char strbuf[NAME_BUF_LEN] = {'\0'};
 
-char appLaunchPath[NAME_BUF_LEN / 2] = {'\0'};
+static const char *appLaunchPath = NULL;
 
 FsStorage fatFsStorage;
 static bool openBis = false, mountBisFatFs = false;
@@ -141,7 +126,7 @@ void loadConfig()
     
     dumpCfg.romFsDumpCfg.isFat32 = true;
     
-    FILE *configFile = fopen(configPath, "rb");
+    FILE *configFile = fopen(CONFIG_PATH, "rb");
     if (!configFile) return;
     
     fseek(configFile, 0, SEEK_END);
@@ -151,7 +136,7 @@ void loadConfig()
     if (configFileSize != sizeof(dumpOptions))
     {
         fclose(configFile);
-        unlink(configPath);
+        remove(CONFIG_PATH);
         return;
     }
     
@@ -161,7 +146,7 @@ void loadConfig()
     
     if (read_res != sizeof(dumpOptions))
     {
-        unlink(configPath);
+        remove(CONFIG_PATH);
         return;
     }
     
@@ -179,13 +164,13 @@ void loadConfig()
 
 void saveConfig()
 {
-    FILE *configFile = fopen(configPath, "wb");
+    FILE *configFile = fopen(CONFIG_PATH, "wb");
     if (!configFile) return;
     
     size_t write_res = fwrite(&dumpCfg, 1, sizeof(dumpOptions), configFile);
     fclose(configFile);
     
-    if (write_res != sizeof(dumpOptions)) unlink(configPath);
+    if (write_res != sizeof(dumpOptions)) remove(CONFIG_PATH);
 }
 
 static bool isGameCardInserted()
@@ -209,6 +194,8 @@ static void changeAtomicBool(volatile bool *ptr, bool value)
 
 static void *fsGameCardDetectionThreadFunc(void *arg)
 {
+    (void)arg;
+    
     Result result = 0;
     int idx = 0;
     
@@ -288,8 +275,15 @@ Result openGameCardStoragePartition(openIStoragePartition partitionIndex)
     // Check if the provided IStorage index is valid
     if (!partitionIndex || partitionIndex >= ISTORAGE_PARTITION_INVALID) return MAKERESULT(Module_Libnx, LibnxError_IoError);
     
-    // Safety check: close the current IStorage instance if we have already opened one
-    if (gameCardInfo.curIStorageIndex && gameCardInfo.curIStorageIndex < ISTORAGE_PARTITION_INVALID) closeGameCardStoragePartition();
+    // Safety check: check if we have already opened an IStorage instance
+    if (gameCardInfo.curIStorageIndex && gameCardInfo.curIStorageIndex < ISTORAGE_PARTITION_INVALID)
+    {
+        // If the opened IStorage instance is the same as the requested one, just return right away
+        if (gameCardInfo.curIStorageIndex == partitionIndex) return 0;
+        
+        // Otherwise, close the current IStorage instance
+        closeGameCardStoragePartition();
+    }
     
     u8 i;
     u32 idx = (u32)(partitionIndex - 1);
@@ -436,8 +430,8 @@ void delay(u8 seconds)
 
 static void createOutputDirectories()
 {
+    mkdir(HBLOADER_BASE_PATH, 0744);
     mkdir(APP_BASE_PATH, 0744);
-    mkdir(NXDUMPTOOL_BASE_PATH, 0744);
     mkdir(XCI_DUMP_PATH, 0744); 
     mkdir(NSP_DUMP_PATH, 0744);
     mkdir(HFS0_DUMP_PATH, 0744);
@@ -525,20 +519,54 @@ void updateFreeSpace()
     convertSize(freeSpace, freeSpaceStr, MAX_CHARACTERS(freeSpaceStr));
 }
 
+void freeFilenameBuffer(void)
+{
+    if (!filenameBuffer) return;
+    
+    for(int i = 0; i < filenameCount; i++)
+    {
+        if (filenameBuffer[i]) free(filenameBuffer[i]);
+    }
+    
+    filenameCount = filenameIndex = 0;
+    
+    free(filenameBuffer);
+    filenameBuffer = NULL;
+}
+
+static bool allocateFilenameBuffer(u32 cnt)
+{
+    if (!cnt) return false;
+    
+    freeFilenameBuffer();
+    
+    filenameBuffer = calloc(cnt, sizeof(char*));
+    if (!filenameBuffer) return false;
+    
+    filenameCount = (int)cnt;
+    
+    return true;
+}
+
+static bool addStringToFilenameBuffer(const char *str)
+{
+    if (!str || !strlen(str) || (filenameIndex + 1) > filenameCount) return false;
+    
+    filenameBuffer[filenameIndex] = strdup(str);
+    if (!filenameBuffer[filenameIndex])
+    {
+        freeFilenameBuffer();
+        return false;
+    }
+    
+    filenameIndex++;
+    
+    return true;
+}
+
 void initExeFsContext()
 {
-    exeFsContext.storageId = NcmStorageId_None;
-    memset(&(exeFsContext.ncmStorage), 0, sizeof(NcmContentStorage));
-    memset(&(exeFsContext.ncaId), 0, sizeof(NcmContentId));
-    memset(&(exeFsContext.aes_ctx), 0, sizeof(Aes128CtrContext));
-    exeFsContext.exefs_offset = 0;
-    exeFsContext.exefs_size = 0;
-    memset(&(exeFsContext.exefs_header), 0, sizeof(pfs0_header));
-    exeFsContext.exefs_entries_offset = 0;
-    exeFsContext.exefs_entries = NULL;
-    exeFsContext.exefs_str_table_offset = 0;
-    exeFsContext.exefs_str_table = NULL;
-    exeFsContext.exefs_data_offset = 0;
+    memset(&exeFsContext, 0, sizeof(exefs_ctx_t));
 }
 
 void freeExeFsContext()
@@ -565,21 +593,7 @@ void freeExeFsContext()
 
 void initRomFsContext()
 {
-    romFsContext.storageId = NcmStorageId_None;
-    memset(&(romFsContext.ncmStorage), 0, sizeof(NcmContentStorage));
-    memset(&(romFsContext.ncaId), 0, sizeof(NcmContentId));
-    memset(&(romFsContext.aes_ctx), 0, sizeof(Aes128CtrContext));
-    romFsContext.section_offset = 0;
-    romFsContext.section_size = 0;
-    romFsContext.romfs_offset = 0;
-    romFsContext.romfs_size = 0;
-    romFsContext.romfs_dirtable_offset = 0;
-    romFsContext.romfs_dirtable_size = 0;
-    romFsContext.romfs_dir_entries = NULL;
-    romFsContext.romfs_filetable_offset = 0;
-    romFsContext.romfs_filetable_size = 0;
-    romFsContext.romfs_file_entries = NULL;
-    romFsContext.romfs_filedata_offset = 0;
+    memset(&romFsContext, 0, sizeof(romfs_ctx_t));
 }
 
 void freeRomFsContext()
@@ -606,27 +620,7 @@ void freeRomFsContext()
 
 void initBktrContext()
 {
-    bktrContext.storageId = NcmStorageId_None;
-    memset(&(bktrContext.ncmStorage), 0, sizeof(NcmContentStorage));
-    memset(&(bktrContext.ncaId), 0, sizeof(NcmContentId));
-    memset(&(bktrContext.aes_ctx), 0, sizeof(Aes128CtrContext));
-    bktrContext.section_offset = 0;
-    bktrContext.section_size = 0;
-    memset(&(bktrContext.superblock), 0, sizeof(bktr_superblock_t));
-    bktrContext.relocation_block = NULL;
-    bktrContext.subsection_block = NULL;
-    bktrContext.virtual_seek = 0;
-    bktrContext.bktr_seek = 0;
-    bktrContext.base_seek = 0;
-    bktrContext.romfs_offset = 0;
-    bktrContext.romfs_size = 0;
-    bktrContext.romfs_dirtable_offset = 0;
-    bktrContext.romfs_dirtable_size = 0;
-    bktrContext.romfs_dir_entries = NULL;
-    bktrContext.romfs_filetable_offset = 0;
-    bktrContext.romfs_filetable_size = 0;
-    bktrContext.romfs_file_entries = NULL;
-    bktrContext.romfs_filedata_offset = 0;
+    memset(&bktrContext, 0, sizeof(bktr_ctx_t));
 }
 
 void freeBktrContext()
@@ -795,6 +789,28 @@ static void freeGlobalData()
     freeRomFsBrowserEntries();
     
     freeHfs0ExeFsEntriesSizes();
+    
+    freeFilenameBuffer();
+}
+
+u64 hidKeysAllDown()
+{
+    u8 controller;
+    u64 keysDown = 0;
+    
+    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keysDown |= hidKeysDown((HidControllerID)controller);
+    
+    return keysDown;
+}
+
+u64 hidKeysAllHeld()
+{
+    u8 controller;
+    u64 keysHeld = 0;
+    
+    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keysHeld |= hidKeysHeld((HidControllerID)controller);
+    
+    return keysHeld;
 }
 
 void consoleErrorScreen(const char *fmt, ...)
@@ -812,7 +828,7 @@ void consoleErrorScreen(const char *fmt, ...)
     {
         hidScanInput();
         
-        u64 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        u64 keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
         
         if (keysDown && !((keysDown & KEY_TOUCH) || (keysDown & KEY_LSTICK_LEFT) || (keysDown & KEY_LSTICK_RIGHT) || (keysDown & KEY_LSTICK_UP) || (keysDown & KEY_LSTICK_DOWN) || \
             (keysDown & KEY_RSTICK_LEFT) || (keysDown & KEY_RSTICK_RIGHT) || (keysDown & KEY_RSTICK_UP) || (keysDown & KEY_RSTICK_DOWN))) break;
@@ -923,11 +939,17 @@ bool initApplicationResources(int argc, char **argv)
         {
             if (argv[i] && strlen(argv[i]) > 10 && !strncasecmp(argv[i], "sdmc:/", 6) && !strncasecmp(argv[i] + strlen(argv[i]) - 4, ".nro", 4))
             {
-                snprintf(appLaunchPath, MAX_CHARACTERS(appLaunchPath), argv[i]);
+                appLaunchPath = (const char*)argv[i];
                 break;
             }
         }
     }
+    
+    /* Initialize services */
+    if (!initServices()) return false;
+    
+    /* Initialize UI */
+    if (!uiInit()) return false;
     
     /* Zero out gamecard info struct */
     memset(&gameCardInfo, 0, sizeof(gamecard_ctx_t));
@@ -953,20 +975,8 @@ bool initApplicationResources(int argc, char **argv)
     /* Retrieve running CFW directory */
     retrieveRunningCfwDir();
     
-    /* Update free space */
-    updateFreeSpace();
-    
-    /* Initialize services */
-    if (!initServices()) return false;
-    
-    /* Initialize UI */
-    if (!uiInit()) return false;
-    
     /* Get applet type */
     programAppletType = appletGetAppletType();
-    
-    /* Block HOME menu button presses if we're running as a regular application or a system application */
-    if (programAppletType == AppletType_Application || programAppletType == AppletType_SystemApplication) appletBeginBlockingHomeButton(0);
     
     /* Disable screen dimming and auto sleep */
     appletSetMediaPlaybackState(true);
@@ -974,16 +984,8 @@ bool initApplicationResources(int argc, char **argv)
     /* Enable CPU boost mode */
     appletSetCpuBoostMode(ApmCpuBoostMode_Type1);
     
-    /* Mount BIS System partition from the eMMC */
+    /* Mount eMMC BIS System partition */
     if (!mountSysEmmcPartition()) goto out;
-    
-    /* Allocate memory for the filename buffer */
-    filenameBuffer = calloc(FILENAME_BUFFER_SIZE, sizeof(char));
-    if (!filenameBuffer)
-    {
-        uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for the filename buffer!", __func__);
-        goto out;
-    }
     
     /* Allocate memory for the general purpose dump buffer */
     dumpBuf = calloc(DUMP_BUFFER_SIZE, sizeof(u8));
@@ -1050,6 +1052,9 @@ bool initApplicationResources(int argc, char **argv)
     /* Load settings from configuration file */
     loadConfig();
     
+    /* Update free space */
+    updateFreeSpace();
+    
     /* Set output status */
     success = true;
     
@@ -1098,10 +1103,7 @@ void deinitApplicationResources()
     /* Free general purpose dump buffer */
     if (dumpBuf) free(dumpBuf);
     
-    /* Free filename buffer */
-    if (filenameBuffer) free(filenameBuffer);
-    
-    /* Unmount BIS System partition from the eMMC */
+    /* Unmount eMMC BIS System partition */
     unmountSysEmmcPartition();
     
     /* Disable CPU boost mode */
@@ -1110,14 +1112,39 @@ void deinitApplicationResources()
     /* Enable screen dimming and auto sleep */
     appletSetMediaPlaybackState(false);
     
-    /* Unblock HOME menu button presses if we're running as a regular application or a system application */
-    if (programAppletType == AppletType_Application || programAppletType == AppletType_SystemApplication) appletEndBlockingHomeButton();
-    
     /* Deinitialize UI */
     uiDeinit();
     
     /* Deinitialize services */
     deinitServices();
+}
+
+bool appletModeCheck()
+{
+    return (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication);
+}
+
+void appletModeOperationWarning()
+{
+    if (!appletModeCheck()) return;
+    
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.");
+    breaks++;
+}
+
+void changeHomeButtonBlockStatus(bool block)
+{
+    // Only change HOME button blocking status if we're running as a regular application or a system application, and if it's current blocking status is different than the requested one
+    if (appletModeCheck() || block == homeBtnBlocked) return;
+    
+    if (block)
+    {
+        appletBeginBlockingHomeButtonShortAndLongPressed(0);
+    } else {
+        appletEndBlockingHomeButtonShortAndLongPressed();
+    }
+    
+    homeBtnBlocked = block;
 }
 
 void formatETAString(u64 curTime, char *out, size_t outSize)
@@ -1144,29 +1171,16 @@ void formatETAString(u64 curTime, char *out, size_t outSize)
     snprintf(out, outSize, "%02luH%02luM%02luS", hour, min, sec);
 }
 
-void clearFilenameBuffer()
-{
-    memset(filenameBuffer, 0, FILENAME_BUFFER_SIZE);
-    memset(filenames, 0, FILENAME_MAX_CNT * sizeof(char*));
-    filenamesCount = 0;
-}
-
-void addStringToFilenameBuffer(const char *string)
-{
-    if (!string || !strlen(string) || (filenamesCount + 1) >= FILENAME_MAX_CNT) return;
-    
-    char *curFilename = (filenameBuffer + (filenamesCount * FILENAME_LENGTH));
-    filenames[filenamesCount++] = curFilename;
-    snprintf(curFilename, FILENAME_LENGTH - 1, string);
-}
-
 void generateSdCardEmmcTitleList()
 {
-    clearFilenameBuffer();
-    
     if (!titleAppCount || !baseAppEntries) return;
     
-    for(u32 i = 0; i < titleAppCount; i++) addStringToFilenameBuffer(baseAppEntries[i].name);
+    if (!allocateFilenameBuffer(titleAppCount)) return;
+    
+    for(u32 i = 0; i < titleAppCount; i++)
+    {
+        if (!addStringToFilenameBuffer(baseAppEntries[i].name)) return;
+    }
 }
 
 static void convertTitleVersionToDotNotation(u32 titleVersion, u8 *outMajor, u8 *outMinor, u8 *outMicro, u16 *outBugfix)
@@ -1637,9 +1651,9 @@ bool retrieveGameCardInfo()
         goto out;
     }
     
-    if (bswap_32(gameCardInfo.header.magic) != GAMECARD_HEADER_MAGIC)
+    if (__builtin_bswap32(gameCardInfo.header.magic) != GAMECARD_HEADER_MAGIC)
     {
-        uiStatusMsg("%s: invalid gamecard header magic word! (0x%08X)", __func__, bswap_32(gameCardInfo.header.magic));
+        uiStatusMsg("%s: invalid gamecard header magic word! (0x%08X)", __func__, __builtin_bswap32(gameCardInfo.header.magic));
         goto out;
     }
     
@@ -1689,9 +1703,9 @@ bool retrieveGameCardInfo()
     
     memcpy(&header, gameCardInfo.rootHfs0Header, sizeof(hfs0_header));
     
-    if (bswap_32(header.magic) != HFS0_MAGIC)
+    if (__builtin_bswap32(header.magic) != HFS0_MAGIC)
     {
-        uiStatusMsg("%s: invalid magic word in root HFS0 header! (0x%08X)", __func__, bswap_32(header.magic));
+        uiStatusMsg("%s: invalid magic word in root HFS0 header! (0x%08X)", __func__, __builtin_bswap32(header.magic));
         goto out;
     }
     
@@ -1770,9 +1784,9 @@ bool retrieveGameCardInfo()
         }
         
         // Check the HFS0 magic word
-        if (bswap_32(header.magic) != HFS0_MAGIC)
+        if (__builtin_bswap32(header.magic) != HFS0_MAGIC)
         {
-            uiStatusMsg("%s: invalid magic word in %s HFS0 partition header! (0x%08X)", __func__, GAMECARD_PARTITION_NAME(gameCardInfo.hfs0PartitionCnt, i), bswap_32(header.magic));
+            uiStatusMsg("%s: invalid magic word in %s HFS0 partition header! (0x%08X)", __func__, GAMECARD_PARTITION_NAME(gameCardInfo.hfs0PartitionCnt, i), __builtin_bswap32(header.magic));
             goto out;
         }
         
@@ -1981,10 +1995,11 @@ void truncateBrowserEntryName(char *str)
     if (!str || !strlen(str)) return;
     
     u32 strWidth = uiGetStrWidth(str);
+    u32 limit = (u32)(FB_WIDTH - (font_height * 8));
     
-    if ((BROWSER_ICON_DIMENSION + 16 + strWidth) >= (FB_WIDTH - (font_height * 8)))
+    if ((BROWSER_ICON_DIMENSION + 16 + strWidth) >= limit)
     {
-        while((BROWSER_ICON_DIMENSION + 16 + strWidth) >= (FB_WIDTH - (font_height * 8)))
+        while((BROWSER_ICON_DIMENSION + 16 + strWidth) >= limit)
         {
             str[strlen(str) - 1] = '\0';
             strWidth = uiGetStrWidth(str);
@@ -2017,18 +2032,9 @@ bool getHfs0FileList(u32 partition)
         return false;
     }
     
-    if (gameCardInfo.hfs0Partitions[partition].file_cnt > FILENAME_MAX_CNT)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: HFS0 partition contains more than %u files! (%u entries)", __func__, FILENAME_MAX_CNT, gameCardInfo.hfs0Partitions[partition].file_cnt);
-        breaks += 2;
-        return false;
-    }
-    
     u32 i;
     hfs0_file_entry entry;
     char curName[NAME_BUF_LEN] = {'\0'};
-    
-    clearFilenameBuffer();
     
     freeHfs0ExeFsEntriesSizes();
     
@@ -2036,6 +2042,13 @@ bool getHfs0FileList(u32 partition)
     if (!hfs0ExeFsEntriesSizes)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to allocate memory for HFS0 entries size info!", __func__);
+        breaks += 2;
+        return false;
+    }
+    
+    if (!allocateFilenameBuffer(gameCardInfo.hfs0Partitions[partition].file_cnt))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for the filename buffer!", __func__);
         breaks += 2;
         return false;
     }
@@ -2051,7 +2064,13 @@ bool getHfs0FileList(u32 partition)
         // Fix entry name length
         truncateBrowserEntryName(curName);
         
-        addStringToFilenameBuffer(curName);
+        if (!addStringToFilenameBuffer(curName))
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for filename entry in filename buffer!", __func__);
+            breaks += 2;
+            freeHfs0ExeFsEntriesSizes();
+            return false;
+        }
         
         // Save entry size
         hfs0ExeFsEntriesSizes[i].size = entry.file_size;
@@ -2372,6 +2391,165 @@ void removeConsoleDataFromTicket(title_rights_ctx *rights_info)
     rights_info->tik_data.account_id = 0;
 }
 
+bool listDesiredNcaType(NcmContentInfo *titleContentInfos, u32 titleContentInfoCnt, u8 type, int desiredIdOffset, u32 *outIndex, u32 *outCount)
+{
+    if (!titleContentInfos || !titleContentInfoCnt || type > NcmContentType_DeltaFragment || !outIndex || !outCount)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters.", __func__);
+        return false;
+    }
+    
+    int idx = -1;
+    u32 i, cnt = 0;
+    bool success = false;
+    u32 *indexes = NULL, *tmpIndexes = NULL;
+    
+    int cur_breaks, initial_breaks = breaks;
+    u32 selectedContent = 0;
+    u64 keysDown = 0, keysHeld = 0;
+    
+    char nca_id[SHA256_HASH_SIZE + 1] = {'\0'};
+    
+    for(i = 0; i < titleContentInfoCnt; i++)
+    {
+        if (titleContentInfos[i].content_type == type)
+        {
+            if (desiredIdOffset >= 0)
+            {
+                if (titleContentInfos[i].id_offset == (u8)desiredIdOffset)
+                {
+                    // Save the index for the content with the desired ID offset
+                    idx = (int)i;
+                }
+            } else {
+                tmpIndexes = realloc(indexes, (cnt + 1) * sizeof(u32));
+                if (!tmpIndexes)
+                {
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to reallocate indexes buffer!", __func__);
+                    goto out;
+                }
+                
+                indexes = tmpIndexes;
+                tmpIndexes = NULL;
+                
+                indexes[cnt] = i;
+            }
+            
+            cnt++;
+        }
+    }
+    
+    if (!cnt)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to find any %s NCAs!", __func__, getContentType(type));
+        goto out;
+    }
+    
+    if (desiredIdOffset >= 0)
+    {
+        if (idx < 0)
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to find %s NCA with ID offset %d!", __func__, getContentType(type), desiredIdOffset);
+            goto out;
+        }
+    } else {
+        // If only a single NCA with the desired content type was detected, save its index right away
+        if (cnt == 1) idx = (int)indexes[0];
+    }
+    
+    // Return immediately if necessary
+    if (idx >= 0)
+    {
+        success = true;
+        goto out;
+    }
+    
+    // Display a selection list
+    breaks++;
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Select one of the available %s NCAs from the list below:", getContentType(type));
+    breaks += 2;
+    
+    while(true)
+    {
+        cur_breaks = breaks;
+        
+        uiFill(0, 8 + (cur_breaks * LINE_HEIGHT), FB_WIDTH, FB_HEIGHT - (8 + (cur_breaks * LINE_HEIGHT)), BG_COLOR_RGB);
+        
+        for(i = 0; i < cnt; i++)
+        {
+            u32 xpos = STRING_X_POS;
+            u32 ypos = (8 + (cur_breaks * LINE_HEIGHT) + (i * (font_height + 12)) + 6);
+            
+            if (i == selectedContent)
+            {
+                highlight = true;
+                uiFill(0, ypos - 6, FB_WIDTH, font_height + 12, HIGHLIGHT_BG_COLOR_RGB);
+            }
+            
+            uiDrawIcon((highlight ? fileHighlightIconBuf : fileNormalIconBuf), BROWSER_ICON_DIMENSION, BROWSER_ICON_DIMENSION, xpos, ypos);
+            xpos += (BROWSER_ICON_DIMENSION + 8);
+            
+            convertDataToHexString(titleContentInfos[indexes[i]].content_id.c, SHA256_HASH_SIZE / 2, nca_id, SHA256_HASH_SIZE + 1);
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s.nca (ID Offset: %u)", nca_id, titleContentInfos[indexes[i]].id_offset);
+            
+            if (highlight)
+            {
+                uiDrawString(xpos, ypos, HIGHLIGHT_FONT_COLOR_RGB, strbuf);
+            } else {
+                uiDrawString(xpos, ypos, FONT_COLOR_RGB, strbuf);
+            }
+            
+            if (i == selectedContent) highlight = false;
+        }
+        
+        while(true)
+        {
+            uiUpdateStatusMsg();
+            uiRefreshDisplay();
+            
+            hidScanInput();
+            
+            keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
+            keysHeld = hidKeysAllHeld(CONTROLLER_P1_AUTO);
+            
+            if ((keysDown && !(keysDown & KEY_TOUCH)) || (keysHeld && !(keysHeld & KEY_TOUCH))) break;
+        }
+        
+        if (keysDown & KEY_A)
+        {
+            idx = (int)indexes[selectedContent];
+            break;
+        }
+        
+        if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+        {
+            if (selectedContent > 0) selectedContent--;
+        }
+        
+        if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+        {
+            if (selectedContent < (cnt - 1)) selectedContent++;
+        }
+    }
+    
+    breaks = initial_breaks;
+    uiFill(0, 8 + (breaks * LINE_HEIGHT), FB_WIDTH, FB_HEIGHT - (8 + (breaks * LINE_HEIGHT)), BG_COLOR_RGB);
+    uiRefreshDisplay();
+    
+    success = true;
+    
+out:
+    if (indexes) free(indexes);
+    
+    if (success)
+    {
+        *outIndex = (u32)idx;
+        *outCount = cnt;
+    }
+    
+    return success;
+}
+
 bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
 {
     u32 i = 0;
@@ -2384,6 +2562,8 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     NcmContentInfo *titleContentInfos = NULL;
     u32 titleContentInfoCnt = 0;
     
+    u32 contentIndex = 0, desiredNcaTypeCount = 0;
+    
     NcmContentId ncaId;
     char ncaIdStr[SHA256_HASH_SIZE + 1] = {'\0'};
     
@@ -2393,9 +2573,12 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     u8 ncaHeader[NCA_FULL_HEADER_LENGTH] = {0};
     nca_header_t dec_nca_header;
     
+    title_rights_ctx rights_info;
+    memset(&rights_info, 0, sizeof(title_rights_ctx));
+    
     u8 decrypted_nca_keys[NCA_KEY_AREA_SIZE];
     
-    bool success = false, foundProgram = false;
+    bool success = false;
     
     if ((!usePatch && !baseAppEntries) || (usePatch && !patchEntries))
     {
@@ -2451,26 +2634,17 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         goto out;
     }
     
-    for(i = 0; i < titleContentInfoCnt; i++)
-    {
-        if (titleContentInfos[i].content_type == NcmContentType_Program)
-        {
-            memcpy(&ncaId, &(titleContentInfos[i].content_id), sizeof(NcmContentId));
-            convertDataToHexString(titleContentInfos[i].content_id.c, SHA256_HASH_SIZE / 2, ncaIdStr, SHA256_HASH_SIZE + 1);
-            foundProgram = true;
-            break;
-        }
-    }
+    if (!listDesiredNcaType(titleContentInfos, titleContentInfoCnt, NcmContentType_Program, -1, &contentIndex, &desiredNcaTypeCount)) goto out;
     
-    if (!foundProgram)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to find Program NCA!", __func__);
-        goto out;
-    }
+    memcpy(&ncaId, &(titleContentInfos[contentIndex].content_id), sizeof(NcmContentId));
+    convertDataToHexString(titleContentInfos[contentIndex].content_id.c, SHA256_HASH_SIZE / 2, ncaIdStr, SHA256_HASH_SIZE + 1);
     
-    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Found Program NCA: \"%s.nca\".", ncaIdStr);
-    uiRefreshDisplay();
-    breaks += 2;
+    if (desiredNcaTypeCount == 1)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Found Program NCA: \"%s.nca\".", ncaIdStr);
+        uiRefreshDisplay();
+        breaks += 2;
+    }
     
     /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Retrieving ExeFS entries...");
     uiRefreshDisplay();
@@ -2491,9 +2665,9 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
     }
     
     // Decrypt the NCA header
-    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, NULL, decrypted_nca_keys, (curStorageId != NcmStorageId_GameCard || (curStorageId == NcmStorageId_GameCard && usePatch)))) goto out;
+    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, &rights_info, decrypted_nca_keys, (curStorageId != NcmStorageId_GameCard || (curStorageId == NcmStorageId_GameCard && usePatch)))) goto out;
     
-    if (curStorageId == NcmStorageId_GameCard && !usePatch)
+    if (curStorageId == NcmStorageId_GameCard)
     {
         bool has_rights_id = false;
         
@@ -2508,14 +2682,24 @@ bool readNcaExeFsSection(u32 titleIndex, bool usePatch)
         
         if (has_rights_id)
         {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: Rights ID field in Program NCA header not empty!", __func__);
-            goto out;
+            if (usePatch)
+            {
+                // Retrieve the ticket from the HFS0 partition in the gamecard
+                if (!retrieveTitleKeyFromGameCardTicket(&rights_info, decrypted_nca_keys)) goto out;
+            } else {
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: Rights ID field in Program NCA header not empty!", __func__);
+                goto out;
+            }
         }
     }
     
     // Read file entries from the ExeFS section
     success = parseExeFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys);
-    if (success) exeFsContext.storageId = curStorageId;
+    if (success)
+    {
+        exeFsContext.storageId = curStorageId;
+        exeFsContext.idOffset = titleContentInfos[contentIndex].id_offset;
+    }
     
 out:
     if (!success)
@@ -2529,7 +2713,7 @@ out:
     return success;
 }
 
-bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
+bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int desiredIdOffset)
 {
     u32 i = 0;
     Result result;
@@ -2541,6 +2725,8 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     NcmContentInfo *titleContentInfos = NULL;
     u32 titleContentInfoCnt = 0;
     
+    u32 contentIndex = 0, desiredNcaTypeCount = 0;
+    
     NcmContentId ncaId;
     char ncaIdStr[SHA256_HASH_SIZE + 1] = {'\0'};
     
@@ -2550,9 +2736,12 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     u8 ncaHeader[NCA_FULL_HEADER_LENGTH] = {0};
     nca_header_t dec_nca_header;
     
+    title_rights_ctx rights_info;
+    memset(&rights_info, 0, sizeof(title_rights_ctx));
+    
     u8 decrypted_nca_keys[NCA_KEY_AREA_SIZE];
     
-    bool success = false, foundNca = false;
+    bool success = false;
     
     if (curRomFsType != ROMFS_TYPE_APP && curRomFsType != ROMFS_TYPE_PATCH && curRomFsType != ROMFS_TYPE_ADDON)
     {
@@ -2614,26 +2803,17 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         goto out;
     }
     
-    for(i = 0; i < titleContentInfoCnt; i++)
-    {
-        if (((curRomFsType == ROMFS_TYPE_APP || curRomFsType == ROMFS_TYPE_PATCH) && titleContentInfos[i].content_type == NcmContentType_Program) || (curRomFsType == ROMFS_TYPE_ADDON && titleContentInfos[i].content_type == NcmContentType_Data))
-        {
-            memcpy(&ncaId, &(titleContentInfos[i].content_id), sizeof(NcmContentId));
-            convertDataToHexString(titleContentInfos[i].content_id.c, SHA256_HASH_SIZE / 2, ncaIdStr, SHA256_HASH_SIZE + 1);
-            foundNca = true;
-            break;
-        }
-    }
+    if (!listDesiredNcaType(titleContentInfos, titleContentInfoCnt, (curRomFsType == ROMFS_TYPE_ADDON ? NcmContentType_Data : NcmContentType_Program), desiredIdOffset, &contentIndex, &desiredNcaTypeCount)) goto out;
     
-    if (!foundNca)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to find %s NCA!", __func__, (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
-        goto out;
-    }
+    memcpy(&ncaId, &(titleContentInfos[contentIndex].content_id), sizeof(NcmContentId));
+    convertDataToHexString(titleContentInfos[contentIndex].content_id.c, SHA256_HASH_SIZE / 2, ncaIdStr, SHA256_HASH_SIZE + 1);
     
-    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Found %s NCA: \"%s.nca\".", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), ncaIdStr);
-    uiRefreshDisplay();
-    breaks += 2;
+    if (desiredNcaTypeCount == 1)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Found %s NCA: \"%s.nca\".", (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"), ncaIdStr);
+        uiRefreshDisplay();
+        breaks += 2;
+    }
     
     /*uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Retrieving RomFS entry tables...");
     uiRefreshDisplay();
@@ -2654,9 +2834,9 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     }
     
     // Decrypt the NCA header
-    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, NULL, decrypted_nca_keys, (curStorageId != NcmStorageId_GameCard || (curStorageId == NcmStorageId_GameCard && curRomFsType == ROMFS_TYPE_PATCH)))) goto out;
+    if (!decryptNcaHeader(ncaHeader, NCA_FULL_HEADER_LENGTH, &dec_nca_header, &rights_info, decrypted_nca_keys, (curStorageId != NcmStorageId_GameCard || (curStorageId == NcmStorageId_GameCard && curRomFsType == ROMFS_TYPE_PATCH)))) goto out;
     
-    if (curStorageId == NcmStorageId_GameCard && curRomFsType != ROMFS_TYPE_PATCH)
+    if (curStorageId == NcmStorageId_GameCard)
     {
         bool has_rights_id = false;
         
@@ -2671,8 +2851,14 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
         
         if (has_rights_id)
         {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: Rights ID field in %s NCA header not empty!", __func__, (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
-            goto out;
+            if (curRomFsType == ROMFS_TYPE_PATCH)
+            {
+                // Retrieve the ticket from the HFS0 partition in the gamecard
+                if (!retrieveTitleKeyFromGameCardTicket(&rights_info, decrypted_nca_keys)) goto out;
+            } else {
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: Rights ID field in %s NCA header not empty!", __func__, (curRomFsType == ROMFS_TYPE_ADDON ? "Data" : "Program"));
+                goto out;
+            }
         }
     }
     
@@ -2680,7 +2866,11 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
     {
         // Read directory and file tables from the RomFS section
         success = parseRomFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys);
-        if (success) romFsContext.storageId = curStorageId;
+        if (success)
+        {
+            romFsContext.storageId = curStorageId;
+            romFsContext.idOffset = titleContentInfos[contentIndex].id_offset;
+        }
     } else {
         // Look for the base application title index
         u32 appIndex;
@@ -2694,18 +2884,22 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType)
             }
         }
         
-        if (i == titleAppCount)
+        if (i >= titleAppCount)
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to find base application title index for the selected update!", __func__);
             goto out;
         }
         
         // Read directory and file tables from the RomFS section in the Program NCA from the base application
-        if (!readNcaRomFsSection(appIndex, ROMFS_TYPE_APP)) goto out;
+        if (!readNcaRomFsSection(appIndex, ROMFS_TYPE_APP, (int)titleContentInfos[contentIndex].id_offset)) goto out;
         
         // Read BKTR entry data in the Program NCA from the update
         success = parseBktrEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys);
-        if (success) bktrContext.storageId = curStorageId;
+        if (success)
+        {
+            bktrContext.storageId = curStorageId;
+            bktrContext.idOffset = titleContentInfos[contentIndex].id_offset;
+        }
     }
     
 out:
@@ -2728,16 +2922,8 @@ bool getExeFsFileList()
         return false;
     }
     
-    if (exeFsContext.exefs_header.file_cnt > FILENAME_MAX_CNT)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: ExeFS section contains more than %u entries! (%u entries)", __func__, FILENAME_MAX_CNT, exeFsContext.exefs_header.file_cnt);
-        return false;
-    }
-    
     u32 i;
     char curName[NAME_BUF_LEN] = {'\0'};
-    
-    clearFilenameBuffer();
     
     freeHfs0ExeFsEntriesSizes();
     
@@ -2745,6 +2931,12 @@ bool getExeFsFileList()
     if (!hfs0ExeFsEntriesSizes)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to allocate memory for ExeFS entries size info!", __func__);
+        return false;
+    }
+    
+    if (!allocateFilenameBuffer(exeFsContext.exefs_header.file_cnt))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for the filename buffer!", __func__);
         return false;
     }
     
@@ -2757,7 +2949,12 @@ bool getExeFsFileList()
         // Fix entry name length
         truncateBrowserEntryName(curName);
         
-        addStringToFilenameBuffer(curName);
+        if (!addStringToFilenameBuffer(curName))
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for filename entry in filename buffer!", __func__);
+            freeHfs0ExeFsEntriesSizes();
+            return false;
+        }
         
         // Save entry size
         hfs0ExeFsEntriesSizes[i].size = exeFsContext.exefs_entries[i].file_size;
@@ -2888,16 +3085,8 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
     
     char curName[NAME_BUF_LEN] = {'\0'};
     
-    clearFilenameBuffer();
-    
     // Silently return true if we're dealing with an empty directory
     if (!totalEntryCnt) goto out;
-    
-    if (totalEntryCnt > FILENAME_MAX_CNT)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: current RomFS dir contains more than %u entries! (%u entries)", __func__, FILENAME_MAX_CNT, totalEntryCnt);
-        return false;
-    }
     
     // Allocate memory for our entries
     romFsBrowserEntries = calloc(totalEntryCnt, sizeof(romfs_browser_entry));
@@ -2907,10 +3096,23 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
         return false;
     }
     
+    if (!allocateFilenameBuffer(totalEntryCnt))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for the filename buffer!", __func__);
+        freeRomFsBrowserEntries();
+        return false;
+    }
+    
+    if (!addStringToFilenameBuffer(".."))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for parent dir entry in filename buffer!", __func__);
+        freeRomFsBrowserEntries();
+        return false;
+    }
+    
     // Add parent directory entry ("..")
     romFsBrowserEntries[0].type = ROMFS_ENTRY_DIR;
     romFsBrowserEntries[0].offset = romFsParentDir;
-    addStringToFilenameBuffer("..");
     
     // First add the directory entries
     if ((!romFsParentDir && dirEntryCnt > 1) || (romFsParentDir && dirEntryCnt > 0))
@@ -2932,7 +3134,12 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
                 // Fix entry name length
                 truncateBrowserEntryName(curName);
                 
-                addStringToFilenameBuffer(curName);
+                if (!addStringToFilenameBuffer(curName))
+                {
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for filename entry in filename buffer!", __func__);
+                    freeRomFsBrowserEntries();
+                    return false;
+                }
                 
                 i++;
             }
@@ -2963,7 +3170,12 @@ bool getRomFsFileList(u32 dir_offset, bool usePatch)
                 // Fix entry name length
                 truncateBrowserEntryName(curName);
                 
-                addStringToFilenameBuffer(curName);
+                if (!addStringToFilenameBuffer(curName))
+                {
+                    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for filename entry in filename buffer!", __func__);
+                    freeRomFsBrowserEntries();
+                    return false;
+                }
                 
                 i++;
             }
@@ -2985,11 +3197,11 @@ char *generateGameCardDumpName(bool useBrackets)
     
     u32 i, j;
     
-    char tmp[NAME_BUF_LEN / 4] = {'\0'};
+    char tmp[NAME_BUF_LEN / 2] = {'\0'};
     char *fullname = NULL;
     char *fullnameTmp = NULL;
     
-    size_t strsize = (NAME_BUF_LEN / 2);
+    size_t strsize = NAME_BUF_LEN;
     
     fullname = calloc(strsize + 1, sizeof(char));
     if (!fullname) return NULL;
@@ -3046,7 +3258,7 @@ char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex, bool 
     if ((selectedNspDumpType == DUMP_APP_NSP && (!titleAppCount || !baseAppEntries || titleIndex >= titleAppCount)) || (selectedNspDumpType == DUMP_PATCH_NSP && (!titlePatchCount || !patchEntries || titleIndex >= titlePatchCount)) || (selectedNspDumpType == DUMP_ADDON_NSP && (!titleAddOnCount || !addOnEntries || titleIndex >= titleAddOnCount))) return NULL;
     
     u32 i;
-    size_t strsize = (NAME_BUF_LEN / 2);
+    size_t strsize = NAME_BUF_LEN;
     
     patch_addon_ctx_t *ptr = NULL;
     
@@ -3325,9 +3537,12 @@ void generateOrphanPatchOrAddOnList()
     qsort(orphanEntries, orphanEntriesCnt, sizeof(orphan_patch_addon_entry), orphanEntryCmp);
     
 out:
-    clearFilenameBuffer();
+    if (!allocateFilenameBuffer(orphanEntriesCnt)) return;
     
-    for(i = 0; i < orphanEntriesCnt; i++) addStringToFilenameBuffer(orphanEntries[i].orphanListStr);
+    for(i = 0; i < orphanEntriesCnt; i++)
+    {
+        if (!addStringToFilenameBuffer(orphanEntries[i].orphanListStr)) return;
+    }
 }
 
 bool checkIfBaseApplicationHasPatchOrAddOn(u32 appIndex, bool addOn)
@@ -3435,7 +3650,7 @@ void waitForButtonPress()
         
         hidScanInput();
         
-        u64 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        u64 keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
         
         if (keysDown && !((keysDown & KEY_TOUCH) || (keysDown & KEY_LSTICK_LEFT) || (keysDown & KEY_LSTICK_RIGHT) || (keysDown & KEY_LSTICK_UP) || (keysDown & KEY_LSTICK_DOWN) || \
             (keysDown & KEY_RSTICK_LEFT) || (keysDown & KEY_RSTICK_RIGHT) || (keysDown & KEY_RSTICK_UP) || (keysDown & KEY_RSTICK_DOWN))) break;
@@ -3503,7 +3718,7 @@ bool cancelProcessCheck(progress_ctx_t *progressCtx)
     
     hidScanInput();
     
-    progressCtx->cancelBtnState = (hidKeysHeld(CONTROLLER_P1_AUTO) & KEY_B);
+    progressCtx->cancelBtnState = (hidKeysAllHeld(CONTROLLER_P1_AUTO) & KEY_B);
     
     if (progressCtx->cancelBtnState && progressCtx->cancelBtnState != progressCtx->cancelBtnStatePrev)
     {
@@ -3576,7 +3791,7 @@ bool yesNoPrompt(const char *message)
         
         hidScanInput();
         
-        u64 keysDown = hidKeysDown(CONTROLLER_P1_AUTO);
+        u64 keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
         
         if (keysDown & KEY_A)
         {
@@ -3672,7 +3887,7 @@ bool checkIfDumpedNspContainsConsoleData(const char *nspPath)
     
     read_bytes = fread(&nspHeader, 1, sizeof(pfs0_header), nspFile);
     
-    if (read_bytes != sizeof(pfs0_header) || bswap_32(nspHeader.magic) != PFS0_MAGIC || nspSize < (sizeof(pfs0_header) + (sizeof(pfs0_file_entry) * (u64)nspHeader.file_cnt) + (u64)nspHeader.str_table_size))
+    if (read_bytes != sizeof(pfs0_header) || __builtin_bswap32(nspHeader.magic) != PFS0_MAGIC || nspSize < (sizeof(pfs0_header) + (sizeof(pfs0_file_entry) * (u64)nspHeader.file_cnt) + (u64)nspHeader.str_table_size))
     {
         fclose(nspFile);
         return false;
@@ -3753,20 +3968,29 @@ void removeDirectoryWithVerbose(const char *path, const char *msg)
 {
     if (!path || !strlen(path) || !msg || !strlen(msg)) return;
     
+    int initial_breaks = breaks;
+    
     breaks += 2;
     
-    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, msg);
+    if (yesNoPrompt("Do you wish to delete the data dumped up to this point? This may take a while."))
+    {
+        breaks = initial_breaks;
+        uiFill(0, STRING_Y_POS(breaks), FB_WIDTH, FB_HEIGHT - STRING_Y_POS(breaks), BG_COLOR_RGB);
+        
+        breaks += 2;
+        
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, msg);
+        uiRefreshDisplay();
+        
+        fsdevDeleteDirectoryRecursively(path);
+    }
+    
+    breaks = initial_breaks;
+    uiFill(0, STRING_Y_POS(breaks), FB_WIDTH, FB_HEIGHT - STRING_Y_POS(breaks), BG_COLOR_RGB);
     uiRefreshDisplay();
-    
-    fsdevDeleteDirectoryRecursively(path);
-    
-    uiFill(0, (breaks * LINE_HEIGHT) + 8, FB_WIDTH, (font_height + (font_height / 2)), BG_COLOR_RGB);
-    uiRefreshDisplay();
-    
-    breaks -= 2;
 }
 
-static bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u64 gc_tid, u32 crc)
+static bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u32 crc)
 {
     if (!doc || !cur) return false;
     
@@ -3780,12 +4004,12 @@ static bool parseNSWDBRelease(xmlDocPtr doc, xmlNodePtr cur, u64 gc_tid, u32 crc
     
     while(node)
     {
-        if ((!xmlStrcmp(node->name, (const xmlChar*)nswReleasesChildrenImgCrc)))
+        if ((!xmlStrcmp(node->name, (const xmlChar*)NSWDB_XML_CHILD_IMGCRC)))
         {
             key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
             if (key) xmlCrc = strtoul((const char*)key, NULL, 16);
         } else
-        if ((!xmlStrcmp(node->name, (const xmlChar*)nswReleasesChildrenReleaseName)))
+        if ((!xmlStrcmp(node->name, (const xmlChar*)NSWDB_XML_CHILD_RELEASENAME)))
         {
             key = xmlNodeListGetString(doc, node->xmlChildrenNode, 1);
             if (key) snprintf(xmlReleaseName, MAX_CHARACTERS(xmlReleaseName), "%s", (const char*)key);
@@ -3842,24 +4066,24 @@ void gameCardDumpNSWDBCheck(u32 crc)
     xmlDocPtr doc = NULL;
     bool found = false;
     
-    doc = xmlParseFile(nswReleasesXmlPath);
+    doc = xmlParseFile(NSWDB_XML_PATH);
     if (!doc)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to open and/or parse \"%s\"!", __func__, nswReleasesXmlPath);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to open and/or parse \"%s\"!", __func__, NSWDB_XML_PATH);
         return;
     }
     
     for(i = 0; i < titleAppCount; i++)
     {
-        snprintf(strbuf, MAX_CHARACTERS(strbuf), "//%s/%s[.//%s[contains(.,'%016lX')]]", nswReleasesRootElement, nswReleasesChildren, nswReleasesChildrenTitleID, baseAppEntries[i].titleId);
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "//%s/%s[.//%s[contains(.,'%016lX')]]", NSWDB_XML_ROOT, NSWDB_XML_CHILD, NSWDB_XML_CHILD_TITLEID, baseAppEntries[i].titleId);
         
         xmlXPathObjectPtr nodeSet = getXPathNodeSet(doc, strbuf);
         if (!nodeSet) continue;
         
-        for(j = 0; j < nodeSet->nodesetval->nodeNr; j++)
+        for(j = 0; j < (u32)nodeSet->nodesetval->nodeNr; j++)
         {
             xmlNodePtr node = nodeSet->nodesetval->nodeTab[j]->xmlChildrenNode;
-            found = parseNSWDBRelease(doc, node, baseAppEntries[i].titleId, crc);
+            found = parseNSWDBRelease(doc, node, crc);
             if (found) break;
         }
         
@@ -3875,15 +4099,25 @@ void gameCardDumpNSWDBCheck(u32 crc)
 
 static Result networkInit()
 {
+    if (initNet) return 0;
+    
     Result result = socketInitializeDefault();
-    if (R_SUCCEEDED(result)) curl_global_init(CURL_GLOBAL_ALL);
+    if (R_SUCCEEDED(result))
+    {
+        curl_global_init(CURL_GLOBAL_ALL);
+        initNet = true;
+    }
+    
     return result;
 }
 
-static void networkDeinit()
+static void networkExit()
 {
+    if (!initNet) return;
+    
     curl_global_cleanup();
     socketExit();
+    initNet = false;
 }
 
 static size_t writeCurlFile(char *buffer, size_t size, size_t number_of_items, void *input_stream)
@@ -3935,7 +4169,7 @@ static bool performCurlRequest(CURL *curl, const char *url, FILE *filePtr, bool 
     
     curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 102400L);
     curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_USERAGENT, userAgent);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, HTTP_USER_AGENT);
     curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 1L);
     curl_easy_setopt(curl, CURLOPT_NOBODY, 0L);
@@ -3986,7 +4220,7 @@ void noIntroDumpCheck(bool isDigital, u32 crc)
     // f = "cart" (XCI) or "dlc" (NSP)
     // c = search by code (Title ID or serial)
     // crc = search by CRC32 checksum
-    snprintf(noIntroUrl, MAX_CHARACTERS(noIntroUrl), "%s?f=%s&crc=%08X", noIntroDatQuickCheckUrl, (isDigital ? "dlc" : "cart"), crc);
+    snprintf(noIntroUrl, MAX_CHARACTERS(noIntroUrl), "%s?f=%s&crc=%08X", NOINTRO_DOM_CHECK_URL, (isDigital ? "dlc" : "cart"), crc);
     
     uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Performing CRC32 checksum lookup against No-Intro, please wait...");
     uiRefreshDisplay();
@@ -4025,7 +4259,7 @@ out:
     
     if (curl) curl_easy_cleanup(curl);
     
-    if (R_SUCCEEDED(result)) networkDeinit();
+    if (R_SUCCEEDED(result)) networkExit();
 }
 
 void updateNSWDBXml()
@@ -4042,6 +4276,9 @@ void updateNSWDBXml()
         goto out;
     }
     
+    char xmlPath[256] = {'\0'};
+    snprintf(xmlPath, MAX_CHARACTERS(xmlPath), "%s.tmp", NSWDB_XML_PATH);
+    
     curl = curl_easy_init();
     if (!curl)
     {
@@ -4049,41 +4286,40 @@ void updateNSWDBXml()
         goto out;
     }
     
-    nswdbXml = fopen(nswReleasesXmlTmpPath, "wb");
+    nswdbXml = fopen(xmlPath, "wb");
     if (!nswdbXml)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to open \"%s\" in write mode!", __func__, nswReleasesXmlTmpPath);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to open \"%s\" in write mode!", __func__, NSWDB_XML_URL);
         goto out;
     }
     
-    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Downloading XML database from \"%s\", please wait...", nswReleasesXmlUrl);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Downloading XML database from \"%s\", please wait...", NSWDB_XML_URL);
     breaks++;
     
-    if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
-    {
-        breaks++;
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.");
-        breaks += 2;
-    }
-    
+    appletModeOperationWarning();
     uiRefreshDisplay();
+    breaks++;
     
-    success = performCurlRequest(curl, nswReleasesXmlUrl, nswdbXml, false, true);
+    changeHomeButtonBlockStatus(true);
+    
+    success = performCurlRequest(curl, NSWDB_XML_URL, nswdbXml, false, true);
+    
+    changeHomeButtonBlockStatus(false);
     
 out:
     if (nswdbXml) fclose(nswdbXml);
     
     if (success)
     {
-        unlink(nswReleasesXmlPath);
-        rename(nswReleasesXmlTmpPath, nswReleasesXmlPath);
+        remove(NSWDB_XML_PATH);
+        rename(xmlPath, NSWDB_XML_PATH);
     } else {
-        unlink(nswReleasesXmlTmpPath);
+        remove(xmlPath);
     }
     
     if (curl) curl_easy_cleanup(curl);
     
-    if (R_SUCCEEDED(result)) networkDeinit();
+    if (R_SUCCEEDED(result)) networkExit();
     
     breaks += 2;
 }
@@ -4198,63 +4434,78 @@ static int versionNumCmp(char *ver1, char *ver2)
     return res;
 }
 
-static const char *retrieveJsonObjStrMember(struct json_object *jobj, char *memberName)
+static struct json_object *retrieveJsonObjMemberByNameAndType(struct json_object *jobj, char *memberName, json_type memberType)
 {
     if (!jobj || !memberName || !strlen(memberName))
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to retrieve string member from JSON object!", __func__);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to retrieve member by name and type from JSON object!", __func__);
         return NULL;
     }
     
     struct json_object *memberObj = NULL;
-    const char *memberObjStr = NULL;
+    json_type memberObjType;
     
     if (!json_object_object_get_ex(jobj, memberName, &memberObj))
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to retrieve object \"%s\" from JSON response!", __func__, memberName);
-        return memberObjStr;
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to retrieve member \"%s\" from JSON object!", __func__, memberName);
+        return NULL;
     }
     
-    if (json_object_get_type(memberObj) != json_type_string)
+    memberObjType = json_object_get_type(memberObj);
+    if (memberObjType != memberType)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid type for object \"%s\" in JSON response! (expected \"string\")", __func__, memberName);
-        return memberObjStr;
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid type for member \"%s\" in JSON object! (got \"%s\", expected \"%s\")", __func__, memberName, json_type_to_name(memberObjType), json_type_to_name(memberType));
+        return NULL;
     }
     
-    memberObjStr = json_object_get_string(memberObj);
+    return memberObj;
+}
+
+static const char *retrieveJsonObjStrMemberContentsByName(struct json_object *jobj, char *memberName)
+{
+    if (!jobj || !memberName || !strlen(memberName))
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to retrieve string member contents by name from JSON object!", __func__);
+        return NULL;
+    }
+    
+    struct json_object *memberObj = retrieveJsonObjMemberByNameAndType(jobj, memberName, json_type_string);
+    if (!memberObj) return NULL;
+    
+    const char *memberObjStr = json_object_get_string(memberObj);
     if (!memberObjStr || !strlen(memberObjStr))
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: object \"%s\" from JSON response is empty!", __func__, memberName);
-        memberObjStr = NULL;
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: string member \"%s\" from JSON object is empty!", __func__, memberName);
+        return NULL;
     }
     
     return memberObjStr;
 }
 
-static struct json_object *retrieveJsonObjArrayElementWithIndex(struct json_object *jobj, char *memberName, size_t idx)
+static struct json_object *retrieveJsonObjArrayMemberByName(struct json_object *jobj, char *memberName, size_t *outputArrayLength)
 {
-    if (!jobj || !memberName || !strlen(memberName))
+    if (!jobj || !memberName || !strlen(memberName) || !outputArrayLength)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to retrieve indexed element in array member from JSON object!", __func__);
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to retrieve array member by name from JSON object!", __func__);
         return NULL;
     }
     
-    struct json_object *memberObj = NULL, *memberObjArrayElement = NULL;
+    struct json_object *memberObj = retrieveJsonObjMemberByNameAndType(jobj, memberName, json_type_array);
+    if (memberObj) *outputArrayLength = json_object_array_length(memberObj);
     
-    if (!json_object_object_get_ex(jobj, memberName, &memberObj))
+    return memberObj;
+}
+
+static struct json_object *retrieveJsonObjArrayElementByIndex(struct json_object *jobj, size_t idx)
+{
+    if (!jobj || json_object_get_type(jobj) != json_type_array)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to retrieve object \"%s\" from JSON response!", __func__, memberName);
-        return memberObjArrayElement;
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to retrieve element by index from JSON array object!", __func__);
+        return NULL;
     }
     
-    if (json_object_get_type(memberObj) != json_type_array)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid type for object \"%s\" in JSON response! (expected \"array\")", __func__, memberName);
-        return memberObjArrayElement;
-    }
-    
-    memberObjArrayElement = json_object_array_get_idx(memberObj, idx);
-    if (!memberObjArrayElement) uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to parse object at index %lu from \"%s\" array in JSON response!", __func__);
+    struct json_object *memberObjArrayElement = json_object_array_get_idx(jobj, idx);
+    if (!memberObjArrayElement) uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to retrieve element at index %lu from JSON array object!", __func__, idx);
     
     return memberObjArrayElement;
 }
@@ -4275,11 +4526,12 @@ bool updateApplication()
     char releaseTag[32] = {'\0'};
     bool success = false;
     
+    size_t i, assetsCnt = 0;
     struct json_object *jobj = NULL, *assets = NULL;
-    const char *nameObjStr = NULL, *dlUrlObjStr = NULL;
+    const char *releaseNameObjStr = NULL, *dlUrlObjStr = NULL;
     
     char nroPath[NAME_BUF_LEN] = {'\0'};
-    snprintf(nroPath, MAX_CHARACTERS(nroPath), "%s.tmp", (strlen(appLaunchPath) ? appLaunchPath : nxDumpToolPath));
+    snprintf(nroPath, MAX_CHARACTERS(nroPath), "%s.tmp", (appLaunchPath ? appLaunchPath : NRO_PATH));
     
     result = networkInit();
     if (R_FAILED(result))
@@ -4295,14 +4547,14 @@ bool updateApplication()
         goto out;
     }
     
-    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Requesting latest release information from \"%s\"...", githubReleasesApiUrl);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Requesting latest release information from \"%s\"...", GITHUB_API_URL);
     breaks++;
     
     uiRefreshDisplay();
     
-    if (!performCurlRequest(curl, githubReleasesApiUrl, NULL, true, false)) goto out;
+    if (!performCurlRequest(curl, GITHUB_API_URL, NULL, true, false)) goto out;
     
-    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Parsing response JSON data...", githubReleasesApiUrl);
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Parsing response JSON data...");
     breaks++;
     
     uiRefreshDisplay();
@@ -4314,10 +4566,10 @@ bool updateApplication()
         goto out;
     }
     
-    nameObjStr = retrieveJsonObjStrMember(jobj, "name");
-    if (!nameObjStr) goto out;
+    releaseNameObjStr = retrieveJsonObjStrMemberContentsByName(jobj, GITHUB_API_JSON_RELEASE_NAME);
+    if (!releaseNameObjStr) goto out;
     
-    snprintf(releaseTag, MAX_CHARACTERS(releaseTag), nameObjStr);
+    snprintf(releaseTag, MAX_CHARACTERS(releaseTag), releaseNameObjStr);
     
     uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Latest release: %s.", releaseTag);
     breaks++;
@@ -4345,7 +4597,7 @@ bool updateApplication()
         {
             // Remove the prompt from the screen
             breaks = cur_breaks;
-            uiFill(0, 8 + STRING_Y_POS(breaks), FB_WIDTH, FB_HEIGHT - (8 + STRING_Y_POS(breaks)), BG_COLOR_RGB);
+            uiFill(0, STRING_Y_POS(breaks), FB_WIDTH, FB_HEIGHT - STRING_Y_POS(breaks), BG_COLOR_RGB);
             uiRefreshDisplay();
         } else {
             breaks -= 2;
@@ -4353,25 +4605,44 @@ bool updateApplication()
         }
     }
     
-    assets = retrieveJsonObjArrayElementWithIndex(jobj, "assets", 0);
+    assets = retrieveJsonObjArrayMemberByName(jobj, GITHUB_API_JSON_ASSETS, &assetsCnt);
     if (!assets) goto out;
     
-    dlUrlObjStr = retrieveJsonObjStrMember(assets, "browser_download_url");
-    if (!dlUrlObjStr) goto out;
+    // Cycle through the assets to find the right download URL
+    for(i = 0; i < assetsCnt; i++)
+    {
+        struct json_object *assetElement = retrieveJsonObjArrayElementByIndex(assets, i);
+        if (!assetElement) break;
+        
+        const char *assetName = retrieveJsonObjStrMemberContentsByName(assetElement, GITHUB_API_JSON_ASSETS_NAME);
+        if (!assetName) break;
+        
+        if (!strncmp(assetName, NRO_NAME, strlen(assetName)))
+        {
+            // Found it
+            dlUrlObjStr = retrieveJsonObjStrMemberContentsByName(assetElement, GITHUB_API_JSON_ASSETS_DL_URL);
+            break;
+        }
+    }
+    
+    if (!dlUrlObjStr)
+    {
+        breaks++;
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to locate NRO download URL!", __func__);
+        goto out;
+    }
     
     uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Download URL: \"%s\".", dlUrlObjStr);
     breaks++;
     
     uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Please wait...");
-    breaks += 2;
+    breaks++;
     
-    if (programAppletType != AppletType_Application && programAppletType != AppletType_SystemApplication)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "Do not press the " NINTENDO_FONT_HOME " button. Doing so could corrupt the SD card filesystem.");
-        breaks += 2;
-    }
-    
+    appletModeOperationWarning();
     uiRefreshDisplay();
+    breaks++;
+    
+    changeHomeButtonBlockStatus(true);
     
     nxDumpToolNro = fopen(nroPath, "wb");
     if (!nxDumpToolNro)
@@ -4391,15 +4662,18 @@ bool updateApplication()
 out:
     if (nxDumpToolNro) fclose(nxDumpToolNro);
     
-    if (success)
+    if (strlen(nroPath))
     {
-        snprintf(strbuf, MAX_CHARACTERS(strbuf), nroPath);
-        nroPath[strlen(nroPath) - 4] = '\0';
-        
-        unlink(nroPath);
-        rename(strbuf, nroPath);
-    } else {
-        unlink(nroPath);
+        if (success)
+        {
+            snprintf(strbuf, MAX_CHARACTERS(strbuf), nroPath);
+            nroPath[strlen(nroPath) - 4] = '\0';
+            
+            remove(nroPath);
+            rename(strbuf, nroPath);
+        } else {
+            remove(nroPath);
+        }
     }
     
     if (jobj) json_object_put(jobj);
@@ -4412,9 +4686,11 @@ out:
     
     if (curl) curl_easy_cleanup(curl);
     
-    if (R_SUCCEEDED(result)) networkDeinit();
+    if (R_SUCCEEDED(result)) networkExit();
     
     breaks += 2;
+    
+    changeHomeButtonBlockStatus(false);
     
     return success;
 }

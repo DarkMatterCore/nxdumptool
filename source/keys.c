@@ -8,7 +8,6 @@
 #include "util.h"
 #include "ui.h"
 #include "es.h"
-#include "set_ext.h"
 #include "save.h"
 
 /* Extern variables */
@@ -24,7 +23,7 @@ extern char strbuf[NAME_BUF_LEN];
 
 nca_keyset_t nca_keyset;
 
-static u8 eticket_data[ETICKET_DEVKEY_DATA_SIZE];
+static SetCalRsa2048DeviceKey eticket_data;
 static bool setcal_eticket_retrieved = false;
 
 static keyLocation FSRodata = {
@@ -553,45 +552,36 @@ static int get_kv(FILE *f, char **key, char **value)
 #undef SKIP_SPACE
 }
 
-static int ishex(char c)
-{
-    if ('a' <= c && c <= 'f') return 1;
-    if ('A' <= c && c <= 'F') return 1;
-    if ('0' <= c && c <= '9') return 1;
-    return 0;
-}
-
 static char hextoi(char c)
 {
     if ('a' <= c && c <= 'f') return (c - 'a' + 0xA);
     if ('A' <= c && c <= 'F') return (c - 'A' + 0xA);
     if ('0' <= c && c <= '9') return (c - '0');
-    return 0;
+    return 'z';
 }
 
 int parse_hex_key(unsigned char *key, const char *hex, unsigned int len)
 {
-    if (strlen(hex) != (2 * len))
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: key (%s) must be %u hex digits!", __func__, hex, 2 * len);
-        return 0;
-    }
-    
     u32 i;
-    for(i = 0; i < (2 * len); i++)
+    size_t hex_str_len = (2 * len);
+    
+    if (strlen(hex) != hex_str_len)
     {
-        if (!ishex(hex[i]))
-        {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: key (%s) must be %u hex digits!", __func__, hex, 2 * len);
-            return 0;
-        }
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: key (%s) must be %u hex digits!", __func__, hex, hex_str_len);
+        return 0;
     }
     
     memset(key, 0, len);
     
-    for(i = 0; i < (2 * len); i++)
+    for(i = 0; i < hex_str_len; i++)
     {
         char val = hextoi(hex[i]);
+        if (val == 'z')
+        {
+            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: key (%s) must be %u hex digits!", __func__, hex, hex_str_len);
+            return 0;
+        }
+        
         if ((i & 1) == 0) val <<= 4;
         key[i >> 1] |= val;
     }
@@ -605,6 +595,7 @@ int readKeysFromFile(FILE *f)
     int ret;
     char *key, *value;
     char test_name[0x100];
+    bool common_eticket = false, personalized_eticket = false;
     
     while((ret = get_kv(f, &key, &value)) != 1 && ret != -2)
     {
@@ -612,15 +603,19 @@ int readKeysFromFile(FILE *f)
         {
             if (key == NULL || value == NULL) continue;
             
-            if (strcasecmp(key, "eticket_rsa_kek") == 0)
+            if (!common_eticket && !personalized_eticket && strcasecmp(key, "eticket_rsa_kek") == 0)
             {
                 if (!parse_hex_key(nca_keyset.eticket_rsa_kek, value, sizeof(nca_keyset.eticket_rsa_kek))) return 0;
                 nca_keyset.ext_key_cnt++;
+                common_eticket = true;
             } else
-            if (strcasecmp(key, "save_mac_key") == 0)
+            if (!personalized_eticket && strcasecmp(key, "eticket_rsa_kek_personalized") == 0)
             {
-                if (!parse_hex_key(nca_keyset.save_mac_key, value, sizeof(nca_keyset.save_mac_key))) return 0;
-                nca_keyset.ext_key_cnt++;
+                /* Use the personalized eTicket RSA kek if available */
+                /* This only appears on consoles that use the new PRODINFO key generation scheme */
+                if (!parse_hex_key(nca_keyset.eticket_rsa_kek, value, sizeof(nca_keyset.eticket_rsa_kek))) return 0;
+                if (!common_eticket) nca_keyset.ext_key_cnt++;
+                personalized_eticket = true;
             } else {
                 memset(test_name, 0, sizeof(test_name));
                 
@@ -766,6 +761,59 @@ void mgf1(const u8 *data, size_t data_length, u8 *mask, size_t mask_length)
     }
     
     free(data_counter);
+}
+
+void dumpSharedTikSavedata(void)
+{
+    FRESULT fr;
+    FIL save;
+    u32 size, blk, i, j;
+    u32 rd_b, wr_b;
+    
+    FILE *out;
+    
+    for(i = 0; i < 2; i++)
+    {
+        fr = FR_OK;
+        memset(&save, 0, sizeof(FIL));
+        size = 0;
+        blk = DUMP_BUFFER_SIZE;
+        
+        out = NULL;
+        
+        fr = f_open(&save, (i == 0 ? "sys:/save/80000000000000e3" : "sys:/save/80000000000000e4"), FA_READ | FA_OPEN_EXISTING);
+        if (fr) continue;
+        
+        size = f_size(&save);
+        if (!size)
+        {
+            f_close(&save);
+            continue;
+        }
+        
+        out = fopen((i == 0 ? "sdmc:/80000000000000e3" : "sdmc:/80000000000000e4"), "wb");
+        if (!out)
+        {
+            f_close(&save);
+            continue;
+        }
+        
+        for(j = 0; j < size; j += blk)
+        {
+            if ((size - j) < blk) blk = (size - j);
+            
+            rd_b = wr_b = 0;
+            
+            fr = f_read(&save, dumpBuf, blk, &rd_b);
+            if (fr || rd_b != blk) break;
+            
+            wr_b = fwrite(dumpBuf, 1, blk, out);
+            if (wr_b != blk) break;
+        }
+        
+        fclose(out);
+        f_close(&save);
+    }
 }
 
 int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_enc_key, u8 *out_dec_key)
@@ -936,6 +984,7 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: NCA rights ID unavailable in this console!", __func__);
         ret = -2;
+        dumpSharedTikSavedata();
         return ret;
     }
     
@@ -945,7 +994,7 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     if (!setcal_eticket_retrieved)
     {
         // Get extended eTicket RSA key from PRODINFO
-        memset(eticket_data, 0, ETICKET_DEVKEY_DATA_SIZE);
+        memset(&eticket_data, 0, sizeof(SetCalRsa2048DeviceKey));
         
         result = setcalInitialize();
         if (R_FAILED(result))
@@ -954,7 +1003,7 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
             return ret;
         }
         
-        result = setcalGetEticketDeviceKey(eticket_data);
+        result = setcalGetEticketDeviceKey(&eticket_data);
         
         setcalExit();
         
@@ -965,22 +1014,22 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
         }
         
         // Decrypt eTicket RSA key
-        memcpy(ctr, eticket_data + ETICKET_DEVKEY_CTR_OFFSET, 0x10);
+        memcpy(ctr, eticket_data.key, ETICKET_DEVKEY_RSA_CTR_SIZE);
         aes128CtrContextCreate(&eticket_aes_ctx, nca_keyset.eticket_rsa_kek, ctr);
-        aes128CtrCrypt(&eticket_aes_ctx, eticket_data + ETICKET_DEVKEY_RSA_OFFSET, eticket_data + ETICKET_DEVKEY_RSA_OFFSET, ETICKET_DEVKEY_RSA_SIZE);
+        aes128CtrCrypt(&eticket_aes_ctx, eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET, eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET, ETICKET_DEVKEY_RSA_SIZE);
         
         // Public exponent must use RSA-2048 SHA-1 signature method
         // The value is stored use big endian byte order
-        if (bswap_32(*((u32*)(&(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x200])))) != SIGTYPE_RSA2048_SHA1)
+        if (__builtin_bswap32(*((u32*)(eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x200))) != SIGTYPE_RSA2048_SHA1)
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid public RSA exponent for eTicket data! Wrong keys?\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__);
             return ret;
         }
     }
     
-    D = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET]);
-    N = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x100]);
-    E = &(eticket_data[ETICKET_DEVKEY_RSA_OFFSET + 0x200]);
+    D = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET);
+    N = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x100);
+    E = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x200);
     
     if (!setcal_eticket_retrieved)
     {
@@ -1006,7 +1055,6 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     
     save_ctx->file = &eTicketSave;
     save_ctx->tool_ctx.action = 0;
-    memcpy(save_ctx->save_mac_key, nca_keyset.save_mac_key, 0x10);
     
     if (!save_process(save_ctx))
     {
@@ -1116,6 +1164,7 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to find a matching eTicket entry for NCA rights ID!", __func__);
         ret = -2;
+        dumpSharedTikSavedata();
         return ret;
     }
     

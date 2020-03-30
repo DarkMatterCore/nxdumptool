@@ -15,7 +15,7 @@
 #define STRING_DEFAULT_POS          8, 8
 
 #define STRING_X_POS                8
-#define STRING_Y_POS(x)             (((x) * LINE_HEIGHT) + LINE_STRING_OFFSET)
+#define STRING_Y_POS(x)             (8 + ((x) * LINE_HEIGHT) + ((x) > 0 ? LINE_STRING_OFFSET : 0))
 
 #define BG_COLOR_RGB                50, 50, 50
 #define FONT_COLOR_RGB              255, 255, 255

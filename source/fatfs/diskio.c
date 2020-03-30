@@ -22,6 +22,8 @@ DSTATUS disk_status (
     BYTE pdrv		/* Physical drive nmuber to identify the drive */
 )
 {
+    (void)pdrv;
+    
     return 0;
 }
 
@@ -35,6 +37,8 @@ DSTATUS disk_initialize (
     BYTE pdrv				/* Physical drive nmuber to identify the drive */
 )
 {
+    (void)pdrv;
+    
     return 0;
 }
 
@@ -51,9 +55,15 @@ DRESULT disk_read (
     UINT count		/* Number of sectors to read */
 )
 {
-    if (R_SUCCEEDED(fsStorageRead(&fatFsStorage, FF_MAX_SS * sector, buff, FF_MAX_SS * count)))
-        return RES_OK;
-    return RES_ERROR;
+    (void)pdrv;
+    (void)buff;
+    (void)sector;
+    (void)count;
+    
+    Result rc = fsStorageRead(&fatFsStorage, FF_MAX_SS * sector, buff, FF_MAX_SS * count);
+    if (R_FAILED(rc)) return RES_ERROR;
+    
+    return RES_OK;
 }
 
 
@@ -71,7 +81,12 @@ DRESULT disk_write (
     UINT count			/* Number of sectors to write */
 )
 {
-    return RES_PARERR;
+    (void)pdrv;
+    (void)buff;
+    (void)sector;
+    (void)count;
+    
+    return RES_OK;
 }
 
 #endif
@@ -87,6 +102,10 @@ DRESULT disk_ioctl (
     void *buff		/* Buffer to send/receive control data */
 )
 {
+    (void)pdrv;
+    (void)cmd;
+    (void)buff;
+    
     return RES_OK;
 }
 

@@ -84,11 +84,13 @@ typedef struct {
     u8 _0x190[0x70];
 } fs_layout_t;
 
+#pragma pack(push, 1)
 typedef struct {
     u64 offset;
     u64 length;
     u32 block_size_power;
-} PACKED duplex_info_t;
+} duplex_info_t;
+#pragma pack(pop)
 
 typedef struct {
     u32 magic; /* DPFS */
@@ -142,6 +144,7 @@ typedef struct {
 typedef struct remap_segment_ctx_t remap_segment_ctx_t;
 typedef struct remap_entry_ctx_t remap_entry_ctx_t;
 
+#pragma pack(push, 1)
 struct remap_entry_ctx_t {
     u64 virtual_offset;
     u64 physical_offset;
@@ -152,7 +155,8 @@ struct remap_entry_ctx_t {
     u64 physical_offset_end;
     remap_segment_ctx_t *segment;
     remap_entry_ctx_t *next;
-} PACKED;
+};
+#pragma pack(pop)
 
 struct remap_segment_ctx_t{
     u64 offset;
@@ -215,6 +219,7 @@ typedef struct {
     u8 salt_source[0x20];
 } ivfc_save_hdr_t;
 
+#pragma pack(push, 1)
 typedef struct {
     u8 cmac[0x10];
     u8 _0x10[0xF0];
@@ -233,7 +238,8 @@ typedef struct {
     u8 _0x748[0x390];
     ivfc_save_hdr_t fat_ivfc_header;
     u8 _0xB98[0x3468];
-} PACKED save_header_t;
+} save_header_t;
+#pragma pack(pop)
 
 typedef struct {
     duplex_storage_ctx_t layers[2];
@@ -344,32 +350,40 @@ typedef struct {
     u32 parent;
 } save_entry_key_t;
 
+#pragma pack(push, 1)
 typedef struct {
     u32 start_block;
     u64 length;
     u32 _0xC[2];
-} PACKED save_file_info_t;
+} save_file_info_t;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef struct {
     u32 next_directory;
     u32 next_file;
     u32 _0x8[3];
-} PACKED save_find_position_t;
+} save_find_position_t;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef struct {
     u32 next_sibling;
     union { /* Save table entry type. Size = 0x14. */
         save_file_info_t save_file_info;
         save_find_position_t save_find_position;
     };
-} PACKED save_table_entry_t;
+} save_table_entry_t;
+#pragma pack(pop)
 
+#pragma pack(push, 1)
 typedef struct {
     u32 parent;
     char name[SAVE_FS_LIST_MAX_NAME_LENGTH];
     save_table_entry_t value;
     u32 next;
-} PACKED save_fs_list_entry_t;
+} save_fs_list_entry_t;
+#pragma pack(pop)
 
 typedef struct {
     u32 free_list_head_index;

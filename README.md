@@ -9,7 +9,7 @@ Nintendo Switch Dump Tool
 Main features
 --------------
 
-* Generates full Cartridge Image dumps (XCI) with optional certificate removal and/or trimming.
+* Generates NX Card Image (XCI) dumps from the inserted gamecard, with optional certificate removal and/or trimming.
 * Generates installable Nintendo Submission Packages (NSP) from base applications, updates and DLCs stored in the inserted gamecard, SD card and eMMC storage devices.
     * The generated dumps follow the `AuditingTool` format from Scene releases.
     * Capable of generating dumps without console specific information (common ticket).
@@ -77,6 +77,30 @@ If you like my work and you'd like to support me in any way, it's not necessary,
 
 Changelog
 --------------
+
+**v1.1.9:**
+
+* Built using libnx commit d7e6207.
+* Removed unnecessary code in NSP dumping steps.
+* Improved GitHub JSON parsing code.
+* Added NSP/ExeFS/RomFS support for titles with multiple Program NCAs (populated ID offset fields). Big thanks to [Cirosan](https://github.com/Cirosan) and [ITotalJustice](https://github.com/ITotalJustice) for testing!
+* Fixed compatibility with consoles that use the new PRODINFO key generation scheme. Big thanks to dimitriblaiddyd78 from GBAtemp for reporting the issue and providing with testing!
+* Fixed ExeFS/RomFS browsing/dumping support for bundled-in game updates in gamecards.
+* Recursive directory removal after a failed HFS0/ExeFS/RomFS data dump is now optional.
+* Fixed RomFS section dump support for titles that hold enough files in a single directory to exceed the max file count per directory limit in FAT32 (e.g. Animal Crossing: New Horizons).
+    * In order to overcome this problem, a secondary directory is created using the current RomFS directory name + a counter value (e.g. `/Model` -> `/Model_0`).
+    * This directory is used to save the rest of the data from the current RomFS directory until:
+        * All files from the current RomFS directory have been dumped, or...
+        * The directory reaches the max file count as well and another directory must be created to continue the process (e.g. `/Model_0` -> `/Model_1`).
+    * Big thanks to [Michael18751](https://github.com/Michael18751), [TechGeekGamer](https://github.com/TechGeekGamer) and [SusejLav](https://github.com/SusejLav) for testing!
+* Button presses are now retrieved from all connected controllers.
+* HOME button presses are now only blocked during dump operations. Fixes problems with homebrew forwarders and qlaunch replacements.
+    * Additionally, long HOME button presses are now blocked as well.
+* Removed max entry count limit for HFS0/ExeFS/RomFS browsers. All filenames are now dynamically allocated, as it should have been from the very start.
+* Updated NACP struct to reflect latest discoveries made by [0Liam](https://github.com/0Liam).
+* The application now displays a FW update warning when the contents from an inserted gamecard can't be parsed because they use an unsupported NCA keygen. Thanks to [ITotalJustice](https://github.com/ITotalJustice) for spotting it!
+
+This is only a bugfix release. I don't expect to release any new versions until the rewrite is finished - the only exception being fixing some kind of feature-breaking bug. Please understand.
 
 **v1.1.8:**
 * Added compatibility with latest devkitA64 and libnx releases. Thanks to [HookedBehemoth](https://github.com/HookedBehemoth) for porting the extra IPC calls used by the application to the new IPC system!

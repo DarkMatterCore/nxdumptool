@@ -331,9 +331,9 @@ bool retrieveSymbolsListFromNso(NcmContentStorage *ncmStorage, const NcmContentI
     mod_magic = *((u32*)(&(nsoBinaryData[mod_magic_offset])));
     dynamic_section_offset = ((s32)mod_magic_offset + *((s32*)(&(nsoBinaryData[mod_magic_offset + 0x04]))));
     
-    if (bswap_32(mod_magic) != MOD_MAGIC)
+    if (__builtin_bswap32(mod_magic) != MOD_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid MOD0 magic word in decompressed NSO from Program NCA! (0x%08X)", __func__, bswap_32(mod_magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid MOD0 magic word in decompressed NSO from Program NCA! (0x%08X)", __func__, __builtin_bswap32(mod_magic));
         goto out;
     }
     

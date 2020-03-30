@@ -6,28 +6,51 @@
 #include <switch.h>
 #include "nca.h"
 
-#define APP_BASE_PATH                   "sdmc:/switch/"
-#define NXDUMPTOOL_BASE_PATH            APP_BASE_PATH "nxdumptool/"
-#define XCI_DUMP_PATH                   NXDUMPTOOL_BASE_PATH "XCI/"
-#define NSP_DUMP_PATH                   NXDUMPTOOL_BASE_PATH "NSP/"
-#define HFS0_DUMP_PATH                  NXDUMPTOOL_BASE_PATH "HFS0/"
-#define EXEFS_DUMP_PATH                 NXDUMPTOOL_BASE_PATH "ExeFS/"
-#define ROMFS_DUMP_PATH                 NXDUMPTOOL_BASE_PATH "RomFS/"
-#define CERT_DUMP_PATH                  NXDUMPTOOL_BASE_PATH "Certificate/"
+#define HBLOADER_BASE_PATH              "sdmc:/switch/"
+#define APP_BASE_PATH                   HBLOADER_BASE_PATH APP_TITLE "/"
+#define XCI_DUMP_PATH                   APP_BASE_PATH "XCI/"
+#define NSP_DUMP_PATH                   APP_BASE_PATH "NSP/"
+#define HFS0_DUMP_PATH                  APP_BASE_PATH "HFS0/"
+#define EXEFS_DUMP_PATH                 APP_BASE_PATH "ExeFS/"
+#define ROMFS_DUMP_PATH                 APP_BASE_PATH "RomFS/"
+#define CERT_DUMP_PATH                  APP_BASE_PATH "Certificate/"
 #define BATCH_OVERRIDES_PATH            NSP_DUMP_PATH "BatchOverrides/"
-#define TICKET_PATH                     NXDUMPTOOL_BASE_PATH "Ticket/"
+#define TICKET_PATH                     APP_BASE_PATH "Ticket/"
 
-#define KEYS_FILE_PATH                  APP_BASE_PATH "prod.keys"
+#define CONFIG_PATH                     APP_BASE_PATH "config.bin"
+#define NRO_NAME                        APP_TITLE ".nro"
+#define NRO_PATH                        APP_BASE_PATH NRO_NAME
+#define NSWDB_XML_PATH                  APP_BASE_PATH "NSWreleases.xml"
+#define KEYS_FILE_PATH                  HBLOADER_BASE_PATH "prod.keys"
 
 #define CFW_PATH_ATMOSPHERE             "sdmc:/atmosphere/contents/"
 #define CFW_PATH_SXOS                   "sdmc:/sxos/titles/"
 #define CFW_PATH_REINX                  "sdmc:/ReiNX/titles/"
 
+#define HTTP_USER_AGENT                 APP_TITLE "/" APP_VERSION " (Nintendo Switch)"
+
+#define GITHUB_API_URL                  "https://api.github.com/repos/DarkMatterCore/nxdumptool/releases/latest"
+#define GITHUB_API_JSON_RELEASE_NAME    "name"
+#define GITHUB_API_JSON_ASSETS          "assets"
+#define GITHUB_API_JSON_ASSETS_NAME     "name"
+#define GITHUB_API_JSON_ASSETS_DL_URL   "browser_download_url"
+
+#define NOINTRO_DOM_CHECK_URL           "https://datomatic.no-intro.org/qchknsw.php"
+
+#define NSWDB_XML_URL                   "http://nswdb.com/xml.php"
+#define NSWDB_XML_ROOT                  "releases"
+#define NSWDB_XML_CHILD                 "release"
+#define NSWDB_XML_CHILD_TITLEID         "titleid"
+#define NSWDB_XML_CHILD_IMGCRC          "imgcrc"
+#define NSWDB_XML_CHILD_RELEASENAME     "releasename"
+
+#define LOCKPICK_RCM_URL                "https://github.com/shchmue/Lockpick_RCM"
+
 #define KiB                             (1024.0)
 #define MiB                             (1024.0 * KiB)
 #define GiB                             (1024.0 * MiB)
 
-#define NAME_BUF_LEN                    4096
+#define NAME_BUF_LEN                    2048
 
 #define DUMP_BUFFER_SIZE                (u64)0x400000		                    // 4 MiB (4194304 bytes)
 
@@ -39,10 +62,6 @@
 
 #define APPLICATION_PATCH_BITMASK       (u64)0x800
 #define APPLICATION_ADDON_BITMASK       (u64)0xFFFFFFFFFFFF0000
-
-#define FILENAME_LENGTH                 512
-#define FILENAME_MAX_CNT                20000
-#define FILENAME_BUFFER_SIZE            (FILENAME_LENGTH * FILENAME_MAX_CNT)    // 10000 KiB
 
 #define NACP_APPNAME_LEN                0x200
 #define NACP_AUTHOR_LEN                 0x100
@@ -82,7 +101,6 @@
 #define NACP_ICON_SQUARE_DIMENSION      256
 #define NACP_ICON_DOWNSCALED            96
 
-#define bswap_32(a)                     ((((a) << 24) & 0xff000000) | (((a) << 8) & 0xff0000) | (((a) >> 8) & 0xff00) | (((a) >> 24) & 0xff))
 #define round_up(x, y)                  ((x) + (((y) - ((x) % (y))) % (y)))			// Aligns 'x' bytes to a 'y' bytes boundary
 
 #define ORPHAN_ENTRY_TYPE_PATCH         1
@@ -159,7 +177,7 @@ typedef struct {
     u64 updateTitleId;
     u32 updateVersion;
     char updateVersionStr[64];
-} PACKED gamecard_ctx_t;
+} gamecard_ctx_t;
 
 typedef struct {
     u64 titleId;
@@ -173,7 +191,7 @@ typedef struct {
     u8 *icon;
     u64 contentSize;
     char contentSizeStr[32];
-} PACKED base_app_ctx_t;
+} base_app_ctx_t;
 
 typedef struct {
     u64 titleId;
@@ -183,7 +201,7 @@ typedef struct {
     char versionStr[VERSION_STR_LEN];
     u64 contentSize;
     char contentSizeStr[32];
-} PACKED patch_addon_ctx_t;
+} patch_addon_ctx_t;
 
 typedef struct {
     u32 index;
@@ -191,7 +209,7 @@ typedef struct {
     char name[NACP_APPNAME_LEN];
     char fixedName[NACP_APPNAME_LEN];
     char orphanListStr[NACP_APPNAME_LEN * 2];
-} PACKED orphan_patch_addon_entry;
+} orphan_patch_addon_entry;
 
 typedef struct {
     u32 magic;
@@ -227,7 +245,7 @@ typedef struct {
     u32 cancelBtnStatePrev;
     u64 cancelStartTmr;
     u64 cancelEndTmr;
-} PACKED progress_ctx_t;
+} progress_ctx_t;
 
 typedef enum {
     ROMFS_TYPE_APP = 0,
@@ -314,6 +332,8 @@ void delay(u8 seconds);
 void convertSize(u64 size, char *out, size_t outSize);
 void updateFreeSpace();
 
+void freeFilenameBuffer(void);
+
 void initExeFsContext();
 void freeExeFsContext();
 
@@ -326,13 +346,18 @@ void freeBktrContext();
 void freeRomFsBrowserEntries();
 void freeHfs0ExeFsEntriesSizes();
 
+u64 hidKeysAllDown();
+u64 hidKeysAllHeld();
+
 void consoleErrorScreen(const char *fmt, ...);
 bool initApplicationResources(int argc, char **argv);
 void deinitApplicationResources();
 
-void formatETAString(u64 curTime, char *out, size_t outSize);
+bool appletModeCheck();
+void appletModeOperationWarning();
+void changeHomeButtonBlockStatus(bool block);
 
-void addStringToFilenameBuffer(const char *string);
+void formatETAString(u64 curTime, char *out, size_t outSize);
 
 void generateSdCardEmmcTitleList();
 
@@ -363,7 +388,7 @@ void removeConsoleDataFromTicket(title_rights_ctx *rights_info);
 
 bool readNcaExeFsSection(u32 titleIndex, bool usePatch);
 
-bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType);
+bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int desiredIdOffset);
 
 bool getExeFsFileList();
 

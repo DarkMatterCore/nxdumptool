@@ -194,7 +194,8 @@ typedef struct {
         };
     };
     u8 crypto_type2; /* Which keyblob (field 2) */
-    u8 _0x221[0xF]; /* Padding. */
+    u8 fixed_key_generation;
+    u8 _0x222[0xE]; /* Padding. */
     u8 rights_id[0x10]; /* Rights ID (for titlekey crypto). */
     nca_section_entry_t section_entries[4]; /* Section entry metadata. */
     u8 section_hashes[4][0x20]; /* SHA-256 hashes for each section header. */
@@ -238,6 +239,7 @@ typedef struct {
 typedef struct {
     u64 patch_tid;  /* Patch TID / Application TID */
     u32 min_sysver; /* Minimum system/application version */
+    u32 min_appver; /* Minimum application version (only for base applications) */
 } PACKED cnmt_extended_header;
 
 typedef struct {
@@ -259,7 +261,8 @@ typedef struct {
     u8 min_keyblob;
     u32 min_sysver;
     u64 patch_tid;
-} PACKED cnmt_xml_program_info;
+    u32 min_appver;
+} cnmt_xml_program_info;
 
 typedef struct {
     u8 type;
@@ -270,12 +273,13 @@ typedef struct {
     char hash_str[(SHA256_HASH_SIZE * 2) + 1];
     u8 keyblob;
     u8 id_offset;
-    u64 cnt_record_offset; // Relative to the start of the content record structs in the CNMT
+    u64 cnt_record_offset; // Relative to the start of the content records section in the CNMT
     u8 decrypted_nca_keys[NCA_KEY_AREA_SIZE];
     u8 encrypted_header_mod[NCA_FULL_HEADER_LENGTH];
-} PACKED cnmt_xml_content_info;
+} cnmt_xml_content_info;
 
 typedef struct {
+    u32 nca_index;
     u8 *hash_table;
     u64 hash_table_offset; // Relative to NCA start
     u64 hash_table_size;
@@ -283,7 +287,21 @@ typedef struct {
     u8 *block_data[2];
     u64 block_offset[2]; // Relative to NCA start
     u64 block_size[2];
-} PACKED nca_program_mod_data;
+} nca_program_mod_data;
+
+typedef struct {
+    char filename[100];
+    u64 icon_size;
+    u8 icon_data[0x20000];
+} nacp_icons_ctx;
+
+typedef struct {
+    u32 nca_index;
+    u64 xml_size;
+    char *xml_data;
+    u8 nacp_icon_cnt; // Only used with Control NCAs
+    nacp_icons_ctx *nacp_icons; // Only used with Control NCAs
+} xml_record_info;
 
 typedef struct {
     u64 section_offset; // Relative to NCA start
@@ -295,7 +313,7 @@ typedef struct {
     u64 pfs0_size;
     u64 title_cnmt_offset; // Relative to NCA start
     u64 title_cnmt_size;
-} PACKED nca_cnmt_mod_data;
+} nca_cnmt_mod_data;
 
 typedef struct {
     u32 sig_type;
@@ -327,12 +345,13 @@ typedef struct {
     rsa2048_sha256_ticket tik_data;
     bool retrieved_tik;
     bool missing_tik;
-} PACKED title_rights_ctx;
+} title_rights_ctx;
 
 typedef struct {
     NcmStorageId storageId;
     NcmContentStorage ncmStorage;
     NcmContentId ncaId;
+    u8 idOffset;
     Aes128CtrContext aes_ctx;
     u64 exefs_offset; // Relative to NCA start
     u64 exefs_size;
@@ -342,12 +361,13 @@ typedef struct {
     u64 exefs_str_table_offset; // Relative to NCA start
     char *exefs_str_table;
     u64 exefs_data_offset; // Relative to NCA start
-} PACKED exefs_ctx_t;
+} exefs_ctx_t;
 
 typedef struct {
     NcmStorageId storageId;
     NcmContentStorage ncmStorage;
     NcmContentId ncaId;
+    u8 idOffset;
     Aes128CtrContext aes_ctx;
     u64 section_offset; // Relative to NCA start
     u64 section_size;
@@ -360,7 +380,7 @@ typedef struct {
     u64 romfs_filetable_size;
     romfs_file *romfs_file_entries;
     u64 romfs_filedata_offset; // Relative to NCA start
-} PACKED romfs_ctx_t;
+} romfs_ctx_t;
 
 typedef struct {
     u64 virt_offset;
@@ -409,6 +429,7 @@ typedef struct {
     NcmStorageId storageId;
     NcmContentStorage ncmStorage;
     NcmContentId ncaId;
+    u8 idOffset;
     Aes128CtrContext aes_ctx;
     u64 section_offset; // Relative to NCA start
     u64 section_size;
@@ -427,94 +448,279 @@ typedef struct {
     u64 romfs_filetable_size;
     romfs_file *romfs_file_entries;
     u64 romfs_filedata_offset; // Relative to section start
-} PACKED bktr_ctx_t;
+} bktr_ctx_t;
 
 // Used in HFS0 / ExeFS / RomFS browsers
 typedef struct {
     u64 size;
     char sizeStr[32];
-} PACKED browser_entry_size_info;
+} browser_entry_size_info;
 
 typedef struct {
     u8 type; // 1 = Dir, 2 = File
     u64 offset; // Relative to directory/file table, depending on type
     browser_entry_size_info sizeInfo; // Only used if type == 2
-} PACKED romfs_browser_entry;
+} romfs_browser_entry;
 
 typedef struct {
-    u64 id;
+    char name[0x200];
+    char publisher[0x100];
+} Title;
+
+typedef enum {
+    Language_AmericanEnglish      = 0,
+    Language_BritishEnglish       = 1,
+    Language_Japanese             = 2,
+    Language_French               = 3,
+    Language_German               = 4,
+    Language_LatinAmericanSpanish = 5,
+    Language_Spanish              = 6,
+    Language_Italian              = 7,
+    Language_Dutch                = 8,
+    Language_CanadianFrench       = 9,
+    Language_Portuguese           = 10,
+    Language_Russian              = 11,
+    Language_Korean               = 12,
+    Language_TraditionalChinese   = 13,
+    Language_SimplifiedChinese    = 14
+} Language;
+
+typedef enum {
+    StartupUserAccount_None                                       = 0,
+    StartupUserAccount_Required                                   = 1,
+    StartupUserAccount_RequiredWithNetworkServiceAccountAvailable = 2
+} StartupUserAccount;
+
+/* Introduced as of SDK 6.4.0 */
+typedef enum {
+    UserAccountSwitchLock_Disable = 0,
+    UserAccountSwitchLock_Enable  = 1
+} UserAccountSwitchLock;
+
+/* Introduced as of SDK 3.4.0 */
+typedef enum {
+    AddOnContentRegistrationType_AllOnLaunch = 0,
+    AddOnContentRegistrationType_OnDemand    = 1
+} AddOnContentRegistrationType;
+
+typedef struct {
+    u32 AttributeFlag_Demo                     : 1;
+    u32 AttributeFlag_RetailInteractiveDisplay : 1; /* Introduced as of SDK 3.4.0 */
+} AttributeFlag;
+
+typedef struct {
+    u32 SupportedLanguageFlag_AmericanEnglish      : 1;
+    u32 SupportedLanguageFlag_BritishEnglish       : 1;
+    u32 SupportedLanguageFlag_Japanese             : 1;
+    u32 SupportedLanguageFlag_French               : 1;
+    u32 SupportedLanguageFlag_German               : 1;
+    u32 SupportedLanguageFlag_LatinAmericanSpanish : 1;
+    u32 SupportedLanguageFlag_Spanish              : 1;
+    u32 SupportedLanguageFlag_Italian              : 1;
+    u32 SupportedLanguageFlag_Dutch                : 1;
+    u32 SupportedLanguageFlag_CanadianFrench       : 1;
+    u32 SupportedLanguageFlag_Portuguese           : 1;
+    u32 SupportedLanguageFlag_Russian              : 1;
+    u32 SupportedLanguageFlag_Korean               : 1;
+    u32 SupportedLanguageFlag_TraditionalChinese   : 1;
+    u32 SupportedLanguageFlag_SimplifiedChinese    : 1;
+} SupportedLanguageFlag;
+
+typedef struct {
+    u32 ParentalControlFlag_FreeCommunication : 1;
+} ParentalControlFlag;
+
+typedef enum {
+    Screenshot_Allow = 0,
+    Screenshot_Deny  = 1
+} Screenshot;
+
+typedef enum {
+    VideoCapture_Disable = 0,
+    VideoCapture_Manual  = 1,
+    VideoCapture_Enable  = 2
+} VideoCapture;
+
+typedef enum {
+    DataLossConfirmation_None     = 0,
+    DataLossConfirmation_Required = 1
+} DataLossConfirmation;
+
+typedef enum {
+    PlayLogPolicy_All     = 0,
+    PlayLogPolicy_LogOnly = 1,
+    PlayLogPolicy_None    = 2
+} PlayLogPolicy;
+
+typedef enum {
+    RatingAgeOrganization_CERO         = 0,
+    RatingAgeOrganization_GRACGCRB     = 1,
+    RatingAgeOrganization_GSRMR        = 2,
+    RatingAgeOrganization_ESRB         = 3,
+    RatingAgeOrganization_ClassInd     = 4,
+    RatingAgeOrganization_USK          = 5,
+    RatingAgeOrganization_PEGI         = 6,
+    RatingAgeOrganization_PEGIPortugal = 7,
+    RatingAgeOrganization_PEGIBBFC     = 8,
+    RatingAgeOrganization_Russian      = 9,
+    RatingAgeOrganization_ACB          = 10,
+    RatingAgeOrganization_OFLC         = 11,
+    RatingAgeOrganization_IARCGeneric  = 12  /* Introduced as of SDK 9.3.1 */
+} RatingAgeOrganization;
+
+typedef struct {
+    u8 cero;
+    u8 gracgcrb;
+    u8 gsrmr;
+    u8 esrb;
+    u8 class_ind;
+    u8 usk;
+    u8 pegi;
+    u8 pegi_portugal;
+    u8 pegibbfc;
+    u8 russian;
+    u8 acb;
+    u8 oflc;
+    u8 iarc_generic;
+    u8 reserved_1[0x13];
+} RatingAge;
+
+typedef enum {
+    LogoType_LicensedByNintendo    = 0,
+    LogoType_DistributedByNintendo = 1, /* Removed in SDK 3.5.2 */
+    LogoType_Nintendo              = 2
+} LogoType;
+
+typedef enum {
+    LogoHandling_Auto   = 0,
+    LogoHandling_Manual = 1
+} LogoHandling;
+
+/* Introduced as of SDK 4.5.0 */
+typedef enum {
+    RuntimeAddOnContentInstall_Deny        = 0,
+    RuntimeAddOnContentInstall_AllowAppend = 1
+} RuntimeAddOnContentInstall;
+
+/* Introduced as of SDK 9.3.1 */
+typedef enum {
+    RuntimeParameterDelivery_Always                   = 0,
+    RuntimeParameterDelivery_AlwaysIfUserStateMatched = 1,
+    RuntimeParameterDelivery_OnRestart                = 2
+} RuntimeParameterDelivery;
+
+/* Introduced as of SDK 3.5.2 */
+typedef enum {
+    CrashReport_Deny  = 0,
+    CrashReport_Allow = 1
+} CrashReport;
+
+typedef enum {
+    Hdcp_None     = 0,
+    Hdcp_Required = 1
+} Hdcp;
+
+/* Introduced as of SDK 7.6.0 */
+typedef struct {
+    u8 StartupUserAccountOptionFlag_IsOptional : 1;
+} StartupUserAccountOptionFlag;
+
+/* Introduced as of SDK 5.3.0 */
+typedef enum {
+    PlayLogQueryCapability_None      = 0,
+    PlayLogQueryCapability_WhiteList = 1,
+    PlayLogQueryCapability_All       = 2
+} PlayLogQueryCapability;
+
+/* Introduced as of SDK 5.3.0 */
+typedef struct {
+    u8 RepairFlag_SuppressGameCardAccess : 1;
+} RepairFlag;
+
+/* Introduced as of SDK 6.4.0 */
+typedef struct {
+    u8 RequiredNetworkServiceLicenseOnLaunchFlag_Common : 1;
+} RequiredNetworkServiceLicenseOnLaunchFlag;
+
+typedef struct {
+    u64 group_id;
     u8 key[0x10];
-} PACKED send_data_configuration;
+} NeighborDetectionGroupConfiguration;
 
 typedef struct {
-    u64 id;
-    u8 key[0x10];
-} PACKED receivable_data_configurations;
+	NeighborDetectionGroupConfiguration send_group_configuration;
+	NeighborDetectionGroupConfiguration receivable_group_configurations[0x10];
+} NeighborDetectionClientConfiguration;
+
+/* Introduced as of SDK 7.6.0 */
+typedef enum {
+	JitConfigurationFlag_None    = 0,
+	JitConfigurationFlag_Enabled = 1
+} JitConfigurationFlag;
 
 typedef struct {
-    NacpLanguageEntry lang[16];
-    char Isbn[0x25];
-    u8 StartupUserAccount;
-    u8 UserAccountSwitchLock;
-    u8 AddOnContentRegistrationType;
-    u32 AttributeFlag;
-    u32 SupportedLanguageFlag;
-    u32 ParentalControlFlag;
-    u8 Screenshot;
-    u8 VideoCapture;
-    u8 DataLossConfirmation;
-    u8 PlayLogPolicy;
-    u64 PresenceGroupId;
-    u8 RatingAge[0x20];
-    char DisplayVersion[0x10];
-    u64 AddOnContentBaseId;
-    u64 SaveDataOwnerId;
-    u64 UserAccountSaveDataSize;
-    u64 UserAccountSaveDataJournalSize;
-    u64 DeviceSaveDataSize;
-    u64 DeviceSaveDataJournalSize;
-    u64 BcatDeliveryCacheStorageSize;
-    char ApplicationErrorCodeCategory[0x8];
-    u64 LocalCommunicationId[0x8];
-    u8 LogoType;
-    u8 LogoHandling;
-    u8 RuntimeAddOnContentInstall;
-    u8 RuntimeParameterDelivery;
-    u8 Reserved_0x30F4[0x2];
-    u8 CrashReport;
-    u8 Hdcp;
-    u64 SeedForPseudoDeviceId;
-    char BcatPassphrase[0x41];
-    u8 StartupUserAccountOptionFlag;
-    u8 ReservedForUserAccountSaveDataOperation[0x6];
-    u64 UserAccountSaveDataSizeMax;
-    u64 UserAccountSaveDataJournalSizeMax;
-    u64 DeviceSaveDataSizeMax;
-    u64 DeviceSaveDataJournalSizeMax;
-    u64 TemporaryStorageSize;
-    u64 CacheStorageSize;
-    u64 CacheStorageJournalSize;
-    u64 CacheStorageDataAndJournalSizeMax;
-    u16 CacheStorageIndexMax;
-    u8 Reserved_0x318A[0x6];
-    u64 PlayLogQueryableApplicationId[0x10];
-    u8 PlayLogQueryCapability;
-    u8 RepairFlag;
-    u8 ProgramIndex;
-    u8 RequiredNetworkServiceLicenseOnLaunchFlag;
-    u8 Reserved_0x3214[0x4];
-    send_data_configuration SendDataConfiguration;
-    receivable_data_configurations ReceivableDataConfiguration[0x10];
-    u64 JitConfigurationFlag;
-    u64 JitMemorySize;
-    u8 Reserved[0xC40];
-} PACKED nacp_t;
+    u64 jit_configuration_flag;
+    u64 memory_size;
+} JitConfiguration;
 
 typedef struct {
-    char filename[100];
-    u64 icon_size;
-    u8 icon_data[0x20000];
-} PACKED nacp_icons_ctx;
+    Title titles[0x10];
+    char isbn[0x25];
+    u8 startup_user_account;
+    u8 user_account_switch_lock; /* Old: touch_screen_usage (None, Supported, Required) */
+    u8 add_on_content_registration_type;
+    AttributeFlag attribute_flag;
+    SupportedLanguageFlag supported_language_flag;
+    ParentalControlFlag parental_control_flag;
+    u8 screenshot;
+    u8 video_capture;
+    u8 data_loss_confirmation;
+    u8 play_log_policy;
+    u64 presence_group_id;
+    RatingAge rating_ages;
+    char display_version[0x10];
+    u64 add_on_content_base_id;
+    u64 save_data_owner_id;
+    u64 user_account_save_data_size;
+    u64 user_account_save_data_journal_size;
+    u64 device_save_data_size;
+    u64 device_save_data_journal_size;
+    u64 bcat_delivery_cache_storage_size;
+    char application_error_code_category[0x8];
+    u64 local_communication_ids[0x8];
+    u8 logo_type;
+    u8 logo_handling;
+    u8 runtime_add_on_content_install;
+    u8 runtime_parameter_delivery;
+    u8 reserved_1[0x2];
+    u8 crash_report;
+    u8 hdcp;
+    u64 seed_for_pseudo_device_id;
+    char bcat_passphrase[0x41];
+    StartupUserAccountOptionFlag startup_user_account_option;
+    u8 reserved_2[0x6];
+    u64 user_account_save_data_size_max;
+    u64 user_account_save_data_journal_size_max;
+    u64 device_save_data_size_max;
+    u64 device_save_data_journal_size_max;
+    u64 temporary_storage_size;
+    u64 cache_storage_size;
+    u64 cache_storage_journal_size;
+    u64 cache_storage_data_and_journal_size_max;
+    u16 cache_storage_index_max;
+    u8 reserved_3[0x6];
+    u64 play_log_queryable_application_ids[0x10];
+    u8 play_log_query_capability;
+    RepairFlag repair_flag;
+    u8 program_index;
+    RequiredNetworkServiceLicenseOnLaunchFlag required_network_service_license_on_launch_flag;
+    u8 reserved_4[0x4];
+    NeighborDetectionClientConfiguration neighbor_detection_client_configuration;
+    JitConfiguration jit_configuration;
+    u8 reserved_5[0xC40];
+} nacp_t;
+
+char *getContentType(u8 type);
 
 void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, char *out);
 
@@ -532,9 +738,11 @@ bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize);
 
 bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title_rights_ctx *rights_info, u8 *decrypted_nca_keys, bool retrieveTitleKeyData);
 
-bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data *output);
+bool retrieveTitleKeyFromGameCardTicket(title_rights_ctx *rights_info, u8 *decrypted_nca_keys);
 
-bool retrieveCnmtNcaData(NcmStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, u32 cnmtNcaIndex, nca_cnmt_mod_data *output, title_rights_ctx *rights_info);
+bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data **output, u32 *cur_mod_cnt, u32 idx);
+
+bool retrieveCnmtNcaData(NcmStorageId curStorageId, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, u32 cnmtNcaIndex, nca_cnmt_mod_data *output, title_rights_ctx *rights_info);
 
 bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, nca_cnmt_mod_data *cnmt_mod);
 
@@ -544,7 +752,7 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
 
 bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
-bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, nca_program_mod_data *program_mod_data, char **outBuf, u64 *outBufSize);
+bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, bool useCustomAcidRsaPubKey, char **outBuf, u64 *outBufSize);
 
 bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **out_nacp_xml, u64 *out_nacp_xml_size, nacp_icons_ctx **out_nacp_icons_ctx, u8 *out_nacp_icons_ctx_cnt);
 

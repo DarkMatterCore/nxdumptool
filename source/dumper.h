@@ -27,19 +27,21 @@ typedef struct {
     u32 certlessCrc;                                // CRC32 checksum accumulator (certless XCI). Only used if calcCrc == true
 } PACKED sequentialXciCtx;
 
+// This struct is followed by 'ncaCount' SHA-256 checksums in the output file and 'programNcaModCount' modified + reencrypted Program NCA headers
+// The modified NCA headers are only needed if their NPDM signature is replaced (it uses cryptographically secure random numbers). The RSA public key used in the ACID section from the main.npdm file is constant, so we don't need to keep track of that
 typedef struct {
-    NcmStorageId storageId;                          // Source storage from which the data is dumped
+    NcmStorageId storageId;                         // Source storage from which the data is dumped
     bool removeConsoleData;                         // Original value for the "Remove console specific data" option. Overrides the selected setting in the current session
     bool tiklessDump;                               // Original value for the "Generate ticket-less dump" option. Overrides the selected setting in the current session. Ignored if removeConsoleData == false
     bool npdmAcidRsaPatch;                          // Original value for the "Change NPDM RSA key/sig in Program NCA" option. Overrides the selected setting in the current session
     bool preInstall;                                // Indicates if we're dealing with a preinstalled title - e.g. if the user already accepted the missing ticket prompt
     u8 partNumber;                                  // Next part number
-    u32 nspFileCount;                               // PFS0 file count
+    u32 pfs0FileCount;                              // PFS0 file count
     u32 ncaCount;                                   // NCA count
+    u32 programNcaModCount;                         // Program NCA mod count
     u32 fileIndex;                                  // Current PFS0 file entry index
     u64 fileOffset;                                 // Current PFS0 file entry offset
     Sha256Context hashCtx;                          // Current NCA SHA-256 checksum context. Only used when dealing with the same NCA between different parts
-    u8 programNcaHeaderMod[NCA_FULL_HEADER_LENGTH]; // Modified + reencrypted Program NCA header. Only needed if the NPDM signature in the Program NCA header is replaced (it uses cryptographically secure random numbers). The RSA public key used in the ACID section from the main.npdm file is constant, so we don't need to keep track of that
 } PACKED sequentialNspCtx;
 
 typedef struct {

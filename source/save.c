@@ -1881,7 +1881,6 @@ bool readCertsFromSystemSave()
     
     save_ctx->file = &certSave;
     save_ctx->tool_ctx.action = 0;
-    memcpy(save_ctx->save_mac_key, nca_keyset.save_mac_key, 0x10);
     
     initSaveCtx = save_process(save_ctx);
     if (!initSaveCtx)

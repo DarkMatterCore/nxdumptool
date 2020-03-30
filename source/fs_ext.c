@@ -1,4 +1,3 @@
-#include <switch/kernel/ipc.h>
 #include <switch/services/fs.h>
 #include <stdlib.h>
 #include <string.h>

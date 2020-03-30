@@ -165,8 +165,7 @@ void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_i
     sprintf(tmp, "  <Digest>%s</Digest>\n" \
                  "  <KeyGenerationMin>%u</KeyGenerationMin>\n" \
                  "  <%s>%u</%s>\n" \
-                 "  <%s>0x%016lx</%s>\n" \
-                 "</ContentMeta>", \
+                 "  <%s>0x%016lx</%s>\n", \
                  xml_program_info->digest_str, \
                  xml_program_info->min_keyblob, \
                  getRequiredMinTitleType(xml_program_info->type), \
@@ -177,6 +176,14 @@ void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_i
                  getReferenceTitleIDType(xml_program_info->type));
     
     strcat(out, tmp);
+    
+    if (xml_program_info->type == NcmContentMetaType_Application)
+    {
+        sprintf(tmp, "  <RequiredApplicationVersion>%u</RequiredApplicationVersion>\n", xml_program_info->min_appver);
+        strcat(out, tmp);
+    }
+    
+    strcat(out, "</ContentMeta>");
 }
 
 void convertNcaSizeToU64(const u8 size[0x6], u64 *out)
@@ -631,7 +638,7 @@ bool readBktrSectionBlock(u64 offset, void *outBuf, size_t bufSize)
 
 bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize)
 {
-    if (!input || !outBuf || !outBufSize || outBufSize < NCA_FULL_HEADER_LENGTH || (bswap_32(input->magic) != NCA3_MAGIC && bswap_32(input->magic) != NCA2_MAGIC))
+    if (!input || !outBuf || !outBufSize || outBufSize < NCA_FULL_HEADER_LENGTH || (__builtin_bswap32(input->magic) != NCA3_MAGIC && __builtin_bswap32(input->magic) != NCA2_MAGIC))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid NCA header encryption parameters.", __func__);
         return false;
@@ -651,7 +658,7 @@ bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize)
     
     aes128XtsContextCreate(&hdr_aes_ctx, header_key_0, header_key_1, true);
     
-    if (bswap_32(input->magic) == NCA3_MAGIC)
+    if (__builtin_bswap32(input->magic) == NCA3_MAGIC)
     {
         crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, outBuf, input, NCA_FULL_HEADER_LENGTH, 0, true);
         if (crypt_res != NCA_FULL_HEADER_LENGTH)
@@ -660,7 +667,7 @@ bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize)
             return false;
         }
     } else
-    if (bswap_32(input->magic) == NCA2_MAGIC)
+    if (__builtin_bswap32(input->magic) == NCA2_MAGIC)
     {
         crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, outBuf, input, NCA_HEADER_LENGTH, 0, true);
         if (crypt_res != NCA_HEADER_LENGTH)
@@ -679,7 +686,7 @@ bool encryptNcaHeader(nca_header_t *input, u8 *outBuf, u64 outBufSize)
             }
         }
     } else {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid decrypted NCA magic word! (0x%08X)", __func__, bswap_32(input->magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid decrypted NCA magic word! (0x%08X)", __func__, __builtin_bswap32(input->magic));
         return false;
     }
     
@@ -719,7 +726,7 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
         return false;
     }
     
-    if (bswap_32(out->magic) == NCA3_MAGIC)
+    if (__builtin_bswap32(out->magic) == NCA3_MAGIC)
     {
         crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, out, ncaBuf, NCA_FULL_HEADER_LENGTH, 0, false);
         if (crypt_res != NCA_FULL_HEADER_LENGTH)
@@ -728,7 +735,7 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
             return false;
         }
     } else
-    if (bswap_32(out->magic) == NCA2_MAGIC)
+    if (__builtin_bswap32(out->magic) == NCA2_MAGIC)
     {
         for(i = 0; i < NCA_SECTION_HEADER_CNT; i++)
         {
@@ -745,7 +752,7 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
             }
         }
     } else {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid NCA magic word! Wrong header key? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, bswap_32(out->magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid NCA magic word! Wrong header key? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(out->magic));
         return false;
     }
     
@@ -821,9 +828,53 @@ bool decryptNcaHeader(const u8 *ncaBuf, u64 ncaBufSize, nca_header_t *out, title
     return true;
 }
 
-bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data *output)
+bool retrieveTitleKeyFromGameCardTicket(title_rights_ctx *rights_info, u8 *decrypted_nca_keys)
 {
-    if (!ncmStorage || !ncaId || !dec_nca_header || !xml_content_info || !output)
+    if (!rights_info || !rights_info->has_rights_id || !strlen(rights_info->tik_filename) || !decrypted_nca_keys)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to retrieve titlekey from gamecard ticket!", __func__);
+        return false;
+    }
+    
+    // Check if the ticket has already been retrieved from the HFS0 partition in the gamecard
+    if (rights_info->retrieved_tik) return true;
+    
+    // Load external keys
+    if (!loadExternalKeys()) return false;
+    
+    // Retrieve ticket
+    if (!readFileFromSecureHfs0PartitionByName(rights_info->tik_filename, 0, &(rights_info->tik_data), ETICKET_TIK_FILE_SIZE)) return false;
+    
+    // Save encrypted titlekey
+    memcpy(rights_info->enc_titlekey, rights_info->tik_data.titlekey_block, 0x10);
+    
+    // Decrypt titlekey
+    u8 crypto_type = rights_info->rights_id[0x0F];
+    if (crypto_type) crypto_type--;
+    
+    if (crypto_type >= 0x20)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid NCA keyblob index.", __func__);
+        return false;
+    }
+    
+    Aes128Context titlekey_aes_ctx;
+    aes128ContextCreate(&titlekey_aes_ctx, nca_keyset.titlekeks[crypto_type], false);
+    aes128DecryptBlock(&titlekey_aes_ctx, rights_info->dec_titlekey, rights_info->enc_titlekey);
+    
+    // Update retrieved ticket flag
+    rights_info->retrieved_tik = true;
+    
+    // Save the decrypted NCA key area keys
+    memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
+    memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info->dec_titlekey, 0x10);
+    
+    return true;
+}
+
+bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, cnmt_xml_content_info *xml_content_info, nca_program_mod_data **output, u32 *cur_mod_cnt, u32 idx)
+{
+    if (!ncmStorage || !ncaId || !dec_nca_header || !xml_content_info || !output || !cur_mod_cnt)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to process Program NCA!", __func__);
         return false;
@@ -907,9 +958,9 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId,
         return false;
     }
     
-    if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC)
+    if (__builtin_bswap32(nca_pfs0_header.magic) != PFS0_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, bswap_32(nca_pfs0_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(nca_pfs0_header.magic));
         return false;
     }
     
@@ -950,7 +1001,7 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId,
             return false;
         }
         
-        if (bswap_32(npdm_header.magic) == META_MAGIC)
+        if (__builtin_bswap32(npdm_header.magic) == META_MAGIC)
         {
             found_meta = true;
             meta_offset = nca_pfs0_cur_file_offset;
@@ -1120,27 +1171,46 @@ bool processProgramNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId,
     
     // Save data to the output struct so we can write it later
     // The caller function must free these data pointers
-    output->hash_table = hash_table;
-    output->hash_table_offset = hash_table_offset;
-    output->hash_table_size = dec_nca_header->fs_headers[0].pfs0_superblock.hash_table_size;
+    nca_program_mod_data *tmp_mod_data = realloc(*output, (*cur_mod_cnt + 1) * sizeof(nca_program_mod_data));
+    if (!tmp_mod_data)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to reallocate Program NCA mod data buffer!", __func__);
+        free(block_data[0]);
+        if (block_data[1]) free(block_data[1]);
+        free(hash_table);
+        return false;
+    }
     
-    output->block_mod_cnt = (block_hash_table_offset != block_hash_table_end_offset ? 2 : 1);
+    memset(&(tmp_mod_data[*cur_mod_cnt]), 0, sizeof(nca_program_mod_data));
     
-    output->block_data[0] = block_data[0];
-    output->block_offset[0] = block_start_offset[0];
-    output->block_size[0] = block_size[0];
+    tmp_mod_data[*cur_mod_cnt].nca_index = idx;
+    
+    tmp_mod_data[*cur_mod_cnt].hash_table = hash_table;
+    tmp_mod_data[*cur_mod_cnt].hash_table_offset = hash_table_offset;
+    tmp_mod_data[*cur_mod_cnt].hash_table_size = dec_nca_header->fs_headers[0].pfs0_superblock.hash_table_size;
+    
+    tmp_mod_data[*cur_mod_cnt].block_mod_cnt = (block_hash_table_offset != block_hash_table_end_offset ? 2 : 1);
+    
+    tmp_mod_data[*cur_mod_cnt].block_data[0] = block_data[0];
+    tmp_mod_data[*cur_mod_cnt].block_offset[0] = block_start_offset[0];
+    tmp_mod_data[*cur_mod_cnt].block_size[0] = block_size[0];
     
     if (block_hash_table_offset != block_hash_table_end_offset)
     {
-        output->block_data[1] = block_data[1];
-        output->block_offset[1] = block_start_offset[1];
-        output->block_size[1] = block_size[1];
+        tmp_mod_data[*cur_mod_cnt].block_data[1] = block_data[1];
+        tmp_mod_data[*cur_mod_cnt].block_offset[1] = block_start_offset[1];
+        tmp_mod_data[*cur_mod_cnt].block_size[1] = block_size[1];
     }
+    
+    *output = tmp_mod_data;
+    tmp_mod_data = NULL;
+    
+    *cur_mod_cnt += 1;
     
     return true;
 }
 
-bool retrieveCnmtNcaData(NcmStorageId curStorageId, nspDumpType selectedNspDumpType, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, u32 cnmtNcaIndex, nca_cnmt_mod_data *output, title_rights_ctx *rights_info)
+bool retrieveCnmtNcaData(NcmStorageId curStorageId, u8 *ncaBuf, cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, u32 cnmtNcaIndex, nca_cnmt_mod_data *output, title_rights_ctx *rights_info)
 {
     if (!ncaBuf || !xml_program_info || !xml_content_info || !output || !rights_info)
     {
@@ -1257,9 +1327,9 @@ bool retrieveCnmtNcaData(NcmStorageId curStorageId, nspDumpType selectedNspDumpT
     nca_pfs0_offset = dec_header.fs_headers[0].pfs0_superblock.pfs0_offset;
     memcpy(&nca_pfs0_header, section_data + nca_pfs0_offset, sizeof(pfs0_header));
     
-    if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC)
+    if (__builtin_bswap32(nca_pfs0_header.magic) != PFS0_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid magic word for CNMT NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, bswap_32(nca_pfs0_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid magic word for CNMT NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(nca_pfs0_header.magic));
         free(section_data);
         return false;
     }
@@ -1318,6 +1388,7 @@ bool retrieveCnmtNcaData(NcmStorageId curStorageId, nspDumpType selectedNspDumpT
     xml_program_info->min_keyblob = (rights_info->has_rights_id ? rights_info->rights_id[15] : xml_content_info[cnmtNcaIndex].keyblob);
     xml_program_info->min_sysver = title_cnmt_extended_header.min_sysver;
     xml_program_info->patch_tid = title_cnmt_extended_header.patch_tid;
+    xml_program_info->min_appver = title_cnmt_extended_header.min_appver;
     
     // Retrieve the ID offset and content record offset for each of our NCAs (except the CNMT NCA)
     // Also wipe each of the content records we're gonna replace
@@ -1534,7 +1605,7 @@ bool parseExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
         
         if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, nca_pfs0_offset, &nca_pfs0_header, sizeof(pfs0_header), false)) return false;
         
-        if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC || !nca_pfs0_header.file_cnt || !nca_pfs0_header.str_table_size) continue;
+        if (__builtin_bswap32(nca_pfs0_header.magic) != PFS0_MAGIC || !nca_pfs0_header.file_cnt || !nca_pfs0_header.str_table_size) continue;
         
         nca_pfs0_entries_offset = (nca_pfs0_offset + sizeof(pfs0_header));
         
@@ -1683,9 +1754,9 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     memcpy(ctr_key, decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), NCA_KEY_AREA_KEY_SIZE);
     aes128CtrContextCreate(&aes_ctx, ctr_key, ctr);
     
-    if (bswap_32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic) != IVFC_MAGIC)
+    if (__builtin_bswap32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic) != IVFC_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid IVFC magic word for NCA RomFS section! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, bswap_32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid IVFC magic word for NCA RomFS section! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic));
         return false;
     }
     
@@ -1851,9 +1922,9 @@ bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *nc
     
     memcpy(&(bktrContext.superblock), &(dec_nca_header->fs_headers[bktr_index].bktr_superblock), sizeof(bktr_superblock_t));
     
-    if (bswap_32(bktrContext.superblock.ivfc_header.magic) != IVFC_MAGIC)
+    if (__builtin_bswap32(bktrContext.superblock.ivfc_header.magic) != IVFC_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid IVFC magic word for NCA BKTR section! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, bswap_32(bktrContext.superblock.ivfc_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid IVFC magic word for NCA BKTR section! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(bktrContext.superblock.ivfc_header.magic));
         return false;
     }
     
@@ -1863,9 +1934,9 @@ bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *nc
         return false;
     }
     
-    if (bswap_32(bktrContext.superblock.relocation_header.magic) != BKTR_MAGIC || bswap_32(bktrContext.superblock.subsection_header.magic) != BKTR_MAGIC)
+    if (__builtin_bswap32(bktrContext.superblock.relocation_header.magic) != BKTR_MAGIC || __builtin_bswap32(bktrContext.superblock.subsection_header.magic) != BKTR_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid BKTR magic word for NCA BKTR relocation/subsection header! Wrong KAEK? (0x%02X | 0x%02X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, bswap_32(bktrContext.superblock.relocation_header.magic), bswap_32(bktrContext.superblock.subsection_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid BKTR magic word for NCA BKTR relocation/subsection header! Wrong KAEK? (0x%02X | 0x%02X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(bktrContext.superblock.relocation_header.magic), __builtin_bswap32(bktrContext.superblock.subsection_header.magic));
         return false;
     }
     
@@ -2058,9 +2129,9 @@ out:
     return success;
 }
 
-bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, nca_program_mod_data *program_mod_data, char **outBuf, u64 *outBufSize)
+bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, bool useCustomAcidRsaPubKey, char **outBuf, u64 *outBufSize)
 {
-    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !program_mod_data || !outBuf || !outBufSize)
+    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !outBuf || !outBufSize)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to generate \"programinfo.xml\"!", __func__);
         return false;
@@ -2143,9 +2214,9 @@ bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *n
         return false;
     }
     
-    if (bswap_32(nca_pfs0_header.magic) != PFS0_MAGIC)
+    if (__builtin_bswap32(nca_pfs0_header.magic) != PFS0_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, bswap_32(nca_pfs0_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid magic word for Program NCA section #0 PFS0 partition! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(nca_pfs0_header.magic));
         return false;
     }
     
@@ -2227,9 +2298,9 @@ bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *n
         goto out;
     }
     
-    if (bswap_32(npdm_header.magic) != META_MAGIC)
+    if (__builtin_bswap32(npdm_header.magic) != META_MAGIC)
     {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid NPDM META magic word! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, bswap_32(npdm_header.magic));
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid NPDM META magic word! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(npdm_header.magic));
         goto out;
     }
     
@@ -2249,7 +2320,7 @@ bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *n
     }
     
     // If we're dealing with a gamecard title, replace the ACID public key with the patched one
-    if (program_mod_data->block_mod_cnt > 0) memcpy(npdm_acid_section + (u64)NPDM_SIGNATURE_SIZE, rsa_get_public_key(), (u64)NPDM_SIGNATURE_SIZE);
+    if (useCustomAcidRsaPubKey) memcpy(npdm_acid_section + (u64)NPDM_SIGNATURE_SIZE, rsa_get_public_key(), (u64)NPDM_SIGNATURE_SIZE);
     
     sprintf(tmp, "  <BuildTarget>%u</BuildTarget>\n", ((npdm_header.mmu_flags & 0x01) ? 64 : 32));
     strcat(programInfoXml, tmp);
@@ -2315,7 +2386,7 @@ bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *n
         }
         
         // Check if we're dealing with a NSO
-        if (bswap_32(nsoHeader.magic) != NSO_MAGIC) continue;
+        if (__builtin_bswap32(nsoHeader.magic) != NSO_MAGIC) continue;
         
         // Retrieve middleware list from this NSO
         if (!retrieveMiddlewareListFromNso(ncmStorage, ncaId, &aes_ctx, curFilename, curFileOffset, &nsoHeader, programInfoXml))
@@ -2351,7 +2422,7 @@ bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *n
         }
         
         // Check if we're dealing with the main NSO
-        if (strlen(curFilename) != 4 || strncmp(curFilename, "main", 4) != 0 || bswap_32(nsoHeader.magic) != NSO_MAGIC) continue;
+        if (strlen(curFilename) != 4 || strncmp(curFilename, "main", 4) != 0 || __builtin_bswap32(nsoHeader.magic) != NSO_MAGIC) continue;
         
         // Retrieve symbols list from main NSO
         if (!retrieveSymbolsListFromNso(ncmStorage, ncaId, &aes_ctx, curFilename, curFileOffset, &nsoHeader, programInfoXml)) proceed = false;
@@ -2387,58 +2458,57 @@ out:
     return success;
 }
 
-char *getNacpLangName(u8 val)
+char *getNacpLangName(Language val)
 {
     char *out = NULL;
     
     switch(val)
     {
-        case 0:
+        case Language_AmericanEnglish:
             out = "AmericanEnglish";
             break;
-        case 1:
+        case Language_BritishEnglish:
             out = "BritishEnglish";
             break;
-        case 2:
+        case Language_Japanese:
             out = "Japanese";
             break;
-        case 3:
+        case Language_French:
             out = "French";
             break;
-        case 4:
+        case Language_German:
             out = "German";
             break;
-        case 5:
+        case Language_LatinAmericanSpanish:
             out = "LatinAmericanSpanish";
             break;
-        case 6:
+        case Language_Spanish:
             out = "Spanish";
             break;
-        case 7:
+        case Language_Italian:
             out = "Italian";
             break;
-        case 8:
+        case Language_Dutch:
             out = "Dutch";
             break;
-        case 9:
+        case Language_CanadianFrench:
             out = "CanadianFrench";
             break;
-        case 10:
+        case Language_Portuguese:
             out = "Portuguese";
             break;
-        case 11:
+        case Language_Russian:
             out = "Russian";
             break;
-        case 12:
+        case Language_Korean:
             out = "Korean";
             break;
-        case 13:
+        case Language_TraditionalChinese:
             out = "TraditionalChinese";
             break;
-        case 14:
+        case Language_SimplifiedChinese:
             out = "SimplifiedChinese";
             break;
-        case 15: // Unknown
         default:
             out = "Unknown";
             break;
@@ -2453,13 +2523,13 @@ char *getNacpStartupUserAccount(u8 val)
     
     switch(val)
     {
-        case 0:
+        case StartupUserAccount_None:
             out = "None";
             break;
-        case 1:
+        case StartupUserAccount_Required:
             out = "Required";
             break;
-        case 2:
+        case StartupUserAccount_RequiredWithNetworkServiceAccountAvailable:
             out = "RequiredWithNetworkServiceAccountAvailable";
             break;
         default:
@@ -2476,10 +2546,10 @@ char *getNacpUserAccountSwitchLock(u8 val)
     
     switch(val)
     {
-        case 0:
+        case UserAccountSwitchLock_Disable:
             out = "Disable";
             break;
-        case 1:
+        case UserAccountSwitchLock_Enable:
             out = "Enable";
             break;
         default:
@@ -2490,24 +2560,15 @@ char *getNacpUserAccountSwitchLock(u8 val)
     return out;
 }
 
-char *getNacpParentalControlFlag(u32 flag)
+char *getNacpSupportedLanguageFlag(SupportedLanguageFlag *data, u8 idx)
 {
-    char *out = NULL;
+    if (!data || idx >= 0x10) return NULL;
     
-    switch(flag)
-    {
-        case 0:
-            out = "None";
-            break;
-        case 1:
-            out = "FreeCommunication";
-            break;
-        default:
-            out = "Unknown";
-            break;
-    }
+    u32 flag;
+    memcpy(&flag, data, sizeof(u32));
+    flag = ((flag >> idx) & 0x1);
     
-    return out;
+    return (flag ? getNacpLangName((Language)flag) : NULL);
 }
 
 char *getNacpScreenshot(u8 val)
@@ -2516,10 +2577,10 @@ char *getNacpScreenshot(u8 val)
     
     switch(val)
     {
-        case 0:
+        case Screenshot_Allow:
             out = "Allow";
             break;
-        case 1:
+        case Screenshot_Deny:
             out = "Deny";
             break;
         default:
@@ -2536,13 +2597,13 @@ char *getNacpVideoCapture(u8 val)
     
     switch(val)
     {
-        case 0:
+        case VideoCapture_Disable:
             out = "Disable";
             break;
-        case 1:
+        case VideoCapture_Manual:
             out = "Manual";
             break;
-        case 2:
+        case VideoCapture_Enable:
             out = "Enable";
             break;
         default:
@@ -2553,49 +2614,49 @@ char *getNacpVideoCapture(u8 val)
     return out;
 }
 
-char *getNacpRatingAgeOrganizationName(u8 val)
+char *getNacpRatingAgeOrganization(RatingAgeOrganization val)
 {
     char *out = NULL;
     
     switch(val)
     {
-        case 0:
+        case RatingAgeOrganization_CERO:
             out = "CERO";
             break;
-        case 1:
+        case RatingAgeOrganization_GRACGCRB:
             out = "GRACGCRB";
             break;
-        case 2:
+        case RatingAgeOrganization_GSRMR:
             out = "GSRMR";
             break;
-        case 3:
+        case RatingAgeOrganization_ESRB:
             out = "ESRB";
             break;
-        case 4:
+        case RatingAgeOrganization_ClassInd:
             out = "ClassInd";
             break;
-        case 5:
+        case RatingAgeOrganization_USK:
             out = "USK";
             break;
-        case 6:
+        case RatingAgeOrganization_PEGI:
             out = "PEGI";
             break;
-        case 7:
+        case RatingAgeOrganization_PEGIPortugal:
             out = "PEGIPortugal";
             break;
-        case 8:
+        case RatingAgeOrganization_PEGIBBFC:
             out = "PEGIBBFC";
             break;
-        case 9:
+        case RatingAgeOrganization_Russian:
             out = "Russian";
             break;
-        case 10:
+        case RatingAgeOrganization_ACB:
             out = "ACB";
             break;
-        case 11:
+        case RatingAgeOrganization_OFLC:
             out = "OFLC";
             break;
-        case 12:
+        case RatingAgeOrganization_IARCGeneric:
             out = "IARCGeneric";
             break;
         default:
@@ -2612,10 +2673,10 @@ char *getNacpDataLossConfirmation(u8 val)
     
     switch(val)
     {
-        case 0:
+        case DataLossConfirmation_None:
             out = "None";
             break;
-        case 1:
+        case DataLossConfirmation_Required:
             out = "Required";
             break;
         default:
@@ -2632,13 +2693,13 @@ char *getNacpPlayLogPolicy(u8 val)
     
     switch(val)
     {
-        case 0:
+        case PlayLogPolicy_All:
             out = "All";
             break;
-        case 1:
+        case PlayLogPolicy_LogOnly:
             out = "LogOnly";
             break;
-        case 2:
+        case PlayLogPolicy_None:
             out = "None";
             break;
         default:
@@ -2655,10 +2716,13 @@ char *getNacpLogoType(u8 val)
     
     switch(val)
     {
-        case 0:
+        case LogoType_LicensedByNintendo:
             out = "LicensedByNintendo";
             break;
-        case 2:
+        case LogoType_DistributedByNintendo:
+            out = "DistributedByNintendo";
+            break;
+        case LogoType_Nintendo:
             out = "Nintendo";
             break;
         default:
@@ -2675,31 +2739,11 @@ char *getNacpLogoHandling(u8 val)
     
     switch(val)
     {
-        case 0:
+        case LogoHandling_Auto:
             out = "Auto";
             break;
-        case 1:
+        case LogoHandling_Manual:
             out = "Manual";
-            break;
-        default:
-            out = "Unknown";
-            break;
-    }
-    
-    return out;
-}
-
-char *getNacpStartupUserAccountOptionFlag(u8 val)
-{
-    char *out = NULL;
-    
-    switch(val)
-    {
-        case 0:
-            out = "None";
-            break;
-        case 1:
-            out = "IsOptional";
             break;
         default:
             out = "Unknown";
@@ -2715,10 +2759,10 @@ char *getNacpAddOnContentRegistrationType(u8 val)
     
     switch(val)
     {
-        case 0:
+        case AddOnContentRegistrationType_AllOnLaunch:
             out = "AllOnLaunch";
             break;
-        case 1:
+        case AddOnContentRegistrationType_OnDemand:
             out = "OnDemand";
             break;
         default:
@@ -2735,10 +2779,10 @@ char *getNacpHdcp(u8 val)
     
     switch(val)
     {
-        case 0:
+        case Hdcp_None:
             out = "None";
             break;
-        case 1:
+        case Hdcp_Required:
             out = "Required";
             break;
         default:
@@ -2755,10 +2799,10 @@ char *getNacpCrashReport(u8 val)
     
     switch(val)
     {
-        case 0:
+        case CrashReport_Deny:
             out = "Deny";
             break;
-        case 1:
+        case CrashReport_Allow:
             out = "Allow";
             break;
         default:
@@ -2775,10 +2819,10 @@ char *getNacpRuntimeAddOnContentInstall(u8 val)
     
     switch(val)
     {
-        case 0:
+        case RuntimeAddOnContentInstall_Deny:
             out = "Deny";
             break;
-        case 1:
+        case RuntimeAddOnContentInstall_AllowAppend:
             out = "AllowAppend";
             break;
         default:
@@ -2795,13 +2839,13 @@ char *getNacpRuntimeParameterDelivery(u8 val)
     
     switch(val)
     {
-        case 0:
+        case RuntimeParameterDelivery_Always:
             out = "Always";
             break;
-        case 1:
+        case RuntimeParameterDelivery_AlwaysIfUserStateMatched:
             out = "AlwaysIfUserStateMatched";
             break;
-        case 2:
+        case RuntimeParameterDelivery_OnRestart:
             out = "OnRestart";
             break;
         default:
@@ -2818,13 +2862,13 @@ char *getNacpPlayLogQueryCapability(u8 val)
     
     switch(val)
     {
-        case 0:
+        case PlayLogQueryCapability_None:
             out = "None";
             break;
-        case 1:
+        case PlayLogQueryCapability_WhiteList:
             out = "WhiteList";
             break;
-        case 2:
+        case PlayLogQueryCapability_All:
             out = "All";
             break;
         default:
@@ -2835,79 +2879,16 @@ char *getNacpPlayLogQueryCapability(u8 val)
     return out;
 }
 
-char *getNacpRepairFlag(u8 val)
+char *getNacpJitConfigurationFlag(u64 val)
 {
     char *out = NULL;
     
     switch(val)
     {
-        case 0:
+        case JitConfigurationFlag_None:
             out = "None";
             break;
-        case 1:
-            out = "SuppressGameCardAccess";
-            break;
-        default:
-            out = "Unknown";
-            break;
-    }
-    
-    return out;
-}
-
-char *getNacpAttributeFlag(u32 flag)
-{
-    char *out = NULL;
-    
-    switch(flag)
-    {
-        case 0:
-            out = "None";
-            break;
-        case 1:
-            out = "Demo";
-            break;
-        case 2:
-            out = "RetailInteractiveDisplay";
-            break;
-        default:
-            out = "Unknown";
-            break;
-    }
-    
-    return out;
-}
-
-char *getNacpRequiredNetworkServiceLicenseOnLaunchFlag(u8 val)
-{
-    char *out = NULL;
-    
-    switch(val)
-    {
-        case 0:
-            out = "None";
-            break;
-        case 1:
-            out = "Common";
-            break;
-        default:
-            out = "Unknown";
-            break;
-    }
-    
-    return out;
-}
-
-char *getNacpJitConfigurationFlag(u64 flag)
-{
-    char *out = NULL;
-    
-    switch(flag)
-    {
-        case 0:
-            out = "None";
-            break;
-        case 1:
+        case JitConfigurationFlag_Enabled:
             out = "Enabled";
             break;
         default:
@@ -2935,15 +2916,16 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
     
     u8 i = 0, j = 0;
     char tmp[NAME_BUF_LEN] = {'\0'};
+    u32 flag;
     
     u8 nacpIconCnt = 0;
     nacp_icons_ctx *nacpIcons = NULL;
     
     bool found_icon = false;
-    u8 languageIconHash[0x20];
-    char languageIconHashStr[0x21];
+    u8 languageIconHash[SHA256_HASH_SIZE];
+    char languageIconHashStr[SHA256_HASH_SIZE + 1] = {'\0'};
     
-    char ncaIdStr[0x21] = {'\0'};
+    char ncaIdStr[SHA256_HASH_SIZE + 1] = {'\0'};
     convertDataToHexString(ncaId->c, 0x10, ncaIdStr, 0x21);
     
     char dataStr[100] = {'\0'};
@@ -2951,7 +2933,7 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
     u8 null_key[0x10];
     memset(null_key, 0, 0x10);
     
-    bool availableSDC = false, availableRDC = false;
+    bool availableSGC = false, availableRGC = false;
     
     if (!parseRomFsEntryFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys)) return false;
     
@@ -2993,9 +2975,9 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
     sprintf(nacpXml, "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
                      "<Application>\n");
     
-    for(i = 0; i < 16; i++)
+    for(i = 0; i < 0x10; i++)
     {
-        if (strlen(controlNacp.lang[i].name) || strlen(controlNacp.lang[i].author))
+        if (strlen(controlNacp.titles[i].name) || strlen(controlNacp.titles[i].publisher))
         {
             sprintf(tmp, "  <Title>\n" \
                          "    <Language>%s</Language>\n" \
@@ -3003,116 +2985,125 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
                          "    <Publisher>%s</Publisher>\n" \
                          "  </Title>\n", \
                          getNacpLangName(i), \
-                         controlNacp.lang[i].name, \
-                         controlNacp.lang[i].author);
+                         controlNacp.titles[i].name, \
+                         controlNacp.titles[i].publisher);
             
             strcat(nacpXml, tmp);
         }
     }
     
-    if (strlen(controlNacp.Isbn))
+    if (strlen(controlNacp.isbn))
     {
-        sprintf(tmp, "  <Isbn>%s</Isbn>\n", controlNacp.Isbn);
+        sprintf(tmp, "  <Isbn>%s</Isbn>\n", controlNacp.isbn);
         strcat(nacpXml, tmp);
     } else {
         strcat(nacpXml, "  <Isbn />\n");
     }
     
-    sprintf(tmp, "  <StartupUserAccount>%s</StartupUserAccount>\n", getNacpStartupUserAccount(controlNacp.StartupUserAccount));
+    sprintf(tmp, "  <StartupUserAccount>%s</StartupUserAccount>\n", getNacpStartupUserAccount(controlNacp.startup_user_account));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <UserAccountSwitchLock>%s</UserAccountSwitchLock>\n", getNacpUserAccountSwitchLock(controlNacp.UserAccountSwitchLock));
+    sprintf(tmp, "  <UserAccountSwitchLock>%s</UserAccountSwitchLock>\n", getNacpUserAccountSwitchLock(controlNacp.user_account_switch_lock));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <ParentalControl>%s</ParentalControl>\n", getNacpParentalControlFlag(controlNacp.ParentalControlFlag));
-    strcat(nacpXml, tmp);
+    strcat(nacpXml, "  <ParentalControl>");
     
-    for(i = 0; i < 16; i++)
+    memcpy(&flag, &(controlNacp.parental_control_flag), sizeof(u32));
+    if (flag != 0)
     {
-        u8 bit = (u8)((controlNacp.SupportedLanguageFlag >> i) & 0x1);
-        if (bit)
-        {
-            sprintf(tmp, "  <SupportedLanguage>%s</SupportedLanguage>\n", getNacpLangName(i));
-            strcat(nacpXml, tmp);
-            nacpIconCnt++;
-        }
+        if (controlNacp.parental_control_flag.ParentalControlFlag_FreeCommunication) strcat(nacpXml, "FreeCommunication");
+    } else {
+        strcat(nacpXml, "None");
     }
     
-    sprintf(tmp, "  <Screenshot>%s</Screenshot>\n", getNacpScreenshot(controlNacp.Screenshot));
-    strcat(nacpXml, tmp);
+    strcat(nacpXml, "</ParentalControl>\n");
     
-    sprintf(tmp, "  <VideoCapture>%s</VideoCapture>\n", getNacpVideoCapture(controlNacp.VideoCapture));
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <PresenceGroupId>0x%016lx</PresenceGroupId>\n", controlNacp.PresenceGroupId);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <DisplayVersion>%s</DisplayVersion>\n", controlNacp.DisplayVersion);
-    strcat(nacpXml, tmp);
-    
-    for(i = 0; i < 32; i++)
+    for(i = 0; i < 0x10; i++)
     {
-        if (controlNacp.RatingAge[i] != 0xFF)
-        {
-            sprintf(tmp, "  <Rating>\n" \
-                         "    <Organization>%s</Organization>\n" \
-                         "    <Age>%u</Age>\n" \
-                         "  </Rating>\n", \
-                         getNacpRatingAgeOrganizationName(i), \
-                         controlNacp.RatingAge[i]);
-            
-            strcat(nacpXml, tmp);
-        }
+        char *str = getNacpSupportedLanguageFlag(&(controlNacp.supported_language_flag), i);
+        if (!str) continue;
+        
+        sprintf(tmp, "  <SupportedLanguage>%s</SupportedLanguage>\n", str);
+        strcat(nacpXml, tmp);
+        
+        nacpIconCnt++;
     }
     
-    sprintf(tmp, "  <DataLossConfirmation>%s</DataLossConfirmation>\n", getNacpDataLossConfirmation(controlNacp.DataLossConfirmation));
+    sprintf(tmp, "  <Screenshot>%s</Screenshot>\n", getNacpScreenshot(controlNacp.screenshot));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <PlayLogPolicy>%s</PlayLogPolicy>\n", getNacpPlayLogPolicy(controlNacp.PlayLogPolicy));
+    sprintf(tmp, "  <VideoCapture>%s</VideoCapture>\n", getNacpVideoCapture(controlNacp.video_capture));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <SaveDataOwnerId>0x%016lx</SaveDataOwnerId>\n", controlNacp.SaveDataOwnerId);
+    sprintf(tmp, "  <PresenceGroupId>0x%016lx</PresenceGroupId>\n", controlNacp.presence_group_id);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <UserAccountSaveDataSize>0x%016lx</UserAccountSaveDataSize>\n", controlNacp.UserAccountSaveDataSize);
+    sprintf(tmp, "  <DisplayVersion>%s</DisplayVersion>\n", controlNacp.display_version);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <UserAccountSaveDataJournalSize>0x%016lx</UserAccountSaveDataJournalSize>\n", controlNacp.UserAccountSaveDataJournalSize);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <DeviceSaveDataSize>0x%016lx</DeviceSaveDataSize>\n", controlNacp.DeviceSaveDataSize);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <DeviceSaveDataJournalSize>0x%016lx</DeviceSaveDataJournalSize>\n", controlNacp.DeviceSaveDataJournalSize);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <BcatDeliveryCacheStorageSize>0x%016lx</BcatDeliveryCacheStorageSize>\n", controlNacp.BcatDeliveryCacheStorageSize);
-    strcat(nacpXml, tmp);
-    
-    if (strlen(controlNacp.ApplicationErrorCodeCategory))
+    for(i = 0; i < 0x20; i++)
     {
-        sprintf(tmp, "  <ApplicationErrorCodeCategory>%s</ApplicationErrorCodeCategory>\n", controlNacp.ApplicationErrorCodeCategory);
+        u8 *ptr = ((u8*)(&(controlNacp.rating_ages)) + i);
+        if (*ptr == 0xFF) continue;
+        
+        sprintf(tmp, "  <Rating>\n" \
+                     "    <Organization>%s</Organization>\n" \
+                     "    <Age>%u</Age>\n" \
+                     "  </Rating>\n", \
+                     getNacpRatingAgeOrganization(i), \
+                     *ptr);
+        
+        strcat(nacpXml, tmp);
+    }
+    
+    sprintf(tmp, "  <DataLossConfirmation>%s</DataLossConfirmation>\n", getNacpDataLossConfirmation(controlNacp.data_loss_confirmation));
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <PlayLogPolicy>%s</PlayLogPolicy>\n", getNacpPlayLogPolicy(controlNacp.play_log_policy));
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <SaveDataOwnerId>0x%016lx</SaveDataOwnerId>\n", controlNacp.save_data_owner_id);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <UserAccountSaveDataSize>0x%016lx</UserAccountSaveDataSize>\n", controlNacp.user_account_save_data_size);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <UserAccountSaveDataJournalSize>0x%016lx</UserAccountSaveDataJournalSize>\n", controlNacp.user_account_save_data_journal_size);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <DeviceSaveDataSize>0x%016lx</DeviceSaveDataSize>\n", controlNacp.device_save_data_size);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <DeviceSaveDataJournalSize>0x%016lx</DeviceSaveDataJournalSize>\n", controlNacp.device_save_data_journal_size);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <BcatDeliveryCacheStorageSize>0x%016lx</BcatDeliveryCacheStorageSize>\n", controlNacp.bcat_delivery_cache_storage_size);
+    strcat(nacpXml, tmp);
+    
+    if (strlen(controlNacp.application_error_code_category))
+    {
+        sprintf(tmp, "  <ApplicationErrorCodeCategory>%s</ApplicationErrorCodeCategory>\n", controlNacp.application_error_code_category);
         strcat(nacpXml, tmp);
     } else {
         strcat(nacpXml, "  <ApplicationErrorCodeCategory />\n");
     }
     
-    sprintf(tmp, "  <AddOnContentBaseId>0x%016lx</AddOnContentBaseId>\n", controlNacp.AddOnContentBaseId);
+    sprintf(tmp, "  <AddOnContentBaseId>0x%016lx</AddOnContentBaseId>\n", controlNacp.add_on_content_base_id);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <LogoType>%s</LogoType>\n", getNacpLogoType(controlNacp.LogoType));
+    sprintf(tmp, "  <LogoType>%s</LogoType>\n", getNacpLogoType(controlNacp.logo_type));
     strcat(nacpXml, tmp);
     
-    for(i = 0; i < 8; i++)
+    for(i = 0; i < 0x8; i++)
     {
-        if (controlNacp.LocalCommunicationId[i] != 0)
+        if (controlNacp.local_communication_ids[i] != 0)
         {
-            sprintf(tmp, "  <LocalCommunicationId>0x%016lx</LocalCommunicationId>\n", controlNacp.LocalCommunicationId[i]);
+            sprintf(tmp, "  <LocalCommunicationId>0x%016lx</LocalCommunicationId>\n", controlNacp.local_communication_ids[i]);
             strcat(nacpXml, tmp);
         }
     }
     
-    sprintf(tmp, "  <LogoHandling>%s</LogoHandling>\n", getNacpLogoHandling(controlNacp.LogoHandling));
+    sprintf(tmp, "  <LogoHandling>%s</LogoHandling>\n", getNacpLogoHandling(controlNacp.logo_handling));
     strcat(nacpXml, tmp);
     
     if (nacpIconCnt)
@@ -3124,16 +3115,16 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
             goto out;
         }
         
-        for(i = 0; i < 16; i++)
+        for(i = 0; i < 0x10; i++)
         {
-            u8 bit = (u8)((controlNacp.SupportedLanguageFlag >> i) & 0x1);
-            if (!bit) continue;
+            char *str = getNacpSupportedLanguageFlag(&(controlNacp.supported_language_flag), i);
+            if (!str) continue;
             
             // Retrieve the icon file for this language and calculate its SHA-256 checksum
             found_icon = false;
             
-            memset(languageIconHash, 0, 0x20);
-            memset(languageIconHashStr, 0, 0x21);
+            memset(languageIconHash, 0, SHA256_HASH_SIZE);
+            memset(languageIconHashStr, 0, SHA256_HASH_SIZE + 1);
             
             entryOffset = 0;
             sprintf(tmp, "icon_%s.dat", getNacpLangName(i));
@@ -3176,7 +3167,7 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
             sha256CalculateHash(languageIconHash, nacpIcons[j].icon_data, nacpIcons[j].icon_size);
             
             // Only retrieve the first half from the SHA-256 checksum
-            convertDataToHexString(languageIconHash, 0x10, languageIconHashStr, 0x21);
+            convertDataToHexString(languageIconHash, SHA256_HASH_SIZE / 2, languageIconHashStr, SHA256_HASH_SIZE + 1);
             
             // Now print the hash
             sprintf(tmp, "    <NxIconHash>%s</NxIconHash>\n", languageIconHashStr);
@@ -3188,129 +3179,168 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
         }
     }
     
-    sprintf(tmp, "  <SeedForPseudoDeviceId>0x%016lx</SeedForPseudoDeviceId>\n", controlNacp.SeedForPseudoDeviceId);
+    sprintf(tmp, "  <SeedForPseudoDeviceId>0x%016lx</SeedForPseudoDeviceId>\n", controlNacp.seed_for_pseudo_device_id);
     strcat(nacpXml, tmp);
     
-    if (strlen(controlNacp.BcatPassphrase))
+    if (strlen(controlNacp.bcat_passphrase))
     {
-        sprintf(tmp, "  <BcatPassphrase>%s</BcatPassphrase>\n", controlNacp.BcatPassphrase);
+        sprintf(tmp, "  <BcatPassphrase>%s</BcatPassphrase>\n", controlNacp.bcat_passphrase);
         strcat(nacpXml, tmp);
     } else {
         strcat(nacpXml, "  <BcatPassphrase />\n");
     }
     
-    sprintf(tmp, "  <StartupUserAccountOption>%s</StartupUserAccountOption>\n", getNacpStartupUserAccountOptionFlag(controlNacp.StartupUserAccountOptionFlag));
-    strcat(nacpXml, tmp);
+    strcat(nacpXml, "  <StartupUserAccountOption>");
     
-    sprintf(tmp, "  <AddOnContentRegistrationType>%s</AddOnContentRegistrationType>\n", getNacpAddOnContentRegistrationType(controlNacp.AddOnContentRegistrationType));
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <UserAccountSaveDataSizeMax>0x%016lx</UserAccountSaveDataSizeMax>\n", controlNacp.UserAccountSaveDataSizeMax);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <UserAccountSaveDataJournalSizeMax>0x%016lx</UserAccountSaveDataJournalSizeMax>\n", controlNacp.UserAccountSaveDataJournalSizeMax);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <DeviceSaveDataSizeMax>0x%016lx</DeviceSaveDataSizeMax>\n", controlNacp.DeviceSaveDataSizeMax);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <DeviceSaveDataJournalSizeMax>0x%016lx</DeviceSaveDataJournalSizeMax>\n", controlNacp.DeviceSaveDataJournalSizeMax);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <TemporaryStorageSize>0x%016lx</TemporaryStorageSize>\n", controlNacp.TemporaryStorageSize);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <CacheStorageSize>0x%016lx</CacheStorageSize>\n", controlNacp.CacheStorageSize);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <CacheStorageJournalSize>0x%016lx</CacheStorageJournalSize>\n", controlNacp.CacheStorageJournalSize);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <CacheStorageDataAndJournalSizeMax>0x%016lx</CacheStorageDataAndJournalSizeMax>\n", controlNacp.CacheStorageDataAndJournalSizeMax);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <CacheStorageIndexMax>0x%04x</CacheStorageIndexMax>\n", controlNacp.CacheStorageIndexMax);
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <Hdcp>%s</Hdcp>\n", getNacpHdcp(controlNacp.Hdcp));
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <CrashReport>%s</CrashReport>\n", getNacpCrashReport(controlNacp.CrashReport));
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <RuntimeAddOnContentInstall>%s</RuntimeAddOnContentInstall>\n", getNacpRuntimeAddOnContentInstall(controlNacp.RuntimeAddOnContentInstall));
-    strcat(nacpXml, tmp);
-    
-    sprintf(tmp, "  <RuntimeParameterDelivery>%s</RuntimeParameterDelivery>\n", getNacpRuntimeParameterDelivery(controlNacp.RuntimeParameterDelivery));
-    strcat(nacpXml, tmp);
-    
-    for(i = 0; i < 16; i++)
+    if (*((u8*)&(controlNacp.startup_user_account_option)) != 0)
     {
-        if (controlNacp.PlayLogQueryableApplicationId[i] != 0)
+        if (controlNacp.startup_user_account_option.StartupUserAccountOptionFlag_IsOptional) strcat(nacpXml, "IsOptional");
+    } else {
+        strcat(nacpXml, "None");
+    }
+    
+    strcat(nacpXml, "</StartupUserAccountOption>\n");
+    
+    sprintf(tmp, "  <AddOnContentRegistrationType>%s</AddOnContentRegistrationType>\n", getNacpAddOnContentRegistrationType(controlNacp.add_on_content_registration_type));
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <UserAccountSaveDataSizeMax>0x%016lx</UserAccountSaveDataSizeMax>\n", controlNacp.user_account_save_data_size_max);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <UserAccountSaveDataJournalSizeMax>0x%016lx</UserAccountSaveDataJournalSizeMax>\n", controlNacp.user_account_save_data_journal_size_max);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <DeviceSaveDataSizeMax>0x%016lx</DeviceSaveDataSizeMax>\n", controlNacp.device_save_data_size_max);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <DeviceSaveDataJournalSizeMax>0x%016lx</DeviceSaveDataJournalSizeMax>\n", controlNacp.device_save_data_journal_size_max);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <TemporaryStorageSize>0x%016lx</TemporaryStorageSize>\n", controlNacp.temporary_storage_size);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <CacheStorageSize>0x%016lx</CacheStorageSize>\n", controlNacp.cache_storage_size);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <CacheStorageJournalSize>0x%016lx</CacheStorageJournalSize>\n", controlNacp.cache_storage_journal_size);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <CacheStorageDataAndJournalSizeMax>0x%016lx</CacheStorageDataAndJournalSizeMax>\n", controlNacp.cache_storage_data_and_journal_size_max);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <CacheStorageIndexMax>0x%04x</CacheStorageIndexMax>\n", controlNacp.cache_storage_index_max);
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <Hdcp>%s</Hdcp>\n", getNacpHdcp(controlNacp.hdcp));
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <CrashReport>%s</CrashReport>\n", getNacpCrashReport(controlNacp.crash_report));
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <RuntimeAddOnContentInstall>%s</RuntimeAddOnContentInstall>\n", getNacpRuntimeAddOnContentInstall(controlNacp.runtime_add_on_content_install));
+    strcat(nacpXml, tmp);
+    
+    sprintf(tmp, "  <RuntimeParameterDelivery>%s</RuntimeParameterDelivery>\n", getNacpRuntimeParameterDelivery(controlNacp.runtime_parameter_delivery));
+    strcat(nacpXml, tmp);
+    
+    for(i = 0; i < 0x10; i++)
+    {
+        if (controlNacp.play_log_queryable_application_ids[i] != 0)
         {
-            sprintf(tmp, "  <PlayLogQueryableApplicationId>0x%016lx</PlayLogQueryableApplicationId>\n", controlNacp.PlayLogQueryableApplicationId[i]);
+            sprintf(tmp, "  <PlayLogQueryableApplicationId>0x%016lx</PlayLogQueryableApplicationId>\n", controlNacp.play_log_queryable_application_ids[i]);
             strcat(nacpXml, tmp);
         }
     }
     
-    sprintf(tmp, "  <PlayLogQueryCapability>%s</PlayLogQueryCapability>\n", getNacpPlayLogQueryCapability(controlNacp.PlayLogQueryCapability));
+    sprintf(tmp, "  <PlayLogQueryCapability>%s</PlayLogQueryCapability>\n", getNacpPlayLogQueryCapability(controlNacp.play_log_query_capability));
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <Repair>%s</Repair>\n", getNacpRepairFlag(controlNacp.RepairFlag));
+    strcat(nacpXml, "  <Repair>");
+    
+    if (*((u8*)&(controlNacp.repair_flag)) != 0)
+    {
+        if (controlNacp.repair_flag.RepairFlag_SuppressGameCardAccess) strcat(nacpXml, "SuppressGameCardAccess");
+    } else {
+        strcat(nacpXml, "None");
+    }
+    
+    strcat(nacpXml, "</Repair>\n");
+    
+    strcat(nacpXml, "  <Attribute>");
+    
+    memcpy(&flag, &(controlNacp.attribute_flag), sizeof(u32));
+    if (flag != 0)
+    {
+        if (controlNacp.attribute_flag.AttributeFlag_Demo) strcat(nacpXml, "Demo");
+        
+        if (controlNacp.attribute_flag.AttributeFlag_RetailInteractiveDisplay)
+        {
+            if (controlNacp.attribute_flag.AttributeFlag_Demo) strcat(nacpXml, ",");
+            strcat(nacpXml, "RetailInteractiveDisplay");
+        }
+    } else {
+        strcat(nacpXml, "None");
+    }
+    
+    strcat(nacpXml, "</Attribute>\n");
+    
+    sprintf(tmp, "  <ProgramIndex>%u</ProgramIndex>\n", controlNacp.program_index);
     strcat(nacpXml, tmp);
     
-    sprintf(tmp, "  <Attribute>%s</Attribute>\n", getNacpAttributeFlag(controlNacp.AttributeFlag));
-    strcat(nacpXml, tmp);
+    strcat(nacpXml, "  <RequiredNetworkServiceLicenseOnLaunch>");
     
-    sprintf(tmp, "  <ProgramIndex>%u</ProgramIndex>\n", controlNacp.ProgramIndex);
-    strcat(nacpXml, tmp);
+    if (*((u8*)&(controlNacp.required_network_service_license_on_launch_flag)) != 0)
+    {
+        if (controlNacp.required_network_service_license_on_launch_flag.RequiredNetworkServiceLicenseOnLaunchFlag_Common) strcat(nacpXml, "Common");
+    } else {
+        strcat(nacpXml, "None");
+    }
     
-    sprintf(tmp, "  <RequiredNetworkServiceLicenseOnLaunch>%s</RequiredNetworkServiceLicenseOnLaunch>\n", getNacpRequiredNetworkServiceLicenseOnLaunchFlag(controlNacp.RequiredNetworkServiceLicenseOnLaunchFlag));
-    strcat(nacpXml, tmp);
+    strcat(nacpXml, "</RequiredNetworkServiceLicenseOnLaunch>\n");
     
     // Check if we actually have valid NeighborDetectionClientConfiguration values
-    availableSDC = (controlNacp.SendDataConfiguration.id != 0 && memcmp(controlNacp.SendDataConfiguration.key, null_key, 0x10) != 0);
+    availableSGC = (controlNacp.neighbor_detection_client_configuration.send_group_configuration.group_id != 0 && memcmp(controlNacp.neighbor_detection_client_configuration.send_group_configuration.key, null_key, 0x10) != 0);
     
-    for(i = 0; i < 16; i++)
+    for(i = 0; i < 0x10; i++)
     {
-        if (controlNacp.ReceivableDataConfiguration[i].id != 0 && memcmp(controlNacp.ReceivableDataConfiguration[i].key, null_key, 0x10) != 0)
+        if (controlNacp.neighbor_detection_client_configuration.receivable_group_configurations[i].group_id != 0 && memcmp(controlNacp.neighbor_detection_client_configuration.receivable_group_configurations[i].key, null_key, 0x10) != 0)
         {
-            availableRDC = true;
+            availableRGC = true;
             break;
         }
     }
     
-    if (availableSDC || availableRDC)
+    if (availableSGC || availableRGC)
     {
         strcat(nacpXml, "  <NeighborDetectionClientConfiguration>\n");
         
-        if (availableSDC)
+        if (availableSGC)
         {
-            convertDataToHexString(controlNacp.SendDataConfiguration.key, 0x10, dataStr, 100);
+            convertDataToHexString(controlNacp.neighbor_detection_client_configuration.send_group_configuration.key, 0x10, dataStr, 100);
             
             sprintf(tmp, "    <SendDataConfiguration>\n" \
                          "      <DataId>0x%016lx</DataId>\n" \
                          "      <Key>%s</Key>\n" \
                          "    </SendDataConfiguration>\n", \
-                         controlNacp.SendDataConfiguration.id, \
+                         controlNacp.neighbor_detection_client_configuration.send_group_configuration.group_id, \
                          dataStr);
             
             strcat(nacpXml, tmp);
         }
         
-        if (availableRDC)
+        if (availableRGC)
         {
-            for(i = 0; i < 16; i++)
+            for(i = 0; i < 0x10; i++)
             {
-                if (controlNacp.ReceivableDataConfiguration[i].id != 0 && memcmp(controlNacp.ReceivableDataConfiguration[i].key, null_key, 0x10) != 0)
+                if (controlNacp.neighbor_detection_client_configuration.receivable_group_configurations[i].group_id != 0 && memcmp(controlNacp.neighbor_detection_client_configuration.receivable_group_configurations[i].key, null_key, 0x10) != 0)
                 {
-                    convertDataToHexString(controlNacp.ReceivableDataConfiguration[i].key, 0x10, dataStr, 100);
+                    convertDataToHexString(controlNacp.neighbor_detection_client_configuration.receivable_group_configurations[i].key, 0x10, dataStr, 100);
                     
                     sprintf(tmp, "    <ReceivableDataConfiguration>\n" \
                                  "      <DataId>0x%016lx</DataId>\n" \
                                  "      <Key>%s</Key>\n" \
                                  "    </ReceivableDataConfiguration>\n", \
-                                 controlNacp.ReceivableDataConfiguration[i].id, \
+                                 controlNacp.neighbor_detection_client_configuration.receivable_group_configurations[i].group_id, \
                                  dataStr);
                     
                     strcat(nacpXml, tmp);
@@ -3325,8 +3355,8 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
                  "    <IsEnabled>%s</IsEnabled>\n" \
                  "    <MemorySize>0x%016lx</MemorySize>\n" \
                  "  </JitConfiguration>\n", \
-                 getNacpJitConfigurationFlag(controlNacp.JitConfigurationFlag), \
-                 controlNacp.JitMemorySize);
+                 getNacpJitConfigurationFlag(controlNacp.jit_configuration.jit_configuration_flag), \
+                 controlNacp.jit_configuration.memory_size);
     
     strcat(nacpXml, tmp);
     

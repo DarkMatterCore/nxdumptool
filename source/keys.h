@@ -12,10 +12,9 @@
 #define SEG_RODATA                      BIT(1)
 #define SEG_DATA                        BIT(2)
 
-#define ETICKET_DEVKEY_DATA_SIZE        0x244
-#define ETICKET_DEVKEY_CTR_OFFSET       0x4
-#define ETICKET_DEVKEY_RSA_OFFSET       0x14
-#define ETICKET_DEVKEY_RSA_SIZE         (ETICKET_DEVKEY_DATA_SIZE - ETICKET_DEVKEY_RSA_OFFSET)
+#define ETICKET_DEVKEY_RSA_CTR_SIZE     0x10
+#define ETICKET_DEVKEY_RSA_OFFSET       ETICKET_DEVKEY_RSA_CTR_SIZE
+#define ETICKET_DEVKEY_RSA_SIZE         0x230
 
 #define SIGTYPE_RSA2048_SHA1            (u32)0x10001
 #define SIGTYPE_RSA2048_SHA256          (u32)0x10004
@@ -25,13 +24,13 @@ typedef struct {
     u8 mask;
     u8 *data;
     u64 dataSize;
-} PACKED keyLocation;
+} keyLocation;
 
 typedef struct {
     char name[128];
     u8 hash[SHA256_HASH_SIZE];
     u64 size;
-} PACKED keyInfo;
+} keyInfo;
 
 typedef struct {
     u16 memory_key_cnt;                         /* Key counter for keys retrieved from memory. */
@@ -55,10 +54,7 @@ typedef struct {
     
     // Needed to reencrypt the NCA key area for tik-less NSP dumps. Retrieved from the Lockpick_RCM keys file.
     u8 key_area_keys[0x20][3][0x10];            /* Key area encryption keys. */
-    
-    // Console specific. Needed to calculate the AES CMAC for savefiles. Retrieved from the Lockpick_RCM keys file.
-    u8 save_mac_key[0x10];                      /* Savefile CMAC key */
-} PACKED nca_keyset_t;
+} nca_keyset_t;
 
 bool loadMemoryKeys();
 bool decryptNcaKeyArea(nca_header_t *dec_nca_header, u8 *out);

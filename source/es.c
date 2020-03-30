@@ -1,5 +1,4 @@
 #include <switch/arm/atomics.h>
-#include <switch/kernel/ipc.h>
 #include <switch/services/sm.h>
 #include <stdlib.h>
 #include <string.h>
