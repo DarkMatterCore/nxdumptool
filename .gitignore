@@ -1,0 +1,13 @@
+build
+/*.elf
+/*.nacp
+/*.nro
+/*.nso
+/*.map
+/*.pfs0
+/*.lst
+
+# Clion files
+.idea
+cmake-build-debug
+CMakeLists.txt
