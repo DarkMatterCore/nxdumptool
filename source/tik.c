@@ -15,6 +15,8 @@
 
 #define ETICKET_DEVKEY_PUBLIC_EXPONENT  0x10001
 
+/* Type definitions. */
+
 /// Everything after the AES CTR is encrypted.
 typedef struct {
     u8 ctr[0x10];
@@ -26,14 +28,18 @@ typedef struct {
     u8 ghash[0x10];
 } tikEticketDeviceKeyData;
 
+/* Global variables. */
+
 static SetCalRsa2048DeviceKey g_eTicketDeviceKey = {0};
 static bool g_eTicketDeviceKeyRetrieved = false;
 
-/* Used during the RSA-OAEP titlekey decryption stage */
+/// Used during the RSA-OAEP titlekey decryption stage.
 static const u8 g_nullHash[0x20] = {
     0xE3, 0xB0, 0xC4, 0x42, 0x98, 0xFC, 0x1C, 0x14, 0x9A, 0xFB, 0xF4, 0xC8, 0x99, 0x6F, 0xB9, 0x24,
     0x27, 0xAE, 0x41, 0xE4, 0x64, 0x9B, 0x93, 0x4C, 0xA4, 0x95, 0x99, 0x1B, 0x78, 0x52, 0xB8, 0x55
 };
+
+/* Function prototypes. */
 
 static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized);
 static u8 tikGetTitleKeyTypeFromRightsId(const FsRightsId *id);
@@ -176,7 +182,7 @@ out:
     return success;
 }
 
-bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TicketCommonBlock *tik_common_blk)
+bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TikCommonBlock *tik_common_blk)
 {
     if (!dst || !tik_common_blk)
     {
@@ -184,7 +190,6 @@ bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TicketCommonBlock *tik_commo
         return false;
     }
     
-    Result rc = 0;
     size_t out_keydata_size = 0;
     u8 out_keydata[0x100] = {0};
     tikEticketDeviceKeyData *eticket_devkey = NULL;
@@ -288,7 +293,7 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, const void *titleke
     if (!tik || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE || !titlekey) return;
     
     bool dev_cert = false;
-    TicketCommonBlock *tik_common_blk = NULL;
+    TikCommonBlock *tik_common_blk = NULL;
     
     tik_common_blk = tikGetTicketCommonBlockFromTicket(tik);
     if (!tik_common_blk || tik_common_blk->title_key_type != TikTitleKeyType_Personalized) return;

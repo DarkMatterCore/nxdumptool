@@ -19,63 +19,6 @@
 
 
 
-
-
-
-
-#define LOGFILE(fmt, ...)           utilsWriteLogMessage(__func__, fmt, ##__VA_ARGS__)
-
-#define MEMBER_SIZE(type, member)   sizeof(((type*)NULL)->member)
-
-#define SLEEP(x)                    svcSleepThread((x) * (u64)1000000000)
-
-static Mutex g_logfileMutex = 0;
-
-void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
-{
-    mutexLock(&g_logfileMutex);
-    
-    va_list args;
-    FILE *logfile = NULL;
-    
-    logfile = fopen(APP_BASE_PATH "log.txt", "a+");
-    if (!logfile) return;
-    
-    time_t now = time(NULL);
-    struct tm *ts = localtime(&now);
-    
-    fprintf(logfile, "%d-%d-%d %d:%d:%d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
-    
-    va_start(args, fmt);
-    vfprintf(logfile, fmt, args);
-    va_end(args);
-    
-    fprintf(logfile, "\r\n");
-    
-    fclose(logfile);
-    
-    mutexUnlock(&g_logfileMutex);
-}
-
-typedef enum {
-    UtilsCustomFirmwareType_Atmosphere = 0,
-    UtilsCustomFirmwareType_SXOS       = 1,
-    UtilsCustomFirmwareType_ReiNX      = 2
-} UtilsCustomFirmwareType;
-
-
-typedef struct {
-    u16 major : 6;
-    u16 minor : 6;
-    u16 micro : 4;
-    u16 bugfix;
-} TitleVersion;
-
-
-
-
-
-
 #define CONFIG_PATH                     APP_BASE_PATH "config.bin"
 #define NRO_NAME                        APP_TITLE ".nro"
 #define NRO_PATH                        APP_BASE_PATH NRO_NAME

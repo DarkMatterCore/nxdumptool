@@ -9,7 +9,9 @@
 #include "rsa.h"
 #include "utils.h"
 
-/* Self-generated private key */
+/* Global variables. */
+
+/// Self-generated private key.
 static const char g_rsa2048CustomAcidPrivateKey[] = "-----BEGIN RSA PRIVATE KEY-----\r\n"
 "MIIEowIBAAKCAQEAvVRzt+8mE7oE4RkmSh3ws4CGlBj7uhHkfwCpPFsn4TNVdLRo\r\n"
 "YYY17jQYWTtcOYPMcHxwUpgJyspGN8QGXEkJqY8jILv2eO0jBGtg7Br2afUBp6/x\r\n"
@@ -38,7 +40,7 @@ static const char g_rsa2048CustomAcidPrivateKey[] = "-----BEGIN RSA PRIVATE KEY-
 "n5NEG+mY4WZaOFRNiZu8+4aJI1yycXMyA22iKcU8+nN/sMAJs3Nx\r\n"
 "-----END RSA PRIVATE KEY-----\r\n";
 
-/* Self-generated public key */
+/// Self-generated public key.
 static const u8 g_rsa2048CustomAcidPublicKey[] = {
     0xBD, 0x54, 0x73, 0xB7, 0xEF, 0x26, 0x13, 0xBA, 0x04, 0xE1, 0x19, 0x26, 0x4A, 0x1D, 0xF0, 0xB3,
     0x80, 0x86, 0x94, 0x18, 0xFB, 0xBA, 0x11, 0xE4, 0x7F, 0x00, 0xA9, 0x3C, 0x5B, 0x27, 0xE1, 0x33,
@@ -57,6 +59,8 @@ static const u8 g_rsa2048CustomAcidPublicKey[] = {
     0xEA, 0xCD, 0xE0, 0xC5, 0xE6, 0x65, 0x13, 0x96, 0x67, 0x9D, 0xD8, 0x8E, 0xA6, 0xE0, 0x42, 0xF1,
     0x6D, 0x5D, 0x5B, 0xD2, 0x55, 0x20, 0xB9, 0x1E, 0x59, 0x13, 0x3C, 0x17, 0xC2, 0x25, 0x56, 0xC7
 };
+
+/* Function prototypes. */
 
 static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_src, size_t h_src_size);
 
@@ -127,7 +131,7 @@ out:
     return success;
 }
 
-const u8 rsa2048GetCustomAcidPublicKey(void)
+const u8 *rsa2048GetCustomAcidPublicKey(void)
 {
     return g_rsa2048CustomAcidPublicKey;
 }
@@ -205,6 +209,8 @@ static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_s
     
     u32 seed = 0;
     size_t i, offset = 0;
+    u8 *data_u8 = (u8*)data;
+    
     u8 mgf1_buf[SHA256_HASH_SIZE] = {0};
     u8 h_buf[RSA2048_SIGNATURE_SIZE] = {0};
     
@@ -216,7 +222,7 @@ static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_s
         
         sha256CalculateHash(mgf1_buf, h_buf, h_src_size + 4);
         
-        for(i = offset; i < data_size && i < (offset + 0x20); i++) data[i] ^= mgf1_buf[i - offset];
+        for(i = offset; i < data_size && i < (offset + 0x20); i++) data_u8[i] ^= mgf1_buf[i - offset];
         
         seed++;
         offset += 0x20;

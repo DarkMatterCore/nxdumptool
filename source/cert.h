@@ -3,6 +3,7 @@
 #ifndef __CERT_H__
 #define __CERT_H__
 
+#include <switch/types.h>
 #include "signature.h"
 
 #define CERT_MAX_SIZE   0x500   /* Equivalent to sizeof(CertSigRsa4096PubKeyRsa4096) */

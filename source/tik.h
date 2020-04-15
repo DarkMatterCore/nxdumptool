@@ -3,6 +3,7 @@
 #ifndef __TIK_H__
 #define __TIK_H__
 
+#include <switch.h>
 #include "signature.h"
 
 #define TIK_MAX_SIZE    0x400   /* Max ticket entry size in the ES system savefiles */
@@ -70,17 +71,17 @@ typedef struct {
 } TikCommonBlock;
 
 typedef struct {
-    SignatureRsa4096Block sig_block;
+    SignatureBlockRsa4096 sig_block;
     TikCommonBlock tik_common_blk;
 } TikSigRsa4096;
 
 typedef struct {
-    SignatureRsa2048Block sig_block;
+    SignatureBlockRsa2048 sig_block;
     TikCommonBlock tik_common_blk;
 } TikSigRsa2048;
 
 typedef struct {
-    SignatureEcsda240Block sig_block;
+    SignatureBlockEcsda240 sig_block;
     TikCommonBlock tik_common_blk;
 } TikSigEcsda240;
 
@@ -112,7 +113,7 @@ static inline TikCommonBlock *tikGetTicketCommonBlockFromTicket(Ticket *tik)
 
 bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id);
 
-bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TicketCommonBlock *tik_common_blk);
+bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TikCommonBlock *tik_common_blk);
 
 static inline bool tikGetTitleKeyFromTicket(void *dst, Ticket *tik)
 {

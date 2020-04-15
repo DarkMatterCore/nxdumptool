@@ -1,4 +1,3 @@
-#include <switch/arm/atomics.h>
 #include <switch/services/sm.h>
 #include <stdlib.h>
 #include <string.h>
@@ -34,7 +33,7 @@ Result esCountPersonalizedTicket(s32 *out_count)
     return rc;
 }
 
-Result esListCommonTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count);
+Result esListCommonTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count)
 {
     struct {
         s32 num_rights_ids_written;

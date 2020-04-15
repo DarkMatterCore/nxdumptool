@@ -32,8 +32,8 @@ include $(DEVKITPRO)/libnx/switch_rules
 #---------------------------------------------------------------------------------
 
 VERSION_MAJOR := 1
-VERSION_MINOR := 1
-VERSION_MICRO := 9
+VERSION_MINOR := 2
+VERSION_MICRO := 0
 
 APP_TITLE	:=	nxdumptool
 APP_AUTHOR	:=	DarkMatterCore

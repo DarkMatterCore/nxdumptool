@@ -277,7 +277,7 @@ static bool keysRetrieveDebugHandleFromProcessByProgramId(Handle *out, u64 progr
             return false;
         }
         
-        rc = svcGetProcessList(&num_processes, pids, 300);
+        rc = svcGetProcessList((s32*)&num_processes, pids, 300);
         if (R_FAILED(rc))
         {
             LOGFILE("svcGetProcessList failed! (0x%08X)", rc);

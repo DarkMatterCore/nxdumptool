@@ -124,12 +124,12 @@ Result gamecardInitialize(void);
 void gamecardExit(void);
 
 /// Used to check if a gamecard has been inserted and if info could be loaded from it.
-bool gamecardCheckReadyStatus(void);
+bool gamecardIsReady(void);
 
 /// Used to read data from the inserted gamecard.
-/// All required handles are managed internally.
+/// All required handles, changes between normal <-> secure storage areas and proper offset calculations are managed internally.
 /// offset + out_size should never exceed the value returned by gamecardGetTotalRomSize().
-bool gamecardStorageRead(void *out, u64 out_size, u64 offset);
+bool gamecardRead(void *out, u64 out_size, u64 offset);
 
 /// Miscellaneous functions.
 bool gamecardGetHeader(GameCardHeader *out);
@@ -138,13 +138,11 @@ bool gamecardGetTrimmedRomSize(u64 *out);
 bool gamecardGetCertificate(FsGameCardCertificate *out);
 bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
 
-static inline u64 gamecardGetCapacity(GameCardHeader *header)
+static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
 {
-    if (!header) return 0;
-    
     u64 capacity = 0;
     
-    switch(header->rom_size)
+    switch(rom_size)
     {
         case GameCardRomSize_1GB:
             capacity = (u64)0x40000000;
@@ -168,7 +166,13 @@ static inline u64 gamecardGetCapacity(GameCardHeader *header)
             break;
     }
     
-    return out;
+    return capacity;
+}
+
+static inline u64 gamecardGetCapacityFromHeader(GameCardHeader *header)
+{
+    if (!header) return 0;
+    return gamecardGetCapacityFromRomSizeValue(header->rom_size);
 }
 
 #endif /* __GAMECARD_H__ */

@@ -9,7 +9,9 @@
 #define CERT_SAVEFILE_PATH              "sys:/save/80000000000000e0"
 #define CERT_SAVEFILE_STORAGE_BASE_PATH "/certificate/"
 
-#define CERT_TYPE(sig)  (pub_key_type == CertPubKeyType_Rsa4096 ? CertType_Sig##sig_PubKeyRsa4096 : (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig_PubKeyRsa2048 : CertType_Sig##sig_PubKeyEcsda240))
+#define CERT_TYPE(sig)  (pub_key_type == CertPubKeyType_Rsa4096 ? CertType_Sig##sig##_PubKeyRsa4096 : (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig##_PubKeyRsa2048 : CertType_Sig##sig##_PubKeyEcsda240))
+
+/* Function prototypes. */
 
 static u8 certGetCertificateType(const void *data, u64 data_size);
 static u32 certGetCertificateCountInSignatureIssuer(const char *issuer);
