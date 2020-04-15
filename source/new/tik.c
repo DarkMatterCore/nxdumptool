@@ -22,7 +22,7 @@ typedef struct {
     u8 modulus[0x100];
     u32 public_exponent;    ///< Must match ETICKET_DEVKEY_PUBLIC_EXPONENT. Stored using big endian byte order.
     u8 padding[0x14];
-    u8 device_id[0x8];
+    u64 device_id;
     u8 ghash[0x10];
 } tikEticketDeviceKeyData;
 
@@ -272,7 +272,7 @@ bool tikGetTitleKekDecryptedTitleKeyFromTicket(void *dst, Ticket *tik)
         return false;
     }
     
-    /* Even though tickets do have a proper key_generation field, we'll default to retrieve it from the rights_id field */
+    /* Even though tickets do have a proper key_generation field, we'll just retrieve it from the rights_id field */
     /* Old custom tools used to wipe the key_generation field or save it to a different offset */
     if (!tikGetTitleKekDecryptedTitleKey(dst, titlekey, tik_common_blk->rights_id.c[0xF]))
     {

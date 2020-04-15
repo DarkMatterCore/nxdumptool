@@ -5,8 +5,8 @@
 
 #include <switch.h>
 
-Result esInitialize();
-void esExit();
+Result esInitialize(void);
+void esExit(void);
 
 Result esCountCommonTicket(s32 *out_count);
 Result esCountPersonalizedTicket(s32 *out_count);

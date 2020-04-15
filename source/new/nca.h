@@ -22,18 +22,11 @@
 
 #define NCA_IVFC_BLOCK_SIZE(x)          (1 << (x))
 
-
-
-
 typedef enum {
-    NcaVersion_Nca0Beta = 0,
-    NcaVersion_Nca0     = 1,
-    NcaVersion_Nca2     = 2,
-    NcaVersion_Nca3     = 3
+    NcaVersion_Nca0     = 0,
+    NcaVersion_Nca2     = 1,
+    NcaVersion_Nca3     = 2
 } NcaVersion;
-
-
-
 
 typedef enum {
     NcaDistributionType_Download = 0,
@@ -51,7 +44,7 @@ typedef enum {
 
 typedef enum {
     NcaKeyGenerationOld_100_230 = 0,
-    NcaKeyGenerationOld_300     = 1
+    NcaKeyGenerationOld_300     = 2
 } NcaKeyGenerationOld;
 
 typedef enum {
@@ -60,7 +53,7 @@ typedef enum {
     NcaKeyAreaEncryptionKeyIndex_System      = 2
 } NcaKeyAreaEncryptionKeyIndex;
 
-/// 'NcaKeyGeneration_Latest' will always point to the last known key generation value
+/// 'NcaKeyGeneration_Latest' will always point to the last known key generation value.
 typedef enum {
     NcaKeyGeneration_301_302 = 3,
     NcaKeyGeneration_400_410 = 4,
@@ -75,8 +68,8 @@ typedef enum {
 } NcaKeyGeneration;
 
 typedef struct {
-    u32 start_block_offset; ///< Expressed in NCA_FS_ENTRY_BLOCK_SIZE blocks
-    u32 end_block_offset;   ///< Expressed in NCA_FS_ENTRY_BLOCK_SIZE blocks
+    u32 start_block_offset; ///< Expressed in NCA_FS_ENTRY_BLOCK_SIZE blocks.
+    u32 end_block_offset;   ///< Expressed in NCA_FS_ENTRY_BLOCK_SIZE blocks.
     u8 enable_entry;
     u8 reserved[0x7];
 } NcaFsEntry;
@@ -97,8 +90,8 @@ typedef enum {
 typedef enum {
     NcaHashType_Auto                  = 0,
     NcaHashType_None                  = 1,
-    NcaHashType_HierarchicalSha256    = 2,  ///< Used by NcaFsType_PartitionFs
-    NcaHashType_HierarchicalIntegrity = 3   ///< Used by NcaFsType_RomFs
+    NcaHashType_HierarchicalSha256    = 2,  ///< Used by NcaFsType_PartitionFs.
+    NcaHashType_HierarchicalIntegrity = 3   ///< Used by NcaFsType_RomFs.
 } NcaHashType;
 
 typedef enum {
@@ -114,7 +107,7 @@ typedef struct {
     u64 size;
 } NcaHierarchicalSha256LayerInfo;
 
-/// Used for NcaFsType_PartitionFs and NCA0 RomFS
+/// Used for NcaFsType_PartitionFs and NCA0 RomFS.
 typedef struct {
     u8 master_hash[SHA256_HASH_SIZE];
     u32 hash_block_size;
@@ -130,9 +123,9 @@ typedef struct {
     u8 reserved[0x4];
 } NcaHierarchicalIntegrityLayerInfo;
 
-/// Used for NcaFsType_RomFs
+/// Used for NcaFsType_RomFs.
 typedef struct {
-    u32 magic;                                                  ///< "IVFC"
+    u32 magic;                                                  ///< "IVFC".
     u32 version;
     u32 master_hash_size;
     u32 layer_count;
@@ -145,12 +138,12 @@ typedef struct {
 typedef struct {
     union {
         struct {
-            ///< Used if hash_type == NcaHashType_HierarchicalSha256 (NcaFsType_PartitionFs)
+            ///< Used if hash_type == NcaHashType_HierarchicalSha256 (NcaFsType_PartitionFs).
             NcaHierarchicalSha256 hierarchical_sha256;
             u8 reserved_1[0xB0];
         };
         struct {
-            ///< Used if hash_type == NcaHashType_HierarchicalIntegrity (NcaFsType_RomFs)
+            ///< Used if hash_type == NcaHashType_HierarchicalIntegrity (NcaFsType_RomFs).
             NcaHierarchicalIntegrity hierarchical_integrity;
             u8 reserved_2[0x18];
         };
@@ -158,13 +151,13 @@ typedef struct {
 } NcaHashInfo;
 
 typedef struct {
-    u32 magic;          ///< "BKTR"
+    u32 magic;          ///< "BKTR".
     u32 bucket_count;
     u32 entry_count;
     u8 reserved[0x4];
 } NcaBucketTreeHeader;
 
-/// Only used for NcaEncryptionType_AesCtrEx (PatchRomFs)
+/// Only used for NcaEncryptionType_AesCtrEx (PatchRomFs).
 typedef struct {
     u64 indirect_offset;
     u64 indirect_size;
@@ -174,16 +167,16 @@ typedef struct {
     NcaBucketTreeHeader aes_ctr_ex_header;
 } NcaPatchInfo;
 
-/// Format unknown
+/// Format unknown.
 typedef struct {
     u8 unknown[0x30];
 } NcaSparseInfo;
 
 typedef struct {
     u16 version;
-    u8 fs_type;                 ///< NcaFsType
-    u8 hash_type;               ///< NcaHashType
-    u8 encryption_type;         ///< NcaEncryptionType
+    u8 fs_type;                 ///< NcaFsType.
+    u8 hash_type;               ///< NcaHashType.
+    u8 encryption_type;         ///< NcaEncryptionType.
     u8 reserved_1[0x3];
     NcaHashInfo hash_info;
     NcaPatchInfo patch_info;
@@ -201,11 +194,11 @@ typedef struct {
 typedef struct {
     u8 main_signature[0x100];           ///< RSA-PSS signature over header with fixed key.
     u8 acid_signature[0x100];           ///< RSA-PSS signature over header with key in NPDM.
-    u32 magic;                          ///< "NCA0" / "NCA2" / "NCA3"
-    u8 distribution_type;               ///< NcaDistributionType
-    u8 content_type;                    ///< NcaContentType
-    u8 key_generation_old;              ///< NcaKeyGenerationOld
-    u8 kaek_index;                      ///< NcaKeyAreaEncryptionKeyIndex
+    u32 magic;                          ///< "NCA0" / "NCA2" / "NCA3".
+    u8 distribution_type;               ///< NcaDistributionType.
+    u8 content_type;                    ///< NcaContentType.
+    u8 key_generation_old;              ///< NcaKeyGenerationOld.
+    u8 kaek_index;                      ///< NcaKeyAreaEncryptionKeyIndex.
     u64 content_size;
     u64 program_id;
     u32 content_index;
@@ -218,7 +211,7 @@ typedef struct {
             u8 sdk_addon_major;
         };
     };
-    u8 key_generation;                  ///< NcaKeyGeneration
+    u8 key_generation;                  ///< NcaKeyGeneration.
     u8 main_signature_key_generation;
     u8 reserved_1[0xE];
     FsRightsId rights_id;               ///< Used for titlekey crypto.
@@ -252,20 +245,21 @@ typedef struct {
 } NcaFsContext;
 
 typedef struct {
-    u8 storage_id;                      ///< NcmStorageId
+    u8 storage_id;                      ///< NcmStorageId.
     NcmContentStorage *ncm_storage;     ///< Pointer to a NcmContentStorage instance. Used to read NCA data.
-    u64 gamecard_base_offset;           ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
+    u64 gc_secure_area_base_offset;     ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
     NcmContentId id;                    ///< Also used to read NCA data.
-    
     char id_str[0x21];
     u8 hash[0x20];
     char hash_str[0x41];
+    u8 format_version;                  ///< NcaVersion.
     u8 type;                            ///< NcmContentType. Retrieved from NcmContentInfo.
     u64 size;                           ///< Retrieved from NcmContentInfo.
     u8 key_generation;                  ///< NcaKeyGenerationOld / NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                       ///< Retrieved from NcmContentInfo.
     bool rights_id_available;
     NcaHeader header;
+    bool dirty_header;
     NcaEncryptedKey decrypted_keys[4];
     NcaFsContext fs_contexts[4];
 } NcaContext;
@@ -293,8 +287,9 @@ static inline u8 ncaGetKeyGenerationValue(NcaContext *ctx)
 
 static inline void ncaSetDownloadDistributionType(NcaContext *ctx)
 {
-    if (!ctx) return;
+    if (!ctx || ctx->header.distribution_type == NcaDistributionType_Download) return;
     ctx->header.distribution_type = NcaDistributionType_Download;
+    ctx->dirty_header = true;
 }
 
 static inline bool ncaCheckRightsIdAvailability(NcaContext *ctx)
@@ -319,6 +314,7 @@ static inline void ncaWipeRightsId(NcaContext *ctx)
 {
     if (!ctx) return;
     memset(ctx->header.rights_id, 0, sizeof(FsRightsId));
+    ctx->dirty_header = true;
 }
 
 
@@ -326,6 +322,9 @@ static inline void ncaWipeRightsId(NcaContext *ctx)
 
 bool ncaDecryptKeyArea(NcaContext *nca_ctx);
 bool ncaEncryptKeyArea(NcaContext *nca_ctx);
+
+bool ncaDecryptHeader(NcaContext *ctx);
+bool ncaEncryptHeader(NcaContext *ctx);
 
 
 

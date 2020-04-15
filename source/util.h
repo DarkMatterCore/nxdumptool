@@ -3,7 +3,6 @@
 #ifndef __UTIL_H__
 #define __UTIL_H__
 
-#include <time.h>
 #include <switch.h>
 #include "nca.h"
 
@@ -24,13 +23,20 @@
 
 
 
+#define LOGFILE(fmt, ...)           utilsWriteLogMessage(__func__, fmt, ##__VA_ARGS__)
+
+#define MEMBER_SIZE(type, member)   sizeof(((type*)NULL)->member)
+
+#define SLEEP(x)                    svcSleepThread((x) * (u64)1000000000)
+
+static Mutex g_logfileMutex = 0;
+
 void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
 {
-    if (!func_name || !strlen(func_name) || !fmt || !strlen(fmt)) return;
+    mutexLock(&g_logfileMutex);
     
     va_list args;
     FILE *logfile = NULL;
-    char str[FS_MAX_PATH] = {0};
     
     logfile = fopen(APP_BASE_PATH "log.txt", "a+");
     if (!logfile) return;
@@ -47,11 +53,25 @@ void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
     fprintf(logfile, "\r\n");
     
     fclose(logfile);
+    
+    mutexUnlock(&g_logfileMutex);
 }
 
-#define LOGFILE(fmt, ...)   utilsWriteLogMessage(__func__, fmt, ##__VA_ARGS__)
+typedef enum {
+    UtilsCustomFirmwareType_Atmosphere = 0,
+    UtilsCustomFirmwareType_SXOS       = 1,
+    UtilsCustomFirmwareType_ReiNX      = 2
+} UtilsCustomFirmwareType;
 
-#define MEMBER_SIZE(type, member)    sizeof(((type*)NULL)->member)
+
+typedef struct {
+    u16 major : 6;
+    u16 minor : 6;
+    u16 micro : 4;
+    u16 bugfix;
+} TitleVersion;
+
+
 
 
 
@@ -128,7 +148,6 @@ void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
 
 #define GAMECARD_TYPE1_PARTITION_CNT    3                                       // "update" (0), "normal" (1), "secure" (2)
 #define GAMECARD_TYPE2_PARTITION_CNT    4                                       // "update" (0), "logo" (1), "normal" (2), "secure" (3)
-#define GAMECARD_TYPE(x)                ((x) == GAMECARD_TYPE1_PARTITION_CNT ? "Type 0x01" : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? "Type 0x02" : "Unknown"))
 #define GAMECARD_TYPE1_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Normal" : ((x) == 2 ? "Secure" : "Unknown")))
 #define GAMECARD_TYPE2_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Logo" : ((x) == 2 ? "Normal" : ((x) == 3 ? "Secure" : "Unknown"))))
 #define GAMECARD_PARTITION_NAME(x, y)   ((x) == GAMECARD_TYPE1_PARTITION_CNT ? GAMECARD_TYPE1_PART_NAMES(y) : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? GAMECARD_TYPE2_PART_NAMES(y) : "Unknown"))

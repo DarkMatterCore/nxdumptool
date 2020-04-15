@@ -6,17 +6,9 @@
 #include "es.h"
 #include "service_guard.h"
 
-static Service g_esSrv;
+static Service g_esSrv = {0};
 
 NX_GENERATE_SERVICE_GUARD(es);
-
-Result _esInitialize() {
-    return smGetService(&g_esSrv, "es");
-}
-
-void _esCleanup() {
-    serviceClose(&g_esSrv);
-}
 
 Result esCountCommonTicket(s32 *out_count)
 {
@@ -50,7 +42,7 @@ Result esListCommonTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 cou
     
     Result rc = serviceDispatchInOut(&g_esSrv, 11, *out_entries_written, out,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
-        .buffers = { { out_ids, count * sizeof(FsRightsId) } },
+        .buffers = { { out_ids, count * sizeof(FsRightsId) } }
     );
     
     if (R_SUCCEEDED(rc) && out_entries_written) *out_entries_written = out.num_rights_ids_written;
@@ -66,10 +58,20 @@ Result esListPersonalizedTicket(s32 *out_entries_written, FsRightsId *out_ids, s
     
     Result rc = serviceDispatchInOut(&g_esSrv, 12, *out_entries_written, out,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
-        .buffers = { { out_ids, count * sizeof(FsRightsId) } },
+        .buffers = { { out_ids, count * sizeof(FsRightsId) } }
     );
     
     if (R_SUCCEEDED(rc) && out_entries_written) *out_entries_written = out.num_rights_ids_written;
     
     return rc;
+}
+
+NX_INLINE Result _esInitialize(void)
+{
+    return smGetService(&g_esSrv, "es");
+}
+
+static void _esCleanup(void)
+{
+    serviceClose(&g_esSrv);
 }

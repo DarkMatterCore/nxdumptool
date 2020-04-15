@@ -1,4 +1,19 @@
-﻿# nxdumptool
+﻿todo:
+    
+    hfs0 methods
+    tik gamecard
+
+
+
+
+
+
+
+
+
+
+
+# nxdumptool
 <img width="200" src="icon.jpg">
 Nintendo Switch Dump Tool
 

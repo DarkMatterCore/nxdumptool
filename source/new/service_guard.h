@@ -32,7 +32,7 @@ NX_INLINE void serviceGuardExit(ServiceGuard* g, void (*cleanupFunc)(void))
 
 #define NX_GENERATE_SERVICE_GUARD_PARAMS(name, _paramdecl, _parampass) \
 \
-static ServiceGuard g_##name##Guard; \
+static ServiceGuard g_##name##Guard = {0}; \
 NX_INLINE Result _##name##Initialize _paramdecl; \
 static void _##name##Cleanup(void); \
 \
