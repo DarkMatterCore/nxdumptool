@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2020 DarkMatterCore
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
@@ -75,7 +91,8 @@ static void gamecardCloseStorageArea(void);
 
 static bool gamecardGetSizesFromStorageAreas(void);
 
-/* Service guard used to generate thread-safe initialize + exit functions */
+/* Service guard used to generate thread-safe initialize + exit functions. */
+/* I'm using this here even though this actually isn't a service but who cares, it gets the job done. */
 NX_GENERATE_SERVICE_GUARD(gamecard);
 
 bool gamecardIsReady(void)
@@ -766,7 +783,7 @@ static bool gamecardGetSizesFromStorageAreas(void)
         
         gamecardCloseStorageArea();
         
-        if (R_FAILED(rc))
+        if (R_FAILED(rc) || !area_size)
         {
             LOGFILE("fsStorageGetSize failed to retrieve %s storage area size! (0x%08X)", GAMECARD_STORAGE_AREA_NAME(area), rc);
             g_gameCardStorageNormalAreaSize = g_gameCardStorageSecureAreaSize = 0;

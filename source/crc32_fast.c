@@ -8,8 +8,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
-
-#include "crc32_fast.h"
+#include <switch/types.h>
 
 u32 crc32_for_byte(u32 r)
 {

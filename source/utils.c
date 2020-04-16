@@ -1,3 +1,19 @@
+/*
+ * Copyright (c) 2020 DarkMatterCore
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 #include <stdio.h>
 #include <string.h>
 #include <stdarg.h>
@@ -84,7 +100,7 @@ void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
     time_t now = time(NULL);
     struct tm *ts = localtime(&now);
     
-    fprintf(logfile, "%d/%d/%d %d:%d:%d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
+    fprintf(logfile, "%d/%d/%d %d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
     
     va_start(args, fmt);
     vfprintf(logfile, fmt, args);

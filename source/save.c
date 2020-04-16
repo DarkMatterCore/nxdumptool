@@ -1,5 +1,19 @@
-/* Savedata container parsing code taken from Lockpick_RCM with some slight modifications */
-/* Big thanks to shchmue */
+/*
+ * Copyright (c) 2019-2020 shchmue
+ * Copyright (c) 2019-2020 DarkMatterCore
+ *
+ * This program is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * This program is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include <stdio.h>
 #include <string.h>
@@ -122,39 +136,40 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
     
     for(i = 0; i < header->map_segment_count; i++)
     {
-        remap_segment_ctx_t *seg = &segments[i];
+        remap_segment_ctx_t *seg = &(segments[i]);
         
-        seg->entries = calloc(1, sizeof(remap_entry_ctx_t));
+        seg->entry_count = 0;
+        
+        seg->entries = calloc(1, sizeof(remap_entry_ctx_t*));
         if (!seg->entries)
         {
             LOGFILE("Failed to allocate memory for remap segment entry #%u!", entry_idx);
             goto out;
         }
         
-        memcpy(seg->entries, &map_entries[entry_idx], sizeof(remap_entry_ctx_t));
+        seg->entries[seg->entry_count++] = &map_entries[entry_idx];
         seg->offset = map_entries[entry_idx].virtual_offset;
-        map_entries[entry_idx].segment = seg;
-        seg->entry_count = 1;
-        entry_idx++;
+        map_entries[entry_idx++].segment = seg;
         
         while(entry_idx < num_map_entries && map_entries[entry_idx - 1].virtual_offset_end == map_entries[entry_idx].virtual_offset)
         {
             map_entries[entry_idx].segment = seg;
             map_entries[entry_idx - 1].next = &map_entries[entry_idx];
             
-            seg->entries = calloc(1, sizeof(remap_entry_ctx_t));
-            if (!seg->entries)
+            remap_entry_ctx_t **ptr = calloc(sizeof(remap_entry_ctx_t*), seg->entry_count + 1);
+            if (!ptr)
             {
                 LOGFILE("Failed to allocate memory for remap segment entry #%u!", entry_idx);
                 goto out;
             }
             
-            memcpy(seg->entries, &map_entries[entry_idx], sizeof(remap_entry_ctx_t));
-            seg->entry_count++;
-            entry_idx++;
+            memcpy(ptr, seg->entries, sizeof(remap_entry_ctx_t*) * seg->entry_count);
+            free(seg->entries);
+            seg->entries = ptr;
+            seg->entries[seg->entry_count++] = &map_entries[entry_idx++];
         }
         
-        seg->length = (seg->entries[seg->entry_count - 1].virtual_offset_end - seg->entries[0].virtual_offset);
+        seg->length = (seg->entries[seg->entry_count - 1]->virtual_offset_end - seg->entries[0]->virtual_offset);
     }
     
     success = true;
@@ -174,8 +189,7 @@ out:
                 map_entries[entry_idx].segment->entries = NULL;
             }
             
-            map_entries[entry_idx].segment = NULL;
-            entry_idx++;
+            map_entries[entry_idx++].segment = NULL;
             
             while(entry_idx < num_map_entries && map_entries[entry_idx - 1].virtual_offset_end == map_entries[entry_idx].virtual_offset)
             {
@@ -189,8 +203,7 @@ out:
                     map_entries[entry_idx].segment->entries = NULL;
                 }
                 
-                map_entries[entry_idx].segment = NULL;
-                entry_idx++;
+                map_entries[entry_idx++].segment = NULL;
             }
         }
         
@@ -215,7 +228,7 @@ static remap_entry_ctx_t *save_remap_get_map_entry(remap_storage_ctx_t *ctx, u64
     {
         for(unsigned int i = 0; i < ctx->segments[segment_idx].entry_count; i++)
         {
-            if (ctx->segments[segment_idx].entries[i].virtual_offset_end > offset) return (&ctx->segments[segment_idx].entries[i]);
+            if (ctx->segments[segment_idx].entries[i]->virtual_offset_end > offset) return ctx->segments[segment_idx].entries[i];
         }
     }
     
@@ -360,7 +373,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
         u32 length;
     };
     
-    static struct salt_source_t salt_sources[6] = {
+    static const struct salt_source_t salt_sources[6] = {
         { "HierarchicalIntegrityVerificationStorage::Master", 48 },
         { "HierarchicalIntegrityVerificationStorage::L1", 44 },
         { "HierarchicalIntegrityVerificationStorage::L2", 44 },
@@ -560,7 +573,7 @@ static bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, vo
     }
     
     memcpy(data_buffer, ctx->salt, 0x20);
-    memcpy(data_buffer + 0x20, buffer, count);
+    memcpy(data_buffer + 0x20, buffer, ctx->sector_size);
     
     sha256CalculateHash(hash, data_buffer, ctx->sector_size + 0x20);
     hash[0x1F] |= 0x80;
@@ -1223,9 +1236,7 @@ bool save_process(save_ctx_t *ctx)
         return success;
     }
     
-    if (!save_process_header(ctx)) return success;
-    
-    if (ctx->header_hash_validity == VALIDITY_INVALID)
+    if (!save_process_header(ctx) || ctx->header_hash_validity == VALIDITY_INVALID)
     {
         /* Try to parse Header B. */
         fr = f_lseek(ctx->file, 0x4000);
@@ -1242,9 +1253,7 @@ bool save_process(save_ctx_t *ctx)
             return success;
         }
         
-        if (!save_process_header(ctx)) return success;
-        
-        if (ctx->header_hash_validity == VALIDITY_INVALID)
+        if (!save_process_header(ctx) || ctx->header_hash_validity == VALIDITY_INVALID)
         {
             LOGFILE("Savefile header is invalid!");
             return success;
@@ -1591,7 +1600,7 @@ void save_free_contexts(save_ctx_t *ctx)
             {
                 for(unsigned int j = 0; j < ctx->data_remap_storage.segments[i].entry_count; j++)
                 {
-                    if (&(ctx->data_remap_storage.segments[i].entries[j])) free(&(ctx->data_remap_storage.segments[i].entries[j]));
+                    if (ctx->data_remap_storage.segments[i].entries[j]) free(ctx->data_remap_storage.segments[i].entries[j]);
                 }
             }
         }
@@ -1614,7 +1623,7 @@ void save_free_contexts(save_ctx_t *ctx)
             {
                 for(unsigned int j = 0; j < ctx->meta_remap_storage.segments[i].entry_count; j++)
                 {
-                    if (&(ctx->meta_remap_storage.segments[i].entries[j])) free(&(ctx->meta_remap_storage.segments[i].entries[j]));
+                    if (ctx->meta_remap_storage.segments[i].entries[j]) free(ctx->meta_remap_storage.segments[i].entries[j]);
                 }
             }
         }
