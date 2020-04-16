@@ -51,13 +51,13 @@ static ServicesInfoEntry g_serviceInfo[] = {
     { false, "ns", NULL, &nsInitialize, &nsExit },
     { false, "csrng", NULL, &csrngInitialize, &csrngExit },
     { false, "spl", NULL, &splInitialize, &splExit },
-    { false, "spl:mig", &servicesSplCryptoCheckAvailability, &splCryptoInitialize, &splCryptoExit }, /* Checks if spl:mig is really available (e.g. avoid calling splInitialize twice) */
+    { false, "spl:mig", &servicesSplCryptoCheckAvailability, &splCryptoInitialize, &splCryptoExit },    /* Checks if spl:mig is really available (e.g. avoid calling splInitialize twice) */
     { false, "pm:dmnt", NULL, &pmdmntInitialize, &pmdmntExit },
     { false, "pl", NULL, &plInitialize, &plExit },
     { false, "psm", NULL, &psmInitialize, &psmExit },
     { false, "nifm:u", NULL, &servicesNifmUserInitialize, &nifmExit },
-    { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                       /* Placeholder for pcv / clkrst */
-    { false, "fsp-usb", &servicesFspUsbCheckAvailability, &fspusbInitialize, &fspusbExit },         /* Checks if fsp-usb is really available */
+    { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst */
+    { false, "fsp-usb", &servicesFspUsbCheckAvailability, &fspusbInitialize, &fspusbExit },             /* Checks if fsp-usb is really available */
     { false, "es", NULL, &esInitialize, &esExit },
     { false, "set:cal", NULL, &setcalInitialize, &setcalExit }
 };
@@ -92,7 +92,7 @@ bool servicesInitialize(void)
         rc = g_serviceInfo[i].init_func();
         if (R_FAILED(rc))
         {
-            utilsConsoleErrorScreen("%s: failed to initialize %s service! (0x%08X)", __func__, g_serviceInfo[i].name, rc);
+            LOGFILE("Failed to initialize %s service! (0x%08X)", g_serviceInfo[i].name, rc);
             ret = false;
             break;
         }

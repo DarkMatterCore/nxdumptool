@@ -22,17 +22,22 @@
 
 //#include "freetype_helper.h"
 //#include "lvgl_helper.h"
-#include "services.h"
+#include "keys.h"
 #include "gamecard.h"
+#include "services.h"
 #include "utils.h"
 
 /* Global variables. */
+
+static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
 static AppletHookCookie g_systemOverclockCookie = {0};
 
 static Mutex g_logfileMutex = 0;
 
 /* Function prototypes. */
+
+static void _utilsGetCustomFirmwareType(void);
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
@@ -71,22 +76,6 @@ void utilsWaitForButtonPress(void)
     }
 }
 
-void utilsConsoleErrorScreen(const char *fmt, ...)
-{
-    consoleInit(NULL);
-    
-    va_list va;
-    va_start(va, fmt);
-    vprintf(fmt, va);
-    va_end(va);
-    
-    printf("\nPress any button to exit.\n");
-    
-    consoleUpdate(NULL);
-    utilsWaitForButtonPress();
-    consoleExit(NULL);
-}
-
 void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
 {
     mutexLock(&g_logfileMutex);
@@ -122,8 +111,19 @@ void utilsOverclockSystem(bool restore)
 
 bool utilsInitializeResources(void)
 {
-    /* Initialize all needed services */
-    if (!servicesInitialize()) return false;
+    /* Initialize needed services */
+    if (!servicesInitialize())
+    {
+        LOGFILE("Failed to initialize needed services!");
+        return false;
+    }
+    
+    /* Load NCA keyset */
+    if (!keysLoadNcaKeyset())
+    {
+        LOGFILE("Failed to load NCA keyset!");
+        return false;
+    }
     
     /* Initialize FreeType */
     //if (!freeTypeHelperInitialize()) return false;
@@ -131,17 +131,20 @@ bool utilsInitializeResources(void)
     /* Initialize LVGL */
     //if (!lvglHelperInitialize()) return false;
     
+    /* Retrieve custom firmware type */
+    _utilsGetCustomFirmwareType();
+    
     /* Overclock system */
     utilsOverclockSystem(false);
     
     /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked) */
     appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
     
-    /* Initialize gamecard */
+    /* Initialize gamecard interface */
     Result rc = gamecardInitialize();
     if (R_FAILED(rc))
     {
-        utilsConsoleErrorScreen("gamecard fail\n");
+        LOGFILE("Failed to initialize gamecard interface!");
         return false;
     }
     
@@ -150,7 +153,7 @@ bool utilsInitializeResources(void)
 
 void utilsCloseResources(void)
 {
-    /* Deinitialize gamecard */
+    /* Deinitialize gamecard interface */
     gamecardExit();
     
     /* Unset our overclock applet hook */
@@ -167,6 +170,31 @@ void utilsCloseResources(void)
     
     /* Close initialized services */
     servicesClose();
+}
+
+u8 utilsGetCustomFirmwareType(void)
+{
+    return g_customFirmwareType;
+}
+
+static void _utilsGetCustomFirmwareType(void)
+{
+    bool tx_srv = servicesCheckRunningServiceByName("tx");
+    bool rnx_srv = servicesCheckRunningServiceByName("rnx");
+    
+    if (!tx_srv && !rnx_srv)
+    {
+        /* Atmosphere */
+        g_customFirmwareType = UtilsCustomFirmwareType_Atmosphere;
+    } else
+    if (tx_srv && !rnx_srv)
+    {
+        /* SX OS */
+        g_customFirmwareType = UtilsCustomFirmwareType_SXOS;
+    } else {
+        /* ReiNX */
+        g_customFirmwareType = UtilsCustomFirmwareType_ReiNX;
+    }
 }
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)

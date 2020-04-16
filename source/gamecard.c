@@ -50,9 +50,10 @@ typedef enum {
 } GameCardStorageArea;
 
 typedef struct {
-    u64 offset; ///< Relative to the start of the gamecard header.
-    u64 size;   ///< Whole partition size.
-    u8 *header; ///< GameCardHashFileSystemHeader + GameCardHashFileSystemEntry + Name Table.
+    u64 offset;         ///< Relative to the start of the gamecard header.
+    u64 size;           ///< Whole partition size.
+    u64 header_size;    ///< Full header size.
+    u8 *header;         ///< GameCardHashFileSystemHeader + GameCardHashFileSystemEntry + Name Table.
 } GameCardHashFileSystemPartitionInfo;
 
 /* Global variables. */
@@ -100,8 +101,12 @@ static void gamecardCloseStorageArea(void);
 static bool gamecardGetStorageAreasSizes(void);
 static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
 
+static inline GameCardHashFileSystemHeader *gamecardGetHashFileSystemPartitionHeaderByIndex(u32 idx);
+static inline GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *hfs_header, u32 idx);
+static inline char *gamecardGetHashFileSystemEntryName(void *hfs_header, u32 name_offset);
+
 /* Service guard used to generate thread-safe initialize + exit functions. */
-/* I'm using this here even though this actually isn't a service but who cares, it gets the job done. */
+/* I'm using this here even though this actually isn't a real service but who cares, it gets the job done. */
 NX_GENERATE_SERVICE_GUARD(gamecard);
 
 bool gamecardIsReady(void)
@@ -217,15 +222,52 @@ bool gamecardGetBundledFirmwareUpdateVersion(u32 *out)
     return ret;
 }
 
-
-
-
-
-
-
-
-
-
+bool gamecardGetHashFileSystemEntryDataOffsetByName(u32 hfs_partition_idx, const char *name, u64 *out_offset)
+{
+    bool ret = false;
+    char *entry_name = NULL;
+    size_t name_len = 0;
+    GameCardHashFileSystemHeader *fs_header = NULL;
+    GameCardHashFileSystemEntry *fs_entry = NULL;
+    
+    mtx_lock(&g_gameCardSharedDataMutex);
+    
+    if (!g_gameCardInserted || !g_gameCardInfoLoaded || !name || !*name || !out_offset)
+    {
+        LOGFILE("Invalid parameters!");
+        goto out;
+    }
+    
+    name_len = strlen(name);
+    
+    fs_header = gamecardGetHashFileSystemPartitionHeaderByIndex(hfs_partition_idx);
+    if (!fs_header)
+    {
+        LOGFILE("Invalid hash FS partition index! (0x%X)", hfs_partition_idx);
+        goto out;
+    }
+    
+    for(u32 i = 0; i < fs_header->entry_count; i++)
+    {
+        fs_entry = gamecardGetHashFileSystemEntryByIndex(fs_header, i);
+        if (!fs_entry) continue;
+        
+        entry_name = gamecardGetHashFileSystemEntryName(fs_header, fs_entry->name_offset);
+        if (!entry_name) continue;
+        
+        if (!strncasecmp(entry_name, name, name_len))
+        {
+            *out_offset = (g_gameCardHfsPartitions[hfs_partition_idx].offset + g_gameCardHfsPartitions[hfs_partition_idx].header_size + fs_entry->offset);
+            ret = true;
+            break;
+        }
+    }
+    
+out:
+    mtx_unlock(&g_gameCardSharedDataMutex);
+    
+    return ret;
+}
 
 
 
@@ -521,11 +563,10 @@ static void gamecardLoadInfo(void)
     /* Read hash FS partitions */
     for(u32 i = 0; i < fs_header->entry_count; i++)
     {
-        fs_entry = (GameCardHashFileSystemEntry*)(g_gameCardHfsRootHeader + sizeof(GameCardHashFileSystemHeader) + (i * sizeof(GameCardHashFileSystemEntry)));
-        
-        if (!fs_entry->size)
+        fs_entry = gamecardGetHashFileSystemEntryByIndex(g_gameCardHfsRootHeader, i);
+        if (!fs_entry || !fs_entry->size)
         {
-            LOGFILE("Invalid size for hash FS partition #%u!", i);
+            LOGFILE("Invalid hash FS partition entry!");
             goto out;
         }
         
@@ -552,11 +593,12 @@ static void gamecardLoadInfo(void)
             goto out;
         }
         
-        /* Calculate the full header size for the current hash FS partition */
-        u64 partition_header_size = (sizeof(GameCardHashFileSystemHeader) + (partition_header.entry_count * sizeof(GameCardHashFileSystemEntry)) + partition_header.name_table_size);
+        /* Calculate the full header size for the current hash FS partition and round it to a GAMECARD_MEDIA_UNIT_SIZE bytes boundary */
+        g_gameCardHfsPartitions[i].header_size = (sizeof(GameCardHashFileSystemHeader) + (partition_header.entry_count * sizeof(GameCardHashFileSystemEntry)) + partition_header.name_table_size);
+        g_gameCardHfsPartitions[i].header_size = ROUND_UP(g_gameCardHfsPartitions[i].header_size, GAMECARD_MEDIA_UNIT_SIZE);
         
         /* Allocate memory for the hash FS partition header */
-        g_gameCardHfsPartitions[i].header = calloc(partition_header_size, sizeof(u8));
+        g_gameCardHfsPartitions[i].header = calloc(g_gameCardHfsPartitions[i].header_size, sizeof(u8));
         if (!g_gameCardHfsPartitions[i].header)
         {
             LOGFILE("Unable to allocate memory for the hash FS partition #%u header!", i);
@@ -564,7 +606,7 @@ static void gamecardLoadInfo(void)
         }
         
         /* Finally, read the full hash FS partition header */
-        if (!gamecardReadStorageArea(g_gameCardHfsPartitions[i].header, partition_header_size, g_gameCardHfsPartitions[i].offset, false))
+        if (!gamecardReadStorageArea(g_gameCardHfsPartitions[i].header, g_gameCardHfsPartitions[i].header_size, g_gameCardHfsPartitions[i].offset, false))
         {
             LOGFILE("Failed to read full hash FS partition #%u header from offset 0x%lX!", i, g_gameCardHfsPartitions[i].offset);
             goto out;
@@ -861,4 +903,26 @@ static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
     }
     
     return capacity;
+}
+
+static inline GameCardHashFileSystemHeader *gamecardGetHashFileSystemPartitionHeaderByIndex(u32 idx)
+{
+    if (idx >= ((GameCardHashFileSystemHeader*)g_gameCardHfsRootHeader)->entry_count) return NULL;
+    return (GameCardHashFileSystemHeader*)g_gameCardHfsPartitions[idx].header;
+}
+
+static inline GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *hfs_header, u32 idx)
+{
+    if (!hfs_header || idx >= ((GameCardHashFileSystemHeader*)hfs_header)->entry_count) return NULL;
+    return (GameCardHashFileSystemEntry*)((u8*)hfs_header + sizeof(GameCardHashFileSystemHeader) + (idx * sizeof(GameCardHashFileSystemEntry)));
+}
+
+static inline char *gamecardGetHashFileSystemEntryName(void *hfs_header, u32 name_offset)
+{
+    if (!hfs_header) return NULL;
+    
+    GameCardHashFileSystemHeader *header = (GameCardHashFileSystemHeader*)hfs_header;
+    if (!header->entry_count || name_offset >= header->name_table_size) return NULL;
+    
+    return ((char*)hfs_header + sizeof(GameCardHashFileSystemHeader) + (header->entry_count * sizeof(GameCardHashFileSystemEntry)) + name_offset);
 }

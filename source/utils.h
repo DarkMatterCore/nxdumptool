@@ -36,9 +36,10 @@
 
 
 typedef enum {
-    UtilsCustomFirmwareType_Atmosphere = 0,
-    UtilsCustomFirmwareType_SXOS       = 1,
-    UtilsCustomFirmwareType_ReiNX      = 2
+    UtilsCustomFirmwareType_Unknown    = 0,
+    UtilsCustomFirmwareType_Atmosphere = 1,
+    UtilsCustomFirmwareType_SXOS       = 2,
+    UtilsCustomFirmwareType_ReiNX      = 3
 } UtilsCustomFirmwareType;
 
 typedef struct {
@@ -56,8 +57,6 @@ u64 utilsHidKeysAllHeld(void);
 
 void utilsWaitForButtonPress(void);
 
-void utilsConsoleErrorScreen(const char *fmt, ...);
-
 void utilsWriteLogMessage(const char *func_name, const char *fmt, ...);
 
 void utilsOverclockSystem(bool restore);
@@ -65,16 +64,13 @@ void utilsOverclockSystem(bool restore);
 bool utilsInitializeResources(void);
 void utilsCloseResources(void);
 
+u8 utilsGetCustomFirmwareType(void);    ///< UtilsCustomFirmwareType.
+
 
 
 static inline FsStorage *utilsGetEmmcBisSystemStorage(void)
 {
     return NULL;
-}
-
-static inline u8 utilsGetCustomFirmwareType(void)
-{
-    return UtilsCustomFirmwareType_Atmosphere;
 }
 
 

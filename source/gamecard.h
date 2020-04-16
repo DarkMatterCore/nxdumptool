@@ -155,4 +155,6 @@ bool gamecardGetRomCapacity(u64 *out); ///< Not the same as gamecardGetTotalSize
 bool gamecardGetCertificate(FsGameCardCertificate *out);
 bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
 
+bool gamecardGetHashFileSystemEntryDataOffsetByName(u32 hfs_partition_idx, const char *name, u64 *out_offset);
+
 #endif /* __GAMECARD_H__ */

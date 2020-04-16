@@ -265,7 +265,7 @@ typedef struct {
 typedef struct {
     u8 storage_id;                      ///< NcmStorageId.
     NcmContentStorage *ncm_storage;     ///< Pointer to a NcmContentStorage instance. Used to read NCA data.
-    u64 gc_secure_area_base_offset;     ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
+    u64 gamecard_offset;                ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
     NcmContentId id;                    ///< Also used to read NCA data.
     char id_str[0x21];
     u8 hash[0x20];

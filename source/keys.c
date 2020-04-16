@@ -29,6 +29,8 @@
 #define SEGMENT_RODATA      BIT(1)
 #define SEGMENT_DATA        BIT(2)
 
+/* Type definitions. */
+
 typedef struct {
     u64 program_id;
     u8 mask;
@@ -68,6 +70,8 @@ typedef struct {
     ///< Needed to reencrypt the NCA key area for tik-less NSP dumps. Retrieved from the Lockpick_RCM keys file.
     u8 key_area_keys[0x20][3][0x10];            ///< Key area encryption keys.
 } keysNcaKeyset;
+
+/* Global variables. */
 
 static keysNcaKeyset g_ncaKeyset = {0};
 
@@ -129,6 +133,8 @@ static keysMemoryInfo g_fsDataMemoryInfo = {
         }
     }
 };
+
+/* Function prototypes. */
 
 static bool keysRetrieveDebugHandleFromProcessByProgramId(Handle *out, u64 program_id);
 static bool keysRetrieveProcessMemory(keysMemoryLocation *location);

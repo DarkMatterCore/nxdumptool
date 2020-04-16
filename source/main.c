@@ -65,6 +65,7 @@ int main(int argc, char *argv[])
     FsGameCardCertificate cert = {0};
     u64 total_size = 0, trimmed_size = 0;
     u32 update_version = 0;
+    u64 nca_offset = 0;
     
     if (gamecardGetHeader(&header))
     {
@@ -163,6 +164,15 @@ int main(int argc, char *argv[])
         free(buf);
     } else {
         printf("buf failed\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    if (gamecardGetHashFileSystemEntryDataOffsetByName(2, "7e86768383cfabb30f1b58d2373fed07.nca", &nca_offset)) // Should match 0x1657F5E00
+    {
+        printf("nca_offset: 0x%lX\n", nca_offset);
+    } else {
+        printf("nca_offset failed\n");
     }
     
     consoleUpdate(NULL);
