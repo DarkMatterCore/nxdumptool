@@ -23,16 +23,23 @@
 #include "service_guard.h"
 #include "utils.h"
 
+#define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB */
+
 #define GAMECARD_ACCESS_WAIT_TIME               3                       /* Seconds */
 
 #define GAMECARD_UPDATE_TID                     (u64)0x0100000000000816
-
-#define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB */
 
 #define GAMECARD_ECC_BLOCK_SIZE                 0x200
 #define GAMECARD_ECC_DATA_SIZE                  0x24
 
 #define GAMECARD_STORAGE_AREA_NAME(x)           ((x) == GameCardStorageArea_Normal ? "normal" : ((x) == GameCardStorageArea_Secure ? "secure" : "none"))
+
+#define GAMECARD_CAPACITY_1GiB                  (u64)0x40000000
+#define GAMECARD_CAPACITY_2GiB                  (u64)0x80000000
+#define GAMECARD_CAPACITY_4GiB                  (u64)0x100000000
+#define GAMECARD_CAPACITY_8GiB                  (u64)0x200000000
+#define GAMECARD_CAPACITY_16GiB                 (u64)0x400000000
+#define GAMECARD_CAPACITY_32GiB                 (u64)0x800000000
 
 /* Type definitions. */
 
@@ -67,6 +74,7 @@ static u8 *g_gameCardReadBuf = NULL;
 
 static GameCardHeader g_gameCardHeader = {0};
 static u64 g_gameCardStorageNormalAreaSize = 0, g_gameCardStorageSecureAreaSize = 0;
+static u64 g_gameCardCapacity = 0;
 
 static u8 *g_gameCardHfsRootHeader = NULL;   /// GameCardHashFileSystemHeader + GameCardHashFileSystemEntry + Name Table.
 static GameCardHashFileSystemPartitionInfo *g_gameCardHfsPartitions = NULL;
@@ -89,7 +97,8 @@ static bool gamecardOpenStorageArea(u8 area);
 static bool gamecardReadStorageArea(void *out, u64 out_size, u64 offset, bool lock);
 static void gamecardCloseStorageArea(void);
 
-static bool gamecardGetSizesFromStorageAreas(void);
+static bool gamecardGetStorageAreasSizes(void);
+static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
 
 /* Service guard used to generate thread-safe initialize + exit functions. */
 /* I'm using this here even though this actually isn't a service but who cares, it gets the job done. */
@@ -97,10 +106,13 @@ NX_GENERATE_SERVICE_GUARD(gamecard);
 
 bool gamecardIsReady(void)
 {
+    bool ret = false;
+    
     mtx_lock(&g_gameCardSharedDataMutex);
-    bool status = (g_gameCardInserted && g_gameCardInfoLoaded);
+    ret = (g_gameCardInserted && g_gameCardInfoLoaded);
     mtx_unlock(&g_gameCardSharedDataMutex);
-    return status;
+    
+    return ret;
 }
 
 bool gamecardRead(void *out, u64 out_size, u64 offset)
@@ -123,7 +135,7 @@ bool gamecardGetHeader(GameCardHeader *out)
     return ret;
 }
 
-bool gamecardGetTotalRomSize(u64 *out)
+bool gamecardGetTotalSize(u64 *out)
 {
     bool ret = false;
     
@@ -138,7 +150,7 @@ bool gamecardGetTotalRomSize(u64 *out)
     return ret;
 }
 
-bool gamecardGetTrimmedRomSize(u64 *out)
+bool gamecardGetTrimmedSize(u64 *out)
 {
     bool ret = false;
     
@@ -146,6 +158,21 @@ bool gamecardGetTrimmedRomSize(u64 *out)
     if (g_gameCardInserted && g_gameCardInfoLoaded && out)
     {
         *out = (sizeof(GameCardHeader) + ((u64)g_gameCardHeader.valid_data_end_address * GAMECARD_MEDIA_UNIT_SIZE));
+        ret = true;
+    }
+    mtx_unlock(&g_gameCardSharedDataMutex);
+    
+    return ret;
+}
+
+bool gamecardGetRomCapacity(u64 *out)
+{
+    bool ret = false;
+    
+    mtx_lock(&g_gameCardSharedDataMutex);
+    if (g_gameCardInserted && g_gameCardInfoLoaded && out)
+    {
+        *out = g_gameCardCapacity;
         ret = true;
     }
     mtx_unlock(&g_gameCardSharedDataMutex);
@@ -418,7 +445,7 @@ static void gamecardLoadInfo(void)
     
     /* Retrieve gamecard storage area sizes */
     /* gamecardReadStorageArea() actually checks if the storage area sizes are greater than zero, so we must first perform this step */
-    if (!gamecardGetSizesFromStorageAreas())
+    if (!gamecardGetStorageAreasSizes())
     {
         LOGFILE("Failed to retrieve gamecard storage area sizes!");
         goto out;
@@ -438,18 +465,19 @@ static void gamecardLoadInfo(void)
         goto out;
     }
     
+    /* Get gamecard capacity */
+    g_gameCardCapacity = gamecardGetCapacityFromRomSizeValue(g_gameCardHeader.rom_size);
+    if (!g_gameCardCapacity)
+    {
+        LOGFILE("Invalid gamecard capacity value! (0x%02X)", g_gameCardHeader.rom_size);
+        goto out;
+    }
+    
     if (utilsGetCustomFirmwareType() == UtilsCustomFirmwareType_SXOS)
     {
         /* The total size for the secure storage area is maxed out under SX OS */
         /* Let's try to calculate it manually */
-        u64 capacity = gamecardGetCapacityFromHeader(&g_gameCardHeader);
-        if (!capacity)
-        {
-            LOGFILE("Invalid gamecard capacity value! (0x%02X)", g_gameCardHeader.rom_size);
-            goto out;
-        }
-        
-        g_gameCardStorageSecureAreaSize = ((capacity - ((capacity / GAMECARD_ECC_BLOCK_SIZE) * GAMECARD_ECC_DATA_SIZE)) - g_gameCardStorageNormalAreaSize);
+        g_gameCardStorageSecureAreaSize = ((g_gameCardCapacity - ((g_gameCardCapacity / GAMECARD_ECC_BLOCK_SIZE) * GAMECARD_ECC_DATA_SIZE)) - g_gameCardStorageNormalAreaSize);
     }
     
     /* Allocate memory for the root hash FS header */
@@ -552,8 +580,11 @@ out:
 static void gamecardFreeInfo(void)
 {
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
+    
     g_gameCardStorageNormalAreaSize = 0;
     g_gameCardStorageSecureAreaSize = 0;
+    
+    g_gameCardCapacity = 0;
     
     if (g_gameCardHfsRootHeader)
     {
@@ -759,7 +790,7 @@ static void gamecardCloseStorageArea(void)
     g_gameCardStorageCurrentArea = GameCardStorageArea_None;
 }
 
-static bool gamecardGetSizesFromStorageAreas(void)
+static bool gamecardGetStorageAreasSizes(void)
 {
     if (!g_gameCardInserted)
     {
@@ -799,4 +830,35 @@ static bool gamecardGetSizesFromStorageAreas(void)
     }
     
     return true;
+}
+
+static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
+{
+    u64 capacity = 0;
+    
+    switch(rom_size)
+    {
+        case GameCardRomSize_1GiB:
+            capacity = GAMECARD_CAPACITY_1GiB;
+            break;
+        case GameCardRomSize_2GiB:
+            capacity = GAMECARD_CAPACITY_2GiB;
+            break;
+        case GameCardRomSize_4GiB:
+            capacity = GAMECARD_CAPACITY_4GiB;
+            break;
+        case GameCardRomSize_8GiB:
+            capacity = GAMECARD_CAPACITY_8GiB;
+            break;
+        case GameCardRomSize_16GiB:
+            capacity = GAMECARD_CAPACITY_16GiB;
+            break;
+        case GameCardRomSize_32GiB:
+            capacity = GAMECARD_CAPACITY_32GiB;
+            break;
+        default:
+            break;
+    }
+    
+    return capacity;
 }

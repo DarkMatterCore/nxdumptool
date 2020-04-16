@@ -38,12 +38,12 @@ typedef struct {
 } GameCardKeyFlags;
 
 typedef enum {
-    GameCardRomSize_1GB  = 0xFA,
-    GameCardRomSize_2GB  = 0xF8,
-    GameCardRomSize_4GB  = 0xF0,
-    GameCardRomSize_8GB  = 0xE0,
-    GameCardRomSize_16GB = 0xE1,
-    GameCardRomSize_32GB = 0xE2
+    GameCardRomSize_1GiB  = 0xFA,
+    GameCardRomSize_2GiB  = 0xF8,
+    GameCardRomSize_4GiB  = 0xF0,
+    GameCardRomSize_8GiB  = 0xE0,
+    GameCardRomSize_16GiB = 0xE1,
+    GameCardRomSize_32GiB = 0xE2
 } GameCardRomSize;
 
 typedef struct {
@@ -144,51 +144,15 @@ bool gamecardIsReady(void);
 
 /// Used to read data from the inserted gamecard.
 /// All required handles, changes between normal <-> secure storage areas and proper offset calculations are managed internally.
-/// offset + out_size should never exceed the value returned by gamecardGetTotalRomSize().
+/// offset + out_size should never exceed the value returned by gamecardGetTotalSize().
 bool gamecardRead(void *out, u64 out_size, u64 offset);
 
 /// Miscellaneous functions.
 bool gamecardGetHeader(GameCardHeader *out);
-bool gamecardGetTotalRomSize(u64 *out);
-bool gamecardGetTrimmedRomSize(u64 *out);
+bool gamecardGetTotalSize(u64 *out);
+bool gamecardGetTrimmedSize(u64 *out);
+bool gamecardGetRomCapacity(u64 *out); ///< Not the same as gamecardGetTotalSize().
 bool gamecardGetCertificate(FsGameCardCertificate *out);
 bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
-
-static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
-{
-    u64 capacity = 0;
-    
-    switch(rom_size)
-    {
-        case GameCardRomSize_1GB:
-            capacity = (u64)0x40000000;
-            break;
-        case GameCardRomSize_2GB:
-            capacity = (u64)0x80000000;
-            break;
-        case GameCardRomSize_4GB:
-            capacity = (u64)0x100000000;
-            break;
-        case GameCardRomSize_8GB:
-            capacity = (u64)0x200000000;
-            break;
-        case GameCardRomSize_16GB:
-            capacity = (u64)0x400000000;
-            break;
-        case GameCardRomSize_32GB:
-            capacity = (u64)0x800000000;
-            break;
-        default:
-            break;
-    }
-    
-    return capacity;
-}
-
-static inline u64 gamecardGetCapacityFromHeader(GameCardHeader *header)
-{
-    if (!header) return 0;
-    return gamecardGetCapacityFromRomSizeValue(header->rom_size);
-}
 
 #endif /* __GAMECARD_H__ */

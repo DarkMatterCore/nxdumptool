@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
-    if (gamecardGetTotalRomSize(&total_size))
+    if (gamecardGetTotalSize(&total_size))
     {
         printf("total_size: 0x%lX\n", total_size);
     } else {
@@ -96,7 +96,7 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
-    if (gamecardGetTrimmedRomSize(&trimmed_size))
+    if (gamecardGetTrimmedSize(&trimmed_size))
     {
         printf("trimmed_size: 0x%lX\n", trimmed_size);
     } else {
