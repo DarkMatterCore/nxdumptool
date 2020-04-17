@@ -124,7 +124,7 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
         return NULL;
     }
     
-    remap_segment_ctx_t *segments = calloc(sizeof(remap_segment_ctx_t), header->map_segment_count);
+    remap_segment_ctx_t *segments = calloc(header->map_segment_count, sizeof(remap_segment_ctx_t));
     if (!segments)
     {
         LOGFILE("Failed to allocate initial memory for remap segments!");
@@ -1598,10 +1598,7 @@ void save_free_contexts(save_ctx_t *ctx)
         {
             for(unsigned int i = 0; i < ctx->data_remap_storage.header->map_segment_count; i++)
             {
-                for(unsigned int j = 0; j < ctx->data_remap_storage.segments[i].entry_count; j++)
-                {
-                    if (ctx->data_remap_storage.segments[i].entries[j]) free(ctx->data_remap_storage.segments[i].entries[j]);
-                }
+                if (ctx->data_remap_storage.segments[i].entries) free(ctx->data_remap_storage.segments[i].entries);
             }
         }
         
@@ -1621,10 +1618,7 @@ void save_free_contexts(save_ctx_t *ctx)
         {
             for(unsigned int i = 0; i < ctx->meta_remap_storage.header->map_segment_count; i++)
             {
-                for(unsigned int j = 0; j < ctx->meta_remap_storage.segments[i].entry_count; j++)
-                {
-                    if (ctx->meta_remap_storage.segments[i].entries[j]) free(ctx->meta_remap_storage.segments[i].entries[j]);
-                }
+                if (ctx->meta_remap_storage.segments[i].entries) free(ctx->meta_remap_storage.segments[i].entries);
             }
         }
         
@@ -1732,15 +1726,22 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     }
     
     FRESULT fr = FR_OK;
-    FIL save_fd = {0};
+    FIL *save_fd = NULL;
     save_ctx_t *save_ctx = NULL;
     bool open_savefile = false, success = false;
     
-    fr = f_open(&save_fd, path, FA_READ | FA_OPEN_EXISTING);
+    save_fd = calloc(1, sizeof(FIL));
+    if (!save_fd)
+    {
+        LOGFILE("Unable to allocate memory for FatFs file descriptor!");
+        return NULL;
+    }
+    
+    fr = f_open(save_fd, path, FA_READ | FA_OPEN_EXISTING);
     if (fr != FR_OK)
     {
         LOGFILE("Failed to open \"%s\" savefile from BIS System partition! (%u)", path, fr);
-        return NULL;
+        goto out;
     }
     
     open_savefile = true;
@@ -1748,11 +1749,11 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     save_ctx = calloc(1, sizeof(save_ctx_t));
     if (!save_ctx)
     {
-        LOGFILE("Failed to allocate memory for savefile \"%s\" context!", path);
+        LOGFILE("Unable to allocate memory for savefile \"%s\" context!", path);
         goto out;
     }
     
-    save_ctx->file = &save_fd;
+    save_ctx->file = save_fd;
     save_ctx->tool_ctx.action = action;
     
     success = save_process(save_ctx);
@@ -1767,7 +1768,11 @@ out:
             save_ctx = NULL;
         }
         
-        if (open_savefile) f_close(&save_fd);
+        if (save_fd)
+        {
+            if (open_savefile) f_close(save_fd);
+            free(save_fd);
+        }
     }
     
     return save_ctx;
@@ -1777,7 +1782,11 @@ void save_close_savefile(save_ctx_t *ctx)
 {
     if (!ctx) return;
     
-    if (ctx->file) f_close(ctx->file);
+    if (ctx->file)
+    {
+        f_close(ctx->file);
+        free(ctx->file);
+    }
     
     save_free_contexts(ctx);
     

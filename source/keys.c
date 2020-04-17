@@ -65,7 +65,7 @@ typedef struct {
     
     ///< Needed to decrypt the titlekey block from a ticker. Retrieved from the Lockpick_RCM keys file.
     u8 eticket_rsa_kek[0x10];                   ///< eTicket RSA kek.
-    u8 titlekeks[0x20][0x10];                   ///< Title key encryption keys.
+    u8 titlekeks[0x20][0x10];                   ///< Titlekey encryption keys.
     
     ///< Needed to reencrypt the NCA key area for tik-less NSP dumps. Retrieved from the Lockpick_RCM keys file.
     u8 key_area_keys[0x20][3][0x10];            ///< Key area encryption keys.

@@ -41,6 +41,9 @@
 #define GAMECARD_CAPACITY_16GiB                 (u64)0x400000000
 #define GAMECARD_CAPACITY_32GiB                 (u64)0x800000000
 
+#define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : \
+                                        ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : "unknown"))))
+
 /* Type definitions. */
 
 typedef enum {
@@ -95,13 +98,13 @@ static bool gamecardGetHandle(void);
 static inline void gamecardCloseHandle(void);
 
 static bool gamecardOpenStorageArea(u8 area);
-static bool gamecardReadStorageArea(void *out, u64 out_size, u64 offset, bool lock);
+static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool lock);
 static void gamecardCloseStorageArea(void);
 
 static bool gamecardGetStorageAreasSizes(void);
 static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
 
-static inline GameCardHashFileSystemHeader *gamecardGetHashFileSystemPartitionHeaderByIndex(u32 idx);
+static bool gamecardGetHashFileSystemPartitionIndexByType(u8 type, u32 *out);
 static inline GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *hfs_header, u32 idx);
 static inline char *gamecardGetHashFileSystemEntryName(void *hfs_header, u32 name_offset);
 
@@ -120,9 +123,9 @@ bool gamecardIsReady(void)
     return ret;
 }
 
-bool gamecardRead(void *out, u64 out_size, u64 offset)
+bool gamecardRead(void *out, u64 read_size, u64 offset)
 {
-    return gamecardReadStorageArea(out, out_size, offset, true);
+    return gamecardReadStorageArea(out, read_size, offset, true);
 }
 
 bool gamecardGetHeader(GameCardHeader *out)
@@ -222,30 +225,25 @@ bool gamecardGetBundledFirmwareUpdateVersion(u32 *out)
     return ret;
 }
 
-bool gamecardGetHashFileSystemEntryDataOffsetByName(u32 hfs_partition_idx, const char *name, u64 *out_offset)
+bool gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(u8 hfs_partition_type, const char *name, u64 *out_offset, u64 *out_size)
 {
     bool ret = false;
     char *entry_name = NULL;
     size_t name_len = 0;
+    u32 hfs_partition_idx = 0;
     GameCardHashFileSystemHeader *fs_header = NULL;
     GameCardHashFileSystemEntry *fs_entry = NULL;
     
     mtx_lock(&g_gameCardSharedDataMutex);
     
-    if (!g_gameCardInserted || !g_gameCardInfoLoaded || !name || !*name || !out_offset)
+    if (!g_gameCardInserted || !g_gameCardInfoLoaded || !name || !*name || !out_offset || !out_size || !gamecardGetHashFileSystemPartitionIndexByType(hfs_partition_type, &hfs_partition_idx))
     {
         LOGFILE("Invalid parameters!");
         goto out;
     }
     
     name_len = strlen(name);
-    
-    fs_header = gamecardGetHashFileSystemPartitionHeaderByIndex(hfs_partition_idx);
-    if (!fs_header)
-    {
-        LOGFILE("Invalid hash FS partition index! (0x%X)", hfs_partition_idx);
-        goto out;
-    }
+    fs_header = (GameCardHashFileSystemHeader*)g_gameCardHfsPartitions[hfs_partition_idx].header;
     
     for(u32 i = 0; i < fs_header->entry_count; i++)
     {
@@ -258,6 +256,7 @@ bool gamecardGetHashFileSystemEntryDataOffsetByName(u32 hfs_partition_idx, const
         if (!strncasecmp(entry_name, name, name_len))
         {
             *out_offset = (g_gameCardHfsPartitions[hfs_partition_idx].offset + g_gameCardHfsPartitions[hfs_partition_idx].header_size + fs_entry->offset);
+            *out_size = fs_entry->size;
             ret = true;
             break;
         }
@@ -447,7 +446,7 @@ static int gamecardDetectionThreadFunc(void *arg)
         if (!prev_status && g_gameCardInserted)
         {
             /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules */
-            SLEEP(GAMECARD_ACCESS_WAIT_TIME);
+            utilsSleep(GAMECARD_ACCESS_WAIT_TIME);
             
             /* Load gamecard info */
             gamecardLoadInfo();
@@ -738,14 +737,14 @@ static bool gamecardOpenStorageArea(u8 area)
     return true;
 }
 
-static bool gamecardReadStorageArea(void *out, u64 out_size, u64 offset, bool lock)
+static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool lock)
 {
     if (lock) mtx_lock(&g_gameCardSharedDataMutex);
     
     bool success = false;
     
-    if (!g_gameCardInserted || !g_gameCardStorageNormalAreaSize || !g_gameCardStorageSecureAreaSize || !out || !out_size || \
-        offset >= (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize) || (offset + out_size) > (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize))
+    if (!g_gameCardInserted || !g_gameCardStorageNormalAreaSize || !g_gameCardStorageSecureAreaSize || !out || !read_size || \
+        offset >= (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize) || (offset + read_size) > (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize))
     {
         LOGFILE("Invalid parameters!");
         goto out;
@@ -756,7 +755,7 @@ static bool gamecardReadStorageArea(void *out, u64 out_size, u64 offset, bool lo
     u8 area = (offset < g_gameCardStorageNormalAreaSize ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
     
     /* Handle reads that span both the normal and secure gamecard storage areas */
-    if (area == GameCardStorageArea_Normal && (offset + out_size) > g_gameCardStorageNormalAreaSize)
+    if (area == GameCardStorageArea_Normal && (offset + read_size) > g_gameCardStorageNormalAreaSize)
     {
         /* Calculate normal storage area size difference */
         u64 diff_size = (g_gameCardStorageNormalAreaSize - offset);
@@ -764,7 +763,7 @@ static bool gamecardReadStorageArea(void *out, u64 out_size, u64 offset, bool lo
         if (!gamecardReadStorageArea(out_u8, diff_size, offset, false)) goto out;
         
         /* Adjust variables to read right from the start of the secure storage area */
-        out_size -= diff_size;
+        read_size -= diff_size;
         offset = g_gameCardStorageNormalAreaSize;
         out_u8 += diff_size;
         area = GameCardStorageArea_Secure;
@@ -781,13 +780,13 @@ static bool gamecardReadStorageArea(void *out, u64 out_size, u64 offset, bool lo
     /* Calculate appropiate storage area offset and retrieve the right storage area pointer */
     u64 base_offset = (area == GameCardStorageArea_Normal ? offset : (offset - g_gameCardStorageNormalAreaSize));
     
-    if (!(base_offset % GAMECARD_MEDIA_UNIT_SIZE) && !(out_size % GAMECARD_MEDIA_UNIT_SIZE))
+    if (!(base_offset % GAMECARD_MEDIA_UNIT_SIZE) && !(read_size % GAMECARD_MEDIA_UNIT_SIZE))
     {
         /* Optimization for reads that are already aligned to GAMECARD_MEDIA_UNIT_SIZE bytes */
-        rc = fsStorageRead(&g_gameCardStorage, base_offset, out_u8, out_size);
+        rc = fsStorageRead(&g_gameCardStorage, base_offset, out_u8, read_size);
         if (R_FAILED(rc))
         {
-            LOGFILE("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (aligned)", out_size, base_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
+            LOGFILE("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (aligned)", read_size, base_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
             goto out;
         }
         
@@ -795,11 +794,11 @@ static bool gamecardReadStorageArea(void *out, u64 out_size, u64 offset, bool lo
     } else {
         /* Fix offset and/or size to avoid unaligned reads */
         u64 block_start_offset = (base_offset - (base_offset % GAMECARD_MEDIA_UNIT_SIZE));
-        u64 block_end_offset = ROUND_UP(base_offset + out_size, GAMECARD_MEDIA_UNIT_SIZE);
+        u64 block_end_offset = ROUND_UP(base_offset + read_size, GAMECARD_MEDIA_UNIT_SIZE);
         u64 block_size = (block_end_offset - block_start_offset);
         
         u64 chunk_size = (block_size > GAMECARD_READ_BUFFER_SIZE ? GAMECARD_READ_BUFFER_SIZE : block_size);
-        u64 out_chunk_size = (block_size > GAMECARD_READ_BUFFER_SIZE ? (GAMECARD_READ_BUFFER_SIZE - (base_offset - block_start_offset)) : out_size);
+        u64 out_chunk_size = (block_size > GAMECARD_READ_BUFFER_SIZE ? (GAMECARD_READ_BUFFER_SIZE - (base_offset - block_start_offset)) : read_size);
         
         rc = fsStorageRead(&g_gameCardStorage, block_start_offset, g_gameCardReadBuf, chunk_size);
         if (R_FAILED(rc))
@@ -810,7 +809,7 @@ static bool gamecardReadStorageArea(void *out, u64 out_size, u64 offset, bool lo
         
         memcpy(out_u8, g_gameCardReadBuf + (base_offset - block_start_offset), out_chunk_size);
         
-        success = (block_size > GAMECARD_READ_BUFFER_SIZE ? gamecardReadStorageArea(out_u8 + out_chunk_size, out_size - out_chunk_size, base_offset + out_chunk_size, false) : true);
+        success = (block_size > GAMECARD_READ_BUFFER_SIZE ? gamecardReadStorageArea(out_u8 + out_chunk_size, read_size - out_chunk_size, base_offset + out_chunk_size, false) : true);
     }
     
 out:
@@ -905,10 +904,30 @@ static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
     return capacity;
 }
 
-static inline GameCardHashFileSystemHeader *gamecardGetHashFileSystemPartitionHeaderByIndex(u32 idx)
+static bool gamecardGetHashFileSystemPartitionIndexByType(u8 type, u32 *out)
 {
-    if (idx >= ((GameCardHashFileSystemHeader*)g_gameCardHfsRootHeader)->entry_count) return NULL;
-    return (GameCardHashFileSystemHeader*)g_gameCardHfsPartitions[idx].header;
+    if (type > GameCardHashFileSystemPartitionType_Secure || !out) return false;
+    
+    char *entry_name = NULL;
+    GameCardHashFileSystemEntry *fs_entry = NULL;
+    GameCardHashFileSystemHeader *fs_header = (GameCardHashFileSystemHeader*)g_gameCardHfsRootHeader;
+    
+    for(u32 i = 0; i < fs_header->entry_count; i++)
+    {
+        fs_entry = gamecardGetHashFileSystemEntryByIndex(fs_header, i);
+        if (!fs_entry) continue;
+        
+        entry_name = gamecardGetHashFileSystemEntryName(fs_header, fs_entry->name_offset);
+        if (!entry_name) continue;
+        
+        if (!strcasecmp(entry_name, GAMECARD_HFS_PARTITION_NAME(type)))
+        {
+            *out = i;
+            return true;
+        }
+    }
+    
+    return false;
 }
 
 static inline GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *hfs_header, u32 idx)

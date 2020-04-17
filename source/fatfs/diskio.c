@@ -61,10 +61,7 @@ DRESULT disk_read (
     u64 start_offset = ((u64)FF_MAX_SS * (u64)sector);
     u64 read_size = ((u64)FF_MAX_SS * (u64)count);
     
-    FsStorage *emmc_storage = utilsGetEmmcBisSystemStorage();
-    if (!emmc_storage) return RES_ERROR;
-    
-    rc = fsStorageRead(emmc_storage, start_offset, buff, read_size);
+    rc = fsStorageRead(utilsGetEmmcBisSystemPartitionStorage(), start_offset, buff, read_size);
     
     return (R_SUCCEEDED(rc) ? RES_OK : RES_ERROR);
 }

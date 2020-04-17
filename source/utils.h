@@ -21,19 +21,17 @@
 
 #include <switch.h>
 
-#define APP_BASE_PATH               "sdmc:/switch/nxdumptool/"
+#define APP_BASE_PATH                   "sdmc:/switch/nxdumptool/"
 
-#define LOGFILE(fmt, ...)           utilsWriteLogMessage(__func__, fmt, ##__VA_ARGS__)
+#define LOGFILE(fmt, ...)               utilsWriteLogMessage(__func__, fmt, ##__VA_ARGS__)
 
-#define MEMBER_SIZE(type, member)   sizeof(((type*)NULL)->member)
+#define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
 
-#define SLEEP(x)                    svcSleepThread((x) * (u64)1000000000)
+#define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
 
-#define MAX_ELEMENTS(x)             ((sizeof((x))) / (sizeof((x)[0])))
+#define ROUND_UP(x, y)                  ((x) + (((y) - ((x) % (y))) % (y)))                 /* Aligns 'x' bytes to a 'y' bytes boundary. */
 
-#define ROUND_UP(x, y)              ((x) + (((y) - ((x) % (y))) % (y)))                 /* Aligns 'x' bytes to a 'y' bytes boundary. */
-
-
+#define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
 typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,
@@ -66,11 +64,13 @@ void utilsCloseResources(void);
 
 u8 utilsGetCustomFirmwareType(void);    ///< UtilsCustomFirmwareType.
 
+void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size);
 
+FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
 
-static inline FsStorage *utilsGetEmmcBisSystemStorage(void)
+static inline void utilsSleep(u64 seconds)
 {
-    return NULL;
+    if (seconds) svcSleepThread(seconds * (u64)1000000000);
 }
 
 

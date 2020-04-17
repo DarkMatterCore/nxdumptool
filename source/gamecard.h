@@ -131,6 +131,13 @@ typedef struct {
     u8 hash[SHA256_HASH_SIZE];
 } GameCardHashFileSystemEntry;
 
+typedef enum {
+    GameCardHashFileSystemPartitionType_Update  = 0,
+    GameCardHashFileSystemPartitionType_Logo    = 1,    ///< Only available in GameCardFwVersion_Since400NUP gamecards.
+    GameCardHashFileSystemPartitionType_Normal  = 2,
+    GameCardHashFileSystemPartitionType_Secure  = 3
+} GameCardHashFileSystemPartitionType;
+
 /// Initializes data needed to access raw gamecard storage areas.
 /// Also spans a background thread to automatically detect gamecard status changes and to cache data from the inserted gamecard.
 Result gamecardInitialize(void);
@@ -144,8 +151,8 @@ bool gamecardIsReady(void);
 
 /// Used to read data from the inserted gamecard.
 /// All required handles, changes between normal <-> secure storage areas and proper offset calculations are managed internally.
-/// offset + out_size should never exceed the value returned by gamecardGetTotalSize().
-bool gamecardRead(void *out, u64 out_size, u64 offset);
+/// offset + read_size should never exceed the value returned by gamecardGetTotalSize().
+bool gamecardRead(void *out, u64 read_size, u64 offset);
 
 /// Miscellaneous functions.
 bool gamecardGetHeader(GameCardHeader *out);
@@ -155,6 +162,6 @@ bool gamecardGetRomCapacity(u64 *out); ///< Not the same as gamecardGetTotalSize
 bool gamecardGetCertificate(FsGameCardCertificate *out);
 bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
 
-bool gamecardGetHashFileSystemEntryDataOffsetByName(u32 hfs_partition_idx, const char *name, u64 *out_offset);
+bool gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(u8 hfs_partition_type, const char *name, u64 *out_offset, u64 *out_size); ///< GameCardHashFileSystemPartitionType.
 
 #endif /* __GAMECARD_H__ */

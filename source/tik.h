@@ -68,9 +68,9 @@ typedef enum {
 /// Placed after the ticket signature block.
 typedef struct {
     char issuer[0x40];
-    u8 title_key_block[0x100];
+    u8 titlekey_block[0x100];
     u8 format_version;
-    u8 title_key_type;              ///< TikTitleKeyType.
+    u8 titlekey_type;               ///< TikTitleKeyType.
     u16 ticket_version;
     u8 license_type;                ///< TikLicenseType.
     u8 key_generation;
@@ -112,38 +112,24 @@ typedef struct {
     u16 section_type;   ///< TikSectionType.
 } TikEsv2SectionRecord;
 
-/// Used to store ticket type, size and raw data.
+/// Used to store ticket type, size and raw data, as well as titlekey data.
 typedef struct {
     u8 type;                ///< TikType.
-    u64 size;
-    u8 data[TIK_MAX_SIZE];
+    u64 size;               ///< Raw ticket size.
+    u8 data[TIK_MAX_SIZE];  ///< Raw ticket data.
+    u8 enc_titlekey[0x10];  ///< Titlekey with titlekek crypto (RSA-OAEP unwrapped if dealing with a TikTitleKeyType_Personalized ticket).
+    u8 dec_titlekey[0x10];  ///< Titlekey without titlekek crypto. Ready to use for NCA FS section decryption.
 } Ticket;
 
-TikCommonBlock *tikGetTicketCommonBlockFromMemoryBuffer(void *data);
+/// Retrieves a ticket from either the secure hash FS partition from the inserted gamecard or ES ticket savedata using a Rights ID value.
+/// Titlekey is also RSA-OAEP unwrapped (if needed) and titlekek decrypted right away.
+bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gamecard);
 
-static inline TikCommonBlock *tikGetTicketCommonBlockFromTicket(Ticket *tik)
-{
-    if (!tik || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE) return NULL;
-    return tikGetTicketCommonBlockFromMemoryBuffer(tik->data);
-}
-
-bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id);
-
-bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TikCommonBlock *tik_common_blk);
-
-static inline bool tikGetTitleKeyFromTicket(void *dst, Ticket *tik)
-{
-    if (!dst || !tik || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE) return false;
-    return tikGetTitleKeyFromTicketCommonBlock(dst, tikGetTicketCommonBlockFromTicket(tik));
-}
-
-bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generation);
-
-bool tikGetTitleKekDecryptedTitleKeyFromTicket(void *dst, Ticket *tik);
+/// Retrieves the common block from an input Ticket.
+TikCommonBlock *tikGetCommonBlockFromTicket(Ticket *tik);
 
 /// This will convert a TikTitleKeyType_Personalized ticket into a TikTitleKeyType_Common ticket.
-/// Use the output titlekey from tikGetTitleKeyFromTicket() / tikGetTitleKeyFromTicketCommonBlock() as the second parameter for this function.
 /// Bear in mind the 'size' member from the Ticket parameter will be updated by this function to remove any possible references to TikEsv2SectionRecord records.
-void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, const void *titlekey);
+void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik);
 
 #endif /* __TIK_H__ */

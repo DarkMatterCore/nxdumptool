@@ -23,10 +23,11 @@
 #include "es.h"
 #include "keys.h"
 #include "rsa.h"
+#include "gamecard.h"
 #include "utils.h"
 
-#define TIK_COMMON_SAVEFILE_PATH        "sys:/save/80000000000000e1"
-#define TIK_PERSONALIZED_SAVEFILE_PATH  "sys:/save/80000000000000e2"
+#define TIK_COMMON_SAVEFILE_PATH        BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e1"
+#define TIK_PERSONALIZED_SAVEFILE_PATH  BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e2"
 #define TIK_SAVEFILE_STORAGE_PATH       "/ticket.bin"
 
 #define ETICKET_DEVKEY_PUBLIC_EXPONENT  0x10001
@@ -57,49 +58,160 @@ static const u8 g_nullHash[0x20] = {
 
 /* Function prototypes. */
 
-static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized);
-static u8 tikGetTitleKeyTypeFromRightsId(const FsRightsId *id);
-static bool tikGetTicketTypeAndSize(const void *data, u64 data_size, u8 *out_type, u64 *out_size);
-static bool tikTestKeyPairFromEticketDeviceKey(const void *e, const void *d, const void *n);
-static bool tikRetrieveEticketDeviceKey(void);
+static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsId *id);
+static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRightsId *id);
 
-TikCommonBlock *tikGetTicketCommonBlockFromMemoryBuffer(void *data)
+static TikCommonBlock *tikGetCommonBlockFromMemoryBuffer(void *data);
+
+static bool tikGetTitleKeyFromTicketCommonBlock(void *dst, const TikCommonBlock *tik_common_blk);
+static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generation);
+
+static u8 tikGetTitleKeyTypeFromRightsId(const FsRightsId *id);
+static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized);
+
+static bool tikGetTicketTypeAndSize(const void *data, u64 data_size, u8 *out_type, u64 *out_size);
+
+static bool tikRetrieveEticketDeviceKey(void);
+static bool tikTestKeyPairFromEticketDeviceKey(const void *e, const void *d, const void *n);
+
+bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gamecard)
 {
-    if (!data)
+    bool tik_retrieved = false;
+    TikCommonBlock *tik_common_blk = NULL;
+    
+    tik_retrieved = (use_gamecard ? tikRetrieveTicketFromGameCardByRightsId(dst, id) : tikRetrieveTicketFromEsSaveDataByRightsId(dst, id));
+    if (!tik_retrieved)
+    {
+        LOGFILE("Unable to retrieve ticket data!");
+        return false;
+    }
+    
+    tik_common_blk = tikGetCommonBlockFromMemoryBuffer(dst->data);
+    if (!tik_common_blk)
+    {
+        LOGFILE("Unable to retrieve common block from ticket!");
+        return false;
+    }
+    
+    if (!tikGetTitleKeyFromTicketCommonBlock(dst->enc_titlekey, tik_common_blk))
+    {
+        LOGFILE("Unable to retrieve titlekey from ticket!");
+        return false;
+    }
+    
+    /* Even though tickets do have a proper key_generation field, we'll just retrieve it from the rights_id field */
+    /* Old custom tools used to wipe the key_generation field or save it to a different offset */
+    if (!tikGetTitleKekDecryptedTitleKey(dst->dec_titlekey, dst->enc_titlekey, tik_common_blk->rights_id.c[0xF]))
+    {
+        LOGFILE("Unable to perform titlekek decryption!");
+        return false;
+    }
+    
+    return true;
+}
+
+TikCommonBlock *tikGetCommonBlockFromTicket(Ticket *tik)
+{
+    if (!tik || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE)
     {
         LOGFILE("Invalid parameters!");
         return NULL;
     }
     
-    u8 *data_u8 = (u8*)data;
-    TikCommonBlock *tik_common_blk = NULL;
-    u32 sig_type;
-    
-    memcpy(&sig_type, data_u8, sizeof(u32));
-    
-    switch(sig_type)
-    {
-        case SignatureType_Rsa4096Sha1:
-        case SignatureType_Rsa4096Sha256:
-            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockRsa4096));
-            break;
-        case SignatureType_Rsa2048Sha1:
-        case SignatureType_Rsa2048Sha256:
-            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockRsa2048));
-            break;
-        case SignatureType_Ecsda240Sha1:
-        case SignatureType_Ecsda240Sha256:
-            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockEcsda240));
-            break;
-        default:
-            LOGFILE("Invalid signature type value! (0x%08X)", sig_type);
-            return NULL;
-    }
-    
-    return tik_common_blk;
+    return tikGetCommonBlockFromMemoryBuffer(tik->data);
 }
 
-bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id)
+void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
+{
+    if (!tik || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE) return;
+    
+    bool dev_cert = false;
+    TikCommonBlock *tik_common_blk = NULL;
+    
+    tik_common_blk = tikGetCommonBlockFromMemoryBuffer(tik->data);
+    if (!tik_common_blk || tik_common_blk->titlekey_type != TikTitleKeyType_Personalized) return;
+    
+    switch(tik->type)
+    {
+        case TikType_SigRsa4096:
+            tik->size = sizeof(TikSigRsa4096);
+            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockRsa4096, signature));
+            break;
+        case TikType_SigRsa2048:
+            tik->size = sizeof(TikSigRsa2048);
+            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockRsa2048, signature));
+            break;
+        case TikType_SigEcsda240:
+            tik->size = sizeof(TikSigEcsda240);
+            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockEcsda240, signature));
+            break;
+        default:
+            break;
+    }
+    
+    dev_cert = (strstr(tik_common_blk->issuer, "CA00000004") != NULL);
+    
+    memset(tik_common_blk->issuer, 0, sizeof(tik_common_blk->issuer));
+    sprintf(tik_common_blk->issuer, "Root-CA%08X-XS00000020", dev_cert ? 4 : 3);
+    
+    memset(tik_common_blk->titlekey_block, 0, sizeof(tik_common_blk->titlekey_block));
+    memcpy(tik_common_blk->titlekey_block, tik->enc_titlekey, 0x10);
+    
+    tik_common_blk->titlekey_type = TikTitleKeyType_Common;
+    tik_common_blk->ticket_id = 0;
+    tik_common_blk->device_id = 0;
+    tik_common_blk->account_id = 0;
+    
+    tik_common_blk->sect_total_size = 0;
+    tik_common_blk->sect_hdr_offset = (u32)tik->size;
+    tik_common_blk->sect_hdr_count = 0;
+    tik_common_blk->sect_hdr_entry_size = 0;
+    
+    memset(tik->data + tik->size, 0, TIK_MAX_SIZE - tik->size);
+}
+
+static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsId *id)
+{
+    if (!dst || !id)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    char tik_filename[0x30] = {0};
+    u64 tik_offset = 0, tik_size = 0;
+    
+    utilsGenerateHexStringFromData(tik_filename, sizeof(tik_filename), id->c, 0x10);
+    strcat(tik_filename, ".tik");
+    
+    if (!gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(GameCardHashFileSystemPartitionType_Secure, tik_filename, &tik_offset, &tik_size))
+    {
+        LOGFILE("Error retrieving offset and size for \"%s\" entry in secure hash FS partition!");
+        return false;
+    }
+    
+    if (tik_size < TIK_MIN_SIZE || tik_size > TIK_MAX_SIZE)
+    {
+        LOGFILE("Invalid size for \"%s\"! (0x%lX)", tik_filename, tik_size);
+        return false;
+    }
+    
+    if (!gamecardRead(dst->data, tik_size, tik_offset))
+    {
+        LOGFILE("Failed to read \"%s\" data from the inserted gamecard!", tik_filename);
+        return false;
+    }
+    
+    if (!tikGetTicketTypeAndSize(dst->data, tik_size, &(dst->type), &(dst->size)))
+    {
+        LOGFILE("Unable to determine ticket type and size!");
+        return false;
+    }
+    
+    return true;
+}
+
+static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRightsId *id)
 {
     if (!dst || !id)
     {
@@ -114,28 +226,28 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id)
     u64 ticket_bin_size = 0;
     
     u64 buf_size = (TIK_MAX_SIZE * 0x10);   /* 0x4000 */
-    u64 br = buf_size, total_br = 0;
+    u64 br = 0, total_br = 0;
     u8 *ticket_bin_buf = NULL;
     
     bool found_tik = false, success = false;
     
-    u8 title_key_type = tikGetTitleKeyTypeFromRightsId(id);
-    if (title_key_type == TikTitleKeyType_Invalid)
+    u8 titlekey_type = tikGetTitleKeyTypeFromRightsId(id);
+    if (titlekey_type == TikTitleKeyType_Invalid)
     {
         LOGFILE("Unable to retrieve ticket titlekey type!");
         return false;
     }
     
-    save_ctx = save_open_savefile(title_key_type == TikTitleKeyType_Common ? TIK_COMMON_SAVEFILE_PATH : TIK_PERSONALIZED_SAVEFILE_PATH, 0);
+    save_ctx = save_open_savefile(titlekey_type == TikTitleKeyType_Common ? TIK_COMMON_SAVEFILE_PATH : TIK_PERSONALIZED_SAVEFILE_PATH, 0);
     if (!save_ctx)
     {
-        LOGFILE("Failed to open ES %s ticket system savefile!", title_key_type == TikTitleKeyType_Common ? "common" : "personalized");
+        LOGFILE("Failed to open ES %s ticket system savefile!", titlekey_type == TikTitleKeyType_Common ? "common" : "personalized");
         return false;
     }
     
     if (!save_get_fat_storage_from_file_entry_by_path(save_ctx, TIK_SAVEFILE_STORAGE_PATH, &fat_storage, &ticket_bin_size))
     {
-        LOGFILE("Failed to locate \"%s\" in ES %s ticket system save!", TIK_SAVEFILE_STORAGE_PATH, title_key_type == TikTitleKeyType_Common ? "common" : "personalized");
+        LOGFILE("Failed to locate \"%s\" in ES %s ticket system save!", TIK_SAVEFILE_STORAGE_PATH, titlekey_type == TikTitleKeyType_Common ? "common" : "personalized");
         goto out;
     }
     
@@ -146,32 +258,40 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id)
     }
     
     ticket_bin_buf = malloc(buf_size);
-    if (ticket_bin_buf)
+    if (!ticket_bin_buf)
     {
-        LOGFILE("Unable to allocate memory for temporary read buffer!");
+        LOGFILE("Unable to allocate 0x%lX bytes block for temporary read buffer!", buf_size);
         goto out;
     }
     
-    while(br == buf_size && total_br < ticket_bin_size)
+    while(total_br < ticket_bin_size)
     {
+        if (buf_size > (ticket_bin_size - total_br)) buf_size = (ticket_bin_size - total_br);
+        
         br = save_allocation_table_storage_read(&fat_storage, ticket_bin_buf, total_br, buf_size);
         if (br != buf_size)
         {
-            LOGFILE("Failed to read 0x%lX bytes chunk at offset 0x%lX from \"%s\" in ES %s ticket system save!", buf_size, total_br, TIK_SAVEFILE_STORAGE_PATH, title_key_type == TikTitleKeyType_Common ? "common" : "personalized");
+            LOGFILE("Failed to read 0x%lX bytes chunk at offset 0x%lX from \"%s\" in ES %s ticket system save!", buf_size, total_br, TIK_SAVEFILE_STORAGE_PATH, \
+                    (titlekey_type == TikTitleKeyType_Common ? "common" : "personalized"));
             goto out;
         }
         
-        if (ticket_bin_buf[0] == 0) break;
+        total_br += br;
         
         for(i = 0; i < buf_size; i += TIK_MAX_SIZE)
         {
-            TikCommonBlock *tik_common_blk = tikGetTicketCommonBlockFromMemoryBuffer(ticket_bin_buf + i);
-            if (!tik_common_blk || memcmp(tik_common_blk->rights_id.c, id->c, 0x10) != 0) continue;
+            if ((buf_size - i) < TIK_MIN_SIZE) break;
             
-            /* Jackpot */
-            found_tik = true;
-            break;
+            TikCommonBlock *tik_common_blk = tikGetCommonBlockFromMemoryBuffer(ticket_bin_buf + i);
+            if (tik_common_blk && !memcmp(tik_common_blk->rights_id.c, id->c, 0x10))
+            {
+                /* Jackpot */
+                found_tik = true;
+                break;
+            }
         }
+        
+        if (found_tik) break;
     }
     
     if (!found_tik)
@@ -198,7 +318,43 @@ out:
     return success;
 }
 
-bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TikCommonBlock *tik_common_blk)
+static TikCommonBlock *tikGetCommonBlockFromMemoryBuffer(void *data)
+{
+    if (!data)
+    {
+        LOGFILE("Invalid parameters!");
+        return NULL;
+    }
+    
+    u8 *data_u8 = (u8*)data;
+    TikCommonBlock *tik_common_blk = NULL;
+    u32 sig_type = 0;
+    
+    memcpy(&sig_type, data_u8, sizeof(u32));
+    
+    switch(sig_type)
+    {
+        case SignatureType_Rsa4096Sha1:
+        case SignatureType_Rsa4096Sha256:
+            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockRsa4096));
+            break;
+        case SignatureType_Rsa2048Sha1:
+        case SignatureType_Rsa2048Sha256:
+            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockRsa2048));
+            break;
+        case SignatureType_Ecsda240Sha1:
+        case SignatureType_Ecsda240Sha256:
+            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockEcsda240));
+            break;
+        default:
+            LOGFILE("Invalid signature type value! (0x%08X)", sig_type);
+            return NULL;
+    }
+    
+    return tik_common_blk;
+}
+
+static bool tikGetTitleKeyFromTicketCommonBlock(void *dst, const TikCommonBlock *tik_common_blk)
 {
     if (!dst || !tik_common_blk)
     {
@@ -210,11 +366,11 @@ bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TikCommonBlock *tik_common_b
     u8 out_keydata[0x100] = {0};
     tikEticketDeviceKeyData *eticket_devkey = NULL;
     
-    switch(tik_common_blk->title_key_type)
+    switch(tik_common_blk->titlekey_type)
     {
         case TikTitleKeyType_Common:
             /* No titlekek crypto used */
-            memcpy(dst, tik_common_blk->title_key_block, 0x10);
+            memcpy(dst, tik_common_blk->titlekey_block, 0x10);
             break;
         case TikTitleKeyType_Personalized:
             /* Retrieve eTicket device key */
@@ -227,7 +383,8 @@ bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TikCommonBlock *tik_common_b
             eticket_devkey = (tikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
             
             /* Perform a RSA-OAEP decrypt operation to get the titlekey */
-            if (!rsa2048OaepDecryptAndVerify(out_keydata, 0x100, tik_common_blk->title_key_block, eticket_devkey->modulus, eticket_devkey->exponent, 0x100, g_nullHash, &out_keydata_size) || out_keydata_size < 0x10)
+            if (!rsa2048OaepDecryptAndVerify(out_keydata, 0x100, tik_common_blk->titlekey_block, eticket_devkey->modulus, eticket_devkey->exponent, 0x100, g_nullHash, &out_keydata_size) || \
+                out_keydata_size < 0x10)
             {
                 LOGFILE("RSA-OAEP titlekey decryption failed!");
                 return false;
@@ -238,14 +395,14 @@ bool tikGetTitleKeyFromTicketCommonBlock(void *dst, TikCommonBlock *tik_common_b
             
             break;
         default:
-            LOGFILE("Invalid titlekey type value! (0x%02X)", tik_common_blk->title_key_type);
+            LOGFILE("Invalid titlekey type value! (0x%02X)", tik_common_blk->titlekey_type);
             return false;
     }
     
     return true;
 }
 
-bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generation)
+static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generation)
 {
     if (!dst || !src)
     {
@@ -265,137 +422,6 @@ bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generati
     
     aes128ContextCreate(&titlekey_aes_ctx, titlekek, false);
     aes128DecryptBlock(&titlekey_aes_ctx, dst, src);
-    
-    return true;
-}
-
-bool tikGetTitleKekDecryptedTitleKeyFromTicket(void *dst, Ticket *tik)
-{
-    if (!dst || !tik)
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    u8 titlekey[0x10] = {0};
-    TikCommonBlock *tik_common_blk = NULL;
-    
-    tik_common_blk = tikGetTicketCommonBlockFromTicket(tik);
-    if (!tik_common_blk)
-    {
-        LOGFILE("Unable to retrieve ticket common block!");
-        return false;
-    }
-    
-    if (!tikGetTitleKeyFromTicketCommonBlock(titlekey, tik_common_blk))
-    {
-        LOGFILE("Unable to retrieve titlekey from ticket!");
-        return false;
-    }
-    
-    /* Even though tickets do have a proper key_generation field, we'll just retrieve it from the rights_id field */
-    /* Old custom tools used to wipe the key_generation field or save it to a different offset */
-    if (!tikGetTitleKekDecryptedTitleKey(dst, titlekey, tik_common_blk->rights_id.c[0xF]))
-    {
-        LOGFILE("Unable to perform titlekek decryption on titlekey!");
-        return false;
-    }
-    
-    return true;
-}
-
-void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, const void *titlekey)
-{
-    if (!tik || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE || !titlekey) return;
-    
-    bool dev_cert = false;
-    TikCommonBlock *tik_common_blk = NULL;
-    
-    tik_common_blk = tikGetTicketCommonBlockFromTicket(tik);
-    if (!tik_common_blk || tik_common_blk->title_key_type != TikTitleKeyType_Personalized) return;
-    
-    switch(tik->type)
-    {
-        case TikType_SigRsa4096:
-            tik->size = sizeof(TikSigRsa4096);
-            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockRsa4096, signature));
-            break;
-        case TikType_SigRsa2048:
-            tik->size = sizeof(TikSigRsa2048);
-            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockRsa2048, signature));
-            break;
-        case TikType_SigEcsda240:
-            tik->size = sizeof(TikSigEcsda240);
-            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockEcsda240, signature));
-            break;
-        default:
-            break;
-    }
-    
-    dev_cert = (strstr(tik_common_blk->issuer, "CA00000004") != NULL);
-    
-    memset(tik_common_blk->issuer, 0, sizeof(tik_common_blk->issuer));
-    sprintf(tik_common_blk->issuer, "Root-CA%08X-XS00000020", dev_cert ? 4 : 3);
-    
-    memset(tik_common_blk->title_key_block, 0, sizeof(tik_common_blk->title_key_block));
-    memcpy(tik_common_blk->title_key_block, titlekey, 0x10);
-    
-    tik_common_blk->title_key_type = TikTitleKeyType_Common;
-    tik_common_blk->ticket_id = 0;
-    tik_common_blk->device_id = 0;
-    tik_common_blk->account_id = 0;
-    
-    tik_common_blk->sect_total_size = 0;
-    tik_common_blk->sect_hdr_offset = (u32)tik->size;
-    tik_common_blk->sect_hdr_count = 0;
-    tik_common_blk->sect_hdr_entry_size = 0;
-    
-    memset(tik->data + tik->size, 0, TIK_MAX_SIZE - tik->size);
-}
-
-static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized)
-{
-    if (!out || !out_count)
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    Result rc = 0;
-    u32 count = 0, ids_written = 0;
-    FsRightsId *rights_ids = NULL;
-    
-    rc = (personalized ? esCountPersonalizedTicket((s32*)&count) : esCountCommonTicket((s32*)&count));
-    if (R_FAILED(rc))
-    {
-        LOGFILE("esCount%sTicket failed! (0x%08X)", personalized ? "Personalized" : "Common", rc);
-        return false;
-    }
-    
-    if (!count)
-    {
-        LOGFILE("No %s tickets available!", personalized ? "personalized" : "common");
-        *out_count = 0;
-        return true;
-    }
-    
-    rights_ids = calloc(count, sizeof(FsRightsId));
-    if (!rights_ids)
-    {
-        LOGFILE("Unable to allocate memory for %s rights IDs!", personalized ? "personalized" : "common");
-        return false;
-    }
-    
-    rc = (personalized ? esListPersonalizedTicket((s32*)&ids_written, rights_ids, count * sizeof(FsRightsId)) : esListCommonTicket((s32*)&ids_written, rights_ids, count * sizeof(FsRightsId)));
-    if (R_FAILED(rc) || ids_written != count)
-    {
-        LOGFILE("esList%sTicket failed! (0x%08X) | Wrote %u entries, expected %u entries", personalized ? "Personalized" : "Common", rc, ids_written, count);
-        free(rights_ids);
-        return false;
-    }
-    
-    *out = rights_ids;
-    *out_count = count;
     
     return true;
 }
@@ -442,6 +468,53 @@ static u8 tikGetTitleKeyTypeFromRightsId(const FsRightsId *id)
     return type;
 }
 
+static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized)
+{
+    if (!out || !out_count)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    Result rc = 0;
+    u32 count = 0, ids_written = 0;
+    FsRightsId *rights_ids = NULL;
+    
+    rc = (personalized ? esCountPersonalizedTicket((s32*)&count) : esCountCommonTicket((s32*)&count));
+    if (R_FAILED(rc))
+    {
+        LOGFILE("esCount%sTicket failed! (0x%08X)", personalized ? "Personalized" : "Common", rc);
+        return false;
+    }
+    
+    if (!count)
+    {
+        LOGFILE("No %s tickets available!", personalized ? "personalized" : "common");
+        *out_count = 0;
+        return true;
+    }
+    
+    rights_ids = calloc(count, sizeof(FsRightsId));
+    if (!rights_ids)
+    {
+        LOGFILE("Unable to allocate memory for %s rights IDs!", personalized ? "personalized" : "common");
+        return false;
+    }
+    
+    rc = (personalized ? esListPersonalizedTicket((s32*)&ids_written, rights_ids, (s32)count) : esListCommonTicket((s32*)&ids_written, rights_ids, (s32)count));
+    if (R_FAILED(rc) || ids_written != count)
+    {
+        LOGFILE("esList%sTicket failed! (0x%08X) | Wrote %u entries, expected %u entries", personalized ? "Personalized" : "Common", rc, ids_written, count);
+        free(rights_ids);
+        return false;
+    }
+    
+    *out = rights_ids;
+    *out_count = count;
+    
+    return true;
+}
+
 static bool tikGetTicketTypeAndSize(const void *data, u64 data_size, u8 *out_type, u64 *out_size)
 {
     if (!data || data_size < TIK_MIN_SIZE || data_size > TIK_MAX_SIZE || !out_type || !out_size)
@@ -453,7 +526,7 @@ static bool tikGetTicketTypeAndSize(const void *data, u64 data_size, u8 *out_typ
     u8 type = TikType_Invalid;
     const u8 *data_u8 = (const u8*)data;
     const TikCommonBlock *tik_common_blk = NULL;
-    u32 sig_type;
+    u32 sig_type = 0;
     u64 offset = 0;
     
     memcpy(&sig_type, data_u8, sizeof(u32));
@@ -509,46 +582,6 @@ static bool tikGetTicketTypeAndSize(const void *data, u64 data_size, u8 *out_typ
     return true;
 }
 
-static bool tikTestKeyPairFromEticketDeviceKey(const void *e, const void *d, const void *n)
-{
-    if (!e || !d || !n)
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    Result rc = 0;
-    u8 x[0x100] = {0}, y[0x100] = {0}, z[0x100] = {0};
-    
-    /* 0xCAFEBABE */
-    x[0xFC] = 0xCA;
-    x[0xFD] = 0xFE;
-    x[0xFE] = 0xBA;
-    x[0xFF] = 0xBE;
-    
-    rc = splUserExpMod(x, n, d, 0x100, y);
-    if (R_FAILED(rc))
-    {
-        LOGFILE("splUserExpMod failed! (#1) (0x%08X)", rc);
-        return false;
-    }
-    
-    rc = splUserExpMod(y, n, e, 4, z);
-    if (R_FAILED(rc))
-    {
-        LOGFILE("splUserExpMod failed! (#2) (0x%08X)", rc);
-        return false;
-    }
-    
-    if (memcmp(x, y, 0x100) != 0)
-    {
-        LOGFILE("Invalid RSA key pair!");
-        return false;
-    }
-    
-    return true;
-}
-
 static bool tikRetrieveEticketDeviceKey(void)
 {
     if (g_eTicketDeviceKeyRetrieved) return true;
@@ -587,6 +620,46 @@ static bool tikRetrieveEticketDeviceKey(void)
     }
     
     g_eTicketDeviceKeyRetrieved = true;
+    
+    return true;
+}
+
+static bool tikTestKeyPairFromEticketDeviceKey(const void *e, const void *d, const void *n)
+{
+    if (!e || !d || !n)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    Result rc = 0;
+    u8 x[0x100] = {0}, y[0x100] = {0}, z[0x100] = {0};
+    
+    /* 0xCAFEBABE */
+    x[0xFC] = 0xCA;
+    x[0xFD] = 0xFE;
+    x[0xFE] = 0xBA;
+    x[0xFF] = 0xBE;
+    
+    rc = splUserExpMod(x, n, d, 0x100, y);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("splUserExpMod failed! (#1) (0x%08X)", rc);
+        return false;
+    }
+    
+    rc = splUserExpMod(y, n, e, 4, z);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("splUserExpMod failed! (#2) (0x%08X)", rc);
+        return false;
+    }
+    
+    if (memcmp(x, z, 0x100) != 0)
+    {
+        LOGFILE("Invalid RSA key pair!");
+        return false;
+    }
     
     return true;
 }

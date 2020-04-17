@@ -15,6 +15,7 @@
  */
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
@@ -26,6 +27,7 @@
 #include "gamecard.h"
 #include "services.h"
 #include "utils.h"
+#include "fatfs/ff.h"
 
 /* Global variables. */
 
@@ -35,11 +37,17 @@ static AppletHookCookie g_systemOverclockCookie = {0};
 
 static Mutex g_logfileMutex = 0;
 
+static FsStorage g_emmcBisSystemPartitionStorage = {0};
+static FATFS *g_emmcBisSystemPartitionFs = NULL;
+
 /* Function prototypes. */
 
 static void _utilsGetCustomFirmwareType(void);
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
+
+static bool utilsMountEmmcBisSystemPartitionStorage(void);
+static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
 u64 utilsHidKeysAllDown(void)
 {
@@ -125,6 +133,17 @@ bool utilsInitializeResources(void)
         return false;
     }
     
+    /* Initialize gamecard interface */
+    Result rc = gamecardInitialize();
+    if (R_FAILED(rc))
+    {
+        LOGFILE("Failed to initialize gamecard interface!");
+        return false;
+    }
+    
+    /* Mount eMMC BIS System partition */
+    if (!utilsMountEmmcBisSystemPartitionStorage()) return false;
+    
     /* Initialize FreeType */
     //if (!freeTypeHelperInitialize()) return false;
     
@@ -140,22 +159,11 @@ bool utilsInitializeResources(void)
     /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked) */
     appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
     
-    /* Initialize gamecard interface */
-    Result rc = gamecardInitialize();
-    if (R_FAILED(rc))
-    {
-        LOGFILE("Failed to initialize gamecard interface!");
-        return false;
-    }
-    
     return true;
 }
 
 void utilsCloseResources(void)
 {
-    /* Deinitialize gamecard interface */
-    gamecardExit();
-    
     /* Unset our overclock applet hook */
     appletUnhook(&g_systemOverclockCookie);
     
@@ -168,6 +176,12 @@ void utilsCloseResources(void)
     /* Free FreeType resouces */
     //freeTypeHelperExit();
     
+    /* Unmount eMMC BIS System partition */
+    utilsUnmountEmmcBisSystemPartitionStorage();
+    
+    /* Deinitialize gamecard interface */
+    gamecardExit();
+    
     /* Close initialized services */
     servicesClose();
 }
@@ -175,6 +189,30 @@ void utilsCloseResources(void)
 u8 utilsGetCustomFirmwareType(void)
 {
     return g_customFirmwareType;
+}
+
+void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size)
+{
+    if (!src || !src_size || !dst || dst_size < ((src_size * 2) + 1)) return;
+    
+    size_t i, j;
+    const u8 *src_u8 = (const u8*)src;
+    
+    for(i = 0, j = 0; i < src_size; i++)
+    {
+        char nib1 = ((src_u8[i] >> 4) & 0xF);
+        char nib2 = (src_u8[i] & 0xF);
+        
+        dst[j++] = (nib1 + (nib1 < 0xA ? 0x30 : 0x57));
+        dst[j++] = (nib2 + (nib2 < 0xA ? 0x30 : 0x57));
+    }
+    
+    dst[j] = '\0';
+}
+
+FsStorage *utilsGetEmmcBisSystemPartitionStorage(void)
+{
+    return &g_emmcBisSystemPartitionStorage;
 }
 
 static void _utilsGetCustomFirmwareType(void)
@@ -205,4 +243,49 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
     
     /* To do: read config here to actually know the value to use with utilsOverclockSystem */
     utilsOverclockSystem(true);
+}
+
+static bool utilsMountEmmcBisSystemPartitionStorage(void)
+{
+    Result rc = 0;
+    FRESULT fr = FR_OK;
+    
+    rc = fsOpenBisStorage(&g_emmcBisSystemPartitionStorage, FsBisPartitionId_System);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("Failed to open eMMC BIS System partition storage! (0x%08X)", rc);
+        return false;
+    }
+    
+    g_emmcBisSystemPartitionFs = calloc(1, sizeof(FATFS));
+    if (!g_emmcBisSystemPartitionFs)
+    {
+        LOGFILE("Unable to allocate memory for FatFs object!");
+        return false;
+    }
+    
+    fr = f_mount(g_emmcBisSystemPartitionFs, BIS_SYSTEM_PARTITION_MOUNT_NAME, 1);
+    if (fr != FR_OK)
+    {
+        LOGFILE("Failed to mount eMMC BIS System partition! (%u)", fr);
+        return false;
+    }
+    
+    return true;
+}
+
+static void utilsUnmountEmmcBisSystemPartitionStorage(void)
+{
+    if (g_emmcBisSystemPartitionFs)
+    {
+        f_unmount(BIS_SYSTEM_PARTITION_MOUNT_NAME);
+        free(g_emmcBisSystemPartitionFs);
+        g_emmcBisSystemPartitionFs = NULL;
+    }
+    
+    if (serviceIsActive(&(g_emmcBisSystemPartitionStorage.s)))
+    {
+        fsStorageClose(&g_emmcBisSystemPartitionStorage);
+        memset(&g_emmcBisSystemPartitionStorage, 0, sizeof(FsStorage));
+    }
 }

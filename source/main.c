@@ -21,7 +21,10 @@
 
 //#include "lvgl_helper.h"
 #include "utils.h"
+
 #include "gamecard.h"
+#include "tik.h"
+#include "cert.h"
 
 int main(int argc, char *argv[])
 {
@@ -65,7 +68,7 @@ int main(int argc, char *argv[])
     FsGameCardCertificate cert = {0};
     u64 total_size = 0, trimmed_size = 0;
     u32 update_version = 0;
-    u64 nca_offset = 0;
+    u64 nca_offset = 0, nca_size = 0;
     
     if (gamecardGetHeader(&header))
     {
@@ -108,7 +111,7 @@ int main(int argc, char *argv[])
     
     if (gamecardGetCertificate(&cert))
     {
-        printf("cert success\n");
+        printf("gamecard cert success\n");
         consoleUpdate(NULL);
         
         tmp_file = fopen("sdmc:/cert.bin", "wb");
@@ -117,12 +120,12 @@ int main(int argc, char *argv[])
             fwrite(&cert, 1, sizeof(FsGameCardCertificate), tmp_file);
             fclose(tmp_file);
             tmp_file = NULL;
-            printf("cert saved\n");
+            printf("gamecard cert saved\n");
         } else {
-            printf("cert not saved\n");
+            printf("gamecard cert not saved\n");
         }
     } else {
-        printf("cert failed\n");
+        printf("gamecard cert failed\n");
     }
     
     consoleUpdate(NULL);
@@ -168,16 +171,77 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
-    if (gamecardGetHashFileSystemEntryDataOffsetByName(2, "7e86768383cfabb30f1b58d2373fed07.nca", &nca_offset)) // Should match 0x1657F5E00
+    // Should match 0x1657F5E00
+    if (gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(GameCardHashFileSystemPartitionType_Secure, "7e86768383cfabb30f1b58d2373fed07.nca", &nca_offset, &nca_size))
     {
-        printf("nca_offset: 0x%lX\n", nca_offset);
+        printf("nca_offset: 0x%lX | nca_size: 0x%lX\n", nca_offset, nca_size);
     } else {
-        printf("nca_offset failed\n");
+        printf("nca_offset + nca_size failed\n");
     }
     
     consoleUpdate(NULL);
     
-    SLEEP(3);
+    Ticket tik = {0};
+    TikCommonBlock *tik_common_blk = NULL;
+    
+    u8 *cert_chain = NULL;
+    u64 cert_chain_size = 0;
+    
+    FsRightsId rights_id = {
+        .c = { 0x01, 0x00, 0x9a, 0xa0, 0x00, 0xfa, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } // Sonic Mania
+    };
+    
+    if (tikRetrieveTicketByRightsId(&tik, &rights_id, false))
+    {
+        printf("tik succeeded\n");
+        consoleUpdate(NULL);
+        
+        tmp_file = fopen("sdmc:/tik.bin", "wb");
+        if (tmp_file)
+        {
+            fwrite(&tik, 1, sizeof(Ticket), tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("tik saved\n");
+        } else {
+            printf("tik not saved\n");
+        }
+        
+        consoleUpdate(NULL);
+        
+        tik_common_blk = tikGetCommonBlockFromTicket(&tik);
+        
+        if (tik_common_blk)
+        {
+            cert_chain = certGenerateRawCertificateChainBySignatureIssuer(tik_common_blk->issuer, &cert_chain_size);
+            if (cert_chain)
+            {
+                printf("cert chain succeeded | size: 0x%lX\n", cert_chain_size);
+                consoleUpdate(NULL);
+                
+                tmp_file = fopen("sdmc:/chain.bin", "wb");
+                if (tmp_file)
+                {
+                    fwrite(cert_chain, 1, cert_chain_size, tmp_file);
+                    fclose(tmp_file);
+                    tmp_file = NULL;
+                    printf("cert chain saved\n");
+                } else {
+                    printf("cert chain not saved\n");
+                }
+            } else {
+                printf("cert chain failed\n");
+            }
+        }
+    } else {
+        printf("tik failed\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    
+    
+    utilsSleep(5);
     consoleExit(NULL);
     
 out:

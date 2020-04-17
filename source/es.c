@@ -57,7 +57,7 @@ Result esListCommonTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 cou
     
     Result rc = serviceDispatchInOut(&g_esSrv, 11, *out_entries_written, out,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
-        .buffers = { { out_ids, count * sizeof(FsRightsId) } }
+        .buffers = { { out_ids, (size_t)count * sizeof(FsRightsId) } }
     );
     
     if (R_SUCCEEDED(rc) && out_entries_written) *out_entries_written = out.num_rights_ids_written;
@@ -73,7 +73,7 @@ Result esListPersonalizedTicket(s32 *out_entries_written, FsRightsId *out_ids, s
     
     Result rc = serviceDispatchInOut(&g_esSrv, 12, *out_entries_written, out,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
-        .buffers = { { out_ids, count * sizeof(FsRightsId) } }
+        .buffers = { { out_ids, (size_t)count * sizeof(FsRightsId) } }
     );
     
     if (R_SUCCEEDED(rc) && out_entries_written) *out_entries_written = out.num_rights_ids_written;

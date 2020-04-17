@@ -22,15 +22,26 @@
 #include "save.h"
 #include "utils.h"
 
-#define CERT_SAVEFILE_PATH              "sys:/save/80000000000000e0"
+#define CERT_SAVEFILE_PATH              BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e0"
 #define CERT_SAVEFILE_STORAGE_BASE_PATH "/certificate/"
 
 #define CERT_TYPE(sig)  (pub_key_type == CertPubKeyType_Rsa4096 ? CertType_Sig##sig##_PubKeyRsa4096 : (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig##_PubKeyRsa2048 : CertType_Sig##sig##_PubKeyEcsda240))
 
+/* Global variables. */
+
+static save_ctx_t *g_esCertSaveCtx = NULL;
+
 /* Function prototypes. */
 
+static bool certOpenEsCertSaveFile(void);
+static void certCloseEsCertSaveFile(void);
+
+static bool _certRetrieveCertificateByName(Certificate *dst, const char *name);
 static u8 certGetCertificateType(const void *data, u64 data_size);
+
+static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer);
 static u32 certGetCertificateCountInSignatureIssuer(const char *issuer);
+
 static u64 certCalculateRawCertificateChainSize(const CertificateChain *chain);
 static void certCopyCertificateChainDataToMemoryBuffer(void *dst, const CertificateChain *chain);
 
@@ -42,66 +53,13 @@ bool certRetrieveCertificateByName(Certificate *dst, const char *name)
         return false;
     }
     
-    save_ctx_t *save_ctx = NULL;
-    allocation_table_storage_ctx_t fat_storage = {0};
+    if (!certOpenEsCertSaveFile()) return false;
     
-    u64 cert_size = 0;
-    char cert_path[SAVE_FS_LIST_MAX_NAME_LENGTH] = {0};
+    bool ret = _certRetrieveCertificateByName(dst, name);
     
-    bool success = false;
+    certCloseEsCertSaveFile();
     
-    snprintf(cert_path, SAVE_FS_LIST_MAX_NAME_LENGTH, "%s%s", CERT_SAVEFILE_STORAGE_BASE_PATH, name);
-    
-    save_ctx = save_open_savefile(CERT_SAVEFILE_PATH, 0);
-    if (!save_ctx)
-    {
-        LOGFILE("Failed to open ES certificate system savefile!");
-        return false;
-    }
-    
-    if (!save_get_fat_storage_from_file_entry_by_path(save_ctx, cert_path, &fat_storage, &cert_size))
-    {
-        LOGFILE("Failed to locate certificate \"%s\" in ES certificate system save!", name);
-        goto out;
-    }
-    
-    if (cert_size < CERT_MIN_SIZE || cert_size > CERT_MAX_SIZE)
-    {
-        LOGFILE("Invalid size for certificate \"%s\"! (0x%lX)", name, cert_size);
-        goto out;
-    }
-    
-    dst->size = cert_size;
-    
-    u64 br = save_allocation_table_storage_read(&fat_storage, dst->data, 0, dst->size);
-    if (br != dst->size)
-    {
-        LOGFILE("Failed to read 0x%lX bytes from certificate \"%s\"! Read 0x%lX bytes.", dst->size, name, br);
-        goto out;
-    }
-    
-    dst->type = certGetCertificateType(dst->data, dst->size);
-    if (dst->type == CertType_Invalid)
-    {
-        LOGFILE("Invalid certificate type for \"%s\"!", name);
-        goto out;
-    }
-    
-    success = true;
-    
-out:
-    if (save_ctx) save_close_savefile(save_ctx);
-    
-    return success;
-}
-
-void certFreeCertificateChain(CertificateChain *chain)
-{
-    if (!chain || !chain->certs) return;
-    
-    chain->count = 0;
-    free(chain->certs);
-    chain->certs = NULL;
+    return ret;
 }
 
 bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer)
@@ -112,45 +70,22 @@ bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const 
         return false;
     }
     
-    u32 i = 0;
-    char issuer_copy[0x40] = {0};
-    bool success = true;
+    if (!certOpenEsCertSaveFile()) return false;
     
-    dst->count = certGetCertificateCountInSignatureIssuer(issuer);
-    if (!dst->count)
-    {
-        LOGFILE("Invalid signature issuer string!");
-        return false;
-    }
+    bool ret = _certRetrieveCertificateChainBySignatureIssuer(dst, issuer);
     
-    dst->certs = calloc(dst->count, sizeof(Certificate));
-    if (!dst->certs)
-    {
-        LOGFILE("Unable to allocate memory for the certificate chain! (0x%lX)", dst->count * sizeof(Certificate));
-        return false;
-    }
+    certCloseEsCertSaveFile();
     
-    /* Copy string to avoid problems with strtok */
-    /* The "Root-" parent from the issuer string is skipped */
-    snprintf(issuer_copy, 0x40, issuer + 5);
+    return ret;
+}
+
+void certFreeCertificateChain(CertificateChain *chain)
+{
+    if (!chain || !chain->certs) return;
     
-    char *pch = strtok(issuer_copy, "-");
-    while(pch != NULL)
-    {
-        if (!certRetrieveCertificateByName(&(dst->certs[i]), pch))
-        {
-            LOGFILE("Unable to retrieve certificate \"%s\"!", pch);
-            success = false;
-            break;
-        }
-        
-        i++;
-        pch = strtok(NULL, "-");
-    }
-    
-    if (!success) certFreeCertificateChain(dst);
-    
-    return success;
+    chain->count = 0;
+    free(chain->certs);
+    chain->certs = NULL;
 }
 
 u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *out_size)
@@ -187,6 +122,74 @@ out:
     certFreeCertificateChain(&chain);
     
     return raw_chain;
+}
+
+static bool certOpenEsCertSaveFile(void)
+{
+    if (g_esCertSaveCtx) return true;
+    
+    g_esCertSaveCtx = save_open_savefile(CERT_SAVEFILE_PATH, 0);
+    if (!g_esCertSaveCtx)
+    {
+        LOGFILE("Failed to open ES certificate system savefile!");
+        return false;
+    }
+    
+    return true;
+}
+
+static void certCloseEsCertSaveFile(void)
+{
+    if (g_esCertSaveCtx)
+    {
+        save_close_savefile(g_esCertSaveCtx);
+        g_esCertSaveCtx = NULL;
+    }
+}
+
+static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
+{
+    if (!g_esCertSaveCtx || !dst || !name || !strlen(name))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    u64 cert_size = 0;
+    char cert_path[SAVE_FS_LIST_MAX_NAME_LENGTH] = {0};
+    allocation_table_storage_ctx_t fat_storage = {0};
+    
+    snprintf(cert_path, SAVE_FS_LIST_MAX_NAME_LENGTH, "%s%s", CERT_SAVEFILE_STORAGE_BASE_PATH, name);
+    
+    if (!save_get_fat_storage_from_file_entry_by_path(g_esCertSaveCtx, cert_path, &fat_storage, &cert_size))
+    {
+        LOGFILE("Failed to locate certificate \"%s\" in ES certificate system save!", name);
+        return false;
+    }
+    
+    if (cert_size < CERT_MIN_SIZE || cert_size > CERT_MAX_SIZE)
+    {
+        LOGFILE("Invalid size for certificate \"%s\"! (0x%lX)", name, cert_size);
+        return false;
+    }
+    
+    dst->size = cert_size;
+    
+    u64 br = save_allocation_table_storage_read(&fat_storage, dst->data, 0, dst->size);
+    if (br != dst->size)
+    {
+        LOGFILE("Failed to read 0x%lX bytes from certificate \"%s\"! Read 0x%lX bytes.", dst->size, name, br);
+        return false;
+    }
+    
+    dst->type = certGetCertificateType(dst->data, dst->size);
+    if (dst->type == CertType_Invalid)
+    {
+        LOGFILE("Invalid certificate type for \"%s\"!", name);
+        return false;
+    }
+    
+    return true;
 }
 
 static u8 certGetCertificateType(const void *data, u64 data_size)
@@ -269,6 +272,55 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
     }
     
     return type;
+}
+
+static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer)
+{
+    if (!dst || !issuer || !strlen(issuer) || strncmp(issuer, "Root-", 5) != 0)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    u32 i = 0;
+    char issuer_copy[0x40] = {0};
+    bool success = true;
+    
+    dst->count = certGetCertificateCountInSignatureIssuer(issuer);
+    if (!dst->count)
+    {
+        LOGFILE("Invalid signature issuer string!");
+        return false;
+    }
+    
+    dst->certs = calloc(dst->count, sizeof(Certificate));
+    if (!dst->certs)
+    {
+        LOGFILE("Unable to allocate memory for the certificate chain! (0x%lX)", dst->count * sizeof(Certificate));
+        return false;
+    }
+    
+    /* Copy string to avoid problems with strtok */
+    /* The "Root-" parent from the issuer string is skipped */
+    snprintf(issuer_copy, 0x40, issuer + 5);
+    
+    char *pch = strtok(issuer_copy, "-");
+    while(pch != NULL)
+    {
+        if (!_certRetrieveCertificateByName(&(dst->certs[i]), pch))
+        {
+            LOGFILE("Unable to retrieve certificate \"%s\"!", pch);
+            success = false;
+            break;
+        }
+        
+        i++;
+        pch = strtok(NULL, "-");
+    }
+    
+    if (!success) certFreeCertificateChain(dst);
+    
+    return success;
 }
 
 static u32 certGetCertificateCountInSignatureIssuer(const char *issuer)

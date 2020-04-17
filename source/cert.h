@@ -158,8 +158,8 @@ typedef struct {
 
 bool certRetrieveCertificateByName(Certificate *dst, const char *name);
 
-void certFreeCertificateChain(CertificateChain *chain);
 bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer);
+void certFreeCertificateChain(CertificateChain *chain);
 
 /// Returns a pointer to a heap allocated buffer that must be freed by the user.
 u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *out_size);
