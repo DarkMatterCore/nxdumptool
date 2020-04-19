@@ -41,9 +41,6 @@
 #define GAMECARD_CAPACITY_16GiB                 (u64)0x400000000
 #define GAMECARD_CAPACITY_32GiB                 (u64)0x800000000
 
-#define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : \
-                                        ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : "unknown"))))
-
 /* Type definitions. */
 
 typedef enum {

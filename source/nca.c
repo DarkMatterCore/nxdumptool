@@ -21,6 +21,7 @@
 #include "nca.h"
 #include "keys.h"
 #include "rsa.h"
+#include "gamecard.h"
 #include "utils.h"
 
 /* Global variables. */
@@ -32,7 +33,7 @@ static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
 
 /* Function prototypes. */
 
-static bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx);
+static inline bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx);
 static void ncaUpdateAesCtrIv(u8 *ctr, u64 offset);
 static void ncaUpdateAesCtrExIv(u8 *ctr, u32 ctr_val, u64 offset);
 
@@ -68,7 +69,30 @@ size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src,
     return i;
 }
 
-
+bool ncaRead(NcaContext *ctx, void *out, u64 read_size, u64 offset)
+{
+    if (!ctx || (ctx->storage_id != NcmStorageId_GameCard && !ctx->ncm_storage) || (ctx->storage_id == NcmStorageId_GameCard && !ctx->gamecard_offset) || !out || !read_size || \
+        offset >= ctx->size || (offset + read_size) > ctx->size)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    Result rc = 0;
+    bool ret = false;
+    
+    if (ctx->storage_id == NcmStorageId_GameCard)
+    {
+        ret = gamecardRead(out, read_size, ctx->gamecard_offset + offset);
+        if (!ret) LOGFILE("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (gamecard)", read_size, offset, ctx->id_str);
+    } else {
+        rc = ncmContentStorageReadContentIdFile(ctx->ncm_storage, out, read_size, &(ctx->id), offset);
+        ret = R_SUCCEEDED(rc);
+        if (!ret) LOGFILE("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (0x%08X) (ncm)", read_size, offset, ctx->id_str, rc);
+    }
+    
+    return ret;
+}
 
 
 
@@ -121,7 +145,7 @@ bool ncaDecryptKeyArea(NcaContext *ctx)
     
     for(u8 i = 0; i < key_count; i++)
     {
-        rc = splCryptoGenerateAesKey(tmp_kek, &(ctx->header.encrypted_keys[i]), &(ctx->decrypted_keys[i]));
+        rc = splCryptoGenerateAesKey(tmp_kek, ctx->header.encrypted_keys[i].key, ctx->decrypted_keys[i].key);
         if (R_FAILED(rc))
         {
             LOGFILE("splCryptoGenerateAesKey failed! (0x%08X)", rc);
@@ -161,7 +185,7 @@ bool ncaEncryptKeyArea(NcaContext *ctx)
     key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4);
     
     aes128ContextCreate(&key_area_ctx, kaek, true);
-    for(u8 i = 0; i < key_count; i++) aes128EncryptBlock(&key_area_ctx, &(ctx->header.encrypted_keys[i]), &(ctx->decrypted_keys[i]));
+    for(u8 i = 0; i < key_count; i++) aes128EncryptBlock(&key_area_ctx, ctx->header.encrypted_keys[i].key, ctx->decrypted_keys[i].key);
     
     return true;
 }
@@ -176,6 +200,7 @@ bool ncaDecryptHeader(NcaContext *ctx)
     
     u32 i, magic = 0;
     size_t crypt_res = 0;
+    u64 fs_header_offset = 0;
     const u8 *header_key = NULL;
     Aes128XtsContext hdr_aes_ctx = {0}, nca0_fs_header_ctx = {0};
     
@@ -231,18 +256,27 @@ bool ncaDecryptHeader(NcaContext *ctx)
                 return false;
             }
             
-            aes128XtsContextCreate(&nca0_fs_header_ctx, &(ctx->decrypted_keys[0]), &(ctx->decrypted_keys[1]), false);
+            aes128XtsContextCreate(&nca0_fs_header_ctx, ctx->decrypted_keys[0].key, ctx->decrypted_keys[1].key, false);
             
             for(i = 0; i < NCA_FS_HEADER_COUNT; i++)
             {
                 if (!ctx->header.fs_entries[i].enable_entry) continue;
                 
+                /* FS headers are not part of NCA0 headers */
+                fs_header_offset = NCA_FS_ENTRY_BLOCK_OFFSET(ctx->header.fs_entries[i].start_block_offset);
+                if (!ncaRead(ctx, &(ctx->header.fs_headers[i]), NCA_FS_HEADER_LENGTH, fs_header_offset))
+                {
+                    LOGFILE("Failed to read NCA0 FS section header #%u at offset 0x%lX!", i, fs_header_offset);
+                    return false;
+                }
                 
-                
-                
-                
-                
-                
+                crypt_res = aes128XtsNintendoCrypt(&nca0_fs_header_ctx, &(ctx->header.fs_headers[i]), &(ctx->header.fs_headers[i]), NCA_FS_HEADER_LENGTH, (fs_header_offset - 0x400) >> 9, \
+                                                   NCA_AES_XTS_SECTOR_SIZE, false);
+                if (crypt_res != NCA_FS_HEADER_LENGTH)
+                {
+                    LOGFILE("Error decrypting NCA0 FS section header #%u!", i);
+                    return false;
+                }
             }
             
             break;
@@ -332,7 +366,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
 
 
 
-static bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx)
+static inline bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx)
 {
     if (!ctx || ctx->format_version != NcaVersion_Nca0) return false;
     

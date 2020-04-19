@@ -120,12 +120,12 @@ bool servicesCheckRunningServiceByName(const char *name)
 {
     if (!name || !strlen(name)) return false;
     
-    Handle handle;
+    Handle handle = INVALID_HANDLE;
     SmServiceName service_name = smEncodeName(name);
     Result rc = smRegisterService(&handle, service_name, false, 1);
     bool running = R_FAILED(rc);
     
-    svcCloseHandle(handle);
+    if (handle != INVALID_HANDLE) svcCloseHandle(handle);
     
     if (!running) smUnregisterService(service_name);
     

@@ -188,12 +188,6 @@ const u8 *keysGetNcaHeaderKey(void)
 
 const u8 *keysGetKeyAreaEncryptionKeySource(u8 kaek_index)
 {
-    if (kaek_index > NcaKeyAreaEncryptionKeyIndex_System)
-    {
-        LOGFILE("Invalid KAEK index! (0x%02X)", kaek_index);
-        return NULL;
-    }
-    
     const u8 *ptr = NULL;
     
     switch(kaek_index)
@@ -208,6 +202,7 @@ const u8 *keysGetKeyAreaEncryptionKeySource(u8 kaek_index)
             ptr = (const u8*)(g_ncaKeyset.key_area_key_system_source);
             break;
         default:
+            LOGFILE("Invalid KAEK index! (0x%02X)", kaek_index);
             break;
     }
     

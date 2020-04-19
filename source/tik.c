@@ -66,7 +66,7 @@ static TikCommonBlock *tikGetCommonBlockFromMemoryBuffer(void *data);
 static bool tikGetTitleKeyFromTicketCommonBlock(void *dst, const TikCommonBlock *tik_common_blk);
 static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generation);
 
-static u8 tikGetTitleKeyTypeFromRightsId(const FsRightsId *id);
+static bool tikGetTitleKeyTypeFromRightsId(const FsRightsId *id, u8 *out);
 static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized);
 
 static bool tikGetTicketTypeAndSize(const void *data, u64 data_size, u8 *out_type, u64 *out_size);
@@ -86,7 +86,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
         return false;
     }
     
-    tik_common_blk = tikGetCommonBlockFromMemoryBuffer(dst->data);
+    tik_common_blk = tikGetCommonBlockFromTicket(dst);
     if (!tik_common_blk)
     {
         LOGFILE("Unable to retrieve common block from ticket!");
@@ -112,23 +112,40 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
 
 TikCommonBlock *tikGetCommonBlockFromTicket(Ticket *tik)
 {
-    if (!tik || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE)
+    if (!tik || tik->type == TikType_None || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE || tik->size > TIK_MAX_SIZE)
     {
         LOGFILE("Invalid parameters!");
         return NULL;
     }
     
-    return tikGetCommonBlockFromMemoryBuffer(tik->data);
+    TikCommonBlock *tik_common_blk = NULL;
+    
+    switch(tik->type)
+    {
+        case TikType_SigRsa4096:
+            tik_common_blk = &(((TikSigRsa4096*)tik->data)->tik_common_blk);
+            break;
+        case TikType_SigRsa2048:
+            tik_common_blk = &(((TikSigRsa2048*)tik->data)->tik_common_blk);
+            break;
+        case TikType_SigEcsda240:
+            tik_common_blk = &(((TikSigEcsda240*)tik->data)->tik_common_blk);
+            break;
+        default:
+            break;
+    }
+    
+    return tik_common_blk;
 }
 
 void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
 {
-    if (!tik || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE) return;
+    if (!tik || tik->type == TikType_None || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE || tik->size > TIK_MAX_SIZE) return;
     
     bool dev_cert = false;
     TikCommonBlock *tik_common_blk = NULL;
     
-    tik_common_blk = tikGetCommonBlockFromMemoryBuffer(tik->data);
+    tik_common_blk = tikGetCommonBlockFromTicket(tik);
     if (!tik_common_blk || tik_common_blk->titlekey_type != TikTitleKeyType_Personalized) return;
     
     switch(tik->type)
@@ -220,19 +237,19 @@ static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRight
     }
     
     u32 i;
+    u8 titlekey_type = 0;
     
     save_ctx_t *save_ctx = NULL;
     allocation_table_storage_ctx_t fat_storage = {0};
     u64 ticket_bin_size = 0;
     
-    u64 buf_size = (TIK_MAX_SIZE * 0x10);   /* 0x4000 */
+    u64 buf_size = (TIK_MAX_SIZE * 0x10);
     u64 br = 0, total_br = 0;
     u8 *ticket_bin_buf = NULL;
     
     bool found_tik = false, success = false;
     
-    u8 titlekey_type = tikGetTitleKeyTypeFromRightsId(id);
-    if (titlekey_type == TikTitleKeyType_Invalid)
+    if (!tikGetTitleKeyTypeFromRightsId(id, &titlekey_type))
     {
         LOGFILE("Unable to retrieve ticket titlekey type!");
         return false;
@@ -326,9 +343,9 @@ static TikCommonBlock *tikGetCommonBlockFromMemoryBuffer(void *data)
         return NULL;
     }
     
+    u32 sig_type = 0;
     u8 *data_u8 = (u8*)data;
     TikCommonBlock *tik_common_blk = NULL;
-    u32 sig_type = 0;
     
     memcpy(&sig_type, data_u8, sizeof(u32));
     
@@ -426,27 +443,27 @@ static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_g
     return true;
 }
 
-static u8 tikGetTitleKeyTypeFromRightsId(const FsRightsId *id)
+static bool tikGetTitleKeyTypeFromRightsId(const FsRightsId *id, u8 *out)
 {
-    if (!id)
+    if (!id || !out)
     {
         LOGFILE("Invalid parameters!");
-        return TikTitleKeyType_Invalid;
+        return false;
     }
     
-    u8 type = TikTitleKeyType_Invalid;
     u32 count;
     FsRightsId *rights_ids;
+    bool found = false;
     
     for(u8 i = 0; i < 2; i++)
     {
         count = 0;
         rights_ids = NULL;
         
-        if (!tikRetrieveRightsIdsByTitleKeyType(&rights_ids, &count, (bool)i))
+        if (!tikRetrieveRightsIdsByTitleKeyType(&rights_ids, &count, i == 1))
         {
             LOGFILE("Unable to retrieve %s rights IDs!", i == 0 ? "common" : "personalized");
-            break;
+            continue;
         }
         
         if (!count) continue;
@@ -455,17 +472,18 @@ static u8 tikGetTitleKeyTypeFromRightsId(const FsRightsId *id)
         {
             if (!memcmp(rights_ids[j].c, id->c, 0x10))
             {
-                type = i; /* TikTitleKeyType_Common or TikTitleKeyType_Personalized */
+                *out = i; /* TikTitleKeyType_Common or TikTitleKeyType_Personalized */
+                found = true;
                 break;
             }
         }
         
         free(rights_ids);
         
-        if (type != TikTitleKeyType_Invalid) break;
+        if (found) break;
     }
     
-    return type;
+    return found;
 }
 
 static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized)
@@ -523,11 +541,11 @@ static bool tikGetTicketTypeAndSize(const void *data, u64 data_size, u8 *out_typ
         return false;
     }
     
-    u8 type = TikType_Invalid;
-    const u8 *data_u8 = (const u8*)data;
-    const TikCommonBlock *tik_common_blk = NULL;
     u32 sig_type = 0;
     u64 offset = 0;
+    u8 type = TikType_None;
+    const u8 *data_u8 = (const u8*)data;
+    const TikCommonBlock *tik_common_blk = NULL;
     
     memcpy(&sig_type, data_u8, sizeof(u32));
     

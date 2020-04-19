@@ -209,6 +209,24 @@ int main(int argc, char *argv[])
         
         consoleUpdate(NULL);
         
+        tikConvertPersonalizedTicketToCommonTicket(&tik);
+        
+        printf("common tik generated\n");
+        consoleUpdate(NULL);
+        
+        tmp_file = fopen("sdmc:/common_tik.bin", "wb");
+        if (tmp_file)
+        {
+            fwrite(&tik, 1, sizeof(Ticket), tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("common tik saved\n");
+        } else {
+            printf("common tik not saved\n");
+        }
+        
+        consoleUpdate(NULL);
+        
         tik_common_blk = tikGetCommonBlockFromTicket(&tik);
         
         if (tik_common_blk)

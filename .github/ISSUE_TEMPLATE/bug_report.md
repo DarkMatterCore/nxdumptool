@@ -20,15 +20,15 @@ Steps to reproduce the behavior:
 **Screenshots**
 Add screenshots to help explain your problem.
 
-**Please complete the following information:**
-- Horizon OS (Switch FW) version: [e.g. 9.0.1]
+**Please fill the following information:**
+- Horizon OS (Switch FW) version: [e.g. 10.0.0]
 - CFW: [e.g. Atmosphère, SX OS, etc.]
-- CFW version: [e.g. 0.9.4, 2.9.2, etc.]
+- CFW version: [e.g. 0.11.1, 2.9.4, etc.]
 - Atmosphère launch method (if applicable): [e.g. Hekate, fusee-primary]
-- NXDumpTool version: [e.g. 1.1.7]
-- Homebrew launch method: [e.g. title override, Album applet]
+- NXDumpTool version: [e.g. 1.2.0]
+- Homebrew launch method: [e.g. title override, applet]
 - Source storage used with the application (if applicable): [e.g. gamecard, SD/eMMC]
-- SD card specs: [e.g. Samsung EVO 256 GB]
+- SD card specs: [e.g. Samsung EVO 256 GB, FAT32 partition]
 
 **Additional context**
 Add any other context about the problem here.

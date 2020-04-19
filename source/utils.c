@@ -38,7 +38,7 @@ static AppletHookCookie g_systemOverclockCookie = {0};
 static Mutex g_logfileMutex = 0;
 
 static FsStorage g_emmcBisSystemPartitionStorage = {0};
-static FATFS *g_emmcBisSystemPartitionFs = NULL;
+static FATFS *g_emmcBisSystemPartitionFatFsObj = NULL;
 
 /* Function prototypes. */
 
@@ -200,11 +200,11 @@ void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src,
     
     for(i = 0, j = 0; i < src_size; i++)
     {
-        char nib1 = ((src_u8[i] >> 4) & 0xF);
-        char nib2 = (src_u8[i] & 0xF);
+        char h_nib = ((src_u8[i] >> 4) & 0xF);
+        char l_nib = (src_u8[i] & 0xF);
         
-        dst[j++] = (nib1 + (nib1 < 0xA ? 0x30 : 0x57));
-        dst[j++] = (nib2 + (nib2 < 0xA ? 0x30 : 0x57));
+        dst[j++] = (h_nib + (h_nib < 0xA ? 0x30 : 0x57));
+        dst[j++] = (l_nib + (l_nib < 0xA ? 0x30 : 0x57));
     }
     
     dst[j] = '\0';
@@ -257,14 +257,14 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void)
         return false;
     }
     
-    g_emmcBisSystemPartitionFs = calloc(1, sizeof(FATFS));
-    if (!g_emmcBisSystemPartitionFs)
+    g_emmcBisSystemPartitionFatFsObj = calloc(1, sizeof(FATFS));
+    if (!g_emmcBisSystemPartitionFatFsObj)
     {
         LOGFILE("Unable to allocate memory for FatFs object!");
         return false;
     }
     
-    fr = f_mount(g_emmcBisSystemPartitionFs, BIS_SYSTEM_PARTITION_MOUNT_NAME, 1);
+    fr = f_mount(g_emmcBisSystemPartitionFatFsObj, BIS_SYSTEM_PARTITION_MOUNT_NAME, 1);
     if (fr != FR_OK)
     {
         LOGFILE("Failed to mount eMMC BIS System partition! (%u)", fr);
@@ -276,11 +276,11 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void)
 
 static void utilsUnmountEmmcBisSystemPartitionStorage(void)
 {
-    if (g_emmcBisSystemPartitionFs)
+    if (g_emmcBisSystemPartitionFatFsObj)
     {
         f_unmount(BIS_SYSTEM_PARTITION_MOUNT_NAME);
-        free(g_emmcBisSystemPartitionFs);
-        g_emmcBisSystemPartitionFs = NULL;
+        free(g_emmcBisSystemPartitionFatFsObj);
+        g_emmcBisSystemPartitionFatFsObj = NULL;
     }
     
     if (serviceIsActive(&(g_emmcBisSystemPartitionStorage.s)))

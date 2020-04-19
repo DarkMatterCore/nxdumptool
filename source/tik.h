@@ -22,20 +22,19 @@
 #include <switch.h>
 #include "signature.h"
 
-#define TIK_MAX_SIZE    0x400   /* Max ticket entry size in the ES system savefiles */
+#define TIK_MAX_SIZE    0x400   /* Max ticket entry size in the ES ticket system savedata file */
 #define TIK_MIN_SIZE    0x200   /* Equivalent to sizeof(TikSigEcsda240) - assuming no ESv2 records are available */
 
 typedef enum {
-    TikType_SigRsa4096  = 0,
-    TikType_SigRsa2048  = 1,
-    TikType_SigEcsda240 = 2,
-    TikType_Invalid     = 255
+    TikType_None        = 0,
+    TikType_SigRsa4096  = 1,
+    TikType_SigRsa2048  = 2,
+    TikType_SigEcsda240 = 3
 } TikType;
 
 typedef enum {
     TikTitleKeyType_Common       = 0,
-    TikTitleKeyType_Personalized = 1,
-    TikTitleKeyType_Invalid      = 255
+    TikTitleKeyType_Personalized = 1
 } TikTitleKeyType;
 
 typedef enum {
@@ -121,7 +120,7 @@ typedef struct {
     u8 dec_titlekey[0x10];  ///< Titlekey without titlekek crypto. Ready to use for NCA FS section decryption.
 } Ticket;
 
-/// Retrieves a ticket from either the secure hash FS partition from the inserted gamecard or ES ticket savedata using a Rights ID value.
+/// Retrieves a ticket from either the ES ticket system savedata file (eMMC BIS System partition) or the secure hash FS partition from an inserted gamecard, using a Rights ID value.
 /// Titlekey is also RSA-OAEP unwrapped (if needed) and titlekek decrypted right away.
 bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gamecard);
 

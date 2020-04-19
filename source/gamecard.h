@@ -27,6 +27,9 @@
 
 #define GAMECARD_MEDIA_UNIT_SIZE    0x200
 
+#define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : \
+                                        ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : "unknown"))))
+
 typedef enum {
     GameCardKekIndex_Version0      = 0,
     GameCardKekIndex_VersionForDev = 1

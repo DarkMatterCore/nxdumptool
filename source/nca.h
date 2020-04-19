@@ -35,6 +35,7 @@
 #define NCA_BKTR_MAGIC                  0x424B5452  /* "BKTR" */
 
 #define NCA_FS_ENTRY_BLOCK_SIZE         0x200
+#define NCA_FS_ENTRY_BLOCK_OFFSET(x)    ((x) * NCA_FS_ENTRY_BLOCK_SIZE)
 
 #define NCA_AES_XTS_SECTOR_SIZE         0x200
 
@@ -98,7 +99,7 @@ typedef struct {
 
 typedef struct {
     u8 key[0x10];
-} NcaEncryptedKey;
+} NcaKey;
 
 typedef enum {
     NcaFsType_RomFs       = 0,
@@ -235,7 +236,7 @@ typedef struct {
     FsRightsId rights_id;               ///< Used for titlekey crypto.
     NcaFsEntry fs_entries[4];           ///< Start and end offsets for each NCA FS section.
     NcaFsHash fs_hashes[4];             ///< SHA-256 hashes calculated over each NCA FS section header.
-    NcaEncryptedKey encrypted_keys[4];  ///< Only the encrypted key at index #2 is used. The other three are zero filled before the key area is encrypted.
+    NcaKey encrypted_keys[4];           ///< Only the encrypted key at index #2 is used. The other three are zero filled before the key area is encrypted.
     u8 reserved_2[0xC0];
     NcaFsHeader fs_headers[4];          /// NCA FS section headers.
 } NcaHeader;
@@ -278,9 +279,21 @@ typedef struct {
     bool rights_id_available;
     NcaHeader header;
     bool dirty_header;
-    NcaEncryptedKey decrypted_keys[4];
+    NcaKey decrypted_keys[4];
     NcaFsContext fs_contexts[4];
 } NcaContext;
+
+/// Reads raw encrypted data from a NCA using a NCA context with the 'storage_id', 'id', 'id_str' and 'size' elements filled beforehand.
+/// If 'storage_id' == NcmStorageId_GameCard, the 'gamecard_offset' element should hold a value greater than zero.
+/// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' element should point to a valid NcmContentStorage instance.
+bool ncaRead(NcaContext *ctx, void *out, u64 read_size, u64 offset);
+
+
+
+
+
+
+
 
 static inline void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
 {

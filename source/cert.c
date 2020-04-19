@@ -25,7 +25,8 @@
 #define CERT_SAVEFILE_PATH              BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e0"
 #define CERT_SAVEFILE_STORAGE_BASE_PATH "/certificate/"
 
-#define CERT_TYPE(sig)  (pub_key_type == CertPubKeyType_Rsa4096 ? CertType_Sig##sig##_PubKeyRsa4096 : (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig##_PubKeyRsa2048 : CertType_Sig##sig##_PubKeyEcsda240))
+#define CERT_TYPE(sig)  (pub_key_type == CertPubKeyType_Rsa4096 ? CertType_Sig##sig##_PubKeyRsa4096 : \
+                        (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig##_PubKeyRsa2048 : CertType_Sig##sig##_PubKeyEcsda240))
 
 /* Global variables. */
 
@@ -86,6 +87,52 @@ void certFreeCertificateChain(CertificateChain *chain)
     chain->count = 0;
     free(chain->certs);
     chain->certs = NULL;
+}
+
+CertCommonBlock *certGetCommonBlockFromCertificate(Certificate *cert)
+{
+    if (!cert || cert->type == CertType_None || cert->type > CertType_SigEcsda240_PubKeyEcsda240 || cert->size < CERT_MIN_SIZE || cert->size > CERT_MAX_SIZE)
+    {
+        LOGFILE("Invalid parameters!");
+        return NULL;
+    }
+    
+    CertCommonBlock *cert_common_blk = NULL;
+    
+    switch(cert->type)
+    {
+        case CertType_SigRsa4096_PubKeyRsa4096:
+            cert_common_blk = &(((CertSigRsa4096PubKeyRsa4096*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigRsa4096_PubKeyRsa2048:
+            cert_common_blk = &(((CertSigRsa4096PubKeyRsa2048*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigRsa4096_PubKeyEcsda240:
+            cert_common_blk = &(((CertSigRsa4096PubKeyEcsda240*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigRsa2048_PubKeyRsa4096:
+            cert_common_blk = &(((CertSigRsa2048PubKeyRsa4096*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigRsa2048_PubKeyRsa2048:
+            cert_common_blk = &(((CertSigRsa2048PubKeyRsa2048*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigRsa2048_PubKeyEcsda240:
+            cert_common_blk = &(((CertSigRsa2048PubKeyEcsda240*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigEcsda240_PubKeyRsa4096:
+            cert_common_blk = &(((CertSigEcsda240PubKeyRsa4096*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigEcsda240_PubKeyRsa2048:
+            cert_common_blk = &(((CertSigEcsda240PubKeyRsa2048*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigEcsda240_PubKeyEcsda240:
+            cert_common_blk = &(((CertSigEcsda240PubKeyEcsda240*)cert->data)->cert_common_blk);
+            break;
+        default:
+            break;
+    }
+    
+    return cert_common_blk;
 }
 
 u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *out_size)
@@ -183,7 +230,7 @@ static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
     }
     
     dst->type = certGetCertificateType(dst->data, dst->size);
-    if (dst->type == CertType_Invalid)
+    if (dst->type == CertType_None)
     {
         LOGFILE("Invalid certificate type for \"%s\"!", name);
         return false;
@@ -197,13 +244,13 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
     if (!data || data_size < CERT_MIN_SIZE || data_size > CERT_MAX_SIZE)
     {
         LOGFILE("Invalid parameters!");
-        return CertType_Invalid;
+        return CertType_None;
     }
     
-    u8 type = CertType_Invalid;
-    const u8 *data_u8 = (const u8*)data;
-    u32 sig_type, pub_key_type;
     u64 offset = 0;
+    u8 type = CertType_None;
+    const u8 *data_u8 = (const u8*)data;
+    u32 sig_type = 0, pub_key_type = 0;
     
     memcpy(&sig_type, data_u8, sizeof(u32));
     sig_type = __builtin_bswap32(sig_type);
@@ -227,14 +274,14 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
             return type;
     }
     
-    offset += MEMBER_SIZE(CertSigRsa4096PubKeyRsa4096, issuer);
+    offset += MEMBER_SIZE(CertCommonBlock, issuer);
     
     memcpy(&pub_key_type, data_u8 + offset, sizeof(u32));
     pub_key_type = __builtin_bswap32(pub_key_type);
     
-    offset += MEMBER_SIZE(CertSigRsa4096PubKeyRsa4096, pub_key_type);
-    offset += MEMBER_SIZE(CertSigRsa4096PubKeyRsa4096, name);
-    offset += MEMBER_SIZE(CertSigRsa4096PubKeyRsa4096, cert_id);
+    offset += MEMBER_SIZE(CertCommonBlock, pub_key_type);
+    offset += MEMBER_SIZE(CertCommonBlock, name);
+    offset += MEMBER_SIZE(CertCommonBlock, cert_id);
     
     switch(pub_key_type)
     {
@@ -254,7 +301,7 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
     
     if (offset != data_size)
     {
-        LOGFILE("Calculated end offset doesn't match certificate size! 0x%lX != 0x%lX", offset, data_size);
+        LOGFILE("Calculated end offset doesn't match certificate size! (0x%lX != 0x%lX)", offset, data_size);
         return type;
     }
     

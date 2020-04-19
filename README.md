@@ -1,7 +1,7 @@
 ﻿todo:
     
     hfs0 methods
-    tik gamecard
+    pfs0: full header aligned to 0x20
 
 
 
