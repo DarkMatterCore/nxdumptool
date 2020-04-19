@@ -161,7 +161,7 @@ struct remap_entry_ctx_t {
 struct remap_segment_ctx_t{
     u64 offset;
     u64 length;
-    remap_entry_ctx_t *entries;
+    remap_entry_ctx_t **entries;
     u64 entry_count;
 };
 

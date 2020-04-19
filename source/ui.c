@@ -4333,7 +4333,7 @@ UIResult uiProcess()
                 {
                     if (scrollAmount > 0)
                     {
-                        cursor = ((uiState == stateNspPatchDumpMenu && cursor == 3) ? 4 : 5);
+                        cursor = ((uiState == stateNspPatchDumpMenu && cursor <= 3) ? 4 : 5);
                     } else
                     if (scrollAmount < 0)
                     {

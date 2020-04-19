@@ -152,7 +152,7 @@ remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, remap_entr
         return NULL;
     }
     
-    remap_segment_ctx_t *segments = calloc(sizeof(remap_segment_ctx_t), header->map_segment_count);
+    remap_segment_ctx_t *segments = calloc(header->map_segment_count, sizeof(remap_segment_ctx_t));
     if (!segments)
     {
         snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate initial memory for remap segments!", __func__);
@@ -164,39 +164,40 @@ remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, remap_entr
     
     for(i = 0; i < header->map_segment_count; i++)
     {
-        remap_segment_ctx_t *seg = &segments[i];
+        remap_segment_ctx_t *seg = &(segments[i]);
         
-        seg->entries = calloc(1, sizeof(remap_entry_ctx_t));
+        seg->entry_count = 0;
+        
+        seg->entries = calloc(1, sizeof(remap_entry_ctx_t*));
         if (!seg->entries)
         {
             snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for remap segment entry #%u!", __func__, entry_idx);
             goto out;
         }
         
-        memcpy(seg->entries, &map_entries[entry_idx], sizeof(remap_entry_ctx_t));
+        seg->entries[seg->entry_count++] = &map_entries[entry_idx];
         seg->offset = map_entries[entry_idx].virtual_offset;
-        map_entries[entry_idx].segment = seg;
-        seg->entry_count = 1;
-        entry_idx++;
+        map_entries[entry_idx++].segment = seg;
         
         while(entry_idx < num_map_entries && map_entries[entry_idx - 1].virtual_offset_end == map_entries[entry_idx].virtual_offset)
         {
             map_entries[entry_idx].segment = seg;
             map_entries[entry_idx - 1].next = &map_entries[entry_idx];
             
-            seg->entries = calloc(1, sizeof(remap_entry_ctx_t));
-            if (!seg->entries)
+            remap_entry_ctx_t **ptr = calloc(sizeof(remap_entry_ctx_t*), seg->entry_count + 1);
+            if (!ptr)
             {
                 snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to allocate memory for remap segment entry #%u!", __func__, entry_idx);
                 goto out;
             }
             
-            memcpy(seg->entries, &map_entries[entry_idx], sizeof(remap_entry_ctx_t));
-            seg->entry_count++;
-            entry_idx++;
+            memcpy(ptr, seg->entries, sizeof(remap_entry_ctx_t*) * seg->entry_count);
+            free(seg->entries);
+            seg->entries = ptr;
+            seg->entries[seg->entry_count++] = &map_entries[entry_idx++];
         }
         
-        seg->length = (seg->entries[seg->entry_count - 1].virtual_offset_end - seg->entries[0].virtual_offset);
+        seg->length = (seg->entries[seg->entry_count - 1]->virtual_offset_end - seg->entries[0]->virtual_offset);
     }
     
     success = true;
@@ -216,8 +217,7 @@ out:
                 map_entries[entry_idx].segment->entries = NULL;
             }
             
-            map_entries[entry_idx].segment = NULL;
-            entry_idx++;
+            map_entries[entry_idx++].segment = NULL;
             
             while(entry_idx < num_map_entries && map_entries[entry_idx - 1].virtual_offset_end == map_entries[entry_idx].virtual_offset)
             {
@@ -231,8 +231,7 @@ out:
                     map_entries[entry_idx].segment->entries = NULL;
                 }
                 
-                map_entries[entry_idx].segment = NULL;
-                entry_idx++;
+                map_entries[entry_idx++].segment = NULL;
             }
         }
         
@@ -257,7 +256,7 @@ remap_entry_ctx_t *save_remap_get_map_entry(remap_storage_ctx_t *ctx, u64 offset
     {
         for(unsigned int i = 0; i < ctx->segments[segment_idx].entry_count; i++)
         {
-            if (ctx->segments[segment_idx].entries[i].virtual_offset_end > offset) return (&ctx->segments[segment_idx].entries[i]);
+            if (ctx->segments[segment_idx].entries[i]->virtual_offset_end > offset) return ctx->segments[segment_idx].entries[i];
         }
     }
     
@@ -409,7 +408,7 @@ bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_ctx_t *c
         u32 length;
     };
     
-    static struct salt_source_t salt_sources[6] = {
+    static const struct salt_source_t salt_sources[6] = {
         {"HierarchicalIntegrityVerificationStorage::Master", 48},
         {"HierarchicalIntegrityVerificationStorage::L1", 44},
         {"HierarchicalIntegrityVerificationStorage::L2", 44},
@@ -618,7 +617,7 @@ bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, void *buf
     }
     
     memcpy(data_buffer, ctx->salt, 0x20);
-    memcpy(data_buffer + 0x20, buffer, count);
+    memcpy(data_buffer + 0x20, buffer, ctx->sector_size);
     
     sha256CalculateHash(hash, data_buffer, ctx->sector_size + 0x20);
     hash[0x1F] |= 0x80;
@@ -1336,9 +1335,7 @@ bool save_process(save_ctx_t *ctx)
         return success;
     }
     
-    if (!save_process_header(ctx)) return success;
-    
-    if (ctx->header_hash_validity == VALIDITY_INVALID)
+    if (!save_process_header(ctx) || ctx->header_hash_validity == VALIDITY_INVALID)
     {
         /* Try to parse Header B. */
         fr = f_lseek(ctx->file, 0x4000);
@@ -1355,9 +1352,7 @@ bool save_process(save_ctx_t *ctx)
             return success;
         }
         
-        if (!save_process_header(ctx)) return success;
-        
-        if (ctx->header_hash_validity == VALIDITY_INVALID)
+        if (!save_process_header(ctx) || ctx->header_hash_validity == VALIDITY_INVALID)
         {
             snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: savefile header is invalid!", __func__);
             return success;
@@ -1717,10 +1712,7 @@ void save_free_contexts(save_ctx_t *ctx)
         {
             for(unsigned int i = 0; i < ctx->data_remap_storage.header->map_segment_count; i++)
             {
-                for(unsigned int j = 0; j < ctx->data_remap_storage.segments[i].entry_count; j++)
-                {
-                    if (&(ctx->data_remap_storage.segments[i].entries[j])) free(&(ctx->data_remap_storage.segments[i].entries[j]));
-                }
+                if (ctx->data_remap_storage.segments[i].entries) free(ctx->data_remap_storage.segments[i].entries);
             }
         }
         
@@ -1740,10 +1732,7 @@ void save_free_contexts(save_ctx_t *ctx)
         {
             for(unsigned int i = 0; i < ctx->meta_remap_storage.header->map_segment_count; i++)
             {
-                for(unsigned int j = 0; j < ctx->meta_remap_storage.segments[i].entry_count; j++)
-                {
-                    if (&(ctx->meta_remap_storage.segments[i].entries[j])) free(&(ctx->meta_remap_storage.segments[i].entries[j]));
-                }
+                if (ctx->meta_remap_storage.segments[i].entries) free(ctx->meta_remap_storage.segments[i].entries);
             }
         }
         
@@ -1846,14 +1835,14 @@ bool readCertsFromSystemSave()
 {
     if (loadedCerts) return true;
     
-    FRESULT fr;
-    FIL certSave;
+    FRESULT fr = FR_OK;
+    FIL *certSave = NULL;
     
     save_ctx_t *save_ctx = NULL;
-    allocation_table_storage_ctx_t fat_storage;
-    save_fs_list_entry_t entry;
+    allocation_table_storage_ctx_t fat_storage = {0};
+    save_fs_list_entry_t entry = {0};
     
-    u64 internalCertSize;
+    u64 internalCertSize = 0;
     
     u8 i, j;
     UINT br = 0;
@@ -1863,7 +1852,14 @@ bool readCertsFromSystemSave()
     
     bool success = false, openSave = false, initSaveCtx = false;
     
-    fr = f_open(&certSave, BIS_CERT_SAVE_NAME, FA_READ | FA_OPEN_EXISTING);
+    certSave = calloc(1, sizeof(FIL));
+    if (!certSave)
+    {
+        snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: unable to allocate memory for FatFs file descriptor!", __func__);
+        goto out;
+    }
+    
+    fr = f_open(certSave, BIS_CERT_SAVE_NAME, FA_READ | FA_OPEN_EXISTING);
     if (fr != FR_OK)
     {
         snprintf(strbuf, MAX_CHARACTERS(strbuf), "%s: failed to open \"%s\" savefile from BIS System partition! (%u)", __func__, BIS_CERT_SAVE_NAME, fr);
@@ -1879,7 +1875,7 @@ bool readCertsFromSystemSave()
         goto out;
     }
     
-    save_ctx->file = &certSave;
+    save_ctx->file = certSave;
     save_ctx->tool_ctx.action = 0;
     
     initSaveCtx = save_process(save_ctx);
@@ -1987,7 +1983,11 @@ out:
         free(save_ctx);
     }
     
-    if (openSave) f_close(&certSave);
+    if (certSave)
+    {
+        if (openSave) f_close(certSave);
+        free(certSave);
+    }
     
     return success;
 }

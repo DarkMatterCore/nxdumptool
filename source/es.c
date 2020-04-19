@@ -1,4 +1,3 @@
-#include <switch/arm/atomics.h>
 #include <switch/services/sm.h>
 #include <stdlib.h>
 #include <string.h>

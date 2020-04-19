@@ -134,7 +134,7 @@ bool retrieveProcessMemory(keyLocation *location)
         u64 pids[300];
         u32 num_processes;
         
-        result = svcGetProcessList(&num_processes, pids, 300);
+        result = svcGetProcessList((s32*)&num_processes, pids, 300);
         if (R_FAILED(result))
         {
             uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: svcGetProcessList failed! (0x%08X)", __func__, result);
@@ -763,59 +763,6 @@ void mgf1(const u8 *data, size_t data_length, u8 *mask, size_t mask_length)
     free(data_counter);
 }
 
-void dumpSharedTikSavedata(void)
-{
-    FRESULT fr;
-    FIL save;
-    u32 size, blk, i, j;
-    u32 rd_b, wr_b;
-    
-    FILE *out;
-    
-    for(i = 0; i < 2; i++)
-    {
-        fr = FR_OK;
-        memset(&save, 0, sizeof(FIL));
-        size = 0;
-        blk = DUMP_BUFFER_SIZE;
-        
-        out = NULL;
-        
-        fr = f_open(&save, (i == 0 ? "sys:/save/80000000000000e3" : "sys:/save/80000000000000e4"), FA_READ | FA_OPEN_EXISTING);
-        if (fr) continue;
-        
-        size = f_size(&save);
-        if (!size)
-        {
-            f_close(&save);
-            continue;
-        }
-        
-        out = fopen((i == 0 ? "sdmc:/80000000000000e3" : "sdmc:/80000000000000e4"), "wb");
-        if (!out)
-        {
-            f_close(&save);
-            continue;
-        }
-        
-        for(j = 0; j < size; j += blk)
-        {
-            if ((size - j) < blk) blk = (size - j);
-            
-            rd_b = wr_b = 0;
-            
-            fr = f_read(&save, dumpBuf, blk, &rd_b);
-            if (fr || rd_b != blk) break;
-            
-            wr_b = fwrite(dumpBuf, 1, blk, out);
-            if (wr_b != blk) break;
-        }
-        
-        fclose(out);
-        f_close(&save);
-    }
-}
-
 int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_enc_key, u8 *out_dec_key)
 {
     int ret = -1;
@@ -865,8 +812,8 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     
     u8 *D = NULL, *N = NULL, *E = NULL;
     
-    FRESULT fr;
-    FIL eTicketSave;
+    FRESULT fr = FR_OK;
+    FIL *eTicketSave = NULL;
     
     save_ctx_t *save_ctx = NULL;
     allocation_table_storage_ctx_t fat_storage;
@@ -984,7 +931,6 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: NCA rights ID unavailable in this console!", __func__);
         ret = -2;
-        dumpSharedTikSavedata();
         return ret;
     }
     
@@ -1037,11 +983,19 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
         setcal_eticket_retrieved = true;
     }
     
+    eTicketSave = calloc(1, sizeof(FIL));
+    if (!eTicketSave)
+    {
+        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to allocate memory for FatFs file descriptor!", __func__);
+        return ret;
+    }
+    
     // FatFs is used to mount the BIS System partition and read the ES savedata files to avoid 0xE02 (file already in use) errors
-    fr = f_open(&eTicketSave, (rightsIdType == 1 ? BIS_COMMON_TIK_SAVE_NAME : BIS_PERSONALIZED_TIK_SAVE_NAME), FA_READ | FA_OPEN_EXISTING);
+    fr = f_open(eTicketSave, (rightsIdType == 1 ? BIS_COMMON_TIK_SAVE_NAME : BIS_PERSONALIZED_TIK_SAVE_NAME), FA_READ | FA_OPEN_EXISTING);
     if (fr)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to open ES %s eTicket save! (%u)", __func__, (rightsIdType == 1 ? "common" : "personalized"), fr);
+        free(eTicketSave);
         return ret;
     }
     
@@ -1049,11 +1003,12 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     if (!save_ctx)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for ticket savefile context!");
-        f_close(&eTicketSave);
+        f_close(eTicketSave);
+        free(eTicketSave);
         return ret;
     }
     
-    save_ctx->file = &eTicketSave;
+    save_ctx->file = eTicketSave;
     save_ctx->tool_ctx.action = 0;
     
     if (!save_process(save_ctx))
@@ -1062,7 +1017,8 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
         strcat(strbuf, tmp);
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, strbuf);
         free(save_ctx);
-        f_close(&eTicketSave);
+        f_close(eTicketSave);
+        free(eTicketSave);
         return ret;
     }
     
@@ -1073,7 +1029,8 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, strbuf);
         save_free_contexts(save_ctx);
         free(save_ctx);
-        f_close(&eTicketSave);
+        f_close(eTicketSave);
+        free(eTicketSave);
         return ret;
     }
     
@@ -1084,7 +1041,8 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, strbuf);
         save_free_contexts(save_ctx);
         free(save_ctx);
-        f_close(&eTicketSave);
+        f_close(eTicketSave);
+        free(eTicketSave);
         return ret;
     }
     
@@ -1156,7 +1114,8 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     
     save_free_contexts(save_ctx);
     free(save_ctx);
-    f_close(&eTicketSave);
+    f_close(eTicketSave);
+    free(eTicketSave);
     
     if (!proceed) return ret;
     
@@ -1164,7 +1123,6 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to find a matching eTicket entry for NCA rights ID!", __func__);
         ret = -2;
-        dumpSharedTikSavedata();
         return ret;
     }
     
