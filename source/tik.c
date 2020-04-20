@@ -63,7 +63,7 @@ static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRight
 
 static TikCommonBlock *tikGetCommonBlockFromMemoryBuffer(void *data);
 
-static bool tikGetTitleKeyFromTicketCommonBlock(void *dst, const TikCommonBlock *tik_common_blk);
+static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik);
 static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generation);
 
 static bool tikGetTitleKeyTypeFromRightsId(const FsRightsId *id, u8 *out);
@@ -76,24 +76,27 @@ static bool tikTestKeyPairFromEticketDeviceKey(const void *e, const void *d, con
 
 bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gamecard)
 {
-    bool tik_retrieved = false;
-    TikCommonBlock *tik_common_blk = NULL;
+    if (!dst || !id)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
     
-    tik_retrieved = (use_gamecard ? tikRetrieveTicketFromGameCardByRightsId(dst, id) : tikRetrieveTicketFromEsSaveDataByRightsId(dst, id));
+    /* Check if this ticket has already been retrieved */
+    if (dst->type > TikType_None && dst->type <= TikType_SigEcsda240 && dst->size >= TIK_MIN_SIZE && dst->size <= TIK_MAX_SIZE)
+    {
+        TikCommonBlock *tik_common_blk = tikGetCommonBlockFromTicket(dst);
+        if (tik_common_blk && !memcmp(tik_common_blk->rights_id.c, id->c, 0x10)) return true;
+    }
+    
+    bool tik_retrieved = (use_gamecard ? tikRetrieveTicketFromGameCardByRightsId(dst, id) : tikRetrieveTicketFromEsSaveDataByRightsId(dst, id));
     if (!tik_retrieved)
     {
         LOGFILE("Unable to retrieve ticket data!");
         return false;
     }
     
-    tik_common_blk = tikGetCommonBlockFromTicket(dst);
-    if (!tik_common_blk)
-    {
-        LOGFILE("Unable to retrieve common block from ticket!");
-        return false;
-    }
-    
-    if (!tikGetTitleKeyFromTicketCommonBlock(dst->enc_titlekey, tik_common_blk))
+    if (!tikGetTitleKekEncryptedTitleKeyFromTicket(dst))
     {
         LOGFILE("Unable to retrieve titlekey from ticket!");
         return false;
@@ -101,7 +104,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
     
     /* Even though tickets do have a proper key_generation field, we'll just retrieve it from the rights_id field */
     /* Old custom tools used to wipe the key_generation field or save it to a different offset */
-    if (!tikGetTitleKekDecryptedTitleKey(dst->dec_titlekey, dst->enc_titlekey, tik_common_blk->rights_id.c[0xF]))
+    if (!tikGetTitleKekDecryptedTitleKey(dst->dec_titlekey, dst->enc_titlekey, id->c[0xF]))
     {
         LOGFILE("Unable to perform titlekek decryption!");
         return false;
@@ -371,9 +374,9 @@ static TikCommonBlock *tikGetCommonBlockFromMemoryBuffer(void *data)
     return tik_common_blk;
 }
 
-static bool tikGetTitleKeyFromTicketCommonBlock(void *dst, const TikCommonBlock *tik_common_blk)
+static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
 {
-    if (!dst || !tik_common_blk)
+    if (!tik)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -381,13 +384,21 @@ static bool tikGetTitleKeyFromTicketCommonBlock(void *dst, const TikCommonBlock 
     
     size_t out_keydata_size = 0;
     u8 out_keydata[0x100] = {0};
+    TikCommonBlock *tik_common_blk = NULL;
     tikEticketDeviceKeyData *eticket_devkey = NULL;
+    
+    tik_common_blk = tikGetCommonBlockFromTicket(tik);
+    if (!tik_common_blk)
+    {
+        LOGFILE("Unable to retrieve common block from ticket!");
+        return false;
+    }
     
     switch(tik_common_blk->titlekey_type)
     {
         case TikTitleKeyType_Common:
             /* No titlekek crypto used */
-            memcpy(dst, tik_common_blk->titlekey_block, 0x10);
+            memcpy(tik->enc_titlekey, tik_common_blk->titlekey_block, 0x10);
             break;
         case TikTitleKeyType_Personalized:
             /* Retrieve eTicket device key */
@@ -408,7 +419,7 @@ static bool tikGetTitleKeyFromTicketCommonBlock(void *dst, const TikCommonBlock 
             }
             
             /* Copy decrypted titlekey */
-            memcpy(dst, out_keydata, 0x10);
+            memcpy(tik->enc_titlekey, out_keydata, 0x10);
             
             break;
         default:

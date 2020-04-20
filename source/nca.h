@@ -20,6 +20,7 @@
 #define __NCA_H__
 
 #include <switch.h>
+#include "tik.h"
 
 #define NCA_HEADER_LENGTH               0x400
 #define NCA_FS_HEADER_LENGTH            0x200
@@ -35,17 +36,11 @@
 #define NCA_BKTR_MAGIC                  0x424B5452  /* "BKTR" */
 
 #define NCA_FS_ENTRY_BLOCK_SIZE         0x200
-#define NCA_FS_ENTRY_BLOCK_OFFSET(x)    ((x) * NCA_FS_ENTRY_BLOCK_SIZE)
+#define NCA_FS_ENTRY_BLOCK_OFFSET(x)    ((u64)(x) * NCA_FS_ENTRY_BLOCK_SIZE)
 
 #define NCA_AES_XTS_SECTOR_SIZE         0x200
 
 #define NCA_IVFC_BLOCK_SIZE(x)          (1 << (x))
-
-typedef enum {
-    NcaVersion_Nca0     = 0,
-    NcaVersion_Nca2     = 1,
-    NcaVersion_Nca3     = 2
-} NcaVersion;
 
 typedef enum {
     NcaDistributionType_Download = 0,
@@ -118,7 +113,8 @@ typedef enum {
     NcaEncryptionType_None     = 1,
     NcaEncryptionType_AesXts   = 2,
     NcaEncryptionType_AesCtr   = 3,
-    NcaEncryptionType_AesCtrEx = 4
+    NcaEncryptionType_AesCtrEx = 4,
+    NcaEncryptionType_Nca0     = 5  ///< Only used to represent NCA0 FS section crypto - not actually used as a possible value for this field.
 } NcaEncryptionType;
 
 typedef struct {
@@ -126,7 +122,7 @@ typedef struct {
     u64 size;
 } NcaHierarchicalSha256LayerInfo;
 
-/// Used for NcaFsType_PartitionFs and NCA0 RomFS.
+/// Used for NcaFsType_PartitionFs and NCA0 NcaFsType_RomFsRomFS.
 typedef struct {
     u8 master_hash[SHA256_HASH_SIZE];
     u32 hash_block_size;
@@ -157,7 +153,7 @@ typedef struct {
 typedef struct {
     union {
         struct {
-            ///< Used if hash_type == NcaHashType_HierarchicalSha256 (NcaFsType_PartitionFs).
+            ///< Used if hash_type == NcaHashType_HierarchicalSha256 (NcaFsType_PartitionFs and NCA0 NcaFsType_RomFs).
             NcaHierarchicalSha256 hierarchical_sha256;
             u8 reserved_1[0xB0];
         };
@@ -241,26 +237,32 @@ typedef struct {
     NcaFsHeader fs_headers[4];          /// NCA FS section headers.
 } NcaHeader;
 
+typedef enum {
+    NcaVersion_Nca0     = 0,
+    NcaVersion_Nca2     = 1,
+    NcaVersion_Nca3     = 2
+} NcaVersion;
 
-
-
-
-
-
-
-
+typedef enum {
+    NcaSectionType_PartitionFs = 0, ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256.
+    NcaSectionType_RomFs       = 1, ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity.
+    NcaSectionType_PatchRomFs  = 2, ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity + NcaEncryptionType_AesCtrEx.
+    NcaSectionType_Nca0RomFs   = 3, ///< NcaFsType_RomFs + NcaHashType_HierarchicalSha256 + NcaVersion_Nca0.
+    NcaSectionType_Invalid     = 4
+} NcaSectionType;
 
 typedef struct {
+    void *nca_ctx;              ///< NcaContext. Used to perform NCA reads.
+    u8 section_num;
     u64 offset;
     u64 size;
-    u32 section_num;
-    NcaFsHeader *fs_header;
-    
-    
-    
-    
-    
-    u8 ctr;
+    u8 section_type;            ///< NcaSectionType.
+    u8 encryption_type;         ///< NcaEncryptionType.
+    NcaFsHeader *header;
+    bool use_xts;
+    Aes128CtrContext ctr_ctx;
+    Aes128XtsContext xts_ctx;
+    u8 ctr[0x10];               ///< Used to update the AES context IV based on the desired offset.
 } NcaFsContext;
 
 typedef struct {
@@ -277,18 +279,24 @@ typedef struct {
     u8 key_generation;                  ///< NcaKeyGenerationOld / NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                       ///< Retrieved from NcmContentInfo.
     bool rights_id_available;
-    NcaHeader header;
     bool dirty_header;
-    NcaKey decrypted_keys[4];
+    NcaHeader header;
     NcaFsContext fs_contexts[4];
+    NcaKey decrypted_keys[4];
+    u8 titlekey[0x10];
 } NcaContext;
 
-/// Reads raw encrypted data from a NCA using a NCA context with the 'storage_id', 'id', 'id_str' and 'size' elements filled beforehand.
-/// If 'storage_id' == NcmStorageId_GameCard, the 'gamecard_offset' element should hold a value greater than zero.
+/// Reads raw encrypted data from a NCA using an input NCA context.
+/// 'storage_id', 'id', 'id_str' and 'size' elements must have been filled beforehand (e.g. using ncaProcessContent()).
 /// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' element should point to a valid NcmContentStorage instance.
-bool ncaRead(NcaContext *ctx, void *out, u64 read_size, u64 offset);
+/// If 'storage_id' == NcmStorageId_GameCard, the 'gamecard_offset' element should hold a value greater than zero.
+bool ncaReadContent(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
-
+/// Generates a valid NCA context.
+/// 'hash', 'type', 'size' and 'id_offset' elements can be retrieved from a NcmContentInfo object.
+/// If the NCA holds a populated Rights ID field, and if the Ticket object pointed to by 'tik' hasn't been filled, the ticket and titlekey will be retrieved.
+/// 'hfs_partition_type' is only necessary if 'storage_id' == NcmStorageId_GameCard.
+bool ncaProcessContent(NcaContext *out, Ticket *tik, u8 storage_id, NcmContentStorage *ncm_storage, const NcmContentId *id, const u8 *hash, u8 type, const u8 *size, u8 id_offset, u8 hfs_partition_type);
 
 
 

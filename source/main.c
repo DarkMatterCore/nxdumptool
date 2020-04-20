@@ -23,7 +23,7 @@
 #include "utils.h"
 
 #include "gamecard.h"
-#include "tik.h"
+#include "nca.h"
 #include "cert.h"
 
 int main(int argc, char *argv[])
@@ -147,7 +147,9 @@ int main(int argc, char *argv[])
         
         if (gamecardRead(buf, (u64)0x400300, (u64)0x16F18100)) // force unaligned read that spans both storage areas
         {
-            printf("read succeeded\n");
+            u32 crc = crc32Calculate(buf, (u64)0x400300);
+            
+            printf("read succeeded: %08X\n", crc);
             consoleUpdate(NULL);
             
             tmp_file = fopen("sdmc:/data.bin", "wb");
@@ -188,7 +190,7 @@ int main(int argc, char *argv[])
     u64 cert_chain_size = 0;
     
     FsRightsId rights_id = {
-        .c = { 0x01, 0x00, 0x9a, 0xa0, 0x00, 0xfa, 0xa0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 } // Sonic Mania
+        .c = { 0x01, 0x00, 0x82, 0x40, 0x0B, 0xCC, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08 } // Untitled Goose Game
     };
     
     if (tikRetrieveTicketByRightsId(&tik, &rights_id, false))
@@ -209,7 +211,7 @@ int main(int argc, char *argv[])
         
         consoleUpdate(NULL);
         
-        tikConvertPersonalizedTicketToCommonTicket(&tik);
+        /*tikConvertPersonalizedTicketToCommonTicket(&tik);
         
         printf("common tik generated\n");
         consoleUpdate(NULL);
@@ -225,7 +227,7 @@ int main(int argc, char *argv[])
             printf("common tik not saved\n");
         }
         
-        consoleUpdate(NULL);
+        consoleUpdate(NULL);*/
         
         tik_common_blk = tikGetCommonBlockFromTicket(&tik);
         
@@ -257,9 +259,73 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
+    NcaContext *nca_ctx = calloc(1, sizeof(NcaContext));
+    if (nca_ctx)
+    {
+        printf("nca ctx buf succeeded\n");
+        consoleUpdate(NULL);
+        
+        NcmContentStorage ncm_storage = {0};
+        if (R_SUCCEEDED(ncmOpenContentStorage(&ncm_storage, NcmStorageId_SdCard)))
+        {
+            printf("ncm open storage succeeded\n");
+            consoleUpdate(NULL);
+            
+            NcmContentId nca_id = {
+                .c = { 0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8 } // Untitled Goose Game
+            };
+            
+            u8 nca_hash[SHA256_HASH_SIZE] = {
+                0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8,
+                0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8
+            };
+            
+            u8 nca_size[0x6] = {
+                0x00, 0x40, 0xAD, 0x31, 0x00, 0x00
+            };
+            
+            if (ncaProcessContent(nca_ctx, &tik, NcmStorageId_SdCard, &ncm_storage, &nca_id, nca_hash, NcmContentType_Program, nca_size, 0, 0))
+            {
+                printf("nca process succeeded\n");
+                consoleUpdate(NULL);
+                
+                tmp_file = fopen("sdmc:/nca_ctx.bin", "wb");
+                if (tmp_file)
+                {
+                    fwrite(nca_ctx, 1, sizeof(NcaContext), tmp_file);
+                    fclose(tmp_file);
+                    tmp_file = NULL;
+                    printf("nca ctx saved\n");
+                } else {
+                    printf("nca ctx not saved\n");
+                }
+            } else {
+                printf("nca process failed\n");
+            }
+            
+            consoleUpdate(NULL);
+            
+            ncmContentStorageClose(&ncm_storage);
+        } else {
+            printf("ncm open storage failed\n");
+        }
+        
+        free(nca_ctx);
+    } else {
+        printf("nca ctx buf failed\n");
+    }
+    
+    consoleUpdate(NULL);
     
     
-    utilsSleep(5);
+    while(true)
+    {
+        hidScanInput();
+        if (utilsHidKeysAllDown() & KEY_A) break;
+    }
+    
+    
+    
     consoleExit(NULL);
     
 out:

@@ -233,7 +233,7 @@ bool gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(u8 hfs_parti
     
     mtx_lock(&g_gameCardSharedDataMutex);
     
-    if (!g_gameCardInserted || !g_gameCardInfoLoaded || !name || !*name || !out_offset || !out_size || !gamecardGetHashFileSystemPartitionIndexByType(hfs_partition_type, &hfs_partition_idx))
+    if (!g_gameCardInserted || !g_gameCardInfoLoaded || !name || !*name || (!out_offset && !out_size) || !gamecardGetHashFileSystemPartitionIndexByType(hfs_partition_type, &hfs_partition_idx))
     {
         LOGFILE("Invalid parameters!");
         goto out;
@@ -252,8 +252,8 @@ bool gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(u8 hfs_parti
         
         if (!strncasecmp(entry_name, name, name_len))
         {
-            *out_offset = (g_gameCardHfsPartitions[hfs_partition_idx].offset + g_gameCardHfsPartitions[hfs_partition_idx].header_size + fs_entry->offset);
-            *out_size = fs_entry->size;
+            if (out_offset) *out_offset = (g_gameCardHfsPartitions[hfs_partition_idx].offset + g_gameCardHfsPartitions[hfs_partition_idx].header_size + fs_entry->offset);
+            if (out_size) *out_size = fs_entry->size;
             ret = true;
             break;
         }
