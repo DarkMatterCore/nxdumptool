@@ -165,8 +165,6 @@ int main(int argc, char *argv[])
         } else {
             printf("read failed\n");
         }
-        
-        free(buf);
     } else {
         printf("buf failed\n");
     }
@@ -271,22 +269,27 @@ int main(int argc, char *argv[])
             printf("ncm open storage succeeded\n");
             consoleUpdate(NULL);
             
-            NcmContentId nca_id = {
-                .c = { 0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8 } // Untitled Goose Game
+            // Untitled Goose Game
+            NcmPackagedContentInfo content_info = {
+                .hash = {
+                    0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8,
+                    0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8
+                },
+                .info = {
+                    .content_id = {
+                        .c = { 0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8 }
+                    },
+                    .size = {
+                        0x00, 0x40, 0xAD, 0x31, 0x00, 0x00
+                    },
+                    .content_type = NcmContentType_Program,
+                    .id_offset = 0
+                }
             };
             
-            u8 nca_hash[SHA256_HASH_SIZE] = {
-                0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8,
-                0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8
-            };
-            
-            u8 nca_size[0x6] = {
-                0x00, 0x40, 0xAD, 0x31, 0x00, 0x00
-            };
-            
-            if (ncaProcessContent(nca_ctx, &tik, NcmStorageId_SdCard, &ncm_storage, &nca_id, nca_hash, NcmContentType_Program, nca_size, 0, 0))
+            if (ncaInitializeContext(nca_ctx, &tik, NcmStorageId_SdCard, &ncm_storage, 0, &content_info))
             {
-                printf("nca process succeeded\n");
+                printf("nca initialize ctx succeeded\n");
                 consoleUpdate(NULL);
                 
                 tmp_file = fopen("sdmc:/nca_ctx.bin", "wb");
@@ -299,8 +302,43 @@ int main(int argc, char *argv[])
                 } else {
                     printf("nca ctx not saved\n");
                 }
+                
+                consoleUpdate(NULL);
+                
+                tmp_file = fopen("sdmc:/section0.bin", "wb");
+                if (tmp_file)
+                {
+                    printf("nca section0 created\n");
+                    consoleUpdate(NULL);
+                    
+                    u64 curpos = 0;
+                    u64 blksize = (u64)0x400000;
+                    u64 total = nca_ctx->fs_contexts[0].section_size;
+                    
+                    for(u64 curpos = 0; curpos < total; curpos += blksize)
+                    {
+                        if (blksize > (total - curpos)) blksize = (total - curpos);
+                        
+                        if (!ncaReadFsSection(&(nca_ctx->fs_contexts[0]), buf, blksize, curpos))
+                        {
+                            printf("nca read section failed\n");
+                            break;
+                        }
+                        
+                        fwrite(buf, 1, blksize, tmp_file);
+                    }
+                    
+                    if (curpos >= total) printf("nca read section success\n");
+                    
+                    consoleUpdate(NULL);
+                    
+                    fclose(tmp_file);
+                    tmp_file = NULL;
+                } else {
+                    printf("nca section0 not created\n");
+                }
             } else {
-                printf("nca process failed\n");
+                printf("nca initialize ctx failed\n");
             }
             
             consoleUpdate(NULL);
@@ -325,6 +363,7 @@ int main(int argc, char *argv[])
     }
     
     
+    if (buf) free(buf);
     
     consoleExit(NULL);
     

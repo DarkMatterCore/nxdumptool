@@ -27,6 +27,7 @@
 #include "gamecard.h"
 #include "services.h"
 #include "utils.h"
+#include "nca.h"
 #include "fatfs/ff.h"
 
 /* Global variables. */
@@ -119,6 +120,8 @@ void utilsOverclockSystem(bool restore)
 
 bool utilsInitializeResources(void)
 {
+    Result rc = 0;
+    
     /* Initialize needed services */
     if (!servicesInitialize())
     {
@@ -133,8 +136,15 @@ bool utilsInitializeResources(void)
         return false;
     }
     
+    /* Allocate NCA crypto buffer */
+    if (!ncaAllocateCryptoBuffer())
+    {
+        LOGFILE("Unable to allocate memory for NCA crypto buffer!");
+        return false;
+    }
+    
     /* Initialize gamecard interface */
-    Result rc = gamecardInitialize();
+    rc = gamecardInitialize();
     if (R_FAILED(rc))
     {
         LOGFILE("Failed to initialize gamecard interface!");
@@ -181,6 +191,9 @@ void utilsCloseResources(void)
     
     /* Deinitialize gamecard interface */
     gamecardExit();
+    
+    /* Free NCA crypto buffer */
+    ncaFreeCryptoBuffer();
     
     /* Close initialized services */
     servicesClose();

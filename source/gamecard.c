@@ -779,7 +779,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
     
     if (!(base_offset % GAMECARD_MEDIA_UNIT_SIZE) && !(read_size % GAMECARD_MEDIA_UNIT_SIZE))
     {
-        /* Optimization for reads that are already aligned to GAMECARD_MEDIA_UNIT_SIZE bytes */
+        /* Optimization for reads that are already aligned to a GAMECARD_MEDIA_UNIT_SIZE boundary */
         rc = fsStorageRead(&g_gameCardStorage, base_offset, out_u8, read_size);
         if (R_FAILED(rc))
         {
@@ -790,12 +790,13 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         success = true;
     } else {
         /* Fix offset and/or size to avoid unaligned reads */
-        u64 block_start_offset = (base_offset - (base_offset % GAMECARD_MEDIA_UNIT_SIZE));
+        u64 block_start_offset = ROUND_DOWN(base_offset, GAMECARD_MEDIA_UNIT_SIZE);
         u64 block_end_offset = ROUND_UP(base_offset + read_size, GAMECARD_MEDIA_UNIT_SIZE);
         u64 block_size = (block_end_offset - block_start_offset);
         
+        u64 data_start_offset = (base_offset - block_start_offset);
         u64 chunk_size = (block_size > GAMECARD_READ_BUFFER_SIZE ? GAMECARD_READ_BUFFER_SIZE : block_size);
-        u64 out_chunk_size = (block_size > GAMECARD_READ_BUFFER_SIZE ? (GAMECARD_READ_BUFFER_SIZE - (base_offset - block_start_offset)) : read_size);
+        u64 out_chunk_size = (block_size > GAMECARD_READ_BUFFER_SIZE ? (GAMECARD_READ_BUFFER_SIZE - data_start_offset) : read_size);
         
         rc = fsStorageRead(&g_gameCardStorage, block_start_offset, g_gameCardReadBuf, chunk_size);
         if (R_FAILED(rc))
@@ -804,7 +805,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
             goto out;
         }
         
-        memcpy(out_u8, g_gameCardReadBuf + (base_offset - block_start_offset), out_chunk_size);
+        memcpy(out_u8, g_gameCardReadBuf + data_start_offset, out_chunk_size);
         
         success = (block_size > GAMECARD_READ_BUFFER_SIZE ? gamecardReadStorageArea(out_u8 + out_chunk_size, read_size - out_chunk_size, base_offset + out_chunk_size, false) : true);
     }

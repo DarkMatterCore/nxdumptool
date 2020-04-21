@@ -22,25 +22,26 @@
 #include <switch.h>
 #include "tik.h"
 
-#define NCA_HEADER_LENGTH               0x400
-#define NCA_FS_HEADER_LENGTH            0x200
-#define NCA_FS_HEADER_COUNT             4
-#define NCA_FULL_HEADER_LENGTH          (NCA_HEADER_LENGTH + (NCA_FS_HEADER_LENGTH * NCA_FS_HEADER_COUNT))
+#define NCA_HEADER_LENGTH                       0x400
+#define NCA_FS_HEADER_LENGTH                    0x200
+#define NCA_FS_HEADER_COUNT                     4
+#define NCA_FULL_HEADER_LENGTH                  (NCA_HEADER_LENGTH + (NCA_FS_HEADER_LENGTH * NCA_FS_HEADER_COUNT))
 
-#define NCA_NCA0_MAGIC                  0x4E434130  /* "NCA0" */
-#define NCA_NCA2_MAGIC                  0x4E434132  /* "NCA2" */
-#define NCA_NCA3_MAGIC                  0x4E434133  /* "NCA3" */
+#define NCA_NCA0_MAGIC                          0x4E434130  /* "NCA0" */
+#define NCA_NCA2_MAGIC                          0x4E434132  /* "NCA2" */
+#define NCA_NCA3_MAGIC                          0x4E434133  /* "NCA3" */
 
-#define NCA_IVFC_MAGIC                  0x49564643  /* "IVFC" */
+#define NCA_IVFC_MAGIC                          0x49564643  /* "IVFC" */
 
-#define NCA_BKTR_MAGIC                  0x424B5452  /* "BKTR" */
+#define NCA_BKTR_MAGIC                          0x424B5452  /* "BKTR" */
 
-#define NCA_FS_ENTRY_BLOCK_SIZE         0x200
-#define NCA_FS_ENTRY_BLOCK_OFFSET(x)    ((u64)(x) * NCA_FS_ENTRY_BLOCK_SIZE)
+#define NCA_FS_ENTRY_BLOCK_SIZE                 0x200
+#define NCA_FS_ENTRY_BLOCK_OFFSET(x)            ((u64)(x) * NCA_FS_ENTRY_BLOCK_SIZE)
 
-#define NCA_AES_XTS_SECTOR_SIZE         0x200
+#define NCA_AES_XTS_SECTOR_SIZE                 0x200
+#define NCA_NCA0_FS_HEADER_AES_XTS_SECTOR(x)    (((x) - NCA_HEADER_LENGTH) >> 9)
 
-#define NCA_IVFC_BLOCK_SIZE(x)          (1 << (x))
+#define NCA_IVFC_BLOCK_SIZE(x)                  (1 << (x))
 
 typedef enum {
     NcaDistributionType_Download = 0,
@@ -114,7 +115,7 @@ typedef enum {
     NcaEncryptionType_AesXts   = 2,
     NcaEncryptionType_AesCtr   = 3,
     NcaEncryptionType_AesCtrEx = 4,
-    NcaEncryptionType_Nca0     = 5  ///< Only used to represent NCA0 FS section crypto - not actually used as a possible value for this field.
+    NcaEncryptionType_Nca0     = 5  ///< Only used to represent NCA0 AES XTS FS section crypto - not actually used as a possible value for this field.
 } NcaEncryptionType;
 
 typedef struct {
@@ -134,7 +135,7 @@ typedef struct {
 typedef struct {
     u64 offset;
     u64 size;
-    u32 block_size;     ///< Use NCA_IVFC_CALC_BLOCK_SIZE to calculate the actual block size using this value.
+    u32 block_size;     ///< Use NCA_IVFC_BLOCK_SIZE to calculate the actual block size using this value.
     u8 reserved[0x4];
 } NcaHierarchicalIntegrityLayerInfo;
 
@@ -254,107 +255,56 @@ typedef enum {
 typedef struct {
     void *nca_ctx;              ///< NcaContext. Used to perform NCA reads.
     u8 section_num;
-    u64 offset;
-    u64 size;
+    u64 section_offset;
+    u64 section_size;
     u8 section_type;            ///< NcaSectionType.
     u8 encryption_type;         ///< NcaEncryptionType.
     NcaFsHeader *header;
-    bool use_xts;
+    u8 ctr[0x10];               ///< Used to update the AES CTR context IV based on the desired offset.
     Aes128CtrContext ctr_ctx;
     Aes128XtsContext xts_ctx;
-    u8 ctr[0x10];               ///< Used to update the AES context IV based on the desired offset.
-} NcaFsContext;
+} NcaFsSectionContext;
 
 typedef struct {
     u8 storage_id;                      ///< NcmStorageId.
     NcmContentStorage *ncm_storage;     ///< Pointer to a NcmContentStorage instance. Used to read NCA data.
     u64 gamecard_offset;                ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
-    NcmContentId id;                    ///< Also used to read NCA data.
-    char id_str[0x21];
-    u8 hash[0x20];
+    NcmContentId content_id;            ///< Also used to read NCA data.
+    char content_id_str[0x21];
+    u8 hash[0x20];                      ///< Retrieved from NcmPackagedContentInfo.
     char hash_str[0x41];
     u8 format_version;                  ///< NcaVersion.
-    u8 type;                            ///< NcmContentType. Retrieved from NcmContentInfo.
-    u64 size;                           ///< Retrieved from NcmContentInfo.
+    u8 content_type;                    ///< NcmContentType. Retrieved from NcmPackagedContentInfo.
+    u64 content_size;                   ///< Retrieved from NcmPackagedContentInfo.
     u8 key_generation;                  ///< NcaKeyGenerationOld / NcaKeyGeneration. Retrieved from the decrypted header.
-    u8 id_offset;                       ///< Retrieved from NcmContentInfo.
+    u8 id_offset;                       ///< Retrieved from NcmPackagedContentInfo.
     bool rights_id_available;
+    u8 titlekey[0x10];
     bool dirty_header;
     NcaHeader header;
-    NcaFsContext fs_contexts[4];
+    NcaFsSectionContext fs_contexts[4];
     NcaKey decrypted_keys[4];
-    u8 titlekey[0x10];
 } NcaContext;
 
-/// Reads raw encrypted data from a NCA using an input NCA context.
-/// 'storage_id', 'id', 'id_str' and 'size' elements must have been filled beforehand (e.g. using ncaProcessContent()).
-/// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' element should point to a valid NcmContentStorage instance.
-/// If 'storage_id' == NcmStorageId_GameCard, the 'gamecard_offset' element should hold a value greater than zero.
+/// Functions to control the internal heap buffer used by NCA FS section crypto code.
+/// Must be called at startup.
+bool ncaAllocateCryptoBuffer(void);
+void ncaFreeCryptoBuffer(void);
+
+/// Initializes a valid NCA context.
+/// If the NCA holds a populated Rights ID field, and if the Ticket object pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
+/// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' argument must point to a valid NcmContentStorage instance, previously opened using the same NcmStorageId value.
+/// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
+bool ncaInitializeContext(NcaContext *out, Ticket *tik, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmPackagedContentInfo *content_info);
+
+/// Reads raw encrypted data from a NCA using an input NCA context, previously initialized by ncaInitializeContext().
 bool ncaReadContent(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
-/// Generates a valid NCA context.
-/// 'hash', 'type', 'size' and 'id_offset' elements can be retrieved from a NcmContentInfo object.
-/// If the NCA holds a populated Rights ID field, and if the Ticket object pointed to by 'tik' hasn't been filled, the ticket and titlekey will be retrieved.
-/// 'hfs_partition_type' is only necessary if 'storage_id' == NcmStorageId_GameCard.
-bool ncaProcessContent(NcaContext *out, Ticket *tik, u8 storage_id, NcmContentStorage *ncm_storage, const NcmContentId *id, const u8 *hash, u8 type, const u8 *size, u8 id_offset, u8 hfs_partition_type);
+/// Reads decrypted data from a NCA FS section using an input NCA FS section context.
+/// Input offset must be relative to the start of the NCA FS section.
+bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 
 
-
-
-
-
-static inline void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
-{
-    if (!size || !out) return;
-    *out = 0;
-    memcpy(out, size, 6);
-}
-
-static inline void ncaConvertU64ToNcmContentSize(const u64 *size, u8 *out)
-{
-    if (!size || !out) return;
-    memcpy(out, size, 6);
-}
-
-
-
-static inline u8 ncaGetKeyGenerationValue(NcaContext *ctx)
-{
-    if (!ctx) return 0;
-    return (ctx->header.key_generation > ctx->header.key_generation_old ? ctx->header.key_generation : ctx->header.key_generation_old);
-}
-
-static inline void ncaSetDownloadDistributionType(NcaContext *ctx)
-{
-    if (!ctx || ctx->header.distribution_type == NcaDistributionType_Download) return;
-    ctx->header.distribution_type = NcaDistributionType_Download;
-    ctx->dirty_header = true;
-}
-
-static inline bool ncaCheckRightsIdAvailability(NcaContext *ctx)
-{
-    if (!ctx) return false;
-    
-    bool rights_id_available = false;
-    
-    for(u8 i = 0; i < 0x10; i++)
-    {
-        if (ctx->header.rights_id.c[i] != 0)
-        {
-            rights_id_available = true;
-            break;
-        }
-    }
-    
-    return rights_id_available;
-}
-
-static inline void ncaWipeRightsId(NcaContext *ctx)
-{
-    if (!ctx) return;
-    memset(&(ctx->header.rights_id), 0, sizeof(FsRightsId));
-    ctx->dirty_header = true;
-}
 
 
 
@@ -369,6 +319,33 @@ bool ncaEncryptHeader(NcaContext *ctx);
 
 
 
+/// Miscellanous functions.
 
+static inline void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
+{
+    if (!size || !out) return;
+    *out = 0;
+    memcpy(out, size, 6);
+}
+
+static inline void ncaConvertU64ToNcmContentSize(const u64 *size, u8 *out)
+{
+    if (!size || !out) return;
+    memcpy(out, size, 6);
+}
+
+static inline void ncaSetDownloadDistributionType(NcaContext *ctx)
+{
+    if (!ctx || ctx->header.distribution_type == NcaDistributionType_Download) return;
+    ctx->header.distribution_type = NcaDistributionType_Download;
+    ctx->dirty_header = true;
+}
+
+static inline void ncaWipeRightsId(NcaContext *ctx)
+{
+    if (!ctx) return;
+    memset(&(ctx->header.rights_id), 0, sizeof(FsRightsId));
+    ctx->dirty_header = true;
+}
 
 #endif /* __NCA_H__ */

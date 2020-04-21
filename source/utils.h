@@ -29,7 +29,8 @@
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
 
-#define ROUND_UP(x, y)                  ((x) + (((y) - ((x) % (y))) % (y)))                 /* Aligns 'x' bytes to a 'y' bytes boundary. */
+#define ROUND_DOWN(x, y)                ((x) & ~((y) - 1))
+#define ROUND_UP(x, y)                  ((x) + (((y) - ((x) % (y))) % (y)))
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
