@@ -23,6 +23,8 @@
 #include "nca.h"
 #include "utils.h"
 
+#define KEYS_FILE_PATH      "sdmc:/switch/prod.keys"    /* Location used by Lockpick_RCM */
+
 #define FS_SYSMODULE_TID    (u64)0x0100000000000000
 
 #define SEGMENT_TEXT        BIT(0)

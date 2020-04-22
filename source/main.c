@@ -26,6 +26,8 @@
 #include "nca.h"
 #include "cert.h"
 
+#include <dirent.h>
+
 int main(int argc, char *argv[])
 {
     (void)argc;
@@ -70,12 +72,16 @@ int main(int argc, char *argv[])
     u32 update_version = 0;
     u64 nca_offset = 0, nca_size = 0;
     
+    
+    mkdir("sdmc:/nxdt_test", 0744);
+    
+    
     if (gamecardGetHeader(&header))
     {
         printf("header success\n");
         consoleUpdate(NULL);
         
-        tmp_file = fopen("sdmc:/header.bin", "wb");
+        tmp_file = fopen("sdmc:/nxdt_test/header.bin", "wb");
         if (tmp_file)
         {
             fwrite(&header, 1, sizeof(GameCardHeader), tmp_file);
@@ -114,7 +120,7 @@ int main(int argc, char *argv[])
         printf("gamecard cert success\n");
         consoleUpdate(NULL);
         
-        tmp_file = fopen("sdmc:/cert.bin", "wb");
+        tmp_file = fopen("sdmc:/nxdt_test/cert.bin", "wb");
         if (tmp_file)
         {
             fwrite(&cert, 1, sizeof(FsGameCardCertificate), tmp_file);
@@ -152,7 +158,7 @@ int main(int argc, char *argv[])
             printf("read succeeded: %08X\n", crc);
             consoleUpdate(NULL);
             
-            tmp_file = fopen("sdmc:/data.bin", "wb");
+            tmp_file = fopen("sdmc:/nxdt_test/data.bin", "wb");
             if (tmp_file)
             {
                 fwrite(buf, 1, (u64)0x400300, tmp_file);
@@ -196,7 +202,7 @@ int main(int argc, char *argv[])
         printf("tik succeeded\n");
         consoleUpdate(NULL);
         
-        tmp_file = fopen("sdmc:/tik.bin", "wb");
+        tmp_file = fopen("sdmc:/nxdt_test/tik.bin", "wb");
         if (tmp_file)
         {
             fwrite(&tik, 1, sizeof(Ticket), tmp_file);
@@ -214,7 +220,7 @@ int main(int argc, char *argv[])
         printf("common tik generated\n");
         consoleUpdate(NULL);
         
-        tmp_file = fopen("sdmc:/common_tik.bin", "wb");
+        tmp_file = fopen("sdmc:/nxdt_test/common_tik.bin", "wb");
         if (tmp_file)
         {
             fwrite(&tik, 1, sizeof(Ticket), tmp_file);
@@ -237,7 +243,7 @@ int main(int argc, char *argv[])
                 printf("cert chain succeeded | size: 0x%lX\n", cert_chain_size);
                 consoleUpdate(NULL);
                 
-                tmp_file = fopen("sdmc:/chain.bin", "wb");
+                tmp_file = fopen("sdmc:/nxdt_test/chain.bin", "wb");
                 if (tmp_file)
                 {
                     fwrite(cert_chain, 1, cert_chain_size, tmp_file);
@@ -287,12 +293,12 @@ int main(int argc, char *argv[])
                 }
             };
             
-            if (ncaInitializeContext(nca_ctx, &tik, NcmStorageId_SdCard, &ncm_storage, 0, &content_info))
+            if (ncaInitializeContext(nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &content_info, &tik))
             {
                 printf("nca initialize ctx succeeded\n");
                 consoleUpdate(NULL);
                 
-                tmp_file = fopen("sdmc:/nca_ctx.bin", "wb");
+                tmp_file = fopen("sdmc:/nxdt_test/nca_ctx.bin", "wb");
                 if (tmp_file)
                 {
                     fwrite(nca_ctx, 1, sizeof(NcaContext), tmp_file);
@@ -305,10 +311,10 @@ int main(int argc, char *argv[])
                 
                 consoleUpdate(NULL);
                 
-                tmp_file = fopen("sdmc:/section0.bin", "wb");
+                tmp_file = fopen("sdmc:/nxdt_test/section0.bin", "wb");
                 if (tmp_file)
                 {
-                    printf("nca section0 created\n");
+                    printf("nca section0 created: 0x%lX\n", nca_ctx->fs_contexts[0].section_size);
                     consoleUpdate(NULL);
                     
                     u64 curpos = 0;
@@ -322,15 +328,56 @@ int main(int argc, char *argv[])
                         if (!ncaReadFsSection(&(nca_ctx->fs_contexts[0]), buf, blksize, curpos))
                         {
                             printf("nca read section failed\n");
+                            consoleUpdate(NULL);
                             break;
                         }
                         
                         fwrite(buf, 1, blksize, tmp_file);
+                        
+                        if (curpos == 0)
+                        {
+                            u8 cryptobuf[0x1E0] = {0};
+                            u64 block_size = 0, block_offset = 0;
+                            FILE *blktest = NULL;
+                            
+                            u8 *block_data = ncaGenerateEncryptedFsSectionBlock(&(nca_ctx->fs_contexts[0]), buf + 0x809C, 0x1CE, 0x809C, &block_size, &block_offset);
+                            if (block_data)
+                            {
+                                printf("nca generate encrypted block success\n");
+                                consoleUpdate(NULL);
+                                
+                                blktest = fopen("sdmc:/nxdt_test/blktest.bin", "wb");
+                                if (blktest)
+                                {
+                                    fwrite(block_data, 1, block_size, blktest);
+                                    fclose(blktest);
+                                    blktest = NULL;
+                                }
+                                
+                                free(block_data);
+                            }
+                            
+                            if (ncaReadContentFile(nca_ctx, cryptobuf, 0x1E0, nca_ctx->fs_contexts[0].section_offset + 0x8090))
+                            {
+                                printf("nca read encrypted block success\n");
+                                consoleUpdate(NULL);
+                                
+                                blktest = fopen("sdmc:/nxdt_test/crytobuf.bin", "wb");
+                                if (blktest)
+                                {
+                                    fwrite(cryptobuf, 1, 0x1E0, blktest);
+                                    fclose(blktest);
+                                    blktest = NULL;
+                                }
+                            }
+                        }
                     }
                     
-                    if (curpos >= total) printf("nca read section success\n");
-                    
-                    consoleUpdate(NULL);
+                    if (curpos >= total)
+                    {
+                        printf("nca read section success\n");
+                        consoleUpdate(NULL);
+                    }
                     
                     fclose(tmp_file);
                     tmp_file = NULL;

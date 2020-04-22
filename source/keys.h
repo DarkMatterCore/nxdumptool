@@ -21,8 +21,6 @@
 
 #include <switch/types.h>
 
-#define KEYS_FILE_PATH  "sdmc:/switch/prod.keys"    /* Location used by Lockpick_RCM */
-
 bool keysLoadNcaKeyset(void);
 
 const u8 *keysGetNcaHeaderKey(void);

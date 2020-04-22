@@ -245,24 +245,25 @@ typedef enum {
 } NcaVersion;
 
 typedef enum {
-    NcaSectionType_PartitionFs = 0, ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256.
-    NcaSectionType_RomFs       = 1, ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity.
-    NcaSectionType_PatchRomFs  = 2, ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity + NcaEncryptionType_AesCtrEx.
-    NcaSectionType_Nca0RomFs   = 3, ///< NcaFsType_RomFs + NcaHashType_HierarchicalSha256 + NcaVersion_Nca0.
-    NcaSectionType_Invalid     = 4
-} NcaSectionType;
+    NcaFsSectionType_PartitionFs = 0,   ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256.
+    NcaFsSectionType_RomFs       = 1,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity.
+    NcaFsSectionType_PatchRomFs  = 2,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity + NcaEncryptionType_AesCtrEx.
+    NcaFsSectionType_Nca0RomFs   = 3,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalSha256 + NcaVersion_Nca0.
+    NcaFsSectionType_Invalid     = 4
+} NcaFsSectionType;
 
 typedef struct {
-    void *nca_ctx;              ///< NcaContext. Used to perform NCA reads.
+    void *nca_ctx;                      ///< NcaContext. Used to perform NCA reads.
     u8 section_num;
     u64 section_offset;
     u64 section_size;
-    u8 section_type;            ///< NcaSectionType.
-    u8 encryption_type;         ///< NcaEncryptionType.
+    u8 section_type;                    ///< NcaFsSectionType.
+    u8 encryption_type;                 ///< NcaEncryptionType.
     NcaFsHeader *header;
-    u8 ctr[0x10];               ///< Used to update the AES CTR context IV based on the desired offset.
+    u8 ctr[0x10];                       ///< Used to update the AES CTR context IV based on the desired offset.
     Aes128CtrContext ctr_ctx;
-    Aes128XtsContext xts_ctx;
+    Aes128XtsContext xts_decrypt_ctx;
+    Aes128XtsContext xts_encrypt_ctx;
 } NcaFsSectionContext;
 
 typedef struct {
@@ -286,33 +287,36 @@ typedef struct {
     NcaKey decrypted_keys[4];
 } NcaContext;
 
-/// Functions to control the internal heap buffer used by NCA FS section crypto code.
+/// Functions to control the internal heap buffer used by NCA FS section crypto operations.
 /// Must be called at startup.
 bool ncaAllocateCryptoBuffer(void);
 void ncaFreeCryptoBuffer(void);
 
 /// Initializes a valid NCA context.
-/// If the NCA holds a populated Rights ID field, and if the Ticket object pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
 /// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' argument must point to a valid NcmContentStorage instance, previously opened using the same NcmStorageId value.
 /// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
-bool ncaInitializeContext(NcaContext *out, Ticket *tik, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmPackagedContentInfo *content_info);
+/// If the NCA holds a populated Rights ID field, and if the Ticket object pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmPackagedContentInfo *content_info, Ticket *tik);
 
-/// Reads raw encrypted data from a NCA using an input NCA context, previously initialized by ncaInitializeContext().
-bool ncaReadContent(NcaContext *ctx, void *out, u64 read_size, u64 offset);
+/// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
+bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
-/// Reads decrypted data from a NCA FS section using an input NCA FS section context.
+/// Reads decrypted data from a NCA FS section using an input context.
 /// Input offset must be relative to the start of the NCA FS section.
+/// If dealing with Patch RomFS sections, this function should only be used when *not* reading BKTR subsections.
 bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 
+/// Returns a pointer to a heap-allocated buffer used to encrypt the input plaintext data, based on the encryption type used by the input NCA FS section, as well as its offset and size.
+/// Input offset must be relative to the start of the NCA FS section.
+/// Output size and offset are guaranteed to be aligned to the AES sector size used by the encryption type from the FS section.
+/// Output offset is relative to the start of the NCA content file, making it easier to use the output encrypted block to replace data in-place while writing a NCA.
+void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
 
 
 
 
 
-bool ncaDecryptKeyArea(NcaContext *nca_ctx);
 bool ncaEncryptKeyArea(NcaContext *nca_ctx);
-
-bool ncaDecryptHeader(NcaContext *ctx);
 bool ncaEncryptHeader(NcaContext *ctx);
 
 
@@ -323,29 +327,34 @@ bool ncaEncryptHeader(NcaContext *ctx);
 
 static inline void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
 {
-    if (!size || !out) return;
-    *out = 0;
-    memcpy(out, size, 6);
+    if (size && out)
+    {
+        *out = 0;
+        memcpy(out, size, 6);
+    }
 }
 
 static inline void ncaConvertU64ToNcmContentSize(const u64 *size, u8 *out)
 {
-    if (!size || !out) return;
-    memcpy(out, size, 6);
+    if (size && out) memcpy(out, size, 6);
 }
 
 static inline void ncaSetDownloadDistributionType(NcaContext *ctx)
 {
-    if (!ctx || ctx->header.distribution_type == NcaDistributionType_Download) return;
-    ctx->header.distribution_type = NcaDistributionType_Download;
-    ctx->dirty_header = true;
+    if (ctx && ctx->header.distribution_type != NcaDistributionType_Download)
+    {
+        ctx->header.distribution_type = NcaDistributionType_Download;
+        ctx->dirty_header = true;
+    }
 }
 
 static inline void ncaWipeRightsId(NcaContext *ctx)
 {
-    if (!ctx) return;
-    memset(&(ctx->header.rights_id), 0, sizeof(FsRightsId));
-    ctx->dirty_header = true;
+    if (ctx)
+    {
+        memset(&(ctx->header.rights_id), 0, sizeof(FsRightsId));
+        ctx->dirty_header = true;
+    }
 }
 
 #endif /* __NCA_H__ */

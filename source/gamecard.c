@@ -744,7 +744,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         offset >= (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize) || (offset + read_size) > (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize))
     {
         LOGFILE("Invalid parameters!");
-        goto out;
+        goto exit;
     }
     
     Result rc = 0;
@@ -757,7 +757,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         /* Calculate normal storage area size difference */
         u64 diff_size = (g_gameCardStorageNormalAreaSize - offset);
         
-        if (!gamecardReadStorageArea(out_u8, diff_size, offset, false)) goto out;
+        if (!gamecardReadStorageArea(out_u8, diff_size, offset, false)) goto exit;
         
         /* Adjust variables to read right from the start of the secure storage area */
         read_size -= diff_size;
@@ -771,7 +771,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
     if (!gamecardOpenStorageArea(area))
     {
         LOGFILE("Failed to open %s storage area!", GAMECARD_STORAGE_AREA_NAME(area));
-        goto out;
+        goto exit;
     }
     
     /* Calculate appropiate storage area offset and retrieve the right storage area pointer */
@@ -784,7 +784,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         if (R_FAILED(rc))
         {
             LOGFILE("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (aligned)", read_size, base_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
-            goto out;
+            goto exit;
         }
         
         success = true;
@@ -802,7 +802,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         if (R_FAILED(rc))
         {
             LOGFILE("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (unaligned)", chunk_size, block_start_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
-            goto out;
+            goto exit;
         }
         
         memcpy(out_u8, g_gameCardReadBuf + data_start_offset, out_chunk_size);
@@ -810,7 +810,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         success = (block_size > GAMECARD_READ_BUFFER_SIZE ? gamecardReadStorageArea(out_u8 + out_chunk_size, read_size - out_chunk_size, base_offset + out_chunk_size, false) : true);
     }
     
-out:
+exit:
     if (lock) mtx_unlock(&g_gameCardSharedDataMutex);
     
     return success;
