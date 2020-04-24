@@ -204,7 +204,7 @@ static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsI
     utilsGenerateHexStringFromData(tik_filename, sizeof(tik_filename), id->c, 0x10);
     strcat(tik_filename, ".tik");
     
-    if (!gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(GameCardHashFileSystemPartitionType_Secure, tik_filename, &tik_offset, &tik_size))
+    if (!gamecardGetEntryInfoFromHashFileSystemPartitionByName(GameCardHashFileSystemPartitionType_Secure, tik_filename, &tik_offset, &tik_size))
     {
         LOGFILE("Error retrieving offset and size for \"%s\" entry in secure hash FS partition!");
         return false;
@@ -216,7 +216,7 @@ static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsI
         return false;
     }
     
-    if (!gamecardRead(dst->data, tik_size, tik_offset))
+    if (!gamecardReadStorage(dst->data, tik_size, tik_offset))
     {
         LOGFILE("Failed to read \"%s\" data from the inserted gamecard!", tik_filename);
         return false;

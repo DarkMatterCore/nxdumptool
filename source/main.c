@@ -22,11 +22,13 @@
 //#include "lvgl_helper.h"
 #include "utils.h"
 
-#include "gamecard.h"
-#include "nca.h"
-#include "cert.h"
 
 #include <dirent.h>
+
+#include "nca.h"
+#include "pfs0.h"
+
+
 
 int main(int argc, char *argv[])
 {
@@ -51,364 +53,228 @@ int main(int argc, char *argv[])
         if (lvglHelperGetExitFlag()) break;
     }*/
     
-    
-    
-    
-    
     consoleInit(NULL);
     
-    printf("waiting...\n");
+    printf("initializing...\n");
     consoleUpdate(NULL);
     
-    while(appletMainLoop())
-    {
-        if (gamecardIsReady()) break;
-    }
-    
+    u8 *buf = NULL;
     FILE *tmp_file = NULL;
-    GameCardHeader header = {0};
-    FsGameCardCertificate cert = {0};
-    u64 total_size = 0, trimmed_size = 0;
-    u32 update_version = 0;
-    u64 nca_offset = 0, nca_size = 0;
     
+    Ticket tik = {0};
+    NcaContext *nca_ctx = NULL;
+    NcmContentStorage ncm_storage = {0};
+    
+    Result rc = 0;
     
     mkdir("sdmc:/nxdt_test", 0744);
     
-    
-    if (gamecardGetHeader(&header))
-    {
-        printf("header success\n");
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/header.bin", "wb");
-        if (tmp_file)
-        {
-            fwrite(&header, 1, sizeof(GameCardHeader), tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("header saved\n");
-        } else {
-            printf("header not saved\n");
-        }
-    } else {
-        printf("header failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    if (gamecardGetTotalSize(&total_size))
-    {
-        printf("total_size: 0x%lX\n", total_size);
-    } else {
-        printf("total_size failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    if (gamecardGetTrimmedSize(&trimmed_size))
-    {
-        printf("trimmed_size: 0x%lX\n", trimmed_size);
-    } else {
-        printf("trimmed_size failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    if (gamecardGetCertificate(&cert))
-    {
-        printf("gamecard cert success\n");
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/cert.bin", "wb");
-        if (tmp_file)
-        {
-            fwrite(&cert, 1, sizeof(FsGameCardCertificate), tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("gamecard cert saved\n");
-        } else {
-            printf("gamecard cert not saved\n");
-        }
-    } else {
-        printf("gamecard cert failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    if (gamecardGetBundledFirmwareUpdateVersion(&update_version))
-    {
-        printf("update_version: %u\n", update_version);
-    } else {
-        printf("update_version failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    u8 *buf = malloc((u64)0x400300); // 4 MiB + 512 bytes + 256 bytes
-    if (buf)
-    {
-        printf("buf succeeded\n");
-        consoleUpdate(NULL);
-        
-        if (gamecardRead(buf, (u64)0x400300, (u64)0x16F18100)) // force unaligned read that spans both storage areas
-        {
-            u32 crc = crc32Calculate(buf, (u64)0x400300);
-            
-            printf("read succeeded: %08X\n", crc);
-            consoleUpdate(NULL);
-            
-            tmp_file = fopen("sdmc:/nxdt_test/data.bin", "wb");
-            if (tmp_file)
-            {
-                fwrite(buf, 1, (u64)0x400300, tmp_file);
-                fclose(tmp_file);
-                tmp_file = NULL;
-                printf("data saved\n");
-            } else {
-                printf("data not saved\n");
-            }
-        } else {
-            printf("read failed\n");
-        }
-    } else {
-        printf("buf failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    // Should match 0x1657F5E00
-    if (gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(GameCardHashFileSystemPartitionType_Secure, "7e86768383cfabb30f1b58d2373fed07.nca", &nca_offset, &nca_size))
-    {
-        printf("nca_offset: 0x%lX | nca_size: 0x%lX\n", nca_offset, nca_size);
-    } else {
-        printf("nca_offset + nca_size failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    Ticket tik = {0};
-    TikCommonBlock *tik_common_blk = NULL;
-    
-    u8 *cert_chain = NULL;
-    u64 cert_chain_size = 0;
-    
-    FsRightsId rights_id = {
+    /*FsRightsId rights_id = {
         .c = { 0x01, 0x00, 0x82, 0x40, 0x0B, 0xCC, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08 } // Untitled Goose Game
+    };*/
+    
+    // Untitled Goose Game
+    NcmPackagedContentInfo content_info = {
+        .hash = {
+            0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8,
+            0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8
+        },
+        .info = {
+            .content_id = {
+                .c = { 0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8 }
+            },
+            .size = {
+                0x00, 0x40, 0xAD, 0x31, 0x00, 0x00
+            },
+            .content_type = NcmContentType_Program,
+            .id_offset = 0
+        }
     };
     
-    if (tikRetrieveTicketByRightsId(&tik, &rights_id, false))
+    PartitionFileSystemContext pfs0_ctx = {0};
+    PartitionFileSystemEntry *pfs0_entry = NULL;
+    
+    buf = malloc(0x400000);
+    if (!buf)
     {
-        printf("tik succeeded\n");
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/tik.bin", "wb");
-        if (tmp_file)
-        {
-            fwrite(&tik, 1, sizeof(Ticket), tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("tik saved\n");
-        } else {
-            printf("tik not saved\n");
-        }
-        
-        consoleUpdate(NULL);
-        
-        /*tikConvertPersonalizedTicketToCommonTicket(&tik);
-        
-        printf("common tik generated\n");
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/common_tik.bin", "wb");
-        if (tmp_file)
-        {
-            fwrite(&tik, 1, sizeof(Ticket), tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("common tik saved\n");
-        } else {
-            printf("common tik not saved\n");
-        }
-        
-        consoleUpdate(NULL);*/
-        
-        tik_common_blk = tikGetCommonBlockFromTicket(&tik);
-        
-        if (tik_common_blk)
-        {
-            cert_chain = certGenerateRawCertificateChainBySignatureIssuer(tik_common_blk->issuer, &cert_chain_size);
-            if (cert_chain)
-            {
-                printf("cert chain succeeded | size: 0x%lX\n", cert_chain_size);
-                consoleUpdate(NULL);
-                
-                tmp_file = fopen("sdmc:/nxdt_test/chain.bin", "wb");
-                if (tmp_file)
-                {
-                    fwrite(cert_chain, 1, cert_chain_size, tmp_file);
-                    fclose(tmp_file);
-                    tmp_file = NULL;
-                    printf("cert chain saved\n");
-                } else {
-                    printf("cert chain not saved\n");
-                }
-            } else {
-                printf("cert chain failed\n");
-            }
-        }
-    } else {
-        printf("tik failed\n");
+        printf("read buf failed\n");
+        goto out2;
     }
     
+    printf("read buf succeeded\n");
     consoleUpdate(NULL);
     
-    NcaContext *nca_ctx = calloc(1, sizeof(NcaContext));
-    if (nca_ctx)
+    nca_ctx = calloc(1, sizeof(NcaContext));
+    if (!nca_ctx)
     {
-        printf("nca ctx buf succeeded\n");
-        consoleUpdate(NULL);
-        
-        NcmContentStorage ncm_storage = {0};
-        if (R_SUCCEEDED(ncmOpenContentStorage(&ncm_storage, NcmStorageId_SdCard)))
-        {
-            printf("ncm open storage succeeded\n");
-            consoleUpdate(NULL);
-            
-            // Untitled Goose Game
-            NcmPackagedContentInfo content_info = {
-                .hash = {
-                    0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8,
-                    0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8
-                },
-                .info = {
-                    .content_id = {
-                        .c = { 0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8 }
-                    },
-                    .size = {
-                        0x00, 0x40, 0xAD, 0x31, 0x00, 0x00
-                    },
-                    .content_type = NcmContentType_Program,
-                    .id_offset = 0
-                }
-            };
-            
-            if (ncaInitializeContext(nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &content_info, &tik))
-            {
-                printf("nca initialize ctx succeeded\n");
-                consoleUpdate(NULL);
-                
-                tmp_file = fopen("sdmc:/nxdt_test/nca_ctx.bin", "wb");
-                if (tmp_file)
-                {
-                    fwrite(nca_ctx, 1, sizeof(NcaContext), tmp_file);
-                    fclose(tmp_file);
-                    tmp_file = NULL;
-                    printf("nca ctx saved\n");
-                } else {
-                    printf("nca ctx not saved\n");
-                }
-                
-                consoleUpdate(NULL);
-                
-                tmp_file = fopen("sdmc:/nxdt_test/section0.bin", "wb");
-                if (tmp_file)
-                {
-                    printf("nca section0 created: 0x%lX\n", nca_ctx->fs_contexts[0].section_size);
-                    consoleUpdate(NULL);
-                    
-                    u64 curpos = 0;
-                    u64 blksize = (u64)0x400000;
-                    u64 total = nca_ctx->fs_contexts[0].section_size;
-                    
-                    for(u64 curpos = 0; curpos < total; curpos += blksize)
-                    {
-                        if (blksize > (total - curpos)) blksize = (total - curpos);
-                        
-                        if (!ncaReadFsSection(&(nca_ctx->fs_contexts[0]), buf, blksize, curpos))
-                        {
-                            printf("nca read section failed\n");
-                            consoleUpdate(NULL);
-                            break;
-                        }
-                        
-                        fwrite(buf, 1, blksize, tmp_file);
-                        
-                        if (curpos == 0)
-                        {
-                            u8 cryptobuf[0x1E0] = {0};
-                            u64 block_size = 0, block_offset = 0;
-                            FILE *blktest = NULL;
-                            
-                            u8 *block_data = ncaGenerateEncryptedFsSectionBlock(&(nca_ctx->fs_contexts[0]), buf + 0x809C, 0x1CE, 0x809C, &block_size, &block_offset);
-                            if (block_data)
-                            {
-                                printf("nca generate encrypted block success\n");
-                                consoleUpdate(NULL);
-                                
-                                blktest = fopen("sdmc:/nxdt_test/blktest.bin", "wb");
-                                if (blktest)
-                                {
-                                    fwrite(block_data, 1, block_size, blktest);
-                                    fclose(blktest);
-                                    blktest = NULL;
-                                }
-                                
-                                free(block_data);
-                            }
-                            
-                            if (ncaReadContentFile(nca_ctx, cryptobuf, 0x1E0, nca_ctx->fs_contexts[0].section_offset + 0x8090))
-                            {
-                                printf("nca read encrypted block success\n");
-                                consoleUpdate(NULL);
-                                
-                                blktest = fopen("sdmc:/nxdt_test/crytobuf.bin", "wb");
-                                if (blktest)
-                                {
-                                    fwrite(cryptobuf, 1, 0x1E0, blktest);
-                                    fclose(blktest);
-                                    blktest = NULL;
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (curpos >= total)
-                    {
-                        printf("nca read section success\n");
-                        consoleUpdate(NULL);
-                    }
-                    
-                    fclose(tmp_file);
-                    tmp_file = NULL;
-                } else {
-                    printf("nca section0 not created\n");
-                }
-            } else {
-                printf("nca initialize ctx failed\n");
-            }
-            
-            consoleUpdate(NULL);
-            
-            ncmContentStorageClose(&ncm_storage);
-        } else {
-            printf("ncm open storage failed\n");
-        }
-        
-        free(nca_ctx);
-    } else {
         printf("nca ctx buf failed\n");
+        goto out2;
+    }
+    
+    printf("nca ctx buf succeeded\n");
+    consoleUpdate(NULL);
+    
+    rc = ncmOpenContentStorage(&ncm_storage, NcmStorageId_SdCard);
+    if (R_FAILED(rc))
+    {
+        printf("ncm open storage failed\n");
+        goto out2;
+    }
+    
+    printf("ncm open storage succeeded\n");
+    consoleUpdate(NULL);
+    
+    if (!ncaInitializeContext(nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &content_info, &tik))
+    {
+        printf("nca initialize ctx failed\n");
+        goto out2;
+    }
+    
+    tmp_file = fopen("sdmc:/nxdt_test/nca_ctx.bin", "wb");
+    if (tmp_file)
+    {
+        fwrite(nca_ctx, 1, sizeof(NcaContext), tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        printf("nca ctx saved\n");
+    } else {
+        printf("nca ctx not saved\n");
     }
     
     consoleUpdate(NULL);
     
-    
-    while(true)
+    tmp_file = fopen("sdmc:/nxdt_test/section0.bin", "wb");
+    if (tmp_file)
     {
+        u64 blksize = 0x400000;
+        u64 total = nca_ctx->fs_contexts[0].section_size;
+        
+        printf("nca section0 created: 0x%lX\n", total);
+        consoleUpdate(NULL);
+        
+        for(u64 curpos = 0; curpos < total; curpos += blksize)
+        {
+            if (blksize > (total - curpos)) blksize = (total - curpos);
+            
+            if (!ncaReadFsSection(&(nca_ctx->fs_contexts[0]), buf, blksize, curpos))
+            {
+                printf("nca read section failed\n");
+                goto out2;
+            }
+            
+            fwrite(buf, 1, blksize, tmp_file);
+        }
+        
+        fclose(tmp_file);
+        tmp_file = NULL;
+        
+        printf("nca read section0 success\n");
+    } else {
+        printf("nca section0 not created\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    if (!pfs0InitializeContext(&pfs0_ctx, &(nca_ctx->fs_contexts[0])))
+    {
+        printf("pfs0 initialize ctx failed\n");
+        goto out2;
+    }
+    
+    printf("pfs0 initialize ctx succeeded\n");
+    consoleUpdate(NULL);
+    
+    tmp_file = fopen("sdmc:/nxdt_test/pfs0_ctx.bin", "wb");
+    if (tmp_file)
+    {
+        fwrite(&pfs0_ctx, 1, sizeof(PartitionFileSystemContext), tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        printf("pfs0 ctx saved\n");
+    } else {
+        printf("pfs0 ctx not saved\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    tmp_file = fopen("sdmc:/nxdt_test/pfs0_header.bin", "wb");
+    if (tmp_file)
+    {
+        fwrite(pfs0_ctx.header, 1, pfs0_ctx.header_size, tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        printf("pfs0 header saved\n");
+    } else {
+        printf("pfs0 header not saved\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    pfs0_entry = pfs0GetEntryByName(&pfs0_ctx, "main.npdm");
+    if (!pfs0_entry)
+    {
+        printf("pfs0 get entry by name failed\n");
+        goto out2;
+    }
+    
+    printf("pfs0 get entry by name succeeded\n");
+    consoleUpdate(NULL);
+    
+    u64 main_npdm_offset = 0;
+    if (!pfs0GetEntryDataOffset(&pfs0_ctx, pfs0_entry, &main_npdm_offset))
+    {
+        printf("pfs0 get entry data offset failed\n");
+        goto out2;
+    }
+    
+    printf("main.npdm offset = 0x%lX\n", main_npdm_offset);
+    consoleUpdate(NULL);
+    
+    tmp_file = fopen("sdmc:/nxdt_test/main.npdm", "wb");
+    if (tmp_file)
+    {
+        u64 blksize = 0x400000;
+        u64 total = pfs0_entry->size;
+        
+        printf("main.npdm created: 0x%lX\n", total);
+        consoleUpdate(NULL);
+        
+        for(u64 curpos = 0; curpos < total; curpos += blksize)
+        {
+            if (blksize > (total - curpos)) blksize = (total - curpos);
+            
+            if (!ncaReadFsSection(pfs0_ctx.nca_fs_ctx, buf, blksize, main_npdm_offset + curpos))
+            {
+                printf("nca read section failed\n");
+                goto out2;
+            }
+            
+            fwrite(buf, 1, blksize, tmp_file);
+        }
+        
+        fclose(tmp_file);
+        tmp_file = NULL;
+        
+        printf("nca read main.npdm success\n");
+    } else {
+        printf("main.npdm not created\n");
+    }
+    
+out2:
+    while(appletMainLoop())
+    {
+        consoleUpdate(NULL);
         hidScanInput();
         if (utilsHidKeysAllDown() & KEY_A) break;
     }
     
+    if (tmp_file) fclose(tmp_file);
+    
+    pfs0FreeContext(&pfs0_ctx);
+    
+    if (serviceIsActive(&(ncm_storage.s))) ncmContentStorageClose(&ncm_storage);
+    
+    if (nca_ctx) free(nca_ctx);
     
     if (buf) free(buf);
     

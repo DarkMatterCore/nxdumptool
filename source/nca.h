@@ -292,7 +292,7 @@ typedef struct {
 bool ncaAllocateCryptoBuffer(void);
 void ncaFreeCryptoBuffer(void);
 
-/// Initializes a valid NCA context.
+/// Initializes a NCA context.
 /// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' argument must point to a valid NcmContentStorage instance, previously opened using the same NcmStorageId value.
 /// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
 /// If the NCA holds a populated Rights ID field, and if the Ticket object pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
@@ -327,11 +327,9 @@ bool ncaEncryptHeader(NcaContext *ctx);
 
 static inline void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
 {
-    if (size && out)
-    {
-        *out = 0;
-        memcpy(out, size, 6);
-    }
+    if (!size || !out) return;
+    *out = 0;
+    memcpy(out, size, 6);
 }
 
 static inline void ncaConvertU64ToNcmContentSize(const u64 *size, u8 *out)
@@ -341,20 +339,16 @@ static inline void ncaConvertU64ToNcmContentSize(const u64 *size, u8 *out)
 
 static inline void ncaSetDownloadDistributionType(NcaContext *ctx)
 {
-    if (ctx && ctx->header.distribution_type != NcaDistributionType_Download)
-    {
-        ctx->header.distribution_type = NcaDistributionType_Download;
-        ctx->dirty_header = true;
-    }
+    if (!ctx || ctx->header.distribution_type == NcaDistributionType_Download) return;
+    ctx->header.distribution_type = NcaDistributionType_Download;
+    ctx->dirty_header = true;
 }
 
 static inline void ncaWipeRightsId(NcaContext *ctx)
 {
-    if (ctx)
-    {
-        memset(&(ctx->header.rights_id), 0, sizeof(FsRightsId));
-        ctx->dirty_header = true;
-    }
+    if (!ctx || !ctx->rights_id_available) return;
+    memset(&(ctx->header.rights_id), 0, sizeof(FsRightsId));
+    ctx->dirty_header = true;
 }
 
 #endif /* __NCA_H__ */

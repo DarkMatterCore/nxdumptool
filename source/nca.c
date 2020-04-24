@@ -222,7 +222,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
         char nca_filename[0x30] = {0};
         sprintf(nca_filename, "%s.%s", out->content_id_str, out->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
         
-        if (!gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(hfs_partition_type, nca_filename, &(out->gamecard_offset), NULL))
+        if (!gamecardGetEntryInfoFromHashFileSystemPartitionByName(hfs_partition_type, nca_filename, &(out->gamecard_offset), NULL))
         {
             LOGFILE("Error retrieving offset for \"%s\" entry in secure hash FS partition!", nca_filename);
             return false;
@@ -380,7 +380,7 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
     } else {
         /* Retrieve NCA data using raw gamecard reads */
         /* Fixes NCA read issues with gamecards under HOS < 4.0.0 when using ncmContentStorageReadContentIdFile() */
-        ret = gamecardRead(out, read_size, ctx->gamecard_offset + offset);
+        ret = gamecardReadStorage(out, read_size, ctx->gamecard_offset + offset);
         if (!ret) LOGFILE("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (gamecard)", read_size, offset, ctx->content_id_str);
     }
     

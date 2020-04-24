@@ -23,12 +23,12 @@
 
 #define GAMECARD_HEAD_MAGIC         0x48454144              /* "HEAD" */
 #define GAMECARD_CERT_MAGIC         0x43455254              /* "CERT" */
-#define GAMECARD_HFS0_MAGIC         0x48465330              /* "HFS0" */
 
 #define GAMECARD_MEDIA_UNIT_SIZE    0x200
 
-#define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : \
-                                        ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : "unknown"))))
+#define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Root ? "root" : ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : \
+                                        ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : \
+                                        ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : "unknown")))))
 
 typedef enum {
     GameCardKekIndex_Version0      = 0,
@@ -118,27 +118,12 @@ typedef struct {
     GameCardExtendedHeader extended_header;         ///< Encrypted using AES-128-CBC with 'xci_header_key', which can't dumped through current methods.
 } GameCardHeader;
 
-typedef struct {
-    u32 magic;              ///< "HFS0".
-    u32 entry_count;
-    u32 name_table_size;
-    u8 reserved[0x4];
-} GameCardHashFileSystemHeader;
-
-typedef struct {
-    u64 offset;
-    u64 size;
-    u32 name_offset;
-    u32 hash_target_size;
-    u64 hash_target_offset;
-    u8 hash[SHA256_HASH_SIZE];
-} GameCardHashFileSystemEntry;
-
 typedef enum {
-    GameCardHashFileSystemPartitionType_Update  = 0,
-    GameCardHashFileSystemPartitionType_Logo    = 1,    ///< Only available in GameCardFwVersion_Since400NUP gamecards.
-    GameCardHashFileSystemPartitionType_Normal  = 2,
-    GameCardHashFileSystemPartitionType_Secure  = 3
+    GameCardHashFileSystemPartitionType_Root    = 0,
+    GameCardHashFileSystemPartitionType_Update  = 1,
+    GameCardHashFileSystemPartitionType_Logo    = 2,    ///< Only available in GameCardFwVersion_Since400NUP gamecards.
+    GameCardHashFileSystemPartitionType_Normal  = 3,
+    GameCardHashFileSystemPartitionType_Secure  = 4
 } GameCardHashFileSystemPartitionType;
 
 /// Initializes data needed to access raw gamecard storage areas.
@@ -154,10 +139,11 @@ bool gamecardIsReady(void);
 
 /// Used to read data from the inserted gamecard.
 /// All required handles, changes between normal <-> secure storage areas and proper offset calculations are managed internally.
-/// offset + read_size should never exceed the value returned by gamecardGetTotalSize().
-bool gamecardRead(void *out, u64 read_size, u64 offset);
+/// 'offset' + 'read_size' must not exceed the value returned by gamecardGetTotalSize().
+bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
 
 /// Miscellaneous functions.
+
 bool gamecardGetHeader(GameCardHeader *out);
 bool gamecardGetTotalSize(u64 *out);
 bool gamecardGetTrimmedSize(u64 *out);
@@ -165,6 +151,16 @@ bool gamecardGetRomCapacity(u64 *out); ///< Not the same as gamecardGetTotalSize
 bool gamecardGetCertificate(FsGameCardCertificate *out);
 bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
 
-bool gamecardGetOffsetAndSizeFromHashFileSystemPartitionEntryByName(u8 hfs_partition_type, const char *name, u64 *out_offset, u64 *out_size); ///< GameCardHashFileSystemPartitionType.
+/// Retrieves the entry count from a hash FS partition.
+bool gamecardGetEntryCountFromHashFileSystemPartition(u8 hfs_partition_type, u32 *out_count);
+
+/// Retrieves info from a hash FS partition entry using an entry index.
+/// 'out_offset', 'out_size' or 'out_name' may be set to NULL, but at least one of them must be a valid pointer.
+/// If 'out_name' != NULL and the function call succeeds, a pointer to a heap allocated buffer is returned.
+bool gamecardGetEntryInfoFromHashFileSystemPartitionByIndex(u8 hfs_partition_type, u32 idx, u64 *out_offset, u64 *out_size, char **out_name);
+
+/// Retrieves info from a hash FS partition entry using an entry name.
+/// 'out_offset' or 'out_size' may be set to NULL, but at least one of them must be a valid pointer.
+bool gamecardGetEntryInfoFromHashFileSystemPartitionByName(u8 hfs_partition_type, const char *name, u64 *out_offset, u64 *out_size);
 
 #endif /* __GAMECARD_H__ */

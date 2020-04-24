@@ -1,7 +1,7 @@
 ﻿todo:
     
     hfs0 methods
-    pfs0: full header aligned to 0x20
+    pfs0: full header aligned to 0x20 (nsp)
 
 
 
