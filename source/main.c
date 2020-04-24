@@ -220,32 +220,22 @@ int main(int argc, char *argv[])
     printf("pfs0 get entry by name succeeded\n");
     consoleUpdate(NULL);
     
-    u64 main_npdm_offset = 0;
-    if (!pfs0GetEntryDataOffset(&pfs0_ctx, pfs0_entry, &main_npdm_offset))
-    {
-        printf("pfs0 get entry data offset failed\n");
-        goto out2;
-    }
-    
-    printf("main.npdm offset = 0x%lX\n", main_npdm_offset);
-    consoleUpdate(NULL);
-    
     tmp_file = fopen("sdmc:/nxdt_test/main.npdm", "wb");
     if (tmp_file)
     {
         u64 blksize = 0x400000;
         u64 total = pfs0_entry->size;
         
-        printf("main.npdm created: 0x%lX\n", total);
+        printf("main.npdm created. Target size -> 0x%lX\n", total);
         consoleUpdate(NULL);
         
         for(u64 curpos = 0; curpos < total; curpos += blksize)
         {
             if (blksize > (total - curpos)) blksize = (total - curpos);
             
-            if (!ncaReadFsSection(pfs0_ctx.nca_fs_ctx, buf, blksize, main_npdm_offset + curpos))
+            if (!pfs0ReadEntryData(&pfs0_ctx, pfs0_entry, buf, blksize, 0))
             {
-                printf("nca read section failed\n");
+                printf("pfs0 read entry data failed\n");
                 goto out2;
             }
             
@@ -255,7 +245,7 @@ int main(int argc, char *argv[])
         fclose(tmp_file);
         tmp_file = NULL;
         
-        printf("nca read main.npdm success\n");
+        printf("pfs0 read main.npdm success\n");
     } else {
         printf("main.npdm not created\n");
     }

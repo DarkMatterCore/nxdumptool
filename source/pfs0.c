@@ -58,8 +58,6 @@ bool pfs0InitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext 
     /* Read partial PFS0 header */
     u32 magic = 0;
     PartitionFileSystemHeader pfs0_header = {0};
-    
-    u64 main_npdm_offset = 0;
     PartitionFileSystemEntry *main_npdm_entry = NULL;
     
     if (!ncaReadFsSection(nca_fs_ctx, &pfs0_header, sizeof(PartitionFileSystemHeader), out->offset))
@@ -100,8 +98,30 @@ bool pfs0InitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext 
     }
     
     /* Check if we're dealing with an ExeFS section */
-    if ((main_npdm_entry = pfs0GetEntryByName(out, "main.npdm")) != NULL && pfs0GetEntryDataOffset(out, main_npdm_entry, &main_npdm_offset) && \
-        ncaReadFsSection(out->nca_fs_ctx, &magic, sizeof(u32), main_npdm_offset) && __builtin_bswap32(magic) == NPDM_META_MAGIC) out->is_exefs = true;
+    if ((main_npdm_entry = pfs0GetEntryByName(out, "main.npdm")) != NULL && pfs0ReadEntryData(out, main_npdm_entry, &magic, sizeof(u32), 0) && \
+        __builtin_bswap32(magic) == NPDM_META_MAGIC) out->is_exefs = true;
+    
+    return true;
+}
+
+bool pfs0ReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset)
+{
+    if (!ctx || !ctx->nca_fs_ctx || !ctx->hash_info || !ctx->size || !ctx->header_size || !ctx->header || !fs_entry || fs_entry->offset >= ctx->size || \
+        (fs_entry->offset + fs_entry->size) > ctx->size || !out || !read_size || offset >= fs_entry->size || (offset + read_size) > fs_entry->size)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Calculate offset relative to the start of the NCA FS section */
+    u64 section_offset = (ctx->offset + ctx->header_size + fs_entry->offset + offset);
+    
+    /* Read entry data */
+    if (!ncaReadFsSection(ctx->nca_fs_ctx, out, read_size, section_offset))
+    {
+        LOGFILE("Failed to read PFS0 entry data!");
+        return false;
+    }
     
     return true;
 }

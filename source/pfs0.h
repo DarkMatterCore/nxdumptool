@@ -59,19 +59,15 @@ static inline void pfs0FreeContext(PartitionFileSystemContext *ctx)
     memset(ctx, 0, sizeof(PartitionFileSystemContext));
 }
 
+/// Reads data from a previously retrieved PartitionFileSystemEntry using a PFS0 context.
+bool pfs0ReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset);
+
 /// Miscellaneous functions.
 
 static inline u32 pfs0GetEntryCount(PartitionFileSystemContext *ctx)
 {
     if (!ctx || !ctx->header_size || !ctx->header) return 0;
     return ((PartitionFileSystemHeader*)ctx->header)->entry_count;
-}
-
-static inline bool pfs0GetEntryDataOffset(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, u64 *out_offset)
-{
-    if (!ctx || !ctx->header_size || !ctx->header || !fs_entry || !out_offset) return false;
-    *out_offset = (ctx->offset + ctx->header_size + fs_entry->offset);  /* Relative to the start of the NCA FS section */
-    return true;
 }
 
 static inline PartitionFileSystemEntry *pfs0GetEntryByIndex(PartitionFileSystemContext *ctx, u32 idx)
