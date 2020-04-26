@@ -370,7 +370,7 @@ NX_INLINE bool ncaValidateHierarchicalSha256Offsets(NcaHierarchicalSha256 *hiera
 NX_INLINE bool ncaValidateHierarchicalIntegrityOffsets(NcaHierarchicalIntegrity *hierarchical_integrity, u64 section_size)
 {
     if (!hierarchical_integrity || !section_size || __builtin_bswap32(hierarchical_integrity->magic) != NCA_IVFC_MAGIC || !hierarchical_integrity->master_hash_size || \
-        hierarchical_integrity->layer_count != NCA_IVFC_HASH_DATA_LAYER_COUNT) return false;
+        hierarchical_integrity->layer_count < NCA_IVFC_HASH_DATA_LAYER_COUNT) return false;
     
     /* Validate layer offsets and sizes */
     for(u8 i = 0; i < (NCA_IVFC_HASH_DATA_LAYER_COUNT + 1); i++)

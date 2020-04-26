@@ -99,7 +99,7 @@ typedef struct {
     RomFileSystemDirectoryEntry *dir_table;         ///< RomFS directory entries table.
     u64 file_table_size;                            ///< RomFS file entries table size.
     RomFileSystemFileEntry *file_table;             ///< RomFS file entries table.
-    u64 body_offset;                                ///< RomFS file data body offset (relative to the start of the NCA FS section).
+    u64 body_offset;                                ///< RomFS file data body offset (relative to the start of the RomFS).
 } RomFileSystemContext;
 
 /// Initializes a RomFS context.
@@ -114,6 +114,9 @@ NX_INLINE void romfsFreeContext(RomFileSystemContext *ctx)
     memset(ctx, 0, sizeof(RomFileSystemContext));
 }
 
+/// Reads raw filesystem data using a RomFS context.
+bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset);
+
 /// Reads data from a previously retrieved RomFileSystemFileEntry using a RomFS context.
 bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
 
@@ -125,16 +128,16 @@ bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, u32 dir_entry_offset, 
 
 /// Miscellaneous functions.
 
-NX_INLINE RomFileSystemDirectoryEntry *romfsGetDirectoryEntry(RomFileSystemContext *ctx, u32 file_entry_offset)
+NX_INLINE RomFileSystemDirectoryEntry *romfsGetDirectoryEntry(RomFileSystemContext *ctx, u32 dir_entry_offset)
 {
-    if (!ctx || !ctx->dir_table || file_entry_offset >= ctx->dir_table_size) return NULL;
-    return (RomFileSystemDirectoryEntry*)((u8*)ctx->dir_table + file_entry_offset);
+    if (!ctx || !ctx->dir_table || (dir_entry_offset + sizeof(RomFileSystemDirectoryEntry)) > ctx->dir_table_size) return NULL;
+    return (RomFileSystemDirectoryEntry*)((u8*)ctx->dir_table + dir_entry_offset);
 }
 
-NX_INLINE RomFileSystemFileEntry *romfsGetFileEntry(RomFileSystemContext *ctx, u32 dir_entry_offset)
+NX_INLINE RomFileSystemFileEntry *romfsGetFileEntry(RomFileSystemContext *ctx, u32 file_entry_offset)
 {
-    if (!ctx || !ctx->file_table || dir_entry_offset >= ctx->file_table_size) return NULL;
-    return (RomFileSystemFileEntry*)((u8*)ctx->file_table + dir_entry_offset);
+    if (!ctx || !ctx->file_table || (file_entry_offset + sizeof(RomFileSystemFileEntry)) > ctx->file_table_size) return NULL;
+    return (RomFileSystemFileEntry*)((u8*)ctx->file_table + file_entry_offset);
 }
 
 #endif /* __ROMFS_H__ */

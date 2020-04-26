@@ -134,7 +134,7 @@ bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry 
     return true;
 }
 
-bool pfsGenerateModifiedEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, PartitionFileSystemModifiedBlockInfo *out)
+bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, PartitionFileSystemPatchInfo *out)
 {
     NcaContext *nca_ctx = NULL;
     

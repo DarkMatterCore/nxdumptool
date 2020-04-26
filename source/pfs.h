@@ -52,10 +52,10 @@ typedef struct {
     u64 hash_block_offset;  ///< New hash block offset (relative to the start of the NCA content file).
     u64 hash_block_size;    ///< New hash block size.
     u8 *hash_block;         ///< New hash block contents.
-    u64 data_block_offset;  ///< New data block offset.
+    u64 data_block_offset;  ///< New data block offset (relative to the start of the NCA content file).
     u64 data_block_size;    ///< New data block size.
     u8 *data_block;         ///< New data block contents.
-} PartitionFileSystemModifiedBlockInfo;
+} PartitionFileSystemPatchInfo;
 
 /// Initializes a partition FS context.
 bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx);
@@ -78,7 +78,7 @@ bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry 
 /// Input offset must be relative to the start of the partition FS entry data.
 /// Bear in mind that this function recalculates both the NcaHashInfo block master hash and the NCA FS header hash from the NCA header, and enables the 'dirty_header' flag from the NCA context.
 /// As such, this function is only capable of modifying a single file from a partition FS in a NCA content file.
-bool pfsGenerateModifiedEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, PartitionFileSystemModifiedBlockInfo *out);
+bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, PartitionFileSystemPatchInfo *out);
 
 /// Miscellaneous functions.
 

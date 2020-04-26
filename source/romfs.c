@@ -86,7 +86,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     }
     
     /* Read directory entries table */
-    dir_table_offset = (out->offset + (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_offset : out->header.cur_format.directory_entry_offset));
+    dir_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_offset : out->header.cur_format.directory_entry_offset);
     out->dir_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_size : out->header.cur_format.directory_entry_size);
     
     if (dir_table_offset >= out->size || !out->dir_table_size || (dir_table_offset + out->dir_table_size) > out->size)
@@ -102,14 +102,14 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         return false;
     }
     
-    if (!ncaReadFsSection(nca_fs_ctx, out->dir_table, out->dir_table_size, dir_table_offset))
+    if (!ncaReadFsSection(nca_fs_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
     {
         LOGFILE("Failed to read RomFS directory entries table!");
         return false;
     }
     
     /* Read file entries table */
-    file_table_offset = (out->offset + (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_offset : out->header.cur_format.file_entry_offset));
+    file_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_offset : out->header.cur_format.file_entry_offset);
     out->file_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_size : out->header.cur_format.file_entry_size);
     
     if (file_table_offset >= out->size || !out->file_table_size || (file_table_offset + out->file_table_size) > out->size)
@@ -125,14 +125,14 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         return false;
     }
     
-    if (!ncaReadFsSection(nca_fs_ctx, out->file_table, out->file_table_size, file_table_offset))
+    if (!ncaReadFsSection(nca_fs_ctx, out->file_table, out->file_table_size, out->offset + file_table_offset))
     {
         LOGFILE("Failed to read RomFS file entries table!");
         return false;
     }
     
-    /* Calculate file data body offset */
-    out->body_offset = (out->offset + (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.body_offset : out->header.cur_format.body_offset));
+    /* Get file data body offset */
+    out->body_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.body_offset : out->header.cur_format.body_offset);
     if (out->body_offset >= out->size)
     {
         LOGFILE("Invalid RomFS file data body!");
@@ -142,20 +142,35 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     return true;
 }
 
+bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset)
+{
+    if (!ctx || !ctx->nca_fs_ctx || !ctx->size || !out || !read_size || offset >= ctx->size || (offset + read_size) > ctx->size)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Read filesystem data */
+    if (!ncaReadFsSection(ctx->nca_fs_ctx, out, read_size, ctx->offset + offset))
+    {
+        LOGFILE("Failed to read RomFS data!");
+        return false;
+    }
+    
+    return true;
+}
+
 bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->nca_fs_ctx || !ctx->size || !ctx->body_offset || !file_entry || !file_entry->size || file_entry->offset >= ctx->size || (file_entry->offset + file_entry->size) > ctx->size || \
+    if (!ctx || !ctx->body_offset || !file_entry || !file_entry->size || file_entry->offset >= ctx->size || (file_entry->offset + file_entry->size) > ctx->size || \
         !out || !read_size || offset >= file_entry->size || (offset + read_size) > file_entry->size)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
-    /* Calculate offset relative to the start of the NCA FS section */
-    u64 section_offset = (ctx->body_offset + file_entry->offset + offset);
-    
     /* Read entry data */
-    if (!ncaReadFsSection(ctx->nca_fs_ctx, out, read_size, section_offset))
+    if (!romfsReadFileSystemData(ctx, out, read_size, ctx->body_offset + file_entry->offset + offset))
     {
         LOGFILE("Failed to read RomFS file entry data!");
         return false;

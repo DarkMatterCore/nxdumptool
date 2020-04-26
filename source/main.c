@@ -26,7 +26,7 @@
 #include <dirent.h>
 
 #include "nca.h"
-#include "pfs.h"
+#include "romfs.h"
 #include "rsa.h"
 
 
@@ -92,9 +92,8 @@ int main(int argc, char *argv[])
         }
     };
     
-    u64 pfs_size = 0;
-    PartitionFileSystemContext pfs_ctx = {0};
-    PartitionFileSystemEntry *pfs_entry = NULL;
+    u64 romfs_size = 0;
+    RomFileSystemContext romfs_ctx = {0};
     
     buf = malloc(0x400000);
     if (!buf)
@@ -145,210 +144,71 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/section0.bin", "wb");
-    if (tmp_file)
+    if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_contexts[1])))
     {
-        u64 blksize = 0x400000;
-        u64 total = nca_ctx->fs_contexts[0].section_size;
-        
-        printf("nca section0 created: 0x%lX\n", total);
-        consoleUpdate(NULL);
-        
-        for(u64 curpos = 0; curpos < total; curpos += blksize)
-        {
-            if (blksize > (total - curpos)) blksize = (total - curpos);
-            
-            if (!ncaReadFsSection(&(nca_ctx->fs_contexts[0]), buf, blksize, curpos))
-            {
-                printf("nca read section failed\n");
-                goto out2;
-            }
-            
-            fwrite(buf, 1, blksize, tmp_file);
-        }
-        
-        fclose(tmp_file);
-        tmp_file = NULL;
-        
-        printf("nca read section0 success\n");
-    } else {
-        printf("nca section0 not created\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    if (!pfsInitializeContext(&pfs_ctx, &(nca_ctx->fs_contexts[0])))
-    {
-        printf("pfs initialize ctx failed\n");
+        printf("romfs initialize ctx failed\n");
         goto out2;
     }
     
-    printf("pfs initialize ctx succeeded\n");
+    printf("romfs initialize ctx succeeded\n");
     consoleUpdate(NULL);
     
-    if (pfsGetTotalDataSize(&pfs_ctx, &pfs_size))
+    if (romfsGetTotalDataSize(&romfs_ctx, &romfs_size))
     {
-        printf("pfs size succeeded: 0x%lX\n", pfs_size);
+        printf("romfs size succeeded: 0x%lX\n", romfs_size);
     } else {
-        printf("pfs size failed\n");
+        printf("romfs size failed\n");
     }
     
     consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/pfs_ctx.bin", "wb");
+    tmp_file = fopen("sdmc:/nxdt_test/romfs_ctx.bin", "wb");
     if (tmp_file)
     {
-        fwrite(&pfs_ctx, 1, sizeof(PartitionFileSystemContext), tmp_file);
+        fwrite(&romfs_ctx, 1, sizeof(RomFileSystemContext), tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("pfs ctx saved\n");
+        printf("romfs ctx saved\n");
     } else {
-        printf("pfs ctx not saved\n");
+        printf("romfs ctx not saved\n");
     }
     
     consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/pfs_header.bin", "wb");
+    tmp_file = fopen("sdmc:/nxdt_test/dir_table.bin", "wb");
     if (tmp_file)
     {
-        fwrite(pfs_ctx.header, 1, pfs_ctx.header_size, tmp_file);
+        fwrite(romfs_ctx.dir_table, 1, romfs_ctx.dir_table_size, tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("pfs header saved\n");
+        printf("dir table saved\n");
     } else {
-        printf("pfs header not saved\n");
+        printf("dir table not saved\n");
     }
     
     consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/pfs.bin", "wb");
+    tmp_file = fopen("sdmc:/nxdt_test/file_table.bin", "wb");
     if (tmp_file)
     {
-        u64 blksize = 0x400000;
-        u64 total = pfs_ctx.size;
-        
-        printf("pfs created: 0x%lX\n", total);
-        consoleUpdate(NULL);
-        
-        for(u64 curpos = 0; curpos < total; curpos += blksize)
-        {
-            if (blksize > (total - curpos)) blksize = (total - curpos);
-            
-            if (!pfsReadPartitionData(&pfs_ctx, buf, blksize, curpos))
-            {
-                printf("pfs read partition failed\n");
-                goto out2;
-            }
-            
-            fwrite(buf, 1, blksize, tmp_file);
-        }
-        
+        fwrite(romfs_ctx.file_table, 1, romfs_ctx.file_table_size, tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        
-        printf("pfs read partition success\n");
+        printf("file table saved\n");
     } else {
-        printf("pfs not created\n");
+        printf("file table not saved\n");
     }
     
     consoleUpdate(NULL);
     
-    pfs_entry = pfsGetEntryByName(&pfs_ctx, "main.npdm");
-    if (!pfs_entry)
-    {
-        printf("pfs get entry by name failed\n");
-        goto out2;
-    }
     
-    printf("pfs get entry by name succeeded\n");
-    consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/main.npdm", "wb");
-    if (tmp_file)
-    {
-        printf("main.npdm created. Target size -> 0x%lX\n", pfs_entry->size);
-        consoleUpdate(NULL);
-        
-        if (!pfsReadEntryData(&pfs_ctx, pfs_entry, buf, pfs_entry->size, 0))
-        {
-            printf("pfs read entry data failed\n");
-            goto out2;
-        }
-        
-        fwrite(buf, 1, pfs_entry->size, tmp_file);
-        fclose(tmp_file);
-        tmp_file = NULL;
-        
-        printf("pfs read main.npdm success\n");
-    } else {
-        printf("main.npdm not created\n");
-    }
     
-    consoleUpdate(NULL);
     
-    u32 acid_offset = 0;
-    memcpy(&acid_offset, buf + 0x78, sizeof(u32));
     
-    PartitionFileSystemModifiedBlockInfo pfs_block_info = {0};
     
-    if (pfsGenerateModifiedEntryData(&pfs_ctx, pfs_entry, rsa2048GetCustomAcidPublicKey(), RSA2048_SIGNATURE_SIZE, acid_offset + RSA2048_SIGNATURE_SIZE, &pfs_block_info))
-    {
-        printf("pfs mod data success | hbo: 0x%lX | hbs: 0x%lX | dbo: 0x%lX | dbs: 0x%lX\n", pfs_block_info.hash_block_offset, pfs_block_info.hash_block_size, pfs_block_info.data_block_offset, pfs_block_info.data_block_size);
-        
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/pfs_mod.bin", "wb");
-        if (tmp_file)
-        {
-            fwrite(&pfs_block_info, 1, sizeof(PartitionFileSystemModifiedBlockInfo), tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("pfs mod data saved\n");
-        } else {
-            printf("pfs mod data not saved\n");
-        }
-        
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/pfs_hash_mod.bin", "wb");
-        if (tmp_file)
-        {
-            fwrite(pfs_block_info.hash_block, 1, pfs_block_info.hash_block_size, tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("pfs hash mod data saved\n");
-        } else {
-            printf("pfs hash mod data not saved\n");
-        }
-        
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/pfs_data_mod.bin", "wb");
-        if (tmp_file)
-        {
-            fwrite(pfs_block_info.data_block, 1, pfs_block_info.data_block_size, tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("pfs data mod data saved\n");
-        } else {
-            printf("pfs data mod data not saved\n");
-        }
-        
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/new_nca_ctx.bin", "wb");
-        if (tmp_file)
-        {
-            fwrite(nca_ctx, 1, sizeof(NcaContext), tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("nca ctx saved\n");
-        } else {
-            printf("nca ctx not saved\n");
-        }
-    } else {
-        printf("pfs mod data failed\n");
-    }
+    
+
     
 out2:
     while(appletMainLoop())
@@ -360,7 +220,7 @@ out2:
     
     if (tmp_file) fclose(tmp_file);
     
-    pfsFreeContext(&pfs_ctx);
+    romfsFreeContext(&romfs_ctx);
     
     if (serviceIsActive(&(ncm_storage.s))) ncmContentStorageClose(&ncm_storage);
     
