@@ -20,6 +20,9 @@ Steps to reproduce the behavior:
 **Screenshots**
 Add screenshots to help explain your problem.
 
+**Logfile**
+If available, please upload your logfile located at `sdmc:/nxdumptool/nxdumptool.log`.
+
 **Please fill the following information:**
 - Horizon OS (Switch FW) version: [e.g. 10.0.0]
 - CFW: [e.g. Atmosphère, SX OS, etc.]

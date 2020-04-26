@@ -104,27 +104,27 @@ static bool gamecardCreateDetectionThread(void);
 static void gamecardDestroyDetectionThread(void);
 static int gamecardDetectionThreadFunc(void *arg);
 
-static inline bool gamecardIsInserted(void);
+NX_INLINE bool gamecardIsInserted(void);
 
 static void gamecardLoadInfo(void);
 static void gamecardFreeInfo(void);
 
 static bool gamecardGetHandle(void);
-static inline void gamecardCloseHandle(void);
+NX_INLINE void gamecardCloseHandle(void);
 
 static bool gamecardOpenStorageArea(u8 area);
 static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool lock);
 static void gamecardCloseStorageArea(void);
 
 static bool gamecardGetStorageAreasSizes(void);
-static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
+NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
 
 static GameCardHashFileSystemHeader *gamecardGetHashFileSystemPartitionHeader(u8 hfs_partition_type, u32 *out_hfs_partition_idx);
 
-static inline GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *header, u32 idx);
-static inline char *gamecardGetHashFileSystemNameTable(void *header);
-static inline char *gamecardGetHashFileSystemEntryNameByIndex(void *header, u32 idx);
-static inline bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx);
+NX_INLINE GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *header, u32 idx);
+NX_INLINE char *gamecardGetHashFileSystemNameTable(void *header);
+NX_INLINE char *gamecardGetHashFileSystemEntryNameByIndex(void *header, u32 idx);
+NX_INLINE bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx);
 
 /* Service guard used to generate thread-safe initialize + exit functions. */
 /* I'm using this here even though this actually isn't a real service but who cares, it gets the job done. */
@@ -570,7 +570,7 @@ static int gamecardDetectionThreadFunc(void *arg)
     return 0;
 }
 
-static inline bool gamecardIsInserted(void)
+NX_INLINE bool gamecardIsInserted(void)
 {
     bool inserted = false;
     Result rc = fsDeviceOperatorIsGameCardInserted(&g_deviceOperator, &inserted);
@@ -695,7 +695,7 @@ static void gamecardLoadInfo(void)
         
         /* Calculate the full header size for the current hash FS partition and round it to a GAMECARD_MEDIA_UNIT_SIZE bytes boundary */
         g_gameCardHfsPartitions[i].header_size = (sizeof(GameCardHashFileSystemHeader) + (partition_header.entry_count * sizeof(GameCardHashFileSystemEntry)) + partition_header.name_table_size);
-        g_gameCardHfsPartitions[i].header_size = ROUND_UP(g_gameCardHfsPartitions[i].header_size, GAMECARD_MEDIA_UNIT_SIZE);
+        g_gameCardHfsPartitions[i].header_size = ALIGN_UP(g_gameCardHfsPartitions[i].header_size, GAMECARD_MEDIA_UNIT_SIZE);
         
         /* Allocate memory for the hash FS partition header */
         g_gameCardHfsPartitions[i].header = calloc(g_gameCardHfsPartitions[i].header_size, sizeof(u8));
@@ -796,7 +796,7 @@ static bool gamecardGetHandle(void)
     return true;
 }
 
-static inline void gamecardCloseHandle(void)
+NX_INLINE void gamecardCloseHandle(void)
 {
     svcCloseHandle(g_gameCardHandle.value);
     g_gameCardHandle.value = 0;
@@ -894,8 +894,8 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         success = true;
     } else {
         /* Fix offset and/or size to avoid unaligned reads */
-        u64 block_start_offset = ROUND_DOWN(base_offset, GAMECARD_MEDIA_UNIT_SIZE);
-        u64 block_end_offset = ROUND_UP(base_offset + read_size, GAMECARD_MEDIA_UNIT_SIZE);
+        u64 block_start_offset = ALIGN_DOWN(base_offset, GAMECARD_MEDIA_UNIT_SIZE);
+        u64 block_end_offset = ALIGN_UP(base_offset + read_size, GAMECARD_MEDIA_UNIT_SIZE);
         u64 block_size = (block_end_offset - block_start_offset);
         
         u64 data_start_offset = (base_offset - block_start_offset);
@@ -975,7 +975,7 @@ static bool gamecardGetStorageAreasSizes(void)
     return true;
 }
 
-static inline u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
+NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
 {
     u64 capacity = 0;
     
@@ -1027,20 +1027,20 @@ static GameCardHashFileSystemHeader *gamecardGetHashFileSystemPartitionHeader(u8
     return fs_header;
 }
 
-static inline GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *header, u32 idx)
+NX_INLINE GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *header, u32 idx)
 {
     if (!header || idx >= ((GameCardHashFileSystemHeader*)header)->entry_count) return NULL;
     return (GameCardHashFileSystemEntry*)((u8*)header + sizeof(GameCardHashFileSystemHeader) + (idx * sizeof(GameCardHashFileSystemEntry)));
 }
 
-static inline char *gamecardGetHashFileSystemNameTable(void *header)
+NX_INLINE char *gamecardGetHashFileSystemNameTable(void *header)
 {
     GameCardHashFileSystemHeader *fs_header = (GameCardHashFileSystemHeader*)header;
     if (!fs_header || !fs_header->entry_count) return NULL;
     return ((char*)header + sizeof(GameCardHashFileSystemHeader) + (fs_header->entry_count * sizeof(GameCardHashFileSystemEntry)));
 }
 
-static inline char *gamecardGetHashFileSystemEntryNameByIndex(void *header, u32 idx)
+NX_INLINE char *gamecardGetHashFileSystemEntryNameByIndex(void *header, u32 idx)
 {
     GameCardHashFileSystemEntry *fs_entry = gamecardGetHashFileSystemEntryByIndex(header, idx);
     char *name_table = gamecardGetHashFileSystemNameTable(header);
@@ -1048,17 +1048,17 @@ static inline char *gamecardGetHashFileSystemEntryNameByIndex(void *header, u32 
     return (name_table + fs_entry->name_offset);
 }
 
-static inline bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx)
+NX_INLINE bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx)
 {
     size_t name_len = 0;
+    GameCardHashFileSystemEntry *fs_entry = NULL;
     GameCardHashFileSystemHeader *fs_header = (GameCardHashFileSystemHeader*)header;
     char *name_table = gamecardGetHashFileSystemNameTable(header);
     if (!fs_header || !fs_header->entry_count || !name_table || !name || !(name_len = strlen(name)) || !out_idx) return false;
     
     for(u32 i = 0; i < fs_header->entry_count; i++)
     {
-        GameCardHashFileSystemEntry *fs_entry = gamecardGetHashFileSystemEntryByIndex(header, i);
-        if (!fs_entry) continue;
+        if (!(fs_entry = gamecardGetHashFileSystemEntryByIndex(header, i))) return false;
         
         if (!strncmp(name_table + fs_entry->name_offset, name, name_len))
         {

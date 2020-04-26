@@ -31,7 +31,11 @@
 #define NCA_NCA2_MAGIC                          0x4E434132  /* "NCA2" */
 #define NCA_NCA3_MAGIC                          0x4E434133  /* "NCA3" */
 
+#define NCA_HIERARCHICAL_SHA256_LAYER_COUNT     2
+
 #define NCA_IVFC_MAGIC                          0x49564643  /* "IVFC" */
+#define NCA_IVFC_HASH_DATA_LAYER_COUNT          5
+#define NCA_IVFC_BLOCK_SIZE(x)                  (1 << (x))
 
 #define NCA_BKTR_MAGIC                          0x424B5452  /* "BKTR" */
 
@@ -40,8 +44,6 @@
 
 #define NCA_AES_XTS_SECTOR_SIZE                 0x200
 #define NCA_NCA0_FS_HEADER_AES_XTS_SECTOR(x)    (((x) - NCA_HEADER_LENGTH) >> 9)
-
-#define NCA_IVFC_BLOCK_SIZE(x)                  (1 << (x))
 
 typedef enum {
     NcaDistributionType_Download = 0,
@@ -141,11 +143,11 @@ typedef struct {
 
 /// Used for NcaFsType_RomFs.
 typedef struct {
-    u32 magic;                                                  ///< "IVFC".
+    u32 magic;                                                                              ///< "IVFC".
     u32 version;
     u32 master_hash_size;
     u32 layer_count;
-    NcaHierarchicalIntegrityLayerInfo hash_data_layer_info[5];
+    NcaHierarchicalIntegrityLayerInfo hash_data_layer_info[NCA_IVFC_HASH_DATA_LAYER_COUNT];
     NcaHierarchicalIntegrityLayerInfo hash_target_layer_info;
     u8 signature_salt[0x20];
     u8 master_hash[0x20];
@@ -310,7 +312,7 @@ bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 of
 /// Input offset must be relative to the start of the NCA FS section.
 /// Output size and offset are guaranteed to be aligned to the AES sector size used by the encryption type from the FS section.
 /// Output offset is relative to the start of the NCA content file, making it easier to use the output encrypted block to replace data in-place while writing a NCA.
-void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
+void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
 
 
 
@@ -325,30 +327,59 @@ bool ncaEncryptHeader(NcaContext *ctx);
 
 /// Miscellanous functions.
 
-static inline void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
+NX_INLINE void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
 {
     if (!size || !out) return;
     *out = 0;
     memcpy(out, size, 6);
 }
 
-static inline void ncaConvertU64ToNcmContentSize(const u64 *size, u8 *out)
+NX_INLINE void ncaConvertU64ToNcmContentSize(const u64 *size, u8 *out)
 {
     if (size && out) memcpy(out, size, 6);
 }
 
-static inline void ncaSetDownloadDistributionType(NcaContext *ctx)
+NX_INLINE void ncaSetDownloadDistributionType(NcaContext *ctx)
 {
     if (!ctx || ctx->header.distribution_type == NcaDistributionType_Download) return;
     ctx->header.distribution_type = NcaDistributionType_Download;
     ctx->dirty_header = true;
 }
 
-static inline void ncaWipeRightsId(NcaContext *ctx)
+NX_INLINE void ncaWipeRightsId(NcaContext *ctx)
 {
     if (!ctx || !ctx->rights_id_available) return;
     memset(&(ctx->header.rights_id), 0, sizeof(FsRightsId));
     ctx->dirty_header = true;
+}
+
+NX_INLINE bool ncaValidateHierarchicalSha256Offsets(NcaHierarchicalSha256 *hierarchical_sha256, u64 section_size)
+{
+    if (!hierarchical_sha256 || !section_size || !hierarchical_sha256->hash_block_size || hierarchical_sha256->layer_count != NCA_HIERARCHICAL_SHA256_LAYER_COUNT) return false;
+    
+    /* Validate layer offsets and sizes */
+    for(u8 i = 0; i < NCA_HIERARCHICAL_SHA256_LAYER_COUNT; i++)
+    {
+        NcaHierarchicalSha256LayerInfo *layer_info = (i == 0 ? &(hierarchical_sha256->hash_data_layer_info) : &(hierarchical_sha256->hash_target_layer_info));
+        if (layer_info->offset >= section_size || !layer_info->size || (layer_info->offset + layer_info->size) > section_size) return false;
+    }
+    
+    return true;
+}
+
+NX_INLINE bool ncaValidateHierarchicalIntegrityOffsets(NcaHierarchicalIntegrity *hierarchical_integrity, u64 section_size)
+{
+    if (!hierarchical_integrity || !section_size || __builtin_bswap32(hierarchical_integrity->magic) != NCA_IVFC_MAGIC || !hierarchical_integrity->master_hash_size || \
+        hierarchical_integrity->layer_count != NCA_IVFC_HASH_DATA_LAYER_COUNT) return false;
+    
+    /* Validate layer offsets and sizes */
+    for(u8 i = 0; i < (NCA_IVFC_HASH_DATA_LAYER_COUNT + 1); i++)
+    {
+        NcaHierarchicalIntegrityLayerInfo *layer_info = (i < NCA_IVFC_HASH_DATA_LAYER_COUNT ? &(hierarchical_integrity->hash_data_layer_info[i]) : &(hierarchical_integrity->hash_target_layer_info));
+        if (layer_info->offset >= section_size || !layer_info->size || !layer_info->block_size || (layer_info->offset + layer_info->size) > section_size) return false;
+    }
+    
+    return true;
 }
 
 #endif /* __NCA_H__ */

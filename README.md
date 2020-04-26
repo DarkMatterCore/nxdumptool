@@ -1,7 +1,14 @@
 ﻿todo:
     
-    hfs0 methods
+    hfs0: filelist generation methods
+    
+    nca: more data replacement methods ???
+    
+    pfs0: filelist generation methods
     pfs0: full header aligned to 0x20 (nsp)
+    
+    romfs: filelist generation methods
+    romfs: data replacement methods
 
 
 

@@ -29,10 +29,12 @@
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
 
-#define ROUND_DOWN(x, y)                ((x) & ~((y) - 1))
-#define ROUND_UP(x, y)                  ((x) + (((y) - ((x) % (y))) % (y)))
+#define ALIGN_DOWN(x, y)                ((x) & ~((y) - 1))
+#define ALIGN_UP(x, y)                  ((((y) - 1) + (x)) & ~((y) - 1))
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
+
+#define NPDM_META_MAGIC                 0x4D455441  /* "META" */
 
 typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,

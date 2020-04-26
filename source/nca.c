@@ -43,13 +43,13 @@ static size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const voi
 static bool ncaDecryptHeader(NcaContext *ctx);
 static bool ncaDecryptKeyArea(NcaContext *ctx);
 
-static inline bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx);
-static inline u8 ncaGetKeyGenerationValue(NcaContext *ctx);
-static inline bool ncaCheckRightsIdAvailability(NcaContext *ctx);
+NX_INLINE bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx);
+NX_INLINE u8 ncaGetKeyGenerationValue(NcaContext *ctx);
+NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx);
 
-static inline void ncaInitializeAesCtrIv(u8 *out, const u8 *ctr, u64 offset);
-static inline void ncaUpdateAesCtrIv(u8 *ctr, u64 offset);
-static inline void ncaUpdateAesCtrExIv(u8 *ctr, u32 ctr_val, u64 offset);
+NX_INLINE void ncaInitializeAesCtrIv(u8 *out, const u8 *ctr, u64 offset);
+NX_INLINE void ncaUpdateAesCtrIv(u8 *ctr, u64 offset);
+NX_INLINE void ncaUpdateAesCtrExIv(u8 *ctr, u32 ctr_val, u64 offset);
 
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, bool lock);
 
@@ -298,11 +298,11 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
         {
             switch(out->fs_contexts[i].section_num)
             {
-                case 0: /* ExeFS PFS0 */
+                case 0: /* ExeFS Partition FS */
                 case 1: /* RomFS */
                     out->fs_contexts[i].encryption_type = NcaEncryptionType_AesCtr;
                     break;
-                case 2: /* Logo PFS0 */
+                case 2: /* Logo Partition FS */
                     out->fs_contexts[i].encryption_type = NcaEncryptionType_None;
                     break;
                 default:
@@ -392,7 +392,7 @@ bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 of
     return _ncaReadFsSection(ctx, out, read_size, offset, true);
 }
 
-void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset)
+void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset)
 {
     mutexLock(&g_ncaCryptoBufferMutex);
     
@@ -466,8 +466,8 @@ void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, void *data, u
     }
     
     /* Calculate block offsets and size */
-    block_start_offset = ROUND_DOWN(data_offset, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
-    block_end_offset = ROUND_UP(data_offset + data_size, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
+    block_start_offset = ALIGN_DOWN(data_offset, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
+    block_end_offset = ALIGN_UP(data_offset + data_size, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
     block_size = (block_end_offset - block_start_offset);
     
     plain_chunk_offset = (data_offset - block_start_offset);
@@ -698,25 +698,24 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
     return true;
 }
 
-static inline bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx)
+NX_INLINE bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx)
 {
     if (!ctx || ctx->format_version != NcaVersion_Nca0) return false;
     
     u8 nca0_key_area_hash[SHA256_HASH_SIZE] = {0};
     sha256CalculateHash(nca0_key_area_hash, ctx->header.encrypted_keys, 0x40);
-    
     if (!memcmp(nca0_key_area_hash, g_nca0KeyAreaHash, SHA256_HASH_SIZE)) return false;
     
     return true;
 }
 
-static inline u8 ncaGetKeyGenerationValue(NcaContext *ctx)
+NX_INLINE u8 ncaGetKeyGenerationValue(NcaContext *ctx)
 {
     if (!ctx) return 0;
     return (ctx->header.key_generation > ctx->header.key_generation_old ? ctx->header.key_generation : ctx->header.key_generation_old);
 }
 
-static inline bool ncaCheckRightsIdAvailability(NcaContext *ctx)
+NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx)
 {
     if (!ctx) return false;
     
@@ -734,7 +733,7 @@ static inline bool ncaCheckRightsIdAvailability(NcaContext *ctx)
     return rights_id_available;
 }
 
-static inline void ncaInitializeAesCtrIv(u8 *out, const u8 *ctr, u64 offset)
+NX_INLINE void ncaInitializeAesCtrIv(u8 *out, const u8 *ctr, u64 offset)
 {
     if (!out || !ctr) return;
     
@@ -748,7 +747,7 @@ static inline void ncaInitializeAesCtrIv(u8 *out, const u8 *ctr, u64 offset)
     }
 }
 
-static inline void ncaUpdateAesCtrIv(u8 *ctr, u64 offset)
+NX_INLINE void ncaUpdateAesCtrIv(u8 *ctr, u64 offset)
 {
     if (!ctr) return;
     
@@ -761,7 +760,7 @@ static inline void ncaUpdateAesCtrIv(u8 *ctr, u64 offset)
     }
 }
 
-static inline void ncaUpdateAesCtrExIv(u8 *ctr, u32 ctr_val, u64 offset)
+NX_INLINE void ncaUpdateAesCtrExIv(u8 *ctr, u32 ctr_val, u64 offset)
 {
     if (!ctr) return;
     
@@ -853,8 +852,8 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     }
     
     /* Calculate offsets and block sizes */
-    block_start_offset = ROUND_DOWN(content_offset, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
-    block_end_offset = ROUND_UP(content_offset + read_size, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
+    block_start_offset = ALIGN_DOWN(content_offset, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
+    block_end_offset = ALIGN_UP(content_offset + read_size, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
     block_size = (block_end_offset - block_start_offset);
     
     data_start_offset = (content_offset - block_start_offset);

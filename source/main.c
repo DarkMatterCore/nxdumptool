@@ -26,7 +26,8 @@
 #include <dirent.h>
 
 #include "nca.h"
-#include "pfs0.h"
+#include "pfs.h"
+#include "rsa.h"
 
 
 
@@ -91,8 +92,9 @@ int main(int argc, char *argv[])
         }
     };
     
-    PartitionFileSystemContext pfs0_ctx = {0};
-    PartitionFileSystemEntry *pfs0_entry = NULL;
+    u64 pfs_size = 0;
+    PartitionFileSystemContext pfs_ctx = {0};
+    PartitionFileSystemEntry *pfs_entry = NULL;
     
     buf = malloc(0x400000);
     if (!buf)
@@ -175,67 +177,66 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
-    if (!pfs0InitializeContext(&pfs0_ctx, &(nca_ctx->fs_contexts[0])))
+    if (!pfsInitializeContext(&pfs_ctx, &(nca_ctx->fs_contexts[0])))
     {
-        printf("pfs0 initialize ctx failed\n");
+        printf("pfs initialize ctx failed\n");
         goto out2;
     }
     
-    printf("pfs0 initialize ctx succeeded\n");
+    printf("pfs initialize ctx succeeded\n");
     consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/pfs0_ctx.bin", "wb");
+    if (pfsGetTotalDataSize(&pfs_ctx, &pfs_size))
+    {
+        printf("pfs size succeeded: 0x%lX\n", pfs_size);
+    } else {
+        printf("pfs size failed\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    tmp_file = fopen("sdmc:/nxdt_test/pfs_ctx.bin", "wb");
     if (tmp_file)
     {
-        fwrite(&pfs0_ctx, 1, sizeof(PartitionFileSystemContext), tmp_file);
+        fwrite(&pfs_ctx, 1, sizeof(PartitionFileSystemContext), tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("pfs0 ctx saved\n");
+        printf("pfs ctx saved\n");
     } else {
-        printf("pfs0 ctx not saved\n");
+        printf("pfs ctx not saved\n");
     }
     
     consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/pfs0_header.bin", "wb");
+    tmp_file = fopen("sdmc:/nxdt_test/pfs_header.bin", "wb");
     if (tmp_file)
     {
-        fwrite(pfs0_ctx.header, 1, pfs0_ctx.header_size, tmp_file);
+        fwrite(pfs_ctx.header, 1, pfs_ctx.header_size, tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("pfs0 header saved\n");
+        printf("pfs header saved\n");
     } else {
-        printf("pfs0 header not saved\n");
+        printf("pfs header not saved\n");
     }
     
     consoleUpdate(NULL);
     
-    pfs0_entry = pfs0GetEntryByName(&pfs0_ctx, "main.npdm");
-    if (!pfs0_entry)
-    {
-        printf("pfs0 get entry by name failed\n");
-        goto out2;
-    }
-    
-    printf("pfs0 get entry by name succeeded\n");
-    consoleUpdate(NULL);
-    
-    tmp_file = fopen("sdmc:/nxdt_test/main.npdm", "wb");
+    tmp_file = fopen("sdmc:/nxdt_test/pfs.bin", "wb");
     if (tmp_file)
     {
         u64 blksize = 0x400000;
-        u64 total = pfs0_entry->size;
+        u64 total = pfs_ctx.size;
         
-        printf("main.npdm created. Target size -> 0x%lX\n", total);
+        printf("pfs created: 0x%lX\n", total);
         consoleUpdate(NULL);
         
         for(u64 curpos = 0; curpos < total; curpos += blksize)
         {
             if (blksize > (total - curpos)) blksize = (total - curpos);
             
-            if (!pfs0ReadEntryData(&pfs0_ctx, pfs0_entry, buf, blksize, 0))
+            if (!pfsReadPartitionData(&pfs_ctx, buf, blksize, curpos))
             {
-                printf("pfs0 read entry data failed\n");
+                printf("pfs read partition failed\n");
                 goto out2;
             }
             
@@ -245,9 +246,108 @@ int main(int argc, char *argv[])
         fclose(tmp_file);
         tmp_file = NULL;
         
-        printf("pfs0 read main.npdm success\n");
+        printf("pfs read partition success\n");
+    } else {
+        printf("pfs not created\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    pfs_entry = pfsGetEntryByName(&pfs_ctx, "main.npdm");
+    if (!pfs_entry)
+    {
+        printf("pfs get entry by name failed\n");
+        goto out2;
+    }
+    
+    printf("pfs get entry by name succeeded\n");
+    consoleUpdate(NULL);
+    
+    tmp_file = fopen("sdmc:/nxdt_test/main.npdm", "wb");
+    if (tmp_file)
+    {
+        printf("main.npdm created. Target size -> 0x%lX\n", pfs_entry->size);
+        consoleUpdate(NULL);
+        
+        if (!pfsReadEntryData(&pfs_ctx, pfs_entry, buf, pfs_entry->size, 0))
+        {
+            printf("pfs read entry data failed\n");
+            goto out2;
+        }
+        
+        fwrite(buf, 1, pfs_entry->size, tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        
+        printf("pfs read main.npdm success\n");
     } else {
         printf("main.npdm not created\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    u32 acid_offset = 0;
+    memcpy(&acid_offset, buf + 0x78, sizeof(u32));
+    
+    PartitionFileSystemModifiedBlockInfo pfs_block_info = {0};
+    
+    if (pfsGenerateModifiedEntryData(&pfs_ctx, pfs_entry, rsa2048GetCustomAcidPublicKey(), RSA2048_SIGNATURE_SIZE, acid_offset + RSA2048_SIGNATURE_SIZE, &pfs_block_info))
+    {
+        printf("pfs mod data success | hbo: 0x%lX | hbs: 0x%lX | dbo: 0x%lX | dbs: 0x%lX\n", pfs_block_info.hash_block_offset, pfs_block_info.hash_block_size, pfs_block_info.data_block_offset, pfs_block_info.data_block_size);
+        
+        consoleUpdate(NULL);
+        
+        tmp_file = fopen("sdmc:/nxdt_test/pfs_mod.bin", "wb");
+        if (tmp_file)
+        {
+            fwrite(&pfs_block_info, 1, sizeof(PartitionFileSystemModifiedBlockInfo), tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("pfs mod data saved\n");
+        } else {
+            printf("pfs mod data not saved\n");
+        }
+        
+        consoleUpdate(NULL);
+        
+        tmp_file = fopen("sdmc:/nxdt_test/pfs_hash_mod.bin", "wb");
+        if (tmp_file)
+        {
+            fwrite(pfs_block_info.hash_block, 1, pfs_block_info.hash_block_size, tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("pfs hash mod data saved\n");
+        } else {
+            printf("pfs hash mod data not saved\n");
+        }
+        
+        consoleUpdate(NULL);
+        
+        tmp_file = fopen("sdmc:/nxdt_test/pfs_data_mod.bin", "wb");
+        if (tmp_file)
+        {
+            fwrite(pfs_block_info.data_block, 1, pfs_block_info.data_block_size, tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("pfs data mod data saved\n");
+        } else {
+            printf("pfs data mod data not saved\n");
+        }
+        
+        consoleUpdate(NULL);
+        
+        tmp_file = fopen("sdmc:/nxdt_test/new_nca_ctx.bin", "wb");
+        if (tmp_file)
+        {
+            fwrite(nca_ctx, 1, sizeof(NcaContext), tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("nca ctx saved\n");
+        } else {
+            printf("nca ctx not saved\n");
+        }
+    } else {
+        printf("pfs mod data failed\n");
     }
     
 out2:
@@ -260,7 +360,7 @@ out2:
     
     if (tmp_file) fclose(tmp_file);
     
-    pfs0FreeContext(&pfs0_ctx);
+    pfsFreeContext(&pfs_ctx);
     
     if (serviceIsActive(&(ncm_storage.s))) ncmContentStorageClose(&ncm_storage);
     
