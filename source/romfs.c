@@ -21,6 +21,11 @@
 #include "romfs.h"
 #include "utils.h"
 
+/* Function prototypes. */
+
+static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name);
+static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name);
+
 bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
     NcaContext *nca_ctx = NULL;
@@ -181,57 +186,336 @@ bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *f
 
 bool romfsGetTotalDataSize(RomFileSystemContext *ctx, u64 *out_size)
 {
-    if (!ctx || !ctx->file_table_size || !ctx->file_table || !out_size) return false;
+    if (!ctx || !ctx->file_table_size || !ctx->file_table || !out_size)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
     
     u64 offset = 0, total_size = 0;
     RomFileSystemFileEntry *file_entry = NULL;
     
     while(offset < ctx->file_table_size)
     {
-        if (!(file_entry = romfsGetFileEntry(ctx, offset))) return false;
+        if (!(file_entry = romfsGetFileEntryByOffset(ctx, offset)))
+        {
+            LOGFILE("Failed to retrieve file entry!");
+            return false;
+        }
+        
         total_size += file_entry->size;
         offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + file_entry->name_length, 4);
     }
     
     *out_size = total_size;
+    
     return true;
 }
 
-bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, u32 dir_entry_offset, u64 *out_size)
+bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size)
 {
-    u64 total_size = 0, child_dir_size = 0;
-    RomFileSystemDirectoryEntry *dir_entry = NULL;
-    RomFileSystemFileEntry *file_entry = NULL;
-    
-    if (!ctx || !ctx->dir_table_size || !ctx->dir_table || !ctx->file_table_size || !ctx->file_table || !out_size || !(dir_entry = romfsGetDirectoryEntry(ctx, dir_entry_offset)) || \
-        (!dir_entry->name_length && dir_entry_offset > 0)) return false;
-    
-    if (dir_entry->file_offset != ROMFS_VOID_ENTRY)
+    if (!ctx || !ctx->dir_table_size || !ctx->dir_table || !ctx->file_table_size || !ctx->file_table || !dir_entry || (dir_entry->file_offset == ROMFS_VOID_ENTRY && \
+        dir_entry->directory_offset == ROMFS_VOID_ENTRY) || !out_size)
     {
-        if (!(file_entry = romfsGetFileEntry(ctx, dir_entry->file_offset))) return false;
-        total_size += file_entry->size;
-        
-        while(file_entry->next_offset != ROMFS_VOID_ENTRY)
-        {
-            if (!(file_entry = romfsGetFileEntry(ctx, file_entry->next_offset))) return false;
-            total_size += file_entry->size;
-        }
+        LOGFILE("Invalid parameters!");
+        return false;
     }
     
-    if (dir_entry->directory_offset != ROMFS_VOID_ENTRY)
+    u64 total_size = 0, child_dir_size = 0;
+    u32 cur_file_offset = 0, cur_dir_offset = 0;
+    RomFileSystemFileEntry *cur_file_entry = NULL;
+    RomFileSystemDirectoryEntry *cur_dir_entry = NULL;
+    
+    cur_file_offset = dir_entry->file_offset;
+    while(cur_file_offset != ROMFS_VOID_ENTRY)
     {
-        if (!romfsGetDirectoryDataSize(ctx, dir_entry->directory_offset, &child_dir_size)) return false;
-        total_size += child_dir_size;
-        
-        while(dir_entry->next_offset != ROMFS_VOID_ENTRY)
+        if (!(cur_file_entry = romfsGetFileEntryByOffset(ctx, cur_file_offset)))
         {
-            if (!romfsGetDirectoryDataSize(ctx, dir_entry->next_offset, &child_dir_size)) return false;
-            total_size += child_dir_size;
-            if (!(dir_entry = romfsGetDirectoryEntry(ctx, dir_entry->next_offset))) return false;
+            LOGFILE("Failed to retrieve file entry!");
+            return false;
         }
+        
+        total_size += cur_file_entry->size;
+        cur_file_offset = cur_file_entry->next_offset;
+    }
+    
+    cur_dir_offset = dir_entry->directory_offset;
+    while(cur_dir_offset != ROMFS_VOID_ENTRY)
+    {
+        if (!(cur_dir_entry = romfsGetDirectoryEntryByOffset(ctx, cur_dir_offset)) || !romfsGetDirectoryDataSize(ctx, cur_dir_entry, &child_dir_size))
+        {
+            LOGFILE("Failed to retrieve directory entry/size!");
+            return false;
+        }
+        
+        total_size += child_dir_size;
+        cur_dir_offset = cur_dir_entry->next_offset;
     }
     
     *out_size = total_size;
     
     return true;
+}
+
+RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *ctx, const char *path)
+{
+    size_t path_len = 0;
+    char *path_dup = NULL, *pch = NULL;
+    RomFileSystemDirectoryEntry *dir_entry = NULL;
+    
+    if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !path || *path != '/' || !(path_len = strlen(path)) || !(dir_entry = romfsGetDirectoryEntryByOffset(ctx, 0)))
+    {
+        LOGFILE("Invalid parameters!");
+        return NULL;
+    }
+    
+    /* Check if the root directory was requested */
+    if (path_len == 1) return dir_entry;
+    
+    /* Duplicate path to avoid problems with strtok() */
+    if (!(path_dup = strdup(path)))
+    {
+        LOGFILE("Unable to duplicate input path!");
+        return NULL;
+    }
+    
+    pch = strtok(path_dup, "/");
+    if (!pch)
+    {
+        LOGFILE("Failed to tokenize input path!");
+        dir_entry = NULL;
+        goto out;
+    }
+    
+    while(pch)
+    {
+        if (!(dir_entry = romfsGetChildDirectoryEntryByName(ctx, dir_entry, pch)))
+        {
+            LOGFILE("Failed to retrieve directory entry by name!");
+            break;
+        }
+        
+        pch = strtok(NULL, "/");
+    }
+    
+out:
+    if (path_dup) free(path_dup);
+    
+    return dir_entry;
+}
+
+RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const char *path)
+{
+    size_t path_len = 0;
+    char *path_dup = NULL, *filename = NULL;
+    RomFileSystemFileEntry *file_entry = NULL;
+    RomFileSystemDirectoryEntry *dir_entry = NULL;
+    
+    if (!ctx || !ctx->file_table || !ctx->file_table_size || !path || *path != '/' || (path_len = strlen(path)) <= 1)
+    {
+        LOGFILE("Invalid parameters!");
+        return NULL;
+    }
+    
+    /* Duplicate path */
+    if (!(path_dup = strdup(path)))
+    {
+        LOGFILE("Unable to duplicate input path!");
+        return NULL;
+    }
+    
+    /* Remove any trailing slashes */
+    while(path_dup[path_len - 1] == '/')
+    {
+        path_dup[path_len - 1] = '\0';
+        path_len--;
+    }
+    
+    /* Safety check */
+    if (!path_len || !(filename = strrchr(path_dup, '/')))
+    {
+        LOGFILE("Invalid input path!");
+        goto out;
+    }
+    
+    /* Remove leading slash and adjust filename string pointer */
+    *filename++ = '\0';
+    
+    /* Retrieve directory entry */
+    /* If the first character is NULL, then just retrieve the root directory entry */
+    if (!(dir_entry = (*path_dup ? romfsGetDirectoryEntryByPath(ctx, path_dup) : romfsGetDirectoryEntryByOffset(ctx, 0))))
+    {
+        LOGFILE("Failed to retrieve directory entry!");
+        goto out;
+    }
+    
+    /* Retrieve file entry */
+    if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename))) LOGFILE("Failed to retrieve file entry by name!");
+    
+out:
+    if (path_dup) free(path_dup);
+    
+    return file_entry;
+}
+
+bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size)
+{
+    size_t path_len = 0;
+    u32 dir_offset = ROMFS_VOID_ENTRY, dir_entries_count = 0;
+    RomFileSystemDirectoryEntry **dir_entries = NULL, **tmp_dir_entries = NULL;
+    bool success = false;
+    
+    if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !dir_entry || (!dir_entry->name_length && dir_entry->parent_offset) || !out_path || out_path_size < 2)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Check if we're dealing with the root directory entry */
+    if (!dir_entry->name_length)
+    {
+        sprintf(out_path, "/");
+        return true;
+    }
+    
+    /* Allocate memory for our directory entries */
+    dir_entries = calloc(1, sizeof(RomFileSystemDirectoryEntry*));
+    if (!dir_entries)
+    {
+        LOGFILE("Unable to allocate memory for directory entries!");
+        return false;
+    }
+    
+    path_len = (1 + dir_entry->name_length);
+    *dir_entries = dir_entry;
+    dir_entries_count++;
+    
+    while(true)
+    {
+        dir_offset = dir_entries[dir_entries_count - 1]->parent_offset;
+        if (!dir_offset) break;
+        
+        /* Reallocate directory entries */
+        if (!(tmp_dir_entries = realloc(dir_entries, (dir_entries_count + 1) * sizeof(RomFileSystemDirectoryEntry*))))
+        {
+            LOGFILE("Unable to reallocate directory entries buffer!");
+            goto out;
+        }
+        
+        dir_entries = tmp_dir_entries;
+        tmp_dir_entries = NULL;
+        
+        if (!(dir_entries[dir_entries_count] = romfsGetDirectoryEntryByOffset(ctx, dir_offset)) || !dir_entries[dir_entries_count]->name_length)
+        {
+            LOGFILE("Failed to retrieve directory entry!");
+            goto out;
+        }
+        
+        path_len += (1 + dir_entries[dir_entries_count]->name_length);
+        dir_entries_count++;
+    }
+    
+    if (path_len >= out_path_size)
+    {
+        LOGFILE("Output path length exceeds output buffer size!");
+        goto out;
+    }
+    
+    /* Generate output path */
+    *out_path = '\0';
+    for(u32 i = dir_entries_count; i > 0; i--)
+    {
+        strcat(out_path, "/");
+        strncat(out_path, dir_entries[i - 1]->name, dir_entries[i - 1]->name_length);
+    }
+    
+    success = true;
+    
+out:
+    if (dir_entries) free(dir_entries);
+    
+    return success;
+}
+
+bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size)
+{
+    size_t path_len = 0;
+    RomFileSystemDirectoryEntry *dir_entry = NULL;
+    
+    if (!ctx || !ctx->file_table || !ctx->file_table_size || !file_entry || !file_entry->name_length || !out_path || out_path_size < 2 || \
+        !(dir_entry = romfsGetDirectoryEntryByOffset(ctx, file_entry->parent_offset)))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Retrieve full RomFS path up to the file entry name */
+    if (!romfsGeneratePathFromDirectoryEntry(ctx, dir_entry, out_path, out_path_size))
+    {
+        LOGFILE("Failed to retrieve RomFS directory path!");
+        return false;
+    }
+    
+    /* Check path length */
+    path_len = strlen(out_path);
+    if ((1 + file_entry->name_length) >= (out_path_size - path_len))
+    {
+        LOGFILE("Output path length exceeds output buffer size!");
+        return false;
+    }
+    
+    /* Concatenate file entry name */
+    strcat(out_path, "/");
+    strncat(out_path, file_entry->name, file_entry->name_length);
+    
+    return true;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name)
+{
+    u64 dir_offset = 0;
+    size_t name_len = 0;
+    RomFileSystemDirectoryEntry *child_dir_entry = NULL;
+    
+    if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !dir_entry || (dir_offset = dir_entry->directory_offset) == ROMFS_VOID_ENTRY || !name || !(name_len = strlen(name))) return NULL;
+    
+    while(dir_offset != ROMFS_VOID_ENTRY)
+    {
+        if (!(child_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset)) || !child_dir_entry->name_length) return NULL;
+        if (!strncmp(child_dir_entry->name, name, name_len)) return child_dir_entry;
+        dir_offset = child_dir_entry->next_offset;
+    }
+    
+    return NULL;
+}
+
+static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name)
+{
+    u64 file_offset = 0;
+    size_t name_len = 0;
+    RomFileSystemFileEntry *child_file_entry = NULL;
+    
+    if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !ctx->file_table || !ctx->file_table_size || !dir_entry || (file_offset = dir_entry->file_offset) == ROMFS_VOID_ENTRY || !name || \
+        !(name_len = strlen(name))) return NULL;
+    
+    while(file_offset != ROMFS_VOID_ENTRY)
+    {
+        if (!(child_file_entry = romfsGetFileEntryByOffset(ctx, file_offset)) || !child_file_entry->name_length) return NULL;
+        if (!strncmp(child_file_entry->name, name, name_len)) return child_file_entry;
+        file_offset = child_file_entry->next_offset;
+    }
+    
+    return NULL;
 }

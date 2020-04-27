@@ -2,15 +2,14 @@
     
     hfs0: filelist generation methods
     
-    nca: more data replacement methods ???
+    nca: continue reencryption methods
     
     pfs0: filelist generation methods
     pfs0: full header aligned to 0x20 (nsp)
     
-    romfs: filelist generation methods
+    romfs: test read functions
     romfs: data replacement methods
-
-
+    romfs: filelist generation methods
 
 
 
@@ -99,6 +98,14 @@ If you like my work and you'd like to support me in any way, it's not necessary,
 
 Changelog
 --------------
+
+**v1.1.10:**
+
+* Built using libnx v3.1.0.
+* Updated save.c/h to reflect changes made by shchmue in Lockpick_RCM. Fixes crashes under HOS 10.0.0.
+* Fixed a nasty stack corruption issue caused by improper handling of FatFs objects. Fixes ES savefile mounting errors throughout the application (e.g. batch mode, ticket dumping).
+
+This is only a bugfix release. I don't expect to release any new versions until the rewrite is finished - the only exception being fixing some kind of feature-breaking bug. Please understand.
 
 **v1.1.9:**
 

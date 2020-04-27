@@ -34,6 +34,7 @@
 #define NCA_HIERARCHICAL_SHA256_LAYER_COUNT     2
 
 #define NCA_IVFC_MAGIC                          0x49564643  /* "IVFC" */
+#define NCA_IVFC_LAYER_COUNT                    7
 #define NCA_IVFC_HASH_DATA_LAYER_COUNT          5
 #define NCA_IVFC_BLOCK_SIZE(x)                  (1 << (x))
 
@@ -70,18 +71,26 @@ typedef enum {
     NcaKeyAreaEncryptionKeyIndex_System      = 2
 } NcaKeyAreaEncryptionKeyIndex;
 
-/// 'NcaKeyGeneration_Latest' will always point to the last known key generation value.
+typedef struct {
+    u8 relstep;
+    u8 micro;
+    u8 minor;
+    u8 major;
+} NcaSdkAddOnVersion;
+
+/// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
-    NcaKeyGeneration_301_302 = 3,
-    NcaKeyGeneration_400_410 = 4,
-    NcaKeyGeneration_500_510 = 5,
-    NcaKeyGeneration_600_610 = 6,
-    NcaKeyGeneration_620     = 7,
-    NcaKeyGeneration_700_801 = 8,
-    NcaKeyGeneration_810_811 = 9,
-    NcaKeyGeneration_900_901 = 10,
-    NcaKeyGeneration_910_920 = 11,
-    NcaKeyGeneration_Latest  = NcaKeyGeneration_910_920
+    NcaKeyGeneration_301_302   = 3,
+    NcaKeyGeneration_400_410   = 4,
+    NcaKeyGeneration_500_510   = 5,
+    NcaKeyGeneration_600_610   = 6,
+    NcaKeyGeneration_620       = 7,
+    NcaKeyGeneration_700_801   = 8,
+    NcaKeyGeneration_810_811   = 9,
+    NcaKeyGeneration_900_901   = 10,
+    NcaKeyGeneration_910_920   = 11,
+    NcaKeyGeneration_1000_1001 = 12,
+    NcaKeyGeneration_Current   = NcaKeyGeneration_1000_1001
 } NcaKeyGeneration;
 
 typedef struct {
@@ -210,34 +219,26 @@ typedef struct {
 } NcaFsHeader;
 
 typedef struct {
-    u8 main_signature[0x100];           ///< RSA-PSS signature over header with fixed key.
-    u8 acid_signature[0x100];           ///< RSA-PSS signature over header with key in NPDM.
-    u32 magic;                          ///< "NCA0" / "NCA2" / "NCA3".
-    u8 distribution_type;               ///< NcaDistributionType.
-    u8 content_type;                    ///< NcaContentType.
-    u8 key_generation_old;              ///< NcaKeyGenerationOld.
-    u8 kaek_index;                      ///< NcaKeyAreaEncryptionKeyIndex.
+    u8 main_signature[0x100];               ///< RSA-PSS signature over header with fixed key.
+    u8 acid_signature[0x100];               ///< RSA-PSS signature over header with key in NPDM.
+    u32 magic;                              ///< "NCA0" / "NCA2" / "NCA3".
+    u8 distribution_type;                   ///< NcaDistributionType.
+    u8 content_type;                        ///< NcaContentType.
+    u8 key_generation_old;                  ///< NcaKeyGenerationOld.
+    u8 kaek_index;                          ///< NcaKeyAreaEncryptionKeyIndex.
     u64 content_size;
     u64 program_id;
     u32 content_index;
-    union {
-        u32 sdk_addon_version;
-        struct {
-            u8 sdk_addon_revision;
-            u8 sdk_addon_micro;
-            u8 sdk_addon_minor;
-            u8 sdk_addon_major;
-        };
-    };
-    u8 key_generation;                  ///< NcaKeyGeneration.
+    NcaSdkAddOnVersion sdk_addon_version;
+    u8 key_generation;                      ///< NcaKeyGeneration.
     u8 main_signature_key_generation;
     u8 reserved_1[0xE];
-    FsRightsId rights_id;               ///< Used for titlekey crypto.
-    NcaFsEntry fs_entries[4];           ///< Start and end offsets for each NCA FS section.
-    NcaFsHash fs_hashes[4];             ///< SHA-256 hashes calculated over each NCA FS section header.
-    NcaKey encrypted_keys[4];           ///< Only the encrypted key at index #2 is used. The other three are zero filled before the key area is encrypted.
+    FsRightsId rights_id;                   ///< Used for titlekey crypto.
+    NcaFsEntry fs_entries[4];               ///< Start and end offsets for each NCA FS section.
+    NcaFsHash fs_hashes[4];                 ///< SHA-256 hashes calculated over each NCA FS section header.
+    NcaKey encrypted_keys[4];               ///< Only the encrypted key at index #2 is used. The other three are zero filled before the key area is encrypted.
     u8 reserved_2[0xC0];
-    NcaFsHeader fs_headers[4];          /// NCA FS section headers.
+    NcaFsHeader fs_headers[4];              /// NCA FS section headers.
 } NcaHeader;
 
 typedef enum {
@@ -370,7 +371,7 @@ NX_INLINE bool ncaValidateHierarchicalSha256Offsets(NcaHierarchicalSha256 *hiera
 NX_INLINE bool ncaValidateHierarchicalIntegrityOffsets(NcaHierarchicalIntegrity *hierarchical_integrity, u64 section_size)
 {
     if (!hierarchical_integrity || !section_size || __builtin_bswap32(hierarchical_integrity->magic) != NCA_IVFC_MAGIC || !hierarchical_integrity->master_hash_size || \
-        hierarchical_integrity->layer_count < NCA_IVFC_HASH_DATA_LAYER_COUNT) return false;
+        hierarchical_integrity->layer_count != NCA_IVFC_LAYER_COUNT) return false;
     
     /* Validate layer offsets and sizes */
     for(u8 i = 0; i < (NCA_IVFC_HASH_DATA_LAYER_COUNT + 1); i++)

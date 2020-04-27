@@ -92,7 +92,10 @@ int main(int argc, char *argv[])
         }
     };
     
+    char romfs_path[FS_MAX_PATH] = {0};
     u64 romfs_size = 0;
+    RomFileSystemDirectoryEntry *romfs_dir_entry = NULL;
+    RomFileSystemFileEntry *romfs_file_entry = NULL;
     RomFileSystemContext romfs_ctx = {0};
     
     buf = malloc(0x400000);
@@ -201,6 +204,72 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
+    romfs_dir_entry = romfsGetDirectoryEntryByOffset(&romfs_ctx, 0x74); // "Resources"
+    if (!romfs_dir_entry)
+    {
+        printf("romfs dir entry failed\n");
+        goto out2;
+    }
+    
+    printf("romfs dir entry success: %s | %p\n", romfs_dir_entry->name, romfs_dir_entry);
+    consoleUpdate(NULL);
+    
+    if (romfsGetDirectoryDataSize(&romfs_ctx, romfs_dir_entry, &romfs_size))
+    {
+        printf("romfs dir size succeeded: 0x%lX\n", romfs_size);
+    } else {
+        printf("romfs dir size failed\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    romfs_file_entry = romfsGetFileEntryByOffset(&romfs_ctx, romfs_dir_entry->file_offset); // "mscorlib.dll-resources.dat"
+    if (!romfs_file_entry)
+    {
+        printf("romfs file entry failed\n");
+        goto out2;
+    }
+    
+    printf("romfs file entry success: %s | %p\n", romfs_file_entry->name, romfs_file_entry);
+    consoleUpdate(NULL);
+    
+    if (!romfsGeneratePathFromDirectoryEntry(&romfs_ctx, romfs_dir_entry, romfs_path, FS_MAX_PATH))
+    {
+        printf("romfs generate dir path failed\n");
+        goto out2;
+    }
+    
+    printf("romfs generate dir path success: %s\n", romfs_path);
+    consoleUpdate(NULL);
+    
+    romfs_dir_entry = romfsGetDirectoryEntryByPath(&romfs_ctx, romfs_path);
+    if (!romfs_dir_entry)
+    {
+        printf("romfs get dir entry by path failed\n");
+        goto out2;
+    }
+    
+    printf("romfs get dir entry by path success: %s | %p\n", romfs_dir_entry->name, romfs_dir_entry);
+    consoleUpdate(NULL);
+    
+    if (!romfsGeneratePathFromFileEntry(&romfs_ctx, romfs_file_entry, romfs_path, FS_MAX_PATH))
+    {
+        printf("romfs generate file path failed\n");
+        goto out2;
+    }
+    
+    printf("romfs generate file path success: %s\n", romfs_path);
+    consoleUpdate(NULL);
+    
+    romfs_file_entry = romfsGetFileEntryByPath(&romfs_ctx, romfs_path);
+    if (!romfs_file_entry)
+    {
+        printf("romfs get file entry by path failed\n");
+        goto out2;
+    }
+    
+    printf("romfs get file entry by path success: %s | %p\n", romfs_file_entry->name, romfs_file_entry);
+    consoleUpdate(NULL);
     
     
     
@@ -208,7 +277,6 @@ int main(int argc, char *argv[])
     
     
     
-
     
 out2:
     while(appletMainLoop())

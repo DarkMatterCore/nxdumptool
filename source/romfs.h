@@ -124,17 +124,31 @@ bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *f
 bool romfsGetTotalDataSize(RomFileSystemContext *ctx, u64 *out_size);
 
 /// Calculates the extracted size from a RomFS directory.
-bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, u32 dir_entry_offset, u64 *out_size);
+bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size); 
+
+/// Retrieves a RomFS directory entry by path.
+/// Input path must have a leading slash ('/'). If just a single slash is provided, a pointer to the root directory entry shall be returned.
+RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *ctx, const char *path);
+
+/// Retrieves a RomFS file entry by path.
+/// Input path must have a leading slash ('/').
+RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const char *path);
+
+/// Generates a path string from a RomFS directory entry.
+bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size);
+
+/// Generates a path string from a RomFS file entry.
+bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size);
 
 /// Miscellaneous functions.
 
-NX_INLINE RomFileSystemDirectoryEntry *romfsGetDirectoryEntry(RomFileSystemContext *ctx, u32 dir_entry_offset)
+NX_INLINE RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByOffset(RomFileSystemContext *ctx, u32 dir_entry_offset)
 {
     if (!ctx || !ctx->dir_table || (dir_entry_offset + sizeof(RomFileSystemDirectoryEntry)) > ctx->dir_table_size) return NULL;
     return (RomFileSystemDirectoryEntry*)((u8*)ctx->dir_table + dir_entry_offset);
 }
 
-NX_INLINE RomFileSystemFileEntry *romfsGetFileEntry(RomFileSystemContext *ctx, u32 file_entry_offset)
+NX_INLINE RomFileSystemFileEntry *romfsGetFileEntryByOffset(RomFileSystemContext *ctx, u32 file_entry_offset)
 {
     if (!ctx || !ctx->file_table || (file_entry_offset + sizeof(RomFileSystemFileEntry)) > ctx->file_table_size) return NULL;
     return (RomFileSystemFileEntry*)((u8*)ctx->file_table + file_entry_offset);

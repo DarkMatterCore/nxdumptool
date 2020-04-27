@@ -53,7 +53,7 @@ typedef struct {
     u64 hash_block_size;    ///< New hash block size.
     u8 *hash_block;         ///< New hash block contents.
     u64 data_block_offset;  ///< New data block offset (relative to the start of the NCA content file).
-    u64 data_block_size;    ///< New data block size.
+    u64 data_block_size;    ///< New data block size (aligned to the NcaHierarchicalSha256 block size).
     u8 *data_block;         ///< New data block contents.
 } PartitionFileSystemPatchInfo;
 
