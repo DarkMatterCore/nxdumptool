@@ -7,7 +7,6 @@
     pfs0: filelist generation methods
     pfs0: full header aligned to 0x20 (nsp)
     
-    romfs: test read functions
     romfs: data replacement methods
     romfs: filelist generation methods
 
