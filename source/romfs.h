@@ -115,9 +115,11 @@ NX_INLINE void romfsFreeContext(RomFileSystemContext *ctx)
 }
 
 /// Reads raw filesystem data using a RomFS context.
+/// Input offset must be relative to the start of the RomFS.
 bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Reads data from a previously retrieved RomFileSystemFileEntry using a RomFS context.
+/// Input offset must be relative to the start of the RomFS file entry.
 bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
 
 /// Calculates the extracted RomFS size.

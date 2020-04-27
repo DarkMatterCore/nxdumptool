@@ -302,6 +302,7 @@ void ncaFreeCryptoBuffer(void);
 bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmPackagedContentInfo *content_info, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
+/// Input offset must be relative to the start of the NCA content file.
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Reads decrypted data from a NCA FS section using an input context.

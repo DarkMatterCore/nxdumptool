@@ -50,7 +50,7 @@ typedef struct {
 
 typedef struct {
     u64 hash_block_offset;  ///< New hash block offset (relative to the start of the NCA content file).
-    u64 hash_block_size;    ///< New hash block size.
+    u64 hash_block_size;    ///< New hash block size (aligned to the AES block size from the NCA FS section).
     u8 *hash_block;         ///< New hash block contents.
     u64 data_block_offset;  ///< New data block offset (relative to the start of the NCA content file).
     u64 data_block_size;    ///< New data block size (aligned to the NcaHierarchicalSha256 block size).
@@ -69,9 +69,11 @@ NX_INLINE void pfsFreeContext(PartitionFileSystemContext *ctx)
 }
 
 /// Reads raw partition data using a partition FS context.
+/// Input offset must be relative to the start of the partition FS.
 bool pfsReadPartitionData(PartitionFileSystemContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Reads data from a previously retrieved PartitionFileSystemEntry using a partition FS context.
+/// Input offset must be relative to the start of the partition FS entry.
 bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset);
 
 /// Generates modified + encrypted hash and data blocks using a partition FS context + entry information. Both blocks are ready to be used to replace NCA content data during writing operations.

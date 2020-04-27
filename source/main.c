@@ -271,6 +271,25 @@ int main(int argc, char *argv[])
     printf("romfs get file entry by path success: %s | %p\n", romfs_file_entry->name, romfs_file_entry);
     consoleUpdate(NULL);
     
+    if (romfsReadFileEntryData(&romfs_ctx, romfs_file_entry, buf, romfs_file_entry->size, 0))
+    {
+        printf("romfs read file entry success\n");
+        consoleUpdate(NULL);
+        
+        tmp_file = fopen("sdmc:/nxdt_test/mscorlib.dll-resources.dat", "wb");
+        if (tmp_file)
+        {
+            fwrite(buf, 1, romfs_file_entry->size, tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("romfs file entry data saved\n");
+        } else {
+            printf("romfs file entry data not saved\n");
+        }
+    } else {
+        printf("romfs read file entry failed\n");
+    }
+    
     
     
     

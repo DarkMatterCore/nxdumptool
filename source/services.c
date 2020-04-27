@@ -215,7 +215,7 @@ static bool servicesClkGetServiceType(void *arg)
     if (!strlen(info->name) || strncmp(info->name, "clk", 3) != 0 || info->init_func != NULL || info->close_func != NULL) return false;
     
     /* Determine which service needs to be used to control hardware clock rates, depending on the system version */
-    /* This may either be pcv (sysver lower than 8.0.0) or clkrst (sysver equal or greater than 8.0.0) */
+    /* This may either be pcv (sysver lower than 8.0.0) or clkrst (sysver equal to or greater than 8.0.0) */
     g_clkSvcUsePcv = hosversionBefore(8, 0, 0);
     
     /* Fill service info */
@@ -233,7 +233,7 @@ static bool servicesSplCryptoCheckAvailability(void *arg)
     ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
     if (!strlen(info->name) || strncmp(info->name, "spl:mig", 7) != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
-    /* Check if spl:mig is available (sysver equal or greater than 4.0.0) */
+    /* Check if spl:mig is available (sysver equal to or greater than 4.0.0) */
     return !hosversionBefore(4, 0, 0);
 }
 
