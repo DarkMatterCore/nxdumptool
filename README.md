@@ -14,11 +14,10 @@ todo:
     nacp mod:
     
     1. Patch StartupUserAccount in control.nacp to 0x01.
-    2. Recalculate hash for the control.nacp file. Store it in the RomFS file hash table. ->  Not so sure about this...
-    3. Recalculate hashes for the modified blocks, then perform chain hash calculation / replacement per each IVFC level up until reaching superblock hash.
-    4. Reencrypt all the modified blocks using the already known crypto properties. Keep the modified + encrypted blocks in memory.
-    5. Recalculate RomFS section header SHA-256 hash. Replace the section hash in the NCA header. Keep a copy of the modified NCA header in memory.
-    6. While generating the output dump, replace sections in the Control NCA with the previously modified + reencrypted blocks before writing data. Also replace the NCA header.
+    2. Recalculate hashes for the modified blocks, then perform chain hash calculation / replacement per each IVFC level up until reaching superblock hash.
+    3. Reencrypt all the modified blocks using the already known crypto properties. Keep the modified + encrypted blocks in memory.
+    4. Recalculate RomFS section header SHA-256 hash. Replace the section hash in the NCA header. Keep a copy of the modified NCA header in memory.
+    5. While generating the output dump, replace sections in the Control NCA with the previously modified + reencrypted blocks before writing data. Also replace the NCA header.
 
 
 
