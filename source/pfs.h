@@ -40,22 +40,12 @@ typedef struct {
 
 typedef struct {
     NcaFsSectionContext *nca_fs_ctx;    ///< Used to read NCA FS section data.
-    NcaHierarchicalSha256 *hash_info;   ///< Hash table information.
     u64 offset;                         ///< Partition offset (relative to the start of the NCA FS section).
     u64 size;                           ///< Partition size.
     bool is_exefs;                      ///< ExeFS flag.
     u64 header_size;                    ///< Full header size.
     u8 *header;                         ///< PartitionFileSystemHeader + (PartitionFileSystemEntry * entry_count) + Name Table.
 } PartitionFileSystemContext;
-
-typedef struct {
-    u64 hash_block_offset;  ///< New hash block offset (relative to the start of the NCA content file).
-    u64 hash_block_size;    ///< New hash block size (aligned to the AES block size from the NCA FS section).
-    u8 *hash_block;         ///< New hash block contents.
-    u64 data_block_offset;  ///< New data block offset (relative to the start of the NCA content file).
-    u64 data_block_size;    ///< New data block size (aligned to the NcaHierarchicalSha256 block size).
-    u8 *data_block;         ///< New data block contents.
-} PartitionFileSystemPatchInfo;
 
 /// Initializes a partition FS context.
 bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx);
@@ -76,11 +66,10 @@ bool pfsReadPartitionData(PartitionFileSystemContext *ctx, void *out, u64 read_s
 /// Input offset must be relative to the start of the partition FS entry.
 bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset);
 
-/// Generates modified + encrypted hash and data blocks using a partition FS context + entry information. Both blocks are ready to be used to replace NCA content data during writing operations.
+/// Generates HierarchicalSha256 FS section patch data using a partition FS context + entry, which can be used to replace NCA data in content dumping operations.
 /// Input offset must be relative to the start of the partition FS entry data.
-/// Bear in mind that this function recalculates both the NcaHashInfo block master hash and the NCA FS header hash from the NCA header, and enables the 'dirty_header' flag from the NCA context.
-/// As such, this function is only capable of modifying a single file from a partition FS in a NCA content file.
-bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, PartitionFileSystemPatchInfo *out);
+/// This function shares the same limitations as ncaGenerateHierarchicalSha256Patch().
+bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out);
 
 /// Miscellaneous functions.
 

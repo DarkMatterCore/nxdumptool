@@ -32,21 +32,20 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     
     /* Fill context */
     out->nca_fs_ctx = nca_fs_ctx;
-    out->hash_info = &(nca_fs_ctx->header->hash_info.hierarchical_sha256);
     out->offset = 0;
     out->size = 0;
     out->is_exefs = false;
     out->header_size = 0;
     out->header = NULL;
     
-    if (!ncaValidateHierarchicalSha256Offsets(out->hash_info, nca_fs_ctx->section_size))
+    if (!ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header->hash_info.hierarchical_sha256), nca_fs_ctx->section_size))
     {
         LOGFILE("Invalid HierarchicalSha256 block!");
         return false;
     }
     
-    out->offset = out->hash_info->hash_target_layer_info.offset;
-    out->size = out->hash_info->hash_target_layer_info.size;
+    out->offset = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.offset;
+    out->size = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.size;
     
     /* Read partial PFS header */
     u32 magic = 0;
@@ -134,111 +133,22 @@ bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry 
     return true;
 }
 
-bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, PartitionFileSystemPatchInfo *out)
+bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out)
 {
-    NcaContext *nca_ctx = NULL;
-    
-    if (!ctx || !ctx->nca_fs_ctx || !(nca_ctx = (NcaContext*)ctx->nca_fs_ctx->nca_ctx) || !ctx->hash_info || !ctx->header_size || !ctx->header || !fs_entry || fs_entry->offset >= ctx->size || \
-        !fs_entry->size || (fs_entry->offset + fs_entry->size) > ctx->size || !data || !data_size || data_offset >= fs_entry->size || (data_offset + data_size) > fs_entry->size || !out)
+    if (!ctx || !ctx->nca_fs_ctx || !ctx->header_size || !ctx->header || !fs_entry || fs_entry->offset >= ctx->size || !fs_entry->size || (fs_entry->offset + fs_entry->size) > ctx->size || !data || \
+        !data_size || data_offset >= fs_entry->size || (data_offset + data_size) > fs_entry->size || !out)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
-    /* Calculate required offsets and sizes */
     u64 partition_offset = (ctx->header_size + fs_entry->offset + data_offset);
-    u64 block_size = ctx->hash_info->hash_block_size;
     
-    u64 hash_table_offset = ctx->hash_info->hash_data_layer_info.offset;
-    u64 hash_table_size = ctx->hash_info->hash_data_layer_info.size;
-    
-    u64 hash_block_start_offset = ((partition_offset / block_size) * SHA256_HASH_SIZE);
-    u64 hash_block_end_offset = (((partition_offset + data_size) / block_size) * SHA256_HASH_SIZE);
-    u64 hash_block_size = (hash_block_end_offset != hash_block_start_offset ? (hash_block_end_offset - hash_block_start_offset) : SHA256_HASH_SIZE);
-    
-    u64 data_block_start_offset = (ctx->offset + ALIGN_DOWN(partition_offset, block_size));
-    u64 data_block_end_offset = (ctx->offset + ALIGN_UP(partition_offset + data_size, block_size));
-    if (data_block_end_offset > (ctx->offset + ctx->size)) data_block_end_offset = (ctx->offset + ctx->size);
-    u64 data_block_size = (data_block_end_offset - data_block_start_offset);
-    
-    u64 new_data_offset = (partition_offset - ALIGN_DOWN(partition_offset, block_size));
-    
-    u8 *hash_table = NULL, *data_block = NULL;
-    
-    bool success = false;
-    
-    /* Allocate memory for the full hash table */
-    hash_table = malloc(hash_table_size);
-    if (!hash_table)
+    if (!ncaGenerateHierarchicalSha256Patch(ctx->nca_fs_ctx, data, data_size, partition_offset, out))
     {
-        LOGFILE("Unable to allocate 0x%lX bytes buffer for the full partition FS hash table!", hash_table_size);
-        goto exit;
+        LOGFILE("Failed to generate 0x%lX bytes HierarchicalSha256 patch at offset 0x%lX for partition FS entry!", data_size, partition_offset);
+        return false;
     }
     
-    /* Read full hash table */
-    if (!ncaReadFsSection(ctx->nca_fs_ctx, hash_table, hash_table_size, hash_table_offset))
-    {
-        LOGFILE("Failed to read full partition FS hash table!");
-        goto exit;
-    }
-    
-    /* Allocate memory for the modified data block */
-    data_block = malloc(data_block_size);
-    if (!data_block)
-    {
-        LOGFILE("Unable to allocate 0x%lX bytes buffer for the modified partition FS data block!", data_block_size);
-        goto exit;
-    }
-    
-    /* Read data block */
-    if (!ncaReadFsSection(ctx->nca_fs_ctx, data_block, data_block_size, data_block_start_offset))
-    {
-        LOGFILE("Failed to read partition FS data block!");
-        goto exit;
-    }
-    
-    /* Replace data */
-    memcpy(data_block + new_data_offset, data, data_size);
-    
-    /* Recalculate hashes */
-    for(u64 i = 0, j = 0; i < data_block_size; i += block_size, j++)
-    {
-        if (block_size > (data_block_size - i)) block_size = (data_block_size - i);
-        sha256CalculateHash(hash_table + hash_block_start_offset + (j * SHA256_HASH_SIZE), data_block + i, block_size);
-    }
-    
-    /* Reencrypt hash block */
-    out->hash_block = ncaGenerateEncryptedFsSectionBlock(ctx->nca_fs_ctx, hash_table + hash_block_start_offset, hash_block_size, hash_table_offset + hash_block_start_offset, \
-                                                         &(out->hash_block_size), &(out->hash_block_offset));
-    if (!out->hash_block)
-    {
-        LOGFILE("Failed to generate encrypted partition FS hash block!");
-        goto exit;
-    }
-    
-    /* Reencrypt data block */
-    out->data_block = ncaGenerateEncryptedFsSectionBlock(ctx->nca_fs_ctx, data_block, data_block_size, data_block_start_offset, &(out->data_block_size), &(out->data_block_offset));
-    if (!out->data_block)
-    {
-        LOGFILE("Failed to generate encrypted partition FS data block!");
-        goto exit;
-    }
-    
-    /* Recalculate master hash from hash info block */
-    sha256CalculateHash(ctx->hash_info->master_hash, hash_table, hash_table_size);
-    
-    /* Recalculate FS header hash */
-    sha256CalculateHash(nca_ctx->header.fs_hashes[ctx->nca_fs_ctx->section_num].hash, ctx->header, sizeof(NcaFsHeader));
-    
-    /* Enable the 'dirty_header' flag */
-    nca_ctx->dirty_header = true;
-    
-    success = true;
-    
-exit:
-    if (data_block) free(data_block);
-    
-    if (hash_table) free(hash_table);
-    
-    return success;
+    return true;
 }

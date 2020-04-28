@@ -289,6 +289,22 @@ typedef struct {
     NcaKey decrypted_keys[4];
 } NcaContext;
 
+typedef struct {
+    u64 offset; ///< New layer data offset (relative to the start of the NCA content file).
+    u64 size;   ///< New layer data size.
+    u8 *data;   ///< New layer data.
+} NcaHashInfoLayerPatch;
+
+typedef struct {
+    NcaHashInfoLayerPatch hash_data_layer_patch;
+    NcaHashInfoLayerPatch hash_target_layer_patch;
+} NcaHierarchicalSha256Patch;
+
+typedef struct {
+    NcaHashInfoLayerPatch hash_data_layer_patch[NCA_IVFC_HASH_DATA_LAYER_COUNT];
+    NcaHashInfoLayerPatch hash_target_layer_patch;
+} NcaHierarchicalIntegrityPatch;
+
 /// Functions to control the internal heap buffer used by NCA FS section crypto operations.
 /// Must be called at startup.
 bool ncaAllocateCryptoBuffer(void);
@@ -314,6 +330,45 @@ bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 of
 /// Output size and offset are guaranteed to be aligned to the AES sector size used by the encryption type from the FS section.
 /// Output offset is relative to the start of the NCA content file, making it easier to use the output encrypted block to replace data in-place while writing a NCA.
 void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
+
+/// Generates HierarchicalSha256 FS section patch data, which can be used to replace NCA data in content dumping operations.
+/// Input offset must be relative to the start of the HierarchicalSha256 hash target layer (actual underlying FS).
+/// Bear in mind that this function recalculates both the NcaHashInfo block master hash and the NCA FS header hash from the NCA header, and enables the 'dirty_header' flag from the NCA context.
+/// As such, this function is not capable of generating more than one patch per HierarchicalSha256 FS section.
+bool ncaGenerateHierarchicalSha256Patch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out);
+
+/// Cleanups a previously generated NcaHierarchicalSha256Patch.
+NX_INLINE void ncaFreeHierarchicalSha256Patch(NcaHierarchicalSha256Patch *patch)
+{
+    if (!patch) return;
+    if (patch->hash_data_layer_patch.data) free(patch->hash_data_layer_patch.data);
+    if (patch->hash_target_layer_patch.data) free(patch->hash_target_layer_patch.data);
+    memset(patch, 0, sizeof(NcaHierarchicalSha256Patch));
+}
+
+
+
+
+
+
+
+/// Cleanups a previously generated NcaHierarchicalIntegrityPatch.
+NX_INLINE void ncaFreeHierarchicalIntegrityPatch(NcaHierarchicalIntegrityPatch *patch)
+{
+    if (!patch) return;
+    
+    for(u8 i = 0; i < NCA_IVFC_HASH_DATA_LAYER_COUNT; i++)
+    {
+        if (patch->hash_data_layer_patch[i].data) free(patch->hash_data_layer_patch[i].data);
+    }
+    
+    if (patch->hash_target_layer_patch.data) free(patch->hash_target_layer_patch.data);
+    memset(patch, 0, sizeof(NcaHierarchicalIntegrityPatch));
+}
+
+
+
+
 
 
 

@@ -249,6 +249,27 @@ int main(int argc, char *argv[])
         printf("romfs read file entry failed\n");
     }
     
+    consoleUpdate(NULL);
+    
+    if (romfsReadFileSystemData(&romfs_ctx, buf, romfs_ctx.size, 0))
+    {
+        printf("romfs read fs data success\n");
+        consoleUpdate(NULL);
+        
+        tmp_file = fopen("sdmc:/nxdt_test/romfs.bin", "wb");
+        if (tmp_file)
+        {
+            fwrite(buf, 1, romfs_ctx.size, tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("romfs data saved\n");
+        } else {
+            printf("romfs data not saved\n");
+        }
+    } else {
+        printf("romfs read fs data failed\n");
+    }
+    
     
     
     

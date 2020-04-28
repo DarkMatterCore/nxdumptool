@@ -102,6 +102,12 @@ typedef struct {
     u64 body_offset;                                ///< RomFS file data body offset (relative to the start of the RomFS).
 } RomFileSystemContext;
 
+typedef struct {
+    bool use_old_format_patch;                      ///< Old format patch flag.
+    NcaHierarchicalSha256Patch old_format_patch;    ///< Used with NCA0 RomFS sections.
+    NcaHierarchicalIntegrityPatch cur_format_patch; ///< Used with NCA2/NCA3 RomFS sections.
+} RomFileSystemFileEntryPatch;
+
 /// Initializes a RomFS context.
 bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx);
 
@@ -119,7 +125,7 @@ NX_INLINE void romfsFreeContext(RomFileSystemContext *ctx)
 bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Reads data from a previously retrieved RomFileSystemFileEntry using a RomFS context.
-/// Input offset must be relative to the start of the RomFS file entry.
+/// Input offset must be relative to the start of the RomFS file entry data.
 bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
 
 /// Calculates the extracted RomFS size.
@@ -141,6 +147,20 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
 
 /// Generates a path string from a RomFS file entry.
 bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size);
+
+/// Generates HierarchicalSha256 (NCA0) / HierarchicalIntegrity (NCA2/NCA3) FS section patch data using a RomFS context + file entry, which can be used to replace NCA data in content dumping operations.
+/// Input offset must be relative to the start of the RomFS file entry data.
+/// This function shares the same limitations as ncaGenerateHierarchicalSha256Patch() / ncaGenerateHierarchicalIntegrityPatch().
+bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, const void *data, u64 data_size, u64 data_offset, RomFileSystemFileEntryPatch *out);
+
+/// Cleanups a previously generated RomFS file entry patch.
+NX_INLINE void romfsFreeFileEntryPatch(RomFileSystemFileEntryPatch *patch)
+{
+    if (!patch) return;
+    ncaFreeHierarchicalSha256Patch(&(patch->old_format_patch));
+    ncaFreeHierarchicalIntegrityPatch(&(patch->cur_format_patch));
+    memset(patch, 0, sizeof(RomFileSystemFileEntryPatch));
+}
 
 /// Miscellaneous functions.
 

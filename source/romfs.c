@@ -471,17 +471,37 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
     return true;
 }
 
-
-
-
-
-
-
-
-
-
-
-
+bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, const void *data, u64 data_size, u64 data_offset, RomFileSystemFileEntryPatch *out)
+{
+    if (!ctx || !ctx->nca_fs_ctx || !ctx->body_offset || (ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || !file_entry || \
+        !file_entry->size || file_entry->offset >= ctx->size || (file_entry->offset + file_entry->size) > ctx->size || !data || !data_size || data_offset >= file_entry->size || \
+        (data_offset + data_size) > file_entry->size || !out)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    bool success = false;
+    u64 fs_offset = (ctx->body_offset + file_entry->offset + data_offset);
+    
+    memset(&(out->old_format_patch), 0, sizeof(NcaHierarchicalSha256Patch));
+    memset(&(out->cur_format_patch), 0, sizeof(NcaHierarchicalIntegrityPatch));
+    
+    if (ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs)
+    {
+        out->use_old_format_patch = true;
+        
+        success = ncaGenerateHierarchicalSha256Patch(ctx->nca_fs_ctx, data, data_size, fs_offset, &(out->old_format_patch));
+        if (!success) LOGFILE("Failed to generate 0x%lX bytes HierarchicalSha256 patch at offset 0x%lX for RomFS file entry!", data_size, fs_offset);
+    } else {
+        out->use_old_format_patch = false;
+        
+        success = true;
+        
+    }
+    
+    return success;
+}
 
 static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name)
 {
