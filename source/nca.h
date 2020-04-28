@@ -80,17 +80,16 @@ typedef struct {
 
 /// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
-    NcaKeyGeneration_301_302   = 3,
-    NcaKeyGeneration_400_410   = 4,
-    NcaKeyGeneration_500_510   = 5,
-    NcaKeyGeneration_600_610   = 6,
-    NcaKeyGeneration_620       = 7,
-    NcaKeyGeneration_700_801   = 8,
-    NcaKeyGeneration_810_811   = 9,
-    NcaKeyGeneration_900_901   = 10,
-    NcaKeyGeneration_910_920   = 11,
-    NcaKeyGeneration_1000_1001 = 12,
-    NcaKeyGeneration_Current   = NcaKeyGeneration_1000_1001
+    NcaKeyGeneration_301_302  = 3,
+    NcaKeyGeneration_400_410  = 4,
+    NcaKeyGeneration_500_510  = 5,
+    NcaKeyGeneration_600_610  = 6,
+    NcaKeyGeneration_620      = 7,
+    NcaKeyGeneration_700_801  = 8,
+    NcaKeyGeneration_810_811  = 9,
+    NcaKeyGeneration_900_901  = 10,
+    NcaKeyGeneration_910_1001 = 11,
+    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1001
 } NcaKeyGeneration;
 
 typedef struct {

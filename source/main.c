@@ -74,11 +74,11 @@ int main(int argc, char *argv[])
         .c = { 0x01, 0x00, 0x82, 0x40, 0x0B, 0xCC, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08 } // Untitled Goose Game
     };*/
     
-    // Untitled Goose Game
-    NcmPackagedContentInfo content_info = {
+    // Untitled Goose Game's Program NCA
+    /*NcmPackagedContentInfo content_info = {
         .hash = {
             0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8,
-            0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8
+            0xD3, 0xE2, 0xE2, 0xA0, 0x66, 0xFD, 0x2B, 0xB6, 0x5C, 0x73, 0xF6, 0x89, 0xE2, 0x25, 0x0A, 0x82
         },
         .info = {
             .content_id = {
@@ -90,11 +90,27 @@ int main(int argc, char *argv[])
             .content_type = NcmContentType_Program,
             .id_offset = 0
         }
+    };*/
+    
+    // Untitled Goose Game's Control NCA
+    NcmPackagedContentInfo content_info = {
+        .hash = {
+            0xCE, 0x6E, 0x17, 0x1F, 0x93, 0x2D, 0x29, 0x28, 0xC1, 0x62, 0x94, 0x5B, 0x86, 0x2C, 0x42, 0x93,
+            0xAC, 0x2C, 0x0D, 0x3E, 0xD7, 0xCE, 0x07, 0xA2, 0x34, 0x33, 0x43, 0xD9, 0x21, 0x8A, 0xA3, 0xFE
+        },
+        .info = {
+            .content_id = {
+                .c = { 0xCE, 0x6E, 0x17, 0x1F, 0x93, 0x2D, 0x29, 0x28, 0xC1, 0x62, 0x94, 0x5B, 0x86, 0x2C, 0x42, 0x93 }
+            },
+            .size = {
+                0x00, 0x74, 0x0A, 0x00, 0x00, 0x00
+            },
+            .content_type = NcmContentType_Control,
+            .id_offset = 0
+        }
     };
     
-    char romfs_path[FS_MAX_PATH] = {0};
     u64 romfs_size = 0;
-    RomFileSystemDirectoryEntry *romfs_dir_entry = NULL;
     RomFileSystemFileEntry *romfs_file_entry = NULL;
     RomFileSystemContext romfs_ctx = {0};
     
@@ -147,7 +163,7 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
-    if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_contexts[1])))
+    if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_contexts[0])))
     {
         printf("romfs initialize ctx failed\n");
         goto out2;
@@ -204,64 +220,7 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
-    romfs_dir_entry = romfsGetDirectoryEntryByOffset(&romfs_ctx, 0x74); // "Resources"
-    if (!romfs_dir_entry)
-    {
-        printf("romfs dir entry failed\n");
-        goto out2;
-    }
-    
-    printf("romfs dir entry success: %s | %p\n", romfs_dir_entry->name, romfs_dir_entry);
-    consoleUpdate(NULL);
-    
-    if (romfsGetDirectoryDataSize(&romfs_ctx, romfs_dir_entry, &romfs_size))
-    {
-        printf("romfs dir size succeeded: 0x%lX\n", romfs_size);
-    } else {
-        printf("romfs dir size failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    romfs_file_entry = romfsGetFileEntryByOffset(&romfs_ctx, romfs_dir_entry->file_offset); // "mscorlib.dll-resources.dat"
-    if (!romfs_file_entry)
-    {
-        printf("romfs file entry failed\n");
-        goto out2;
-    }
-    
-    printf("romfs file entry success: %s | %p\n", romfs_file_entry->name, romfs_file_entry);
-    consoleUpdate(NULL);
-    
-    if (!romfsGeneratePathFromDirectoryEntry(&romfs_ctx, romfs_dir_entry, romfs_path, FS_MAX_PATH))
-    {
-        printf("romfs generate dir path failed\n");
-        goto out2;
-    }
-    
-    printf("romfs generate dir path success: %s\n", romfs_path);
-    consoleUpdate(NULL);
-    
-    romfs_dir_entry = romfsGetDirectoryEntryByPath(&romfs_ctx, romfs_path);
-    if (!romfs_dir_entry)
-    {
-        printf("romfs get dir entry by path failed\n");
-        goto out2;
-    }
-    
-    printf("romfs get dir entry by path success: %s | %p\n", romfs_dir_entry->name, romfs_dir_entry);
-    consoleUpdate(NULL);
-    
-    if (!romfsGeneratePathFromFileEntry(&romfs_ctx, romfs_file_entry, romfs_path, FS_MAX_PATH))
-    {
-        printf("romfs generate file path failed\n");
-        goto out2;
-    }
-    
-    printf("romfs generate file path success: %s\n", romfs_path);
-    consoleUpdate(NULL);
-    
-    romfs_file_entry = romfsGetFileEntryByPath(&romfs_ctx, romfs_path);
+    romfs_file_entry = romfsGetFileEntryByPath(&romfs_ctx, "/control.nacp");
     if (!romfs_file_entry)
     {
         printf("romfs get file entry by path failed\n");
@@ -276,7 +235,7 @@ int main(int argc, char *argv[])
         printf("romfs read file entry success\n");
         consoleUpdate(NULL);
         
-        tmp_file = fopen("sdmc:/nxdt_test/mscorlib.dll-resources.dat", "wb");
+        tmp_file = fopen("sdmc:/nxdt_test/control.nacp", "wb");
         if (tmp_file)
         {
             fwrite(buf, 1, romfs_file_entry->size, tmp_file);
