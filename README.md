@@ -1,4 +1,5 @@
-﻿todo:
+﻿```
+todo:
     
     hfs0: filelist generation methods
     
@@ -9,12 +10,30 @@
     
     romfs: data replacement methods
     romfs: filelist generation methods
+    
+    nacp mod:
+    
+    1. Patch StartupUserAccount in control.nacp to 0x01.
+    2. Recalculate hash for the control.nacp file. Store it in the RomFS file hash table. ->  Not so sure about this...
+    3. Recalculate hashes for the modified blocks, then perform chain hash calculation / replacement per each IVFC level up until reaching superblock hash.
+    4. Reencrypt all the modified blocks using the already known crypto properties. Keep the modified + encrypted blocks in memory.
+    5. Recalculate RomFS section header SHA-256 hash. Replace the section hash in the NCA header. Keep a copy of the modified NCA header in memory.
+    6. While generating the output dump, replace sections in the Control NCA with the previously modified + reencrypted blocks before writing data. Also replace the NCA header.
 
 
 
 
-
-
+    Result txIsFat32(bool *mode) {
+        Result rc = serviceDispatch(&g_tx, 137);
+        if (rc == 0xa08) {
+            *mode = false;
+            return 0;
+        } else if (rc == 0) {
+            *mode = true;
+        }
+        return rc;
+    }
+```
 
 
 

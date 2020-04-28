@@ -158,9 +158,9 @@ bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemE
     
     u64 data_block_start_offset = (ctx->offset + ALIGN_DOWN(partition_offset, block_size));
     u64 data_block_end_offset = (ctx->offset + ALIGN_UP(partition_offset + data_size, block_size));
+    if (data_block_end_offset > (ctx->offset + ctx->size)) data_block_end_offset = (ctx->offset + ctx->size);
     u64 data_block_size = (data_block_end_offset - data_block_start_offset);
     
-    u64 block_count = (hash_block_size / SHA256_HASH_SIZE);
     u64 new_data_offset = (partition_offset - ALIGN_DOWN(partition_offset, block_size));
     
     u8 *hash_table = NULL, *data_block = NULL;
@@ -201,7 +201,11 @@ bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemE
     memcpy(data_block + new_data_offset, data, data_size);
     
     /* Recalculate hashes */
-    for(u64 i = 0; i < block_count; i++) sha256CalculateHash(hash_table + hash_block_start_offset + (i * SHA256_HASH_SIZE), data_block + (i * block_size), block_size);
+    for(u64 i = 0, j = 0; i < data_block_size; i += block_size, j++)
+    {
+        if (block_size > (data_block_size - i)) block_size = (data_block_size - i);
+        sha256CalculateHash(hash_table + hash_block_start_offset + (j * SHA256_HASH_SIZE), data_block + i, block_size);
+    }
     
     /* Reencrypt hash block */
     out->hash_block = ncaGenerateEncryptedFsSectionBlock(ctx->nca_fs_ctx, hash_table + hash_block_start_offset, hash_block_size, hash_table_offset + hash_block_start_offset, \
