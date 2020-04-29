@@ -113,6 +113,7 @@ int main(int argc, char *argv[])
     u64 romfs_size = 0;
     RomFileSystemFileEntry *romfs_file_entry = NULL;
     RomFileSystemContext romfs_ctx = {0};
+    RomFileSystemFileEntryPatch romfs_patch = {0};
     
     buf = malloc(0x400000);
     if (!buf)
@@ -172,15 +173,6 @@ int main(int argc, char *argv[])
     printf("romfs initialize ctx succeeded\n");
     consoleUpdate(NULL);
     
-    if (romfsGetTotalDataSize(&romfs_ctx, &romfs_size))
-    {
-        printf("romfs size succeeded: 0x%lX\n", romfs_size);
-    } else {
-        printf("romfs size failed\n");
-    }
-    
-    consoleUpdate(NULL);
-    
     tmp_file = fopen("sdmc:/nxdt_test/romfs_ctx.bin", "wb");
     if (tmp_file)
     {
@@ -200,9 +192,9 @@ int main(int argc, char *argv[])
         fwrite(romfs_ctx.dir_table, 1, romfs_ctx.dir_table_size, tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("dir table saved\n");
+        printf("romfs dir table saved\n");
     } else {
-        printf("dir table not saved\n");
+        printf("romfs dir table not saved\n");
     }
     
     consoleUpdate(NULL);
@@ -213,40 +205,9 @@ int main(int argc, char *argv[])
         fwrite(romfs_ctx.file_table, 1, romfs_ctx.file_table_size, tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("file table saved\n");
+        printf("romfs file table saved\n");
     } else {
-        printf("file table not saved\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    romfs_file_entry = romfsGetFileEntryByPath(&romfs_ctx, "/control.nacp");
-    if (!romfs_file_entry)
-    {
-        printf("romfs get file entry by path failed\n");
-        goto out2;
-    }
-    
-    printf("romfs get file entry by path success: %s | %p\n", romfs_file_entry->name, romfs_file_entry);
-    consoleUpdate(NULL);
-    
-    if (romfsReadFileEntryData(&romfs_ctx, romfs_file_entry, buf, romfs_file_entry->size, 0))
-    {
-        printf("romfs read file entry success\n");
-        consoleUpdate(NULL);
-        
-        tmp_file = fopen("sdmc:/nxdt_test/control.nacp", "wb");
-        if (tmp_file)
-        {
-            fwrite(buf, 1, romfs_file_entry->size, tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("romfs file entry data saved\n");
-        } else {
-            printf("romfs file entry data not saved\n");
-        }
-    } else {
-        printf("romfs read file entry failed\n");
+        printf("romfs file table not saved\n");
     }
     
     consoleUpdate(NULL);
@@ -270,6 +231,134 @@ int main(int argc, char *argv[])
         printf("romfs read fs data failed\n");
     }
     
+    if (romfsGetTotalDataSize(&romfs_ctx, &romfs_size))
+    {
+        printf("romfs size succeeded: 0x%lX\n", romfs_size);
+    } else {
+        printf("romfs size failed\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    romfs_file_entry = romfsGetFileEntryByPath(&romfs_ctx, "/control.nacp");
+    if (!romfs_file_entry)
+    {
+        printf("romfs get file entry by path failed\n");
+        goto out2;
+    }
+    
+    printf("romfs get file entry by path success: %s | %p\n", romfs_file_entry->name, romfs_file_entry);
+    consoleUpdate(NULL);
+    
+    if (!romfsReadFileEntryData(&romfs_ctx, romfs_file_entry, buf, romfs_file_entry->size, 0))
+    {
+        printf("romfs read file entry failed\n");
+        goto out2;
+    }
+    
+    printf("romfs read file entry success\n");
+    consoleUpdate(NULL);
+    
+    tmp_file = fopen("sdmc:/nxdt_test/control.nacp", "wb");
+    if (tmp_file)
+    {
+        fwrite(buf, 1, romfs_file_entry->size, tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        printf("romfs file entry data saved\n");
+    } else {
+        printf("romfs file entry data not saved\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    NacpStruct *nacp_data = (NacpStruct*)buf;
+    memset(nacp_data->lang, 0, MEMBER_SIZE(NacpStruct, lang));
+    for(u8 i = 0; i < 16; i++)
+    {
+        sprintf(nacp_data->lang[i].name, "nxdumptool");
+        sprintf(nacp_data->lang[i].author, "DarkMatterCore");
+    }
+    
+    tmp_file = fopen("sdmc:/nxdt_test/control_mod.nacp", "wb");
+    if (tmp_file)
+    {
+        fwrite(buf, 1, romfs_file_entry->size, tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        printf("romfs file entry mod data saved\n");
+    } else {
+        printf("romfs file entry mod data not saved\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    if (!romfsGenerateFileEntryPatch(&romfs_ctx, romfs_file_entry, buf, MEMBER_SIZE(NacpStruct, lang), 0, &romfs_patch))
+    {
+        printf("romfs file entry patch failed\n");
+        goto out2;
+    }
+    
+    printf("romfs file entry patch success\n");
+    consoleUpdate(NULL);
+    
+    tmp_file = fopen("sdmc:/nxdt_test/romfs_patch.bin", "wb");
+    if (tmp_file)
+    {
+        fwrite(&romfs_patch, 1, sizeof(RomFileSystemFileEntryPatch), tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        printf("romfs patch saved\n");
+    } else {
+        printf("romfs patch not saved\n");
+    }
+    
+    for(u8 i = 0; i < (NCA_IVFC_HASH_DATA_LAYER_COUNT + 1); i++)
+    {
+        NcaHashInfoLayerPatch *layer_patch = (i < NCA_IVFC_HASH_DATA_LAYER_COUNT ? &(romfs_patch.cur_format_patch.hash_data_layer_patch[i]) : &(romfs_patch.cur_format_patch.hash_target_layer_patch));
+        if (!layer_patch->size || !layer_patch->data) continue;
+        
+        char path[64];
+        sprintf(path, "sdmc:/nxdt_test/romfs_patch_l%u.bin", i);
+        
+        tmp_file = fopen(path, "wb");
+        if (tmp_file)
+        {
+            fwrite(layer_patch->data, 1, layer_patch->size, tmp_file);
+            fclose(tmp_file);
+            tmp_file = NULL;
+            printf("romfs patch #%u saved\n", i);
+        } else {
+            printf("romfs patch #%u not saved\n", i);
+        }
+        
+        consoleUpdate(NULL);
+    }
+    
+    if (!ncaEncryptHeader(nca_ctx))
+    {
+        printf("nca header mod not encrypted\n");
+        goto out2;
+    }
+    
+    printf("nca header mod encrypted\n");
+    consoleUpdate(NULL);
+    
+    tmp_file = fopen("sdmc:/nxdt_test/nca_header_mod.bin", "wb");
+    if (tmp_file)
+    {
+        fwrite(&(nca_ctx->header), 1, sizeof(NcaHeader), tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        printf("nca header mod saved\n");
+    } else {
+        printf("nca header mod not saved\n");
+    }
+    
+    
+    
+    
+    
     
     
     
@@ -286,6 +375,8 @@ out2:
     }
     
     if (tmp_file) fclose(tmp_file);
+    
+    romfsFreeFileEntryPatch(&romfs_patch);
     
     romfsFreeContext(&romfs_ctx);
     
