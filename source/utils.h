@@ -45,12 +45,12 @@
 #define TITLE_ADDON_BITMASK             (u64)0xFFFFFFFFFFFF0000
 
 
-NX_INLINE u64 titleGetPatchIdFromApplicationId(u64 app_id)
+NX_INLINE u64 titleGetPatchIdByApplicationId(u64 app_id)
 {
     return (app_id | TITLE_PATCH_BITMASK);
 }
 
-NX_INLINE u64 titleGetApplicationIdFromPatchId(u64 patch_id)
+NX_INLINE u64 titleGetApplicationIdByPatchId(u64 patch_id)
 {
     return (patch_id & ~TITLE_PATCH_BITMASK);
 }

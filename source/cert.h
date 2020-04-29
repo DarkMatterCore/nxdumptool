@@ -26,26 +26,26 @@
 #define CERT_MIN_SIZE   0x140   /* Equivalent to sizeof(CertSigHmac160PubKeyEcc480) */
 
 typedef enum {
-    CertType_None                       = 0,
-    CertType_SigRsa4096_PubKeyRsa4096   = 1,
-    CertType_SigRsa4096_PubKeyRsa2048   = 2,
+    CertType_None                     = 0,
+    CertType_SigRsa4096_PubKeyRsa4096 = 1,
+    CertType_SigRsa4096_PubKeyRsa2048 = 2,
     CertType_SigRsa4096_PubKeyEcc480  = 3,
-    CertType_SigRsa2048_PubKeyRsa4096   = 4,
-    CertType_SigRsa2048_PubKeyRsa2048   = 5,
+    CertType_SigRsa2048_PubKeyRsa4096 = 4,
+    CertType_SigRsa2048_PubKeyRsa2048 = 5,
     CertType_SigRsa2048_PubKeyEcc480  = 6,
     CertType_SigEcc480_PubKeyRsa4096  = 7,
     CertType_SigEcc480_PubKeyRsa2048  = 8,
-    CertType_SigEcc480_PubKeyEcc480 = 9,
-    CertType_SigHmac160_PubKeyRsa4096   = 10,
-    CertType_SigHmac160_PubKeyRsa2048   = 11,
+    CertType_SigEcc480_PubKeyEcc480   = 9,
+    CertType_SigHmac160_PubKeyRsa4096 = 10,
+    CertType_SigHmac160_PubKeyRsa2048 = 11,
     CertType_SigHmac160_PubKeyEcc480  = 12
 } CertType;
 
 /// Always stored using big endian byte order.
 typedef enum {
-    CertPubKeyType_Rsa4096  = 0,
-    CertPubKeyType_Rsa2048  = 1,
-    CertPubKeyType_Ecc480 = 2
+    CertPubKeyType_Rsa4096 = 0,
+    CertPubKeyType_Rsa2048 = 1,
+    CertPubKeyType_Ecc480  = 2
 } CertPubKeyType;
 
 typedef struct {
