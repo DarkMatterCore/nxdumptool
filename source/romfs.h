@@ -90,8 +90,6 @@ typedef struct {
 
 typedef struct {
     NcaFsSectionContext *nca_fs_ctx;                ///< Used to read NCA FS section data.
-    NcaHierarchicalSha256 *sha256_hash_info;        ///< HierarchicalSha256 hash table information. Used with NCA0 RomFS sections.
-    NcaHierarchicalIntegrity *integrity_hash_info;  ///< HierarchicalIntegrity hash table information. Used with NCA2/NCA3 RomFS sections.
     u64 offset;                                     ///< RomFS offset (relative to the start of the NCA FS section).
     u64 size;                                       ///< RomFS size.
     RomFileSystemHeader header;                     ///< RomFS header.
