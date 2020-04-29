@@ -7,8 +7,10 @@ todo:
     
     pfs0: filelist generation methods
     pfs0: full header aligned to 0x20 (nsp)
+    pfs0: patch writing function
     
     romfs: filelist generation methods
+    romfs: patch writing function
     
     Result txIsFat32(bool *mode) {
         Result rc = serviceDispatch(&g_tx, 137);
