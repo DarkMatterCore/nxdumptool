@@ -294,7 +294,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
         memset(&(out->fs_contexts[i].xts_encrypt_ctx), 0, sizeof(Aes128XtsContext));
         
         /* Determine encryption type */
-        out->fs_contexts[i].encryption_type = (out->format_version == NcaVersion_Nca0 ? NcaEncryptionType_Nca0 : out->header.fs_headers[i].encryption_type);
+        out->fs_contexts[i].encryption_type = (out->format_version == NcaVersion_Nca0 ? NcaEncryptionType_AesXts : out->header.fs_headers[i].encryption_type);
         if (out->fs_contexts[i].encryption_type == NcaEncryptionType_Auto)
         {
             switch(out->fs_contexts[i].section_num)
@@ -312,7 +312,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
         }
         
         /* Check if we're dealing with an invalid encryption type value */
-        if (out->fs_contexts[i].encryption_type == NcaEncryptionType_Auto || out->fs_contexts[i].encryption_type > NcaEncryptionType_Nca0) continue;
+        if (out->fs_contexts[i].encryption_type == NcaEncryptionType_Auto || out->fs_contexts[i].encryption_type > NcaEncryptionType_AesCtrEx) continue;
         
         /* Determine FS section type */
         if (out->fs_contexts[i].header->fs_type == NcaFsType_PartitionFs && out->fs_contexts[i].header->hash_type == NcaHashType_HierarchicalSha256)
@@ -332,7 +332,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
         if (out->fs_contexts[i].section_type >= NcaFsSectionType_Invalid) continue;
         
         /* Initialize crypto related fields */
-        if (out->fs_contexts[i].encryption_type > NcaEncryptionType_None && out->fs_contexts[i].encryption_type <= NcaEncryptionType_Nca0)
+        if (out->fs_contexts[i].encryption_type > NcaEncryptionType_None && out->fs_contexts[i].encryption_type <= NcaEncryptionType_AesCtrEx)
         {
             /* Initialize section CTR */
             ncaInitializeAesCtrIv(out->fs_contexts[i].ctr, out->fs_contexts[i].header->section_ctr, out->fs_contexts[i].section_offset);
@@ -346,7 +346,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
                 {
                     aes128CtrContextCreate(&(out->fs_contexts[i].ctr_ctx), out->decrypted_keys[2].key, out->fs_contexts[i].ctr);
                 } else
-                if (out->fs_contexts[i].encryption_type == NcaEncryptionType_AesXts || out->fs_contexts[i].encryption_type == NcaEncryptionType_Nca0)
+                if (out->fs_contexts[i].encryption_type == NcaEncryptionType_AesXts)
                 {
                     /* We need to create two different contexts: one for decryption and another one for encryption */
                     aes128XtsContextCreate(&(out->fs_contexts[i].xts_decrypt_ctx), out->decrypted_keys[0].key, out->decrypted_keys[1].key, false);
@@ -942,7 +942,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     bool ret = false;
     
     if (!g_ncaCryptoBuffer || !ctx || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < NCA_FULL_HEADER_LENGTH || ctx->section_type >= NcaFsSectionType_Invalid || \
-        ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_Nca0 || !ctx->header || !out || !read_size || offset >= ctx->section_size || \
+        ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_AesCtrEx || !ctx->header || !out || !read_size || offset >= ctx->section_size || \
         (offset + read_size) > ctx->section_size)
     {
         LOGFILE("Invalid NCA FS section header parameters!");
@@ -967,7 +967,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     
     /* Optimization for reads from plaintext FS sections or reads that are aligned to the AES-CTR / AES-XTS sector size */
     if (ctx->encryption_type == NcaEncryptionType_None || \
-        ((ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) && !(content_offset % NCA_AES_XTS_SECTOR_SIZE) && !(read_size % NCA_AES_XTS_SECTOR_SIZE)) || \
+        (ctx->encryption_type == NcaEncryptionType_AesXts && !(content_offset % NCA_AES_XTS_SECTOR_SIZE) && !(read_size % NCA_AES_XTS_SECTOR_SIZE)) || \
         ((ctx->encryption_type == NcaEncryptionType_AesCtr || ctx->encryption_type == NcaEncryptionType_AesCtrEx) && !(content_offset % AES_BLOCK_SIZE) && !(read_size % AES_BLOCK_SIZE)))
     {
         /* Read data */
@@ -985,7 +985,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         }
         
         /* Decrypt data */
-        if (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0)
+        if (ctx->encryption_type == NcaEncryptionType_AesXts)
         {
             sector_num = ((ctx->encryption_type == NcaEncryptionType_AesXts ? offset : (content_offset - NCA_HEADER_LENGTH)) / NCA_AES_XTS_SECTOR_SIZE);
             
@@ -1008,8 +1008,8 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     }
     
     /* Calculate offsets and block sizes */
-    block_start_offset = ALIGN_DOWN(content_offset, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
-    block_end_offset = ALIGN_UP(content_offset + read_size, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
+    block_start_offset = ALIGN_DOWN(content_offset, ctx->encryption_type == NcaEncryptionType_AesXts ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
+    block_end_offset = ALIGN_UP(content_offset + read_size, ctx->encryption_type == NcaEncryptionType_AesXts ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
     block_size = (block_end_offset - block_start_offset);
     
     data_start_offset = (content_offset - block_start_offset);
@@ -1024,7 +1024,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     }
     
     /* Decrypt data */
-    if (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0)
+    if (ctx->encryption_type == NcaEncryptionType_AesXts)
     {
         sector_num = ((ctx->encryption_type == NcaEncryptionType_AesXts ? offset : (content_offset - NCA_HEADER_LENGTH)) / NCA_AES_XTS_SECTOR_SIZE);
         
@@ -1061,7 +1061,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     bool success = false;
     
     if (!g_ncaCryptoBuffer || !ctx || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < NCA_FULL_HEADER_LENGTH || ctx->section_type >= NcaFsSectionType_Invalid || \
-        ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_Nca0 || !ctx->header || !data || !data_size || data_offset >= ctx->section_size || \
+        ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_AesCtrEx || !ctx->header || !data || !data_size || data_offset >= ctx->section_size || \
         (data_offset + data_size) > ctx->section_size || !out_block_size || !out_block_offset)
     {
         LOGFILE("Invalid NCA FS section header parameters!");
@@ -1086,7 +1086,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     
     /* Optimization for blocks from plaintext FS sections or blocks that are aligned to the AES-CTR / AES-XTS sector size */
     if (ctx->encryption_type == NcaEncryptionType_None || \
-        ((ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) && !(content_offset % NCA_AES_XTS_SECTOR_SIZE) && !(data_size % NCA_AES_XTS_SECTOR_SIZE)) || \
+        (ctx->encryption_type == NcaEncryptionType_AesXts && !(content_offset % NCA_AES_XTS_SECTOR_SIZE) && !(data_size % NCA_AES_XTS_SECTOR_SIZE)) || \
         ((ctx->encryption_type == NcaEncryptionType_AesCtr || ctx->encryption_type == NcaEncryptionType_AesCtrEx) && !(content_offset % AES_BLOCK_SIZE) && !(data_size % AES_BLOCK_SIZE)))
     {
         /* Allocate memory */
@@ -1101,7 +1101,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
         memcpy(out, data, data_size);
         
         /* Encrypt data */
-        if (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0)
+        if (ctx->encryption_type == NcaEncryptionType_AesXts)
         {
             sector_num = ((ctx->encryption_type == NcaEncryptionType_AesXts ? data_offset : (content_offset - NCA_HEADER_LENGTH)) / NCA_AES_XTS_SECTOR_SIZE);
             
@@ -1127,8 +1127,8 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     }
     
     /* Calculate block offsets and size */
-    block_start_offset = ALIGN_DOWN(data_offset, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
-    block_end_offset = ALIGN_UP(data_offset + data_size, (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0) ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
+    block_start_offset = ALIGN_DOWN(data_offset, ctx->encryption_type == NcaEncryptionType_AesXts ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
+    block_end_offset = ALIGN_UP(data_offset + data_size, ctx->encryption_type == NcaEncryptionType_AesXts ? NCA_AES_XTS_SECTOR_SIZE : AES_BLOCK_SIZE);
     block_size = (block_end_offset - block_start_offset);
     
     plain_chunk_offset = (data_offset - block_start_offset);
@@ -1153,7 +1153,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     memcpy(out + plain_chunk_offset, data, data_size);
     
     /* Reencrypt data */
-    if (ctx->encryption_type == NcaEncryptionType_AesXts || ctx->encryption_type == NcaEncryptionType_Nca0)
+    if (ctx->encryption_type == NcaEncryptionType_AesXts)
     {
         sector_num = ((ctx->encryption_type == NcaEncryptionType_AesXts ? block_start_offset : (content_offset - NCA_HEADER_LENGTH)) / NCA_AES_XTS_SECTOR_SIZE);
         

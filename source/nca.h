@@ -124,8 +124,7 @@ typedef enum {
     NcaEncryptionType_None     = 1,
     NcaEncryptionType_AesXts   = 2,
     NcaEncryptionType_AesCtr   = 3,
-    NcaEncryptionType_AesCtrEx = 4,
-    NcaEncryptionType_Nca0     = 5  ///< Only used to represent NCA0 AES-XTS FS section crypto - not actually used as a possible value for this field.
+    NcaEncryptionType_AesCtrEx = 4
 } NcaEncryptionType;
 
 typedef struct {
