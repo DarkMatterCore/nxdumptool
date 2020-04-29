@@ -23,13 +23,14 @@
 #include "signature.h"
 
 #define TIK_MAX_SIZE    0x400   /* Max ticket entry size in the ES ticket system savedata file */
-#define TIK_MIN_SIZE    0x200   /* Equivalent to sizeof(TikSigEcsda240) - assuming no ESv2 records are available */
+#define TIK_MIN_SIZE    0x1C0   /* Equivalent to sizeof(TikSigHmac160) - assuming no ESv2 records are available */
 
 typedef enum {
     TikType_None        = 0,
     TikType_SigRsa4096  = 1,
     TikType_SigRsa2048  = 2,
-    TikType_SigEcsda240 = 3
+    TikType_SigEcc480   = 3,
+    TikType_SigHmac160  = 4
 } TikType;
 
 typedef enum {
@@ -96,9 +97,14 @@ typedef struct {
 } TikSigRsa2048;
 
 typedef struct {
-    SignatureBlockEcsda240 sig_block;
+    SignatureBlockEcc480 sig_block;
     TikCommonBlock tik_common_blk;
-} TikSigEcsda240;
+} TikSigEcc480;
+
+typedef struct {
+    SignatureBlockHmac160 sig_block;
+    TikCommonBlock tik_common_blk;
+} TikSigHmac160;
 
 /// Section records are placed right after the ticket data. These aren't available in TikTitleKeyType_Common tickets.
 /// These are only used if the sect_* fields are non-zero (other than 'sect_hdr_offset').

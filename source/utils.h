@@ -34,7 +34,29 @@
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
+
+
+
+
+
 #define NPDM_META_MAGIC                 0x4D455441  /* "META" */
+
+#define TITLE_PATCH_BITMASK             (u64)0x800
+#define TITLE_ADDON_BITMASK             (u64)0xFFFFFFFFFFFF0000
+
+
+NX_INLINE u64 titleGetPatchIdFromApplicationId(u64 app_id)
+{
+    return (app_id | TITLE_PATCH_BITMASK);
+}
+
+NX_INLINE u64 titleGetApplicationIdFromPatchId(u64 patch_id)
+{
+    return (patch_id & ~TITLE_PATCH_BITMASK);
+}
+
+
+
 
 typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,

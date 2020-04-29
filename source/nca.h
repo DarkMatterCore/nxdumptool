@@ -321,7 +321,7 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Reads decrypted data from a NCA FS section using an input context.
 /// Input offset must be relative to the start of the NCA FS section.
-/// If dealing with Patch RomFS sections, this function should only be used when *not* reading BKTR subsections.
+/// If dealing with Patch RomFS sections, this function should only be used when *not* reading the BKTR AesCtrEx storage.
 bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Returns a pointer to a heap-allocated buffer used to encrypt the input plaintext data, based on the encryption type used by the input NCA FS section, as well as its offset and size.

@@ -83,7 +83,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
     }
     
     /* Check if this ticket has already been retrieved */
-    if (dst->type > TikType_None && dst->type <= TikType_SigEcsda240 && dst->size >= TIK_MIN_SIZE && dst->size <= TIK_MAX_SIZE)
+    if (dst->type > TikType_None && dst->type <= TikType_SigHmac160 && dst->size >= TIK_MIN_SIZE && dst->size <= TIK_MAX_SIZE)
     {
         TikCommonBlock *tik_common_blk = tikGetCommonBlockFromTicket(dst);
         if (tik_common_blk && !memcmp(tik_common_blk->rights_id.c, id->c, 0x10)) return true;
@@ -115,7 +115,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
 
 TikCommonBlock *tikGetCommonBlockFromTicket(Ticket *tik)
 {
-    if (!tik || tik->type == TikType_None || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE || tik->size > TIK_MAX_SIZE)
+    if (!tik || tik->type == TikType_None || tik->type > TikType_SigHmac160 || tik->size < TIK_MIN_SIZE || tik->size > TIK_MAX_SIZE)
     {
         LOGFILE("Invalid parameters!");
         return NULL;
@@ -131,8 +131,11 @@ TikCommonBlock *tikGetCommonBlockFromTicket(Ticket *tik)
         case TikType_SigRsa2048:
             tik_common_blk = &(((TikSigRsa2048*)tik->data)->tik_common_blk);
             break;
-        case TikType_SigEcsda240:
-            tik_common_blk = &(((TikSigEcsda240*)tik->data)->tik_common_blk);
+        case TikType_SigEcc480:
+            tik_common_blk = &(((TikSigEcc480*)tik->data)->tik_common_blk);
+            break;
+        case TikType_SigHmac160:
+            tik_common_blk = &(((TikSigHmac160*)tik->data)->tik_common_blk);
             break;
         default:
             break;
@@ -143,7 +146,7 @@ TikCommonBlock *tikGetCommonBlockFromTicket(Ticket *tik)
 
 void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
 {
-    if (!tik || tik->type == TikType_None || tik->type > TikType_SigEcsda240 || tik->size < TIK_MIN_SIZE || tik->size > TIK_MAX_SIZE) return;
+    if (!tik || tik->type == TikType_None || tik->type > TikType_SigHmac160 || tik->size < TIK_MIN_SIZE || tik->size > TIK_MAX_SIZE) return;
     
     bool dev_cert = false;
     TikCommonBlock *tik_common_blk = NULL;
@@ -161,9 +164,13 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
             tik->size = sizeof(TikSigRsa2048);
             memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockRsa2048, signature));
             break;
-        case TikType_SigEcsda240:
-            tik->size = sizeof(TikSigEcsda240);
-            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockEcsda240, signature));
+        case TikType_SigEcc480:
+            tik->size = sizeof(TikSigEcc480);
+            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockEcc480, signature));
+            break;
+        case TikType_SigHmac160:
+            tik->size = sizeof(TikSigHmac160);
+            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockHmac160, signature));
             break;
         default:
             break;
@@ -362,9 +369,12 @@ static TikCommonBlock *tikGetCommonBlockFromMemoryBuffer(void *data)
         case SignatureType_Rsa2048Sha256:
             tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockRsa2048));
             break;
-        case SignatureType_Ecsda240Sha1:
-        case SignatureType_Ecsda240Sha256:
-            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockEcsda240));
+        case SignatureType_Ecc480Sha1:
+        case SignatureType_Ecc480Sha256:
+            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockEcc480));
+            break;
+        case SignatureType_Hmac160Sha1:
+            tik_common_blk = (TikCommonBlock*)(data_u8 + sizeof(SignatureBlockHmac160));
             break;
         default:
             LOGFILE("Invalid signature type value! (0x%08X)", sig_type);
@@ -572,10 +582,14 @@ static bool tikGetTicketTypeAndSize(const void *data, u64 data_size, u8 *out_typ
             type = TikType_SigRsa2048;
             offset += sizeof(SignatureBlockRsa2048);
             break;
-        case SignatureType_Ecsda240Sha1:
-        case SignatureType_Ecsda240Sha256:
-            type = TikType_SigEcsda240;
-            offset += sizeof(SignatureBlockEcsda240);
+        case SignatureType_Ecc480Sha1:
+        case SignatureType_Ecc480Sha256:
+            type = TikType_SigEcc480;
+            offset += sizeof(SignatureBlockEcc480);
+            break;
+        case SignatureType_Hmac160Sha1:
+            type = TikType_SigHmac160;
+            offset += sizeof(SignatureBlockHmac160);
             break;
         default:
             LOGFILE("Invalid signature type value! (0x%08X)", sig_type);

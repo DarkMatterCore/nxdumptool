@@ -86,6 +86,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     if (!ncaReadFsSection(nca_fs_ctx, out->header, out->header_size, out->offset))
     {
         LOGFILE("Failed to read full partition FS header!");
+        pfsFreeContext(out);
         return false;
     }
     

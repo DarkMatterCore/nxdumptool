@@ -20,12 +20,13 @@
 #define __SIGNATURE_H__
 
 typedef enum {
-    SignatureType_Rsa4096Sha1    = 0x10000,
-    SignatureType_Rsa2048Sha1    = 0x10001,
-    SignatureType_Ecsda240Sha1   = 0x10002,
-    SignatureType_Rsa4096Sha256  = 0x10003,
-    SignatureType_Rsa2048Sha256  = 0x10004,
-    SignatureType_Ecsda240Sha256 = 0x10005
+    SignatureType_Rsa4096Sha1   = 0x10000,
+    SignatureType_Rsa2048Sha1   = 0x10001,
+    SignatureType_Ecc480Sha1    = 0x10002,
+    SignatureType_Rsa4096Sha256 = 0x10003,
+    SignatureType_Rsa2048Sha256 = 0x10004,
+    SignatureType_Ecc480Sha256  = 0x10005,
+    SignatureType_Hmac160Sha1   = 0x10006
 } SignatureType;
 
 typedef struct {
@@ -41,9 +42,15 @@ typedef struct {
 } SignatureBlockRsa2048;
 
 typedef struct {
-    u32 sig_type;           ///< SignatureType_Ecsda240Sha1, SignatureType_Ecsda240Sha256.
+    u32 sig_type;           ///< SignatureType_Ecc480Sha1, SignatureType_Ecc480Sha256.
     u8 signature[0x3C];
     u8 padding[0x40];
-} SignatureBlockEcsda240;
+} SignatureBlockEcc480;
+
+typedef struct {
+    u32 sig_type;           ///< SignatureType_Hmac160Sha1.
+    u8 signature[0x14];
+    u8 padding[0x28];
+} SignatureBlockHmac160;
 
 #endif /* __SIGNATURE_H__ */

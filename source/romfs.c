@@ -31,9 +31,10 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     NcaContext *nca_ctx = NULL;
     u64 dir_table_offset = 0, file_table_offset = 0;
     
-    if (!out || !nca_fs_ctx || nca_fs_ctx->section_type != NcaFsSectionType_RomFs || !nca_fs_ctx->header || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || \
-        (nca_ctx->format_version == NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalSha256)) || \
-        (nca_ctx->format_version != NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalIntegrity)))
+    if (!out || !nca_fs_ctx || (nca_fs_ctx->section_type != NcaFsSectionType_RomFs && nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs) || !nca_fs_ctx->header || \
+        !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->format_version == NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || \
+        nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalSha256)) || (nca_ctx->format_version != NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
+        nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalIntegrity)))
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -85,6 +86,8 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         return false;
     }
     
+    bool success = false;
+    
     /* Read directory entries table */
     dir_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_offset : out->header.cur_format.directory_entry_offset);
     out->dir_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_size : out->header.cur_format.directory_entry_size);
@@ -106,7 +109,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     if (!ncaReadFsSection(nca_fs_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
     {
         LOGFILE("Failed to read RomFS directory entries table!");
-        return false;
+        goto exit;
     }
     
     /* Read file entries table */
@@ -117,20 +120,20 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     if (!out->file_table_size || (nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx && (file_table_offset >= out->size || (file_table_offset + out->file_table_size) > out->size)))
     {
         LOGFILE("Invalid RomFS file entries table!");
-        return false;
+        goto exit;
     }
     
     out->file_table = malloc(out->file_table_size);
     if (!out->file_table)
     {
         LOGFILE("Unable to allocate memory for RomFS file entries table!");
-        return false;
+        goto exit;
     }
     
     if (!ncaReadFsSection(nca_fs_ctx, out->file_table, out->file_table_size, out->offset + file_table_offset))
     {
         LOGFILE("Failed to read RomFS file entries table!");
-        return false;
+        goto exit;
     }
     
     /* Get file data body offset */
@@ -139,10 +142,15 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     if (nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx && out->body_offset >= out->size)
     {
         LOGFILE("Invalid RomFS file data body!");
-        return false;
+        goto exit;
     }
     
-    return true;
+    success = true;
+    
+exit:
+    if (!success) romfsFreeContext(out);
+    
+    return success;
 }
 
 bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset)

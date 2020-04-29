@@ -23,26 +23,29 @@
 #include "signature.h"
 
 #define CERT_MAX_SIZE   0x500   /* Equivalent to sizeof(CertSigRsa4096PubKeyRsa4096) */
-#define CERT_MIN_SIZE   0x180   /* Equivalent to sizeof(CertSigEcsda240PubKeyEcsda240) */
+#define CERT_MIN_SIZE   0x140   /* Equivalent to sizeof(CertSigHmac160PubKeyEcc480) */
 
 typedef enum {
     CertType_None                       = 0,
     CertType_SigRsa4096_PubKeyRsa4096   = 1,
     CertType_SigRsa4096_PubKeyRsa2048   = 2,
-    CertType_SigRsa4096_PubKeyEcsda240  = 3,
+    CertType_SigRsa4096_PubKeyEcc480  = 3,
     CertType_SigRsa2048_PubKeyRsa4096   = 4,
     CertType_SigRsa2048_PubKeyRsa2048   = 5,
-    CertType_SigRsa2048_PubKeyEcsda240  = 6,
-    CertType_SigEcsda240_PubKeyRsa4096  = 7,
-    CertType_SigEcsda240_PubKeyRsa2048  = 8,
-    CertType_SigEcsda240_PubKeyEcsda240 = 9
+    CertType_SigRsa2048_PubKeyEcc480  = 6,
+    CertType_SigEcc480_PubKeyRsa4096  = 7,
+    CertType_SigEcc480_PubKeyRsa2048  = 8,
+    CertType_SigEcc480_PubKeyEcc480 = 9,
+    CertType_SigHmac160_PubKeyRsa4096   = 10,
+    CertType_SigHmac160_PubKeyRsa2048   = 11,
+    CertType_SigHmac160_PubKeyEcc480  = 12
 } CertType;
 
 /// Always stored using big endian byte order.
 typedef enum {
     CertPubKeyType_Rsa4096  = 0,
     CertPubKeyType_Rsa2048  = 1,
-    CertPubKeyType_Ecsda240 = 2
+    CertPubKeyType_Ecc480 = 2
 } CertPubKeyType;
 
 typedef struct {
@@ -60,69 +63,87 @@ typedef struct {
 typedef struct {
     u8 public_key[0x3C];
     u8 padding[0x3C];
-} CertPublicKeyBlockEcsda240;
+} CertPublicKeyBlockEcc480;
 
 /// Placed after the certificate signature block.
 typedef struct {
     char issuer[0x40];
-    u32 pub_key_type;
+    u32 pub_key_type;   ///< CertPubKeyType.
     char name[0x40];
-    u32 cert_id;
+    u32 date;
 } CertCommonBlock;
 
 typedef struct {
-    SignatureBlockRsa4096 sig_block;        ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Rsa4096.
+    SignatureBlockRsa4096 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Rsa4096.
     CertPublicKeyBlockRsa4096 pub_key_block;
 } CertSigRsa4096PubKeyRsa4096;
 
 typedef struct {
-    SignatureBlockRsa4096 sig_block;        ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Rsa2048.
+    SignatureBlockRsa4096 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Rsa2048.
     CertPublicKeyBlockRsa2048 pub_key_block;
 } CertSigRsa4096PubKeyRsa2048;
 
 typedef struct {
-    SignatureBlockRsa4096 sig_block;        ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Ecsda240.
-    CertPublicKeyBlockEcsda240 pub_key_block;
-} CertSigRsa4096PubKeyEcsda240;
+    SignatureBlockRsa4096 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Ecc480.
+    CertPublicKeyBlockEcc480 pub_key_block;
+} CertSigRsa4096PubKeyEcc480;
 
 typedef struct {
-    SignatureBlockRsa2048 sig_block;        ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Rsa4096.
+    SignatureBlockRsa2048 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Rsa4096.
     CertPublicKeyBlockRsa4096 pub_key_block;
 } CertSigRsa2048PubKeyRsa4096;
 
 typedef struct {
-    SignatureBlockRsa2048 sig_block;        ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Rsa2048.
+    SignatureBlockRsa2048 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Rsa2048.
     CertPublicKeyBlockRsa2048 pub_key_block;
 } CertSigRsa2048PubKeyRsa2048;
 
 typedef struct {
-    SignatureBlockRsa2048 sig_block;        ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Ecsda240.
-    CertPublicKeyBlockEcsda240 pub_key_block;
-} CertSigRsa2048PubKeyEcsda240;
+    SignatureBlockRsa2048 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Ecc480.
+    CertPublicKeyBlockEcc480 pub_key_block;
+} CertSigRsa2048PubKeyEcc480;
 
 typedef struct {
-    SignatureBlockEcsda240 sig_block;       ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Rsa4096.
+    SignatureBlockEcc480 sig_block;             ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Rsa4096.
     CertPublicKeyBlockRsa4096 pub_key_block;
-} CertSigEcsda240PubKeyRsa4096;
+} CertSigEcc480PubKeyRsa4096;
 
 typedef struct {
-    SignatureBlockEcsda240 sig_block;       ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Rsa2048.
+    SignatureBlockEcc480 sig_block;             ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Rsa2048.
     CertPublicKeyBlockRsa2048 pub_key_block;
-} CertSigEcsda240PubKeyRsa2048;
+} CertSigEcc480PubKeyRsa2048;
 
 typedef struct {
-    SignatureBlockEcsda240 sig_block;       ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_blk;        ///< pub_key_type field must be CertPubKeyType_Ecsda240.
-    CertPublicKeyBlockEcsda240 pub_key_block;
-} CertSigEcsda240PubKeyEcsda240;
+    SignatureBlockEcc480 sig_block;             ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Ecc480.
+    CertPublicKeyBlockEcc480 pub_key_block;
+} CertSigEcc480PubKeyEcc480;
+
+typedef struct {
+    SignatureBlockHmac160 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Rsa4096.
+    CertPublicKeyBlockRsa4096 pub_key_block;
+} CertSigHmac160PubKeyRsa4096;
+
+typedef struct {
+    SignatureBlockHmac160 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Rsa2048.
+    CertPublicKeyBlockRsa2048 pub_key_block;
+} CertSigHmac160PubKeyRsa2048;
+
+typedef struct {
+    SignatureBlockHmac160 sig_block;            ///< sig_type field is stored using big endian byte order.
+    CertCommonBlock cert_common_blk;            ///< pub_key_type field must be CertPubKeyType_Ecc480.
+    CertPublicKeyBlockEcc480 pub_key_block;
+} CertSigHmac160PubKeyEcc480;
 
 /// Used to store certificate type, size and raw data.
 typedef struct {

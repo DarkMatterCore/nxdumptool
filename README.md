@@ -12,6 +12,8 @@ todo:
     romfs: filelist generation methods
     romfs: patch writing function
     
+    bktr: filelist generation methods
+    
     Result txIsFat32(bool *mode) {
         Result rc = serviceDispatch(&g_tx, 137);
         if (rc == 0xa08) {

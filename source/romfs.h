@@ -130,7 +130,7 @@ bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *f
 bool romfsGetTotalDataSize(RomFileSystemContext *ctx, u64 *out_size);
 
 /// Calculates the extracted size from a RomFS directory.
-bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size); 
+bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size);
 
 /// Retrieves a RomFS directory entry by path.
 /// Input path must have a leading slash ('/'). If just a single slash is provided, a pointer to the root directory entry shall be returned.

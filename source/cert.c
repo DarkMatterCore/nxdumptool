@@ -26,7 +26,7 @@
 #define CERT_SAVEFILE_STORAGE_BASE_PATH "/certificate/"
 
 #define CERT_TYPE(sig)  (pub_key_type == CertPubKeyType_Rsa4096 ? CertType_Sig##sig##_PubKeyRsa4096 : \
-                        (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig##_PubKeyRsa2048 : CertType_Sig##sig##_PubKeyEcsda240))
+                        (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig##_PubKeyRsa2048 : CertType_Sig##sig##_PubKeyEcc480))
 
 /* Global variables. */
 
@@ -91,7 +91,7 @@ void certFreeCertificateChain(CertificateChain *chain)
 
 CertCommonBlock *certGetCommonBlockFromCertificate(Certificate *cert)
 {
-    if (!cert || cert->type == CertType_None || cert->type > CertType_SigEcsda240_PubKeyEcsda240 || cert->size < CERT_MIN_SIZE || cert->size > CERT_MAX_SIZE)
+    if (!cert || cert->type == CertType_None || cert->type > CertType_SigHmac160_PubKeyEcc480 || cert->size < CERT_MIN_SIZE || cert->size > CERT_MAX_SIZE)
     {
         LOGFILE("Invalid parameters!");
         return NULL;
@@ -107,8 +107,8 @@ CertCommonBlock *certGetCommonBlockFromCertificate(Certificate *cert)
         case CertType_SigRsa4096_PubKeyRsa2048:
             cert_common_blk = &(((CertSigRsa4096PubKeyRsa2048*)cert->data)->cert_common_blk);
             break;
-        case CertType_SigRsa4096_PubKeyEcsda240:
-            cert_common_blk = &(((CertSigRsa4096PubKeyEcsda240*)cert->data)->cert_common_blk);
+        case CertType_SigRsa4096_PubKeyEcc480:
+            cert_common_blk = &(((CertSigRsa4096PubKeyEcc480*)cert->data)->cert_common_blk);
             break;
         case CertType_SigRsa2048_PubKeyRsa4096:
             cert_common_blk = &(((CertSigRsa2048PubKeyRsa4096*)cert->data)->cert_common_blk);
@@ -116,17 +116,26 @@ CertCommonBlock *certGetCommonBlockFromCertificate(Certificate *cert)
         case CertType_SigRsa2048_PubKeyRsa2048:
             cert_common_blk = &(((CertSigRsa2048PubKeyRsa2048*)cert->data)->cert_common_blk);
             break;
-        case CertType_SigRsa2048_PubKeyEcsda240:
-            cert_common_blk = &(((CertSigRsa2048PubKeyEcsda240*)cert->data)->cert_common_blk);
+        case CertType_SigRsa2048_PubKeyEcc480:
+            cert_common_blk = &(((CertSigRsa2048PubKeyEcc480*)cert->data)->cert_common_blk);
             break;
-        case CertType_SigEcsda240_PubKeyRsa4096:
-            cert_common_blk = &(((CertSigEcsda240PubKeyRsa4096*)cert->data)->cert_common_blk);
+        case CertType_SigEcc480_PubKeyRsa4096:
+            cert_common_blk = &(((CertSigEcc480PubKeyRsa4096*)cert->data)->cert_common_blk);
             break;
-        case CertType_SigEcsda240_PubKeyRsa2048:
-            cert_common_blk = &(((CertSigEcsda240PubKeyRsa2048*)cert->data)->cert_common_blk);
+        case CertType_SigEcc480_PubKeyRsa2048:
+            cert_common_blk = &(((CertSigEcc480PubKeyRsa2048*)cert->data)->cert_common_blk);
             break;
-        case CertType_SigEcsda240_PubKeyEcsda240:
-            cert_common_blk = &(((CertSigEcsda240PubKeyEcsda240*)cert->data)->cert_common_blk);
+        case CertType_SigEcc480_PubKeyEcc480:
+            cert_common_blk = &(((CertSigEcc480PubKeyEcc480*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigHmac160_PubKeyRsa4096:
+            cert_common_blk = &(((CertSigHmac160PubKeyRsa4096*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigHmac160_PubKeyRsa2048:
+            cert_common_blk = &(((CertSigHmac160PubKeyRsa2048*)cert->data)->cert_common_blk);
+            break;
+        case CertType_SigHmac160_PubKeyEcc480:
+            cert_common_blk = &(((CertSigHmac160PubKeyEcc480*)cert->data)->cert_common_blk);
             break;
         default:
             break;
@@ -265,9 +274,12 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
         case SignatureType_Rsa2048Sha256:
             offset += sizeof(SignatureBlockRsa2048);
             break;
-        case SignatureType_Ecsda240Sha1:
-        case SignatureType_Ecsda240Sha256:
-            offset += sizeof(SignatureBlockEcsda240);
+        case SignatureType_Ecc480Sha1:
+        case SignatureType_Ecc480Sha256:
+            offset += sizeof(SignatureBlockEcc480);
+            break;
+        case SignatureType_Hmac160Sha1:
+            offset += sizeof(SignatureBlockHmac160);
             break;
         default:
             LOGFILE("Invalid signature type value! (0x%08X)", sig_type);
@@ -281,7 +293,7 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
     
     offset += MEMBER_SIZE(CertCommonBlock, pub_key_type);
     offset += MEMBER_SIZE(CertCommonBlock, name);
-    offset += MEMBER_SIZE(CertCommonBlock, cert_id);
+    offset += MEMBER_SIZE(CertCommonBlock, date);
     
     switch(pub_key_type)
     {
@@ -291,8 +303,8 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
         case CertPubKeyType_Rsa2048:
             offset += sizeof(CertPublicKeyBlockRsa2048);
             break;
-        case CertPubKeyType_Ecsda240:
-            offset += sizeof(CertPublicKeyBlockEcsda240);
+        case CertPubKeyType_Ecc480:
+            offset += sizeof(CertPublicKeyBlockEcc480);
             break;
         default:
             LOGFILE("Invalid public key type value! (0x%08X)", pub_key_type);
@@ -313,9 +325,13 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
     {
         type = CERT_TYPE(Rsa2048);
     } else
-    if (sig_type == SignatureType_Ecsda240Sha1 || sig_type == SignatureType_Ecsda240Sha256)
+    if (sig_type == SignatureType_Ecc480Sha1 || sig_type == SignatureType_Ecc480Sha256)
     {
-        type = CERT_TYPE(Ecsda240);
+        type = CERT_TYPE(Ecc480);
+    } else
+    if (sig_type == SignatureType_Hmac160Sha1)
+    {
+        type = CERT_TYPE(Hmac160);
     }
     
     return type;

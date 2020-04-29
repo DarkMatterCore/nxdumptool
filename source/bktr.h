@@ -71,11 +71,16 @@ typedef struct {
 } BktrAesCtrExStorageBlock;
 
 typedef struct {
-    RomFileSystemContext base_romfs;            ///< Base NCA RomFS context.
-    RomFileSystemContext patch_romfs;           ///< Update NCA RomFS context. Must be used with RomFS directory/file entry functions, because it holds the updated directory/file tables.
-    NcaPatchInfo *patch_info;
+    RomFileSystemContext base_romfs_ctx;        ///< Base NCA RomFS context.
+    RomFileSystemContext patch_romfs_ctx;       ///< Update NCA RomFS context. Must be used with RomFS directory/file entry functions, because it holds the updated directory/file tables.
+    NcaPatchInfo *patch_info;                   ///< BKTR patch info block.
+    u64 size;                                   ///< Patched RomFS image size.
     BktrIndirectStorageBlock *indirect_block;
     BktrAesCtrExStorageBlock *aes_ctr_ex_block;
+    
+    
+    
+    
     u64 virtual_seek;                           ///< Relative to the start of the NCA FS section.
     u64 base_seek;                              ///< Relative to the start of the NCA FS section (base NCA RomFS).
     u64 patch_seek;                             ///< Relative to the start of the NCA FS section (update NCA BKTR).
@@ -88,32 +93,70 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
 NX_INLINE void bktrFreeContext(BktrContext *ctx)
 {
     if (!ctx) return;
-    romfsFreeContext(&(ctx->base_romfs));
-    romfsFreeContext(&(ctx->update_romfs));
+    romfsFreeContext(&(ctx->base_romfs_ctx));
+    romfsFreeContext(&(ctx->patch_romfs_ctx));
     if (ctx->indirect_block) free(ctx->indirect_block);
     if (ctx->aes_ctr_ex_block) free(ctx->aes_ctr_ex_block);
     memset(ctx, 0, sizeof(BktrContext));
 }
 
+/// Reads raw filesystem data using a BKTR context.
+/// Input offset must be relative to the start of the patched RomFS image.
+bool bktrReadFileSystemData(BktrContext *ctx, void *out, u64 read_size, u64 offset);
 
-
-
-
-
-
-
-/// Reads raw filesystem data using a RomFS context.
-/// Input offset must be relative to the start of the RomFS.
-//bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset);
-
-/// Reads data from a previously retrieved RomFileSystemFileEntry using a RomFS context.
+/// Reads data from a previously retrieved RomFileSystemFileEntry using a BKTR context.
 /// Input offset must be relative to the start of the RomFS file entry data.
-//bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
+bool bktrReadFileEntryData(BktrContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
 
+/// Miscellaneous functions.
+/// These are just wrappers for RomFS functions.
 
+NX_INLINE RomFileSystemDirectoryEntry *bktrGetDirectoryEntryByOffset(BktrContext *ctx, u32 dir_entry_offset)
+{
+    if (!ctx) return NULL;
+    return romfsGetDirectoryEntryByOffset(&(ctx->patch_romfs_ctx), dir_entry_offset);
+}
 
+NX_INLINE RomFileSystemFileEntry *bktrGetFileEntryByOffset(BktrContext *ctx, u32 file_entry_offset)
+{
+    if (!ctx) return NULL;
+    return romfsGetFileEntryByOffset(&(ctx->patch_romfs_ctx), file_entry_offset);
+}
 
+NX_INLINE bool bktrGetTotalDataSize(BktrContext *ctx, u64 *out_size)
+{
+    if (!ctx) return false;
+    return romfsGetTotalDataSize(&(ctx->patch_romfs_ctx), out_size);
+}
 
+NX_INLINE bool bktrGetDirectoryDataSize(BktrContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size)
+{
+    if (!ctx) return false;
+    return romfsGetDirectoryDataSize(&(ctx->patch_romfs_ctx), dir_entry, out_size);
+}
 
+NX_INLINE RomFileSystemDirectoryEntry *bktrGetDirectoryEntryByPath(BktrContext *ctx, const char *path)
+{
+    if (!ctx) return NULL;
+    return romfsGetDirectoryEntryByPath(&(ctx->patch_romfs_ctx), path);
+}
+
+NX_INLINE RomFileSystemFileEntry *bktrGetFileEntryByPath(BktrContext *ctx, const char *path)
+{
+    if (!ctx) return NULL;
+    return romfsGetFileEntryByPath(&(ctx->patch_romfs_ctx), path);
+}
+
+NX_INLINE bool bktrGeneratePathFromDirectoryEntry(BktrContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size)
+{
+    if (!ctx) return false;
+    return romfsGeneratePathFromDirectoryEntry(&(ctx->patch_romfs_ctx), dir_entry, out_path, out_path_size);
+}
+
+NX_INLINE bool bktrGeneratePathFromFileEntry(BktrContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size)
+{
+    if (!ctx) return false;
+    return romfsGeneratePathFromFileEntry(&(ctx->patch_romfs_ctx), file_entry, out_path, out_path_size);
+}
 
 #endif /* __BKTR_H__ */
