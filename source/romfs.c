@@ -31,10 +31,9 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     NcaContext *nca_ctx = NULL;
     u64 dir_table_offset = 0, file_table_offset = 0;
     
-    if (!out || !nca_fs_ctx || (nca_fs_ctx->section_type != NcaFsSectionType_RomFs && nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs) || !nca_fs_ctx->header || \
-        !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->format_version == NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || \
-        nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalSha256)) || (nca_ctx->format_version != NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
-        nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalIntegrity)))
+    if (!out || !nca_fs_ctx || !nca_fs_ctx->header || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->format_version == NcaVersion_Nca0 && \
+        (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalSha256)) || (nca_ctx->format_version != NcaVersion_Nca0 && \
+        (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalIntegrity)))
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -61,8 +60,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         out->offset = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.offset;
         out->size = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.size;
     } else {
-        /* Don't verify offsets from Patch RomFS sections, because they reflect the full, patched RomFS image */
-        if (nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx && !ncaValidateHierarchicalIntegrityOffsets(&(nca_fs_ctx->header->hash_info.hierarchical_integrity), nca_fs_ctx->section_size))
+        if (!ncaValidateHierarchicalIntegrityOffsets(&(nca_fs_ctx->header->hash_info.hierarchical_integrity), nca_fs_ctx->section_size))
         {
             LOGFILE("Invalid HierarchicalIntegrity block!");
             return false;
@@ -92,8 +90,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     dir_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_offset : out->header.cur_format.directory_entry_offset);
     out->dir_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_size : out->header.cur_format.directory_entry_size);
     
-    /* Don't verify offsets from Patch RomFS sections, because they reflect the full, patched RomFS image */
-    if (!out->dir_table_size || (nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx && (dir_table_offset >= out->size || (dir_table_offset + out->dir_table_size) > out->size)))
+    if (!out->dir_table_size || dir_table_offset >= out->size || (dir_table_offset + out->dir_table_size) > out->size)
     {
         LOGFILE("Invalid RomFS directory entries table!");
         return false;
@@ -116,8 +113,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     file_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_offset : out->header.cur_format.file_entry_offset);
     out->file_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_size : out->header.cur_format.file_entry_size);
     
-    /* Don't verify offsets from Patch RomFS sections, because they reflect the full, patched RomFS image */
-    if (!out->file_table_size || (nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx && (file_table_offset >= out->size || (file_table_offset + out->file_table_size) > out->size)))
+    if (!out->file_table_size || file_table_offset >= out->size || (file_table_offset + out->file_table_size) > out->size)
     {
         LOGFILE("Invalid RomFS file entries table!");
         goto exit;
@@ -137,9 +133,8 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     }
     
     /* Get file data body offset */
-    /* Don't verify offsets from Patch RomFS sections, because they reflect the full, patched RomFS image */
     out->body_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.body_offset : out->header.cur_format.body_offset);
-    if (nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx && out->body_offset >= out->size)
+    if (out->body_offset >= out->size)
     {
         LOGFILE("Invalid RomFS file data body!");
         goto exit;

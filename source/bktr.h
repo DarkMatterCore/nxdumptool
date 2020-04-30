@@ -73,17 +73,11 @@ typedef struct {
 typedef struct {
     RomFileSystemContext base_romfs_ctx;        ///< Base NCA RomFS context.
     RomFileSystemContext patch_romfs_ctx;       ///< Update NCA RomFS context. Must be used with RomFS directory/file entry functions, because it holds the updated directory/file tables.
-    NcaPatchInfo *patch_info;                   ///< BKTR patch info block.
+    u64 offset;                                 ///< Patched RomFS image offset (relative to the start of the update NCA FS section).
     u64 size;                                   ///< Patched RomFS image size.
-    BktrIndirectStorageBlock *indirect_block;
-    BktrAesCtrExStorageBlock *aes_ctr_ex_block;
-    
-    
-    
-    
-    u64 virtual_seek;                           ///< Relative to the start of the NCA FS section.
-    u64 base_seek;                              ///< Relative to the start of the NCA FS section (base NCA RomFS).
-    u64 patch_seek;                             ///< Relative to the start of the NCA FS section (update NCA BKTR).
+    u64 body_offset;                            ///< Patched RomFS image file data body offset (relative to the start of the RomFS).
+    BktrIndirectStorageBlock *indirect_block;   ///< BKTR Indirect Storage Block.
+    BktrAesCtrExStorageBlock *aes_ctr_ex_block; ///< BKTR AesCtrEx Storage Block.
 } BktrContext;
 
 /// Initializes a BKTR context.

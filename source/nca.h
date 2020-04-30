@@ -321,13 +321,18 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Reads decrypted data from a NCA FS section using an input context.
 /// Input offset must be relative to the start of the NCA FS section.
-/// If dealing with Patch RomFS sections, this function should only be used when *not* reading the BKTR AesCtrEx storage.
+/// If dealing with Patch RomFS sections, this function should only be used when *not* reading BKTR AesCtrEx storage data. Use ncaReadAesCtrExStorageFromBktrSection() for that.
 bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
+
+/// Reads decrypted BKTR AesCtrEx storage data from a NCA Patch RomFS section using an input context and a AesCtrEx CTR value.
+/// Input offset must be relative to the start of the NCA FS section.
+bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val);
 
 /// Returns a pointer to a heap-allocated buffer used to encrypt the input plaintext data, based on the encryption type used by the input NCA FS section, as well as its offset and size.
 /// Input offset must be relative to the start of the NCA FS section.
 /// Output size and offset are guaranteed to be aligned to the AES sector size used by the encryption type from the FS section.
 /// Output offset is relative to the start of the NCA content file, making it easier to use the output encrypted block to seamlessly replace data while dumping a NCA.
+/// This function isn't compatible with Patch RomFS sections.
 void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
 
 /// Generates HierarchicalSha256 FS section patch data, which can be used to replace NCA data in content dumping operations.
