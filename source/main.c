@@ -25,10 +25,7 @@
 
 #include <dirent.h>
 
-#include "nca.h"
-#include "pfs.h"
-#include "romfs.h"
-#include "rsa.h"
+#include "bktr.h"
 
 
 
@@ -63,9 +60,12 @@ int main(int argc, char *argv[])
     u8 *buf = NULL;
     FILE *tmp_file = NULL;
     
-    Ticket tik = {0};
-    NcaContext *nca_ctx = NULL;
+    Ticket base_tik = {0}, update_tik = {0};
+    NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
     NcmContentStorage ncm_storage = {0};
+    
+    BktrContext bktr_ctx = {0};
+    RomFileSystemFileEntry *bktr_file_entry = NULL;
     
     Result rc = 0;
     
@@ -75,8 +75,8 @@ int main(int argc, char *argv[])
         .c = { 0x01, 0x00, 0x82, 0x40, 0x0B, 0xCC, 0x60, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08 } // Untitled Goose Game
     };*/
     
-    // Untitled Goose Game's Program NCA
-    NcmPackagedContentInfo content_info = {
+    // Untitled Goose Game's Base Program NCA
+    NcmPackagedContentInfo base_program_content_info = {
         .hash = {
             0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8,
             0xD3, 0xE2, 0xE2, 0xA0, 0x66, 0xFD, 0x2B, 0xB6, 0x5C, 0x73, 0xF6, 0x89, 0xE2, 0x25, 0x0A, 0x82
@@ -93,27 +93,23 @@ int main(int argc, char *argv[])
         }
     };
     
-    // Untitled Goose Game's Control NCA
-    /*NcmPackagedContentInfo content_info = {
+    // Untitled Goose Game's Update Program NCA
+    NcmPackagedContentInfo update_program_content_info = {
         .hash = {
-            0xCE, 0x6E, 0x17, 0x1F, 0x93, 0x2D, 0x29, 0x28, 0xC1, 0x62, 0x94, 0x5B, 0x86, 0x2C, 0x42, 0x93,
-            0xAC, 0x2C, 0x0D, 0x3E, 0xD7, 0xCE, 0x07, 0xA2, 0x34, 0x33, 0x43, 0xD9, 0x21, 0x8A, 0xA3, 0xFE
+            0xDB, 0xEE, 0x62, 0x0E, 0x8F, 0x64, 0x37, 0xE4, 0x8A, 0x5C, 0x63, 0x61, 0xE8, 0xD2, 0x32, 0x6A,
+            0x21, 0x0D, 0x79, 0x50, 0x3A, 0xAF, 0x0D, 0x66, 0x76, 0xE2, 0xBC, 0x84, 0xF7, 0x0A, 0x21, 0xE2
         },
         .info = {
             .content_id = {
-                .c = { 0xCE, 0x6E, 0x17, 0x1F, 0x93, 0x2D, 0x29, 0x28, 0xC1, 0x62, 0x94, 0x5B, 0x86, 0x2C, 0x42, 0x93 }
+                .c = { 0xDB, 0xEE, 0x62, 0x0E, 0x8F, 0x64, 0x37, 0xE4, 0x8A, 0x5C, 0x63, 0x61, 0xE8, 0xD2, 0x32, 0x6A }
             },
             .size = {
-                0x00, 0x74, 0x0A, 0x00, 0x00, 0x00
+                0x00, 0xF4, 0xA0, 0x0E, 0x00, 0x00
             },
-            .content_type = NcmContentType_Control,
+            .content_type = NcmContentType_Program,
             .id_offset = 0
         }
-    };*/
-    
-    PartitionFileSystemEntry *pfs_entry = NULL;
-    PartitionFileSystemContext pfs_ctx = {0};
-    NcaHierarchicalSha256Patch pfs_patch = {0};
+    };
     
     buf = malloc(0x400000);
     if (!buf)
@@ -125,14 +121,24 @@ int main(int argc, char *argv[])
     printf("read buf succeeded\n");
     consoleUpdate(NULL);
     
-    nca_ctx = calloc(1, sizeof(NcaContext));
-    if (!nca_ctx)
+    base_nca_ctx = calloc(1, sizeof(NcaContext));
+    if (!base_nca_ctx)
     {
-        printf("nca ctx buf failed\n");
+        printf("base nca ctx buf failed\n");
         goto out2;
     }
     
-    printf("nca ctx buf succeeded\n");
+    printf("base nca ctx buf succeeded\n");
+    consoleUpdate(NULL);
+    
+    update_nca_ctx = calloc(1, sizeof(NcaContext));
+    if (!update_nca_ctx)
+    {
+        printf("update nca ctx buf failed\n");
+        goto out2;
+    }
+    
+    printf("update nca ctx buf succeeded\n");
     consoleUpdate(NULL);
     
     rc = ncmOpenContentStorage(&ncm_storage, NcmStorageId_SdCard);
@@ -145,171 +151,127 @@ int main(int argc, char *argv[])
     printf("ncm open storage succeeded\n");
     consoleUpdate(NULL);
     
-    if (!ncaInitializeContext(nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &content_info, &tik))
+    if (!ncaInitializeContext(base_nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &base_program_content_info, &base_tik))
     {
-        printf("nca initialize ctx failed\n");
+        printf("base nca initialize ctx failed\n");
         goto out2;
     }
     
-    tmp_file = fopen("sdmc:/nxdt_test/nca_ctx.bin", "wb");
+    tmp_file = fopen("sdmc:/nxdt_test/base_nca_ctx.bin", "wb");
     if (tmp_file)
     {
-        fwrite(nca_ctx, 1, sizeof(NcaContext), tmp_file);
+        fwrite(base_nca_ctx, 1, sizeof(NcaContext), tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("nca ctx saved\n");
+        printf("base nca ctx saved\n");
     } else {
-        printf("nca ctx not saved\n");
+        printf("base nca ctx not saved\n");
     }
     
     consoleUpdate(NULL);
     
-    if (!pfsInitializeContext(&pfs_ctx, &(nca_ctx->fs_contexts[0])))
+    if (!ncaInitializeContext(update_nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &update_program_content_info, &update_tik))
     {
-        printf("pfs initialize ctx failed\n");
+        printf("update nca initialize ctx failed\n");
         goto out2;
     }
     
-    printf("pfs initialize ctx succeeded\n");
-    consoleUpdate(NULL);
-    
-    tmp_file = fopen("sdmc:/nxdt_test/pfs_ctx.bin", "wb");
+    tmp_file = fopen("sdmc:/nxdt_test/update_nca_ctx.bin", "wb");
     if (tmp_file)
     {
-        fwrite(&pfs_ctx, 1, sizeof(PartitionFileSystemContext), tmp_file);
+        fwrite(update_nca_ctx, 1, sizeof(NcaContext), tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("pfs ctx saved\n");
+        printf("update nca ctx saved\n");
     } else {
-        printf("pfs ctx not saved\n");
+        printf("update nca ctx not saved\n");
     }
     
     consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/pfs_header.bin", "wb");
-    if (tmp_file)
+    if (!bktrInitializeContext(&bktr_ctx, &(base_nca_ctx->fs_contexts[1]), &(update_nca_ctx->fs_contexts[1])))
     {
-        fwrite(pfs_ctx.header, 1, pfs_ctx.header_size, tmp_file);
-        fclose(tmp_file);
-        tmp_file = NULL;
-        printf("pfs header saved\n");
-    } else {
-        printf("pfs header not saved\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    pfs_entry = pfsGetEntryByName(&pfs_ctx, "main.npdm");
-    if (!pfs_entry)
-    {
-        printf("pfs get entry by name failed\n");
+        printf("bktr initialize ctx failed\n");
         goto out2;
     }
     
-    printf("pfs get entry by name succeeded\n");
+    printf("bktr initialize ctx succeeded\n");
     consoleUpdate(NULL);
     
-    if (!pfsReadEntryData(&pfs_ctx, pfs_entry, buf, pfs_entry->size, 0))
+    tmp_file = fopen("sdmc:/nxdt_test/bktr_ctx.bin", "wb");
+    if (tmp_file)
     {
-        printf("pfs read entry data failed\n");
+        fwrite(&bktr_ctx, 1, sizeof(BktrContext), tmp_file);
+        fclose(tmp_file);
+        tmp_file = NULL;
+        printf("bktr ctx saved\n");
+    } else {
+        printf("bktr ctx not saved\n");
+    }
+    
+    consoleUpdate(NULL);
+    
+    bktr_file_entry = bktrGetFileEntryByPath(&bktr_ctx, "/Data/resources.assets");
+    if (!bktr_file_entry)
+    {
+        printf("bktr get file entry by path failed\n");
         goto out2;
     }
     
-    printf("pfs read entry data succeeded\n");
+    printf("bktr get file entry by path success: %.*s | 0x%lX\n", bktr_file_entry->name_length, bktr_file_entry->name, bktr_file_entry->size);
     consoleUpdate(NULL);
     
-    tmp_file = fopen("sdmc:/nxdt_test/main.npdm", "wb");
+    /*tmp_file = fopen("sdmc:/nxdt_test/resources.assets", "wb");
     if (tmp_file)
     {
-        fwrite(buf, 1, pfs_entry->size, tmp_file);
-        fclose(tmp_file);
-        tmp_file = NULL;
-        printf("main.npdm saved\n");
-    } else {
-        printf("main.npdm not saved\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    u32 acid_offset = 0;
-    memcpy(&acid_offset, buf + 0x78, sizeof(u32));
-    memcpy(buf + acid_offset + RSA2048_SIGNATURE_SIZE, rsa2048GetCustomAcidPublicKey(), RSA2048_SIGNATURE_SIZE);
-    
-    tmp_file = fopen("sdmc:/nxdt_test/main_mod.npdm", "wb");
-    if (tmp_file)
-    {
-        fwrite(buf, 1, pfs_entry->size, tmp_file);
-        fclose(tmp_file);
-        tmp_file = NULL;
-        printf("main_mod.npdm saved\n");
-    } else {
-        printf("main_mod.npdm not saved\n");
-    }
-    
-    consoleUpdate(NULL);
-    
-    if (!pfsGenerateEntryPatch(&pfs_ctx, pfs_entry, buf + acid_offset + RSA2048_SIGNATURE_SIZE, RSA2048_SIGNATURE_SIZE, acid_offset + RSA2048_SIGNATURE_SIZE, &pfs_patch))
-    {
-        printf("pfs entry patch failed\n");
-        goto out2;
-    }
-    
-    printf("pfs entry patch succeeded\n");
-    consoleUpdate(NULL);
-    
-    tmp_file = fopen("sdmc:/nxdt_test/pfs_patch.bin", "wb");
-    if (tmp_file)
-    {
-        fwrite(&pfs_patch, 1, sizeof(NcaHierarchicalSha256Patch), tmp_file);
-        fclose(tmp_file);
-        tmp_file = NULL;
-        printf("pfs patch saved\n");
-    } else {
-        printf("pfs patch not saved\n");
-    }
-    
-    for(u8 i = 0; i < 2; i++)
-    {
-        NcaHashInfoLayerPatch *layer_patch = (i == 0 ? &(pfs_patch.hash_data_layer_patch) : &(pfs_patch.hash_target_layer_patch));
-        if (!layer_patch->size || !layer_patch->data) continue;
-        
-        char path[64];
-        sprintf(path, "sdmc:/nxdt_test/pfs_patch_l%u.bin", i);
-        
-        tmp_file = fopen(path, "wb");
-        if (tmp_file)
+        u64 curpos = 0, blksize = 0x400000;
+        for(curpos = 0; curpos < bktr_file_entry->size; curpos += blksize)
         {
-            fwrite(layer_patch->data, 1, layer_patch->size, tmp_file);
-            fclose(tmp_file);
-            tmp_file = NULL;
-            printf("pfs patch #%u saved\n", i);
-        } else {
-            printf("pfs patch #%u not saved\n", i);
+            if (blksize > (bktr_file_entry->size - curpos)) blksize = (bktr_file_entry->size - curpos);
+            
+            if (!bktrReadFileEntryData(&bktr_ctx, bktr_file_entry, buf, blksize, curpos)) break;
+            
+            fwrite(buf, 1, blksize, tmp_file);
         }
         
-        consoleUpdate(NULL);
-    }
-    
-    if (!ncaEncryptHeader(nca_ctx))
-    {
-        printf("nca header mod not encrypted\n");
-        goto out2;
-    }
-    
-    printf("nca header mod encrypted\n");
-    consoleUpdate(NULL);
-    
-    tmp_file = fopen("sdmc:/nxdt_test/nca_header_mod.bin", "wb");
-    if (tmp_file)
-    {
-        fwrite(&(nca_ctx->header), 1, sizeof(NcaHeader), tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("nca header mod saved\n");
+        
+        if (curpos < bktr_file_entry->size)
+        {
+            printf("resources.assets read error\n");
+        } else {
+            printf("resources.assets saved\n");
+        }
     } else {
-        printf("nca header mod not saved\n");
-    }
+        printf("resources.assets not saved\n");
+    }*/
     
+    tmp_file = fopen("sdmc:/nxdt_test/romfs.bin", "wb");
+    if (tmp_file)
+    {
+        u64 curpos = 0, blksize = 0x400000;
+        for(curpos = 0; curpos < bktr_ctx.size; curpos += blksize)
+        {
+            if (blksize > (bktr_ctx.size - curpos)) blksize = (bktr_ctx.size - curpos);
+            
+            if (!bktrReadFileSystemData(&bktr_ctx, buf, blksize, curpos)) break;
+            
+            fwrite(buf, 1, blksize, tmp_file);
+        }
+        
+        fclose(tmp_file);
+        tmp_file = NULL;
+        
+        if (curpos < bktr_ctx.size)
+        {
+            printf("romfs read error\n");
+        } else {
+            printf("romfs saved\n");
+        }
+    } else {
+        printf("romfs not saved\n");
+    }
     
     
     
@@ -331,13 +293,13 @@ out2:
     
     if (tmp_file) fclose(tmp_file);
     
-    ncaFreeHierarchicalSha256Patch(&pfs_patch);
-    
-    pfsFreeContext(&pfs_ctx);
+    bktrFreeContext(&bktr_ctx);
     
     if (serviceIsActive(&(ncm_storage.s))) ncmContentStorageClose(&ncm_storage);
     
-    if (nca_ctx) free(nca_ctx);
+    if (update_nca_ctx) free(update_nca_ctx);
+    
+    if (base_nca_ctx) free(base_nca_ctx);
     
     if (buf) free(buf);
     

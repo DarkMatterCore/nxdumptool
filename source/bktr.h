@@ -25,13 +25,13 @@
 typedef enum {
     BktrIndirectStorageIndex_Original = 0,
     BktrIndirectStorageIndex_Patch    = 1
-} BktrIndirectStorageIndex;
+} PACKED BktrIndirectStorageIndex;
 
 typedef struct {
     u64 virtual_offset;
     u64 physical_offset;
     u32 indirect_storage_index; ///< BktrIndirectStorageIndex.
-} BktrIndirectStorageEntry;
+} PACKED BktrIndirectStorageEntry;
 
 typedef struct {
     u32 index;
@@ -39,7 +39,7 @@ typedef struct {
     u64 end_offset;
     BktrIndirectStorageEntry indirect_storage_entries[0x3FF0 / sizeof(BktrIndirectStorageEntry)];
     u8 reserved[0x3FF0 % sizeof(BktrIndirectStorageEntry)];
-} BktrIndirectStorageBucket;
+} PACKED BktrIndirectStorageBucket;
 
 typedef struct {
     u32 index;
@@ -47,20 +47,20 @@ typedef struct {
     u64 virtual_size;
     u64 virtual_offsets[0x3FF0 / sizeof(u64)];
     BktrIndirectStorageBucket indirect_storage_buckets[];
-} BktrIndirectStorageBlock;
+} PACKED BktrIndirectStorageBlock;
 
 typedef struct {
     u64 offset;
     u32 size;
     u32 generation;
-} BktrAesCtrExStorageEntry;
+} PACKED BktrAesCtrExStorageEntry;
 
 typedef struct {
     u32 index;
     u32 entry_count;
     u64 end_offset;
     BktrAesCtrExStorageEntry aes_ctr_ex_storage_entries[0x3FF];
-} BktrAesCtrExStorageBucket;
+} PACKED BktrAesCtrExStorageBucket;
 
 typedef struct {
     u32 index;
@@ -68,7 +68,7 @@ typedef struct {
     u64 physical_size;
     u64 physical_offsets[0x3FF0 / sizeof(u64)];
     BktrAesCtrExStorageBucket aes_ctr_ex_storage_buckets[];
-} BktrAesCtrExStorageBlock;
+} PACKED BktrAesCtrExStorageBlock;
 
 typedef struct {
     RomFileSystemContext base_romfs_ctx;        ///< Base NCA RomFS context.
