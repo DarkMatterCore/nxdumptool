@@ -150,12 +150,6 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
     
     bool dev_cert = false;
     TikCommonBlock *tik_common_blk = NULL;
-    
-    SignatureBlockRsa4096 *sig_rsa_4096 = NULL;
-    SignatureBlockRsa2048 *sig_rsa_2048 = NULL;
-    SignatureBlockEcc480 *sig_ecc_480 = NULL;
-    SignatureBlockHmac160 *sig_hmac_160 = NULL;
-    
     char *sig_issuer = NULL;
     
     tik_common_blk = tikGetCommonBlockFromTicket(tik);
@@ -164,29 +158,37 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
     switch(tik->type)
     {
         case TikType_SigRsa4096:
+        {
             tik->size = sizeof(TikSigRsa4096);
-            sig_rsa_4096 = (SignatureBlockRsa4096*)tik->data;
+            SignatureBlockRsa4096 *sig_rsa_4096 = (SignatureBlockRsa4096*)tik->data;
             memset(sig_rsa_4096->signature, 0xFF, sizeof(sig_rsa_4096->signature));
             sig_issuer = sig_rsa_4096->issuer;
             break;
+        }
         case TikType_SigRsa2048:
+        {
             tik->size = sizeof(TikSigRsa2048);
-            sig_rsa_2048 = (SignatureBlockRsa2048*)tik->data;
+            SignatureBlockRsa2048 *sig_rsa_2048 = (SignatureBlockRsa2048*)tik->data;
             memset(sig_rsa_2048->signature, 0xFF, sizeof(sig_rsa_2048->signature));
             sig_issuer = sig_rsa_2048->issuer;
             break;
+        }
         case TikType_SigEcc480:
+        {
             tik->size = sizeof(TikSigEcc480);
-            sig_ecc_480 = (SignatureBlockEcc480*)tik->data;
+            SignatureBlockEcc480 *sig_ecc_480 = (SignatureBlockEcc480*)tik->data;
             memset(sig_ecc_480->signature, 0xFF, sizeof(sig_ecc_480->signature));
             sig_issuer = sig_ecc_480->issuer;
             break;
+        }
         case TikType_SigHmac160:
+        {
             tik->size = sizeof(TikSigHmac160);
-            sig_hmac_160 = (SignatureBlockHmac160*)tik->data;
+            SignatureBlockHmac160 *sig_hmac_160 = (SignatureBlockHmac160*)tik->data;
             memset(sig_hmac_160->signature, 0xFF, sizeof(sig_hmac_160->signature));
             sig_issuer = sig_hmac_160->issuer;
             break;
+        }
         default:
             break;
     }
