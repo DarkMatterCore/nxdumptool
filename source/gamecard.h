@@ -79,19 +79,19 @@ typedef enum {
 } GameCardCompatibilityType;
 
 typedef struct {
-	u64 fw_version;         ///< GameCardFwVersion.
-	u32 acc_ctrl;           ///< GameCardAccCtrl.
+    u64 fw_version;         ///< GameCardFwVersion.
+    u32 acc_ctrl;           ///< GameCardAccCtrl.
     u32 wait_1_time_read;   ///< Always 0x1388.
-	u32 wait_2_time_read;   ///< Always 0.
-	u32 wait_1_time_write;  ///< Always 0.
-	u32 wait_2_time_write;  ///< Always 0.
+    u32 wait_2_time_read;   ///< Always 0.
+    u32 wait_1_time_write;  ///< Always 0.
+    u32 wait_2_time_write;  ///< Always 0.
     u32 fw_mode;
-	u32 upp_version;
+    u32 upp_version;
     u8 compatibility_type;  ///< GameCardCompatibilityType.
-	u8 reserved_1[0x3];
-	u64 upp_hash;
-	u64 upp_id;             ///< Must match GAMECARD_UPDATE_TID.
-	u8 reserved_2[0x38];
+    u8 reserved_1[0x3];
+    u64 upp_hash;
+    u64 upp_id;             ///< Must match GAMECARD_UPDATE_TID.
+    u8 reserved_2[0x38];
 } GameCardExtendedHeader;
 
 typedef struct {
