@@ -47,13 +47,13 @@ typedef enum {
     TikLicenseType_Service      = 5
 } TikLicenseType;
 
-typedef struct {
-    u8 preinstallation         : 1;
-    u8 shared_title            : 1;
-    u8 all_contents            : 1;
-    u8 device_link_independent : 1;
-    u8 _volatile               : 1;
-    u8 elicense_required       : 1;
+typedef enum {
+    TikPropertyMask_PreInstallation      = BIT(0),
+    TikPropertyMask_SharedTitle          = BIT(1),
+    TikPropertyMask_AllContents          = BIT(2),
+    TikPropertyMask_DeviceLinkIndepedent = BIT(3),
+    TikPropertyMask_Volatile             = BIT(4),
+    TikPropertyMask_ELicenseRequired     = BIT(5)
 } TikPropertyMask;
 
 typedef enum {
@@ -67,14 +67,13 @@ typedef enum {
 
 /// Placed after the ticket signature block.
 typedef struct {
-    char issuer[0x40];
     u8 titlekey_block[0x100];
     u8 format_version;
     u8 titlekey_type;               ///< TikTitleKeyType.
     u16 ticket_version;
     u8 license_type;                ///< TikLicenseType.
     u8 key_generation;
-    TikPropertyMask property_mask;
+    u8 property_mask;               ///< TikPropertyMask.
     u8 reserved_1[0x9];
     u64 ticket_id;
     u64 device_id;

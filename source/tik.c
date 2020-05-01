@@ -151,6 +151,13 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
     bool dev_cert = false;
     TikCommonBlock *tik_common_blk = NULL;
     
+    SignatureBlockRsa4096 *sig_rsa_4096 = NULL;
+    SignatureBlockRsa2048 *sig_rsa_2048 = NULL;
+    SignatureBlockEcc480 *sig_ecc_480 = NULL;
+    SignatureBlockHmac160 *sig_hmac_160 = NULL;
+    
+    char *sig_issuer = NULL;
+    
     tik_common_blk = tikGetCommonBlockFromTicket(tik);
     if (!tik_common_blk || tik_common_blk->titlekey_type != TikTitleKeyType_Personalized) return;
     
@@ -158,28 +165,36 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
     {
         case TikType_SigRsa4096:
             tik->size = sizeof(TikSigRsa4096);
-            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockRsa4096, signature));
+            sig_rsa_4096 = (SignatureBlockRsa4096*)tik->data;
+            memset(sig_rsa_4096->signature, 0xFF, sizeof(sig_rsa_4096->signature));
+            sig_issuer = sig_rsa_4096->issuer;
             break;
         case TikType_SigRsa2048:
             tik->size = sizeof(TikSigRsa2048);
-            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockRsa2048, signature));
+            sig_rsa_2048 = (SignatureBlockRsa2048*)tik->data;
+            memset(sig_rsa_2048->signature, 0xFF, sizeof(sig_rsa_2048->signature));
+            sig_issuer = sig_rsa_2048->issuer;
             break;
         case TikType_SigEcc480:
             tik->size = sizeof(TikSigEcc480);
-            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockEcc480, signature));
+            sig_ecc_480 = (SignatureBlockEcc480*)tik->data;
+            memset(sig_ecc_480->signature, 0xFF, sizeof(sig_ecc_480->signature));
+            sig_issuer = sig_ecc_480->issuer;
             break;
         case TikType_SigHmac160:
             tik->size = sizeof(TikSigHmac160);
-            memset(tik->data + 4, 0xFF, MEMBER_SIZE(SignatureBlockHmac160, signature));
+            sig_hmac_160 = (SignatureBlockHmac160*)tik->data;
+            memset(sig_hmac_160->signature, 0xFF, sizeof(sig_hmac_160->signature));
+            sig_issuer = sig_hmac_160->issuer;
             break;
         default:
             break;
     }
     
-    dev_cert = (strstr(tik_common_blk->issuer, "CA00000004") != NULL);
+    dev_cert = (strstr(sig_issuer, "CA00000004") != NULL);
     
-    memset(tik_common_blk->issuer, 0, sizeof(tik_common_blk->issuer));
-    sprintf(tik_common_blk->issuer, "Root-CA%08X-XS00000020", dev_cert ? 4 : 3);
+    memset(sig_issuer, 0, MEMBER_SIZE(SignatureBlockRsa4096, issuer));
+    sprintf(sig_issuer, "Root-CA%08X-XS00000020", dev_cert ? 4 : 3);
     
     memset(tik_common_blk->titlekey_block, 0, sizeof(tik_common_blk->titlekey_block));
     memcpy(tik_common_blk->titlekey_block, tik->enc_titlekey, 0x10);

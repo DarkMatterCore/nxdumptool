@@ -286,8 +286,6 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
             return type;
     }
     
-    offset += MEMBER_SIZE(CertCommonBlock, issuer);
-    
     memcpy(&pub_key_type, data_u8 + offset, sizeof(u32));
     pub_key_type = __builtin_bswap32(pub_key_type);
     

@@ -49,12 +49,12 @@ typedef enum {
     GameCardRomSize_32GiB = 0xE2
 } GameCardRomSize;
 
-typedef struct {
-    u8 autoboot                              : 1;
-    u8 history_erase                         : 1;
-    u8 repair_tool                           : 1;
-    u8 different_region_cup_to_terra_device  : 1;
-    u8 different_region_cup_to_global_device : 1;
+typedef enum {
+    GameCardFlags_AutoBoot                         = BIT(0),
+    GameCardFlags_HistoryErase                     = BIT(1),
+    GameCardFlags_RepairTool                       = BIT(2),
+    GameCardFlags_DifferentRegionCupToTerraDevice  = BIT(3),
+    GameCardFlags_DifferentRegionCupToGlobalDevice = BIT(4)
 } GameCardFlags;
 
 typedef enum {
@@ -102,7 +102,7 @@ typedef struct {
     GameCardKeyFlags key_flags;
     u8 rom_size;                                    ///< GameCardRomSize.
     u8 header_version;
-    GameCardFlags flags;
+    u8 flags;                                       ///< GameCardFlags.
     u64 package_id;
     u32 valid_data_end_address;                     ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
     u8 reserved[0x4];

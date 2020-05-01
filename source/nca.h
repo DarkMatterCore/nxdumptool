@@ -52,12 +52,12 @@ typedef enum {
 } NcaDistributionType;
 
 typedef enum {
-    NcaContentType_Program       = 0,
-    NcaContentType_Meta          = 1,
-    NcaContentType_Control       = 2,
-    NcaContentType_Manual        = 3,
-    NcaContentType_Data          = 4,
-    NcaContentType_PublicData    = 5
+    NcaContentType_Program    = 0,
+    NcaContentType_Meta       = 1,
+    NcaContentType_Control    = 2,
+    NcaContentType_Manual     = 3,
+    NcaContentType_Data       = 4,
+    NcaContentType_PublicData = 5
 } NcaContentType;
 
 typedef enum {
@@ -88,8 +88,8 @@ typedef enum {
     NcaKeyGeneration_700_801  = 8,
     NcaKeyGeneration_810_811  = 9,
     NcaKeyGeneration_900_901  = 10,
-    NcaKeyGeneration_910_1001 = 11,
-    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1001
+    NcaKeyGeneration_910_1002 = 11,
+    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1002
 } NcaKeyGeneration;
 
 typedef struct {

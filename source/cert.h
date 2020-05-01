@@ -67,7 +67,6 @@ typedef struct {
 
 /// Placed after the certificate signature block.
 typedef struct {
-    char issuer[0x40];
     u32 pub_key_type;   ///< CertPubKeyType.
     char name[0x40];
     u32 date;

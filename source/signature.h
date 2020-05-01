@@ -33,24 +33,28 @@ typedef struct {
     u32 sig_type;           ///< SignatureType_Rsa4096Sha1, SignatureType_Rsa4096Sha256.
     u8 signature[0x200];
     u8 padding[0x3C];
+    char issuer[0x40];
 } SignatureBlockRsa4096;
 
 typedef struct {
     u32 sig_type;           ///< SignatureType_Rsa2048Sha1, SignatureType_Rsa2048Sha256.
     u8 signature[0x100];
     u8 padding[0x3C];
+    char issuer[0x40];
 } SignatureBlockRsa2048;
 
 typedef struct {
     u32 sig_type;           ///< SignatureType_Ecc480Sha1, SignatureType_Ecc480Sha256.
     u8 signature[0x3C];
     u8 padding[0x40];
+    char issuer[0x40];
 } SignatureBlockEcc480;
 
 typedef struct {
     u32 sig_type;           ///< SignatureType_Hmac160Sha1.
     u8 signature[0x14];
     u8 padding[0x28];
+    char issuer[0x40];
 } SignatureBlockHmac160;
 
 #endif /* __SIGNATURE_H__ */
