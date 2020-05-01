@@ -211,7 +211,7 @@ int main(int argc, char *argv[])
     
     consoleUpdate(NULL);
     
-    bktr_file_entry = bktrGetFileEntryByPath(&bktr_ctx, "/Data/resources.assets");
+    /*bktr_file_entry = bktrGetFileEntryByPath(&bktr_ctx, "/Data/resources.assets");
     if (!bktr_file_entry)
     {
         printf("bktr get file entry by path failed\n");
@@ -219,7 +219,7 @@ int main(int argc, char *argv[])
     }
     
     printf("bktr get file entry by path success: %.*s | 0x%lX\n", bktr_file_entry->name_length, bktr_file_entry->name, bktr_file_entry->size);
-    consoleUpdate(NULL);
+    consoleUpdate(NULL);*/
     
     /*tmp_file = fopen("sdmc:/nxdt_test/resources.assets", "wb");
     if (tmp_file)
@@ -245,9 +245,11 @@ int main(int argc, char *argv[])
         }
     } else {
         printf("resources.assets not saved\n");
-    }*/
+    }
     
-    tmp_file = fopen("sdmc:/nxdt_test/romfs.bin", "wb");
+    consoleUpdate(NULL);*/
+    
+    /*tmp_file = fopen("sdmc:/nxdt_test/romfs.bin", "wb");
     if (tmp_file)
     {
         u64 curpos = 0, blksize = 0x400000;
@@ -273,6 +275,31 @@ int main(int argc, char *argv[])
         printf("romfs not saved\n");
     }
     
+    consoleUpdate(NULL);*/
+    
+    printf("updated file list:\n");
+    consoleUpdate(NULL);
+    
+    u64 offset = 0;
+    bool updated = false;
+    char bktr_path[FS_MAX_PATH] = {0};
+    
+    while(offset < bktr_ctx.patch_romfs_ctx.file_table_size)
+    {
+        if (!(bktr_file_entry = bktrGetFileEntryByOffset(&bktr_ctx, offset)))
+        {
+            printf("Failed to retrieve file entry!\n");
+            goto out2;
+        }
+        
+        if (bktrIsFileEntryUpdated(&bktr_ctx, bktr_file_entry, &updated) && updated && bktrGeneratePathFromFileEntry(&bktr_ctx, bktr_file_entry, bktr_path, FS_MAX_PATH))
+        {
+            printf("%s\n", bktr_path);
+            consoleUpdate(NULL);
+        }
+        
+        offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + bktr_file_entry->name_length, 4);
+    }
     
     
     

@@ -246,6 +246,44 @@ bool bktrReadFileEntryData(BktrContext *ctx, RomFileSystemFileEntry *file_entry,
     return true;
 }
 
+bool bktrIsFileEntryUpdated(BktrContext *ctx, RomFileSystemFileEntry *file_entry, bool *out)
+{
+    if (!ctx || !ctx->body_offset || !ctx->indirect_block || !file_entry || !file_entry->size || file_entry->offset >= ctx->size || (file_entry->offset + file_entry->size) > ctx->size || !out)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    bool updated = false;
+    u64 file_offset = (ctx->offset + ctx->body_offset + file_entry->offset);
+    BktrIndirectStorageEntry *indirect_entry = NULL, *last_indirect_entry = NULL;
+    
+    indirect_entry = bktrGetIndirectStorageEntry(ctx->indirect_block, file_offset);
+    if (!indirect_entry)
+    {
+        LOGFILE("Error retrieving BKTR Indirect Storage Entry at offset 0x%lX!", file_offset);
+        return false;
+    }
+    
+    last_indirect_entry = indirect_entry;
+    
+    while(last_indirect_entry->virtual_offset < (file_offset + file_entry->size)) last_indirect_entry++;
+    
+    while(indirect_entry < last_indirect_entry)
+    {
+        if (indirect_entry->indirect_storage_index == BktrIndirectStorageIndex_Patch)
+        {
+            updated = true;
+            break;
+        }
+        
+        indirect_entry++;
+    }
+    
+    *out = updated;
+    return true;
+}
+
 static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, u64 offset)
 {
     if (!ctx || !ctx->base_romfs_ctx.nca_fs_ctx || !ctx->indirect_block || !out || !read_size)

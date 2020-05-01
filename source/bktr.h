@@ -102,6 +102,9 @@ bool bktrReadFileSystemData(BktrContext *ctx, void *out, u64 read_size, u64 offs
 /// Input offset must be relative to the start of the RomFS file entry data.
 bool bktrReadFileEntryData(BktrContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
 
+/// Checks if a RomFS file entry is updated by the Patch RomFS.
+bool bktrIsFileEntryUpdated(BktrContext *ctx, RomFileSystemFileEntry *file_entry, bool *out);
+
 /// Miscellaneous functions.
 /// These are just wrappers for RomFS functions.
 
