@@ -18,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
+#include <ctype.h>
 #include <time.h>
 #include <switch.h>
 
@@ -32,23 +33,145 @@
 
 /* Global variables. */
 
+static bool g_resourcesInitialized = false;
+static Mutex g_resourcesMutex = 0;
+
+static FsFileSystem *g_sdCardFileSystem = NULL;
+
+static FsStorage g_emmcBisSystemPartitionStorage = {0};
+static FATFS *g_emmcBisSystemPartitionFatFsObj = NULL;
+
+static AppletType g_programAppletType = 0;
+static bool g_homeButtonBlocked = false;
+static Mutex g_homeButtonMutex = 0;
+
 static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
 static AppletHookCookie g_systemOverclockCookie = {0};
 
 static Mutex g_logfileMutex = 0;
 
-static FsStorage g_emmcBisSystemPartitionStorage = {0};
-static FATFS *g_emmcBisSystemPartitionFatFsObj = NULL;
-
 /* Function prototypes. */
+
+static bool utilsMountEmmcBisSystemPartitionStorage(void);
+static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
 static void _utilsGetCustomFirmwareType(void);
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
-static bool utilsMountEmmcBisSystemPartitionStorage(void);
-static void utilsUnmountEmmcBisSystemPartitionStorage(void);
+bool utilsInitializeResources(void)
+{
+    mutexLock(&g_resourcesMutex);
+    
+    bool ret = g_resourcesInitialized;
+    if (ret) goto exit;
+    
+    /* Initialize needed services */
+    if (!servicesInitialize())
+    {
+        LOGFILE("Failed to initialize needed services!");
+        goto exit;
+    }
+    
+    /* Load NCA keyset */
+    if (!keysLoadNcaKeyset())
+    {
+        LOGFILE("Failed to load NCA keyset!");
+        goto exit;
+    }
+    
+    /* Allocate NCA crypto buffer */
+    if (!ncaAllocateCryptoBuffer())
+    {
+        LOGFILE("Unable to allocate memory for NCA crypto buffer!");
+        goto exit;
+    }
+    
+    /* Initialize gamecard interface */
+    if (!gamecardInitialize())
+    {
+        LOGFILE("Failed to initialize gamecard interface!");
+        goto exit;
+    }
+    
+    /* Retrieve SD card FsFileSystem */
+    if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
+    {
+        LOGFILE("fsdevGetDeviceFileSystem failed!");
+        goto exit;
+    }
+    
+    /* Mount eMMC BIS System partition */
+    if (!utilsMountEmmcBisSystemPartitionStorage()) goto exit;
+    
+    /* Get applet type */
+    g_programAppletType = appletGetAppletType();
+    
+    /* Disable screen dimming and auto sleep */
+    appletSetMediaPlaybackState(true);
+    
+    /* Retrieve custom firmware type */
+    _utilsGetCustomFirmwareType();
+    
+    /* Overclock system */
+    utilsOverclockSystem(true);
+    
+    /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked) */
+    appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
+    
+    /* Initialize FreeType */
+    //if (!freeTypeHelperInitialize()) return false;
+    
+    /* Initialize LVGL */
+    //if (!lvglHelperInitialize()) return false;
+    
+    ret = g_resourcesInitialized = true;
+    
+exit:
+    mutexUnlock(&g_resourcesMutex);
+    
+    return ret;
+}
+
+void utilsCloseResources(void)
+{
+    mutexLock(&g_resourcesMutex);
+    
+    /* Free LVGL resources */
+    //lvglHelperExit();
+    
+    /* Free FreeType resouces */
+    //freeTypeHelperExit();
+    
+    /* Unset our overclock applet hook */
+    appletUnhook(&g_systemOverclockCookie);
+    
+    /* Restore hardware clocks */
+    utilsOverclockSystem(false);
+    
+    /* Enable screen dimming and auto sleep */
+    appletSetMediaPlaybackState(false);
+    
+    /* Unblock HOME button presses */
+    utilsChangeHomeButtonBlockStatus(false);
+    
+    /* Unmount eMMC BIS System partition */
+    utilsUnmountEmmcBisSystemPartitionStorage();
+    
+    /* Deinitialize gamecard interface */
+    gamecardExit();
+    
+    /* Free NCA crypto buffer */
+    ncaFreeCryptoBuffer();
+    
+    /* Close initialized services */
+    servicesClose();
+    
+    g_resourcesInitialized = false;
+    
+    mutexUnlock(&g_resourcesMutex);
+}
 
 u64 utilsHidKeysAllDown(void)
 {
@@ -111,97 +234,49 @@ out:
     mutexUnlock(&g_logfileMutex);
 }
 
-void utilsOverclockSystem(bool restore)
+void removeIllegalCharacters(char *name)
 {
-    u32 cpuClkRate = ((restore ? CPU_CLKRT_NORMAL : CPU_CLKRT_OVERCLOCKED) * 1000000);
-    u32 memClkRate = ((restore ? MEM_CLKRT_NORMAL : MEM_CLKRT_OVERCLOCKED) * 1000000);
-    servicesChangeHardwareClockRates(cpuClkRate, memClkRate);
+    if (!name || !strlen(name)) return;
+    
+    u32 i, len = strlen(name);
+    for (i = 0; i < len; i++)
+    {
+        if (memchr("?[]/\\=+<>:;\",*|^", name[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || name[i] < 0x20 || name[i] > 0x7E) name[i] = '_';
+    }
 }
 
-bool utilsInitializeResources(void)
+void utilsReplaceIllegalCharacters(char *str)
 {
-    Result rc = 0;
+    size_t strsize = 0;
     
-    /* Initialize needed services */
-    if (!servicesInitialize())
+    if (!str || !(strsize = strlen(str))) return;
+    
+    for(size_t i = 0; i < strsize; i++)
     {
-        LOGFILE("Failed to initialize needed services!");
-        return false;
+        if (memchr("?[]/\\=+<>:;\",*|^", str[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || str[i] < 0x20 || str[i] > 0x7E) str[i] = '_';
     }
-    
-    /* Load NCA keyset */
-    if (!keysLoadNcaKeyset())
-    {
-        LOGFILE("Failed to load NCA keyset!");
-        return false;
-    }
-    
-    /* Allocate NCA crypto buffer */
-    if (!ncaAllocateCryptoBuffer())
-    {
-        LOGFILE("Unable to allocate memory for NCA crypto buffer!");
-        return false;
-    }
-    
-    /* Initialize gamecard interface */
-    rc = gamecardInitialize();
-    if (R_FAILED(rc))
-    {
-        LOGFILE("Failed to initialize gamecard interface!");
-        return false;
-    }
-    
-    /* Mount eMMC BIS System partition */
-    if (!utilsMountEmmcBisSystemPartitionStorage()) return false;
-    
-    /* Initialize FreeType */
-    //if (!freeTypeHelperInitialize()) return false;
-    
-    /* Initialize LVGL */
-    //if (!lvglHelperInitialize()) return false;
-    
-    /* Retrieve custom firmware type */
-    _utilsGetCustomFirmwareType();
-    
-    /* Overclock system */
-    utilsOverclockSystem(false);
-    
-    /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked) */
-    appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
-    
-    return true;
 }
 
-void utilsCloseResources(void)
+void utilsTrimString(char *str)
 {
-    /* Unset our overclock applet hook */
-    appletUnhook(&g_systemOverclockCookie);
+    size_t strsize = 0;
+    char *start = NULL, *end = NULL;
     
-    /* Restore hardware clocks */
-    utilsOverclockSystem(true);
+    if (!str || !(strsize = strlen(str))) return;
     
-    /* Free LVGL resources */
-    //lvglHelperExit();
+    start = str;
+    end = (start + strsize);
     
-    /* Free FreeType resouces */
-    //freeTypeHelperExit();
+    while(--end >= start)
+    {
+        if (!isspace((unsigned char)*end)) break;
+    }
     
-    /* Unmount eMMC BIS System partition */
-    utilsUnmountEmmcBisSystemPartitionStorage();
+    *(++end) = '\0';
     
-    /* Deinitialize gamecard interface */
-    gamecardExit();
+    while(isspace((unsigned char)*start)) start++;
     
-    /* Free NCA crypto buffer */
-    ncaFreeCryptoBuffer();
-    
-    /* Close initialized services */
-    servicesClose();
-}
-
-u8 utilsGetCustomFirmwareType(void)
-{
-    return g_customFirmwareType;
+    if (start != str) memmove(str, start, end - start + 1);
 }
 
 void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size)
@@ -223,39 +298,109 @@ void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src,
     dst[j] = '\0';
 }
 
+bool utilsGetFreeSdCardSpace(u64 *out)
+{
+    return utilsGetFreeFileSystemSpace(g_sdCardFileSystem, out);
+}
+
+bool utilsGetFreeFileSystemSpace(FsFileSystem *fs, u64 *out)
+{
+    if (!fs || !out)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    Result rc = fsFsGetFreeSpace(fs, "/", (s64*)out);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("fsFsGetFreeSpace failed! (0x%08X)", rc);
+        return false;
+    }
+    
+    return true;
+}
+
+bool utilsCheckIfFileExists(const char *path)
+{
+    if (!path || !strlen(path)) return false;
+    
+    FILE *chkfile = fopen(path, "rb");
+    if (chkfile)
+    {
+        fclose(chkfile);
+        return true;
+    }
+    
+    return false;
+}
+
+bool utilsCreateConcatenationFile(const char *path)
+{
+    Result rc = 0;
+    
+    if (!path || !strlen(path))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Safety check: remove any existant file/directory at the destination path */
+    remove(path);
+    fsdevDeleteDirectoryRecursively(path);
+    
+    /* Create ConcatenationFile */
+    /* If the call succeeds, the caller function will be able to operate on this file using stdio calls */
+    rc = fsdevCreateFile(path, 0, FsCreateOption_BigFile);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("fsdevCreateFile failed for \"%s\"! (0x%08X)", path, rc);
+        return false;
+    }
+    
+    return true;
+}
+
+bool utilsAppletModeCheck(void)
+{
+    return (g_programAppletType != AppletType_Application && g_programAppletType != AppletType_SystemApplication);
+}
+
+void utilsChangeHomeButtonBlockStatus(bool block)
+{
+    mutexLock(&g_homeButtonMutex);
+    
+    /* Only change HOME button blocking status if we're running as a regular application or a system application, and if it's current blocking status is different than the requested one */
+    if (!utilsAppletModeCheck() && block != g_homeButtonBlocked)
+    {
+        if (block)
+        {
+            appletBeginBlockingHomeButtonShortAndLongPressed(0);
+        } else {
+            appletEndBlockingHomeButtonShortAndLongPressed();
+        }
+        
+        g_homeButtonBlocked = block;
+    }
+    
+    mutexUnlock(&g_homeButtonMutex);
+}
+
+u8 utilsGetCustomFirmwareType(void)
+{
+    return g_customFirmwareType;
+}
+
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void)
 {
     return &g_emmcBisSystemPartitionStorage;
 }
 
-static void _utilsGetCustomFirmwareType(void)
+void utilsOverclockSystem(bool overclock)
 {
-    bool tx_srv = servicesCheckRunningServiceByName("tx");
-    bool rnx_srv = servicesCheckRunningServiceByName("rnx");
-    
-    if (!tx_srv && !rnx_srv)
-    {
-        /* Atmosphere */
-        g_customFirmwareType = UtilsCustomFirmwareType_Atmosphere;
-    } else
-    if (tx_srv && !rnx_srv)
-    {
-        /* SX OS */
-        g_customFirmwareType = UtilsCustomFirmwareType_SXOS;
-    } else {
-        /* ReiNX */
-        g_customFirmwareType = UtilsCustomFirmwareType_ReiNX;
-    }
-}
-
-static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
-{
-    (void)param;
-    
-    if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
-    
-    /* To do: read config here to actually know the value to use with utilsOverclockSystem */
-    utilsOverclockSystem(true);
+    u32 cpuClkRate = ((overclock ? CPU_CLKRT_OVERCLOCKED : CPU_CLKRT_NORMAL) * 1000000);
+    u32 memClkRate = ((overclock ? MEM_CLKRT_OVERCLOCKED : MEM_CLKRT_NORMAL) * 1000000);
+    servicesChangeHardwareClockRates(cpuClkRate, memClkRate);
 }
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void)
@@ -301,4 +446,21 @@ static void utilsUnmountEmmcBisSystemPartitionStorage(void)
         fsStorageClose(&g_emmcBisSystemPartitionStorage);
         memset(&g_emmcBisSystemPartitionStorage, 0, sizeof(FsStorage));
     }
+}
+
+static void _utilsGetCustomFirmwareType(void)
+{
+    bool tx_srv = servicesCheckRunningServiceByName("tx");
+    bool rnx_srv = servicesCheckRunningServiceByName("rnx");
+    g_customFirmwareType = (rnx_srv ? UtilsCustomFirmwareType_ReiNX : (tx_srv ? UtilsCustomFirmwareType_SXOS : UtilsCustomFirmwareType_Atmosphere));
+}
+
+static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
+{
+    (void)param;
+    
+    if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
+    
+    /* To do: read config here to actually know the value to use with utilsOverclockSystem */
+    utilsOverclockSystem(false);
 }

@@ -49,6 +49,7 @@ typedef struct {
 
 static SetCalRsa2048DeviceKey g_eTicketDeviceKey = {0};
 static bool g_eTicketDeviceKeyRetrieved = false;
+static Mutex g_eTicketDeviceKeyMutex = 0;
 
 /// Used during the RSA-OAEP titlekey decryption stage.
 static const u8 g_nullHash[0x20] = {
@@ -96,7 +97,11 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
         return false;
     }
     
-    if (!tikGetTitleKekEncryptedTitleKeyFromTicket(dst))
+    mutexLock(&g_eTicketDeviceKeyMutex);
+    bool titlekey_retrieved = tikGetTitleKekEncryptedTitleKeyFromTicket(dst);
+    mutexUnlock(&g_eTicketDeviceKeyMutex);
+    
+    if (!titlekey_retrieved)
     {
         LOGFILE("Unable to retrieve titlekey from ticket!");
         return false;

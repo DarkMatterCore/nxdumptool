@@ -76,6 +76,8 @@ typedef struct {
 /* Global variables. */
 
 static keysNcaKeyset g_ncaKeyset = {0};
+static bool g_ncaKeysetLoaded = false;
+static Mutex g_ncaKeysetMutex = 0;
 
 static keysMemoryInfo g_fsRodataMemoryInfo = {
     .location = {
@@ -150,6 +152,11 @@ static bool keysReadKeysFromFile(void);
 
 bool keysLoadNcaKeyset(void)
 {
+    mutexLock(&g_ncaKeysetMutex);
+    
+    bool ret = g_ncaKeysetLoaded;
+    if (ret) goto exit;
+    
     if (!(envIsSyscallHinted(0x60) &&   /* svcDebugActiveProcess */
           envIsSyscallHinted(0x63) &&   /* svcGetDebugEvent */
           envIsSyscallHinted(0x65) &&   /* svcGetProcessList */
@@ -157,30 +164,35 @@ bool keysLoadNcaKeyset(void)
           envIsSyscallHinted(0x6A)))    /* svcReadDebugProcessMemory */
     {
         LOGFILE("Debug SVC permissions not available!");
-        return false;
+        goto exit;
     }
     
     if (!keysRetrieveKeysFromProcessMemory(&g_fsRodataMemoryInfo))
     {
         LOGFILE("Unable to retrieve keys from FS .rodata section!");
-        return false;
+        goto exit;
     }
     
     if (!keysRetrieveKeysFromProcessMemory(&g_fsDataMemoryInfo))
     {
         LOGFILE("Unable to retrieve keys from FS .data section!");
-        return false;
+        goto exit;
     }
     
     if (!keysDeriveNcaHeaderKey())
     {
         LOGFILE("Unable to derive NCA header key!");
-        return false;
+        goto exit;
     }
     
-    if (!keysReadKeysFromFile()) return false;
+    if (!keysReadKeysFromFile()) goto exit;
     
-    return true;
+    ret = g_ncaKeysetLoaded = true;
+    
+exit:
+    mutexUnlock(&g_ncaKeysetMutex);
+    
+    return ret;
 }
 
 const u8 *keysGetNcaHeaderKey(void)

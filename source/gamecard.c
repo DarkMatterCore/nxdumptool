@@ -20,7 +20,6 @@
 #include <threads.h>
 
 #include "gamecard.h"
-#include "service_guard.h"
 #include "utils.h"
 
 #define GAMECARD_HFS0_MAGIC                     0x48465330              /* "HFS0" */
@@ -76,6 +75,9 @@ typedef struct {
 
 /* Global variables. */
 
+static Mutex g_gamecardMutex = 0;
+static bool g_gamecardInitialized = false;
+
 static FsDeviceOperator g_deviceOperator = {0};
 static FsEventNotifier g_gameCardEventNotifier = {0};
 static Event g_gameCardKernelEvent = {0};
@@ -83,7 +85,6 @@ static bool g_openDeviceOperator = false, g_openEventNotifier = false, g_loadKer
 
 static thrd_t g_gameCardDetectionThread;
 static UEvent g_gameCardDetectionThreadExitEvent = {0};
-static mtx_t g_gameCardSharedDataMutex;
 static bool g_gameCardDetectionThreadCreated = false, g_gameCardInserted = false, g_gameCardInfoLoaded = false;
 
 static FsGameCardHandle g_gameCardHandle = {0};
@@ -126,17 +127,123 @@ NX_INLINE char *gamecardGetHashFileSystemNameTable(void *header);
 NX_INLINE char *gamecardGetHashFileSystemEntryNameByIndex(void *header, u32 idx);
 NX_INLINE bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx);
 
-/* Service guard used to generate thread-safe initialize + exit functions. */
-/* I'm using this here even though this actually isn't a real service but who cares, it gets the job done. */
-NX_GENERATE_SERVICE_GUARD(gamecard);
+bool gamecardInitialize(void)
+{
+    mutexLock(&g_gamecardMutex);
+    
+    Result rc = 0;
+    
+    bool ret = g_gamecardInitialized;
+    if (ret) goto out;
+    
+    /* Allocate memory for the gamecard read buffer */
+    g_gameCardReadBuf = malloc(GAMECARD_READ_BUFFER_SIZE);
+    if (!g_gameCardReadBuf)
+    {
+        LOGFILE("Unable to allocate memory for the gamecard read buffer!");
+        goto out;
+    }
+    
+    /* Open device operator */
+    rc = fsOpenDeviceOperator(&g_deviceOperator);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("fsOpenDeviceOperator failed! (0x%08X)", rc);
+        goto out;
+    }
+    
+    g_openDeviceOperator = true;
+    
+    /* Open gamecard detection event notifier */
+    rc = fsOpenGameCardDetectionEventNotifier(&g_gameCardEventNotifier);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("fsOpenGameCardDetectionEventNotifier failed! (0x%08X)", rc);
+        goto out;
+    }
+    
+    g_openEventNotifier = true;
+    
+    /* Retrieve gamecard detection kernel event */
+    rc = fsEventNotifierGetEventHandle(&g_gameCardEventNotifier, &g_gameCardKernelEvent, true);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("fsEventNotifierGetEventHandle failed! (0x%08X)", rc);
+        goto out;
+    }
+    
+    g_loadKernelEvent = true;
+    
+    /* Create usermode exit event */
+    ueventCreate(&g_gameCardDetectionThreadExitEvent, false);
+    
+    /* Create gamecard detection thread */
+    g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread();
+    if (!g_gameCardDetectionThreadCreated)
+    {
+        LOGFILE("Failed to create gamecard detection thread!");
+        goto out;
+    }
+    
+    ret = g_gamecardInitialized = true;
+    
+out:
+    mutexUnlock(&g_gamecardMutex);
+    
+    return ret;
+}
+
+void gamecardExit(void)
+{
+    mutexLock(&g_gamecardMutex);
+    
+    /* Destroy gamecard detection thread */
+    if (g_gameCardDetectionThreadCreated)
+    {
+        gamecardDestroyDetectionThread();
+        g_gameCardDetectionThreadCreated = false;
+    }
+    
+    /* Close gamecard detection kernel event */
+    if (g_loadKernelEvent)
+    {
+        eventClose(&g_gameCardKernelEvent);
+        g_loadKernelEvent = false;
+    }
+    
+    /* Close gamecard detection event notifier */
+    if (g_openEventNotifier)
+    {
+        fsEventNotifierClose(&g_gameCardEventNotifier);
+        g_openEventNotifier = false;
+    }
+    
+    /* Close device operator */
+    if (g_openDeviceOperator)
+    {
+        fsDeviceOperatorClose(&g_deviceOperator);
+        g_openDeviceOperator = false;
+    }
+    
+    /* Free gamecard read buffer */
+    if (g_gameCardReadBuf)
+    {
+        free(g_gameCardReadBuf);
+        g_gameCardReadBuf = NULL;
+    }
+    
+    g_gamecardInitialized = false;
+    
+    mutexUnlock(&g_gamecardMutex);
+}
 
 bool gamecardIsReady(void)
 {
     bool ret = false;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     ret = (g_gameCardInserted && g_gameCardInfoLoaded);
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -150,13 +257,13 @@ bool gamecardGetHeader(GameCardHeader *out)
 {
     bool ret = false;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     if (g_gameCardInserted && g_gameCardInfoLoaded && out)
     {
         memcpy(out, &g_gameCardHeader, sizeof(GameCardHeader));
         ret = true;
     }
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -165,13 +272,13 @@ bool gamecardGetTotalSize(u64 *out)
 {
     bool ret = false;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     if (g_gameCardInserted && g_gameCardInfoLoaded && out)
     {
         *out = (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize);
         ret = true;
     }
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -180,13 +287,13 @@ bool gamecardGetTrimmedSize(u64 *out)
 {
     bool ret = false;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     if (g_gameCardInserted && g_gameCardInfoLoaded && out)
     {
         *out = (sizeof(GameCardHeader) + ((u64)g_gameCardHeader.valid_data_end_address * GAMECARD_MEDIA_UNIT_SIZE));
         ret = true;
     }
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -195,13 +302,13 @@ bool gamecardGetRomCapacity(u64 *out)
 {
     bool ret = false;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     if (g_gameCardInserted && g_gameCardInfoLoaded && out)
     {
         *out = g_gameCardCapacity;
         ret = true;
     }
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -211,14 +318,14 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
     Result rc = 0;
     bool ret = false;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     if (g_gameCardInserted && g_gameCardHandle.value && out)
     {
         rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out);
         if (R_FAILED(rc)) LOGFILE("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%08X)", rc);
         ret = R_SUCCEEDED(rc);
     }
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -230,7 +337,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(u32 *out)
     u32 update_version = 0;
     bool ret = false;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     if (g_gameCardInserted && g_gameCardHandle.value && out)
     {
         rc = fsDeviceOperatorUpdatePartitionInfo(&g_deviceOperator, &g_gameCardHandle, &update_version, &update_id);
@@ -239,7 +346,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(u32 *out)
         ret = (R_SUCCEEDED(rc) && update_id == GAMECARD_UPDATE_TID);
         if (ret) *out = update_version;
     }
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -249,7 +356,7 @@ bool gamecardGetEntryCountFromHashFileSystemPartition(u8 hfs_partition_type, u32
     bool ret = false;
     GameCardHashFileSystemHeader *fs_header = NULL;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     if (g_gameCardInserted && g_gameCardInfoLoaded && out_count)
     {
         fs_header = gamecardGetHashFileSystemPartitionHeader(hfs_partition_type, NULL);
@@ -261,7 +368,7 @@ bool gamecardGetEntryCountFromHashFileSystemPartition(u8 hfs_partition_type, u32
             LOGFILE("Failed to retrieve hash FS partition header!");
         }
     }
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -274,7 +381,7 @@ bool gamecardGetEntryInfoFromHashFileSystemPartitionByIndex(u8 hfs_partition_typ
     GameCardHashFileSystemHeader *fs_header = NULL;
     GameCardHashFileSystemEntry *fs_entry = NULL;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     
     if (g_gameCardInserted && g_gameCardInfoLoaded && (out_offset || out_size || out_name))
     {
@@ -325,7 +432,7 @@ bool gamecardGetEntryInfoFromHashFileSystemPartitionByIndex(u8 hfs_partition_typ
     }
     
 out:
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
@@ -337,7 +444,7 @@ bool gamecardGetEntryInfoFromHashFileSystemPartitionByName(u8 hfs_partition_type
     GameCardHashFileSystemHeader *fs_header = NULL;
     GameCardHashFileSystemEntry *fs_entry = NULL;
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     
     if (g_gameCardInserted && g_gameCardInfoLoaded && (out_offset || out_size))
     {
@@ -377,119 +484,16 @@ bool gamecardGetEntryInfoFromHashFileSystemPartitionByName(u8 hfs_partition_type
     }
     
 out:
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return ret;
 }
 
-NX_INLINE Result _gamecardInitialize(void)
-{
-    Result rc = 0;
-    
-    /* Allocate memory for the gamecard read buffer */
-    g_gameCardReadBuf = malloc(GAMECARD_READ_BUFFER_SIZE);
-    if (!g_gameCardReadBuf)
-    {
-        LOGFILE("Unable to allocate memory for the gamecard read buffer!");
-        rc = MAKERESULT(Module_Libnx, LibnxError_HeapAllocFailed);
-        goto out;
-    }
-    
-    /* Open device operator */
-    rc = fsOpenDeviceOperator(&g_deviceOperator);
-    if (R_FAILED(rc))
-    {
-        LOGFILE("fsOpenDeviceOperator failed! (0x%08X)", rc);
-        goto out;
-    }
-    
-    g_openDeviceOperator = true;
-    
-    /* Open gamecard detection event notifier */
-    rc = fsOpenGameCardDetectionEventNotifier(&g_gameCardEventNotifier);
-    if (R_FAILED(rc))
-    {
-        LOGFILE("fsOpenGameCardDetectionEventNotifier failed! (0x%08X)", rc);
-        goto out;
-    }
-    
-    g_openEventNotifier = true;
-    
-    /* Retrieve gamecard detection kernel event */
-    rc = fsEventNotifierGetEventHandle(&g_gameCardEventNotifier, &g_gameCardKernelEvent, true);
-    if (R_FAILED(rc))
-    {
-        LOGFILE("fsEventNotifierGetEventHandle failed! (0x%08X)", rc);
-        goto out;
-    }
-    
-    g_loadKernelEvent = true;
-    
-    /* Create usermode exit event */
-    ueventCreate(&g_gameCardDetectionThreadExitEvent, false);
-    
-    /* Create gamecard detection thread */
-    g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread();
-    if (!g_gameCardDetectionThreadCreated)
-    {
-        LOGFILE("Failed to create gamecard detection thread!");
-        rc = MAKERESULT(Module_Libnx, LibnxError_IoError);
-    }
-    
-out:
-    return rc;
-}
-
-static void _gamecardCleanup(void)
-{
-    /* Destroy gamecard detection thread */
-    if (g_gameCardDetectionThreadCreated)
-    {
-        gamecardDestroyDetectionThread();
-        g_gameCardDetectionThreadCreated = false;
-    }
-    
-    /* Close gamecard detection kernel event */
-    if (g_loadKernelEvent)
-    {
-        eventClose(&g_gameCardKernelEvent);
-        g_loadKernelEvent = false;
-    }
-    
-    /* Close gamecard detection event notifier */
-    if (g_openEventNotifier)
-    {
-        fsEventNotifierClose(&g_gameCardEventNotifier);
-        g_openEventNotifier = false;
-    }
-    
-    /* Close device operator */
-    if (g_openDeviceOperator)
-    {
-        fsDeviceOperatorClose(&g_deviceOperator);
-        g_openDeviceOperator = false;
-    }
-    
-    /* Free gamecard read buffer */
-    if (g_gameCardReadBuf)
-    {
-        free(g_gameCardReadBuf);
-        g_gameCardReadBuf = NULL;
-    }
-}
-
 static bool gamecardCreateDetectionThread(void)
 {
-    if (mtx_init(&g_gameCardSharedDataMutex, mtx_plain) != thrd_success)
-    {
-        LOGFILE("Failed to initialize gamecard shared data mutex!");
-        return false;
-    }
-    
     if (thrd_create(&g_gameCardDetectionThread, gamecardDetectionThreadFunc, NULL) != thrd_success)
     {
         LOGFILE("Failed to create gamecard detection thread!");
-        mtx_destroy(&g_gameCardSharedDataMutex);
         return false;
     }
     
@@ -503,9 +507,6 @@ static void gamecardDestroyDetectionThread(void)
     
     /* Wait for the gamecard detection thread to exit */
     thrd_join(g_gameCardDetectionThread, NULL);
-    
-    /* Destroy mutex */
-    mtx_destroy(&g_gameCardSharedDataMutex);
 }
 
 static int gamecardDetectionThreadFunc(void *arg)
@@ -519,7 +520,7 @@ static int gamecardDetectionThreadFunc(void *arg)
     Waiter gamecard_event_waiter = waiterForEvent(&g_gameCardKernelEvent);
     Waiter exit_event_waiter = waiterForUEvent(&g_gameCardDetectionThreadExitEvent);
     
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     
     /* Retrieve initial gamecard insertion status */
     g_gameCardInserted = prev_status = gamecardIsInserted();
@@ -527,7 +528,7 @@ static int gamecardDetectionThreadFunc(void *arg)
     /* Load gamecard info right away if a gamecard is inserted */
     if (g_gameCardInserted) gamecardLoadInfo();
     
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     while(true)
     {
@@ -540,7 +541,7 @@ static int gamecardDetectionThreadFunc(void *arg)
         
         /* Retrieve current gamecard insertion status */
         /* Only proceed if we're dealing with a status change */
-        mtx_lock(&g_gameCardSharedDataMutex);
+        mutexLock(&g_gamecardMutex);
         
         g_gameCardInserted = gamecardIsInserted();
         
@@ -558,14 +559,14 @@ static int gamecardDetectionThreadFunc(void *arg)
         
         prev_status = g_gameCardInserted;
         
-        mtx_unlock(&g_gameCardSharedDataMutex);
+        mutexUnlock(&g_gamecardMutex);
     }
     
     /* Free gamecard info and close gamecard handle */
-    mtx_lock(&g_gameCardSharedDataMutex);
+    mutexLock(&g_gamecardMutex);
     gamecardFreeInfo();
     g_gameCardInserted = false;
-    mtx_unlock(&g_gameCardSharedDataMutex);
+    mutexUnlock(&g_gamecardMutex);
     
     return 0;
 }
@@ -840,7 +841,7 @@ static bool gamecardOpenStorageArea(u8 area)
 
 static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool lock)
 {
-    if (lock) mtx_lock(&g_gameCardSharedDataMutex);
+    if (lock) mutexLock(&g_gamecardMutex);
     
     bool success = false;
     
@@ -915,7 +916,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
     }
     
 exit:
-    if (lock) mtx_unlock(&g_gameCardSharedDataMutex);
+    if (lock) mutexUnlock(&g_gamecardMutex);
     
     return success;
 }

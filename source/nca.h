@@ -273,13 +273,13 @@ typedef struct {
     u64 gamecard_offset;                ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
     NcmContentId content_id;            ///< Also used to read NCA data.
     char content_id_str[0x21];
-    u8 hash[0x20];                      ///< Retrieved from NcmPackagedContentInfo.
+    u8 hash[0x20];                      ///< Manually calculated (if needed).
     char hash_str[0x41];
     u8 format_version;                  ///< NcaVersion.
-    u8 content_type;                    ///< NcmContentType. Retrieved from NcmPackagedContentInfo.
-    u64 content_size;                   ///< Retrieved from NcmPackagedContentInfo.
+    u8 content_type;                    ///< NcmContentType. Retrieved from NcmContentInfo.
+    u64 content_size;                   ///< Retrieved from NcmContentInfo.
     u8 key_generation;                  ///< NcaKeyGenerationOld / NcaKeyGeneration. Retrieved from the decrypted header.
-    u8 id_offset;                       ///< Retrieved from NcmPackagedContentInfo.
+    u8 id_offset;                       ///< Retrieved from NcmContentInfo.
     bool rights_id_available;
     u8 titlekey[0x10];
     bool dirty_header;
@@ -313,7 +313,7 @@ void ncaFreeCryptoBuffer(void);
 /// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' argument must point to a valid NcmContentStorage instance, previously opened using the same NcmStorageId value.
 /// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
 /// If the NCA holds a populated Rights ID field, and if the Ticket object pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmPackagedContentInfo *content_info, Ticket *tik);
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
 /// Input offset must be relative to the start of the NCA content file.
@@ -385,7 +385,7 @@ bool ncaEncryptHeader(NcaContext *ctx);
 
 
 
-/// Miscellanous functions.
+/// Miscellaneous functions.
 
 NX_INLINE void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
 {

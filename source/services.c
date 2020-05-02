@@ -67,8 +67,12 @@ static const u32 g_serviceInfoCount = MAX_ELEMENTS(g_serviceInfo);
 static bool g_clkSvcUsePcv = false;
 static ClkrstSession g_clkrstCpuSession = {0}, g_clkrstMemSession = {0};
 
+static Mutex g_servicesMutex = 0;
+
 bool servicesInitialize(void)
 {
+    mutexLock(&g_servicesMutex);
+    
     Result rc = 0;
     bool ret = true;
     
@@ -101,11 +105,15 @@ bool servicesInitialize(void)
         g_serviceInfo[i].initialized = true;
     }
     
+    mutexUnlock(&g_servicesMutex);
+    
     return ret;
 }
 
 void servicesClose(void)
 {
+    mutexLock(&g_servicesMutex);
+    
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
         /* Check if this service has not been initialized, or if it doesn't have a valid close function */
@@ -114,6 +122,8 @@ void servicesClose(void)
         /* Close service */
         g_serviceInfo[i].close_func();
     }
+    
+    mutexUnlock(&g_servicesMutex);
 }
 
 bool servicesCheckRunningServiceByName(const char *name)
@@ -134,9 +144,12 @@ bool servicesCheckRunningServiceByName(const char *name)
 
 bool servicesCheckInitializedServiceByName(const char *name)
 {
-    if (!name || !strlen(name)) return false;
+    mutexLock(&g_servicesMutex);
     
     bool ret = false;
+    
+    if (!name || !strlen(name)) goto exit;
+    
     size_t name_len = strlen(name);
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
@@ -148,11 +161,16 @@ bool servicesCheckInitializedServiceByName(const char *name)
         }
     }
     
+exit:
+    mutexUnlock(&g_servicesMutex);
+    
     return ret;
 }
 
 void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
 {
+    mutexLock(&g_servicesMutex);
+    
     if (g_clkSvcUsePcv)
     {
         pcvSetClockRate(PcvModule_CpuBus, cpu_rate);
@@ -161,6 +179,8 @@ void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
         clkrstSetClockRate(&g_clkrstCpuSession, cpu_rate);
         clkrstSetClockRate(&g_clkrstMemSession, mem_rate);
     }
+    
+    mutexUnlock(&g_servicesMutex);
 }
 
 static Result servicesNifmUserInitialize(void)

@@ -31,6 +31,7 @@
 /* Global variables. */
 
 static save_ctx_t *g_esCertSaveCtx = NULL;
+static Mutex g_esCertSaveMutex = 0;
 
 /* Function prototypes. */
 
@@ -48,34 +49,48 @@ static void certCopyCertificateChainDataToMemoryBuffer(void *dst, const Certific
 
 bool certRetrieveCertificateByName(Certificate *dst, const char *name)
 {
+    mutexLock(&g_esCertSaveMutex);
+    
+    bool ret = false;
+    
     if (!dst || !name || !strlen(name))
     {
         LOGFILE("Invalid parameters!");
-        return false;
+        goto exit;
     }
     
-    if (!certOpenEsCertSaveFile()) return false;
+    if (!certOpenEsCertSaveFile()) goto exit;
     
-    bool ret = _certRetrieveCertificateByName(dst, name);
+    ret = _certRetrieveCertificateByName(dst, name);
     
     certCloseEsCertSaveFile();
+    
+exit:
+    mutexUnlock(&g_esCertSaveMutex);
     
     return ret;
 }
 
 bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer)
 {
+    mutexLock(&g_esCertSaveMutex);
+    
+    bool ret = false;
+    
     if (!dst || !issuer || !strlen(issuer) || strncmp(issuer, "Root-", 5) != 0)
     {
         LOGFILE("Invalid parameters!");
-        return false;
+        goto exit;
     }
     
-    if (!certOpenEsCertSaveFile()) return false;
+    if (!certOpenEsCertSaveFile()) goto exit;
     
-    bool ret = _certRetrieveCertificateChainBySignatureIssuer(dst, issuer);
+    ret = _certRetrieveCertificateChainBySignatureIssuer(dst, issuer);
     
     certCloseEsCertSaveFile();
+    
+exit:
+    mutexUnlock(&g_esCertSaveMutex);
     
     return ret;
 }

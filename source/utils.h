@@ -38,22 +38,13 @@
 
 
 
-
+/// Need to move this to npdm.c/h eventually.
 #define NPDM_META_MAGIC                 0x4D455441  /* "META" */
 
-#define TITLE_PATCH_BITMASK             (u64)0x800
-#define TITLE_ADDON_BITMASK             (u64)0xFFFFFFFFFFFF0000
 
 
-NX_INLINE u64 titleGetPatchIdByApplicationId(u64 app_id)
-{
-    return (app_id | TITLE_PATCH_BITMASK);
-}
 
-NX_INLINE u64 titleGetApplicationIdByPatchId(u64 patch_id)
-{
-    return (patch_id & ~TITLE_PATCH_BITMASK);
-}
+
 
 
 
@@ -65,15 +56,8 @@ typedef enum {
     UtilsCustomFirmwareType_ReiNX      = 3
 } UtilsCustomFirmwareType;
 
-typedef struct {
-    u16 major : 6;
-    u16 minor : 6;
-    u16 micro : 4;
-    u16 bugfix;
-} TitleVersion;
-
-
-
+bool utilsInitializeResources(void);
+void utilsCloseResources(void);
 
 u64 utilsHidKeysAllDown(void);
 u64 utilsHidKeysAllHeld(void);
@@ -82,22 +66,32 @@ void utilsWaitForButtonPress(void);
 
 void utilsWriteLogMessage(const char *func_name, const char *fmt, ...);
 
-void utilsOverclockSystem(bool restore);
+void utilsReplaceIllegalCharacters(char *str);
 
-bool utilsInitializeResources(void);
-void utilsCloseResources(void);
-
-u8 utilsGetCustomFirmwareType(void);    ///< UtilsCustomFirmwareType.
+void utilsTrimString(char *str);
 
 void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size);
 
+bool utilsGetFreeSdCardSpace(u64 *out);
+bool utilsGetFreeFileSystemSpace(FsFileSystem *fs, u64 *out);
+
+bool utilsCheckIfFileExists(const char *path);
+
+bool utilsCreateConcatenationFile(const char *path);
+
+bool utilsAppletModeCheck(void);
+
+void utilsChangeHomeButtonBlockStatus(bool block);
+
+u8 utilsGetCustomFirmwareType(void);    ///< UtilsCustomFirmwareType.
+
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
 
-static inline void utilsSleep(u64 seconds)
+void utilsOverclockSystem(bool overclock);
+
+NX_INLINE void utilsSleep(u64 seconds)
 {
     if (seconds) svcSleepThread(seconds * (u64)1000000000);
 }
-
-
 
 #endif /* __UTILS_H__ */

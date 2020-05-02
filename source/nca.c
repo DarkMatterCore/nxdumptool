@@ -188,10 +188,10 @@ bool ncaEncryptHeader(NcaContext *ctx)
     return true;
 }
 
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmPackagedContentInfo *content_info, Ticket *tik)
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik)
 {
     if (!out || !tik || (storage_id != NcmStorageId_GameCard && !ncm_storage) || (storage_id == NcmStorageId_GameCard && hfs_partition_type > GameCardHashFileSystemPartitionType_Secure) || \
-        !content_info || content_info->info.content_type > NcmContentType_DeltaFragment)
+        !content_info || content_info->content_type > NcmContentType_DeltaFragment)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -201,16 +201,13 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
     out->storage_id = storage_id;
     out->ncm_storage = (out->storage_id != NcmStorageId_GameCard ? ncm_storage : NULL);
     
-    memcpy(&(out->content_id), &(content_info->info.content_id), sizeof(NcmContentId));
+    memcpy(&(out->content_id), &(content_info->content_id), sizeof(NcmContentId));
     utilsGenerateHexStringFromData(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c));
     
-    memcpy(out->hash, content_info->hash, SHA256_HASH_SIZE);
-    utilsGenerateHexStringFromData(out->hash_str, sizeof(out->hash_str), out->hash, sizeof(out->hash));
+    out->content_type = content_info->content_type;
+    out->id_offset = content_info->id_offset;
     
-    out->content_type = content_info->info.content_type;
-    out->id_offset = content_info->info.id_offset;
-    
-    ncaConvertNcmContentSizeToU64(content_info->info.size, &(out->content_size));
+    ncaConvertNcmContentSizeToU64(content_info->size, &(out->content_size));
     if (out->content_size < NCA_FULL_HEADER_LENGTH)
     {
         LOGFILE("Invalid size for NCA \"%s\"!", out->content_id_str);
