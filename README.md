@@ -68,13 +68,6 @@ Thanks to
 * The Comfy Boyes, for being both awesome and supportive. You know who you are.
 * My girlfriend, for putting up with me even though I dedicate most of my free time to this little project, and for doing her best to cheer me up and keep me going. I love you.
 
-Donate
---------------
-
-If you like my work and you'd like to support me in any way, it's not necessary, but a donation would be greatly appreciated!
-
-[![Donate](https://img.shields.io/static/v1.svg?label=PayPal&message=Donate&color=blue&style=flat&logo=paypal)](https://paypal.me/DarkMatterCore)
-
 Changelog
 --------------
 
