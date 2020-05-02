@@ -2,7 +2,7 @@
 name: Bug report
 about: Create a report to help us improve
 title: ''
-labels: ''
+labels: bug
 assignees: ''
 
 ---
@@ -17,12 +17,6 @@ Steps to reproduce the behavior:
 3. Scroll down to '....'
 4. See error
 
-**Screenshots**
-Add screenshots to help explain your problem.
-
-**Logfile**
-If available, please upload your logfile located at `sdmc:/nxdumptool/nxdumptool.log`.
-
 **Please fill the following information:**
 - Horizon OS (Switch FW) version: [e.g. 10.0.0]
 - CFW: [e.g. Atmosphère, SX OS, etc.]
@@ -32,6 +26,12 @@ If available, please upload your logfile located at `sdmc:/nxdumptool/nxdumptool
 - Homebrew launch method: [e.g. title override, applet]
 - Source storage used with the application (if applicable): [e.g. gamecard, SD/eMMC]
 - SD card specs: [e.g. Samsung EVO 256 GB, FAT32 partition]
+
+**Screenshots**
+Add screenshots to help explain your problem.
+
+**Logfile**
+If available, please upload your logfile located at `sdmc:/nxdumptool/nxdumptool.log`.
 
 **Additional context**
 Add any other context about the problem here.
