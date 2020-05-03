@@ -19,15 +19,92 @@
 #include <string.h>
 #include <switch.h>
 
-//#include "lvgl_helper.h"
-#include "utils.h"
-
-
 #include <dirent.h>
+#include <threads.h>
+#include <stdarg.h>
 
+//#include "lvgl_helper.h"
+
+#include "utils.h"
 #include "bktr.h"
 
+#define TEST_BUF_SIZE   0x800000
 
+static Mutex g_fileMutex = 0;
+static CondVar g_readCondvar = 0, g_writeCondvar = 0;
+
+typedef struct
+{
+    FILE *fileobj;
+    BktrContext *bktr_ctx;
+    RomFileSystemFileEntry *bktr_file_entry;
+    void *data;
+    size_t data_size;
+    size_t data_written;
+    size_t total_size;
+} ThreadSharedData;
+
+static void consolePrint(const char *text, ...)
+{
+    va_list v;
+    va_start(v, text);
+    vfprintf(stdout, text, v);
+    va_end(v);
+    consoleUpdate(NULL);
+}
+
+static int read_thread_func(void *arg)
+{
+    ThreadSharedData *shared_data = (ThreadSharedData*)arg;
+    if (!shared_data || !shared_data->bktr_ctx || !shared_data->bktr_file_entry || !shared_data->data) return -1;
+    
+    u8 *buf = malloc(TEST_BUF_SIZE);
+    if (!buf) return -2;
+    
+    for(u64 offset = 0, blksize = TEST_BUF_SIZE; offset < shared_data->total_size; offset += blksize)
+    {
+        if (blksize > (shared_data->total_size - offset)) blksize = (shared_data->total_size - offset);
+        
+        if (!bktrReadFileEntryData(shared_data->bktr_ctx, shared_data->bktr_file_entry, buf, blksize, offset)) break;
+        
+        mutexLock(&g_fileMutex);
+        
+        if (shared_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
+        
+        memcpy(shared_data->data, buf, blksize);
+        shared_data->data_size = blksize;
+        
+        mutexUnlock(&g_fileMutex);
+        condvarWakeAll(&g_writeCondvar);
+    }
+    
+    free(buf);
+    
+    return 0;
+}
+
+static int write_thread_func(void *arg)
+{
+    ThreadSharedData *shared_data = (ThreadSharedData*)arg;
+    if (!shared_data || !shared_data->fileobj || !shared_data->data) return -1;
+    
+    while(shared_data->data_written < shared_data->total_size)
+    {
+        mutexLock(&g_fileMutex);
+        
+        if (!shared_data->data_size) condvarWait(&g_writeCondvar, &g_fileMutex);
+        
+        fwrite(shared_data->data, 1, shared_data->data_size, shared_data->fileobj);
+        
+        shared_data->data_written += shared_data->data_size;
+        shared_data->data_size = 0;
+        
+        mutexUnlock(&g_fileMutex);
+        condvarWakeAll(&g_readCondvar);
+    }
+    
+    return 0;
+}
 
 int main(int argc, char *argv[])
 {
@@ -37,6 +114,10 @@ int main(int argc, char *argv[])
     int ret = 0;
     
     LOGFILE("nxdumptool starting.");
+    
+    consoleInit(NULL);
+    
+    consolePrint("initializing...\n");
     
     if (!utilsInitializeResources())
     {
@@ -52,11 +133,6 @@ int main(int argc, char *argv[])
         if (lvglHelperGetExitFlag()) break;
     }*/
     
-    consoleInit(NULL);
-    
-    printf("initializing...\n");
-    consoleUpdate(NULL);
-    
     u8 *buf = NULL;
     FILE *tmp_file = NULL;
     
@@ -71,73 +147,69 @@ int main(int argc, char *argv[])
     
     mkdir("sdmc:/nxdt_test", 0744);
     
-    // Untitled Goose Game's Base Program NCA
+    // SSBU's Base Program NCA
     NcmContentInfo base_program_content_info = {
         .content_id = {
-            .c = { 0x8E, 0xF9, 0x20, 0xD4, 0x5E, 0xE1, 0x9E, 0xD1, 0xD2, 0x04, 0xC4, 0xC8, 0x22, 0x50, 0x79, 0xE8 }
+            .c = { 0x48, 0xBB, 0xEA, 0xB6, 0x3E, 0x73, 0x88, 0x69, 0x8D, 0xE4, 0x74, 0x43, 0x49, 0x00, 0xE1, 0x04 }
         },
         .size = {
-            0x00, 0x40, 0xAD, 0x31, 0x00, 0x00
+            0x00, 0x40, 0x24, 0x62, 0x03, 0x00
         },
         .content_type = NcmContentType_Program,
         .id_offset = 0
     };
     
-    // Untitled Goose Game's Update Program NCA
+    // SSBU's Update Program NCA
     NcmContentInfo update_program_content_info = {
         .content_id = {
-            .c = { 0xDB, 0xEE, 0x62, 0x0E, 0x8F, 0x64, 0x37, 0xE4, 0x8A, 0x5C, 0x63, 0x61, 0xE8, 0xD2, 0x32, 0x6A }
+            .c = { 0x83, 0x7A, 0xD9, 0x78, 0x3E, 0xB2, 0x3A, 0xFA, 0xB0, 0x4B, 0xF5, 0x71, 0x55, 0x43, 0x6E, 0x5D }
         },
         .size = {
-            0x00, 0xF4, 0xA0, 0x0E, 0x00, 0x00
+            0x00, 0x6E, 0xE9, 0x84, 0x00, 0x00
         },
         .content_type = NcmContentType_Program,
         .id_offset = 0
     };
     
-    buf = malloc(0x400000);
+    buf = malloc(TEST_BUF_SIZE);
     if (!buf)
     {
-        printf("read buf failed\n");
+        consolePrint("buf failed\n");
         goto out2;
     }
     
-    printf("read buf succeeded\n");
-    consoleUpdate(NULL);
+    consolePrint("buf succeeded\n");
     
     base_nca_ctx = calloc(1, sizeof(NcaContext));
     if (!base_nca_ctx)
     {
-        printf("base nca ctx buf failed\n");
+        consolePrint("base nca ctx buf failed\n");
         goto out2;
     }
     
-    printf("base nca ctx buf succeeded\n");
-    consoleUpdate(NULL);
+    consolePrint("base nca ctx buf succeeded\n");
     
     update_nca_ctx = calloc(1, sizeof(NcaContext));
     if (!update_nca_ctx)
     {
-        printf("update nca ctx buf failed\n");
+        consolePrint("update nca ctx buf failed\n");
         goto out2;
     }
     
-    printf("update nca ctx buf succeeded\n");
-    consoleUpdate(NULL);
+    consolePrint("update nca ctx buf succeeded\n");
     
     rc = ncmOpenContentStorage(&ncm_storage, NcmStorageId_SdCard);
     if (R_FAILED(rc))
     {
-        printf("ncm open storage failed\n");
+        consolePrint("ncm open storage failed\n");
         goto out2;
     }
     
-    printf("ncm open storage succeeded\n");
-    consoleUpdate(NULL);
+    consolePrint("ncm open storage succeeded\n");
     
     if (!ncaInitializeContext(base_nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &base_program_content_info, &base_tik))
     {
-        printf("base nca initialize ctx failed\n");
+        consolePrint("base nca initialize ctx failed\n");
         goto out2;
     }
     
@@ -147,16 +219,14 @@ int main(int argc, char *argv[])
         fwrite(base_nca_ctx, 1, sizeof(NcaContext), tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("base nca ctx saved\n");
+        consolePrint("base nca ctx saved\n");
     } else {
-        printf("base nca ctx not saved\n");
+        consolePrint("base nca ctx not saved\n");
     }
-    
-    consoleUpdate(NULL);
     
     if (!ncaInitializeContext(update_nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &update_program_content_info, &update_tik))
     {
-        printf("update nca initialize ctx failed\n");
+        consolePrint("update nca initialize ctx failed\n");
         goto out2;
     }
     
@@ -166,21 +236,18 @@ int main(int argc, char *argv[])
         fwrite(update_nca_ctx, 1, sizeof(NcaContext), tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("update nca ctx saved\n");
+        consolePrint("update nca ctx saved\n");
     } else {
-        printf("update nca ctx not saved\n");
+        consolePrint("update nca ctx not saved\n");
     }
-    
-    consoleUpdate(NULL);
     
     if (!bktrInitializeContext(&bktr_ctx, &(base_nca_ctx->fs_contexts[1]), &(update_nca_ctx->fs_contexts[1])))
     {
-        printf("bktr initialize ctx failed\n");
+        consolePrint("bktr initialize ctx failed\n");
         goto out2;
     }
     
-    printf("bktr initialize ctx succeeded\n");
-    consoleUpdate(NULL);
+    consolePrint("bktr initialize ctx succeeded\n");
     
     tmp_file = fopen("sdmc:/nxdt_test/bktr_ctx.bin", "wb");
     if (tmp_file)
@@ -188,102 +255,87 @@ int main(int argc, char *argv[])
         fwrite(&bktr_ctx, 1, sizeof(BktrContext), tmp_file);
         fclose(tmp_file);
         tmp_file = NULL;
-        printf("bktr ctx saved\n");
+        consolePrint("bktr ctx saved\n");
     } else {
-        printf("bktr ctx not saved\n");
+        consolePrint("bktr ctx not saved\n");
     }
     
-    consoleUpdate(NULL);
-    
-    /*bktr_file_entry = bktrGetFileEntryByPath(&bktr_ctx, "/Data/resources.assets");
+    bktr_file_entry = bktrGetFileEntryByPath(&bktr_ctx, "/data.arc");
     if (!bktr_file_entry)
     {
-        printf("bktr get file entry by path failed\n");
+        consolePrint("bktr get file entry by path failed\n");
         goto out2;
     }
     
-    printf("bktr get file entry by path success: %.*s | 0x%lX\n", bktr_file_entry->name_length, bktr_file_entry->name, bktr_file_entry->size);
-    consoleUpdate(NULL);*/
+    consolePrint("bktr get file entry by path success: %.*s | 0x%lX\n", bktr_file_entry->name_length, bktr_file_entry->name, bktr_file_entry->size);
     
-    /*tmp_file = fopen("sdmc:/nxdt_test/resources.assets", "wb");
-    if (tmp_file)
+    if (!utilsCreateConcatenationFile("sdmc:/nxdt_test/data.arc"))
     {
-        u64 curpos = 0, blksize = 0x400000;
-        for(curpos = 0; curpos < bktr_file_entry->size; curpos += blksize)
-        {
-            if (blksize > (bktr_file_entry->size - curpos)) blksize = (bktr_file_entry->size - curpos);
-            
-            if (!bktrReadFileEntryData(&bktr_ctx, bktr_file_entry, buf, blksize, curpos)) break;
-            
-            fwrite(buf, 1, blksize, tmp_file);
-        }
-        
-        fclose(tmp_file);
-        tmp_file = NULL;
-        
-        if (curpos < bktr_file_entry->size)
-        {
-            printf("resources.assets read error\n");
-        } else {
-            printf("resources.assets saved\n");
-        }
-    } else {
-        printf("resources.assets not saved\n");
+        consolePrint("create concatenationfile failed\n");
+        goto out2;
     }
     
-    consoleUpdate(NULL);*/
+    consolePrint("create concatenationfile success\n");
     
-    /*tmp_file = fopen("sdmc:/nxdt_test/romfs.bin", "wb");
-    if (tmp_file)
+    tmp_file = fopen("sdmc:/nxdt_test/data.arc", "wb");
+    if (!tmp_file)
     {
-        u64 curpos = 0, blksize = 0x400000;
-        for(curpos = 0; curpos < bktr_ctx.size; curpos += blksize)
-        {
-            if (blksize > (bktr_ctx.size - curpos)) blksize = (bktr_ctx.size - curpos);
-            
-            if (!bktrReadFileSystemData(&bktr_ctx, buf, blksize, curpos)) break;
-            
-            fwrite(buf, 1, blksize, tmp_file);
-        }
-        
-        fclose(tmp_file);
-        tmp_file = NULL;
-        
-        if (curpos < bktr_ctx.size)
-        {
-            printf("romfs read error\n");
-        } else {
-            printf("romfs saved\n");
-        }
-    } else {
-        printf("romfs not saved\n");
+        consolePrint("open concatenationfile failed\n");
+        goto out2;
     }
     
-    consoleUpdate(NULL);*/
+    consolePrint("open concatenationfile success\n");
     
-    printf("updated file list:\n");
-    consoleUpdate(NULL);
+    ThreadSharedData shared_data = {0};
     
-    u64 offset = 0;
-    bool updated = false;
-    char bktr_path[FS_MAX_PATH] = {0};
+    shared_data.fileobj = tmp_file;
+    shared_data.bktr_ctx = &bktr_ctx;
+    shared_data.bktr_file_entry = bktr_file_entry;
+    shared_data.data = buf;
+    shared_data.data_size = 0;
+    shared_data.data_written = 0;
+    shared_data.total_size = bktr_file_entry->size;
     
-    while(offset < bktr_ctx.patch_romfs_ctx.file_table_size)
+    thrd_t read_thread, write_thread;
+
+    consolePrint("creating threads\n\n");
+    thrd_create(&read_thread, read_thread_func, &shared_data);
+    thrd_create(&write_thread, write_thread_func, &shared_data);
+    
+    u8 prev_time = 0;
+    u64 prev_size = 0;
+    u8 percent = 0;
+    
+    time_t start = time(NULL);
+    
+    while(shared_data.data_written < shared_data.total_size)
     {
-        if (!(bktr_file_entry = bktrGetFileEntryByOffset(&bktr_ctx, offset)))
-        {
-            printf("Failed to retrieve file entry!\n");
-            goto out2;
-        }
+        time_t now = time(NULL);
+        struct tm *ts = localtime(&now);
+        size_t size = shared_data.data_written;
         
-        if (bktrIsFileEntryUpdated(&bktr_ctx, bktr_file_entry, &updated) && updated && bktrGeneratePathFromFileEntry(&bktr_ctx, bktr_file_entry, bktr_path, FS_MAX_PATH))
-        {
-            printf("%s\n", bktr_path);
-            consoleUpdate(NULL);
-        }
+        if (prev_time == ts->tm_sec || prev_size == size) continue;
         
-        offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + bktr_file_entry->name_length, 4);
+        percent = (u8)((size * 100) / shared_data.total_size) + 1;
+        
+        prev_time = ts->tm_sec;
+        prev_size = size;
+        
+        printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (time(NULL) - start));
+        consoleUpdate(NULL);
     }
+    
+    fclose(tmp_file);
+    tmp_file = NULL;
+    
+    consolePrint("\n\nprocess completed in %lu seconds\n", (time(NULL) - start));
+    
+    consolePrint("waiting for threads to join\n");
+    thrd_join(read_thread, NULL);
+    thrd_join(write_thread, NULL);
+    
+    
+    
     
     
     
@@ -295,7 +347,6 @@ int main(int argc, char *argv[])
     
     
 out2:
-    consoleUpdate(NULL);
     utilsWaitForButtonPress();
     
     if (tmp_file) fclose(tmp_file);
@@ -310,10 +361,10 @@ out2:
     
     if (buf) free(buf);
     
-    consoleExit(NULL);
-    
 out:
     utilsCloseResources();
+    
+    consoleExit(NULL);
     
     return ret;
 }
