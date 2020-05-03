@@ -520,15 +520,10 @@ static int gamecardDetectionThreadFunc(void *arg)
     Waiter gamecard_event_waiter = waiterForEvent(&g_gameCardKernelEvent);
     Waiter exit_event_waiter = waiterForUEvent(&g_gameCardDetectionThreadExitEvent);
     
-    mutexLock(&g_gamecardMutex);
-    
     /* Retrieve initial gamecard insertion status */
-    g_gameCardInserted = prev_status = gamecardIsInserted();
-    
     /* Load gamecard info right away if a gamecard is inserted */
+    g_gameCardInserted = prev_status = gamecardIsInserted();
     if (g_gameCardInserted) gamecardLoadInfo();
-    
-    mutexUnlock(&g_gamecardMutex);
     
     while(true)
     {
@@ -563,10 +558,8 @@ static int gamecardDetectionThreadFunc(void *arg)
     }
     
     /* Free gamecard info and close gamecard handle */
-    mutexLock(&g_gamecardMutex);
     gamecardFreeInfo();
     g_gameCardInserted = false;
-    mutexUnlock(&g_gamecardMutex);
     
     return 0;
 }
