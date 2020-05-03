@@ -76,7 +76,7 @@ typedef struct {
 /* Global variables. */
 
 static Mutex g_gamecardMutex = 0;
-static bool g_gamecardInitialized = false;
+static bool g_gamecardInterfaceInit = false;
 
 static FsDeviceOperator g_deviceOperator = {0};
 static FsEventNotifier g_gameCardEventNotifier = {0};
@@ -84,7 +84,7 @@ static Event g_gameCardKernelEvent = {0};
 static bool g_openDeviceOperator = false, g_openEventNotifier = false, g_loadKernelEvent = false;
 
 static thrd_t g_gameCardDetectionThread;
-static UEvent g_gameCardDetectionThreadExitEvent = {0};
+static UEvent g_gameCardDetectionThreadExitEvent = {0}, g_gameCardStatusChangeEvent = {0};
 static bool g_gameCardDetectionThreadCreated = false, g_gameCardInserted = false, g_gameCardInfoLoaded = false;
 
 static FsGameCardHandle g_gameCardHandle = {0};
@@ -133,7 +133,7 @@ bool gamecardInitialize(void)
     
     Result rc = 0;
     
-    bool ret = g_gamecardInitialized;
+    bool ret = g_gamecardInterfaceInit;
     if (ret) goto out;
     
     /* Allocate memory for the gamecard read buffer */
@@ -175,17 +175,15 @@ bool gamecardInitialize(void)
     g_loadKernelEvent = true;
     
     /* Create usermode exit event */
-    ueventCreate(&g_gameCardDetectionThreadExitEvent, false);
+    ueventCreate(&g_gameCardDetectionThreadExitEvent, true);
+    
+    /* Create usermode gamecard status change event */
+    ueventCreate(&g_gameCardStatusChangeEvent, true);
     
     /* Create gamecard detection thread */
-    g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread();
-    if (!g_gameCardDetectionThreadCreated)
-    {
-        LOGFILE("Failed to create gamecard detection thread!");
-        goto out;
-    }
+    if (!(g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread())) goto out;
     
-    ret = g_gamecardInitialized = true;
+    ret = g_gamecardInterfaceInit = true;
     
 out:
     mutexUnlock(&g_gamecardMutex);
@@ -232,9 +230,17 @@ void gamecardExit(void)
         g_gameCardReadBuf = NULL;
     }
     
-    g_gamecardInitialized = false;
+    g_gamecardInterfaceInit = false;
     
     mutexUnlock(&g_gamecardMutex);
+}
+
+UEvent *gamecardGetStatusChangeUserEvent(void)
+{
+    mutexLock(&g_gamecardMutex);
+    UEvent *event = (g_gamecardInterfaceInit ? &g_gameCardStatusChangeEvent : NULL);
+    mutexUnlock(&g_gamecardMutex);
+    return event;
 }
 
 bool gamecardIsReady(void)
@@ -524,6 +530,7 @@ static int gamecardDetectionThreadFunc(void *arg)
     /* Load gamecard info right away if a gamecard is inserted */
     g_gameCardInserted = prev_status = gamecardIsInserted();
     if (g_gameCardInserted) gamecardLoadInfo();
+    ueventSignal(&g_gameCardStatusChangeEvent);
     
     while(true)
     {
@@ -555,6 +562,8 @@ static int gamecardDetectionThreadFunc(void *arg)
         prev_status = g_gameCardInserted;
         
         mutexUnlock(&g_gamecardMutex);
+        
+        ueventSignal(&g_gameCardStatusChangeEvent);
     }
     
     /* Free gamecard info and close gamecard handle */

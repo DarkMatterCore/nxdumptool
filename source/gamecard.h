@@ -19,6 +19,7 @@
 #ifndef __GAMECARD_H__
 #define __GAMECARD_H__
 
+#include <switch/kernel/uevent.h>
 #include "fs_ext.h"
 
 #define GAMECARD_HEAD_MAGIC         0x48454144              /* "HEAD" */
@@ -134,7 +135,12 @@ bool gamecardInitialize(void);
 /// This includes destroying the background gamecard detection thread and freeing all cached gamecard data.
 void gamecardExit(void);
 
-/// Used to check if a gamecard has been inserted and if info could be loaded from it.
+/// Returns an usermode gamecard status change event that can be used to wait for status changes on other threads.
+/// If the gamecard interface hasn't been initialized, this returns NULL.
+UEvent *gamecardGetStatusChangeUserEvent(void);
+
+/// Used to check if a gamecard has been inserted and if info could be loaded from it (e.g. physical storage access is possible).
+/// If this call returns false, it pretty much means nothing can be done with the inserted gamecard.
 bool gamecardIsReady(void);
 
 /// Used to read data from the inserted gamecard.
