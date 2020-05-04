@@ -22,6 +22,7 @@
 #include <switch.h>
 
 #define APP_BASE_PATH                   "sdmc:/switch/nxdumptool/"
+#define LOGFILE_PATH                    APP_BASE_PATH "nxdumptool.log"
 
 #define LOGFILE(fmt, ...)               utilsWriteLogMessage(__func__, fmt, ##__VA_ARGS__)
 

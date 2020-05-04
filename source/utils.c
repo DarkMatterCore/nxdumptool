@@ -215,7 +215,7 @@ void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
     va_list args;
     FILE *logfile = NULL;
     
-    logfile = fopen(APP_BASE_PATH "nxdumptool.log", "a+");
+    logfile = fopen(LOGFILE_PATH, "a+");
     if (!logfile) goto out;
     
     time_t now = time(NULL);

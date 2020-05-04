@@ -27,8 +27,94 @@
 
 #include "utils.h"
 #include "bktr.h"
+#include "gamecard.h"
 
 #define TEST_BUF_SIZE   0x800000
+
+alignas(16) u8 __nx_exception_stack[0x1000];
+u64 __nx_exception_stack_size = sizeof(__nx_exception_stack);
+
+void __libnx_exception_handler(ThreadExceptionDump *ctx)
+{
+    LOGFILE("Exception triggered!");
+    
+    FILE *logfile = fopen(LOGFILE_PATH, "a+");
+    if (!logfile) return;
+    
+    fprintf(logfile, "\r\n    error_desc: 0x%x ", ctx->error_desc);
+    
+    switch(ctx->error_desc)
+    {
+        case ThreadExceptionDesc_InstructionAbort:
+            fprintf(logfile, "(InstructionAbort)");
+            break;
+        case ThreadExceptionDesc_MisalignedPC:
+            fprintf(logfile, "(MisalignedPC)");
+            break;
+        case ThreadExceptionDesc_MisalignedSP:
+            fprintf(logfile, "(MisalignedSP)");
+            break;
+        case ThreadExceptionDesc_SError:
+            fprintf(logfile, "(SError)");
+            break;
+        case ThreadExceptionDesc_BadSVC:
+            fprintf(logfile, "(BadSVC)");
+            break;
+        case ThreadExceptionDesc_Trap:
+            fprintf(logfile, "(Trap)");
+            break;
+        case ThreadExceptionDesc_Other:
+            fprintf(logfile, "(Other)");
+            break;
+        default:
+            fprintf(logfile, "(Unknown)");
+            break;
+    }
+    
+    fprintf(logfile, "\r\n\r\n");
+    
+    if (threadExceptionIsAArch64(ctx))
+    {
+        for(u32 i = 0; i < 29; i++) fprintf(logfile, "    [X%d]: 0x%lx\r\n", i, ctx->cpu_gprs[i].x);
+        fprintf(logfile, "\r\n");
+        
+        fprintf(logfile, "    fp:  0x%lx\r\n", ctx->fp.x);
+        fprintf(logfile, "    lr:  0x%lx\r\n", ctx->lr.x);
+        fprintf(logfile, "    sp:  0x%lx\r\n", ctx->sp.x);
+        fprintf(logfile, "    pc:  0x%lx\r\n", ctx->pc.x);
+        fprintf(logfile, "    far: 0x%lx\r\n", ctx->far.x);
+    } else {
+        for(u32 i = 0; i < 29; i++) fprintf(logfile, "    [X%d]: 0x%x\r\n", i, ctx->cpu_gprs[i].r);
+        fprintf(logfile, "\r\n");
+        
+        fprintf(logfile, "    fp:  0x%x\r\n", ctx->fp.r);
+        fprintf(logfile, "    lr:  0x%x\r\n", ctx->lr.r);
+        fprintf(logfile, "    sp:  0x%x\r\n", ctx->sp.r);
+        fprintf(logfile, "    pc:  0x%x\r\n", ctx->pc.r);
+        fprintf(logfile, "    far: 0x%x\r\n", ctx->far.r);
+    }
+    
+    fprintf(logfile, "\r\n");
+    
+    fprintf(logfile, "    pstate: 0x%x\r\n", ctx->pstate);
+    fprintf(logfile, "    afsr0:  0x%x\r\n", ctx->afsr0);
+    fprintf(logfile, "    afsr1:  0x%x\r\n", ctx->afsr1);
+    fprintf(logfile, "    esr:    0x%x\r\n\r\n", ctx->esr);
+    
+    fclose(logfile);
+}
+
+
+
+
+
+
+
+
+
+
+
+
 
 static Mutex g_fileMutex = 0;
 static CondVar g_readCondvar = 0, g_writeCondvar = 0;
@@ -36,8 +122,6 @@ static CondVar g_readCondvar = 0, g_writeCondvar = 0;
 typedef struct
 {
     FILE *fileobj;
-    BktrContext *bktr_ctx;
-    RomFileSystemFileEntry *bktr_file_entry;
     void *data;
     size_t data_size;
     size_t data_written;
@@ -56,7 +140,7 @@ static void consolePrint(const char *text, ...)
 static int read_thread_func(void *arg)
 {
     ThreadSharedData *shared_data = (ThreadSharedData*)arg;
-    if (!shared_data || !shared_data->bktr_ctx || !shared_data->bktr_file_entry || !shared_data->data) return -1;
+    if (!shared_data || !shared_data->data || !shared_data->total_size) return -1;
     
     u8 *buf = malloc(TEST_BUF_SIZE);
     if (!buf) return -2;
@@ -65,7 +149,7 @@ static int read_thread_func(void *arg)
     {
         if (blksize > (shared_data->total_size - offset)) blksize = (shared_data->total_size - offset);
         
-        if (!bktrReadFileEntryData(shared_data->bktr_ctx, shared_data->bktr_file_entry, buf, blksize, offset)) break;
+        if (!gamecardReadStorage(buf, blksize, offset)) break;
         
         mutexLock(&g_fileMutex);
         
@@ -269,7 +353,12 @@ int main(int argc, char *argv[])
     
     consolePrint("bktr get file entry by path success: %.*s | 0x%lX\n", bktr_file_entry->name_length, bktr_file_entry->name, bktr_file_entry->size);
     
-    if (!utilsCreateConcatenationFile("sdmc:/nxdt_test/data.arc"))
+    
+    
+    
+    
+    
+    if (!utilsCreateConcatenationFile("sdmc:/nxdt_test/gamecard.xci"))
     {
         consolePrint("create concatenationfile failed\n");
         goto out2;
@@ -277,7 +366,7 @@ int main(int argc, char *argv[])
     
     consolePrint("create concatenationfile success\n");
     
-    tmp_file = fopen("sdmc:/nxdt_test/data.arc", "wb");
+    tmp_file = fopen("sdmc:/nxdt_test/gamecard.xci", "wb");
     if (!tmp_file)
     {
         consolePrint("open concatenationfile failed\n");
@@ -289,12 +378,10 @@ int main(int argc, char *argv[])
     ThreadSharedData shared_data = {0};
     
     shared_data.fileobj = tmp_file;
-    shared_data.bktr_ctx = &bktr_ctx;
-    shared_data.bktr_file_entry = bktr_file_entry;
     shared_data.data = buf;
     shared_data.data_size = 0;
     shared_data.data_written = 0;
-    shared_data.total_size = bktr_file_entry->size;
+    gamecardGetTotalSize(&(shared_data.total_size));
     
     thrd_t read_thread, write_thread;
 

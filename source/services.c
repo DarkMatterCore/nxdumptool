@@ -59,7 +59,8 @@ static ServicesInfoEntry g_serviceInfo[] = {
     { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst */
     { false, "fsp-usb", &servicesFspUsbCheckAvailability, &fspusbInitialize, &fspusbExit },             /* Checks if fsp-usb is really available */
     { false, "es", NULL, &esInitialize, &esExit },
-    { false, "set:cal", NULL, &setcalInitialize, &setcalExit }
+    { false, "set:cal", NULL, &setcalInitialize, &setcalExit },
+    { false, "usb:ds", NULL, &usbCommsInitialize, &usbCommsExit }
 };
 
 static const u32 g_serviceInfoCount = MAX_ELEMENTS(g_serviceInfo);
