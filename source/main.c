@@ -28,6 +28,7 @@
 #include "utils.h"
 #include "bktr.h"
 #include "gamecard.h"
+#include "usb.h"
 
 #define TEST_BUF_SIZE   0x800000
 
@@ -383,7 +384,38 @@ int main(int argc, char *argv[])
     shared_data.data_written = 0;
     gamecardGetTotalSize(&(shared_data.total_size));
     
-    thrd_t read_thread, write_thread;
+    
+    
+    consolePrint("waiting for usb connection... ");
+    
+    u8 count = 0;
+    
+    while(appletMainLoop())
+    {
+        /* Avoid using usbIsHostAvailable() alone inside a loop, because it can hang up the system */
+        consolePrint("%u ", count);
+        if (usbIsHostAvailable()) break;
+        utilsSleep(1);
+        count++;
+        if (count == 10) break;
+    }
+    
+    if (count == 10)
+    {
+        consolePrint("\nusb connection not detected\n");
+        goto out2;
+    }
+    
+    consolePrint("\nusb connection detected\n");
+    
+    if (usbSendFileProperties(shared_data.total_size, "gamecard.xci"))
+    {
+        consolePrint("usb send file properties succeeded\n");
+    } else {
+        consolePrint("usb send file properties failed\n");
+    }
+    
+    /*thrd_t read_thread, write_thread;
 
     consolePrint("creating threads\n\n");
     thrd_create(&read_thread, read_thread_func, &shared_data);
@@ -419,7 +451,7 @@ int main(int argc, char *argv[])
     
     consolePrint("waiting for threads to join\n");
     thrd_join(read_thread, NULL);
-    thrd_join(write_thread, NULL);
+    thrd_join(write_thread, NULL);*/
     
     
     

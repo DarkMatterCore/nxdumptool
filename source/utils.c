@@ -29,6 +29,7 @@
 #include "services.h"
 #include "utils.h"
 #include "nca.h"
+#include "usb.h"
 #include "fatfs/ff.h"
 
 /* Global variables. */
@@ -71,6 +72,13 @@ bool utilsInitializeResources(void)
     if (!servicesInitialize())
     {
         LOGFILE("Failed to initialize needed services!");
+        goto exit;
+    }
+    
+    /* Initialize USB interface */
+    if (!usbInitialize())
+    {
+        LOGFILE("Failed to initialize USB interface!");
         goto exit;
     }
     
@@ -164,6 +172,9 @@ void utilsCloseResources(void)
     
     /* Free NCA crypto buffer */
     ncaFreeCryptoBuffer();
+    
+    /* Close USB interface */
+    usbExit();
     
     /* Close initialized services */
     servicesClose();
