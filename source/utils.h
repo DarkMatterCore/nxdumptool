@@ -67,7 +67,7 @@ void utilsWaitForButtonPress(void);
 
 void utilsWriteLogMessage(const char *func_name, const char *fmt, ...);
 
-void utilsReplaceIllegalCharacters(char *str);
+void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 
 void utilsTrimString(char *str);
 

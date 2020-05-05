@@ -245,18 +245,7 @@ out:
     mutexUnlock(&g_logfileMutex);
 }
 
-void removeIllegalCharacters(char *name)
-{
-    if (!name || !strlen(name)) return;
-    
-    u32 i, len = strlen(name);
-    for (i = 0; i < len; i++)
-    {
-        if (memchr("?[]/\\=+<>:;\",*|^", name[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || name[i] < 0x20 || name[i] > 0x7E) name[i] = '_';
-    }
-}
-
-void utilsReplaceIllegalCharacters(char *str)
+void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
 {
     size_t strsize = 0;
     
@@ -264,7 +253,7 @@ void utilsReplaceIllegalCharacters(char *str)
     
     for(size_t i = 0; i < strsize; i++)
     {
-        if (memchr("?[]/\\=+<>:;\",*|^", str[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || str[i] < 0x20 || str[i] > 0x7E) str[i] = '_';
+        if (memchr("?[]/\\=+<>:;\",*|^", str[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || str[i] < 0x20 || (!ascii_only && str[i] == 0x7F) || (ascii_only && str[i] >= 0x7F)) str[i] = '_';
     }
 }
 
