@@ -23,6 +23,8 @@
 #include "usb.h"
 #include "utils.h"
 
+#define USB_ABI_VERSION             1
+
 #define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT" */
 
 #define USB_TRANSFER_ALIGNMENT      0x1000
@@ -51,10 +53,11 @@ typedef struct {
 } UsbCommandHeader;
 
 typedef struct {
-    u8 version_major;
-    u8 version_minor;
-    u8 version_micro;
-    u8 reserved[0x9];
+    u8 app_ver_major;
+    u8 app_ver_minor;
+    u8 app_ver_micro;
+    u8 abi_version;
+    u8 reserved[0xC];
 } UsbCommandPerformHandshake;
 
 typedef struct {
@@ -74,7 +77,7 @@ typedef enum {
     UsbStatusType_InvalidMagicWord           = 4,
     
     UsbStatusType_MalformedCommand           = 5,
-    UsbStatusType_UnsupportedProtocolVersion = 6,
+    UsbStatusType_UnsupportedAbiVersion      = 6,
     UsbStatusType_UnsupportedCommand         = 7,
     UsbStatusType_HostIoError                = 8
 } UsbStatusType;
@@ -184,9 +187,10 @@ bool usbPerformHandshake(void)
     
     cmd_block = (UsbCommandPerformHandshake*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
     memset(cmd_block, 0, sizeof(UsbCommandPerformHandshake));
-    cmd_block->version_major = VERSION_MAJOR;
-    cmd_block->version_minor = VERSION_MINOR;
-    cmd_block->version_micro = VERSION_MICRO;
+    cmd_block->app_ver_major = VERSION_MAJOR;
+    cmd_block->app_ver_minor = VERSION_MINOR;
+    cmd_block->app_ver_micro = VERSION_MICRO;
+    cmd_block->abi_version = USB_ABI_VERSION;
     
     cmd_size = (sizeof(UsbCommandHeader) + sizeof(UsbCommandPerformHandshake));
     memset(g_usbTransferBuffer + cmd_size, 0, USB_TRANSFER_ALIGNMENT - cmd_size);
@@ -369,8 +373,8 @@ NX_INLINE void usbLogStatusDetail(u32 status)
         case UsbStatusType_MalformedCommand:
             LOGFILE("Host replied with Malformed Command status code.");
             break;
-        case UsbStatusType_UnsupportedProtocolVersion:
-            LOGFILE("Host replied with Unsupported Protocol Version status code.");
+        case UsbStatusType_UnsupportedAbiVersion:
+            LOGFILE("Host replied with Unsupported ABI Version status code.");
             break;
         case UsbStatusType_UnsupportedCommand:
             LOGFILE("Host replied with Unsupported Command status code.");
