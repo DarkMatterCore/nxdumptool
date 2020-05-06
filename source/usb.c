@@ -27,8 +27,7 @@
 
 #define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT" */
 
-#define USB_TRANSFER_ALIGNMENT      0x1000
-#define USB_TRANSFER_TIMEOUT        (u64)10000000000    /* 10 seconds (in nanoseconds) */
+#define USB_TRANSFER_TIMEOUT        (u64)30000000000    /* 10 seconds (in nanoseconds) */
 
 /* Type definitions. */
 
@@ -187,14 +186,13 @@ bool usbPerformHandshake(void)
     
     cmd_block = (UsbCommandPerformHandshake*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
     memset(cmd_block, 0, sizeof(UsbCommandPerformHandshake));
+    
     cmd_block->app_ver_major = VERSION_MAJOR;
     cmd_block->app_ver_minor = VERSION_MINOR;
     cmd_block->app_ver_micro = VERSION_MICRO;
     cmd_block->abi_version = USB_ABI_VERSION;
     
     cmd_size = (sizeof(UsbCommandHeader) + sizeof(UsbCommandPerformHandshake));
-    memset(g_usbTransferBuffer + cmd_size, 0, USB_TRANSFER_ALIGNMENT - cmd_size);
-    cmd_size = USB_TRANSFER_ALIGNMENT;
     
     status = usbSendCommand(cmd_size);
     if (status != UsbStatusType_Success) usbLogStatusDetail(status);
@@ -230,13 +228,12 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
     
     cmd_block = (UsbCommandSendFileProperties*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
     memset(cmd_block, 0, sizeof(UsbCommandSendFileProperties));
+    
     cmd_block->file_size = file_size;
     cmd_block->filename_length = filename_length;
     sprintf(cmd_block->filename, filename);
     
     cmd_size = (sizeof(UsbCommandHeader) + sizeof(UsbCommandSendFileProperties));
-    memset(g_usbTransferBuffer + cmd_size, 0, USB_TRANSFER_ALIGNMENT - cmd_size);
-    cmd_size = USB_TRANSFER_ALIGNMENT;
     
     status = usbSendCommand(cmd_size);
     if (status == UsbStatusType_Success)
@@ -260,7 +257,8 @@ bool usbSendFileData(void *data, u32 data_size)
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
     
     bool ret = false;
-    u32 block_size = 0;
+    void *buf = NULL;
+    UsbStatus *cmd_status = NULL;
     
     if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbTransferRemainingSize || !data || !data_size || data_size > USB_TRANSFER_BUFFER_SIZE || \
         data_size > g_usbTransferRemainingSize)
@@ -269,13 +267,18 @@ bool usbSendFileData(void *data, u32 data_size)
         goto exit;
     }
     
-    block_size = ALIGN_UP(data_size, USB_TRANSFER_ALIGNMENT);
-    memcpy(g_usbTransferBuffer, data, data_size);
-    if (block_size > data_size) memset(g_usbTransferBuffer + data_size, 0, block_size - data_size);
-    
-    if (!usbWrite(g_usbTransferBuffer, block_size))
+    /* Optimization for buffers that already are page aligned */
+    if (!((u64)data & (USB_TRANSFER_ALIGNMENT - 1)))
     {
-        LOGFILE("Failed to write 0x%lX bytes long file data chunk!", block_size);
+        buf = data;
+    } else {
+        buf = g_usbTransferBuffer;
+        memcpy(buf, data, data_size);
+    }
+    
+    if (!usbWrite(buf, data_size))
+    {
+        LOGFILE("Failed to write 0x%lX bytes long file data chunk!", data_size);
         goto exit;
     }
     
@@ -285,11 +288,9 @@ bool usbSendFileData(void *data, u32 data_size)
     /* Check if this is the last chunk */
     if (!g_usbTransferRemainingSize)
     {
-        UsbStatus *cmd_status = NULL;
-        
-        if (!usbRead(g_usbTransferBuffer, USB_TRANSFER_ALIGNMENT))
+        if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus)))
         {
-            LOGFILE("Failed to read 0x%lX bytes long status block!", USB_TRANSFER_ALIGNMENT);
+            LOGFILE("Failed to read 0x%lX bytes long status block!", sizeof(UsbStatus));
             ret = false;
             goto exit;
         }
@@ -331,7 +332,7 @@ static u32 usbSendCommand(size_t cmd_size)
     u32 cmd = ((UsbCommandHeader*)g_usbTransferBuffer)->cmd;
     UsbStatus *cmd_status = NULL;
     
-    if (!cmd_size || (cmd_size % USB_TRANSFER_ALIGNMENT) > 0 || cmd_size > USB_TRANSFER_BUFFER_SIZE)
+    if (cmd_size < sizeof(UsbCommandHeader) || cmd_size > USB_TRANSFER_BUFFER_SIZE)
     {
         LOGFILE("Invalid command size!");
         return UsbStatusType_InvalidCommandSize;
@@ -343,9 +344,9 @@ static u32 usbSendCommand(size_t cmd_size)
         return UsbStatusType_WriteCommandFailed;
     }
     
-    if (!usbRead(g_usbTransferBuffer, USB_TRANSFER_ALIGNMENT))
+    if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus)))
     {
-        LOGFILE("Failed to read 0x%lX bytes long status block for type 0x%X command!", USB_TRANSFER_ALIGNMENT, cmd);
+        LOGFILE("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd);
         return UsbStatusType_ReadStatusFailed;
     }
     
@@ -839,7 +840,7 @@ static bool usbWrite(void *buf, size_t size)
 
 static bool usbTransferData(void *buf, size_t size, UsbDsEndpoint *endpoint)
 {
-    if (!buf || ((u64)buf & (USB_TRANSFER_ALIGNMENT - 1)) > 0 || !size || (size % USB_TRANSFER_ALIGNMENT) > 0 || !endpoint)
+    if (!buf || ((u64)buf & (USB_TRANSFER_ALIGNMENT - 1)) > 0 || !size || !endpoint)
     {
         LOGFILE("Invalid parameters!");
         return false;

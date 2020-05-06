@@ -21,9 +21,10 @@
 
 #include <switch.h>
 
-#define USB_TRANSFER_BUFFER_SIZE    0x800000
+#define USB_TRANSFER_ALIGNMENT      0x1000      /* 4 KiB */
+#define USB_TRANSFER_BUFFER_SIZE    0x800000    /* 8 MiB */
 
-/// Initializes the USB interface, input and output endpoints and allocates a USB_TRANSFER_BUFFER_SIZE sized, 0x1000 page aligned transfer buffer.
+/// Initializes the USB interface, input and output endpoints and allocates an internal transfer buffer.
 bool usbInitialize(void);
 
 /// Closes the USB interface, input and output endpoints and frees the transfer buffer.
