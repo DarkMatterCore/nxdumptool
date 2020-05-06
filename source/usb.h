@@ -23,7 +23,7 @@
 
 #define USB_TRANSFER_BUFFER_SIZE    0x800000
 
-/// Initializes the USB interface, input and output endpoints and allocates a 0x1000-byte aligned transfer buffer.
+/// Initializes the USB interface, input and output endpoints and allocates a USB_TRANSFER_BUFFER_SIZE sized, 0x1000 page aligned transfer buffer.
 bool usbInitialize(void);
 
 /// Closes the USB interface, input and output endpoints and frees the transfer buffer.
