@@ -144,10 +144,18 @@ static void consolePrint(const char *text, ...)
 static int read_thread_func(void *arg)
 {
     ThreadSharedData *shared_data = (ThreadSharedData*)arg;
-    if (!shared_data || !shared_data->data || !shared_data->total_size) return -1;
+    if (!shared_data || !shared_data->data || !shared_data->total_size)
+    {
+        shared_data->read_error = true;
+        return -1;
+    }
     
     u8 *buf = memalign(USB_TRANSFER_ALIGNMENT, TEST_BUF_SIZE);
-    if (!buf) return -2;
+    if (!buf)
+    {
+        shared_data->read_error = true;
+        return -2;
+    }
     
     for(u64 offset = 0, blksize = TEST_BUF_SIZE; offset < shared_data->total_size; offset += blksize)
     {
@@ -162,7 +170,7 @@ static int read_thread_func(void *arg)
         
         mutexLock(&g_fileMutex);
         
-        if (shared_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
+        if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
         
         if (shared_data->write_error)
         {
@@ -185,13 +193,17 @@ static int read_thread_func(void *arg)
 static int write_thread_func(void *arg)
 {
     ThreadSharedData *shared_data = (ThreadSharedData*)arg;
-    if (!shared_data || !shared_data->fileobj || !shared_data->data) return -1;
+    if (!shared_data || !shared_data->data)
+    {
+        shared_data->write_error = true;
+        return -1;
+    }
     
     while(shared_data->data_written < shared_data->total_size)
     {
         mutexLock(&g_fileMutex);
         
-        if (!shared_data->data_size) condvarWait(&g_writeCondvar, &g_fileMutex);
+        if (!shared_data->data_size && !shared_data->read_error) condvarWait(&g_writeCondvar, &g_fileMutex);
         
         if (shared_data->read_error)
         {
@@ -477,17 +489,17 @@ int main(int argc, char *argv[])
     
     start = (time(NULL) - start);
     
-    consolePrint("\n\nwaiting for threads to join\n");
+    consolePrint("\nwaiting for threads to join\n");
     thrd_join(read_thread, NULL);
     thrd_join(write_thread, NULL);
     
     if (shared_data.read_error || shared_data.write_error)
     {
-        consolePrint("\n\nusb transfer error\n");
+        consolePrint("usb transfer error\n");
         goto out2;
     }
     
-    consolePrint("\n\nprocess completed in %lu seconds\n", start);
+    consolePrint("process completed in %lu seconds\n", start);
     
     
     
