@@ -19,6 +19,7 @@
 #include <string.h>
 #include <stdlib.h>
 #include <malloc.h>
+#include <time.h>
 
 #include "usb.h"
 #include "utils.h"
@@ -27,7 +28,8 @@
 
 #define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT" */
 
-#define USB_TRANSFER_TIMEOUT        (u64)30000000000    /* 10 seconds (in nanoseconds) */
+#define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB */
+#define USB_TRANSFER_TIMEOUT        30                  /* 30 seconds */
 
 /* Type definitions. */
 
@@ -68,17 +70,17 @@ typedef struct {
 } UsbCommandSendFileProperties;
 
 typedef enum {
-    UsbStatusType_Success                    = 0,
+    UsbStatusType_Success               = 0,
     
-    UsbStatusType_InvalidCommandSize         = 1,
-    UsbStatusType_WriteCommandFailed         = 2,
-    UsbStatusType_ReadStatusFailed           = 3,
-    UsbStatusType_InvalidMagicWord           = 4,
+    UsbStatusType_InvalidCommandSize    = 1,
+    UsbStatusType_WriteCommandFailed    = 2,
+    UsbStatusType_ReadStatusFailed      = 3,
+    UsbStatusType_InvalidMagicWord      = 4,
     
-    UsbStatusType_MalformedCommand           = 5,
-    UsbStatusType_UnsupportedAbiVersion      = 6,
-    UsbStatusType_UnsupportedCommand         = 7,
-    UsbStatusType_HostIoError                = 8
+    UsbStatusType_MalformedCommand      = 5,
+    UsbStatusType_UnsupportedAbiVersion = 6,
+    UsbStatusType_UnsupportedCommand    = 7,
+    UsbStatusType_HostIoError           = 8
 } UsbStatusType;
 
 typedef struct {
@@ -98,6 +100,8 @@ static u64 g_usbTransferRemainingSize = 0;
 
 /* Function prototypes. */
 
+static bool _usbPerformHandshake(void);
+
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size);
 static u32 usbSendCommand(size_t cmd_size);
 NX_INLINE void usbLogStatusDetail(u32 status);
@@ -114,8 +118,10 @@ NX_INLINE bool usbInitializeDeviceInterface(void);
 static bool usbInitializeDeviceInterface5x(void);
 static bool usbInitializeDeviceInterface1x(void);
 
-static bool usbRead(void *buf, size_t size);
-static bool usbWrite(void *buf, size_t size);
+NX_INLINE bool usbIsHostAvailable(void);
+
+NX_INLINE bool usbRead(void *buf, size_t size);
+NX_INLINE bool usbWrite(void *buf, size_t size);
 static bool usbTransferData(void *buf, size_t size, UsbDsEndpoint *endpoint);
 
 bool usbInitialize(void)
@@ -159,11 +165,10 @@ void usbExit(void)
     rwlockWriteUnlock(&g_usbDeviceLock);
 }
 
-bool usbIsHostAvailable(void)
+void *usbAllocatePageAlignedBuffer(size_t size)
 {
-    u32 state = 0;
-    usbDsGetState(&state);
-    return (state == 5);
+    if (!size) return NULL;
+    return memalign(USB_TRANSFER_ALIGNMENT, size);
 }
 
 bool usbPerformHandshake(void)
@@ -172,34 +177,23 @@ bool usbPerformHandshake(void)
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
     
     bool ret = false;
-    UsbCommandPerformHandshake *cmd_block = NULL;
-    size_t cmd_size = 0;
-    u32 status = UsbStatusType_Success;
+    time_t start = time(NULL);
+    time_t now = start;
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized)
+    while((now - start) < USB_TRANSFER_TIMEOUT)
     {
-        LOGFILE("Invalid parameters!");
-        goto exit;
+        if (usbIsHostAvailable())
+        {
+            /* Once the console has been connected to a host device, there's no need to keep running this loop */
+            /* usbTransferData() implements its own timeout */
+            ret = _usbPerformHandshake();
+            break;
+        }
+        
+        utilsSleep(1);
+        now = time(NULL);
     }
     
-    usbPrepareCommandHeader(UsbCommandType_PerformHandshake, (u32)sizeof(UsbCommandPerformHandshake));
-    
-    cmd_block = (UsbCommandPerformHandshake*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
-    memset(cmd_block, 0, sizeof(UsbCommandPerformHandshake));
-    
-    cmd_block->app_ver_major = VERSION_MAJOR;
-    cmd_block->app_ver_minor = VERSION_MINOR;
-    cmd_block->app_ver_micro = VERSION_MICRO;
-    cmd_block->abi_version = USB_ABI_VERSION;
-    
-    cmd_size = (sizeof(UsbCommandHeader) + sizeof(UsbCommandPerformHandshake));
-    
-    status = usbSendCommand(cmd_size);
-    if (status != UsbStatusType_Success) usbLogStatusDetail(status);
-    
-    ret = (status == UsbStatusType_Success);
-    
-exit:
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
     
@@ -251,7 +245,7 @@ exit:
     return ret;
 }
 
-bool usbSendFileData(void *data, u32 data_size)
+bool usbSendFileData(void *data, u64 data_size)
 {
     rwlockWriteLock(&g_usbDeviceLock);
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
@@ -315,6 +309,36 @@ exit:
     rwlockWriteUnlock(&g_usbDeviceLock);
     
     return ret;
+}
+
+static bool _usbPerformHandshake(void)
+{
+    UsbCommandPerformHandshake *cmd_block = NULL;
+    size_t cmd_size = 0;
+    u32 status = UsbStatusType_Success;
+    
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    usbPrepareCommandHeader(UsbCommandType_PerformHandshake, (u32)sizeof(UsbCommandPerformHandshake));
+    
+    cmd_block = (UsbCommandPerformHandshake*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
+    memset(cmd_block, 0, sizeof(UsbCommandPerformHandshake));
+    
+    cmd_block->app_ver_major = VERSION_MAJOR;
+    cmd_block->app_ver_minor = VERSION_MINOR;
+    cmd_block->app_ver_micro = VERSION_MICRO;
+    cmd_block->abi_version = USB_ABI_VERSION;
+    
+    cmd_size = (sizeof(UsbCommandHeader) + sizeof(UsbCommandPerformHandshake));
+    
+    status = usbSendCommand(cmd_size);
+    if (status != UsbStatusType_Success) usbLogStatusDetail(status);
+    
+    return (status == UsbStatusType_Success);
 }
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size)
@@ -518,6 +542,19 @@ static bool usbInitializeComms(void)
             rc = usbDsSetBinaryObjectStore(bos, sizeof(bos));
             if (R_FAILED(rc)) LOGFILE("usbDsSetBinaryObjectStore failed! (0x%08X)", rc);
         }
+    } else {
+        static const UsbDsDeviceInfo device_info = {
+            .idVendor = 0x057e,
+            .idProduct = 0x3000,
+            .bcdDevice = 0x0100,
+            .Manufacturer = APP_AUTHOR,
+            .Product = APP_TITLE,
+            .SerialNumber = APP_VERSION
+        };
+        
+        /* Set VID, PID and BCD */
+        rc = usbDsSetVidPidBcd(&device_info);
+        if (R_FAILED(rc)) LOGFILE("usbDsSetVidPidBcd failed! (0x%08X)", rc);
     }
     
     if (R_FAILED(rc)) goto exit;
@@ -822,7 +859,14 @@ static bool usbInitializeDeviceInterface1x(void)
     return true;
 }
 
-static bool usbRead(void *buf, size_t size)
+NX_INLINE bool usbIsHostAvailable(void)
+{
+    u32 state = 0;
+    Result rc = usbDsGetState(&state);
+    return (R_SUCCEEDED(rc) && state == 5);
+}
+
+NX_INLINE bool usbRead(void *buf, u64 size)
 {
     rwlockWriteLock(&(g_usbDeviceInterface.lock_out));
     bool ret = usbTransferData(buf, size, g_usbDeviceInterface.endpoint_out);
@@ -830,7 +874,7 @@ static bool usbRead(void *buf, size_t size)
     return ret;
 }
 
-static bool usbWrite(void *buf, size_t size)
+NX_INLINE bool usbWrite(void *buf, u64 size)
 {
     rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
     bool ret = usbTransferData(buf, size, g_usbDeviceInterface.endpoint_in);
@@ -838,7 +882,7 @@ static bool usbWrite(void *buf, size_t size)
     return ret;
 }
 
-static bool usbTransferData(void *buf, size_t size, UsbDsEndpoint *endpoint)
+static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
 {
     if (!buf || ((u64)buf & (USB_TRANSFER_ALIGNMENT - 1)) > 0 || !size || !endpoint)
     {
@@ -866,7 +910,7 @@ static bool usbTransferData(void *buf, size_t size, UsbDsEndpoint *endpoint)
     }
     
     /* Wait for the transfer to finish */
-    rc = eventWait(&(endpoint->CompletionEvent), USB_TRANSFER_TIMEOUT);
+    rc = eventWait(&(endpoint->CompletionEvent), USB_TRANSFER_TIMEOUT * (u64)1000000000);
     eventClear(&(endpoint->CompletionEvent));
     
     if (R_FAILED(rc))

@@ -22,7 +22,6 @@
 #include <dirent.h>
 #include <threads.h>
 #include <stdarg.h>
-#include <malloc.h>
 
 //#include "lvgl_helper.h"
 
@@ -150,7 +149,7 @@ static int read_thread_func(void *arg)
         return -1;
     }
     
-    u8 *buf = memalign(USB_TRANSFER_ALIGNMENT, TEST_BUF_SIZE);
+    u8 *buf = usbAllocatePageAlignedBuffer(TEST_BUF_SIZE);
     if (!buf)
     {
         shared_data->read_error = true;
@@ -268,7 +267,10 @@ int main(int argc, char *argv[])
     
     Result rc = 0;
     
-    mkdir("sdmc:/nxdt_test", 0744);
+    ThreadSharedData shared_data = {0};
+    thrd_t read_thread, write_thread;
+    
+    //mkdir("sdmc:/nxdt_test", 0744);
     
     // SSBU's Base Program NCA
     NcmContentInfo base_program_content_info = {
@@ -330,7 +332,7 @@ int main(int argc, char *argv[])
     
     consolePrint("ncm open storage succeeded\n");
     
-    if (!ncaInitializeContext(base_nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &base_program_content_info, &base_tik))
+    /*if (!ncaInitializeContext(base_nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &base_program_content_info, &base_tik))
     {
         consolePrint("base nca initialize ctx failed\n");
         goto out2;
@@ -390,7 +392,7 @@ int main(int argc, char *argv[])
         goto out2;
     }
     
-    consolePrint("bktr get file entry by path success: %.*s | 0x%lX\n", bktr_file_entry->name_length, bktr_file_entry->name, bktr_file_entry->size);
+    consolePrint("bktr get file entry by path success: %.*s | 0x%lX\n", bktr_file_entry->name_length, bktr_file_entry->name, bktr_file_entry->size);*/
     
     
     
@@ -414,7 +416,17 @@ int main(int argc, char *argv[])
     
     consolePrint("open concatenationfile success\n");*/
     
-    ThreadSharedData shared_data = {0};
+    
+    
+    
+    
+    
+    consolePrint("waiting for gamecard to be ready...\n");
+    
+    while(appletMainLoop())
+    {
+        if (gamecardIsReady()) break;
+    }
     
     //shared_data.fileobj = tmp_file;
     shared_data.fileobj = NULL;
@@ -425,36 +437,24 @@ int main(int argc, char *argv[])
     
     consolePrint("waiting for usb connection... ");
     
-    u8 count = 0;
-    
-    while(appletMainLoop())
+    if (!usbPerformHandshake())
     {
-        /* Avoid using usbIsHostAvailable() alone inside a loop, because it can hang up the system */
-        consolePrint("%u ", count);
-        if (usbIsHostAvailable()) break;
-        utilsSleep(1);
-        count++;
-        if (count == 10) break;
-    }
-    
-    if (count == 10)
-    {
-        consolePrint("\nusb connection not detected\n");
+        consolePrint("failed\n");
         goto out2;
     }
     
-    consolePrint("\nusb connection detected\n");
+    consolePrint("success\n");
+    
+    consolePrint("sending file properties... ");
     
     if (!usbSendFileProperties(shared_data.total_size, "gamecard.xci"))
     {
-        consolePrint("usb send file properties failed\n");
+        consolePrint("failed\n");
         goto out2;
     }
     
-    consolePrint("usb send file properties succeeded\n");
+    consolePrint("success\n");
     
-    thrd_t read_thread, write_thread;
-
     consolePrint("creating threads\n\n");
     thrd_create(&read_thread, read_thread_func, &shared_data);
     thrd_create(&write_thread, write_thread_func, &shared_data);
@@ -475,12 +475,12 @@ int main(int argc, char *argv[])
         
         if (prev_time == ts->tm_sec || prev_size == size) continue;
         
-        percent = (u8)((size * 100) / shared_data.total_size) + 1;
+        percent = (u8)((size * 100) / shared_data.total_size);
         
         prev_time = ts->tm_sec;
         prev_size = size;
         
-        printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (time(NULL) - start));
+        printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));
         consoleUpdate(NULL);
     }
     
@@ -514,6 +514,7 @@ int main(int argc, char *argv[])
     
     
 out2:
+    consolePrint("press any button to exit\n");
     utilsWaitForButtonPress();
     
     if (tmp_file) fclose(tmp_file);
