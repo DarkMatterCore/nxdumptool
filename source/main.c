@@ -437,7 +437,7 @@ int main(int argc, char *argv[])
     
     consolePrint("waiting for usb connection... ");
     
-    if (!usbPerformHandshake())
+    if (!usbStartSession())
     {
         consolePrint("failed\n");
         goto out2;
@@ -492,6 +492,8 @@ int main(int argc, char *argv[])
     consolePrint("\nwaiting for threads to join\n");
     thrd_join(read_thread, NULL);
     thrd_join(write_thread, NULL);
+    
+    usbEndSession();
     
     if (shared_data.read_error || shared_data.write_error)
     {

@@ -32,15 +32,18 @@ void usbExit(void);
 /// Returns a pointer to a heap-allocated, page-aligned memory buffer that's suitable for USB transfers.
 void *usbAllocatePageAlignedBuffer(size_t size);
 
-/// Performs a handshake with the host device. Returns true if the host device replies with valid data within a certain time span.
+/// Starts a data transfer session with the connected host device. Returns true if the host device replies with valid data within a certain time span.
 /// This should be called before usbSendFileProperties().
-bool usbPerformHandshake(void);
+bool usbStartSession(void);
 
-/// Sends file properties to the host device before starting a file data transfer. Must be called before usbSendFileData(), and after usbPerformHandshake().
+/// Sends file properties to the host device before starting a file data transfer. Must be called before usbSendFileData(), and after usbStartSession().
 bool usbSendFileProperties(u64 file_size, const char *filename);
 
 /// Performs a file data transfer. Must be continuously called after usbSendFileProperties() until all file data has been transferred.
 /// Data chunk size must not exceed USB_TRANSFER_BUFFER_SIZE.
 bool usbSendFileData(void *data, u64 data_size);
+
+/// Ends a previously started data transfer session with the connected host device.
+void usbEndSession(void);
 
 #endif /* __USB_H__ */
