@@ -71,17 +71,19 @@ typedef struct {
 } UsbCommandSendFileProperties;
 
 typedef enum {
+    /* Expected response code */
     UsbStatusType_Success               = 0,
     
+    /* Internal usage */
     UsbStatusType_InvalidCommandSize    = 1,
     UsbStatusType_WriteCommandFailed    = 2,
     UsbStatusType_ReadStatusFailed      = 3,
-    UsbStatusType_InvalidMagicWord      = 4,
     
-    UsbStatusType_MalformedCommand      = 5,
+    /* These can be returned by the host device */
+    UsbStatusType_InvalidMagicWord      = 4,
+    UsbStatusType_UnsupportedCommand    = 5,
     UsbStatusType_UnsupportedAbiVersion = 6,
-    UsbStatusType_UnsupportedCommand    = 7,
-    UsbStatusType_HostIoError           = 8
+    UsbStatusType_HostIoError           = 7
 } UsbStatusType;
 
 typedef struct {
@@ -421,16 +423,15 @@ NX_INLINE void usbLogStatusDetail(u32 status)
         case UsbStatusType_InvalidCommandSize:
         case UsbStatusType_WriteCommandFailed:
         case UsbStatusType_ReadStatusFailed:
+            break;
         case UsbStatusType_InvalidMagicWord:
-            break;
-        case UsbStatusType_MalformedCommand:
-            LOGFILE("Host replied with Malformed Command status code.");
-            break;
-        case UsbStatusType_UnsupportedAbiVersion:
-            LOGFILE("Host replied with Unsupported ABI Version status code.");
+            LOGFILE("Host replied with Invalid Magic Word status code.");
             break;
         case UsbStatusType_UnsupportedCommand:
             LOGFILE("Host replied with Unsupported Command status code.");
+            break;
+        case UsbStatusType_UnsupportedAbiVersion:
+            LOGFILE("Host replied with Unsupported ABI Version status code.");
             break;
         case UsbStatusType_HostIoError:
             LOGFILE("Host replied with I/O Error status code.");
