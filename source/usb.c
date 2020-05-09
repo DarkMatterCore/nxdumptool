@@ -83,7 +83,8 @@ typedef enum {
     UsbStatusType_InvalidMagicWord      = 4,
     UsbStatusType_UnsupportedCommand    = 5,
     UsbStatusType_UnsupportedAbiVersion = 6,
-    UsbStatusType_HostIoError           = 7
+    UsbStatusType_MalformedCommand      = 7,
+    UsbStatusType_HostIoError           = 8
 } UsbStatusType;
 
 typedef struct {
@@ -432,6 +433,9 @@ NX_INLINE void usbLogStatusDetail(u32 status)
             break;
         case UsbStatusType_UnsupportedAbiVersion:
             LOGFILE("Host replied with Unsupported ABI Version status code.");
+            break;
+        case UsbStatusType_MalformedCommand:
+            LOGFILE("Host replied with Malformed Command status code.");
             break;
         case UsbStatusType_HostIoError:
             LOGFILE("Host replied with I/O Error status code.");
