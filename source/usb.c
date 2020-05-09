@@ -31,7 +31,6 @@
 #define USB_SESSION_START_TIMEOUT   10                  /* 10 seconds */
 
 #define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB */
-#define USB_TRANSFER_TIMEOUT        5                   /* 5 seconds */
 
 /* Type definitions. */
 
@@ -192,9 +191,15 @@ bool usbStartSession(void)
     
     while((now - start) < USB_SESSION_START_TIMEOUT)
     {
-        ret = g_usbSessionStarted = (usbIsHostAvailable() && _usbStartSession());
-        if (ret) break;
+        if (usbIsHostAvailable())
+        {
+            /* Once the console has been connected to a host device, there's no need to keep running this loop */
+            /* usbTransferData() implements its own timeout */
+            ret = g_usbSessionStarted = _usbStartSession();
+            break;
+        }
         
+        /* Continuously running usbDsGetState() can potentially hang up the system, so let's add a small sleep */
         utilsSleep(1);
         now = time(NULL);
     }
@@ -941,15 +946,8 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
     }
     
     /* Wait for the transfer to finish */
-    rc = eventWait(&(endpoint->CompletionEvent), USB_TRANSFER_TIMEOUT * (u64)1000000000);
+    eventWait(&(endpoint->CompletionEvent), UINT64_MAX);
     eventClear(&(endpoint->CompletionEvent));
-    
-    if (R_FAILED(rc))
-    {
-        LOGFILE("USB transfer timed out! (0x%08X)", rc);
-        usbDsEndpoint_Cancel(endpoint);
-        return false;
-    }
     
     rc = usbDsEndpoint_GetReportData(endpoint, &report_data);
     if (R_FAILED(rc))
