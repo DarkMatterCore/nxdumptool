@@ -149,7 +149,7 @@ static int read_thread_func(void *arg)
         return -1;
     }
     
-    u8 *buf = usbAllocatePageAlignedBuffer(TEST_BUF_SIZE);
+    u8 *buf = malloc(TEST_BUF_SIZE);
     if (!buf)
     {
         shared_data->read_error = true;
@@ -296,7 +296,7 @@ int main(int argc, char *argv[])
         .id_offset = 0
     };
     
-    buf = malloc(TEST_BUF_SIZE);
+    buf = usbAllocatePageAlignedBuffer(TEST_BUF_SIZE);
     if (!buf)
     {
         consolePrint("buf failed\n");

@@ -28,6 +28,8 @@
 
 #define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT" */
 
+#define USB_SESSION_START_TIMEOUT   10                  /* 10 seconds */
+
 #define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB */
 #define USB_TRANSFER_TIMEOUT        5                   /* 5 seconds */
 
@@ -188,15 +190,10 @@ bool usbStartSession(void)
     time_t start = time(NULL);
     time_t now = start;
     
-    while((now - start) < USB_TRANSFER_TIMEOUT)
+    while((now - start) < USB_SESSION_START_TIMEOUT)
     {
-        if (usbIsHostAvailable())
-        {
-            /* Once the console has been connected to a host device, there's no need to keep running this loop */
-            /* usbTransferData() implements its own timeout */
-            ret = g_usbSessionStarted = _usbStartSession();
-            break;
-        }
+        ret = g_usbSessionStarted = (usbIsHostAvailable() && _usbStartSession());
+        if (ret) break;
         
         utilsSleep(1);
         now = time(NULL);
@@ -950,6 +947,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
     if (R_FAILED(rc))
     {
         LOGFILE("USB transfer timed out! (0x%08X)", rc);
+        usbDsEndpoint_Cancel(endpoint);
         return false;
     }
     
@@ -963,7 +961,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
     rc = usbDsParseReportData(&report_data, urb_id, NULL, &transferred_size);
     if (R_FAILED(rc))
     {
-        LOGFILE("usbDsEndpoint_GetReportData failed! (0x%08X)", rc);
+        LOGFILE("usbDsParseReportData failed! (0x%08X)", rc);
         return false;
     }
     
