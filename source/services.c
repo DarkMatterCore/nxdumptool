@@ -78,8 +78,8 @@ bool servicesInitialize(void)
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
-        /* Check if this service has been already initialized */
-        if (g_serviceInfo[i].initialized) continue;
+        /* Check if this service has been already initialized or if it actually has a valid initialize function */
+        if (g_serviceInfo[i].initialized || g_serviceInfo[i].init_func == NULL) continue;
         
         /* Check if this service depends on a condition function */
         if (g_serviceInfo[i].cond_func != NULL)
@@ -88,9 +88,6 @@ bool servicesInitialize(void)
             /* Skip this service if the required conditions aren't met */
             if (!g_serviceInfo[i].cond_func(&(g_serviceInfo[i]))) continue;
         }
-        
-        /* Check if this service has a valid initialize function  */
-        if (g_serviceInfo[i].init_func == NULL) continue;
         
         /* Initialize service */
         rc = g_serviceInfo[i].init_func();

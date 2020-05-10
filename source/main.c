@@ -23,8 +23,6 @@
 #include <threads.h>
 #include <stdarg.h>
 
-//#include "lvgl_helper.h"
-
 #include "utils.h"
 #include "bktr.h"
 #include "gamecard.h"
@@ -122,13 +120,15 @@ static CondVar g_readCondvar = 0, g_writeCondvar = 0;
 
 typedef struct
 {
-    FILE *fileobj;
+    //FILE *fileobj;
+    RomFileSystemContext *romfs_ctx;
     void *data;
     size_t data_size;
     size_t data_written;
     size_t total_size;
     bool read_error;
     bool write_error;
+    bool transfer_cancelled;
 } ThreadSharedData;
 
 static void consolePrint(const char *text, ...)
@@ -156,37 +156,89 @@ static int read_thread_func(void *arg)
         return -2;
     }
     
-    for(u64 offset = 0, blksize = TEST_BUF_SIZE; offset < shared_data->total_size; offset += blksize)
+    u64 file_table_offset = 0;
+    RomFileSystemFileEntry *file_entry = NULL;
+    char path[FS_MAX_PATH] = {0};
+    
+    while(file_table_offset < shared_data->romfs_ctx->file_table_size)
     {
-        if (blksize > (shared_data->total_size - offset)) blksize = (shared_data->total_size - offset);
+        /* Check if the transfer has been cancelled by the user */
+        if (shared_data->transfer_cancelled)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
         
-        shared_data->read_error = !gamecardReadStorage(buf, blksize, offset);
+        /* Retrieve RomFS file entry information */
+        shared_data->read_error = (!(file_entry = romfsGetFileEntryByOffset(shared_data->romfs_ctx, file_table_offset)) || \
+                                   !romfsGeneratePathFromFileEntry(shared_data->romfs_ctx, file_entry, path, FS_MAX_PATH, RomFileSystemPathIllegalCharReplaceType_IllegalFsChars));
         if (shared_data->read_error)
         {
             condvarWakeAll(&g_writeCondvar);
             break;
         }
         
+        /* Wait until the previous file data chunk has been written */
         mutexLock(&g_fileMutex);
-        
         if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+        mutexUnlock(&g_fileMutex);
+        if (shared_data->write_error) break;
         
-        if (shared_data->write_error)
+        /* Send current file properties */
+        shared_data->read_error = !usbSendFileProperties(file_entry->size, path);
+        if (shared_data->read_error)
         {
-            mutexUnlock(&g_fileMutex);
+            condvarWakeAll(&g_writeCondvar);
             break;
         }
         
-        memcpy(shared_data->data, buf, blksize);
-        shared_data->data_size = blksize;
+        for(u64 offset = 0, blksize = TEST_BUF_SIZE; offset < file_entry->size; offset += blksize)
+        {
+            if (blksize > (file_entry->size - offset)) blksize = (file_entry->size - offset);
+            
+            /* Check if the transfer has been cancelled by the user */
+            if (shared_data->transfer_cancelled)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+            
+            /* Read current file data chunk */
+            shared_data->read_error = !romfsReadFileEntryData(shared_data->romfs_ctx, file_entry, buf, blksize, offset);
+            if (shared_data->read_error)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+            
+            /* Wait until the previous file data chunk has been written */
+            mutexLock(&g_fileMutex);
+            
+            if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+            
+            if (shared_data->write_error)
+            {
+                mutexUnlock(&g_fileMutex);
+                break;
+            }
+            
+            /* Copy current file data chunk to the shared buffer */
+            memcpy(shared_data->data, buf, blksize);
+            shared_data->data_size = blksize;
+            
+            /* Wake up the write thread to continue writing data */
+            mutexUnlock(&g_fileMutex);
+            condvarWakeAll(&g_writeCondvar);
+        }
         
-        mutexUnlock(&g_fileMutex);
-        condvarWakeAll(&g_writeCondvar);
+        if (shared_data->read_error || shared_data->write_error || shared_data->transfer_cancelled) break;
+        
+        file_table_offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + file_entry->name_length, 4);
     }
     
     free(buf);
     
-    return 0;
+    return (shared_data->read_error ? -3 : 0);
 }
 
 static int write_thread_func(void *arg)
@@ -200,11 +252,12 @@ static int write_thread_func(void *arg)
     
     while(shared_data->data_written < shared_data->total_size)
     {
+        /* Wait until the current file data chunk has been read */
         mutexLock(&g_fileMutex);
         
         if (!shared_data->data_size && !shared_data->read_error) condvarWait(&g_writeCondvar, &g_fileMutex);
         
-        if (shared_data->read_error)
+        if (shared_data->read_error || shared_data->transfer_cancelled)
         {
             mutexUnlock(&g_fileMutex);
             break;
@@ -212,6 +265,7 @@ static int write_thread_func(void *arg)
         
         //shared_data->write_error = (fwrite(shared_data->data, 1, shared_data->data_size, shared_data->fileobj) != shared_data->data_size);
         
+        /* Write current file data chunk */
         shared_data->write_error = !usbSendFileData(shared_data->data, shared_data->data_size);
         if (!shared_data->write_error)
         {
@@ -219,6 +273,7 @@ static int write_thread_func(void *arg)
             shared_data->data_size = 0;
         }
         
+        /* Wake up the read thread to continue reading data */
         mutexUnlock(&g_fileMutex);
         condvarWakeAll(&g_readCondvar);
         
@@ -247,54 +302,24 @@ int main(int argc, char *argv[])
         goto out;
     }
     
-    /*lv_test();
-    
-    while(appletMainLoop())
-    {
-        lv_task_handler();
-        if (lvglHelperGetExitFlag()) break;
-    }*/
-    
     u8 *buf = NULL;
-    FILE *tmp_file = NULL;
     
-    Ticket base_tik = {0}, update_tik = {0};
-    NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
+    Ticket tik = {0};
+    NcaContext *nca_ctx = NULL;
     NcmContentStorage ncm_storage = {0};
-    
-    BktrContext bktr_ctx = {0};
-    RomFileSystemFileEntry *bktr_file_entry = NULL;
     
     Result rc = 0;
     
     ThreadSharedData shared_data = {0};
     thrd_t read_thread, write_thread;
     
+    char path[FS_MAX_PATH] = {0};
+    LrLocationResolver resolver = {0};
+    NcmContentInfo content_info = {0};
+    
+    RomFileSystemContext romfs_ctx = {0};
+    
     //mkdir("sdmc:/nxdt_test", 0744);
-    
-    // SSBU's Base Program NCA
-    NcmContentInfo base_program_content_info = {
-        .content_id = {
-            .c = { 0x48, 0xBB, 0xEA, 0xB6, 0x3E, 0x73, 0x88, 0x69, 0x8D, 0xE4, 0x74, 0x43, 0x49, 0x00, 0xE1, 0x04 }
-        },
-        .size = {
-            0x00, 0x40, 0x24, 0x62, 0x03, 0x00
-        },
-        .content_type = NcmContentType_Program,
-        .id_offset = 0
-    };
-    
-    // SSBU's Update Program NCA
-    NcmContentInfo update_program_content_info = {
-        .content_id = {
-            .c = { 0x83, 0x7A, 0xD9, 0x78, 0x3E, 0xB2, 0x3A, 0xFA, 0xB0, 0x4B, 0xF5, 0x71, 0x55, 0x43, 0x6E, 0x5D }
-        },
-        .size = {
-            0x00, 0x6E, 0xE9, 0x84, 0x00, 0x00
-        },
-        .content_type = NcmContentType_Program,
-        .id_offset = 0
-    };
     
     buf = usbAllocatePageAlignedBuffer(TEST_BUF_SIZE);
     if (!buf)
@@ -305,23 +330,14 @@ int main(int argc, char *argv[])
     
     consolePrint("buf succeeded\n");
     
-    base_nca_ctx = calloc(1, sizeof(NcaContext));
-    if (!base_nca_ctx)
+    nca_ctx = calloc(1, sizeof(NcaContext));
+    if (!nca_ctx)
     {
-        consolePrint("base nca ctx buf failed\n");
+        consolePrint("nca ctx buf failed\n");
         goto out2;
     }
     
-    consolePrint("base nca ctx buf succeeded\n");
-    
-    update_nca_ctx = calloc(1, sizeof(NcaContext));
-    if (!update_nca_ctx)
-    {
-        consolePrint("update nca ctx buf failed\n");
-        goto out2;
-    }
-    
-    consolePrint("update nca ctx buf succeeded\n");
+    consolePrint("nca ctx buf succeeded\n");
     
     rc = ncmOpenContentStorage(&ncm_storage, NcmStorageId_SdCard);
     if (R_FAILED(rc))
@@ -332,108 +348,80 @@ int main(int argc, char *argv[])
     
     consolePrint("ncm open storage succeeded\n");
     
-    /*if (!ncaInitializeContext(base_nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &base_program_content_info, &base_tik))
+    rc = lrInitialize();
+    if (R_FAILED(rc))
     {
-        consolePrint("base nca initialize ctx failed\n");
+        consolePrint("lrInitialize failed\n");
         goto out2;
     }
     
-    tmp_file = fopen("sdmc:/nxdt_test/base_nca_ctx.bin", "wb");
-    if (tmp_file)
-    {
-        fwrite(base_nca_ctx, 1, sizeof(NcaContext), tmp_file);
-        fclose(tmp_file);
-        tmp_file = NULL;
-        consolePrint("base nca ctx saved\n");
-    } else {
-        consolePrint("base nca ctx not saved\n");
-    }
+    consolePrint("lrInitialize succeeded\n");
     
-    if (!ncaInitializeContext(update_nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &update_program_content_info, &update_tik))
+    rc = lrOpenLocationResolver(NcmStorageId_SdCard, &resolver);
+    if (R_FAILED(rc))
     {
-        consolePrint("update nca initialize ctx failed\n");
+        consolePrint("lrOpenLocationResolver failed\n");
         goto out2;
     }
     
-    tmp_file = fopen("sdmc:/nxdt_test/update_nca_ctx.bin", "wb");
-    if (tmp_file)
-    {
-        fwrite(update_nca_ctx, 1, sizeof(NcaContext), tmp_file);
-        fclose(tmp_file);
-        tmp_file = NULL;
-        consolePrint("update nca ctx saved\n");
-    } else {
-        consolePrint("update nca ctx not saved\n");
-    }
+    consolePrint("lrOpenLocationResolver succeeded\n");
     
-    if (!bktrInitializeContext(&bktr_ctx, &(base_nca_ctx->fs_contexts[1]), &(update_nca_ctx->fs_contexts[1])))
+    rc = lrLrResolveProgramPath(&resolver, (u64)0x01006F8002326000, path); // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000
+    if (R_FAILED(rc))
     {
-        consolePrint("bktr initialize ctx failed\n");
+        consolePrint("lrLrResolveProgramPath failed\n");
         goto out2;
     }
     
-    consolePrint("bktr initialize ctx succeeded\n");
+    consolePrint("lrLrResolveProgramPath succeeded\n");
     
-    tmp_file = fopen("sdmc:/nxdt_test/bktr_ctx.bin", "wb");
-    if (tmp_file)
+    memmove(path, strrchr(path, '/') + 1, SHA256_HASH_SIZE + 4);
+    path[SHA256_HASH_SIZE + 4] = '\0';
+    
+    consolePrint("Program NCA: %s\n", path);
+    
+    for(u32 i = 0; i < SHA256_HASH_SIZE; i++)
     {
-        fwrite(&bktr_ctx, 1, sizeof(BktrContext), tmp_file);
-        fclose(tmp_file);
-        tmp_file = NULL;
-        consolePrint("bktr ctx saved\n");
-    } else {
-        consolePrint("bktr ctx not saved\n");
+        char val = (('a' <= path[i] && path[i] <= 'f') ? (path[i] - 'a' + 0xA) : (path[i] - '0'));
+        if ((i & 1) == 0) val <<= 4;
+        content_info.content_id.c[i >> 1] |= val;
     }
     
-    bktr_file_entry = bktrGetFileEntryByPath(&bktr_ctx, "/data.arc");
-    if (!bktr_file_entry)
+    content_info.content_type = NcmContentType_Program;
+    
+    u64 content_size = 0;
+    rc = ncmContentStorageGetSizeFromContentId(&ncm_storage, (s64*)&content_size, &(content_info.content_id));
+    if (R_FAILED(rc))
     {
-        consolePrint("bktr get file entry by path failed\n");
+        consolePrint("ncmContentStorageGetSizeFromContentId failed\n");
         goto out2;
     }
     
-    consolePrint("bktr get file entry by path success: %.*s | 0x%lX\n", bktr_file_entry->name_length, bktr_file_entry->name, bktr_file_entry->size);*/
+    consolePrint("ncmContentStorageGetSizeFromContentId succeeded\n");
     
+    memcpy(&(content_info.size), &content_size, 6);
     
-    
-    
-    
-    
-    /*if (!utilsCreateConcatenationFile("sdmc:/nxdt_test/gamecard.xci"))
+    if (!ncaInitializeContext(nca_ctx, NcmStorageId_SdCard, &ncm_storage, 0, &content_info, &tik))
     {
-        consolePrint("create concatenationfile failed\n");
+        consolePrint("nca initialize ctx failed\n");
         goto out2;
     }
     
-    consolePrint("create concatenationfile success\n");
+    consolePrint("nca initialize ctx succeeded\n");
     
-    tmp_file = fopen("sdmc:/nxdt_test/gamecard.xci", "wb");
-    if (!tmp_file)
+    if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_contexts[1])))
     {
-        consolePrint("open concatenationfile failed\n");
+        consolePrint("romfs initialize ctx failed\n");
         goto out2;
     }
     
-    consolePrint("open concatenationfile success\n");*/
+    consolePrint("romfs initialize ctx succeeded\n");
     
-    
-    
-    
-    
-    
-    consolePrint("waiting for gamecard to be ready...\n");
-    
-    while(appletMainLoop())
-    {
-        if (gamecardIsReady()) break;
-    }
-    
-    //shared_data.fileobj = tmp_file;
-    shared_data.fileobj = NULL;
+    shared_data.romfs_ctx = &romfs_ctx;
     shared_data.data = buf;
     shared_data.data_size = 0;
     shared_data.data_written = 0;
-    gamecardGetTotalSize(&(shared_data.total_size));
+    romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
     
     consolePrint("waiting for usb connection... ");
     
@@ -445,17 +433,7 @@ int main(int argc, char *argv[])
     
     consolePrint("success\n");
     
-    consolePrint("sending file properties... ");
-    
-    if (!usbSendFileProperties(shared_data.total_size, "gamecard.xci"))
-    {
-        consolePrint("failed\n");
-        goto out2;
-    }
-    
-    consolePrint("success\n");
-    
-    consolePrint("creating threads\n\n");
+    consolePrint("creating threads\n");
     thrd_create(&read_thread, read_thread_func, &shared_data);
     thrd_create(&write_thread, write_thread_func, &shared_data);
     
@@ -465,6 +443,11 @@ int main(int argc, char *argv[])
     
     time_t start = time(NULL);
     
+    time_t btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
+    bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
+    
+    consolePrint("hold b to cancel\n\n");
+    
     while(shared_data.data_written < shared_data.total_size)
     {
         if (shared_data.read_error || shared_data.write_error) break;
@@ -472,6 +455,29 @@ int main(int argc, char *argv[])
         time_t now = time(NULL);
         struct tm *ts = localtime(&now);
         size_t size = shared_data.data_written;
+        
+        hidScanInput();
+        btn_cancel_cur_state = (utilsHidKeysAllHeld() & KEY_B);
+        
+        if (btn_cancel_cur_state && btn_cancel_cur_state != btn_cancel_prev_state)
+        {
+            btn_cancel_start_tmr = now;
+        } else
+        if (btn_cancel_cur_state && btn_cancel_cur_state == btn_cancel_prev_state)
+        {
+            btn_cancel_end_tmr = now;
+            if ((btn_cancel_end_tmr - btn_cancel_start_tmr) >= 3)
+            {
+                mutexLock(&g_fileMutex);
+                shared_data.transfer_cancelled = true;
+                mutexUnlock(&g_fileMutex);
+                break;
+            }
+        } else {
+            btn_cancel_start_tmr = btn_cancel_end_tmr = 0;
+        }
+        
+        btn_cancel_prev_state = btn_cancel_cur_state;
         
         if (prev_time == ts->tm_sec || prev_size == size) continue;
         
@@ -484,9 +490,6 @@ int main(int argc, char *argv[])
         consoleUpdate(NULL);
     }
     
-    //fclose(tmp_file);
-    //tmp_file = NULL;
-    
     start = (time(NULL) - start);
     
     consolePrint("\nwaiting for threads to join\n");
@@ -498,6 +501,12 @@ int main(int argc, char *argv[])
     if (shared_data.read_error || shared_data.write_error)
     {
         consolePrint("usb transfer error\n");
+        goto out2;
+    }
+    
+    if (shared_data.transfer_cancelled)
+    {
+        consolePrint("process cancelled\n");
         goto out2;
     }
     
@@ -519,15 +528,11 @@ out2:
     consolePrint("press any button to exit\n");
     utilsWaitForButtonPress();
     
-    if (tmp_file) fclose(tmp_file);
-    
-    bktrFreeContext(&bktr_ctx);
+    lrExit();
     
     if (serviceIsActive(&(ncm_storage.s))) ncmContentStorageClose(&ncm_storage);
     
-    if (update_nca_ctx) free(update_nca_ctx);
-    
-    if (base_nca_ctx) free(base_nca_ctx);
+    if (nca_ctx) free(nca_ctx);
     
     if (buf) free(buf);
     

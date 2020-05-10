@@ -106,6 +106,12 @@ typedef struct {
     NcaHierarchicalIntegrityPatch cur_format_patch; ///< Used with NCA2/NCA3 RomFS sections.
 } RomFileSystemFileEntryPatch;
 
+typedef enum {
+    RomFileSystemPathIllegalCharReplaceType_None               = 0,
+    RomFileSystemPathIllegalCharReplaceType_IllegalFsChars     = 1,
+    RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly = 2
+} RomFileSystemPathIllegalCharReplaceType;
+
 /// Initializes a RomFS context.
 bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx);
 
@@ -141,10 +147,10 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
 RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const char *path);
 
 /// Generates a path string from a RomFS directory entry.
-bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size);
+bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type);
 
 /// Generates a path string from a RomFS file entry.
-bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size);
+bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type);
 
 /// Generates HierarchicalSha256 (NCA0) / HierarchicalIntegrity (NCA2/NCA3) FS section patch data using a RomFS context + file entry, which can be used to replace NCA data in content dumping operations.
 /// Input offset must be relative to the start of the RomFS file entry data.
