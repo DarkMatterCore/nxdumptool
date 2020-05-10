@@ -483,43 +483,6 @@ static bool usbInitializeComms(void)
         u8 manufacturer = 0, product = 0, serial_number = 0;
         static const u16 supported_langs[1] = { 0x0409 };
         
-        struct usb_device_descriptor device_descriptor = {
-            .bLength = USB_DT_DEVICE_SIZE,
-            .bDescriptorType = USB_DT_DEVICE,
-            .bcdUSB = 0x0110,
-            .bDeviceClass = 0x00,
-            .bDeviceSubClass = 0x00,
-            .bDeviceProtocol = 0x00,
-            .bMaxPacketSize0 = 0x40,
-            .idVendor = 0x057e,
-            .idProduct = 0x3000,
-            .bcdDevice = 0x0100,
-            .iManufacturer = manufacturer,
-            .iProduct = product,
-            .iSerialNumber = serial_number,
-            .bNumConfigurations = 0x01
-        };
-        
-        u8 bos[0x16] = {
-            /* USB 1.1 */
-            0x05,                       /* .bLength */
-            USB_DT_BOS,                 /* .bDescriptorType */
-            0x16, 0x00,                 /* .wTotalLength */
-            0x02,                       /* .bNumDeviceCaps */
-            
-            /* USB 2.0 */
-            0x07,                       /* .bLength */
-            USB_DT_DEVICE_CAPABILITY,   /* .bDescriptorType */
-            0x02,                       /* .bDevCapabilityType */
-            0x02, 0x00, 0x00, 0x00,     /* dev_capability_data */
-            
-            /* USB 3.0 */
-            0x0A,                       /* .bLength */
-            USB_DT_DEVICE_CAPABILITY,   /* .bDescriptorType */
-            0x03,                       /* .bDevCapabilityType */
-            0x00, 0x0E, 0x00, 0x03, 0x00, 0x00, 0x00
-        };
-        
         /* Send language descriptor */
         rc = usbDsAddUsbLanguageStringDescriptor(NULL, supported_langs, sizeof(supported_langs) / sizeof(u16));
         if (R_FAILED(rc)) LOGFILE("usbDsAddUsbLanguageStringDescriptor failed! (0x%08X)", rc);
@@ -546,6 +509,22 @@ static bool usbInitializeComms(void)
         }
         
         /* Send device descriptors */
+        struct usb_device_descriptor device_descriptor = {
+            .bLength = USB_DT_DEVICE_SIZE,
+            .bDescriptorType = USB_DT_DEVICE,
+            .bcdUSB = 0x0110,
+            .bDeviceClass = 0x00,
+            .bDeviceSubClass = 0x00,
+            .bDeviceProtocol = 0x00,
+            .bMaxPacketSize0 = 0x40,
+            .idVendor = 0x057e,
+            .idProduct = 0x3000,
+            .bcdDevice = 0x0100,
+            .iManufacturer = manufacturer,
+            .iProduct = product,
+            .iSerialNumber = serial_number,
+            .bNumConfigurations = 0x01
+        };
         
         /* Full Speed is USB 1.1 */
         if (R_SUCCEEDED(rc))
@@ -573,6 +552,26 @@ static bool usbInitializeComms(void)
         }
         
         /* Define Binary Object Store */
+        u8 bos[0x16] = {
+            /* USB 1.1 */
+            0x05,                       /* .bLength */
+            USB_DT_BOS,                 /* .bDescriptorType */
+            0x16, 0x00,                 /* .wTotalLength */
+            0x02,                       /* .bNumDeviceCaps */
+            
+            /* USB 2.0 */
+            0x07,                       /* .bLength */
+            USB_DT_DEVICE_CAPABILITY,   /* .bDescriptorType */
+            0x02,                       /* .bDevCapabilityType */
+            0x02, 0x00, 0x00, 0x00,     /* dev_capability_data */
+            
+            /* USB 3.0 */
+            0x0A,                       /* .bLength */
+            USB_DT_DEVICE_CAPABILITY,   /* .bDescriptorType */
+            0x03,                       /* .bDevCapabilityType */
+            0x00, 0x0E, 0x00, 0x03, 0x00, 0x00, 0x00
+        };
+        
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsSetBinaryObjectStore(bos, sizeof(bos));
