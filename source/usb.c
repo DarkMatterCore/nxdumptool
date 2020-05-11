@@ -280,7 +280,7 @@ bool usbSendFileData(void *data, u64 data_size)
     }
     
     /* Optimization for buffers that already are page aligned */
-    if (!((u64)data & (USB_TRANSFER_ALIGNMENT - 1)))
+    if (IS_ALIGNED((u64)data, USB_TRANSFER_ALIGNMENT))
     {
         buf = data;
     } else {
@@ -920,13 +920,14 @@ NX_INLINE bool usbWrite(void *buf, u64 size)
 {
     rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
     bool ret = usbTransferData(buf, size, g_usbDeviceInterface.endpoint_in);
+    if (ret) usbDsEndpoint_SetZlt(g_usbDeviceInterface.endpoint_in, true);
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock_in));
     return ret;
 }
 
 static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
 {
-    if (!buf || ((u64)buf & (USB_TRANSFER_ALIGNMENT - 1)) > 0 || !size || !endpoint)
+    if (!buf || !IS_ALIGNED((u64)buf, USB_TRANSFER_ALIGNMENT) || !size || !endpoint)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -959,7 +960,13 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
     
     if (R_FAILED(rc))
     {
+        /* Cancel transfer */
         usbDsEndpoint_Cancel(endpoint);
+        
+        /* Safety measure: wait until the completion event is triggered again before proceeding */
+        eventWait(&(endpoint->CompletionEvent), UINT64_MAX);
+        eventClear(&(endpoint->CompletionEvent));
+        
         LOGFILE("eventWait failed! (0x%08X)", rc);
         return false;
     }
