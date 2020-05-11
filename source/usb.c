@@ -31,6 +31,7 @@
 #define USB_SESSION_START_TIMEOUT   10                  /* 10 seconds */
 
 #define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB */
+#define USB_TRANSFER_TIMEOUT        5                   /* 5 seconds */
 
 /* Type definitions. */
 
@@ -169,6 +170,10 @@ void usbExit(void)
     /* Free USB transfer buffer */
     usbFreeTransferBuffer();
     
+    /* Reset global variables */
+    g_usbTransferRemainingSize = 0;
+    g_usbSessionStarted = false;
+    
     rwlockWriteUnlock(&g_usbDeviceLock);
 }
 
@@ -195,7 +200,7 @@ bool usbStartSession(void)
         {
             /* Once the console has been connected to a host device, there's no need to keep running this loop */
             /* usbTransferData() implements its own timeout */
-            ret = g_usbSessionStarted = _usbStartSession();
+            ret = _usbStartSession();
             break;
         }
         
@@ -203,6 +208,8 @@ bool usbStartSession(void)
         utilsSleep(1);
         now = time(NULL);
     }
+    
+    if (ret) g_usbSessionStarted = true;
     
 exit:
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
@@ -460,8 +467,6 @@ NX_INLINE void usbFreeTransferBuffer(void)
     if (!g_usbTransferBuffer) return;
     free(g_usbTransferBuffer);
     g_usbTransferBuffer = NULL;
-    g_usbTransferRemainingSize = 0;
-    g_usbSessionStarted = false;
 }
 
 static bool usbInitializeComms(void)
@@ -898,7 +903,9 @@ NX_INLINE bool usbIsHostAvailable(void)
 {
     u32 state = 0;
     Result rc = usbDsGetState(&state);
-    return (R_SUCCEEDED(rc) && state == 5);
+    bool ret = (R_SUCCEEDED(rc) && state == 5);
+    if (!ret) g_usbSessionStarted = false;
+    return ret;
 }
 
 NX_INLINE bool usbRead(void *buf, u64 size)
@@ -945,8 +952,17 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
     }
     
     /* Wait for the transfer to finish */
-    eventWait(&(endpoint->CompletionEvent), UINT64_MAX);
+    /* If we're starting an USB transfer session, use an infinite timeout value to let the user start the companion app */
+    u64 timeout = (g_usbSessionStarted ? (USB_TRANSFER_TIMEOUT * (u64)1000000000) : UINT64_MAX);
+    rc = eventWait(&(endpoint->CompletionEvent), timeout);
     eventClear(&(endpoint->CompletionEvent));
+    
+    if (R_FAILED(rc))
+    {
+        usbDsEndpoint_Cancel(endpoint);
+        LOGFILE("eventWait failed! (0x%08X)", rc);
+        return false;
+    }
     
     rc = usbDsEndpoint_GetReportData(endpoint, &report_data);
     if (R_FAILED(rc))

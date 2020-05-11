@@ -366,7 +366,7 @@ int main(int argc, char *argv[])
     
     consolePrint("lrOpenLocationResolver succeeded\n");
     
-    rc = lrLrResolveProgramPath(&resolver, (u64)0x01006F8002326000, path); // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000
+    rc = lrLrResolveProgramPath(&resolver, (u64)0x01007EF00011E000, path); // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000
     if (R_FAILED(rc))
     {
         consolePrint("lrLrResolveProgramPath failed\n");
@@ -494,9 +494,9 @@ int main(int argc, char *argv[])
     
     consolePrint("\nwaiting for threads to join\n");
     thrd_join(read_thread, NULL);
+    consolePrint("read_thread done: %lu\n", time(NULL));
     thrd_join(write_thread, NULL);
-    
-    usbEndSession();
+    consolePrint("write_thread done: %lu\n", time(NULL));
     
     if (shared_data.read_error || shared_data.write_error)
     {
@@ -509,6 +509,10 @@ int main(int argc, char *argv[])
         consolePrint("process cancelled\n");
         goto out2;
     }
+    
+    consolePrint("ending usb session... ");
+    usbEndSession();
+    consolePrint("done\n");
     
     consolePrint("process completed in %lu seconds\n", start);
     
