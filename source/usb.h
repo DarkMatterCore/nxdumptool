@@ -32,18 +32,16 @@ void usbExit(void);
 /// Returns a pointer to a heap-allocated, page-aligned memory buffer that's suitable for USB transfers.
 void *usbAllocatePageAlignedBuffer(size_t size);
 
-/// Starts a data transfer session with the connected host device. Returns true if the host device replies with valid data within a certain time span.
-/// This should be called before usbSendFileProperties().
-bool usbStartSession(void);
+/// Used to check if the console has been connected to an USB host device and if a valid USB session has been established.
+/// Bear in mind this call will block the calling thread if the console is connected to an USB host device but no USB session has been established.
+/// If the console is disconnected during this block, the function will return false.
+bool usbIsReady(void);
 
-/// Sends file properties to the host device before starting a file data transfer. Must be called before usbSendFileData(), and after usbStartSession().
+/// Sends file properties to the host device before starting a file data transfer. Must be called before usbSendFileData().
 bool usbSendFileProperties(u64 file_size, const char *filename);
 
 /// Performs a file data transfer. Must be continuously called after usbSendFileProperties() until all file data has been transferred.
 /// Data chunk size must not exceed USB_TRANSFER_BUFFER_SIZE.
 bool usbSendFileData(void *data, u64 data_size);
-
-/// Ends a previously started data transfer session with the connected host device.
-void usbEndSession(void);
 
 #endif /* __USB_H__ */

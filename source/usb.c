@@ -20,6 +20,7 @@
 #include <stdlib.h>
 #include <malloc.h>
 #include <time.h>
+#include <threads.h>
 
 #include "usb.h"
 #include "utils.h"
@@ -27,8 +28,6 @@
 #define USB_ABI_VERSION             1
 
 #define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT" */
-
-#define USB_SESSION_START_TIMEOUT   10                  /* 10 seconds */
 
 #define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB */
 #define USB_TRANSFER_TIMEOUT        5                   /* 5 seconds */
@@ -45,7 +44,7 @@ typedef struct {
 typedef enum {
     UsbCommandType_StartSession       = 0,
     UsbCommandType_SendFileProperties = 1,
-    UsbCommandType_SendNspHeader      = 2, /* Needs to be implemented */
+    UsbCommandType_SendNspHeader      = 2,  ///< Needs to be implemented.
     UsbCommandType_EndSession         = 3
 } UsbCommandType;
 
@@ -73,15 +72,15 @@ typedef struct {
 } UsbCommandSendFileProperties;
 
 typedef enum {
-    /* Expected response code */
+    /// Expected response code.
     UsbStatusType_Success               = 0,
     
-    /* Internal usage */
+    /// Internal usage.
     UsbStatusType_InvalidCommandSize    = 1,
     UsbStatusType_WriteCommandFailed    = 2,
     UsbStatusType_ReadStatusFailed      = 3,
     
-    /* These can be returned by the host device */
+    /// These can be returned by the host device.
     UsbStatusType_InvalidMagicWord      = 4,
     UsbStatusType_UnsupportedCommand    = 5,
     UsbStatusType_UnsupportedAbiVersion = 6,
@@ -97,18 +96,26 @@ typedef struct {
 
 /* Global variables. */
 
-static bool g_usbDeviceInterfaceInitialized = false;
-static usbDeviceInterface g_usbDeviceInterface = {0};
 static RwLock g_usbDeviceLock = {0};
+static usbDeviceInterface g_usbDeviceInterface = {0};
+static bool g_usbDeviceInterfaceInitialized = false;
 
-static bool g_usbSessionStarted = false;
+static Event *g_usbStateChangeEvent = NULL;
+static thrd_t g_usbDetectionThread;
+static UEvent g_usbDetectionThreadExitEvent = {0};
+static bool g_usbDetectionThreadCreated = false, g_usbHostAvailable = false, g_usbSessionStarted = false;
 
 static u8 *g_usbTransferBuffer = NULL;
 static u64 g_usbTransferRemainingSize = 0;
 
 /* Function prototypes. */
 
-static bool _usbStartSession(void);
+static bool usbCreateDetectionThread(void);
+static void usbDestroyDetectionThread(void);
+static int usbDetectionThreadFunc(void *arg);
+
+static bool usbStartSession(void);
+static void usbEndSession(void);
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size);
 static u32 usbSendCommand(size_t cmd_size);
@@ -152,6 +159,20 @@ bool usbInitialize(void)
         goto exit;
     }
     
+    /* Retrieve USB state change kernel event */
+    g_usbStateChangeEvent = usbDsGetStateChangeEvent();
+    if (!g_usbStateChangeEvent)
+    {
+        LOGFILE("Failed to retrieve USB state change kernel event!");
+        goto exit;
+    }
+    
+    /* Create usermode exit event */
+    ueventCreate(&g_usbDetectionThreadExitEvent, true);
+    
+    /* Create USB detection thread */
+    if (!(g_usbDetectionThreadCreated = usbCreateDetectionThread())) goto exit;
+    
     ret = true;
     
 exit:
@@ -163,6 +184,16 @@ exit:
 void usbExit(void)
 {
     rwlockWriteLock(&g_usbDeviceLock);
+    
+    /* Destroy USB detection thread */
+    if (g_usbDetectionThreadCreated)
+    {
+        usbDestroyDetectionThread();
+        g_usbDetectionThreadCreated = false;
+    }
+    
+    /* Clear USB state change kernel event */
+    g_usbStateChangeEvent = NULL;
     
     /* Close USB device interface */
     usbCloseComms();
@@ -183,38 +214,13 @@ void *usbAllocatePageAlignedBuffer(size_t size)
     return memalign(USB_TRANSFER_ALIGNMENT, size);
 }
 
-bool usbStartSession(void)
+bool usbIsReady(void)
 {
     rwlockWriteLock(&g_usbDeviceLock);
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
-    
-    bool ret = g_usbSessionStarted;
-    if (ret) goto exit;
-    
-    time_t start = time(NULL);
-    time_t now = start;
-    
-    while((now - start) < USB_SESSION_START_TIMEOUT)
-    {
-        if (usbIsHostAvailable())
-        {
-            /* Once the console has been connected to a host device, there's no need to keep running this loop */
-            /* usbTransferData() implements its own timeout */
-            ret = _usbStartSession();
-            break;
-        }
-        
-        /* Continuously running usbDsGetState() can potentially hang up the system, so let's add a small sleep */
-        utilsSleep(1);
-        now = time(NULL);
-    }
-    
-    if (ret) g_usbSessionStarted = true;
-    
-exit:
+    bool ret = (g_usbHostAvailable && g_usbSessionStarted);
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
-    
     return ret;
 }
 
@@ -229,7 +235,7 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
     u32 status = UsbStatusType_Success;
     u32 filename_length = 0;
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbSessionStarted || g_usbTransferRemainingSize > 0 || !filename || \
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize > 0 || !filename || \
         !(filename_length = (u32)strlen(filename)) || filename_length >= FS_MAX_PATH)
     {
         LOGFILE("Invalid parameters!");
@@ -272,8 +278,8 @@ bool usbSendFileData(void *data, u64 data_size)
     void *buf = NULL;
     UsbStatus *cmd_status = NULL;
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbSessionStarted || !g_usbTransferRemainingSize || !data || !data_size || \
-        data_size > USB_TRANSFER_BUFFER_SIZE || data_size > g_usbTransferRemainingSize)
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize || !data || \
+        !data_size || data_size > USB_TRANSFER_BUFFER_SIZE || data_size > g_usbTransferRemainingSize)
     {
         LOGFILE("Invalid parameters!");
         goto exit;
@@ -329,29 +335,78 @@ exit:
     return ret;
 }
 
-void usbEndSession(void)
+static bool usbCreateDetectionThread(void)
 {
-    rwlockWriteLock(&g_usbDeviceLock);
-    rwlockWriteLock(&(g_usbDeviceInterface.lock));
-    
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbSessionStarted)
+    if (thrd_create(&g_usbDetectionThread, usbDetectionThreadFunc, NULL) != thrd_success)
     {
-        LOGFILE("Invalid parameters!");
-        goto exit;
+        LOGFILE("Failed to create USB detection thread!");
+        return false;
     }
     
-    usbPrepareCommandHeader(UsbCommandType_EndSession, 0);
-    
-    if (!usbWrite(g_usbTransferBuffer, sizeof(UsbCommandHeader))) LOGFILE("Failed to send EndSession command!");
-    
-    g_usbSessionStarted = false;
-    
-exit:
-    rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
-    rwlockWriteUnlock(&g_usbDeviceLock);
+    return true;
 }
 
-static bool _usbStartSession(void)
+static void usbDestroyDetectionThread(void)
+{
+    /* Signal the exit event to terminate the USB detection thread */
+    ueventSignal(&g_usbDetectionThreadExitEvent);
+    
+    /* Wait for the USB detection thread to exit */
+    thrd_join(g_usbDetectionThread, NULL);
+}
+
+static int usbDetectionThreadFunc(void *arg)
+{
+    (void)arg;
+    
+    Result rc = 0;
+    int idx = 0;
+    bool prev_status = false;
+    
+    Waiter usb_event_waiter = waiterForEvent(g_usbStateChangeEvent);
+    Waiter exit_event_waiter = waiterForUEvent(&g_usbDetectionThreadExitEvent);
+    
+    while(true)
+    {
+        /* Wait until an event is triggered */
+        rc = waitMulti(&idx, -1, usb_event_waiter, exit_event_waiter);
+        if (R_FAILED(rc)) continue;
+        
+        /* Exit event triggered */
+        if (idx == 1) break;
+        
+        /* Retrieve current USB connection status */
+        /* Only proceed if we're dealing with a status change */
+        rwlockWriteLock(&g_usbDeviceLock);
+        rwlockWriteLock(&(g_usbDeviceInterface.lock));
+        
+        g_usbHostAvailable = usbIsHostAvailable();
+        g_usbTransferRemainingSize = 0;
+        
+        if (!prev_status && g_usbHostAvailable)
+        {
+            /* Start a USB session */
+            /* This will essentially hang this thread and all other threads that call USB-related functions until a session is established */
+            g_usbSessionStarted = usbStartSession();
+        } else {
+            /* Update USB session flag */
+            g_usbSessionStarted = false;
+        }
+        
+        prev_status = g_usbHostAvailable;
+        
+        rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
+        rwlockWriteUnlock(&g_usbDeviceLock);
+    }
+    
+    /* Close USB session if needed */
+    if (g_usbHostAvailable && g_usbSessionStarted) usbEndSession();
+    g_usbHostAvailable = g_usbSessionStarted = false;
+    
+    return 0;
+}
+
+static bool usbStartSession(void)
 {
     UsbCommandStartSession *cmd_block = NULL;
     size_t cmd_size = 0;
@@ -379,6 +434,19 @@ static bool _usbStartSession(void)
     if (status != UsbStatusType_Success) usbLogStatusDetail(status);
     
     return (status == UsbStatusType_Success);
+}
+
+static void usbEndSession(void)
+{
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted)
+    {
+        LOGFILE("Invalid parameters!");
+        return;
+    }
+    
+    usbPrepareCommandHeader(UsbCommandType_EndSession, 0);
+    
+    if (!usbWrite(g_usbTransferBuffer, sizeof(UsbCommandHeader))) LOGFILE("Failed to send EndSession command!");
 }
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size)
@@ -903,9 +971,7 @@ NX_INLINE bool usbIsHostAvailable(void)
 {
     u32 state = 0;
     Result rc = usbDsGetState(&state);
-    bool ret = (R_SUCCEEDED(rc) && state == 5);
-    if (!ret) g_usbSessionStarted = false;
-    return ret;
+    return (R_SUCCEEDED(rc) && state == 5);
 }
 
 NX_INLINE bool usbRead(void *buf, u64 size)

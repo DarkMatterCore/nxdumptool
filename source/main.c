@@ -366,7 +366,7 @@ int main(int argc, char *argv[])
     
     consolePrint("lrOpenLocationResolver succeeded\n");
     
-    rc = lrLrResolveProgramPath(&resolver, (u64)0x01007EF00011E000, path); // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000
+    rc = lrLrResolveProgramPath(&resolver, (u64)0x01004AB00A260000, path); // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000
     if (R_FAILED(rc))
     {
         consolePrint("lrLrResolveProgramPath failed\n");
@@ -423,15 +423,12 @@ int main(int argc, char *argv[])
     shared_data.data_written = 0;
     romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
     
-    consolePrint("waiting for usb connection... ");
+    consolePrint("waiting for usb connection...\n");
     
-    if (!usbStartSession())
+    while(appletMainLoop())
     {
-        consolePrint("failed\n");
-        goto out2;
+        if (usbIsReady()) break;
     }
-    
-    consolePrint("success\n");
     
     consolePrint("creating threads\n");
     thrd_create(&read_thread, read_thread_func, &shared_data);
@@ -509,10 +506,6 @@ int main(int argc, char *argv[])
         consolePrint("process cancelled\n");
         goto out2;
     }
-    
-    consolePrint("ending usb session... ");
-    usbEndSession();
-    consolePrint("done\n");
     
     consolePrint("process completed in %lu seconds\n", start);
     
