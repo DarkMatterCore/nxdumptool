@@ -39,6 +39,7 @@ typedef struct ServicesInfoEntry {
 
 /* Function prototypes. */
 
+static Result servicesPlUserInitialize(void);
 static Result servicesNifmUserInitialize(void);
 static bool servicesClkGetServiceType(void *arg);
 static bool servicesSplCryptoCheckAvailability(void *arg);
@@ -53,7 +54,7 @@ static ServicesInfoEntry g_serviceInfo[] = {
     { false, "spl", NULL, &splInitialize, &splExit },
     { false, "spl:mig", &servicesSplCryptoCheckAvailability, &splCryptoInitialize, &splCryptoExit },    /* Checks if spl:mig is really available (e.g. avoid calling splInitialize twice) */
     { false, "pm:dmnt", NULL, &pmdmntInitialize, &pmdmntExit },
-    { false, "pl", NULL, &plInitialize, &plExit },
+    { false, "pl:u", NULL, &servicesPlUserInitialize, &plExit },
     { false, "psm", NULL, &psmInitialize, &psmExit },
     { false, "nifm:u", NULL, &servicesNifmUserInitialize, &nifmExit },
     { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst */
@@ -178,6 +179,11 @@ void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
     }
     
     mutexUnlock(&g_servicesMutex);
+}
+
+static Result servicesPlUserInitialize(void)
+{
+    return plInitialize(PlServiceType_User);
 }
 
 static Result servicesNifmUserInitialize(void)
