@@ -17,8 +17,6 @@
 #define BATCH_OVERRIDES_PATH            NSP_DUMP_PATH "BatchOverrides/"
 #define TICKET_PATH                     APP_BASE_PATH "Ticket/"
 
-
-
 #define CONFIG_PATH                     APP_BASE_PATH "config.bin"
 #define NRO_NAME                        APP_TITLE ".nro"
 #define NRO_PATH                        APP_BASE_PATH NRO_NAME
@@ -91,6 +89,7 @@
 
 #define GAMECARD_TYPE1_PARTITION_CNT    3                                       // "update" (0), "normal" (1), "secure" (2)
 #define GAMECARD_TYPE2_PARTITION_CNT    4                                       // "update" (0), "logo" (1), "normal" (2), "secure" (3)
+#define GAMECARD_TYPE(x)                ((x) == GAMECARD_TYPE1_PARTITION_CNT ? "Type 0x01" : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? "Type 0x02" : "Unknown"))
 #define GAMECARD_TYPE1_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Normal" : ((x) == 2 ? "Secure" : "Unknown")))
 #define GAMECARD_TYPE2_PART_NAMES(x)    ((x) == 0 ? "Update" : ((x) == 1 ? "Logo" : ((x) == 2 ? "Normal" : ((x) == 3 ? "Secure" : "Unknown"))))
 #define GAMECARD_PARTITION_NAME(x, y)   ((x) == GAMECARD_TYPE1_PARTITION_CNT ? GAMECARD_TYPE1_PART_NAMES(y) : ((x) == GAMECARD_TYPE2_PARTITION_CNT ? GAMECARD_TYPE2_PART_NAMES(y) : "Unknown"))

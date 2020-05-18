@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
+#include <errno.h>
 #include <math.h>
 #include <dirent.h>
 #include <unistd.h>
@@ -95,8 +96,8 @@ char strbuf[NAME_BUF_LEN] = {'\0'};
 
 static const char *appLaunchPath = NULL;
 
-FsStorage fatFsStorage;
-static bool openBis = false, mountBisFatFs = false;
+FsStorage fatFsStorage = {0};
+static FATFS *fatFsObj = NULL;
 
 u64 freeSpace = 0;
 char freeSpaceStr[32] = {'\0'};
@@ -352,33 +353,47 @@ static Result getGameCardStoragePartitionSize(u64 *out)
 
 bool mountSysEmmcPartition()
 {
-    FATFS fs;
+    Result result = 0;
+    FRESULT fr = FR_OK;
     
-    Result result = fsOpenBisStorage(&fatFsStorage, FsBisPartitionId_System);
+    result = fsOpenBisStorage(&fatFsStorage, FsBisPartitionId_System);
     if (R_FAILED(result))
     {
         uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_ERROR_RGB, "%s: failed to open BIS System partition! (0x%08X)", __func__, result);
         return false;
     }
     
-    openBis = true;
+    fatFsObj = calloc(1, sizeof(FATFS));
+    if (!fatFsObj)
+    {
+        uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_ERROR_RGB, "%s: failed to allocate memory for FatFs object!", __func__);
+        return false;
+    }
     
-    FRESULT fr = f_mount(&fs, BIS_MOUNT_NAME, 1);
+    fr = f_mount(fatFsObj, BIS_MOUNT_NAME, 1);
     if (fr != FR_OK)
     {
         uiDrawString(STRING_DEFAULT_POS, FONT_COLOR_ERROR_RGB, "%s: failed to mount BIS System partition! (%u)", __func__, fr);
         return false;
     }
     
-    mountBisFatFs = true;
-    
     return true;
 }
 
 void unmountSysEmmcPartition()
 {
-    if (mountBisFatFs) f_unmount(BIS_MOUNT_NAME);
-    if (openBis) fsStorageClose(&fatFsStorage);
+    if (fatFsObj)
+    {
+        f_unmount(BIS_MOUNT_NAME);
+        free(fatFsObj);
+        fatFsObj = NULL;
+    }
+    
+    if (serviceIsActive(&(fatFsStorage.s)))
+    {
+        fsStorageClose(&fatFsStorage);
+        memset(&fatFsStorage, 0, sizeof(FsStorage));
+    }
 }
 
 static bool isServiceRunning(const char *name)

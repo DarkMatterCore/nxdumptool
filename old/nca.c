@@ -111,8 +111,6 @@ char *getReferenceTitleIDType(u8 type)
             out = "PatchId";
             break;
         case NcmContentMetaType_Patch:
-            out = "OriginalId";
-            break;
         case NcmContentMetaType_AddOnContent:
             out = "ApplicationId";
             break;
