@@ -1,0 +1,20 @@
+    char content_info_path[FS_MAX_PATH] = {0};
+    sprintf(content_info_path, "sdmc:/%016lX.bin", xml_program_info.title_id);
+    
+    FILE *content_info = fopen(content_info_path, "wb");
+    if (content_info)
+    {
+        fwrite(titleContentInfos, 1, titleContentInfoCnt * sizeof(NcmContentInfo), content_info);
+        fclose(content_info);
+    }
+    
+    
+    
+    
+    
+    
+    improve cert.c/h
+    improve headers
+    
+    improve comments and button handling
+    improve function names

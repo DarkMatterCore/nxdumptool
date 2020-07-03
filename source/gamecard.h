@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * gamecard.h
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -19,13 +23,12 @@
 #ifndef __GAMECARD_H__
 #define __GAMECARD_H__
 
-#include <switch/kernel/uevent.h>
 #include "fs_ext.h"
 
-#define GAMECARD_HEAD_MAGIC         0x48454144              /* "HEAD" */
-#define GAMECARD_CERT_MAGIC         0x43455254              /* "CERT" */
+#define GAMECARD_HEAD_MAGIC             0x48454144              /* "HEAD" */
+#define GAMECARD_CERT_MAGIC             0x43455254              /* "CERT" */
 
-#define GAMECARD_MEDIA_UNIT_SIZE    0x200
+#define GAMECARD_MEDIA_UNIT_SIZE        0x200
 
 #define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Root ? "root" : ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : \
                                         ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : \

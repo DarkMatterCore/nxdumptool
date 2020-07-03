@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * utils.h
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -19,6 +23,17 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stddef.h>
+#include <stdarg.h>
+#include <malloc.h>
+#include <errno.h>
+#include <ctype.h>
+#include <time.h>
+#include <threads.h>
 #include <switch.h>
 
 #define APP_BASE_PATH                   "sdmc:/switch/nxdumptool/"

@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * pfs.h
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -19,7 +23,6 @@
 #ifndef __PFS_H__
 #define __PFS_H__
 
-#include <switch.h>
 #include "nca.h"
 
 #define PFS0_MAGIC  0x50465330  /* "PFS0" */
@@ -106,13 +109,14 @@ NX_INLINE bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const cha
     PartitionFileSystemEntry *fs_entry = NULL;
     u32 entry_count = pfsGetEntryCount(ctx);
     char *name_table = pfsGetNameTable(ctx);
+    
     if (!entry_count || !name_table || !name || !(name_len = strlen(name)) || !out_idx) return false;
     
     for(u32 i = 0; i < entry_count; i++)
     {
         if (!(fs_entry = pfsGetEntryByIndex(ctx, i))) return false;
         
-        if (!strncmp(name_table + fs_entry->name_offset, name, name_len))
+        if (strlen(name_table + fs_entry->name_offset) == name_len && !strcmp(name_table + fs_entry->name_offset, name))
         {
             *out_idx = i;
             return true;

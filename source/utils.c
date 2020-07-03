@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * utils.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -14,20 +18,12 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stdarg.h>
-#include <ctype.h>
-#include <time.h>
-#include <switch.h>
-
+#include "utils.h"
 //#include "freetype_helper.h"
 //#include "lvgl_helper.h"
 #include "keys.h"
 #include "gamecard.h"
 #include "services.h"
-#include "utils.h"
 #include "nca.h"
 #include "usb.h"
 #include "fatfs/ff.h"
@@ -418,7 +414,7 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void)
     g_emmcBisSystemPartitionFatFsObj = calloc(1, sizeof(FATFS));
     if (!g_emmcBisSystemPartitionFatFsObj)
     {
-        LOGFILE("Unable to allocate memory for FatFs object!");
+        LOGFILE("Unable to allocate memory for FatFs element!");
         return false;
     }
     

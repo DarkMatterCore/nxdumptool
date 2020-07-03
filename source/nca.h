@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * nca.h
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -19,7 +23,6 @@
 #ifndef __NCA_H__
 #define __NCA_H__
 
-#include <switch.h>
 #include "tik.h"
 
 #define NCA_HEADER_LENGTH                       0x400
@@ -88,8 +91,8 @@ typedef enum {
     NcaKeyGeneration_700_801  = 8,
     NcaKeyGeneration_810_811  = 9,
     NcaKeyGeneration_900_901  = 10,
-    NcaKeyGeneration_910_1002 = 11,
-    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1002
+    NcaKeyGeneration_910_1004 = 11,
+    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1004
 } NcaKeyGeneration;
 
 typedef struct {
@@ -312,7 +315,7 @@ void ncaFreeCryptoBuffer(void);
 /// Initializes a NCA context.
 /// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' argument must point to a valid NcmContentStorage instance, previously opened using the same NcmStorageId value.
 /// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
-/// If the NCA holds a populated Rights ID field, and if the Ticket object pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
+/// If the NCA holds a populated Rights ID field, and if the Ticket element pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
 bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().

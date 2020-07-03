@@ -1,12 +1,16 @@
 /*
- * Copyright (c) 2019-2020 shchmue
- * Copyright (c) 2019-2020 DarkMatterCore
+ * save.h
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2019-2020, shchmue.
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -19,10 +23,6 @@
 
 #ifndef __SAVE_H__
 #define __SAVE_H__
-
-#include <stddef.h>
-#include <stdint.h>
-#include <switch.h>
 
 #include "fatfs/ff.h"
 
@@ -505,7 +505,7 @@ void save_free_contexts(save_ctx_t *ctx);
 bool save_open_fat_storage(save_filesystem_ctx_t *ctx, allocation_table_storage_ctx_t *storage_ctx, u32 block_index);
 u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void *buffer, u64 offset, size_t count);
 bool save_fs_list_get_value(save_filesystem_list_ctx_t *ctx, u32 index, save_fs_list_entry_t *value);
-u32 save_fs_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_key_t *key, u32 *prev_index);
+u32 save_fs_list_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_key_t *key, u32 *prev_index);
 bool save_hierarchical_file_table_find_path_recursive(hierarchical_save_file_table_ctx_t *ctx, save_entry_key_t *key, const char *path);
 bool save_hierarchical_file_table_get_file_entry_by_path(hierarchical_save_file_table_ctx_t *ctx, const char *path, save_fs_list_entry_t *entry);
 

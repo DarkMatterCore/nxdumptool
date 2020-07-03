@@ -1,12 +1,16 @@
 /*
- * Copyright (c) 2019-2020 XorTroll
- * Copyright (c) 2019-2020 DarkMatterCore
+ * fspusb.h
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2019-2020, XorTroll.
+ * Copyright (c) 2019-2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -19,8 +23,6 @@
 
 #ifndef __FSPUSB_H__
 #define __FSPUSB_H__
-
-#include <switch.h>
 
 /// This is basically FATFS' file system types.
 typedef enum {

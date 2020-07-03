@@ -1,12 +1,16 @@
 /*
- * Copyright (c) 2019-2020 shchmue
- * Copyright (c) 2019-2020 DarkMatterCore
+ * save.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2019-2020, shchmue.
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -15,12 +19,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-
-#include "save.h"
 #include "utils.h"
+#include "save.h"
 
 static inline void save_bitmap_set_bit(void *buffer, size_t bit_offset)
 {
@@ -131,7 +131,7 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
         return NULL;
     }
     
-    unsigned int i, entry_idx = 0;
+    u32 i, entry_idx = 0;
     bool success = false;
     
     for(i = 0; i < header->map_segment_count; i++)
@@ -179,7 +179,7 @@ out:
     {
         entry_idx = 0;
         
-        for(unsigned int j = 0; j <= i; j++)
+        for(u32 j = 0; j <= i; j++)
         {
             if (!map_entries[entry_idx].segment) break;
             
@@ -226,7 +226,7 @@ static remap_entry_ctx_t *save_remap_get_map_entry(remap_storage_ctx_t *ctx, u64
     
     if (segment_idx < ctx->header->map_segment_count)
     {
-        for(unsigned int i = 0; i < ctx->segments[segment_idx].entry_count; i++)
+        for(u32 i = 0; i < ctx->segments[segment_idx].entry_count; i++)
         {
             if (ctx->segments[segment_idx].entries[i]->virtual_offset_end > offset) return ctx->segments[segment_idx].entries[i];
         }
@@ -352,7 +352,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
     levels[0].type = STORAGE_BYTES;
     levels[0].hash_offset = master_hash_offset;
     
-    for(unsigned int i = 1; i < 4; i++)
+    for(u32 i = 1; i < 4; i++)
     {
         ivfc_level_hdr_t *level = &ivfc->level_headers[i - 1];
         levels[i].type = STORAGE_REMAP;
@@ -387,7 +387,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
     init_info[0].data = &levels[0];
     init_info[0].block_size = 0;
     
-    for(unsigned int i = 1; i < ivfc->num_levels; i++)
+    for(u32 i = 1; i < ivfc->num_levels; i++)
     {
         init_info[i].data = &levels[i];
         init_info[i].block_size = (1 << ivfc->level_headers[i - 1].block_size);
@@ -403,7 +403,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
         goto out;
     }
     
-    for(unsigned int i = 1; i < ivfc->num_levels; i++)
+    for(u32 i = 1; i < ivfc->num_levels; i++)
     {
         integrity_verification_storage_ctx_t *level_data = &ctx->integrity_storages[i - 1];
         level_data->hash_storage = &levels[i - 1];
@@ -435,7 +435,7 @@ out:
         free(ctx->level_validities);
         ctx->level_validities = NULL;
         
-        for(unsigned int i = 1; i < ivfc->num_levels; i++)
+        for(u32 i = 1; i < ivfc->num_levels; i++)
         {
             integrity_verification_storage_ctx_t *level_data = &ctx->integrity_storages[i - 1];
             
@@ -640,7 +640,7 @@ static u32 save_allocation_table_get_list_length(allocation_table_ctx_t *ctx, u3
         return 0;
     }
     
-    allocation_table_entry_t entry;
+    allocation_table_entry_t entry = {0};
     entry.next = block_index;
     u32 total_length = 0;
     u32 table_size = ctx->header->allocation_table_block_count;
@@ -680,7 +680,7 @@ static bool save_allocation_table_iterator_begin(allocation_table_iterator_ctx_t
     ctx->physical_block = initial_block;
     ctx->virtual_block = 0;
     
-    allocation_table_entry_t entry;
+    allocation_table_entry_t entry = {0};
     entry.next = initial_block;
     
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
@@ -713,7 +713,7 @@ static bool save_allocation_table_iterator_move_next(allocation_table_iterator_c
     ctx->virtual_block += ctx->current_segment_size;
     ctx->physical_block = ctx->next_block;
     
-    allocation_table_entry_t entry;
+    allocation_table_entry_t entry = {0};
     entry.next = ctx->next_block;
     
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
@@ -739,7 +739,7 @@ static bool save_allocation_table_iterator_move_prev(allocation_table_iterator_c
     
     ctx->physical_block = ctx->prev_block;
     
-    allocation_table_entry_t entry;
+    allocation_table_entry_t entry = {0};
     entry.next = ctx->prev_block;
     
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
@@ -811,7 +811,7 @@ u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void
         u32 sector_size = ctx->base_storage->integrity_storages[3].sector_size;
         u32 chunk_remaining = bytes_to_read;
         
-        for(unsigned int i = 0; i < bytes_to_read; i += sector_size)
+        for(u32 i = 0; i < bytes_to_read; i += sector_size)
         {
             u32 bytes_to_request = (chunk_remaining < sector_size ? chunk_remaining : sector_size);
             
@@ -900,7 +900,7 @@ bool save_fs_list_get_value(save_filesystem_list_ctx_t *ctx, u32 index, save_fs_
     return true;
 }
 
-u32 save_fs_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_key_t *key, u32 *prev_index)
+u32 save_fs_list_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_key_t *key, u32 *prev_index)
 {
     u32 prev;
     if (!prev_index) prev_index = &prev;
@@ -964,13 +964,13 @@ bool save_hierarchical_file_table_find_path_recursive(hierarchical_save_file_tab
     }
     
     key->parent = 0;
-    char *pos = strchr(path, '/');
+    const char *pos = strchr(path, '/');
     
     while(pos)
     {
         memset(key->name, 0, SAVE_FS_LIST_MAX_NAME_LENGTH);
         
-        char *tmp = strchr(pos, '/');
+        const char *tmp = strchr(pos, '/');
         if (!tmp)
         {
             memcpy(key->name, pos, strlen(pos));
@@ -979,7 +979,7 @@ bool save_hierarchical_file_table_find_path_recursive(hierarchical_save_file_tab
         
         memcpy(key->name, pos, tmp - pos);
         
-        key->parent = save_fs_get_index_from_key(&ctx->directory_table, key, NULL);
+        key->parent = save_fs_list_get_index_from_key(&ctx->directory_table, key, NULL);
         if (key->parent == 0xFFFFFFFF) return false;
         
         pos = (tmp + 1);
@@ -1003,7 +1003,7 @@ bool save_hierarchical_file_table_get_file_entry_by_path(hierarchical_save_file_
         return false;
     }
     
-    u32 index = save_fs_get_index_from_key(&ctx->file_table, &key, NULL);
+    u32 index = save_fs_list_get_index_from_key(&ctx->file_table, &key, NULL);
     if (index == 0xFFFFFFFF)
     {
         LOGFILE("Unable to get table index for file \"%s\"!", path);
@@ -1092,7 +1092,7 @@ static validity_t save_ivfc_validate(hierarchical_integrity_verification_storage
     
     validity_t result = VALIDITY_VALID;
     
-    for(unsigned int i = 0; i < (ivfc->num_levels - 1) && result != VALIDITY_INVALID; i++)
+    for(u32 i = 0; i < (ivfc->num_levels - 1) && result != VALIDITY_INVALID; i++)
     {
         integrity_verification_storage_ctx_t *storage = &ctx->integrity_storages[i];
         
@@ -1107,7 +1107,7 @@ static validity_t save_ivfc_validate(hierarchical_integrity_verification_storage
             break;
         }
         
-        for(unsigned int j = 0; j < block_count; j++)
+        for(u32 j = 0; j < block_count; j++)
         {
             if (ctx->level_validities[ivfc->num_levels - 2][j] == VALIDITY_UNCHECKED)
             {
@@ -1145,11 +1145,11 @@ static bool save_ivfc_set_level_validities(hierarchical_integrity_verification_s
     
     bool success = true;
     
-    for(unsigned int i = 0; i < (ivfc->num_levels - 1); i++)
+    for(u32 i = 0; i < (ivfc->num_levels - 1); i++)
     {
         validity_t level_validity = VALIDITY_VALID;
         
-        for(unsigned int j = 0; j < ctx->integrity_storages[i].sector_count; j++)
+        for(u32 j = 0; j < ctx->integrity_storages[i].sector_count; j++)
         {
             if (ctx->level_validities[i][j] == VALIDITY_INVALID)
             {
@@ -1260,8 +1260,7 @@ bool save_process(save_ctx_t *ctx)
         }
     }
     
-    unsigned char cmac[0x10];
-    memset(cmac, 0, 0x10);
+    u8 cmac[0x10] = {0};
     cmacAes128CalculateMac(cmac, ctx->save_mac_key, &ctx->header.layout, sizeof(ctx->header.layout));
     
     ctx->header_cmac_validity = (!memcmp(cmac, &ctx->header.cmac, 0x10) ? VALIDITY_VALID : VALIDITY_INVALID);
@@ -1286,7 +1285,7 @@ bool save_process(save_ctx_t *ctx)
         return success;
     }
     
-    for(unsigned int i = 0; i < ctx->data_remap_storage.header->map_entry_count; i++)
+    for(u32 i = 0; i < ctx->data_remap_storage.header->map_entry_count; i++)
     {
         fr = f_read(ctx->file, &ctx->data_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
@@ -1423,7 +1422,7 @@ bool save_process(save_ctx_t *ctx)
         goto out;
     }
     
-    for(unsigned int i = 0; i < ctx->meta_remap_storage.header->map_entry_count; i++)
+    for(u32 i = 0; i < ctx->meta_remap_storage.header->map_entry_count; i++)
     {
         fr = f_read(ctx->file, &ctx->meta_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
@@ -1474,7 +1473,7 @@ bool save_process(save_ctx_t *ctx)
     
     u32 *pos = (u32*)ctx->journal_storage.map.map_storage;
     
-    for(unsigned int i = 0; i < ctx->journal_storage.map.header->main_data_block_count; i++)
+    for(u32 i = 0; i < ctx->journal_storage.map.header->main_data_block_count; i++)
     {
         ctx->journal_storage.map.entries[i].virtual_index = i;
         ctx->journal_storage.map.entries[i].physical_index = (*pos & 0x7FFFFFFF);
@@ -1485,7 +1484,7 @@ bool save_process(save_ctx_t *ctx)
     ctx->journal_storage._length = (ctx->journal_storage.header->total_size - ctx->journal_storage.header->journal_size);
     
     /* Initialize core IVFC storage. */
-    for(unsigned int i = 0; i < 5; i++) ctx->core_data_ivfc_storage.levels[i].save_ctx = ctx;
+    for(u32 i = 0; i < 5; i++) ctx->core_data_ivfc_storage.levels[i].save_ctx = ctx;
     
     if (!save_ivfc_storage_init(&ctx->core_data_ivfc_storage, ctx->header.layout.ivfc_master_hash_offset_a, &ctx->header.data_ivfc_header))
     {
@@ -1509,7 +1508,7 @@ bool save_process(save_ctx_t *ctx)
             goto out;
         }
     } else {
-        for(unsigned int i = 0; i < 5; i++) ctx->fat_ivfc_storage.levels[i].save_ctx = ctx;
+        for(u32 i = 0; i < 5; i++) ctx->fat_ivfc_storage.levels[i].save_ctx = ctx;
         
         if (!save_ivfc_storage_init(&ctx->fat_ivfc_storage, ctx->header.layout.fat_ivfc_master_hash_a, &ctx->header.fat_ivfc_header))
         {
@@ -1596,7 +1595,7 @@ void save_free_contexts(save_ctx_t *ctx)
     {
         if (ctx->data_remap_storage.header)
         {
-            for(unsigned int i = 0; i < ctx->data_remap_storage.header->map_segment_count; i++)
+            for(u32 i = 0; i < ctx->data_remap_storage.header->map_segment_count; i++)
             {
                 if (ctx->data_remap_storage.segments[i].entries) free(ctx->data_remap_storage.segments[i].entries);
             }
@@ -1616,7 +1615,7 @@ void save_free_contexts(save_ctx_t *ctx)
     {
         if (ctx->meta_remap_storage.header)
         {
-            for(unsigned int i = 0; i < ctx->meta_remap_storage.header->map_segment_count; i++)
+            for(u32 i = 0; i < ctx->meta_remap_storage.header->map_segment_count; i++)
             {
                 if (ctx->meta_remap_storage.segments[i].entries) free(ctx->meta_remap_storage.segments[i].entries);
             }
@@ -1650,7 +1649,7 @@ void save_free_contexts(save_ctx_t *ctx)
         ctx->duplex_storage.layers[1].bitmap_storage = NULL;
     }
     
-    for(unsigned int i = 1; i < 3; i++)
+    for(u32 i = 1; i < 3; i++)
     {
         if (ctx->duplex_layers[i].data_a)
         {
@@ -1677,7 +1676,7 @@ void save_free_contexts(save_ctx_t *ctx)
         ctx->journal_storage.map.entries = NULL;
     }
     
-    for(unsigned int i = 0; i < ctx->header.data_ivfc_header.num_levels - 1; i++)
+    for(u32 i = 0; i < ctx->header.data_ivfc_header.num_levels - 1; i++)
     {
         if (ctx->core_data_ivfc_storage.integrity_storages[i].block_validities)
         {
@@ -1694,7 +1693,7 @@ void save_free_contexts(save_ctx_t *ctx)
     
     if (ctx->header.layout.version >= 0x50000)
     {
-        for(unsigned int i = 0; i < ctx->header.fat_ivfc_header.num_levels - 1; i++)
+        for(u32 i = 0; i < ctx->header.fat_ivfc_header.num_levels - 1; i++)
         {
             if (ctx->fat_ivfc_storage.integrity_storages[i].block_validities)
             {

@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * services.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -152,7 +156,7 @@ bool servicesCheckInitializedServiceByName(const char *name)
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
-        if (!strncmp(g_serviceInfo[i].name, name, name_len))
+        if (strlen(g_serviceInfo[i].name) == name_len && !strcmp(g_serviceInfo[i].name, name))
         {
             ret = g_serviceInfo[i].initialized;
             break;
@@ -235,7 +239,7 @@ static bool servicesClkGetServiceType(void *arg)
     if (!arg) return false;
     
     ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
-    if (!strlen(info->name) || strncmp(info->name, "clk", 3) != 0 || info->init_func != NULL || info->close_func != NULL) return false;
+    if (strlen(info->name) != 3 || strcmp(info->name, "clk") != 0 || info->init_func != NULL || info->close_func != NULL) return false;
     
     /* Determine which service needs to be used to control hardware clock rates, depending on the system version */
     /* This may either be pcv (sysver lower than 8.0.0) or clkrst (sysver equal to or greater than 8.0.0) */
@@ -254,7 +258,7 @@ static bool servicesSplCryptoCheckAvailability(void *arg)
     if (!arg) return false;
     
     ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
-    if (!strlen(info->name) || strncmp(info->name, "spl:mig", 7) != 0 || info->init_func == NULL || info->close_func == NULL) return false;
+    if (strlen(info->name) != 7 || strcmp(info->name, "spl:mig") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
     /* Check if spl:mig is available (sysver equal to or greater than 4.0.0) */
     return !hosversionBefore(4, 0, 0);
@@ -265,7 +269,7 @@ static bool servicesFspUsbCheckAvailability(void *arg)
     if (!arg) return false;
     
     ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
-    if (!strlen(info->name) || strncmp(info->name, "fsp-usb", 7) != 0 || info->init_func == NULL || info->close_func == NULL) return false;
+    if (strlen(info->name) != 7 || strcmp(info->name, "fsp-usb") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
     /* Check if fsp-usb is actually running in the background */
     return servicesCheckRunningServiceByName("fsp-usb");

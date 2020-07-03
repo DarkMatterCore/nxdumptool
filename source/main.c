@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * main.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -13,15 +17,6 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <switch.h>
-
-#include <dirent.h>
-#include <threads.h>
-#include <stdarg.h>
 
 #include "utils.h"
 #include "bktr.h"
@@ -423,11 +418,27 @@ int main(int argc, char *argv[])
     shared_data.data_written = 0;
     romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
     
-    consolePrint("waiting for usb connection...\n");
+    consolePrint("waiting for usb connection... ");
     
-    while(appletMainLoop())
+    time_t start = time(NULL);
+    bool usb_conn = false;
+    
+    while(true)
     {
-        if (usbIsReady()) break;
+        time_t now = time(NULL);
+        if ((now - start) >= 10) break;
+        consolePrint("%lu ", now - start);
+        
+        if ((usb_conn = usbIsReady())) break;
+        utilsSleep(1);
+    }
+    
+    consolePrint("\n");
+    
+    if (!usb_conn)
+    {
+        consolePrint("usb connection failed\n");
+        goto out2;
     }
     
     consolePrint("creating threads\n");
@@ -438,12 +449,12 @@ int main(int argc, char *argv[])
     u64 prev_size = 0;
     u8 percent = 0;
     
-    time_t start = time(NULL);
-    
     time_t btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
     bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
     
     consolePrint("hold b to cancel\n\n");
+    
+    start = time(NULL);
     
     while(shared_data.data_written < shared_data.total_size)
     {

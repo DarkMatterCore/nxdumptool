@@ -1,3 +1,26 @@
+/*
+ * crc32_fast.c
+ *
+ * Based on the standard CRC32 checksum fast public domain implementation for
+ * little-endian architecures by Björn Samuelsson (http://home.thep.lu.se/~bjorn/crc).
+ *
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
 /* Standard CRC32 checksum: fast public domain implementation for
  * little-endian architectures.  Written for compilation with an
  * optimizer set to perform loop unwinding.  Outputs the checksum for
@@ -5,10 +28,7 @@
  * files that cause errors are silently skipped.  The program reads
  * from stdin if it is called with no arguments. */
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <switch/types.h>
+#include "utils.h"
 
 u32 crc32_for_byte(u32 r)
 {

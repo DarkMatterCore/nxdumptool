@@ -1,11 +1,17 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * rsa.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2018-2019, SciresM.
+ * Copyright (c) 2018-2019, The-4n.
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -18,8 +24,6 @@
 
 #ifndef __RSA_H__
 #define __RSA_H__
-
-#include <switch/types.h>
 
 #define RSA2048_SIGNATURE_SIZE  0x100
 

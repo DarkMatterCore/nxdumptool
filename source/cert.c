@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * cert.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -14,19 +18,16 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-
+#include "utils.h"
 #include "cert.h"
 #include "save.h"
-#include "utils.h"
+#include "gamecard.h"
 
 #define CERT_SAVEFILE_PATH              BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e0"
 #define CERT_SAVEFILE_STORAGE_BASE_PATH "/certificate/"
 
-#define CERT_TYPE(sig)  (pub_key_type == CertPubKeyType_Rsa4096 ? CertType_Sig##sig##_PubKeyRsa4096 : \
-                        (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig##_PubKeyRsa2048 : CertType_Sig##sig##_PubKeyEcc480))
+#define CERT_TYPE(sig)                  (pub_key_type == CertPubKeyType_Rsa4096 ? CertType_Sig##sig##_PubKeyRsa4096 : \
+                                        (pub_key_type == CertPubKeyType_Rsa2048 ? CertType_Sig##sig##_PubKeyRsa2048 : CertType_Sig##sig##_PubKeyEcc480))
 
 /* Global variables. */
 
@@ -39,7 +40,7 @@ static bool certOpenEsCertSaveFile(void);
 static void certCloseEsCertSaveFile(void);
 
 static bool _certRetrieveCertificateByName(Certificate *dst, const char *name);
-static u8 certGetCertificateType(const void *data, u64 data_size);
+static u8 certGetCertificateType(void *data, u64 data_size);
 
 static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer);
 static u32 certGetCertificateCountInSignatureIssuer(const char *issuer);
@@ -76,8 +77,9 @@ bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const 
     mutexLock(&g_esCertSaveMutex);
     
     bool ret = false;
+    size_t issuer_len = 0;
     
-    if (!dst || !issuer || !strlen(issuer) || strncmp(issuer, "Root-", 5) != 0)
+    if (!dst || !issuer || !(issuer_len = strlen(issuer)) || issuer_len <= 5 || strcmp(issuer, "Root-") != 0)
     {
         LOGFILE("Invalid parameters!");
         goto exit;
@@ -93,70 +95,6 @@ exit:
     mutexUnlock(&g_esCertSaveMutex);
     
     return ret;
-}
-
-void certFreeCertificateChain(CertificateChain *chain)
-{
-    if (!chain || !chain->certs) return;
-    
-    chain->count = 0;
-    free(chain->certs);
-    chain->certs = NULL;
-}
-
-CertCommonBlock *certGetCommonBlockFromCertificate(Certificate *cert)
-{
-    if (!cert || cert->type == CertType_None || cert->type > CertType_SigHmac160_PubKeyEcc480 || cert->size < CERT_MIN_SIZE || cert->size > CERT_MAX_SIZE)
-    {
-        LOGFILE("Invalid parameters!");
-        return NULL;
-    }
-    
-    CertCommonBlock *cert_common_blk = NULL;
-    
-    switch(cert->type)
-    {
-        case CertType_SigRsa4096_PubKeyRsa4096:
-            cert_common_blk = &(((CertSigRsa4096PubKeyRsa4096*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigRsa4096_PubKeyRsa2048:
-            cert_common_blk = &(((CertSigRsa4096PubKeyRsa2048*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigRsa4096_PubKeyEcc480:
-            cert_common_blk = &(((CertSigRsa4096PubKeyEcc480*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigRsa2048_PubKeyRsa4096:
-            cert_common_blk = &(((CertSigRsa2048PubKeyRsa4096*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigRsa2048_PubKeyRsa2048:
-            cert_common_blk = &(((CertSigRsa2048PubKeyRsa2048*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigRsa2048_PubKeyEcc480:
-            cert_common_blk = &(((CertSigRsa2048PubKeyEcc480*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigEcc480_PubKeyRsa4096:
-            cert_common_blk = &(((CertSigEcc480PubKeyRsa4096*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigEcc480_PubKeyRsa2048:
-            cert_common_blk = &(((CertSigEcc480PubKeyRsa2048*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigEcc480_PubKeyEcc480:
-            cert_common_blk = &(((CertSigEcc480PubKeyEcc480*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigHmac160_PubKeyRsa4096:
-            cert_common_blk = &(((CertSigHmac160PubKeyRsa4096*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigHmac160_PubKeyRsa2048:
-            cert_common_blk = &(((CertSigHmac160PubKeyRsa2048*)cert->data)->cert_common_blk);
-            break;
-        case CertType_SigHmac160_PubKeyEcc480:
-            cert_common_blk = &(((CertSigHmac160PubKeyEcc480*)cert->data)->cert_common_blk);
-            break;
-        default:
-            break;
-    }
-    
-    return cert_common_blk;
 }
 
 u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *out_size)
@@ -182,7 +120,7 @@ u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *ou
     raw_chain = malloc(raw_chain_size);
     if (!raw_chain)
     {
-        LOGFILE("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX)", issuer, raw_chain_size);
+        LOGFILE("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", issuer, raw_chain_size);
         goto out;
     }
     
@@ -191,6 +129,60 @@ u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *ou
     
 out:
     certFreeCertificateChain(&chain);
+    
+    return raw_chain;
+}
+
+u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, u64 *out_size)
+{
+    if (!id || !out_size)
+    {
+        LOGFILE("Invalid parameters!");
+        return NULL;
+    }
+    
+    char raw_chain_filename[0x30] = {0};
+    u64 raw_chain_offset = 0, raw_chain_size = 0;
+    u8 *raw_chain = NULL;
+    bool success = false;
+    
+    utilsGenerateHexStringFromData(raw_chain_filename, sizeof(raw_chain_filename), id->c, 0x10);
+    strcat(raw_chain_filename, ".cert");
+    
+    if (!gamecardGetEntryInfoFromHashFileSystemPartitionByName(GameCardHashFileSystemPartitionType_Secure, raw_chain_filename, &raw_chain_offset, &raw_chain_size))
+    {
+        LOGFILE("Error retrieving offset and size for \"%s\" entry in secure hash FS partition!", raw_chain_filename);
+        return NULL;
+    }
+    
+    if (raw_chain_size < SIGNED_CERT_MIN_SIZE)
+    {
+        LOGFILE("Invalid size for \"%s\"! (0x%lX).", raw_chain_filename, raw_chain_size);
+        return NULL;
+    }
+    
+    raw_chain = malloc(raw_chain_size);
+    if (!raw_chain)
+    {
+        LOGFILE("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", raw_chain_size);
+        return NULL;
+    }
+    
+    if (!gamecardReadStorage(raw_chain, raw_chain_size, raw_chain_offset))
+    {
+        LOGFILE("Failed to read \"%s\" data from the inserted gamecard!", raw_chain_filename);
+        goto out;
+    }
+    
+    *out_size = raw_chain_size;
+    success = true;
+    
+out:
+    if (!success && raw_chain)
+    {
+        free(raw_chain);
+        raw_chain = NULL;
+    }
     
     return raw_chain;
 }
@@ -211,18 +203,16 @@ static bool certOpenEsCertSaveFile(void)
 
 static void certCloseEsCertSaveFile(void)
 {
-    if (g_esCertSaveCtx)
-    {
-        save_close_savefile(g_esCertSaveCtx);
-        g_esCertSaveCtx = NULL;
-    }
+    if (!g_esCertSaveCtx) return;
+    save_close_savefile(g_esCertSaveCtx);
+    g_esCertSaveCtx = NULL;
 }
 
 static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
 {
-    if (!g_esCertSaveCtx || !dst || !name || !strlen(name))
+    if (!g_esCertSaveCtx)
     {
-        LOGFILE("Invalid parameters!");
+        LOGFILE("ES certificate savefile not opened!");
         return false;
     }
     
@@ -230,7 +220,7 @@ static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
     char cert_path[SAVE_FS_LIST_MAX_NAME_LENGTH] = {0};
     allocation_table_storage_ctx_t fat_storage = {0};
     
-    snprintf(cert_path, SAVE_FS_LIST_MAX_NAME_LENGTH, "%s%s", CERT_SAVEFILE_STORAGE_BASE_PATH, name);
+    snprintf(cert_path, SAVE_FS_LIST_MAX_NAME_LENGTH, CERT_SAVEFILE_STORAGE_BASE_PATH "%s", name);
     
     if (!save_get_fat_storage_from_file_entry_by_path(g_esCertSaveCtx, cert_path, &fat_storage, &cert_size))
     {
@@ -238,9 +228,9 @@ static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
         return false;
     }
     
-    if (cert_size < CERT_MIN_SIZE || cert_size > CERT_MAX_SIZE)
+    if (cert_size < SIGNED_CERT_MIN_SIZE || cert_size > SIGNED_CERT_MAX_SIZE)
     {
-        LOGFILE("Invalid size for certificate \"%s\"! (0x%lX)", name, cert_size);
+        LOGFILE("Invalid size for certificate \"%s\"! (0x%lX).", name, cert_size);
         return false;
     }
     
@@ -263,88 +253,47 @@ static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
     return true;
 }
 
-static u8 certGetCertificateType(const void *data, u64 data_size)
+static u8 certGetCertificateType(void *data, u64 data_size)
 {
-    if (!data || data_size < CERT_MIN_SIZE || data_size > CERT_MAX_SIZE)
+    CertCommonBlock *cert_common_block = NULL;
+    u32 sig_type = 0, pub_key_type = 0;
+    u64 signed_cert_size = 0;
+    u8 type = CertType_None;
+    
+    if (!data || data_size < SIGNED_CERT_MIN_SIZE || data_size > SIGNED_CERT_MAX_SIZE)
     {
         LOGFILE("Invalid parameters!");
-        return CertType_None;
+        return type;
     }
     
-    u64 offset = 0;
-    u8 type = CertType_None;
-    const u8 *data_u8 = (const u8*)data;
-    u32 sig_type = 0, pub_key_type = 0;
+    if (!(cert_common_block = certGetCommonBlock(data)) || !(signed_cert_size = certGetSignedCertificateSize(data)) || signed_cert_size > data_size)
+    {
+        LOGFILE("Input buffer doesn't hold a valid signed certificate!");
+        return type;
+    }
     
-    memcpy(&sig_type, data_u8, sizeof(u32));
-    sig_type = __builtin_bswap32(sig_type);
+    sig_type = signatureGetSigType(data, true);
+    pub_key_type = __builtin_bswap32(cert_common_block->pub_key_type);
     
     switch(sig_type)
     {
         case SignatureType_Rsa4096Sha1:
         case SignatureType_Rsa4096Sha256:
-            offset += sizeof(SignatureBlockRsa4096);
+            type = CERT_TYPE(Rsa4096);
             break;
         case SignatureType_Rsa2048Sha1:
         case SignatureType_Rsa2048Sha256:
-            offset += sizeof(SignatureBlockRsa2048);
+            type = CERT_TYPE(Rsa2048);
             break;
         case SignatureType_Ecc480Sha1:
         case SignatureType_Ecc480Sha256:
-            offset += sizeof(SignatureBlockEcc480);
+            type = CERT_TYPE(Ecc480);
             break;
         case SignatureType_Hmac160Sha1:
-            offset += sizeof(SignatureBlockHmac160);
+            type = CERT_TYPE(Hmac160);
             break;
         default:
-            LOGFILE("Invalid signature type value! (0x%08X)", sig_type);
-            return type;
-    }
-    
-    memcpy(&pub_key_type, data_u8 + offset, sizeof(u32));
-    pub_key_type = __builtin_bswap32(pub_key_type);
-    
-    offset += MEMBER_SIZE(CertCommonBlock, pub_key_type);
-    offset += MEMBER_SIZE(CertCommonBlock, name);
-    offset += MEMBER_SIZE(CertCommonBlock, date);
-    
-    switch(pub_key_type)
-    {
-        case CertPubKeyType_Rsa4096:
-            offset += sizeof(CertPublicKeyBlockRsa4096);
             break;
-        case CertPubKeyType_Rsa2048:
-            offset += sizeof(CertPublicKeyBlockRsa2048);
-            break;
-        case CertPubKeyType_Ecc480:
-            offset += sizeof(CertPublicKeyBlockEcc480);
-            break;
-        default:
-            LOGFILE("Invalid public key type value! (0x%08X)", pub_key_type);
-            return type;
-    }
-    
-    if (offset != data_size)
-    {
-        LOGFILE("Calculated end offset doesn't match certificate size! (0x%lX != 0x%lX)", offset, data_size);
-        return type;
-    }
-    
-    if (sig_type == SignatureType_Rsa4096Sha1 || sig_type == SignatureType_Rsa4096Sha256)
-    {
-        type = CERT_TYPE(Rsa4096);
-    } else
-    if (sig_type == SignatureType_Rsa2048Sha1 || sig_type == SignatureType_Rsa2048Sha256)
-    {
-        type = CERT_TYPE(Rsa2048);
-    } else
-    if (sig_type == SignatureType_Ecc480Sha1 || sig_type == SignatureType_Ecc480Sha256)
-    {
-        type = CERT_TYPE(Ecc480);
-    } else
-    if (sig_type == SignatureType_Hmac160Sha1)
-    {
-        type = CERT_TYPE(Hmac160);
     }
     
     return type;
@@ -352,9 +301,9 @@ static u8 certGetCertificateType(const void *data, u64 data_size)
 
 static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer)
 {
-    if (!dst || !issuer || !strlen(issuer) || strncmp(issuer, "Root-", 5) != 0)
+    if (!g_esCertSaveCtx)
     {
-        LOGFILE("Invalid parameters!");
+        LOGFILE("ES certificate savefile not opened!");
         return false;
     }
     
@@ -372,13 +321,13 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
     dst->certs = calloc(dst->count, sizeof(Certificate));
     if (!dst->certs)
     {
-        LOGFILE("Unable to allocate memory for the certificate chain! (0x%lX)", dst->count * sizeof(Certificate));
+        LOGFILE("Unable to allocate memory for the certificate chain! (0x%lX).", dst->count * sizeof(Certificate));
         return false;
     }
     
     /* Copy string to avoid problems with strtok */
     /* The "Root-" parent from the issuer string is skipped */
-    snprintf(issuer_copy, 0x40, issuer + 5);
+    snprintf(issuer_copy, 0x40, "%s", issuer + 5);
     
     char *pch = strtok(issuer_copy, "-");
     while(pch != NULL)

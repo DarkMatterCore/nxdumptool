@@ -1,12 +1,18 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
- * Heavily based in usb_comms.c/h from libnx
+ * usb.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Heavily based in usb_comms from libnx.
+ *
+ * Copyright (c) 2018-2020, Switchbrew, libnx contributors.
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -15,15 +21,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <malloc.h>
-#include <time.h>
-#include <threads.h>
-
-#include "usb.h"
 #include "utils.h"
+#include "usb.h"
 
 #define USB_ABI_VERSION             1
 
@@ -72,15 +71,15 @@ typedef struct {
 } UsbCommandSendFileProperties;
 
 typedef enum {
-    /// Expected response code.
+    ///< Expected response code.
     UsbStatusType_Success               = 0,
     
-    /// Internal usage.
+    ///< Internal usage.
     UsbStatusType_InvalidCommandSize    = 1,
     UsbStatusType_WriteCommandFailed    = 2,
     UsbStatusType_ReadStatusFailed      = 3,
     
-    /// These can be returned by the host device.
+    ///< These can be returned by the host device.
     UsbStatusType_InvalidMagicWord      = 4,
     UsbStatusType_UnsupportedCommand    = 5,
     UsbStatusType_UnsupportedAbiVersion = 6,
@@ -102,7 +101,7 @@ static bool g_usbDeviceInterfaceInitialized = false;
 
 static Event *g_usbStateChangeEvent = NULL;
 static thrd_t g_usbDetectionThread;
-static UEvent g_usbDetectionThreadExitEvent = {0};
+static UEvent g_usbDetectionThreadExitEvent = {0}, g_usbTimeoutEvent = {0};
 static bool g_usbDetectionThreadCreated = false, g_usbHostAvailable = false, g_usbSessionStarted = false;
 
 static u8 *g_usbTransferBuffer = NULL;
@@ -170,6 +169,9 @@ bool usbInitialize(void)
     /* Create usermode exit event */
     ueventCreate(&g_usbDetectionThreadExitEvent, true);
     
+    /* Create usermode USB timeout event */
+    ueventCreate(&g_usbTimeoutEvent, true);
+    
     /* Create USB detection thread */
     if (!(g_usbDetectionThreadCreated = usbCreateDetectionThread())) goto exit;
     
@@ -200,10 +202,6 @@ void usbExit(void)
     
     /* Free USB transfer buffer */
     usbFreeTransferBuffer();
-    
-    /* Reset global variables */
-    g_usbTransferRemainingSize = 0;
-    g_usbSessionStarted = false;
     
     rwlockWriteUnlock(&g_usbDeviceLock);
 }
@@ -249,7 +247,7 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
     
     cmd_block->file_size = file_size;
     cmd_block->filename_length = filename_length;
-    sprintf(cmd_block->filename, filename);
+    sprintf(cmd_block->filename, "%s", filename);
     
     cmd_size = (sizeof(UsbCommandHeader) + sizeof(UsbCommandSendFileProperties));
     
@@ -361,39 +359,32 @@ static int usbDetectionThreadFunc(void *arg)
     
     Result rc = 0;
     int idx = 0;
-    bool prev_status = false;
     
-    Waiter usb_event_waiter = waiterForEvent(g_usbStateChangeEvent);
+    Waiter usb_change_event_waiter = waiterForEvent(g_usbStateChangeEvent);
+    Waiter usb_timeout_event_waiter = waiterForUEvent(&g_usbTimeoutEvent);
     Waiter exit_event_waiter = waiterForUEvent(&g_usbDetectionThreadExitEvent);
     
     while(true)
     {
         /* Wait until an event is triggered */
-        rc = waitMulti(&idx, -1, usb_event_waiter, exit_event_waiter);
+        rc = waitMulti(&idx, -1, usb_change_event_waiter, usb_timeout_event_waiter, exit_event_waiter);
         if (R_FAILED(rc)) continue;
         
         /* Exit event triggered */
-        if (idx == 1) break;
+        if (idx == 2) break;
         
-        /* Retrieve current USB connection status */
-        /* Only proceed if we're dealing with a status change */
         rwlockWriteLock(&g_usbDeviceLock);
         rwlockWriteLock(&(g_usbDeviceInterface.lock));
         
+        /* Retrieve current USB connection status */
+        /* Only proceed if we're dealing with a status change */
         g_usbHostAvailable = usbIsHostAvailable();
+        g_usbSessionStarted = false;
         g_usbTransferRemainingSize = 0;
         
-        if (!prev_status && g_usbHostAvailable)
-        {
-            /* Start a USB session */
-            /* This will essentially hang this thread and all other threads that call USB-related functions until a session is established */
-            g_usbSessionStarted = usbStartSession();
-        } else {
-            /* Update USB session flag */
-            g_usbSessionStarted = false;
-        }
-        
-        prev_status = g_usbHostAvailable;
+        /* Start a USB session if we're connected to a host device and if the status change event was triggered */
+        /* This will essentially hang this thread and all other threads that call USB-related functions until a session is established */
+        if (g_usbHostAvailable && idx == 1) g_usbSessionStarted = usbStartSession();
         
         rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
         rwlockWriteUnlock(&g_usbDeviceLock);
@@ -402,6 +393,7 @@ static int usbDetectionThreadFunc(void *arg)
     /* Close USB session if needed */
     if (g_usbHostAvailable && g_usbSessionStarted) usbEndSession();
     g_usbHostAvailable = g_usbSessionStarted = false;
+    g_usbTransferRemainingSize = 0;
     
     return 0;
 }
@@ -1032,6 +1024,10 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         /* Safety measure: wait until the completion event is triggered again before proceeding */
         eventWait(&(endpoint->CompletionEvent), UINT64_MAX);
         eventClear(&(endpoint->CompletionEvent));
+        
+        /* Signal usermode USB timeout event if needed */
+        /* This will "reset" the USB connection by making the background thread wait until a new session is established */
+        if (g_usbSessionStarted) ueventSignal(&g_usbTimeoutEvent);
         
         LOGFILE("eventWait failed! (0x%08X)", rc);
         return false;

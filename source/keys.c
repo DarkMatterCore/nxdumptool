@@ -1,11 +1,17 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * keys.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2018-2020, SciresM.
+ * Copyright (c) 2019, shchmue.
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -14,14 +20,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <errno.h>
-
+#include "utils.h"
 #include "keys.h"
 #include "nca.h"
-#include "utils.h"
 
 #define KEYS_FILE_PATH      "sdmc:/switch/prod.keys"    /* Location used by Lockpick_RCM */
 
@@ -678,15 +679,16 @@ static char keysConvertHexCharToBinary(char c)
 
 static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 size)
 {
-    if (!out || !key || !strlen(key) || !value || !strlen(value) || !size)
+    u32 hex_str_len = (2 * size);
+    size_t value_len = 0;
+    
+    if (!out || !key || !strlen(key) || !value || !(value_len = strlen(value)) || !size)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
-    u32 hex_str_len = (2 * size);
-    
-    if (strlen(value) != hex_str_len)
+    if (value_len != hex_str_len)
     {
         LOGFILE("Key \"%s\" must be %u hex digits long!", key, hex_str_len);
         return false;
@@ -717,7 +719,7 @@ static bool keysReadKeysFromFile(void)
     FILE *keys_file = NULL;
     char *key = NULL, *value = NULL;
     char test_name[0x40] = {0};
-    bool common_eticket_rsa_kek = false, personalized_eticket_rsa_kek = false;
+    bool parse_fail = false, common_eticket_rsa_kek = false, personalized_eticket_rsa_kek = false;
     
     keys_file = fopen(KEYS_FILE_PATH, "rb");
     if (!keys_file)
@@ -736,7 +738,7 @@ static bool keysReadKeysFromFile(void)
         
         if (!common_eticket_rsa_kek && !personalized_eticket_rsa_kek && !strcasecmp(key, "eticket_rsa_kek"))
         {
-            if (!keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek))) return false;
+            if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek)))) break;
             common_eticket_rsa_kek = true;
             key_count++;
         } else
@@ -744,7 +746,7 @@ static bool keysReadKeysFromFile(void)
         {
             /* Use the personalized eTicket RSA kek if available */
             /* This only appears on consoles that use the new PRODINFO key generation scheme */
-            if (!keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek))) return false;
+            if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek)))) break;
             personalized_eticket_rsa_kek = true;
             key_count++;
         } else {
@@ -753,7 +755,7 @@ static bool keysReadKeysFromFile(void)
                 snprintf(test_name, sizeof(test_name), "titlekek_%02x", i);
                 if (!strcasecmp(key, test_name))
                 {
-                    if (!keysParseHexKey(g_ncaKeyset.titlekeks[i], key, value, sizeof(g_ncaKeyset.titlekeks[i]))) return false;
+                    if ((parse_fail = !keysParseHexKey(g_ncaKeyset.titlekeks[i], key, value, sizeof(g_ncaKeyset.titlekeks[i])))) break;
                     key_count++;
                     break;
                 }
@@ -761,7 +763,7 @@ static bool keysReadKeysFromFile(void)
                 snprintf(test_name, sizeof(test_name), "key_area_key_application_%02x", i);
                 if (!strcasecmp(key, test_name))
                 {
-                    if (!keysParseHexKey(g_ncaKeyset.key_area_keys[i][0], key, value, sizeof(g_ncaKeyset.key_area_keys[i][0]))) return false;
+                    if ((parse_fail = !keysParseHexKey(g_ncaKeyset.key_area_keys[i][0], key, value, sizeof(g_ncaKeyset.key_area_keys[i][0])))) break;
                     key_count++;
                     break;
                 }
@@ -769,7 +771,7 @@ static bool keysReadKeysFromFile(void)
                 snprintf(test_name, sizeof(test_name), "key_area_key_ocean_%02x", i);
                 if (!strcasecmp(key, test_name))
                 {
-                    if (!keysParseHexKey(g_ncaKeyset.key_area_keys[i][1], key, value, sizeof(g_ncaKeyset.key_area_keys[i][1]))) return false;
+                    if ((parse_fail = !keysParseHexKey(g_ncaKeyset.key_area_keys[i][1], key, value, sizeof(g_ncaKeyset.key_area_keys[i][1])))) break;
                     key_count++;
                     break;
                 }
@@ -777,19 +779,21 @@ static bool keysReadKeysFromFile(void)
                 snprintf(test_name, sizeof(test_name), "key_area_key_system_%02x", i);
                 if (!strcasecmp(key, test_name))
                 {
-                    if (!keysParseHexKey(g_ncaKeyset.key_area_keys[i][2], key, value, sizeof(g_ncaKeyset.key_area_keys[i][2]))) return false;
+                    if ((parse_fail = !keysParseHexKey(g_ncaKeyset.key_area_keys[i][2], key, value, sizeof(g_ncaKeyset.key_area_keys[i][2])))) break;
                     key_count++;
                     break;
                 }
             }
+            
+            if (parse_fail) break;
         }
     }
     
     fclose(keys_file);
     
-    if (!key_count)
+    if (parse_fail || !key_count)
     {
-        LOGFILE("Unable to parse necessary keys from \"%s\"! (keys file empty?)", KEYS_FILE_PATH);
+        if (!key_count) LOGFILE("Unable to parse necessary keys from \"%s\"! (keys file empty?)", KEYS_FILE_PATH);
         return false;
     }
     

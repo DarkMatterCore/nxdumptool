@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * gamecard.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -14,13 +18,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-#include <threads.h>
-
-#include "gamecard.h"
 #include "utils.h"
+#include "gamecard.h"
 
 #define GAMECARD_HFS0_MAGIC                     0x48465330              /* "HFS0" */
 
@@ -521,14 +520,13 @@ static int gamecardDetectionThreadFunc(void *arg)
     
     Result rc = 0;
     int idx = 0;
-    bool prev_status = false;
     
     Waiter gamecard_event_waiter = waiterForEvent(&g_gameCardKernelEvent);
     Waiter exit_event_waiter = waiterForUEvent(&g_gameCardDetectionThreadExitEvent);
     
     /* Retrieve initial gamecard insertion status */
     /* Load gamecard info right away if a gamecard is inserted */
-    g_gameCardInserted = prev_status = gamecardIsInserted();
+    g_gameCardInserted = gamecardIsInserted();
     if (g_gameCardInserted) gamecardLoadInfo();
     ueventSignal(&g_gameCardStatusChangeEvent);
     
@@ -541,25 +539,21 @@ static int gamecardDetectionThreadFunc(void *arg)
         /* Exit event triggered */
         if (idx == 1) break;
         
-        /* Retrieve current gamecard insertion status */
-        /* Only proceed if we're dealing with a status change */
         mutexLock(&g_gamecardMutex);
         
+        /* Retrieve current gamecard insertion status */
+        /* Only proceed if we're dealing with a status change */
         g_gameCardInserted = gamecardIsInserted();
+        gamecardFreeInfo();
         
-        if (!prev_status && g_gameCardInserted)
+        if (g_gameCardInserted)
         {
             /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules */
             utilsSleep(GAMECARD_ACCESS_WAIT_TIME);
             
             /* Load gamecard info */
             gamecardLoadInfo();
-        } else {
-            /* Free gamecard info */
-            gamecardFreeInfo();
         }
-        
-        prev_status = g_gameCardInserted;
         
         mutexUnlock(&g_gamecardMutex);
         
@@ -1057,13 +1051,14 @@ NX_INLINE bool gamecardGetHashFileSystemEntryIndexByName(void *header, const cha
     GameCardHashFileSystemEntry *fs_entry = NULL;
     GameCardHashFileSystemHeader *fs_header = (GameCardHashFileSystemHeader*)header;
     char *name_table = gamecardGetHashFileSystemNameTable(header);
+    
     if (!fs_header || !fs_header->entry_count || !name_table || !name || !(name_len = strlen(name)) || !out_idx) return false;
     
     for(u32 i = 0; i < fs_header->entry_count; i++)
     {
         if (!(fs_entry = gamecardGetHashFileSystemEntryByIndex(header, i))) return false;
         
-        if (!strncmp(name_table + fs_entry->name_offset, name, name_len))
+        if (strlen(name_table + fs_entry->name_offset) == name_len && !strcmp(name_table + fs_entry->name_offset, name))
         {
             *out_idx = i;
             return true;

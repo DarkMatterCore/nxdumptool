@@ -1,11 +1,15 @@
 /*
- * Copyright (c) 2020 DarkMatterCore
+ * romfs.c
  *
- * This program is free software; you can redistribute it and/or modify it
+ * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
  * under the terms and conditions of the GNU General Public License,
  * version 2, as published by the Free Software Foundation.
  *
- * This program is distributed in the hope it will be useful, but WITHOUT
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
  * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
  * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
  * more details.
@@ -14,12 +18,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#include <stdio.h>
-#include <string.h>
-#include <stdlib.h>
-
-#include "romfs.h"
 #include "utils.h"
+#include "romfs.h"
 
 /* Function prototypes. */
 
@@ -518,7 +518,7 @@ static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSys
     while(dir_offset != ROMFS_VOID_ENTRY)
     {
         if (!(child_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset)) || !child_dir_entry->name_length) return NULL;
-        if (!strncmp(child_dir_entry->name, name, name_len)) return child_dir_entry;
+        if (child_dir_entry->name_length == name_len && !strcmp(child_dir_entry->name, name)) return child_dir_entry;
         dir_offset = child_dir_entry->next_offset;
     }
     
@@ -537,7 +537,7 @@ static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext
     while(file_offset != ROMFS_VOID_ENTRY)
     {
         if (!(child_file_entry = romfsGetFileEntryByOffset(ctx, file_offset)) || !child_file_entry->name_length) return NULL;
-        if (!strncmp(child_file_entry->name, name, name_len)) return child_file_entry;
+        if (child_file_entry->name_length == name_len && !strcmp(child_file_entry->name, name)) return child_file_entry;
         file_offset = child_file_entry->next_offset;
     }
     
