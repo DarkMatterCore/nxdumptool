@@ -25,8 +25,8 @@
 
 #include "fs_ext.h"
 
-#define GAMECARD_HEAD_MAGIC             0x48454144              /* "HEAD" */
-#define GAMECARD_CERT_MAGIC             0x43455254              /* "CERT" */
+#define GAMECARD_HEAD_MAGIC             0x48454144              /* "HEAD". */
+#define GAMECARD_CERT_MAGIC             0x43455254              /* "CERT". */
 
 #define GAMECARD_MEDIA_UNIT_SIZE        0x200
 

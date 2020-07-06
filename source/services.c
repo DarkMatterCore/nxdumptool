@@ -29,9 +29,9 @@
 
 /* Type definitions. */
 
-typedef bool (*ServiceCondFunction)(void *arg);         /* Used to perform a runtime condition check (e.g. system version) before initializing the service */
-typedef Result (*ServiceInitFunction)(void);            /* Used to initialize the service */
-typedef void (*ServiceCloseFunction)(void);             /* Used to close the service */
+typedef bool (*ServiceCondFunction)(void *arg);         /* Used to perform a runtime condition check (e.g. system version) before initializing the service. */
+typedef Result (*ServiceInitFunction)(void);            /* Used to initialize the service. */
+typedef void (*ServiceCloseFunction)(void);             /* Used to close the service. */
 
 typedef struct ServicesInfoEntry {
     bool initialized;
@@ -56,13 +56,13 @@ static ServicesInfoEntry g_serviceInfo[] = {
     { false, "ns", NULL, &nsInitialize, &nsExit },
     { false, "csrng", NULL, &csrngInitialize, &csrngExit },
     { false, "spl", NULL, &splInitialize, &splExit },
-    { false, "spl:mig", &servicesSplCryptoCheckAvailability, &splCryptoInitialize, &splCryptoExit },    /* Checks if spl:mig is really available (e.g. avoid calling splInitialize twice) */
+    { false, "spl:mig", &servicesSplCryptoCheckAvailability, &splCryptoInitialize, &splCryptoExit },    /* Checks if spl:mig is really available (e.g. avoid calling splInitialize twice). */
     { false, "pm:dmnt", NULL, &pmdmntInitialize, &pmdmntExit },
     { false, "pl:u", NULL, &servicesPlUserInitialize, &plExit },
     { false, "psm", NULL, &psmInitialize, &psmExit },
     { false, "nifm:u", NULL, &servicesNifmUserInitialize, &nifmExit },
-    { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst */
-    { false, "fsp-usb", &servicesFspUsbCheckAvailability, &fspusbInitialize, &fspusbExit },             /* Checks if fsp-usb is really available */
+    { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst. */
+    { false, "fsp-usb", &servicesFspUsbCheckAvailability, &fspusbInitialize, &fspusbExit },             /* Checks if fsp-usb is really available. */
     { false, "es", NULL, &esInitialize, &esExit },
     { false, "set:cal", NULL, &setcalInitialize, &setcalExit }
 };
@@ -83,27 +83,27 @@ bool servicesInitialize(void)
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
-        /* Check if this service has been already initialized or if it actually has a valid initialize function */
+        /* Check if this service has been already initialized or if it actually has a valid initialize function. */
         if (g_serviceInfo[i].initialized || g_serviceInfo[i].init_func == NULL) continue;
         
-        /* Check if this service depends on a condition function */
+        /* Check if this service depends on a condition function. */
         if (g_serviceInfo[i].cond_func != NULL)
         {
-            /* Run the condition function - it will update the current service member */
-            /* Skip this service if the required conditions aren't met */
+            /* Run the condition function - it will update the current service member. */
+            /* Skip this service if the required conditions aren't met. */
             if (!g_serviceInfo[i].cond_func(&(g_serviceInfo[i]))) continue;
         }
         
-        /* Initialize service */
+        /* Initialize service. */
         rc = g_serviceInfo[i].init_func();
         if (R_FAILED(rc))
         {
-            LOGFILE("Failed to initialize %s service! (0x%08X)", g_serviceInfo[i].name, rc);
+            LOGFILE("Failed to initialize %s service! (0x%08X).", g_serviceInfo[i].name, rc);
             ret = false;
             break;
         }
         
-        /* Update initialized flag */
+        /* Update initialized flag. */
         g_serviceInfo[i].initialized = true;
     }
     
@@ -118,10 +118,10 @@ void servicesClose(void)
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
-        /* Check if this service has not been initialized, or if it doesn't have a valid close function */
+        /* Check if this service has not been initialized, or if it doesn't have a valid close function. */
         if (!g_serviceInfo[i].initialized || g_serviceInfo[i].close_func == NULL) continue;
         
-        /* Close service */
+        /* Close service. */
         g_serviceInfo[i].close_func();
     }
     
@@ -199,11 +199,11 @@ static Result servicesClkrstInitialize(void)
 {
     Result rc = 0;
     
-    /* Open clkrst service handle */
+    /* Open clkrst service handle. */
     rc = clkrstInitialize();
     if (R_FAILED(rc)) return rc;
     
-    /* Initialize CPU and MEM clkrst sessions */
+    /* Initialize CPU and MEM clkrst sessions. */
     memset(&g_clkrstCpuSession, 0, sizeof(ClkrstSession));
     memset(&g_clkrstMemSession, 0, sizeof(ClkrstSession));
     
@@ -226,11 +226,11 @@ static Result servicesClkrstInitialize(void)
 
 static void servicesClkrstExit(void)
 {
-    /* Close CPU and MEM clkrst sessions */
+    /* Close CPU and MEM clkrst sessions. */
     clkrstCloseSession(&g_clkrstMemSession);
     clkrstCloseSession(&g_clkrstCpuSession);
     
-    /* Close clkrst service handle */
+    /* Close clkrst service handle. */
     clkrstExit();
 }
 
@@ -241,11 +241,11 @@ static bool servicesClkGetServiceType(void *arg)
     ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
     if (strlen(info->name) != 3 || strcmp(info->name, "clk") != 0 || info->init_func != NULL || info->close_func != NULL) return false;
     
-    /* Determine which service needs to be used to control hardware clock rates, depending on the system version */
-    /* This may either be pcv (sysver lower than 8.0.0) or clkrst (sysver equal to or greater than 8.0.0) */
+    /* Determine which service needs to be used to control hardware clock rates, depending on the system version. */
+    /* This may either be pcv (sysver lower than 8.0.0) or clkrst (sysver equal to or greater than 8.0.0). */
     g_clkSvcUsePcv = hosversionBefore(8, 0, 0);
     
-    /* Fill service info */
+    /* Fill service info. */
     sprintf(info->name, "%s", (g_clkSvcUsePcv ? "pcv" : "clkrst"));
     info->init_func = (g_clkSvcUsePcv ? &pcvInitialize : &servicesClkrstInitialize);
     info->close_func = (g_clkSvcUsePcv ? &pcvExit : &servicesClkrstExit);
@@ -260,7 +260,7 @@ static bool servicesSplCryptoCheckAvailability(void *arg)
     ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
     if (strlen(info->name) != 7 || strcmp(info->name, "spl:mig") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
-    /* Check if spl:mig is available (sysver equal to or greater than 4.0.0) */
+    /* Check if spl:mig is available (sysver equal to or greater than 4.0.0). */
     return !hosversionBefore(4, 0, 0);
 }
 
@@ -271,6 +271,6 @@ static bool servicesFspUsbCheckAvailability(void *arg)
     ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
     if (strlen(info->name) != 7 || strcmp(info->name, "fsp-usb") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
-    /* Check if fsp-usb is actually running in the background */
+    /* Check if fsp-usb is actually running in the background. */
     return servicesCheckRunningServiceByName("fsp-usb");
 }

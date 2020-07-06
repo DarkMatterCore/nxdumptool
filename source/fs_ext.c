@@ -21,7 +21,7 @@
 #include "utils.h"
 #include "fs_ext.h"
 
-/* IFileSystemProxy */
+/* IFileSystemProxy. */
 Result fsOpenGameCardStorage(FsStorage *out, const FsGameCardHandle *handle, u32 partition)
 {
     struct {
@@ -43,7 +43,7 @@ Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier *out)
     );
 }
 
-/* IDeviceOperator */
+/* IDeviceOperator. */
 Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCardHandle *handle, u32 *out_title_version, u64 *out_title_id)
 {
     struct {

@@ -21,11 +21,11 @@
 #include "utils.h"
 #include "gamecard.h"
 
-#define GAMECARD_HFS0_MAGIC                     0x48465330              /* "HFS0" */
+#define GAMECARD_HFS0_MAGIC                     0x48465330              /* "HFS0". */
 
-#define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB */
+#define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB. */
 
-#define GAMECARD_ACCESS_WAIT_TIME               3                       /* Seconds */
+#define GAMECARD_ACCESS_WAIT_TIME               3                       /* Seconds. */
 
 #define GAMECARD_UPDATE_TID                     (u64)0x0100000000000816
 
@@ -135,7 +135,7 @@ bool gamecardInitialize(void)
     bool ret = g_gamecardInterfaceInit;
     if (ret) goto out;
     
-    /* Allocate memory for the gamecard read buffer */
+    /* Allocate memory for the gamecard read buffer. */
     g_gameCardReadBuf = malloc(GAMECARD_READ_BUFFER_SIZE);
     if (!g_gameCardReadBuf)
     {
@@ -143,17 +143,17 @@ bool gamecardInitialize(void)
         goto out;
     }
     
-    /* Open device operator */
+    /* Open device operator. */
     rc = fsOpenDeviceOperator(&g_deviceOperator);
     if (R_FAILED(rc))
     {
-        LOGFILE("fsOpenDeviceOperator failed! (0x%08X)", rc);
+        LOGFILE("fsOpenDeviceOperator failed! (0x%08X).", rc);
         goto out;
     }
     
     g_openDeviceOperator = true;
     
-    /* Open gamecard detection event notifier */
+    /* Open gamecard detection event notifier. */
     rc = fsOpenGameCardDetectionEventNotifier(&g_gameCardEventNotifier);
     if (R_FAILED(rc))
     {
@@ -163,7 +163,7 @@ bool gamecardInitialize(void)
     
     g_openEventNotifier = true;
     
-    /* Retrieve gamecard detection kernel event */
+    /* Retrieve gamecard detection kernel event. */
     rc = fsEventNotifierGetEventHandle(&g_gameCardEventNotifier, &g_gameCardKernelEvent, true);
     if (R_FAILED(rc))
     {
@@ -173,13 +173,13 @@ bool gamecardInitialize(void)
     
     g_loadKernelEvent = true;
     
-    /* Create usermode exit event */
+    /* Create usermode exit event. */
     ueventCreate(&g_gameCardDetectionThreadExitEvent, true);
     
-    /* Create usermode gamecard status change event */
+    /* Create usermode gamecard status change event. */
     ueventCreate(&g_gameCardStatusChangeEvent, true);
     
-    /* Create gamecard detection thread */
+    /* Create gamecard detection thread. */
     if (!(g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread())) goto out;
     
     ret = g_gamecardInterfaceInit = true;
@@ -194,35 +194,35 @@ void gamecardExit(void)
 {
     mutexLock(&g_gamecardMutex);
     
-    /* Destroy gamecard detection thread */
+    /* Destroy gamecard detection thread. */
     if (g_gameCardDetectionThreadCreated)
     {
         gamecardDestroyDetectionThread();
         g_gameCardDetectionThreadCreated = false;
     }
     
-    /* Close gamecard detection kernel event */
+    /* Close gamecard detection kernel event. */
     if (g_loadKernelEvent)
     {
         eventClose(&g_gameCardKernelEvent);
         g_loadKernelEvent = false;
     }
     
-    /* Close gamecard detection event notifier */
+    /* Close gamecard detection event notifier. */
     if (g_openEventNotifier)
     {
         fsEventNotifierClose(&g_gameCardEventNotifier);
         g_openEventNotifier = false;
     }
     
-    /* Close device operator */
+    /* Close device operator. */
     if (g_openDeviceOperator)
     {
         fsDeviceOperatorClose(&g_deviceOperator);
         g_openDeviceOperator = false;
     }
     
-    /* Free gamecard read buffer */
+    /* Free gamecard read buffer. */
     if (g_gameCardReadBuf)
     {
         free(g_gameCardReadBuf);
@@ -244,12 +244,9 @@ UEvent *gamecardGetStatusChangeUserEvent(void)
 
 bool gamecardIsReady(void)
 {
-    bool ret = false;
-    
     mutexLock(&g_gamecardMutex);
-    ret = (g_gameCardInserted && g_gameCardInfoLoaded);
+    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded);
     mutexUnlock(&g_gamecardMutex);
-    
     return ret;
 }
 
@@ -260,61 +257,37 @@ bool gamecardReadStorage(void *out, u64 read_size, u64 offset)
 
 bool gamecardGetHeader(GameCardHeader *out)
 {
-    bool ret = false;
-    
     mutexLock(&g_gamecardMutex);
-    if (g_gameCardInserted && g_gameCardInfoLoaded && out)
-    {
-        memcpy(out, &g_gameCardHeader, sizeof(GameCardHeader));
-        ret = true;
-    }
+    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+    if (ret) memcpy(out, &g_gameCardHeader, sizeof(GameCardHeader));
     mutexUnlock(&g_gamecardMutex);
-    
     return ret;
 }
 
 bool gamecardGetTotalSize(u64 *out)
 {
-    bool ret = false;
-    
     mutexLock(&g_gamecardMutex);
-    if (g_gameCardInserted && g_gameCardInfoLoaded && out)
-    {
-        *out = (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize);
-        ret = true;
-    }
+    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+    if (ret) *out = (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize);
     mutexUnlock(&g_gamecardMutex);
-    
     return ret;
 }
 
 bool gamecardGetTrimmedSize(u64 *out)
 {
-    bool ret = false;
-    
     mutexLock(&g_gamecardMutex);
-    if (g_gameCardInserted && g_gameCardInfoLoaded && out)
-    {
-        *out = (sizeof(GameCardHeader) + ((u64)g_gameCardHeader.valid_data_end_address * GAMECARD_MEDIA_UNIT_SIZE));
-        ret = true;
-    }
+    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+    if (ret) *out = (sizeof(GameCardHeader) + ((u64)g_gameCardHeader.valid_data_end_address * GAMECARD_MEDIA_UNIT_SIZE));
     mutexUnlock(&g_gamecardMutex);
-    
     return ret;
 }
 
 bool gamecardGetRomCapacity(u64 *out)
 {
-    bool ret = false;
-    
     mutexLock(&g_gamecardMutex);
-    if (g_gameCardInserted && g_gameCardInfoLoaded && out)
-    {
-        *out = g_gameCardCapacity;
-        ret = true;
-    }
+    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+    if (ret) *out = g_gameCardCapacity;
     mutexUnlock(&g_gamecardMutex);
-    
     return ret;
 }
 
@@ -477,7 +450,7 @@ bool gamecardGetEntryInfoFromHashFileSystemPartitionByName(u8 hfs_partition_type
         {
             if (hfs_partition_type == GameCardHashFileSystemPartitionType_Root)
             {
-                *out_offset = g_gameCardHfsPartitions[fs_entry_idx].offset;  /* No need to recalculate what we already have */
+                *out_offset = g_gameCardHfsPartitions[fs_entry_idx].offset;  /* No need to recalculate what we already have. */
             } else {
                 *out_offset = (g_gameCardHfsPartitions[hfs_partition_idx].offset + g_gameCardHfsPartitions[hfs_partition_idx].header_size + fs_entry->offset);
             }
@@ -507,10 +480,10 @@ static bool gamecardCreateDetectionThread(void)
 
 static void gamecardDestroyDetectionThread(void)
 {
-    /* Signal the exit event to terminate the gamecard detection thread */
+    /* Signal the exit event to terminate the gamecard detection thread. */
     ueventSignal(&g_gameCardDetectionThreadExitEvent);
     
-    /* Wait for the gamecard detection thread to exit */
+    /* Wait for the gamecard detection thread to exit. */
     thrd_join(g_gameCardDetectionThread, NULL);
 }
 
@@ -524,34 +497,34 @@ static int gamecardDetectionThreadFunc(void *arg)
     Waiter gamecard_event_waiter = waiterForEvent(&g_gameCardKernelEvent);
     Waiter exit_event_waiter = waiterForUEvent(&g_gameCardDetectionThreadExitEvent);
     
-    /* Retrieve initial gamecard insertion status */
-    /* Load gamecard info right away if a gamecard is inserted */
+    /* Retrieve initial gamecard insertion status. */
+    /* Load gamecard info right away if a gamecard is inserted. */
     g_gameCardInserted = gamecardIsInserted();
     if (g_gameCardInserted) gamecardLoadInfo();
     ueventSignal(&g_gameCardStatusChangeEvent);
     
     while(true)
     {
-        /* Wait until an event is triggered */
+        /* Wait until an event is triggered. */
         rc = waitMulti(&idx, -1, gamecard_event_waiter, exit_event_waiter);
         if (R_FAILED(rc)) continue;
         
-        /* Exit event triggered */
+        /* Exit event triggered. */
         if (idx == 1) break;
         
         mutexLock(&g_gamecardMutex);
         
-        /* Retrieve current gamecard insertion status */
-        /* Only proceed if we're dealing with a status change */
+        /* Retrieve current gamecard insertion status. */
+        /* Only proceed if we're dealing with a status change. */
         g_gameCardInserted = gamecardIsInserted();
         gamecardFreeInfo();
         
         if (g_gameCardInserted)
         {
-            /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules */
+            /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules. */
             utilsSleep(GAMECARD_ACCESS_WAIT_TIME);
             
-            /* Load gamecard info */
+            /* Load gamecard info. */
             gamecardLoadInfo();
         }
         
@@ -560,7 +533,7 @@ static int gamecardDetectionThreadFunc(void *arg)
         ueventSignal(&g_gameCardStatusChangeEvent);
     }
     
-    /* Free gamecard info and close gamecard handle */
+    /* Free gamecard info and close gamecard handle. */
     gamecardFreeInfo();
     g_gameCardInserted = false;
     
@@ -582,44 +555,44 @@ static void gamecardLoadInfo(void)
     GameCardHashFileSystemHeader *fs_header = NULL;
     GameCardHashFileSystemEntry *fs_entry = NULL;
     
-    /* Retrieve gamecard storage area sizes */
-    /* gamecardReadStorageArea() actually checks if the storage area sizes are greater than zero, so we must first perform this step */
+    /* Retrieve gamecard storage area sizes. */
+    /* gamecardReadStorageArea() actually checks if the storage area sizes are greater than zero, so we must first perform this step. */
     if (!gamecardGetStorageAreasSizes())
     {
         LOGFILE("Failed to retrieve gamecard storage area sizes!");
         goto out;
     }
     
-    /* Read gamecard header */
+    /* Read gamecard header. */
     if (!gamecardReadStorageArea(&g_gameCardHeader, sizeof(GameCardHeader), 0, false))
     {
         LOGFILE("Failed to read gamecard header!");
         goto out;
     }
     
-    /* Check magic word from gamecard header */
+    /* Check magic word from gamecard header. */
     if (__builtin_bswap32(g_gameCardHeader.magic) != GAMECARD_HEAD_MAGIC)
     {
         LOGFILE("Invalid gamecard header magic word! (0x%08X)", __builtin_bswap32(g_gameCardHeader.magic));
         goto out;
     }
     
-    /* Get gamecard capacity */
+    /* Get gamecard capacity. */
     g_gameCardCapacity = gamecardGetCapacityFromRomSizeValue(g_gameCardHeader.rom_size);
     if (!g_gameCardCapacity)
     {
-        LOGFILE("Invalid gamecard capacity value! (0x%02X)", g_gameCardHeader.rom_size);
+        LOGFILE("Invalid gamecard capacity value! (0x%02X).", g_gameCardHeader.rom_size);
         goto out;
     }
     
     if (utilsGetCustomFirmwareType() == UtilsCustomFirmwareType_SXOS)
     {
-        /* The total size for the secure storage area is maxed out under SX OS */
-        /* Let's try to calculate it manually */
+        /* The total size for the secure storage area is maxed out under SX OS. */
+        /* Let's try to calculate it manually. */
         g_gameCardStorageSecureAreaSize = ((g_gameCardCapacity - ((g_gameCardCapacity / GAMECARD_ECC_BLOCK_SIZE) * GAMECARD_ECC_DATA_SIZE)) - g_gameCardStorageNormalAreaSize);
     }
     
-    /* Allocate memory for the root hash FS header */
+    /* Allocate memory for the root hash FS header. */
     g_gameCardHfsRootHeader = calloc(g_gameCardHeader.partition_fs_header_size, sizeof(u8));
     if (!g_gameCardHfsRootHeader)
     {
@@ -627,7 +600,7 @@ static void gamecardLoadInfo(void)
         goto out;
     }
     
-    /* Read root hash FS header */
+    /* Read root hash FS header. */
     if (!gamecardReadStorageArea(g_gameCardHfsRootHeader, g_gameCardHeader.partition_fs_header_size, g_gameCardHeader.partition_fs_header_address, false))
     {
         LOGFILE("Failed to read root hash FS header from offset 0x%lX!", g_gameCardHeader.partition_fs_header_address);
@@ -638,7 +611,7 @@ static void gamecardLoadInfo(void)
     
     if (__builtin_bswap32(fs_header->magic) != GAMECARD_HFS0_MAGIC)
     {
-        LOGFILE("Invalid magic word in root hash FS header! (0x%08X)", __builtin_bswap32(fs_header->magic));
+        LOGFILE("Invalid magic word in root hash FS header! (0x%08X).", __builtin_bswap32(fs_header->magic));
         goto out;
     }
     
@@ -649,7 +622,7 @@ static void gamecardLoadInfo(void)
         goto out;
     }
     
-    /* Allocate memory for the hash FS partitions info */
+    /* Allocate memory for the hash FS partitions info. */
     g_gameCardHfsPartitions = calloc(fs_header->entry_count, sizeof(GameCardHashFileSystemEntry));
     if (!g_gameCardHfsPartitions)
     {
@@ -657,7 +630,7 @@ static void gamecardLoadInfo(void)
         goto out;
     }
     
-    /* Read hash FS partitions */
+    /* Read hash FS partitions. */
     for(u32 i = 0; i < fs_header->entry_count; i++)
     {
         fs_entry = gamecardGetHashFileSystemEntryByIndex(g_gameCardHfsRootHeader, i);
@@ -670,7 +643,7 @@ static void gamecardLoadInfo(void)
         g_gameCardHfsPartitions[i].offset = (g_gameCardHeader.partition_fs_header_address + g_gameCardHeader.partition_fs_header_size + fs_entry->offset);
         g_gameCardHfsPartitions[i].size = fs_entry->size;
         
-        /* Partially read the current hash FS partition header */
+        /* Partially read the current hash FS partition header. */
         GameCardHashFileSystemHeader partition_header = {0};
         if (!gamecardReadStorageArea(&partition_header, sizeof(GameCardHashFileSystemHeader), g_gameCardHfsPartitions[i].offset, false))
         {
@@ -680,7 +653,7 @@ static void gamecardLoadInfo(void)
         
         if (__builtin_bswap32(partition_header.magic) != GAMECARD_HFS0_MAGIC)
         {
-            LOGFILE("Invalid magic word in hash FS partition #%u header! (0x%08X)", i, __builtin_bswap32(partition_header.magic));
+            LOGFILE("Invalid magic word in hash FS partition #%u header! (0x%08X).", i, __builtin_bswap32(partition_header.magic));
             goto out;
         }
         
@@ -690,11 +663,11 @@ static void gamecardLoadInfo(void)
             goto out;
         }
         
-        /* Calculate the full header size for the current hash FS partition and round it to a GAMECARD_MEDIA_UNIT_SIZE bytes boundary */
+        /* Calculate the full header size for the current hash FS partition and round it to a GAMECARD_MEDIA_UNIT_SIZE bytes boundary. */
         g_gameCardHfsPartitions[i].header_size = (sizeof(GameCardHashFileSystemHeader) + (partition_header.entry_count * sizeof(GameCardHashFileSystemEntry)) + partition_header.name_table_size);
         g_gameCardHfsPartitions[i].header_size = ALIGN_UP(g_gameCardHfsPartitions[i].header_size, GAMECARD_MEDIA_UNIT_SIZE);
         
-        /* Allocate memory for the hash FS partition header */
+        /* Allocate memory for the hash FS partition header. */
         g_gameCardHfsPartitions[i].header = calloc(g_gameCardHfsPartitions[i].header_size, sizeof(u8));
         if (!g_gameCardHfsPartitions[i].header)
         {
@@ -702,7 +675,7 @@ static void gamecardLoadInfo(void)
             goto out;
         }
         
-        /* Finally, read the full hash FS partition header */
+        /* Finally, read the full hash FS partition header. */
         if (!gamecardReadStorageArea(g_gameCardHfsPartitions[i].header, g_gameCardHfsPartitions[i].header_size, g_gameCardHfsPartitions[i].offset, false))
         {
             LOGFILE("Failed to read full hash FS partition #%u header from offset 0x%lX!", i, g_gameCardHfsPartitions[i].offset);
@@ -763,10 +736,10 @@ static bool gamecardGetHandle(void)
     Result rc1 = 0, rc2 = 0;
     FsStorage tmp_storage = {0};
     
-    /* 10 tries */
+    /* 10 tries. */
     for(u8 i = 0; i < 10; i++)
     {
-        /* First try to open a gamecard storage area using the current gamecard handle */
+        /* First try to open a gamecard storage area using the current gamecard handle. */
         rc1 = fsOpenGameCardStorage(&tmp_storage, &g_gameCardHandle, 0);
         if (R_SUCCEEDED(rc1))
         {
@@ -774,18 +747,18 @@ static bool gamecardGetHandle(void)
             break;
         }
         
-        /* If the previous call failed, we may have an invalid handle, so let's close the current one and try to retrieve a new one */
+        /* If the previous call failed, we may have an invalid handle, so let's close the current one and try to retrieve a new one. */
         gamecardCloseHandle();
         rc2 = fsDeviceOperatorGetGameCardHandle(&g_deviceOperator, &g_gameCardHandle);
     }
     
     if (R_FAILED(rc1) || R_FAILED(rc2))
     {
-        /* Close leftover gamecard handle */
+        /* Close leftover gamecard handle. */
         gamecardCloseHandle();
         
-        if (R_FAILED(rc1)) LOGFILE("fsOpenGameCardStorage failed! (0x%08X)", rc1);
-        if (R_FAILED(rc2)) LOGFILE("fsDeviceOperatorGetGameCardHandle failed! (0x%08X)", rc2);
+        if (R_FAILED(rc1)) LOGFILE("fsOpenGameCardStorage failed! (0x%08X).", rc1);
+        if (R_FAILED(rc2)) LOGFILE("fsDeviceOperatorGetGameCardHandle failed! (0x%08X).", rc2);
         
         return false;
     }
@@ -812,20 +785,20 @@ static bool gamecardOpenStorageArea(u8 area)
     gamecardCloseStorageArea();
     
     Result rc = 0;
-    u32 partition = (area - 1); /* Zero-based index */
+    u32 partition = (area - 1); /* Zero-based index. */
     
-    /* Retrieve a new gamecard handle */
+    /* Retrieve a new gamecard handle. */
     if (!gamecardGetHandle())
     {
         LOGFILE("Failed to retrieve gamecard handle!");
         return false;
     }
     
-    /* Open storage area */
+    /* Open storage area. */
     rc = fsOpenGameCardStorage(&g_gameCardStorage, &g_gameCardHandle, partition);
     if (R_FAILED(rc))
     {
-        LOGFILE("fsOpenGameCardStorage failed to open %s storage area! (0x%08X)", GAMECARD_STORAGE_AREA_NAME(area), rc);
+        LOGFILE("fsOpenGameCardStorage failed to open %s storage area! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(area), rc);
         gamecardCloseHandle();
         return false;
     }
@@ -852,45 +825,45 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
     u8 *out_u8 = (u8*)out;
     u8 area = (offset < g_gameCardStorageNormalAreaSize ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
     
-    /* Handle reads that span both the normal and secure gamecard storage areas */
+    /* Handle reads that span both the normal and secure gamecard storage areas. */
     if (area == GameCardStorageArea_Normal && (offset + read_size) > g_gameCardStorageNormalAreaSize)
     {
-        /* Calculate normal storage area size difference */
+        /* Calculate normal storage area size difference. */
         u64 diff_size = (g_gameCardStorageNormalAreaSize - offset);
         
         if (!gamecardReadStorageArea(out_u8, diff_size, offset, false)) goto exit;
         
-        /* Adjust variables to read right from the start of the secure storage area */
+        /* Adjust variables to read right from the start of the secure storage area. */
         read_size -= diff_size;
         offset = g_gameCardStorageNormalAreaSize;
         out_u8 += diff_size;
         area = GameCardStorageArea_Secure;
     }
     
-    /* Open a storage area if needed */
-    /* If the right storage area has already been opened, this will return true */
+    /* Open a storage area if needed. */
+    /* If the right storage area has already been opened, this will return true. */
     if (!gamecardOpenStorageArea(area))
     {
         LOGFILE("Failed to open %s storage area!", GAMECARD_STORAGE_AREA_NAME(area));
         goto exit;
     }
     
-    /* Calculate appropiate storage area offset and retrieve the right storage area pointer */
+    /* Calculate appropiate storage area offset and retrieve the right storage area pointer. */
     u64 base_offset = (area == GameCardStorageArea_Normal ? offset : (offset - g_gameCardStorageNormalAreaSize));
     
     if (!(base_offset % GAMECARD_MEDIA_UNIT_SIZE) && !(read_size % GAMECARD_MEDIA_UNIT_SIZE))
     {
-        /* Optimization for reads that are already aligned to a GAMECARD_MEDIA_UNIT_SIZE boundary */
+        /* Optimization for reads that are already aligned to a GAMECARD_MEDIA_UNIT_SIZE boundary. */
         rc = fsStorageRead(&g_gameCardStorage, base_offset, out_u8, read_size);
         if (R_FAILED(rc))
         {
-            LOGFILE("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (aligned)", read_size, base_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
+            LOGFILE("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (aligned).", read_size, base_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
             goto exit;
         }
         
         success = true;
     } else {
-        /* Fix offset and/or size to avoid unaligned reads */
+        /* Fix offset and/or size to avoid unaligned reads. */
         u64 block_start_offset = ALIGN_DOWN(base_offset, GAMECARD_MEDIA_UNIT_SIZE);
         u64 block_end_offset = ALIGN_UP(base_offset + read_size, GAMECARD_MEDIA_UNIT_SIZE);
         u64 block_size = (block_end_offset - block_start_offset);
@@ -902,7 +875,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         rc = fsStorageRead(&g_gameCardStorage, block_start_offset, g_gameCardReadBuf, chunk_size);
         if (R_FAILED(rc))
         {
-            LOGFILE("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (unaligned)", chunk_size, block_start_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
+            LOGFILE("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (unaligned).", chunk_size, block_start_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
             goto exit;
         }
         
@@ -956,7 +929,7 @@ static bool gamecardGetStorageAreasSizes(void)
         
         if (R_FAILED(rc) || !area_size)
         {
-            LOGFILE("fsStorageGetSize failed to retrieve %s storage area size! (0x%08X)", GAMECARD_STORAGE_AREA_NAME(area), rc);
+            LOGFILE("fsStorageGetSize failed to retrieve %s storage area size! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(area), rc);
             g_gameCardStorageNormalAreaSize = g_gameCardStorageSecureAreaSize = 0;
             return false;
         }

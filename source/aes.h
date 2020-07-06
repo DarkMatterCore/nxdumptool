@@ -1,7 +1,6 @@
 /*
- * es.h
+ * aes.h
  *
- * Copyright (c) 2018-2020, Addubz.
  * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
@@ -21,15 +20,12 @@
 
 #pragma once
 
-#ifndef __ES_H__
-#define __ES_H__
+#ifndef __AES_H__
+#define __AES_H__
 
-Result esInitialize(void);
-void esExit(void);
+/// Performs an AES-128-XTS crypto operation using the non-standard Nintendo XTS tweak.
+/// The Aes128XtsContext element should have been previously initialized with aes128XtsContextCreate(). 'encrypt' should match the value of 'is_encryptor' used with that call.
+/// 'dst' and 'src' can both point to the same address.
+size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src, size_t size, u64 sector, size_t sector_size, bool encrypt);
 
-Result esCountCommonTicket(s32 *out_count);
-Result esCountPersonalizedTicket(s32 *out_count);
-Result esListCommonTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count);
-Result esListPersonalizedTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count);
-
-#endif /* __ES_H__ */
+#endif /* __AES_H__ */

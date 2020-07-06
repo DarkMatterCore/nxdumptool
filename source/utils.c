@@ -1,6 +1,7 @@
 /*
  * utils.c
  *
+ * Copyright (c) 2018-2020, WerWolv.
  * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
@@ -50,6 +51,9 @@ static Mutex g_logfileMutex = 0;
 
 /* Function prototypes. */
 
+static u64 utilsHidKeysAllDown(void);
+static u64 utilsHidKeysAllHeld(void);
+
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
@@ -64,70 +68,70 @@ bool utilsInitializeResources(void)
     bool ret = g_resourcesInitialized;
     if (ret) goto exit;
     
-    /* Initialize needed services */
+    /* Initialize needed services. */
     if (!servicesInitialize())
     {
         LOGFILE("Failed to initialize needed services!");
         goto exit;
     }
     
-    /* Initialize USB interface */
+    /* Initialize USB interface. */
     if (!usbInitialize())
     {
         LOGFILE("Failed to initialize USB interface!");
         goto exit;
     }
     
-    /* Load NCA keyset */
+    /* Load NCA keyset. */
     if (!keysLoadNcaKeyset())
     {
         LOGFILE("Failed to load NCA keyset!");
         goto exit;
     }
     
-    /* Allocate NCA crypto buffer */
+    /* Allocate NCA crypto buffer. */
     if (!ncaAllocateCryptoBuffer())
     {
         LOGFILE("Unable to allocate memory for NCA crypto buffer!");
         goto exit;
     }
     
-    /* Initialize gamecard interface */
+    /* Initialize gamecard interface. */
     if (!gamecardInitialize())
     {
         LOGFILE("Failed to initialize gamecard interface!");
         goto exit;
     }
     
-    /* Retrieve SD card FsFileSystem */
+    /* Retrieve SD card FsFileSystem element. */
     if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
     {
         LOGFILE("fsdevGetDeviceFileSystem failed!");
         goto exit;
     }
     
-    /* Mount eMMC BIS System partition */
+    /* Mount eMMC BIS System partition. */
     if (!utilsMountEmmcBisSystemPartitionStorage()) goto exit;
     
-    /* Get applet type */
+    /* Get applet type. */
     g_programAppletType = appletGetAppletType();
     
-    /* Disable screen dimming and auto sleep */
+    /* Disable screen dimming and auto sleep. */
     appletSetMediaPlaybackState(true);
     
-    /* Retrieve custom firmware type */
+    /* Retrieve custom firmware type. */
     _utilsGetCustomFirmwareType();
     
-    /* Overclock system */
+    /* Overclock system. */
     utilsOverclockSystem(true);
     
-    /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked) */
+    /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked). */
     appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
     
-    /* Initialize FreeType */
+    /* Initialize FreeType. */
     //if (!freeTypeHelperInitialize()) return false;
     
-    /* Initialize LVGL */
+    /* Initialize LVGL. */
     //if (!lvglHelperInitialize()) return false;
     
     ret = g_resourcesInitialized = true;
@@ -142,37 +146,37 @@ void utilsCloseResources(void)
 {
     mutexLock(&g_resourcesMutex);
     
-    /* Free LVGL resources */
+    /* Free LVGL resources. */
     //lvglHelperExit();
     
-    /* Free FreeType resouces */
+    /* Free FreeType resources. */
     //freeTypeHelperExit();
     
-    /* Unset our overclock applet hook */
+    /* Unset our overclock applet hook. */
     appletUnhook(&g_systemOverclockCookie);
     
-    /* Restore hardware clocks */
+    /* Restore hardware clocks. */
     utilsOverclockSystem(false);
     
-    /* Enable screen dimming and auto sleep */
+    /* Enable screen dimming and auto sleep. */
     appletSetMediaPlaybackState(false);
     
-    /* Unblock HOME button presses */
+    /* Unblock HOME button presses. */
     utilsChangeHomeButtonBlockStatus(false);
     
-    /* Unmount eMMC BIS System partition */
+    /* Unmount eMMC BIS System partition. */
     utilsUnmountEmmcBisSystemPartitionStorage();
     
-    /* Deinitialize gamecard interface */
+    /* Deinitialize gamecard interface. */
     gamecardExit();
     
-    /* Free NCA crypto buffer */
+    /* Free NCA crypto buffer. */
     ncaFreeCryptoBuffer();
     
-    /* Close USB interface */
+    /* Close USB interface. */
     usbExit();
     
-    /* Close initialized services */
+    /* Close initialized services. */
     servicesClose();
     
     g_resourcesInitialized = false;
@@ -180,37 +184,28 @@ void utilsCloseResources(void)
     mutexUnlock(&g_resourcesMutex);
 }
 
-u64 utilsHidKeysAllDown(void)
+u64 utilsReadInput(u8 input_type)
 {
-    u8 controller;
+    if (input_type != UtilsInputType_Down && input_type != UtilsInputType_Held) return 0;
+    
+    hidScanInput();
+    
+    return (input_type == UtilsInputType_Down ? utilsHidKeysAllDown() : utilsHidKeysAllHeld());
+}
+
+void utilsWaitForButtonPress(u64 flag)
+{
     u64 keys_down = 0;
     
-    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_down |= hidKeysDown((HidControllerID)controller);
-    
-    return keys_down;
-}
-
-u64 utilsHidKeysAllHeld(void)
-{
-    u8 controller;
-    u64 keys_held = 0;
-    
-    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_held |= hidKeysHeld((HidControllerID)controller);
-    
-    return keys_held;
-}
-
-void utilsWaitForButtonPress(void)
-{
-    u64 flag, keys_down;
-    
-    /* Don't consider touch screen presses nor stick movement as button inputs */
-    flag = ~(KEY_TOUCH | KEY_LSTICK_LEFT | KEY_LSTICK_RIGHT | KEY_LSTICK_UP | KEY_LSTICK_DOWN | KEY_RSTICK_LEFT | KEY_RSTICK_RIGHT | KEY_RSTICK_UP | KEY_RSTICK_DOWN);
+    if (!flag)
+    {
+        /* Don't consider touch screen presses nor stick movement as button inputs. */
+        flag = ~(KEY_TOUCH | KEY_LSTICK_LEFT | KEY_LSTICK_RIGHT | KEY_LSTICK_UP | KEY_LSTICK_DOWN | KEY_RSTICK_LEFT | KEY_RSTICK_RIGHT | KEY_RSTICK_UP | KEY_RSTICK_DOWN);
+    }
     
     while(appletMainLoop())
     {
-        hidScanInput();
-        keys_down = utilsHidKeysAllDown();
+        keys_down = utilsReadInput(UtilsInputType_Down);
         if (keys_down & flag) break;
     }
 }
@@ -310,7 +305,7 @@ bool utilsGetFreeFileSystemSpace(FsFileSystem *fs, u64 *out)
     Result rc = fsFsGetFreeSpace(fs, "/", (s64*)out);
     if (R_FAILED(rc))
     {
-        LOGFILE("fsFsGetFreeSpace failed! (0x%08X)", rc);
+        LOGFILE("fsFsGetFreeSpace failed! (0x%08X).", rc);
         return false;
     }
     
@@ -341,16 +336,16 @@ bool utilsCreateConcatenationFile(const char *path)
         return false;
     }
     
-    /* Safety check: remove any existant file/directory at the destination path */
+    /* Safety check: remove any existant file/directory at the destination path. */
     remove(path);
     fsdevDeleteDirectoryRecursively(path);
     
     /* Create ConcatenationFile */
-    /* If the call succeeds, the caller function will be able to operate on this file using stdio calls */
+    /* If the call succeeds, the caller function will be able to operate on this file using stdio calls. */
     rc = fsdevCreateFile(path, 0, FsCreateOption_BigFile);
     if (R_FAILED(rc))
     {
-        LOGFILE("fsdevCreateFile failed for \"%s\"! (0x%08X)", path, rc);
+        LOGFILE("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
         return false;
     }
     
@@ -366,7 +361,7 @@ void utilsChangeHomeButtonBlockStatus(bool block)
 {
     mutexLock(&g_homeButtonMutex);
     
-    /* Only change HOME button blocking status if we're running as a regular application or a system application, and if it's current blocking status is different than the requested one */
+    /* Only change HOME button blocking status if we're running as a regular application or a system application, and if it's current blocking status is different than the requested one. */
     if (!utilsAppletModeCheck() && block != g_homeButtonBlocked)
     {
         if (block)
@@ -399,6 +394,26 @@ void utilsOverclockSystem(bool overclock)
     servicesChangeHardwareClockRates(cpuClkRate, memClkRate);
 }
 
+static u64 utilsHidKeysAllDown(void)
+{
+    u8 controller;
+    u64 keys_down = 0;
+    
+    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_down |= hidKeysDown((HidControllerID)controller);
+    
+    return keys_down;
+}
+
+static u64 utilsHidKeysAllHeld(void)
+{
+    u8 controller;
+    u64 keys_held = 0;
+    
+    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_held |= hidKeysHeld((HidControllerID)controller);
+    
+    return keys_held;
+}
+
 static bool utilsMountEmmcBisSystemPartitionStorage(void)
 {
     Result rc = 0;
@@ -407,7 +422,7 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void)
     rc = fsOpenBisStorage(&g_emmcBisSystemPartitionStorage, FsBisPartitionId_System);
     if (R_FAILED(rc))
     {
-        LOGFILE("Failed to open eMMC BIS System partition storage! (0x%08X)", rc);
+        LOGFILE("Failed to open eMMC BIS System partition storage! (0x%08X).", rc);
         return false;
     }
     
@@ -421,7 +436,7 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void)
     fr = f_mount(g_emmcBisSystemPartitionFatFsObj, BIS_SYSTEM_PARTITION_MOUNT_NAME, 1);
     if (fr != FR_OK)
     {
-        LOGFILE("Failed to mount eMMC BIS System partition! (%u)", fr);
+        LOGFILE("Failed to mount eMMC BIS System partition! (%u).", fr);
         return false;
     }
     
@@ -457,6 +472,6 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
     
     if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
     
-    /* To do: read config here to actually know the value to use with utilsOverclockSystem */
+    /* To do: read config here to actually know the value to use with utilsOverclockSystem. */
     utilsOverclockSystem(false);
 }

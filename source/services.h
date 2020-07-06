@@ -23,18 +23,25 @@
 #ifndef __SERVICES_H__
 #define __SERVICES_H__
 
-/* Hardware clocks expressed in MHz */
+/* Hardware clocks expressed in MHz. */
 #define CPU_CLKRT_NORMAL        1020
 #define CPU_CLKRT_OVERCLOCKED   1785
 #define MEM_CLKRT_NORMAL        1331
 #define MEM_CLKRT_OVERCLOCKED   1600
 
+/// Initializes the background services needed by the application.
 bool servicesInitialize();
+
+/// Closes services previously initialized by servicesInitialize().
 void servicesClose();
 
+/// Checks if a service is running by its name.
 bool servicesCheckRunningServiceByName(const char *name);
+
+/// Check if a service has been initialized by its name.
 bool servicesCheckInitializedServiceByName(const char *name);
 
+/// Changes CPU/MEM clock rates at runtime.
 void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate);
 
 #endif /* __SERVICES_H__ */

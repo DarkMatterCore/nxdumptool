@@ -1,6 +1,7 @@
 /*
  * tik.c
  *
+ * Copyright (c) 2019, shchmue.
  * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
@@ -183,7 +184,7 @@ static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsI
     
     if (tik_size < SIGNED_TIK_MIN_SIZE || tik_size > SIGNED_TIK_MAX_SIZE)
     {
-        LOGFILE("Invalid size for \"%s\"! (0x%lX)", tik_filename, tik_size);
+        LOGFILE("Invalid size for \"%s\"! (0x%lX).", tik_filename, tik_size);
         return false;
     }
     
@@ -545,7 +546,7 @@ static bool tikRetrieveEticketDeviceKey(void)
     aes128CtrCrypt(&eticket_aes_ctx, &(eticket_devkey->exponent), &(eticket_devkey->exponent), sizeof(tikEticketDeviceKeyData) - 0x10);
     
     /* Public exponent value must be 0x10001. */
-    /* It is stored use big endian byte order. */
+    /* It is stored using big endian byte order. */
     public_exponent = __builtin_bswap32(eticket_devkey->public_exponent);
     if (public_exponent != ETICKET_DEVKEY_PUBLIC_EXPONENT)
     {

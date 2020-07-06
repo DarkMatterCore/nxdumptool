@@ -25,7 +25,7 @@
 
 #include "nca.h"
 
-#define PFS0_MAGIC  0x50465330  /* "PFS0" */
+#define PFS0_MAGIC  0x50465330  /* "PFS0". */
 
 typedef struct {
     u32 magic;              ///< "PFS0".
@@ -69,6 +69,12 @@ bool pfsReadPartitionData(PartitionFileSystemContext *ctx, void *out, u64 read_s
 /// Input offset must be relative to the start of the partition FS entry.
 bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset);
 
+/// Retrieves a partition FS entry index by its name.
+bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u32 *out_idx);
+
+/// Calculates the extracted partition FS size.
+bool pfsGetTotalDataSize(PartitionFileSystemContext *ctx, u64 *out_size);
+
 /// Generates HierarchicalSha256 FS section patch data using a partition FS context + entry, which can be used to replace NCA data in content dumping operations.
 /// Input offset must be relative to the start of the partition FS entry data.
 /// This function shares the same limitations as ncaGenerateHierarchicalSha256Patch().
@@ -103,52 +109,11 @@ NX_INLINE char *pfsGetEntryNameByIndex(PartitionFileSystemContext *ctx, u32 idx)
     return (name_table + fs_entry->name_offset);
 }
 
-NX_INLINE bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u32 *out_idx)
-{
-    size_t name_len = 0;
-    PartitionFileSystemEntry *fs_entry = NULL;
-    u32 entry_count = pfsGetEntryCount(ctx);
-    char *name_table = pfsGetNameTable(ctx);
-    
-    if (!entry_count || !name_table || !name || !(name_len = strlen(name)) || !out_idx) return false;
-    
-    for(u32 i = 0; i < entry_count; i++)
-    {
-        if (!(fs_entry = pfsGetEntryByIndex(ctx, i))) return false;
-        
-        if (strlen(name_table + fs_entry->name_offset) == name_len && !strcmp(name_table + fs_entry->name_offset, name))
-        {
-            *out_idx = i;
-            return true;
-        }
-    }
-    
-    return false;
-}
-
 NX_INLINE PartitionFileSystemEntry *pfsGetEntryByName(PartitionFileSystemContext *ctx, const char *name)
 {
     u32 idx = 0;
     if (!pfsGetEntryIndexByName(ctx, name, &idx)) return NULL;
     return pfsGetEntryByIndex(ctx, idx);
-}
-
-NX_INLINE bool pfsGetTotalDataSize(PartitionFileSystemContext *ctx, u64 *out_size)
-{
-    u64 total_size = 0;
-    u32 entry_count = pfsGetEntryCount(ctx);
-    PartitionFileSystemEntry *fs_entry = NULL;
-    if (!entry_count || !out_size) return false;
-    
-    for(u32 i = 0; i < entry_count; i++)
-    {
-        if (!(fs_entry = pfsGetEntryByIndex(ctx, i))) return false;
-        total_size += fs_entry->size;
-    }
-    
-    *out_size = total_size;
-    
-    return true;
 }
 
 #endif /* __PFS_H__ */

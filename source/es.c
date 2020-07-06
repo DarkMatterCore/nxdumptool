@@ -1,6 +1,7 @@
 /*
  * es.c
  *
+ * Copyright (c) 2018-2020, Addubz.
  * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).

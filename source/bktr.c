@@ -49,18 +49,18 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         return false;
     }
     
-    /* Initialize base NCA RomFS context */
+    /* Initialize base NCA RomFS context. */
     if (!romfsInitializeContext(&(out->base_romfs_ctx), base_nca_fs_ctx))
     {
         LOGFILE("Failed to initialize base NCA RomFS context!");
         return false;
     }
     
-    /* Fill context */
+    /* Fill context. */
     bool success = false;
     NcaPatchInfo *patch_info = &(update_nca_fs_ctx->header->patch_info);
     
-    /* Allocate space for an extra (fake) indirect storage entry, to simplify our logic */
+    /* Allocate space for an extra (fake) indirect storage entry, to simplify our logic. */
     out->indirect_block = calloc(1, patch_info->indirect_size + ((0x3FF0 / sizeof(u64)) * sizeof(BktrIndirectStorageEntry)));
     if (!out->indirect_block)
     {
@@ -68,14 +68,14 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         goto exit;
     }
     
-    /* Read indirect storage block data */
+    /* Read indirect storage block data. */
     if (!ncaReadFsSection(update_nca_fs_ctx, out->indirect_block, patch_info->indirect_size, patch_info->indirect_offset))
     {
         LOGFILE("Failed to read BKTR Indirect Storage Block data!");
         goto exit;
     }
     
-    /* Allocate space for an extra (fake) AesCtrEx storage entry, to simplify our logic */
+    /* Allocate space for an extra (fake) AesCtrEx storage entry, to simplify our logic. */
     out->aes_ctr_ex_block = calloc(1, patch_info->aes_ctr_ex_size + (((0x3FF0 / sizeof(u64)) + 1) * sizeof(BktrAesCtrExStorageEntry)));
     if (!out->aes_ctr_ex_block)
     {
@@ -83,7 +83,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         goto exit;
     }
     
-    /* Read AesCtrEx storage block data */
+    /* Read AesCtrEx storage block data. */
     if (!ncaReadFsSection(update_nca_fs_ctx, out->aes_ctr_ex_block, patch_info->aes_ctr_ex_size, patch_info->aes_ctr_ex_offset))
     {
         LOGFILE("Failed to read BKTR AesCtrEx Storage Block data!");
@@ -133,8 +133,8 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     last_aes_ctr_ex_bucket->aes_ctr_ex_storage_entries[last_aes_ctr_ex_bucket->entry_count + 1].offset = update_nca_fs_ctx->section_size;
     last_aes_ctr_ex_bucket->aes_ctr_ex_storage_entries[last_aes_ctr_ex_bucket->entry_count + 1].generation = 0;
     
-    /* Initialize update NCA RomFS context */
-    /* Don't verify offsets from Patch RomFS sections, because they reflect the full, patched RomFS image */
+    /* Initialize update NCA RomFS context. */
+    /* Don't verify offsets from Patch RomFS sections, because they reflect the full, patched RomFS image. */
     out->patch_romfs_ctx.nca_fs_ctx = update_nca_fs_ctx;
     out->patch_romfs_ctx.offset = out->offset = update_nca_fs_ctx->header->hash_info.hierarchical_integrity.hash_target_layer_info.offset;
     out->patch_romfs_ctx.size = out->size = update_nca_fs_ctx->header->hash_info.hierarchical_integrity.hash_target_layer_info.size;
@@ -152,7 +152,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         goto exit;
     }
     
-    /* Read directory entries table */
+    /* Read directory entries table. */
     u64 dir_table_offset = out->patch_romfs_ctx.header.cur_format.directory_entry_offset;
     out->patch_romfs_ctx.dir_table_size = out->patch_romfs_ctx.header.cur_format.directory_entry_size;
     
@@ -175,7 +175,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         goto exit;
     }
     
-    /* Read file entries table */
+    /* Read file entries table. */
     u64 file_table_offset = out->patch_romfs_ctx.header.cur_format.file_entry_offset;
     out->patch_romfs_ctx.file_table_size = out->patch_romfs_ctx.header.cur_format.file_entry_size;
     
@@ -198,7 +198,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         goto exit;
     }
     
-    /* Get file data body offset */
+    /* Get file data body offset. */
     out->patch_romfs_ctx.body_offset = out->body_offset = out->patch_romfs_ctx.header.cur_format.body_offset;
     
     success = true;
@@ -217,7 +217,7 @@ bool bktrReadFileSystemData(BktrContext *ctx, void *out, u64 read_size, u64 offs
         return false;
     }
     
-    /* Read filesystem data */
+    /* Read filesystem data. */
     if (!bktrPhysicalSectionRead(ctx, out, read_size, ctx->offset + offset))
     {
         LOGFILE("Failed to read Patch RomFS data!");
@@ -236,7 +236,7 @@ bool bktrReadFileEntryData(BktrContext *ctx, RomFileSystemFileEntry *file_entry,
         return false;
     }
     
-    /* Read entry data */
+    /* Read entry data. */
     if (!bktrReadFileSystemData(ctx, out, read_size, ctx->body_offset + file_entry->offset + offset))
     {
         LOGFILE("Failed to read Patch RomFS file entry data!");
@@ -295,8 +295,8 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
     BktrIndirectStorageEntry *indirect_entry = NULL, *next_indirect_entry = NULL;
     u64 section_offset = 0, indirect_block_size = 0;
     
-    /* Determine which FS section to use + the actual offset to start reading from */
-    /* There's no better way to do this than making all BKTR addresses virtual */
+    /* Determine which FS section to use + the actual offset to start reading from. */
+    /* There's no better way to do this than making all BKTR addresses virtual. */
     indirect_entry = bktrGetIndirectStorageEntry(ctx->indirect_block, offset);
     if (!indirect_entry)
     {
@@ -307,12 +307,12 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
     next_indirect_entry = (indirect_entry + 1);
     section_offset = (offset - indirect_entry->virtual_offset + indirect_entry->physical_offset);
     
-    /* Perform read operation */
+    /* Perform read operation. */
     bool success = false;
     if ((offset + read_size) <= next_indirect_entry->virtual_offset)
     {
-        /* Read only within the current indirect storage entry */
-        /* If we're not dealing with an indirect storage entry with a patch index, just retrieve the data from the base RomFS */
+        /* Read only within the current indirect storage entry. */
+        /* If we're not dealing with an indirect storage entry with a patch index, just retrieve the data from the base RomFS. */
         if (indirect_entry->indirect_storage_index == BktrIndirectStorageIndex_Patch)
         {
             success = bktrAesCtrExStorageRead(ctx, out, read_size, offset, section_offset);
@@ -322,7 +322,7 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
             if (!success) LOGFILE("Failed to read 0x%lX bytes block from base RomFS at offset 0x%lX!", read_size, section_offset);
         }
     } else {
-        /* Handle reads that span multiple indirect storage entries */
+        /* Handle reads that span multiple indirect storage entries. */
         indirect_block_size = (next_indirect_entry->virtual_offset - offset);
         
         success = (bktrPhysicalSectionRead(ctx, out, indirect_block_size, offset) && \
@@ -352,14 +352,14 @@ static bool bktrAesCtrExStorageRead(BktrContext *ctx, void *out, u64 read_size, 
     
     next_aes_ctr_ex_entry = (aes_ctr_ex_entry + 1);
     
-    /* Perform read operation */
+    /* Perform read operation. */
     bool success = false;
     if ((section_offset + read_size) <= next_aes_ctr_ex_entry->offset)
     {
-        /* Read only within the current AesCtrEx storage entry */
+        /* Read only within the current AesCtrEx storage entry. */
         success = ncaReadAesCtrExStorageFromBktrSection(ctx->patch_romfs_ctx.nca_fs_ctx, out, read_size, section_offset, aes_ctr_ex_entry->generation);
     } else {
-        /* Handle read that spans multiple AesCtrEx storage entries */
+        /* Handle read that spans multiple AesCtrEx storage entries. */
         u64 aes_ctr_ex_block_size = (next_aes_ctr_ex_entry->offset - section_offset);
         
         success = (bktrPhysicalSectionRead(ctx, out, aes_ctr_ex_block_size, virtual_offset) && \
@@ -398,10 +398,10 @@ static BktrIndirectStorageEntry *bktrGetIndirectStorageEntry(BktrIndirectStorage
         return NULL;
     }
     
-    /* Check for edge case, short circuit */
+    /* Check for edge case, short circuit. */
     if (bucket->entry_count == 1) return &(bucket->indirect_storage_entries[0]);
     
-    /* Binary search */
+    /* Binary search. */
     u32 low = 0, high = (bucket->entry_count - 1);
     while(low <= high)
     {
@@ -409,10 +409,10 @@ static BktrIndirectStorageEntry *bktrGetIndirectStorageEntry(BktrIndirectStorage
         
         if (bucket->indirect_storage_entries[mid].virtual_offset > offset)
         {
-            /* Too high */
+            /* Too high. */
             high = (mid - 1);
         } else {
-            /* Check for success */
+            /* Check for success. */
             if (mid == (bucket->entry_count - 1) || bucket->indirect_storage_entries[mid + 1].virtual_offset > offset) return &(bucket->indirect_storage_entries[mid]);
             low = (mid + 1);
         }
@@ -460,10 +460,10 @@ static BktrAesCtrExStorageEntry *bktrGetAesCtrExStorageEntry(BktrAesCtrExStorage
         return NULL;
     }
     
-    /* Check for edge case, short circuit */
+    /* Check for edge case, short circuit. */
     if (bucket->entry_count == 1) return &(bucket->aes_ctr_ex_storage_entries[0]);
     
-    /* Binary search */
+    /* Binary search. */
     u32 low = 0, high = (bucket->entry_count - 1);
     while(low <= high)
     {
@@ -471,10 +471,10 @@ static BktrAesCtrExStorageEntry *bktrGetAesCtrExStorageEntry(BktrAesCtrExStorage
         
         if (bucket->aes_ctr_ex_storage_entries[mid].offset > offset)
         {
-            /* Too high */
+            /* Too high. */
             high = (mid - 1);
         } else {
-            /* Check for success */
+            /* Check for success. */
             if (mid == (bucket->entry_count - 1) || bucket->aes_ctr_ex_storage_entries[mid + 1].offset > offset) return &(bucket->aes_ctr_ex_storage_entries[mid]);
             low = (mid + 1);
         }

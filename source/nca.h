@@ -257,6 +257,7 @@ typedef enum {
 } NcaFsSectionType;
 
 typedef struct {
+    bool enabled;
     void *nca_ctx;                      ///< NcaContext. Used to perform NCA reads.
     u8 section_num;
     u64 section_offset;
@@ -284,6 +285,7 @@ typedef struct {
     u8 key_generation;                  ///< NcaKeyGenerationOld / NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                       ///< Retrieved from NcmContentInfo.
     bool rights_id_available;
+    bool titlekey_retrieved;
     u8 titlekey[0x10];
     bool dirty_header;
     NcaHeader header;
@@ -316,6 +318,7 @@ void ncaFreeCryptoBuffer(void);
 /// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' argument must point to a valid NcmContentStorage instance, previously opened using the same NcmStorageId value.
 /// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
 /// If the NCA holds a populated Rights ID field, and if the Ticket element pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
+/// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with plaintext FS section blocks won't be possible (e.g. ncaReadFsSection()).
 bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().

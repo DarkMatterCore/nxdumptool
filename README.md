@@ -3,16 +3,37 @@ todo:
     
     hfs0: filelist generation methods
     
-    nca: continue reencryption methods
+    tik: automatically dump tickets to the SD card?
+    tik: use dumped tickets when the original ones can't be found in the ES savefile?
+    
+    nca: function to write encrypted nca headers / nca fs headers (don't forget nca0 please)
     
     pfs0: filelist generation methods
     pfs0: full header aligned to 0x20 (nsp)
-    pfs0: patch writing function
+    pfs0: function to write patches
     
     romfs: filelist generation methods
-    romfs: patch writing function
+    romfs: function to write patches
     
-    bktr: filelist generation methods
+    bktr: filelist generation methods (wrappers for romfs functions)
+    
+    
+    
+    
+    
+    char content_info_path[FS_MAX_PATH] = {0};
+    sprintf(content_info_path, "sdmc:/%016lX.bin", xml_program_info.title_id);
+    
+    FILE *content_info = fopen(content_info_path, "wb");
+    if (content_info)
+    {
+        fwrite(titleContentInfos, 1, titleContentInfoCnt * sizeof(NcmContentInfo), content_info);
+        fclose(content_info);
+    }
+    
+    
+    
+    
     
     Result txIsFat32(bool *mode) {
         Result rc = serviceDispatch(&g_tx, 137);

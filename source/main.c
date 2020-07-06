@@ -464,8 +464,7 @@ int main(int argc, char *argv[])
         struct tm *ts = localtime(&now);
         size_t size = shared_data.data_written;
         
-        hidScanInput();
-        btn_cancel_cur_state = (utilsHidKeysAllHeld() & KEY_B);
+        btn_cancel_cur_state = (utilsReadInput(UtilsInputType_Down) & KEY_B);
         
         if (btn_cancel_cur_state && btn_cancel_cur_state != btn_cancel_prev_state)
         {
@@ -534,7 +533,7 @@ int main(int argc, char *argv[])
     
 out2:
     consolePrint("press any button to exit\n");
-    utilsWaitForButtonPress();
+    utilsWaitForButtonPress(KEY_NONE);
     
     lrExit();
     

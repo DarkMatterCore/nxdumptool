@@ -24,12 +24,12 @@
 #ifndef __FSPUSB_H__
 #define __FSPUSB_H__
 
-/// This is basically FATFS' file system types.
+/// This is basically FatFs' file system types.
 typedef enum {
     FspUsbFileSystemType_FAT12 = 1,
     FspUsbFileSystemType_FAT16 = 2,
     FspUsbFileSystemType_FAT32 = 3,
-    FspUsbFileSystemType_exFAT = 4,
+    FspUsbFileSystemType_exFAT = 4
 } FspUsbFileSystemType;
 
 /// Initialize fsp-usb.

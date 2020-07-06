@@ -51,7 +51,7 @@ typedef enum {
 typedef struct save_ctx_t save_ctx_t;
 
 typedef struct {
-    u32 magic; /* DISF */
+    u32 magic; /* "DISF". */
     u32 version;
     u8 hash[0x20];
     u64 file_map_entry_offset;
@@ -111,7 +111,7 @@ typedef struct {
 #pragma pack(pop)
 
 typedef struct {
-    u32 magic; /* DPFS */
+    u32 magic; /* "DPFS". */
     u32 version;
     duplex_info_t layers[3];
 } duplex_header_t;
@@ -124,7 +124,7 @@ typedef struct {
 } journal_map_header_t;
 
 typedef struct {
-    u32 magic; /* JNGL */
+    u32 magic; /* "JNGL". */
     u32 version;
     u64 total_size;
     u64 journal_size;
@@ -132,7 +132,7 @@ typedef struct {
 } journal_header_t;
 
 typedef struct {
-    u32 magic; /* SAVE */
+    u32 magic; /* "SAVE". */
     u32 version;
     u64 block_count;
     u64 block_size;
@@ -151,7 +151,7 @@ typedef struct {
 } fat_header_t;
 
 typedef struct {
-    u32 magic; /* RMAP */
+    u32 magic; /* "RMAP". */
     u32 version;
     u32 map_entry_count;
     u32 map_segment_count;

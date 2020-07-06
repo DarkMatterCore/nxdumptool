@@ -1,7 +1,9 @@
 /*
- * es.h
+ * crc32_fast.h
  *
- * Copyright (c) 2018-2020, Addubz.
+ * Based on the standard CRC32 checksum fast public domain implementation for
+ * little-endian architecures by Björn Samuelsson (http://home.thep.lu.se/~bjorn/crc).
+ *
  * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
@@ -21,15 +23,11 @@
 
 #pragma once
 
-#ifndef __ES_H__
-#define __ES_H__
+#ifndef __CRC32_FAST_H__
+#define __CRC32_FAST_H__
 
-Result esInitialize(void);
-void esExit(void);
+/// Calculates a CRC32 checksum over the provided input buffer. Checksum calculation in chunks is supported.
+/// CRC32 calculation state is both read from and saved to 'crc', which should be zero during the first call to this function.
+void crc32FastCalculate(const void *data, u64 n_bytes, u32 *crc);
 
-Result esCountCommonTicket(s32 *out_count);
-Result esCountPersonalizedTicket(s32 *out_count);
-Result esListCommonTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count);
-Result esListPersonalizedTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count);
-
-#endif /* __ES_H__ */
+#endif /* __CRC32_FAST_H__ */

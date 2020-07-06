@@ -3,7 +3,7 @@
  *
  * Heavily based in usb_comms from libnx.
  *
- * Copyright (c) 2018-2020, Switchbrew, libnx contributors.
+ * Copyright (c) 2018-2020, Switchbrew and libnx contributors.
  * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
@@ -26,7 +26,7 @@
 #ifndef __USB_H__
 #define __USB_H__
 
-#define USB_TRANSFER_BUFFER_SIZE    0x800000    /* 8 MiB */
+#define USB_TRANSFER_BUFFER_SIZE    0x800000    /* 8 MiB. */
 
 /// Initializes the USB interface, input and output endpoints and allocates an internal transfer buffer.
 bool usbInitialize(void);

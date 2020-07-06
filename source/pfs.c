@@ -23,20 +23,22 @@
 
 bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
-    if (!out || !nca_fs_ctx || nca_fs_ctx->section_type != NcaFsSectionType_PartitionFs || !nca_fs_ctx->header || nca_fs_ctx->header->fs_type != NcaFsType_PartitionFs || \
+    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type != NcaFsSectionType_PartitionFs || !nca_fs_ctx->header || nca_fs_ctx->header->fs_type != NcaFsType_PartitionFs || \
         nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalSha256)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
-    /* Fill context */
+    u32 magic = 0;
+    PartitionFileSystemHeader pfs_header = {0};
+    PartitionFileSystemEntry *main_npdm_entry = NULL;
+    
+    /* Clear output partition FS context. */
+    memset(out, 0, sizeof(PartitionFileSystemContext));
+    
+    /* Fill context. */
     out->nca_fs_ctx = nca_fs_ctx;
-    out->offset = 0;
-    out->size = 0;
-    out->is_exefs = false;
-    out->header_size = 0;
-    out->header = NULL;
     
     if (!ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header->hash_info.hierarchical_sha256), nca_fs_ctx->section_size))
     {
@@ -47,11 +49,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     out->offset = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.offset;
     out->size = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.size;
     
-    /* Read partial PFS header */
-    u32 magic = 0;
-    PartitionFileSystemHeader pfs_header = {0};
-    PartitionFileSystemEntry *main_npdm_entry = NULL;
-    
+    /* Read partial PFS header. */
     if (!ncaReadFsSection(nca_fs_ctx, &pfs_header, sizeof(PartitionFileSystemHeader), out->offset))
     {
         LOGFILE("Failed to read partial partition FS header!");
@@ -61,7 +59,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     magic = __builtin_bswap32(pfs_header.magic);
     if (magic != PFS0_MAGIC)
     {
-        LOGFILE("Invalid partition FS magic word! (0x%08X)", magic);
+        LOGFILE("Invalid partition FS magic word! (0x%08X).", magic);
         return false;
     }
     
@@ -71,10 +69,10 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
         return false;
     }
     
-    /* Calculate full partition FS header size */
+    /* Calculate full partition FS header size. */
     out->header_size = (sizeof(PartitionFileSystemHeader) + (pfs_header.entry_count * sizeof(PartitionFileSystemEntry)) + pfs_header.name_table_size);
     
-    /* Allocate memory for the full partition FS header */
+    /* Allocate memory for the full partition FS header. */
     out->header = calloc(out->header_size, sizeof(u8));
     if (!out->header)
     {
@@ -82,7 +80,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
         return false;
     }
     
-    /* Read full partition FS header */
+    /* Read full partition FS header. */
     if (!ncaReadFsSection(nca_fs_ctx, out->header, out->header_size, out->offset))
     {
         LOGFILE("Failed to read full partition FS header!");
@@ -90,7 +88,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
         return false;
     }
     
-    /* Check if we're dealing with an ExeFS section */
+    /* Check if we're dealing with an ExeFS section. */
     if ((main_npdm_entry = pfsGetEntryByName(out, "main.npdm")) != NULL && pfsReadEntryData(out, main_npdm_entry, &magic, sizeof(u32), 0) && \
         __builtin_bswap32(magic) == NPDM_META_MAGIC) out->is_exefs = true;
     
@@ -105,7 +103,7 @@ bool pfsReadPartitionData(PartitionFileSystemContext *ctx, void *out, u64 read_s
         return false;
     }
     
-    /* Read partition data */
+    /* Read partition data. */
     if (!ncaReadFsSection(ctx->nca_fs_ctx, out, read_size, ctx->offset + offset))
     {
         LOGFILE("Failed to read partition FS data!");
@@ -124,12 +122,73 @@ bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry 
         return false;
     }
     
-    /* Read entry data */
+    /* Read entry data. */
     if (!pfsReadPartitionData(ctx, out, read_size, ctx->header_size + fs_entry->offset + offset))
     {
         LOGFILE("Failed to read partition FS entry data!");
         return false;
     }
+    
+    return true;
+}
+
+bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u32 *out_idx)
+{
+    size_t name_len = 0;
+    PartitionFileSystemEntry *fs_entry = NULL;
+    u32 entry_count = pfsGetEntryCount(ctx);
+    char *name_table = pfsGetNameTable(ctx);
+    
+    if (!entry_count || !name_table || !name || !(name_len = strlen(name)) || !out_idx)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    for(u32 i = 0; i < entry_count; i++)
+    {
+        if (!(fs_entry = pfsGetEntryByIndex(ctx, i)))
+        {
+            LOGFILE("Failed to retrieve partition FS entry #%u!", i);
+            return false;
+        }
+        
+        if (strlen(name_table + fs_entry->name_offset) == name_len && !strcmp(name_table + fs_entry->name_offset, name))
+        {
+            *out_idx = i;
+            return true;
+        }
+    }
+    
+    LOGFILE("Unable to find partition FS entry \"%s\"!", name);
+    
+    return false;
+}
+
+bool pfsGetTotalDataSize(PartitionFileSystemContext *ctx, u64 *out_size)
+{
+    u64 total_size = 0;
+    u32 entry_count = pfsGetEntryCount(ctx);
+    PartitionFileSystemEntry *fs_entry = NULL;
+    
+    if (!entry_count || !out_size)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    for(u32 i = 0; i < entry_count; i++)
+    {
+        if (!(fs_entry = pfsGetEntryByIndex(ctx, i)))
+        {
+            LOGFILE("Failed to retrieve partition FS entry #%u!", i);
+            return false;
+        }
+        
+        total_size += fs_entry->size;
+    }
+    
+    *out_size = total_size;
     
     return true;
 }

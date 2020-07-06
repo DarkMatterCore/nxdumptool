@@ -60,7 +60,7 @@ Result fspusbGetDriveLabel(s32 interface_id, char *out_label, size_t out_label_s
 }
 
 Result fspusbSetDriveLabel(s32 interface_id, const char *label) {
-    char inputlbl[11 + 1] = {0}; // Actual limit is 11 characters
+    char inputlbl[11 + 1] = {0}; /* Actual limit is 11 characters. */
     strncpy(inputlbl, label, 11);
     return serviceDispatchIn(&g_fspusbSrv, 3, interface_id,
         .buffer_attrs = { SfBufferAttr_In | SfBufferAttr_HipcMapAlias },

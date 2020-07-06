@@ -109,38 +109,38 @@ bool rsa2048GenerateSha256BasedCustomAcidSignature(void *dst, const void *src, s
     mbedtls_pk_context pk;
     mbedtls_pk_init(&pk);
     
-    /* Calculate SHA-256 checksum for the input data */
+    /* Calculate SHA-256 checksum for the input data. */
     sha256CalculateHash(hash, src, size);
     
-    /* Seed the random number generator */
+    /* Seed the random number generator. */
     ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const u8*)pers, strlen(pers));
     if (ret != 0)
     {
-        LOGFILE("mbedtls_ctr_drbg_seed failed! (%d)", ret);
+        LOGFILE("mbedtls_ctr_drbg_seed failed! (%d).", ret);
         goto out;
     }
     
-    /* Parse private key */
+    /* Parse private key. */
     ret = mbedtls_pk_parse_key(&pk, (u8*)g_rsa2048CustomAcidPrivateKey, strlen(g_rsa2048CustomAcidPrivateKey) + 1, NULL, 0);
     if (ret != 0)
     {
-        LOGFILE("mbedtls_pk_parse_key failed! (%d)", ret);
+        LOGFILE("mbedtls_pk_parse_key failed! (%d).", ret);
         goto out;
     }
     
-    /* Set RSA padding */
+    /* Set RSA padding. */
     mbedtls_rsa_set_padding(mbedtls_pk_rsa(pk), MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
     
-    /* Calculate hash signature */
+    /* Calculate hash signature. */
     ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, hash, 0, buf, &olen, mbedtls_ctr_drbg_random, &ctr_drbg);
     if (ret != 0)
     {
-        LOGFILE("mbedtls_pk_sign failed! (%d)", ret);
+        LOGFILE("mbedtls_pk_sign failed! (%d).", ret);
         goto out;
     }
     
-    /* Copy signature to output buffer */
-    memcpy(dst, buf, RSA2048_SIGNATURE_SIZE);
+    /* Copy signature to output buffer. */
+    memcpy(dst, buf, RSA2048_SIG_SIZE);
     success = true;
     
 out:
@@ -165,12 +165,12 @@ bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signatu
     }
     
     Result rc = 0;
-    u8 m_buf[RSA2048_SIGNATURE_SIZE] = {0};
+    u8 m_buf[RSA2048_SIG_SIZE] = {0};
     
     rc = splUserExpMod(signature, modulus, exponent, exponent_size, m_buf);
     if (R_FAILED(rc))
     {
-        LOGFILE("splUserExpMod failed! (0x%08X)", rc);
+        LOGFILE("splUserExpMod failed! (0x%08X).", rc);
         return false;
     }
     
@@ -180,13 +180,13 @@ bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signatu
         return false;
     }
     
-    /* Unmask salt */
-    rsaCalculateMgf1AndXor(m_buf + 1, 0x20, m_buf + 0x21, RSA2048_SIGNATURE_SIZE - 0x21);
+    /* Unmask salt. */
+    rsaCalculateMgf1AndXor(m_buf + 1, 0x20, m_buf + 0x21, RSA2048_SIG_SIZE - 0x21);
     
-    /* Unmask DB */
-    rsaCalculateMgf1AndXor(m_buf + 0x21, RSA2048_SIGNATURE_SIZE - 0x21, m_buf + 1, 0x20);
+    /* Unmask DB. */
+    rsaCalculateMgf1AndXor(m_buf + 0x21, RSA2048_SIG_SIZE - 0x21, m_buf + 1, 0x20);
     
-    /* Validate label hash */
+    /* Validate label hash. */
     const u8 *db = (const u8*)(m_buf + 0x21);
     if (memcmp(db, label_hash, SHA256_HASH_SIZE) != 0)
     {
@@ -194,9 +194,9 @@ bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signatu
         return false;
     }
     
-    /* Validate message prefix */
+    /* Validate message prefix. */
     const u8 *data = (const u8*)(db + 0x20);
-    size_t remaining = (RSA2048_SIGNATURE_SIZE - 0x41);
+    size_t remaining = (RSA2048_SIG_SIZE - 0x41);
     
     while(!*data && remaining)
     {
@@ -221,7 +221,7 @@ bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signatu
 
 static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_src, size_t h_src_size)
 {
-    if (!data || !data_size || !h_src || !h_src_size || h_src_size > RSA2048_SIGNATURE_SIZE)
+    if (!data || !data_size || !h_src || !h_src_size || h_src_size > RSA2048_SIG_SIZE)
     {
         LOGFILE("Invalid parameters!");
         return;
@@ -232,7 +232,7 @@ static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_s
     u8 *data_u8 = (u8*)data;
     
     u8 mgf1_buf[SHA256_HASH_SIZE] = {0};
-    u8 h_buf[RSA2048_SIGNATURE_SIZE] = {0};
+    u8 h_buf[RSA2048_SIG_SIZE] = {0};
     
     memcpy(h_buf, h_src, h_src_size);
     

@@ -325,8 +325,8 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
         return false;
     }
     
-    /* Copy string to avoid problems with strtok */
-    /* The "Root-" parent from the issuer string is skipped */
+    /* Copy string to avoid problems with strtok(). */
+    /* The "Root-" parent from the issuer string is skipped. */
     snprintf(issuer_copy, 0x40, "%s", issuer + 5);
     
     char *pch = strtok(issuer_copy, "-");
@@ -355,8 +355,8 @@ static u32 certGetCertificateCountInSignatureIssuer(const char *issuer)
     u32 count = 0;
     char issuer_copy[0x40] = {0};
     
-    /* Copy string to avoid problems with strtok */
-    /* The "Root-" parent from the issuer string is skipped */
+    /* Copy string to avoid problems with strtok(). */
+    /* The "Root-" parent from the issuer string is skipped. */
     snprintf(issuer_copy, 0x40, issuer + 5);
     
     char *pch = strtok(issuer_copy, "-");

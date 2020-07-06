@@ -269,14 +269,14 @@ static u32 save_remap_read(remap_storage_ctx_t *ctx, void *buffer, u64 offset, s
                 fr = f_lseek(ctx->file, ctx->base_storage_offset + entry->physical_offset + entry_pos);
                 if (fr || f_tell(ctx->file) != (ctx->base_storage_offset + entry->physical_offset + entry_pos))
                 {
-                    LOGFILE("Failed to seek to offset 0x%lX in savefile! (%u)", ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
+                    LOGFILE("Failed to seek to offset 0x%lX in savefile! (%u).", ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
                     return out_pos;
                 }
                 
                 fr = f_read(ctx->file, (u8*)buffer + out_pos, bytes_to_read, &br);
                 if (fr || br != bytes_to_read)
                 {
-                    LOGFILE("Failed to read %u bytes chunk from offset 0x%lX in savefile! (%u)", bytes_to_read, ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
+                    LOGFILE("Failed to read %u bytes chunk from offset 0x%lX in savefile! (%u).", bytes_to_read, ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
                     return (out_pos + br);
                 }
                 
@@ -470,14 +470,14 @@ static size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u6
             fr = f_lseek(ctx->save_ctx->file, ctx->hash_offset + offset);
             if (fr || f_tell(ctx->save_ctx->file) != (ctx->hash_offset + offset))
             {
-                LOGFILE("Failed to seek to offset 0x%lX in savefile! (%u)", ctx->hash_offset + offset, fr);
+                LOGFILE("Failed to seek to offset 0x%lX in savefile! (%u).", ctx->hash_offset + offset, fr);
                 return (size_t)br;
             }
             
             fr = f_read(ctx->save_ctx->file, buffer, count, &br);
             if (fr || br != count)
             {
-                LOGFILE("Failed to read IVFC level data from offset 0x%lX in savefile! (%u)", ctx->hash_offset + offset, fr);
+                LOGFILE("Failed to read IVFC level data from offset 0x%lX in savefile! (%u).", ctx->hash_offset + offset, fr);
                 return (size_t)br;
             }
             
@@ -815,7 +815,8 @@ u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void
         {
             u32 bytes_to_request = (chunk_remaining < sector_size ? chunk_remaining : sector_size);
             
-            if (!save_ivfc_storage_read(&ctx->base_storage->integrity_storages[3], (u8*)buffer + out_pos + i, physical_offset + i, bytes_to_request, ctx->base_storage->data_level->save_ctx->tool_ctx.action & ACTION_VERIFY))
+            if (!save_ivfc_storage_read(&ctx->base_storage->integrity_storages[3], (u8*)buffer + out_pos + i, physical_offset + i, bytes_to_request, \
+                                        ctx->base_storage->data_level->save_ctx->tool_ctx.action & ACTION_VERIFY))
             {
                 LOGFILE("Failed to read %u bytes chunk from IVFC storage at physical offset 0x%lX!", bytes_to_request, physical_offset + i);
                 return (out_pos + bytes_to_read - chunk_remaining);
@@ -1232,7 +1233,7 @@ bool save_process(save_ctx_t *ctx)
     fr = f_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
     if (fr || br != sizeof(ctx->header))
     {
-        LOGFILE("Failed to read savefile header A! (%u)", fr);
+        LOGFILE("Failed to read savefile header A! (%u).", fr);
         return success;
     }
     
@@ -1242,14 +1243,14 @@ bool save_process(save_ctx_t *ctx)
         fr = f_lseek(ctx->file, 0x4000);
         if (fr || f_tell(ctx->file) != 0x4000)
         {
-            LOGFILE("Failed to seek to offset 0x4000 in savefile! (%u)", fr);
+            LOGFILE("Failed to seek to offset 0x4000 in savefile! (%u).", fr);
             return success;
         }
         
         fr = f_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
         if (fr || br != sizeof(ctx->header))
         {
-            LOGFILE("Failed to read savefile header B! (%u)", fr);
+            LOGFILE("Failed to read savefile header B! (%u).", fr);
             return success;
         }
         
@@ -1281,7 +1282,7 @@ bool save_process(save_ctx_t *ctx)
     fr = f_lseek(ctx->file, ctx->header.layout.file_map_entry_offset);
     if (fr || f_tell(ctx->file) != ctx->header.layout.file_map_entry_offset)
     {
-        LOGFILE("Failed to seek to file map entry offset 0x%lX in savefile! (%u)", ctx->header.layout.file_map_entry_offset, fr);
+        LOGFILE("Failed to seek to file map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.file_map_entry_offset, fr);
         return success;
     }
     
@@ -1290,7 +1291,7 @@ bool save_process(save_ctx_t *ctx)
         fr = f_read(ctx->file, &ctx->data_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
         {
-            LOGFILE("Failed to read data remap storage entry #%u! (%u)", i, fr);
+            LOGFILE("Failed to read data remap storage entry #%u! (%u).", i, fr);
             goto out;
         }
         
@@ -1418,7 +1419,7 @@ bool save_process(save_ctx_t *ctx)
     fr = f_lseek(ctx->file, ctx->header.layout.meta_map_entry_offset);
     if (fr || f_tell(ctx->file) != ctx->header.layout.meta_map_entry_offset)
     {
-        LOGFILE("Failed to seek to meta map entry offset 0x%lX in savefile! (%u)", ctx->header.layout.meta_map_entry_offset, fr);
+        LOGFILE("Failed to seek to meta map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.meta_map_entry_offset, fr);
         goto out;
     }
     
@@ -1427,7 +1428,7 @@ bool save_process(save_ctx_t *ctx)
         fr = f_read(ctx->file, &ctx->meta_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
         {
-            LOGFILE("Failed to read meta remap storage entry #%u! (%u)", i, fr);
+            LOGFILE("Failed to read meta remap storage entry #%u! (%u).", i, fr);
             goto out;
         }
         
@@ -1512,20 +1513,20 @@ bool save_process(save_ctx_t *ctx)
         
         if (!save_ivfc_storage_init(&ctx->fat_ivfc_storage, ctx->header.layout.fat_ivfc_master_hash_a, &ctx->header.fat_ivfc_header))
         {
-            LOGFILE("Failed to initialize FAT storage (IVFC)!");
+            LOGFILE("Failed to initialize FAT storage! (IVFC).");
             goto out;
         }
         
         ctx->fat_storage = calloc(1, ctx->fat_ivfc_storage._length);
         if (!ctx->fat_storage)
         {
-            LOGFILE("Failed to allocate memory for FAT storage (IVFC)!");
+            LOGFILE("Failed to allocate memory for FAT storage! (IVFC).");
             goto out;
         }
         
         if (save_remap_read(&ctx->meta_remap_storage, ctx->fat_storage, ctx->header.fat_ivfc_header.level_headers[ctx->header.fat_ivfc_header.num_levels - 2].logical_offset, ctx->fat_ivfc_storage._length) != ctx->fat_ivfc_storage._length)
         {
-            LOGFILE("Failed to read FAT storage from meta remap storage (IVFC)!");
+            LOGFILE("Failed to read FAT storage from meta remap storage! (IVFC).");
             goto out;
         }
     }
@@ -1739,7 +1740,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     fr = f_open(save_fd, path, FA_READ | FA_OPEN_EXISTING);
     if (fr != FR_OK)
     {
-        LOGFILE("Failed to open \"%s\" savefile from BIS System partition! (%u)", path, fr);
+        LOGFILE("Failed to open \"%s\" savefile from BIS System partition! (%u).", path, fr);
         goto out;
     }
     

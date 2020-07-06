@@ -51,12 +51,12 @@
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
-
+#define KEY_NONE                        0
 
 
 
 /// Need to move this to npdm.c/h eventually.
-#define NPDM_META_MAGIC                 0x4D455441  /* "META" */
+#define NPDM_META_MAGIC                 0x4D455441  /* "META". */
 
 
 
@@ -64,7 +64,10 @@
 
 
 
-
+typedef enum {
+    UtilsInputType_Down = 0,
+    UtilsInputType_Held = 1
+} UtilsInputType;
 
 typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,
@@ -76,10 +79,8 @@ typedef enum {
 bool utilsInitializeResources(void);
 void utilsCloseResources(void);
 
-u64 utilsHidKeysAllDown(void);
-u64 utilsHidKeysAllHeld(void);
-
-void utilsWaitForButtonPress(void);
+u64 utilsReadInput(u8 input_type);
+void utilsWaitForButtonPress(u64 flag);
 
 void utilsWriteLogMessage(const char *func_name, const char *fmt, ...);
 

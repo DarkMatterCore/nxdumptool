@@ -24,9 +24,11 @@
 #include "keys.h"
 #include "nca.h"
 
-#define KEYS_FILE_PATH      "sdmc:/switch/prod.keys"    /* Location used by Lockpick_RCM */
+#define KEYS_FILE_PATH      "sdmc:/switch/prod.keys"    /* Location used by Lockpick_RCM. */
 
 #define FS_SYSMODULE_TID    (u64)0x0100000000000000
+#define BOOT_SYSMODULE_TID  (u64)0x0100000000000005
+#define SPL_SYSMODULE_TID   (u64)0x0100000000000028
 
 #define SEGMENT_TEXT        BIT(0)
 #define SEGMENT_RODATA      BIT(1)
@@ -55,18 +57,18 @@ typedef struct {
 } keysMemoryInfo;
 
 typedef struct {
-    ///< Needed to decrypt the NCA header using AES-128-XTS
+    ///< Needed to decrypt the NCA header using AES-128-XTS.
     u8 header_kek_source[0x10];                 ///< Seed for header kek. Retrieved from the .rodata section in the FS sysmodule.
     u8 header_key_source[0x20];                 ///< Seed for NCA header key. Retrieved from the .data section in the FS sysmodule.
     u8 header_kek[0x10];                        ///< NCA header kek. Generated from header_kek_source.
     u8 header_key[0x20];                        ///< NCA header key. Generated from header_kek and header_key_source.
     
-    ///< Needed to derive the KAEK used to decrypt the NCA key area
+    ///< Needed to derive the KAEK used to decrypt the NCA key area.
     u8 key_area_key_application_source[0x10];   ///< Seed for kaek 0. Retrieved from the .rodata section in the FS sysmodule.
     u8 key_area_key_ocean_source[0x10];         ///< Seed for kaek 1. Retrieved from the .rodata section in the FS sysmodule.
     u8 key_area_key_system_source[0x10];        ///< Seed for kaek 2. Retrieved from the .rodata section in the FS sysmodule.
     
-    ///< Needed to decrypt the titlekey block from a ticker. Retrieved from the Lockpick_RCM keys file.
+    ///< Needed to decrypt the titlekey block from a ticket. Retrieved from the Lockpick_RCM keys file.
     u8 eticket_rsa_kek[0x10];                   ///< eTicket RSA kek.
     u8 titlekeks[0x20][0x10];                   ///< Titlekey encryption keys.
     
@@ -158,11 +160,11 @@ bool keysLoadNcaKeyset(void)
     bool ret = g_ncaKeysetLoaded;
     if (ret) goto exit;
     
-    if (!(envIsSyscallHinted(0x60) &&   /* svcDebugActiveProcess */
-          envIsSyscallHinted(0x63) &&   /* svcGetDebugEvent */
-          envIsSyscallHinted(0x65) &&   /* svcGetProcessList */
-          envIsSyscallHinted(0x69) &&   /* svcQueryDebugProcessMemory */
-          envIsSyscallHinted(0x6A)))    /* svcReadDebugProcessMemory */
+    if (!(envIsSyscallHinted(0x60) &&   /* svcDebugActiveProcess. */
+          envIsSyscallHinted(0x63) &&   /* svcGetDebugEvent. */
+          envIsSyscallHinted(0x65) &&   /* svcGetProcessList. */
+          envIsSyscallHinted(0x69) &&   /* svcQueryDebugProcessMemory. */
+          envIsSyscallHinted(0x6A)))    /* svcReadDebugProcessMemory. */
     {
         LOGFILE("Debug SVC permissions not available!");
         goto exit;
@@ -217,7 +219,7 @@ const u8 *keysGetKeyAreaEncryptionKeySource(u8 kaek_index)
             ptr = (const u8*)(g_ncaKeyset.key_area_key_system_source);
             break;
         default:
-            LOGFILE("Invalid KAEK index! (0x%02X)", kaek_index);
+            LOGFILE("Invalid KAEK index! (0x%02X).", kaek_index);
             break;
     }
     
@@ -233,7 +235,7 @@ const u8 *keysGetTitlekek(u8 key_generation)
 {
     if (key_generation > 0x20)
     {
-        LOGFILE("Invalid key generation value! (0x%02X)", key_generation);
+        LOGFILE("Invalid key generation value! (0x%02X).", key_generation);
         return NULL;
     }
     
@@ -246,13 +248,13 @@ const u8 *keysGetKeyAreaEncryptionKey(u8 key_generation, u8 kaek_index)
 {
     if (key_generation > 0x20)
     {
-        LOGFILE("Invalid key generation value! (0x%02X)", key_generation);
+        LOGFILE("Invalid key generation value! (0x%02X).", key_generation);
         return NULL;
     }
     
     if (kaek_index > NcaKeyAreaEncryptionKeyIndex_System)
     {
-        LOGFILE("Invalid KAEK index! (0x%02X)", kaek_index);
+        LOGFILE("Invalid KAEK index! (0x%02X).", kaek_index);
         return NULL;
     }
     
@@ -273,33 +275,33 @@ static bool keysRetrieveDebugHandleFromProcessByProgramId(Handle *out, u64 progr
     u64 d[8] = {0};
     Handle debug_handle = INVALID_HANDLE;
     
-    if (program_id > 0x0100000000000005 && program_id != 0x0100000000000028)
+    if (program_id > BOOT_SYSMODULE_TID && program_id != SPL_SYSMODULE_TID)
     {
-        /* If not a kernel process, get PID from pm:dmnt */
+        /* If not a kernel process, get PID from pm:dmnt. */
         u64 pid;
         
         rc = pmdmntGetProcessId(&pid, program_id);
         if (R_FAILED(rc))
         {
-            LOGFILE("pmdmntGetProcessId failed! (0x%08X)", rc);
+            LOGFILE("pmdmntGetProcessId failed! (0x%08X).", rc);
             return false;
         }
         
         rc = svcDebugActiveProcess(&debug_handle, pid);
         if (R_FAILED(rc))
         {
-            LOGFILE("svcDebugActiveProcess failed! (0x%08X)", rc);
+            LOGFILE("svcDebugActiveProcess failed! (0x%08X).", rc);
             return false;
         }
         
         rc = svcGetDebugEvent((u8*)&d, debug_handle);
         if (R_FAILED(rc))
         {
-            LOGFILE("svcGetDebugEvent failed! (0x%08X)", rc);
+            LOGFILE("svcGetDebugEvent failed! (0x%08X).", rc);
             return false;
         }
     } else {
-        /* Otherwise, query svc for the process list */
+        /* Otherwise, query svc for the process list. */
         u32 i, num_processes = 0;
         
         u64 *pids = calloc(300, sizeof(u64));
@@ -312,7 +314,7 @@ static bool keysRetrieveDebugHandleFromProcessByProgramId(Handle *out, u64 progr
         rc = svcGetProcessList((s32*)&num_processes, pids, 300);
         if (R_FAILED(rc))
         {
-            LOGFILE("svcGetProcessList failed! (0x%08X)", rc);
+            LOGFILE("svcGetProcessList failed! (0x%08X).", rc);
             return false;
         }
         
@@ -332,7 +334,7 @@ static bool keysRetrieveDebugHandleFromProcessByProgramId(Handle *out, u64 progr
         
         if (i == (num_processes - 1))
         {
-            LOGFILE("Kernel process lookup failed! (0x%08X)", rc);
+            LOGFILE("Kernel process lookup failed! (0x%08X).", rc);
             return false;
         }
     }
@@ -368,13 +370,13 @@ static bool keysRetrieveProcessMemory(keysMemoryLocation *location)
         return false;
     }
     
-    /* Locate "real" .text segment as Atmosphere emuMMC has two */
+    /* Locate "real" .text segment as Atmosphere emuMMC has two. */
     for(;;)
     {
         rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
         if (R_FAILED(rc))
         {
-            LOGFILE("svcQueryDebugProcessMemory failed! (0x%08X)", rc);
+            LOGFILE("svcQueryDebugProcessMemory failed! (0x%08X).", rc);
             success = false;
             goto out;
         }
@@ -392,15 +394,15 @@ static bool keysRetrieveProcessMemory(keysMemoryLocation *location)
         rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
         if (R_FAILED(rc))
         {
-            LOGFILE("svcQueryDebugProcessMemory failed! (0x%08X)", rc);
+            LOGFILE("svcQueryDebugProcessMemory failed! (0x%08X).", rc);
             success = false;
             break;
         }
         
-        /* Code to allow for bitmasking segments */
+        /* Code to allow for bitmasking segments. */
         if ((mem_info.perm & Perm_R) && ((mem_info.type & 0xFF) >= MemType_CodeStatic) && ((mem_info.type & 0xFF) < MemType_Heap) && ((segment <<= 1) >> 1 & location->mask) > 0)
         {
-            /* If location->data == NULL, realloc will essentially act as a malloc */
+            /* If location->data == NULL, realloc will essentially act as a malloc. */
             tmp = realloc(location->data, location->data_size + mem_info.size);
             if (!tmp)
             {
@@ -415,7 +417,7 @@ static bool keysRetrieveProcessMemory(keysMemoryLocation *location)
             rc = svcReadDebugProcessMemory(location->data + location->data_size, debug_handle, mem_info.addr, mem_info.size);
             if (R_FAILED(rc))
             {
-                LOGFILE("svcReadDebugProcessMemory failed! (0x%08X)", rc);
+                LOGFILE("svcReadDebugProcessMemory failed! (0x%08X).", rc);
                 success = false;
                 break;
             }
@@ -472,7 +474,7 @@ static bool keysRetrieveKeysFromProcessMemory(keysMemoryInfo *info)
             goto out;
         }
         
-        /* Hash every key length-sized byte chunk in the process memory buffer until a match is found */
+        /* Hash every key length-sized byte chunk in the process memory buffer until a match is found. */
         for(u64 j = 0; j < info->location.data_size; j++)
         {
             if ((info->location.data_size - j) < info->keys[i].size) break;
@@ -481,7 +483,7 @@ static bool keysRetrieveKeysFromProcessMemory(keysMemoryInfo *info)
             
             if (!memcmp(tmp_hash, info->keys[i].hash, SHA256_HASH_SIZE))
             {
-                /* Jackpot */
+                /* Jackpot. */
                 memcpy(info->keys[i].dst, info->location.data + j, info->keys[i].size);
                 found = true;
                 break;
@@ -510,21 +512,21 @@ static bool keysDeriveNcaHeaderKey(void)
     rc = splCryptoGenerateAesKek(g_ncaKeyset.header_kek_source, 0, 0, g_ncaKeyset.header_kek);
     if (R_FAILED(rc))
     {
-        LOGFILE("splCryptoGenerateAesKek(header_kek_source) failed! (0x%08X)", rc);
+        LOGFILE("splCryptoGenerateAesKek(header_kek_source) failed! (0x%08X).", rc);
         return false;
     }
     
     rc = splCryptoGenerateAesKey(g_ncaKeyset.header_kek, g_ncaKeyset.header_key_source + 0x00, g_ncaKeyset.header_key + 0x00);
     if (R_FAILED(rc))
     {
-        LOGFILE("splCryptoGenerateAesKey(header_key_source + 0x00) failed! (0x%08X)", rc);
+        LOGFILE("splCryptoGenerateAesKey(header_key_source + 0x00) failed! (0x%08X).", rc);
         return false;
     }
     
     rc = splCryptoGenerateAesKey(g_ncaKeyset.header_kek, g_ncaKeyset.header_key_source + 0x10, g_ncaKeyset.header_key + 0x10);
     if (R_FAILED(rc))
     {
-        LOGFILE("splCryptoGenerateAesKey(header_key_source + 0x10) failed! (0x%08X)", rc);
+        LOGFILE("splCryptoGenerateAesKey(header_key_source + 0x10) failed! (0x%08X).", rc);
         return false;
     }
     
@@ -634,12 +636,10 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **key, char **value)
         if (*p != '_' && (*p < '0' && *p > '9') && (*p < 'a' && *p > 'z')) return -1;
     }
     
-    /* Bail if the final ++p put us at the end of string */
+    /* Bail if the final ++p put us at the end of string. */
     if (*p == '\0') return -1;
     
-    /* We should be at the end of key now and either whitespace or [,=]
-     * follows.
-     */
+    /* We should be at the end of key now and either whitespace or [,=] follows. */
     if (*p == '=' || *p == ',')
     {
         *p++ = '\0';
@@ -656,7 +656,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **key, char **value)
     SKIP_SPACE(p);
     v = p;
     
-    /* Skip trailing whitespace */
+    /* Skip trailing whitespace. */
     for (p = end - 1; *p == '\t' || *p == ' '; --p);
     
     *(p + 1) = '\0';
@@ -731,9 +731,9 @@ static bool keysReadKeysFromFile(void)
     while(true)
     {
         ret = keysGetKeyAndValueFromFile(keys_file, &key, &value);
-        if (ret == 1 || ret == -2) break; /* Break from the while loop if EOF is reached or if an I/O error occurs */
+        if (ret == 1 || ret == -2) break; /* Break from the while loop if EOF is reached or if an I/O error occurs. */
         
-        /* Ignore malformed lines */
+        /* Ignore malformed lines. */
         if (ret != 0 || !key || !value) continue;
         
         if (!common_eticket_rsa_kek && !personalized_eticket_rsa_kek && !strcasecmp(key, "eticket_rsa_kek"))
@@ -744,8 +744,8 @@ static bool keysReadKeysFromFile(void)
         } else
         if (!personalized_eticket_rsa_kek && !strcasecmp(key, "eticket_rsa_kek_personalized"))
         {
-            /* Use the personalized eTicket RSA kek if available */
-            /* This only appears on consoles that use the new PRODINFO key generation scheme */
+            /* Use the personalized eTicket RSA kek if available. */
+            /* This only appears on consoles that use the new PRODINFO key generation scheme. */
             if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek)))) break;
             personalized_eticket_rsa_kek = true;
             key_count++;
@@ -793,7 +793,7 @@ static bool keysReadKeysFromFile(void)
     
     if (parse_fail || !key_count)
     {
-        if (!key_count) LOGFILE("Unable to parse necessary keys from \"%s\"! (keys file empty?)", KEYS_FILE_PATH);
+        if (!key_count) LOGFILE("Unable to parse necessary keys from \"%s\"! (keys file empty?).", KEYS_FILE_PATH);
         return false;
     }
     

@@ -113,50 +113,42 @@ bool bktrIsFileEntryUpdated(BktrContext *ctx, RomFileSystemFileEntry *file_entry
 
 NX_INLINE RomFileSystemDirectoryEntry *bktrGetDirectoryEntryByOffset(BktrContext *ctx, u32 dir_entry_offset)
 {
-    if (!ctx) return NULL;
-    return romfsGetDirectoryEntryByOffset(&(ctx->patch_romfs_ctx), dir_entry_offset);
+    return (ctx != NULL ? romfsGetDirectoryEntryByOffset(&(ctx->patch_romfs_ctx), dir_entry_offset) : NULL);
 }
 
 NX_INLINE RomFileSystemFileEntry *bktrGetFileEntryByOffset(BktrContext *ctx, u32 file_entry_offset)
 {
-    if (!ctx) return NULL;
-    return romfsGetFileEntryByOffset(&(ctx->patch_romfs_ctx), file_entry_offset);
+    return (ctx != NULL ? romfsGetFileEntryByOffset(&(ctx->patch_romfs_ctx), file_entry_offset) : NULL);
 }
 
 NX_INLINE bool bktrGetTotalDataSize(BktrContext *ctx, u64 *out_size)
 {
-    if (!ctx) return false;
-    return romfsGetTotalDataSize(&(ctx->patch_romfs_ctx), out_size);
+    return (ctx != NULL ? romfsGetTotalDataSize(&(ctx->patch_romfs_ctx), out_size) : false);
 }
 
 NX_INLINE bool bktrGetDirectoryDataSize(BktrContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size)
 {
-    if (!ctx) return false;
-    return romfsGetDirectoryDataSize(&(ctx->patch_romfs_ctx), dir_entry, out_size);
+    return (ctx != NULL ? romfsGetDirectoryDataSize(&(ctx->patch_romfs_ctx), dir_entry, out_size) : false);
 }
 
 NX_INLINE RomFileSystemDirectoryEntry *bktrGetDirectoryEntryByPath(BktrContext *ctx, const char *path)
 {
-    if (!ctx) return NULL;
-    return romfsGetDirectoryEntryByPath(&(ctx->patch_romfs_ctx), path);
+    return (ctx != NULL ? romfsGetDirectoryEntryByPath(&(ctx->patch_romfs_ctx), path) : NULL);
 }
 
 NX_INLINE RomFileSystemFileEntry *bktrGetFileEntryByPath(BktrContext *ctx, const char *path)
 {
-    if (!ctx) return NULL;
-    return romfsGetFileEntryByPath(&(ctx->patch_romfs_ctx), path);
+    return (ctx != NULL ? romfsGetFileEntryByPath(&(ctx->patch_romfs_ctx), path) : NULL);
 }
 
 NX_INLINE bool bktrGeneratePathFromDirectoryEntry(BktrContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type)
 {
-    if (!ctx) return false;
-    return romfsGeneratePathFromDirectoryEntry(&(ctx->patch_romfs_ctx), dir_entry, out_path, out_path_size, illegal_char_replace_type);
+    return (ctx != NULL ? romfsGeneratePathFromDirectoryEntry(&(ctx->patch_romfs_ctx), dir_entry, out_path, out_path_size, illegal_char_replace_type) : false);
 }
 
 NX_INLINE bool bktrGeneratePathFromFileEntry(BktrContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type)
 {
-    if (!ctx) return false;
-    return romfsGeneratePathFromFileEntry(&(ctx->patch_romfs_ctx), file_entry, out_path, out_path_size, illegal_char_replace_type);
+    return (ctx != NULL ? romfsGeneratePathFromFileEntry(&(ctx->patch_romfs_ctx), file_entry, out_path, out_path_size, illegal_char_replace_type) : false);
 }
 
 #endif /* __BKTR_H__ */
