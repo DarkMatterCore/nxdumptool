@@ -1,6 +1,7 @@
 /*
  * bktr.c
  *
+ * Copyright (c) 2018-2020, SciresM.
  * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
@@ -36,11 +37,11 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
 {
     NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
     
-    if (!out || !base_nca_fs_ctx || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || !base_nca_fs_ctx->header || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
-        base_nca_fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || !update_nca_fs_ctx || !update_nca_fs_ctx->header || !(update_nca_ctx = (NcaContext*)update_nca_fs_ctx->nca_ctx) || \
-        update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || update_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx || \
-        base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || \
-        __builtin_bswap32(update_nca_fs_ctx->header->patch_info.indirect_header.magic) != NCA_BKTR_MAGIC || \
+    if (!out || !base_nca_fs_ctx || !base_nca_fs_ctx->enabled || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || !base_nca_fs_ctx->header || \
+        base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || base_nca_fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || !update_nca_fs_ctx || !update_nca_fs_ctx->enabled || \
+        !update_nca_fs_ctx->header || !(update_nca_ctx = (NcaContext*)update_nca_fs_ctx->nca_ctx) || update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || \
+        update_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx || base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || \
+        base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || __builtin_bswap32(update_nca_fs_ctx->header->patch_info.indirect_header.magic) != NCA_BKTR_MAGIC || \
         __builtin_bswap32(update_nca_fs_ctx->header->patch_info.aes_ctr_ex_header.magic) != NCA_BKTR_MAGIC || \
         (update_nca_fs_ctx->header->patch_info.indirect_offset + update_nca_fs_ctx->header->patch_info.indirect_size) != update_nca_fs_ctx->header->patch_info.aes_ctr_ex_offset || \
         (update_nca_fs_ctx->header->patch_info.aes_ctr_ex_offset + update_nca_fs_ctx->header->patch_info.aes_ctr_ex_size) != update_nca_fs_ctx->section_size)
@@ -139,7 +140,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     out->patch_romfs_ctx.offset = out->offset = update_nca_fs_ctx->header->hash_info.hierarchical_integrity.hash_target_layer_info.offset;
     out->patch_romfs_ctx.size = out->size = update_nca_fs_ctx->header->hash_info.hierarchical_integrity.hash_target_layer_info.size;
     
-    /* Read update NCA RomFS header */
+    /* Read update NCA RomFS header. */
     if (!bktrPhysicalSectionRead(out, &(out->patch_romfs_ctx.header), sizeof(RomFileSystemHeader), out->patch_romfs_ctx.offset))
     {
         LOGFILE("Failed to read update NCA RomFS header!");
