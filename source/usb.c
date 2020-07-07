@@ -376,7 +376,7 @@ static int usbDetectionThreadFunc(void *arg)
         rwlockWriteLock(&g_usbDeviceLock);
         rwlockWriteLock(&(g_usbDeviceInterface.lock));
         
-        /* Retrieve current USB connection status */
+        /* Retrieve current USB connection status. */
         /* Only proceed if we're dealing with a status change. */
         g_usbHostAvailable = usbIsHostAvailable();
         g_usbSessionStarted = false;
@@ -384,7 +384,7 @@ static int usbDetectionThreadFunc(void *arg)
         
         /* Start a USB session if we're connected to a host device and if the status change event was triggered. */
         /* This will essentially hang this thread and all other threads that call USB-related functions until a session is established. */
-        if (g_usbHostAvailable && idx == 1) g_usbSessionStarted = usbStartSession();
+        if (g_usbHostAvailable && idx == 0) g_usbSessionStarted = usbStartSession();
         
         rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
         rwlockWriteUnlock(&g_usbDeviceLock);
