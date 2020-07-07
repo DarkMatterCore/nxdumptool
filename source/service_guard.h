@@ -24,8 +24,6 @@
 #ifndef __SERVICE_GUARD_H__
 #define __SERVICE_GUARD_H__
 
-#include <switch.h>
-
 typedef struct ServiceGuard {
     Mutex mutex;
     u32 refCount;
