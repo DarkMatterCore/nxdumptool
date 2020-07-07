@@ -42,7 +42,7 @@ static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
 static bool ncaDecryptHeader(NcaContext *ctx);
 static bool ncaDecryptKeyArea(NcaContext *ctx);
 
-NX_INLINE bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx);
+NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx);
 NX_INLINE u8 ncaGetKeyGenerationValue(NcaContext *ctx);
 NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx);
 
@@ -88,7 +88,7 @@ bool ncaEncryptKeyArea(NcaContext *ctx)
     Aes128Context key_area_ctx = {0};
     
     /* Check if we're dealing with a NCA0 with a plain text key area. */
-    if (ctx->format_version == NcaVersion_Nca0 && !ncaCheckIfVersion0KeyAreaIsEncrypted(ctx))
+    if (ncaIsVersion0KeyAreaEncrypted(ctx))
     {
         memcpy(ctx->header.encrypted_keys, ctx->decrypted_keys, 0x40);
         return true;
@@ -806,7 +806,7 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
     u8 key_count, tmp_kek[0x10] = {0};
     
     /* Check if we're dealing with a NCA0 with a plain text key area. */
-    if (ctx->format_version == NcaVersion_Nca0 && !ncaCheckIfVersion0KeyAreaIsEncrypted(ctx))
+    if (ncaIsVersion0KeyAreaEncrypted(ctx))
     {
         memcpy(ctx->decrypted_keys, ctx->header.encrypted_keys, 0x40);
         return true;
@@ -841,7 +841,7 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
     return true;
 }
 
-NX_INLINE bool ncaCheckIfVersion0KeyAreaIsEncrypted(NcaContext *ctx)
+NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx)
 {
     if (!ctx || ctx->format_version != NcaVersion_Nca0) return false;
     
