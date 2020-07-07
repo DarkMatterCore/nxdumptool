@@ -542,7 +542,7 @@ static bool tikRetrieveEticketDeviceKey(void)
     
     /* Decrypt eTicket RSA key. */
     eticket_devkey = (tikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
-    aes128CtrContextCreate(&eticket_aes_ctx, keysGetEticketRsaKek(), eticket_devkey->ctr);
+    aes128CtrContextCreate(&eticket_aes_ctx, keysGetEticketRsaKek(g_eTicketDeviceKey.generation > 0), eticket_devkey->ctr);
     aes128CtrCrypt(&eticket_aes_ctx, &(eticket_devkey->exponent), &(eticket_devkey->exponent), sizeof(tikEticketDeviceKeyData) - 0x10);
     
     /* Public exponent value must be 0x10001. */

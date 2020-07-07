@@ -69,7 +69,8 @@ typedef struct {
     u8 key_area_key_system_source[0x10];        ///< Seed for kaek 2. Retrieved from the .rodata section in the FS sysmodule.
     
     ///< Needed to decrypt the titlekey block from a ticket. Retrieved from the Lockpick_RCM keys file.
-    u8 eticket_rsa_kek[0x10];                   ///< eTicket RSA kek.
+    u8 eticket_rsa_kek[0x10];                   ///< eTicket RSA kek (generic).
+    u8 eticket_rsa_kek_personalized[0x10];      ///< eTicket RSA kek (console-specific).
     u8 titlekeks[0x20][0x10];                   ///< Titlekey encryption keys.
     
     ///< Needed to reencrypt the NCA key area for tik-less NSP dumps. Retrieved from the Lockpick_RCM keys file.
@@ -226,9 +227,9 @@ const u8 *keysGetKeyAreaEncryptionKeySource(u8 kaek_index)
     return ptr;
 }
 
-const u8 *keysGetEticketRsaKek(void)
+const u8 *keysGetEticketRsaKek(bool personalized)
 {
-    return (const u8*)(g_ncaKeyset.eticket_rsa_kek);
+    return (const u8*)(personalized ? g_ncaKeyset.eticket_rsa_kek_personalized : g_ncaKeyset.eticket_rsa_kek);
 }
 
 const u8 *keysGetTitlekek(u8 key_generation)
@@ -719,7 +720,7 @@ static bool keysReadKeysFromFile(void)
     FILE *keys_file = NULL;
     char *key = NULL, *value = NULL;
     char test_name[0x40] = {0};
-    bool parse_fail = false, common_eticket_rsa_kek = false, personalized_eticket_rsa_kek = false;
+    bool parse_fail = false;
     
     keys_file = fopen(KEYS_FILE_PATH, "rb");
     if (!keys_file)
@@ -736,24 +737,21 @@ static bool keysReadKeysFromFile(void)
         /* Ignore malformed lines. */
         if (ret != 0 || !key || !value) continue;
         
-        if (!common_eticket_rsa_kek && !personalized_eticket_rsa_kek && !strcasecmp(key, "eticket_rsa_kek"))
+        if (strlen(key) == 15 && !strcasecmp(key, "eticket_rsa_kek"))
         {
             if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek)))) break;
-            common_eticket_rsa_kek = true;
             key_count++;
         } else
-        if (!personalized_eticket_rsa_kek && !strcasecmp(key, "eticket_rsa_kek_personalized"))
+        if (strlen(key) == 28 && !strcasecmp(key, "eticket_rsa_kek_personalized"))
         {
-            /* Use the personalized eTicket RSA kek if available. */
             /* This only appears on consoles that use the new PRODINFO key generation scheme. */
-            if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek)))) break;
-            personalized_eticket_rsa_kek = true;
+            if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek_personalized, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek_personalized)))) break;
             key_count++;
         } else {
             for(u32 i = 0; i < 0x20; i++)
             {
                 snprintf(test_name, sizeof(test_name), "titlekek_%02x", i);
-                if (!strcasecmp(key, test_name))
+                if (strlen(key) == 11 && !strcasecmp(key, test_name))
                 {
                     if ((parse_fail = !keysParseHexKey(g_ncaKeyset.titlekeks[i], key, value, sizeof(g_ncaKeyset.titlekeks[i])))) break;
                     key_count++;
@@ -761,7 +759,7 @@ static bool keysReadKeysFromFile(void)
                 }
                 
                 snprintf(test_name, sizeof(test_name), "key_area_key_application_%02x", i);
-                if (!strcasecmp(key, test_name))
+                if (strlen(key) == 27 && !strcasecmp(key, test_name))
                 {
                     if ((parse_fail = !keysParseHexKey(g_ncaKeyset.key_area_keys[i][0], key, value, sizeof(g_ncaKeyset.key_area_keys[i][0])))) break;
                     key_count++;
@@ -769,7 +767,7 @@ static bool keysReadKeysFromFile(void)
                 }
                 
                 snprintf(test_name, sizeof(test_name), "key_area_key_ocean_%02x", i);
-                if (!strcasecmp(key, test_name))
+                if (strlen(key) == 21 && !strcasecmp(key, test_name))
                 {
                     if ((parse_fail = !keysParseHexKey(g_ncaKeyset.key_area_keys[i][1], key, value, sizeof(g_ncaKeyset.key_area_keys[i][1])))) break;
                     key_count++;
@@ -777,7 +775,7 @@ static bool keysReadKeysFromFile(void)
                 }
                 
                 snprintf(test_name, sizeof(test_name), "key_area_key_system_%02x", i);
-                if (!strcasecmp(key, test_name))
+                if (strlen(key) == 22 && !strcasecmp(key, test_name))
                 {
                     if ((parse_fail = !keysParseHexKey(g_ncaKeyset.key_area_keys[i][2], key, value, sizeof(g_ncaKeyset.key_area_keys[i][2])))) break;
                     key_count++;

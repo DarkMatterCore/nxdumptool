@@ -29,7 +29,7 @@ bool keysLoadNcaKeyset(void);
 
 const u8 *keysGetNcaHeaderKey(void);
 const u8 *keysGetKeyAreaEncryptionKeySource(u8 kaek_index);
-const u8 *keysGetEticketRsaKek(void);
+const u8 *keysGetEticketRsaKek(bool personalized);
 const u8 *keysGetTitlekek(u8 key_generation);
 const u8 *keysGetKeyAreaEncryptionKey(u8 key_generation, u8 kaek_index);
 
