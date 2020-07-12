@@ -223,7 +223,7 @@ void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
     time_t now = time(NULL);
     struct tm *ts = localtime(&now);
     
-    fprintf(logfile, "%d/%d/%d %d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
+    fprintf(logfile, "%d-%02d-%02d %02d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
     
     va_start(args, fmt);
     vfprintf(logfile, fmt, args);

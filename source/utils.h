@@ -34,6 +34,7 @@
 #include <ctype.h>
 #include <time.h>
 #include <threads.h>
+#include <stdatomic.h>
 #include <switch.h>
 
 #define APP_BASE_PATH                   "sdmc:/switch/nxdumptool/"

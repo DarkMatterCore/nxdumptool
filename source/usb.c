@@ -29,7 +29,7 @@
 #define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT". */
 
 #define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB. */
-#define USB_TRANSFER_TIMEOUT        5                   /* 5 seconds. */
+#define USB_TRANSFER_TIMEOUT        1                   /* 1 second. */
 
 /* Type definitions. */
 
@@ -101,8 +101,9 @@ static bool g_usbDeviceInterfaceInitialized = false;
 
 static Event *g_usbStateChangeEvent = NULL;
 static thrd_t g_usbDetectionThread;
-static UEvent g_usbDetectionThreadExitEvent = {0}, g_usbTimeoutEvent = {0};
+static UEvent g_usbTimeoutEvent = {0};
 static bool g_usbDetectionThreadCreated = false, g_usbHostAvailable = false, g_usbSessionStarted = false;
+static atomic_bool g_usbDetectionThreadExit = false;
 
 static u8 *g_usbTransferBuffer = NULL;
 static u64 g_usbTransferRemainingSize = 0;
@@ -166,9 +167,6 @@ bool usbInitialize(void)
         goto exit;
     }
     
-    /* Create usermode exit event. */
-    ueventCreate(&g_usbDetectionThreadExitEvent, true);
-    
     /* Create usermode USB timeout event. */
     ueventCreate(&g_usbTimeoutEvent, true);
     
@@ -185,14 +183,16 @@ exit:
 
 void usbExit(void)
 {
-    rwlockWriteLock(&g_usbDeviceLock);
-    
     /* Destroy USB detection thread. */
-    if (g_usbDetectionThreadCreated)
+    if (g_usbDetectionThreadCreated && !atomic_load(&g_usbDetectionThreadExit))
     {
+        atomic_store(&g_usbDetectionThreadExit, true);
         usbDestroyDetectionThread();
         g_usbDetectionThreadCreated = false;
+        atomic_store(&g_usbDetectionThreadExit, false);
     }
+    
+    rwlockWriteLock(&g_usbDeviceLock);
     
     /* Clear USB state change kernel event. */
     g_usbStateChangeEvent = NULL;
@@ -346,9 +346,6 @@ static bool usbCreateDetectionThread(void)
 
 static void usbDestroyDetectionThread(void)
 {
-    /* Signal the exit event to terminate the USB detection thread */
-    ueventSignal(&g_usbDetectionThreadExitEvent);
-    
     /* Wait for the USB detection thread to exit. */
     thrd_join(g_usbDetectionThread, NULL);
 }
@@ -362,16 +359,15 @@ static int usbDetectionThreadFunc(void *arg)
     
     Waiter usb_change_event_waiter = waiterForEvent(g_usbStateChangeEvent);
     Waiter usb_timeout_event_waiter = waiterForUEvent(&g_usbTimeoutEvent);
-    Waiter exit_event_waiter = waiterForUEvent(&g_usbDetectionThreadExitEvent);
     
     while(true)
     {
-        /* Wait until an event is triggered. */
-        rc = waitMulti(&idx, -1, usb_change_event_waiter, usb_timeout_event_waiter, exit_event_waiter);
-        if (R_FAILED(rc)) continue;
+        /* Check if the thread exit flag has been enabled. */
+        if (atomic_load(&g_usbDetectionThreadExit)) break;
         
-        /* Exit event triggered. */
-        if (idx == 2) break;
+        /* Wait until an event is triggered (100 ms). */
+        rc = waitMulti(&idx, (u64)100000000, usb_change_event_waiter, usb_timeout_event_waiter);
+        if (R_FAILED(rc)) continue;
         
         rwlockWriteLock(&g_usbDeviceLock);
         rwlockWriteLock(&(g_usbDeviceInterface.lock));
@@ -384,7 +380,7 @@ static int usbDetectionThreadFunc(void *arg)
         
         /* Start a USB session if we're connected to a host device and if the status change event was triggered. */
         /* This will essentially hang this thread and all other threads that call USB-related functions until a session is established. */
-        if (g_usbHostAvailable && idx == 0) g_usbSessionStarted = usbStartSession();
+        if (g_usbHostAvailable) g_usbSessionStarted = usbStartSession();
         
         rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
         rwlockWriteUnlock(&g_usbDeviceLock);
@@ -1001,6 +997,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
     Result rc = 0;
     UsbDsReportData report_data = {0};
     u32 transferred_size = 0;
+    bool thread_exit = false;
     
     /* Start an USB transfer using the provided endpoint. */
     rc = usbDsEndpoint_PostBufferAsync(endpoint, buf, size, &urb_id);
@@ -1011,10 +1008,31 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
     }
     
     /* Wait for the transfer to finish. */
-    /* If we're starting an USB transfer session, use an infinite timeout value to let the user start the companion app. */
-    u64 timeout = (g_usbSessionStarted ? (USB_TRANSFER_TIMEOUT * (u64)1000000000) : UINT64_MAX);
-    rc = eventWait(&(endpoint->CompletionEvent), timeout);
-    eventClear(&(endpoint->CompletionEvent));
+    if (g_usbSessionStarted)
+    {
+        /* If the USB transfer session has already been started, then use a regular timeout value. */
+        rc = eventWait(&(endpoint->CompletionEvent), USB_TRANSFER_TIMEOUT * (u64)1000000000);
+    } else {
+        /* If we're starting an USB transfer session, wait indefinitely inside a loop to let the user start the companion app. */
+        while(true)
+        {
+            /* Check if the thread exit flag has been enabled. */
+            if (atomic_load(&g_usbDetectionThreadExit))
+            {
+                rc = MAKERESULT(Module_Kernel, KernelError_TimedOut);
+                thread_exit = true;
+                break;
+            }
+            
+            /* Wait for the endpoint completion event (100 ms). */
+            /* Break from this loop if the wait function succeeded, or if we got an result code different than TimedOut. */
+            rc = eventWait(&(endpoint->CompletionEvent), (u64)100000000);
+            if (R_SUCCEEDED(rc) || R_VALUE(rc) != KERNELRESULT(TimedOut)) break;
+        }
+    }
+    
+    /* Clear the endpoint completion event. */
+    if (!thread_exit) eventClear(&(endpoint->CompletionEvent));
     
     if (R_FAILED(rc))
     {
@@ -1029,7 +1047,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         /* This will "reset" the USB connection by making the background thread wait until a new session is established. */
         if (g_usbSessionStarted) ueventSignal(&g_usbTimeoutEvent);
         
-        LOGFILE("eventWait failed! (0x%08X).", rc);
+        if (!thread_exit) LOGFILE("eventWait failed! (0x%08X).", rc);
         return false;
     }
     

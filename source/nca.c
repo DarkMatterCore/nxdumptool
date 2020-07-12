@@ -274,11 +274,14 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
         }
     }
     
-    /* Parse sections */
+    /* Return right away if the NCA uses titlekey crypto and the titlekey couldn't be retrieved. */
+    if (out->rights_id_available && !out->titlekey_retrieved) return true;
+    
+    /* Parse sections. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
-        /* Skip NCA section if it's not enabled in the FS entries, or if the NCA uses titlekey crypto and the titlekey couldn't be retrieved. */
-        if (!out->header.fs_entries[i].enable_entry || (out->rights_id_available && !out->titlekey_retrieved)) continue;
+        /* Skip NCA section if it's not enabled in the FS entries. */
+        if (!out->header.fs_entries[i].enable_entry) continue;
         
         /* Fill section context. */
         out->fs_contexts[i].nca_ctx = out;
