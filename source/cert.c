@@ -57,16 +57,16 @@ bool certRetrieveCertificateByName(Certificate *dst, const char *name)
     if (!dst || !name || !strlen(name))
     {
         LOGFILE("Invalid parameters!");
-        goto exit;
+        goto end;
     }
     
-    if (!certOpenEsCertSaveFile()) goto exit;
+    if (!certOpenEsCertSaveFile()) goto end;
     
     ret = _certRetrieveCertificateByName(dst, name);
     
     certCloseEsCertSaveFile();
     
-exit:
+end:
     mutexUnlock(&g_esCertSaveMutex);
     
     return ret;
@@ -82,16 +82,16 @@ bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const 
     if (!dst || !issuer || !(issuer_len = strlen(issuer)) || issuer_len <= 5 || strcmp(issuer, "Root-") != 0)
     {
         LOGFILE("Invalid parameters!");
-        goto exit;
+        goto end;
     }
     
-    if (!certOpenEsCertSaveFile()) goto exit;
+    if (!certOpenEsCertSaveFile()) goto end;
     
     ret = _certRetrieveCertificateChainBySignatureIssuer(dst, issuer);
     
     certCloseEsCertSaveFile();
     
-exit:
+end:
     mutexUnlock(&g_esCertSaveMutex);
     
     return ret;
@@ -121,13 +121,13 @@ u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *ou
     if (!raw_chain)
     {
         LOGFILE("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", issuer, raw_chain_size);
-        goto out;
+        goto end;
     }
     
     certCopyCertificateChainDataToMemoryBuffer(raw_chain, &chain);
     *out_size = raw_chain_size;
     
-out:
+end:
     certFreeCertificateChain(&chain);
     
     return raw_chain;
@@ -171,13 +171,13 @@ u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, 
     if (!gamecardReadStorage(raw_chain, raw_chain_size, raw_chain_offset))
     {
         LOGFILE("Failed to read \"%s\" data from the inserted gamecard!", raw_chain_filename);
-        goto out;
+        goto end;
     }
     
     *out_size = raw_chain_size;
     success = true;
     
-out:
+end:
     if (!success && raw_chain)
     {
         free(raw_chain);

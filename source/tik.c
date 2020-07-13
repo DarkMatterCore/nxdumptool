@@ -240,20 +240,20 @@ static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRight
     if (!save_get_fat_storage_from_file_entry_by_path(save_ctx, TIK_SAVEFILE_STORAGE_PATH, &fat_storage, &ticket_bin_size))
     {
         LOGFILE("Failed to locate \"%s\" in ES %s ticket system save!", TIK_SAVEFILE_STORAGE_PATH, titlekey_type == TikTitleKeyType_Common ? "common" : "personalized");
-        goto out;
+        goto end;
     }
     
     if (ticket_bin_size < SIGNED_TIK_MIN_SIZE || (ticket_bin_size % SIGNED_TIK_MAX_SIZE) != 0)
     {
         LOGFILE("Invalid size for \"%s\"! (0x%lX).", TIK_SAVEFILE_STORAGE_PATH, ticket_bin_size);
-        goto out;
+        goto end;
     }
     
     ticket_bin_buf = malloc(buf_size);
     if (!ticket_bin_buf)
     {
         LOGFILE("Unable to allocate 0x%lX bytes block for temporary read buffer!", buf_size);
-        goto out;
+        goto end;
     }
     
     while(total_br < ticket_bin_size)
@@ -265,7 +265,7 @@ static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRight
         {
             LOGFILE("Failed to read 0x%lX bytes chunk at offset 0x%lX from \"%s\" in ES %s ticket system save!", buf_size, total_br, TIK_SAVEFILE_STORAGE_PATH, \
                     (titlekey_type == TikTitleKeyType_Common ? "common" : "personalized"));
-            goto out;
+            goto end;
         }
         
         total_br += br;
@@ -289,20 +289,20 @@ static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRight
     if (!found_tik)
     {
         LOGFILE("Unable to find a matching ticket entry for the provided Rights ID!");
-        goto out;
+        goto end;
     }
     
     if (!tikGetTicketTypeAndSize(ticket_bin_buf + i, SIGNED_TIK_MAX_SIZE, &(dst->type), &(dst->size)))
     {
         LOGFILE("Unable to determine ticket type and size!");
-        goto out;
+        goto end;
     }
     
     memcpy(dst->data, ticket_bin_buf + i, dst->size);
     
     success = true;
     
-out:
+end:
     if (ticket_bin_buf) free(ticket_bin_buf);
     
     if (save_ctx) save_close_savefile(save_ctx);

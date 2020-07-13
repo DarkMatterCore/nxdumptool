@@ -333,6 +333,8 @@ int main(int argc, char *argv[])
     shared_data.data_written = 0;
     romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
     
+    goto out2;
+    
     consolePrint("waiting for usb connection... ");
     
     time_t start = time(NULL);
@@ -449,6 +451,26 @@ int main(int argc, char *argv[])
 out2:
     consolePrint("press any button to exit\n");
     utilsWaitForButtonPress(KEY_NONE);
+    
+    
+    
+    
+    if (gamecardIsReady())
+    {
+        GameCardKeyArea key_area = {0};
+        if (gamecardGetKeyArea(&key_area))
+        {
+            FILE *kafd = fopen("sdmc:/gc_key_area.bin", "wb");
+            if (kafd)
+            {
+                fwrite(&key_area, 1, sizeof(GameCardKeyArea), kafd);
+                fclose(kafd);
+            }
+        }
+    }
+    
+    
+    
     
     lrExit();
     

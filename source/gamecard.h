@@ -30,9 +30,25 @@
 
 #define GAMECARD_MEDIA_UNIT_SIZE        0x200
 
+#define GAMECARD_UPDATE_TID             (u64)0x0100000000000816
+
 #define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Root ? "root" : ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : \
                                         ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : \
                                         ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : "unknown")))))
+
+typedef struct {
+    union {
+        u8 key_source[0x10];
+        struct {
+            u64 package_id;     ///< Matches package_id from GameCardHeader.
+            u64 padding;        ///< Just zeroes.
+        };
+    };
+    u8 encrypted_titlekey[0x10];
+    u8 mac[0x10];
+    u8 nonce[0xC];
+    u8 reserved[0x1C4];
+} GameCardKeyArea;
 
 typedef enum {
     GameCardKekIndex_Version0      = 0,
@@ -153,11 +169,12 @@ bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
 
 /// Miscellaneous functions.
 
+bool gamecardGetKeyArea(GameCardKeyArea *out);
 bool gamecardGetHeader(GameCardHeader *out);
+bool gamecardGetCertificate(FsGameCardCertificate *out);
 bool gamecardGetTotalSize(u64 *out);
 bool gamecardGetTrimmedSize(u64 *out);
 bool gamecardGetRomCapacity(u64 *out); ///< Not the same as gamecardGetTotalSize().
-bool gamecardGetCertificate(FsGameCardCertificate *out);
 bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
 
 /// Retrieves the entry count from a hash FS partition.

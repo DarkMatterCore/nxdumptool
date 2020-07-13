@@ -22,51 +22,37 @@
 
 #include "utils.h"
 #include "keys.h"
+#include "mem.h"
 #include "nca.h"
 
 #define KEYS_FILE_PATH      "sdmc:/switch/prod.keys"    /* Location used by Lockpick_RCM. */
 
-#define FS_SYSMODULE_TID    (u64)0x0100000000000000
-#define BOOT_SYSMODULE_TID  (u64)0x0100000000000005
-#define SPL_SYSMODULE_TID   (u64)0x0100000000000028
-
-#define SEGMENT_TEXT        BIT(0)
-#define SEGMENT_RODATA      BIT(1)
-#define SEGMENT_DATA        BIT(2)
-
 /* Type definitions. */
-
-typedef struct {
-    u64 program_id;
-    u8 mask;
-    u8 *data;
-    u64 data_size;
-} keysMemoryLocation;
 
 typedef struct {
     char name[64];
     u8 hash[SHA256_HASH_SIZE];
     u64 size;
     void *dst;
-} keysMemoryKey;
+} KeysMemoryKey;
 
 typedef struct {
-    keysMemoryLocation location;
+    MemoryLocation location;
     u32 key_count;
-    keysMemoryKey keys[];
-} keysMemoryInfo;
+    KeysMemoryKey keys[];
+} KeysMemoryInfo;
 
 typedef struct {
     ///< Needed to decrypt the NCA header using AES-128-XTS.
-    u8 header_kek_source[0x10];                 ///< Seed for header kek. Retrieved from the .rodata section in the FS sysmodule.
-    u8 header_key_source[0x20];                 ///< Seed for NCA header key. Retrieved from the .data section in the FS sysmodule.
+    u8 header_kek_source[0x10];                 ///< Seed for header kek. Retrieved from the .rodata segment in the FS sysmodule.
+    u8 header_key_source[0x20];                 ///< Seed for NCA header key. Retrieved from the .data segment in the FS sysmodule.
     u8 header_kek[0x10];                        ///< NCA header kek. Generated from header_kek_source.
     u8 header_key[0x20];                        ///< NCA header key. Generated from header_kek and header_key_source.
     
     ///< Needed to derive the KAEK used to decrypt the NCA key area.
-    u8 key_area_key_application_source[0x10];   ///< Seed for kaek 0. Retrieved from the .rodata section in the FS sysmodule.
-    u8 key_area_key_ocean_source[0x10];         ///< Seed for kaek 1. Retrieved from the .rodata section in the FS sysmodule.
-    u8 key_area_key_system_source[0x10];        ///< Seed for kaek 2. Retrieved from the .rodata section in the FS sysmodule.
+    u8 key_area_key_application_source[0x10];   ///< Seed for kaek 0. Retrieved from the .rodata segment in the FS sysmodule.
+    u8 key_area_key_ocean_source[0x10];         ///< Seed for kaek 1. Retrieved from the .rodata segment in the FS sysmodule.
+    u8 key_area_key_system_source[0x10];        ///< Seed for kaek 2. Retrieved from the .rodata segment in the FS sysmodule.
     
     ///< Needed to decrypt the titlekey block from a ticket. Retrieved from the Lockpick_RCM keys file.
     u8 eticket_rsa_kek[0x10];                   ///< eTicket RSA kek (generic).
@@ -83,10 +69,10 @@ static keysNcaKeyset g_ncaKeyset = {0};
 static bool g_ncaKeysetLoaded = false;
 static Mutex g_ncaKeysetMutex = 0;
 
-static keysMemoryInfo g_fsRodataMemoryInfo = {
+static KeysMemoryInfo g_fsRodataMemoryInfo = {
     .location = {
         .program_id = FS_SYSMODULE_TID,
-        .mask = SEGMENT_RODATA,
+        .mask = MemoryProgramSegmentType_Rodata,
         .data = NULL,
         .data_size = 0
     },
@@ -123,10 +109,10 @@ static keysMemoryInfo g_fsRodataMemoryInfo = {
     }
 };
 
-static keysMemoryInfo g_fsDataMemoryInfo = {
+static KeysMemoryInfo g_fsDataMemoryInfo = {
     .location = {
         .program_id = FS_SYSMODULE_TID,
-        .mask = SEGMENT_DATA,
+        .mask = MemoryProgramSegmentType_Data,
         .data = NULL,
         .data_size = 0
     },
@@ -144,10 +130,7 @@ static keysMemoryInfo g_fsDataMemoryInfo = {
 
 /* Function prototypes. */
 
-static bool keysRetrieveDebugHandleFromProcessByProgramId(Handle *out, u64 program_id);
-static bool keysRetrieveProcessMemory(keysMemoryLocation *location);
-static void keysFreeProcessMemory(keysMemoryLocation *location);
-static bool keysRetrieveKeysFromProcessMemory(keysMemoryInfo *info);
+static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info);
 static bool keysDeriveNcaHeaderKey(void);
 static int keysGetKeyAndValueFromFile(FILE *f, char **key, char **value);
 static char keysConvertHexCharToBinary(char c);
@@ -159,7 +142,7 @@ bool keysLoadNcaKeyset(void)
     mutexLock(&g_ncaKeysetMutex);
     
     bool ret = g_ncaKeysetLoaded;
-    if (ret) goto exit;
+    if (ret) goto end;
     
     if (!(envIsSyscallHinted(0x60) &&   /* svcDebugActiveProcess. */
           envIsSyscallHinted(0x63) &&   /* svcGetDebugEvent. */
@@ -168,32 +151,32 @@ bool keysLoadNcaKeyset(void)
           envIsSyscallHinted(0x6A)))    /* svcReadDebugProcessMemory. */
     {
         LOGFILE("Debug SVC permissions not available!");
-        goto exit;
+        goto end;
     }
     
-    if (!keysRetrieveKeysFromProcessMemory(&g_fsRodataMemoryInfo))
+    if (!keysRetrieveKeysFromProgramMemory(&g_fsRodataMemoryInfo))
     {
-        LOGFILE("Unable to retrieve keys from FS .rodata section!");
-        goto exit;
+        LOGFILE("Unable to retrieve keys from FS .rodata segment!");
+        goto end;
     }
     
-    if (!keysRetrieveKeysFromProcessMemory(&g_fsDataMemoryInfo))
+    if (!keysRetrieveKeysFromProgramMemory(&g_fsDataMemoryInfo))
     {
-        LOGFILE("Unable to retrieve keys from FS .data section!");
-        goto exit;
+        LOGFILE("Unable to retrieve keys from FS .data segment!");
+        goto end;
     }
     
     if (!keysDeriveNcaHeaderKey())
     {
         LOGFILE("Unable to derive NCA header key!");
-        goto exit;
+        goto end;
     }
     
-    if (!keysReadKeysFromFile()) goto exit;
+    if (!keysReadKeysFromFile()) goto end;
     
     ret = g_ncaKeysetLoaded = true;
     
-exit:
+end:
     mutexUnlock(&g_ncaKeysetMutex);
     
     return ret;
@@ -264,190 +247,7 @@ const u8 *keysGetKeyAreaEncryptionKey(u8 key_generation, u8 kaek_index)
     return (const u8*)(g_ncaKeyset.key_area_keys[key_gen_val][kaek_index]);
 }
 
-static bool keysRetrieveDebugHandleFromProcessByProgramId(Handle *out, u64 program_id)
-{
-    if (!out || !program_id)
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    Result rc = 0;
-    u64 d[8] = {0};
-    Handle debug_handle = INVALID_HANDLE;
-    
-    if (program_id > BOOT_SYSMODULE_TID && program_id != SPL_SYSMODULE_TID)
-    {
-        /* If not a kernel process, get PID from pm:dmnt. */
-        u64 pid;
-        
-        rc = pmdmntGetProcessId(&pid, program_id);
-        if (R_FAILED(rc))
-        {
-            LOGFILE("pmdmntGetProcessId failed! (0x%08X).", rc);
-            return false;
-        }
-        
-        rc = svcDebugActiveProcess(&debug_handle, pid);
-        if (R_FAILED(rc))
-        {
-            LOGFILE("svcDebugActiveProcess failed! (0x%08X).", rc);
-            return false;
-        }
-        
-        rc = svcGetDebugEvent((u8*)&d, debug_handle);
-        if (R_FAILED(rc))
-        {
-            LOGFILE("svcGetDebugEvent failed! (0x%08X).", rc);
-            return false;
-        }
-    } else {
-        /* Otherwise, query svc for the process list. */
-        u32 i, num_processes = 0;
-        
-        u64 *pids = calloc(300, sizeof(u64));
-        if (!pids)
-        {
-            LOGFILE("Failed to allocate memory for PID list!");
-            return false;
-        }
-        
-        rc = svcGetProcessList((s32*)&num_processes, pids, 300);
-        if (R_FAILED(rc))
-        {
-            LOGFILE("svcGetProcessList failed! (0x%08X).", rc);
-            return false;
-        }
-        
-        for(i = 0; i < (num_processes - 1); i++)
-        {
-            rc = svcDebugActiveProcess(&debug_handle, pids[i]);
-            if (R_FAILED(rc)) continue;
-            
-            rc = svcGetDebugEvent((u8*)&d, debug_handle);
-            if (R_SUCCEEDED(rc) && d[2] == program_id) break;
-            
-            svcCloseHandle(debug_handle);
-            debug_handle = INVALID_HANDLE;
-        }
-        
-        free(pids);
-        
-        if (i == (num_processes - 1))
-        {
-            LOGFILE("Kernel process lookup failed! (0x%08X).", rc);
-            return false;
-        }
-    }
-    
-    *out = debug_handle;
-    
-    return true;
-}
-
-static bool keysRetrieveProcessMemory(keysMemoryLocation *location)
-{
-    if (!location || !location->program_id || !location->mask)
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    Result rc = 0;
-    Handle debug_handle = INVALID_HANDLE;
-    
-    MemoryInfo mem_info = {0};
-    
-    u32 page_info = 0;
-    u64 addr = 0, last_text_addr = 0;
-    u8 segment = 0;
-    u8 *tmp = NULL;
-    
-    bool success = true;
-    
-    if (!keysRetrieveDebugHandleFromProcessByProgramId(&debug_handle, location->program_id))
-    {
-        LOGFILE("Unable to retrieve debug handle for program %016lX!", location->program_id);
-        return false;
-    }
-    
-    /* Locate "real" .text segment as Atmosphere emuMMC has two. */
-    for(;;)
-    {
-        rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
-        if (R_FAILED(rc))
-        {
-            LOGFILE("svcQueryDebugProcessMemory failed! (0x%08X).", rc);
-            success = false;
-            goto out;
-        }
-        
-        if ((mem_info.perm & Perm_X) && ((mem_info.type & 0xFF) >= MemType_CodeStatic) && ((mem_info.type & 0xFF) < MemType_Heap)) last_text_addr = mem_info.addr;
-        
-        addr = (mem_info.addr + mem_info.size);
-        if (!addr) break;
-    }
-    
-    addr = last_text_addr;
-
-    for(segment = 1; segment < BIT(3);)
-    {
-        rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
-        if (R_FAILED(rc))
-        {
-            LOGFILE("svcQueryDebugProcessMemory failed! (0x%08X).", rc);
-            success = false;
-            break;
-        }
-        
-        /* Code to allow for bitmasking segments. */
-        if ((mem_info.perm & Perm_R) && ((mem_info.type & 0xFF) >= MemType_CodeStatic) && ((mem_info.type & 0xFF) < MemType_Heap) && ((segment <<= 1) >> 1 & location->mask) > 0)
-        {
-            /* If location->data == NULL, realloc will essentially act as a malloc. */
-            tmp = realloc(location->data, location->data_size + mem_info.size);
-            if (!tmp)
-            {
-                LOGFILE("Failed to resize key location data buffer to 0x%lX bytes.", location->data_size + mem_info.size);
-                success = false;
-                break;
-            }
-            
-            location->data = tmp;
-            tmp = NULL;
-            
-            rc = svcReadDebugProcessMemory(location->data + location->data_size, debug_handle, mem_info.addr, mem_info.size);
-            if (R_FAILED(rc))
-            {
-                LOGFILE("svcReadDebugProcessMemory failed! (0x%08X).", rc);
-                success = false;
-                break;
-            }
-            
-            location->data_size += mem_info.size;
-        }
-        
-        addr = (mem_info.addr + mem_info.size);
-        if (addr == 0) break;
-    }
-    
-out:
-    svcCloseHandle(debug_handle);
-    
-    if (success && (!location->data || !location->data_size)) success = false;
-    
-    return success;
-}
-
-static void keysFreeProcessMemory(keysMemoryLocation *location)
-{
-    if (location && location->data)
-    {
-        free(location->data);
-        location->data = NULL;
-    }
-}
-
-static bool keysRetrieveKeysFromProcessMemory(keysMemoryInfo *info)
+static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
 {
     if (!info || !info->key_count)
     {
@@ -459,11 +259,7 @@ static bool keysRetrieveKeysFromProcessMemory(keysMemoryInfo *info)
     u8 tmp_hash[SHA256_HASH_SIZE];
     bool success = false;
     
-    if (!keysRetrieveProcessMemory(&(info->location)))
-    {
-        LOGFILE("Unable to retrieve process memory from program %016lX!", info->location.program_id);
-        return false;
-    }
+    if (!memRetrieveProgramMemorySegment(&(info->location))) return false;
     
     for(u32 i = 0; i < info->key_count; i++)
     {
@@ -472,7 +268,7 @@ static bool keysRetrieveKeysFromProcessMemory(keysMemoryInfo *info)
         if (!info->keys[i].dst)
         {
             LOGFILE("Invalid destination pointer for key \"%s\" in program %016lX!", info->keys[i].name, info->location.program_id);
-            goto out;
+            goto end;
         }
         
         /* Hash every key length-sized byte chunk in the process memory buffer until a match is found. */
@@ -494,14 +290,14 @@ static bool keysRetrieveKeysFromProcessMemory(keysMemoryInfo *info)
         if (!found)
         {
             LOGFILE("Unable to locate key \"%s\" in process memory from program %016lX!", info->keys[i].name, info->location.program_id);
-            goto out;
+            goto end;
         }
     }
     
     success = true;
     
-out:
-    keysFreeProcessMemory(&(info->location));
+end:
+    memFreeMemoryLocation(&(info->location));
     
     return success;
 }

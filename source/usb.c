@@ -149,14 +149,14 @@ bool usbInitialize(void)
     if (!usbAllocateTransferBuffer())
     {
         LOGFILE("Failed to allocate memory for the USB transfer buffer!");
-        goto exit;
+        goto end;
     }
     
     /* Initialize USB device interface. */
     if (!usbInitializeComms())
     {
         LOGFILE("Failed to initialize USB device interface!");
-        goto exit;
+        goto end;
     }
     
     /* Retrieve USB state change kernel event. */
@@ -164,7 +164,7 @@ bool usbInitialize(void)
     if (!g_usbStateChangeEvent)
     {
         LOGFILE("Failed to retrieve USB state change kernel event!");
-        goto exit;
+        goto end;
     }
     
     /* Create usermode exit event. */
@@ -175,11 +175,11 @@ bool usbInitialize(void)
     
     /* Create USB detection thread. */
     atomic_store(&g_usbDetectionThreadCreated, usbCreateDetectionThread());
-    if (!atomic_load(&g_usbDetectionThreadCreated)) goto exit;
+    if (!atomic_load(&g_usbDetectionThreadCreated)) goto end;
     
     ret = true;
     
-exit:
+end:
     rwlockWriteUnlock(&g_usbDeviceLock);
     
     return ret;
@@ -240,7 +240,7 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
         !(filename_length = (u32)strlen(filename)) || filename_length >= FS_MAX_PATH)
     {
         LOGFILE("Invalid parameters!");
-        goto exit;
+        goto end;
     }
     
     usbPrepareCommandHeader(UsbCommandType_SendFileProperties, (u32)sizeof(UsbCommandSendFileProperties));
@@ -263,7 +263,7 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
         usbLogStatusDetail(status);
     }
     
-exit:
+end:
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
     
@@ -283,7 +283,7 @@ bool usbSendFileData(void *data, u64 data_size)
         !data_size || data_size > USB_TRANSFER_BUFFER_SIZE || data_size > g_usbTransferRemainingSize)
     {
         LOGFILE("Invalid parameters!");
-        goto exit;
+        goto end;
     }
     
     /* Optimization for buffers that already are page aligned. */
@@ -298,7 +298,7 @@ bool usbSendFileData(void *data, u64 data_size)
     if (!usbWrite(buf, data_size))
     {
         LOGFILE("Failed to write 0x%lX bytes long file data chunk!", data_size);
-        goto exit;
+        goto end;
     }
     
     ret = true;
@@ -311,7 +311,7 @@ bool usbSendFileData(void *data, u64 data_size)
         {
             LOGFILE("Failed to read 0x%lX bytes long status block!", sizeof(UsbStatus));
             ret = false;
-            goto exit;
+            goto end;
         }
         
         cmd_status = (UsbStatus*)g_usbTransferBuffer;
@@ -320,14 +320,14 @@ bool usbSendFileData(void *data, u64 data_size)
         {
             LOGFILE("Invalid status block magic word!");
             ret = false;
-            goto exit;
+            goto end;
         }
         
         ret = (cmd_status->status == UsbStatusType_Success);
         if (!ret) usbLogStatusDetail(cmd_status->status);
     }
     
-exit:
+end:
     if (!ret) g_usbTransferRemainingSize = 0;
     
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
@@ -550,13 +550,13 @@ static bool usbInitializeComms(void)
     Result rc = 0;
     
     bool ret = (g_usbDeviceInterfaceInitialized && g_usbDeviceInterface.initialized);
-    if (ret) goto exit;
+    if (ret) goto end;
     
     rc = usbDsInitialize();
     if (R_FAILED(rc))
     {
         LOGFILE("usbDsInitialize failed! (0x%08X).", rc);
-        goto exit;
+        goto end;
     }
     
     if (hosversionAtLeast(5,0,0))
@@ -673,7 +673,7 @@ static bool usbInitializeComms(void)
         if (R_FAILED(rc)) LOGFILE("usbDsSetVidPidBcd failed! (0x%08X).", rc);
     }
     
-    if (R_FAILED(rc)) goto exit;
+    if (R_FAILED(rc)) goto end;
     
     /* Initialize USB device interface. */
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
@@ -689,7 +689,7 @@ static bool usbInitializeComms(void)
     if (!dev_iface_init)
     {
         LOGFILE("Failed to initialize USB device interface!");
-        goto exit;
+        goto end;
     }
     
     if (hosversionAtLeast(5,0,0))
@@ -698,13 +698,13 @@ static bool usbInitializeComms(void)
         if (R_FAILED(rc))
         {
             LOGFILE("usbDsEnable failed! (0x%08X).", rc);
-            goto exit;
+            goto end;
         }
     }
     
     ret = g_usbDeviceInterfaceInitialized = true;
     
-exit:
+end:
     if (!ret) usbCloseComms();
     
     return ret;

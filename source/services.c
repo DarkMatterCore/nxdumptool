@@ -146,7 +146,7 @@ bool servicesCheckInitializedServiceByName(const char *name)
     
     bool ret = false;
     
-    if (!name || !strlen(name)) goto exit;
+    if (!name || !strlen(name)) goto end;
     
     size_t name_len = strlen(name);
     
@@ -159,7 +159,7 @@ bool servicesCheckInitializedServiceByName(const char *name)
         }
     }
     
-exit:
+end:
     mutexUnlock(&g_servicesMutex);
     
     return ret;

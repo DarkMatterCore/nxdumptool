@@ -117,7 +117,7 @@ bool rsa2048GenerateSha256BasedCustomAcidSignature(void *dst, const void *src, s
     if (ret != 0)
     {
         LOGFILE("mbedtls_ctr_drbg_seed failed! (%d).", ret);
-        goto out;
+        goto end;
     }
     
     /* Parse private key. */
@@ -125,7 +125,7 @@ bool rsa2048GenerateSha256BasedCustomAcidSignature(void *dst, const void *src, s
     if (ret != 0)
     {
         LOGFILE("mbedtls_pk_parse_key failed! (%d).", ret);
-        goto out;
+        goto end;
     }
     
     /* Set RSA padding. */
@@ -136,14 +136,14 @@ bool rsa2048GenerateSha256BasedCustomAcidSignature(void *dst, const void *src, s
     if (ret != 0)
     {
         LOGFILE("mbedtls_pk_sign failed! (%d).", ret);
-        goto out;
+        goto end;
     }
     
     /* Copy signature to output buffer. */
     memcpy(dst, buf, RSA2048_SIG_SIZE);
     success = true;
     
-out:
+end:
     mbedtls_pk_free(&pk);
     mbedtls_entropy_free(&entropy);
     mbedtls_ctr_drbg_free(&ctr_drbg);

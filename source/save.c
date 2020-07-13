@@ -144,7 +144,7 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
         if (!seg->entries)
         {
             LOGFILE("Failed to allocate memory for remap segment entry #%u!", entry_idx);
-            goto out;
+            goto end;
         }
         
         seg->entries[seg->entry_count++] = &map_entries[entry_idx];
@@ -160,7 +160,7 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
             if (!ptr)
             {
                 LOGFILE("Failed to allocate memory for remap segment entry #%u!", entry_idx);
-                goto out;
+                goto end;
             }
             
             memcpy(ptr, seg->entries, sizeof(remap_entry_ctx_t*) * seg->entry_count);
@@ -174,7 +174,7 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
     
     success = true;
     
-out:
+end:
     if (!success)
     {
         entry_idx = 0;
@@ -400,7 +400,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
     if (!ctx->level_validities)
     {
         LOGFILE("Failed to allocate memory for level validities!");
-        goto out;
+        goto end;
     }
     
     for(u32 i = 1; i < ivfc->num_levels; i++)
@@ -417,7 +417,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
         if (!level_data->block_validities)
         {
             LOGFILE("Failed to allocate memory for block validities in IVFC level #%u!", i);
-            goto out;
+            goto end;
         }
         
         ctx->level_validities[i - 1] = level_data->block_validities;
@@ -429,7 +429,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
     
     success = true;
     
-out:
+end:
     if (!success && ctx->level_validities)
     {
         free(ctx->level_validities);
@@ -909,21 +909,21 @@ u32 save_fs_list_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_
     if (!ctx || !key)
     {
         LOGFILE("Invalid parameters!");
-        goto out;
+        goto end;
     }
     
     u32 capacity = save_fs_list_get_capacity(ctx);
     if (!capacity)
     {
         LOGFILE("Failed to retrieve FS capacity!");
-        goto out;
+        goto end;
     }
     
     save_fs_list_entry_t entry;
     if (!save_fs_list_read_entry(ctx, ctx->used_list_head_index, &entry))
     {
         LOGFILE("Failed to read FS entry for initial index %u!", ctx->used_list_head_index);
-        goto out;
+        goto end;
     }
     
     *prev_index = ctx->used_list_head_index;
@@ -951,7 +951,7 @@ u32 save_fs_list_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_
     
     if (!index) LOGFILE("Unable to find FS index from key!");
     
-out:
+end:
     *prev_index = 0xFFFFFFFF;
     return 0xFFFFFFFF;
 }
@@ -1292,7 +1292,7 @@ bool save_process(save_ctx_t *ctx)
         if (fr || br != 0x20)
         {
             LOGFILE("Failed to read data remap storage entry #%u! (%u).", i, fr);
-            goto out;
+            goto end;
         }
         
         ctx->data_remap_storage.map_entries[i].physical_offset_end = (ctx->data_remap_storage.map_entries[i].physical_offset + ctx->data_remap_storage.map_entries[i].size);
@@ -1304,7 +1304,7 @@ bool save_process(save_ctx_t *ctx)
     if (!ctx->data_remap_storage.segments)
     {
         LOGFILE("Failed to retrieve data remap storage segments!");
-        goto out;
+        goto end;
     }
     
     /* Initialize duplex storage. */
@@ -1316,26 +1316,26 @@ bool save_process(save_ctx_t *ctx)
     if (!ctx->duplex_layers[1].data_a)
     {
         LOGFILE("Failed to allocate memory for data_a block in duplex layer #1!");
-        goto out;
+        goto end;
     }
     
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[1].data_a, ctx->header.layout.duplex_l1_offset_a, ctx->header.layout.duplex_l1_size) != ctx->header.layout.duplex_l1_size)
     {
         LOGFILE("Failed to read data_a block from duplex layer #1 in data remap storage!");
-        goto out;
+        goto end;
     }
     
     ctx->duplex_layers[1].data_b = calloc(1, ctx->header.layout.duplex_l1_size);
     if (!ctx->duplex_layers[1].data_b)
     {
         LOGFILE("Failed to allocate memory for data_b block in duplex layer #1!");
-        goto out;
+        goto end;
     }
     
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[1].data_b, ctx->header.layout.duplex_l1_offset_b, ctx->header.layout.duplex_l1_size) != ctx->header.layout.duplex_l1_size)
     {
         LOGFILE("Failed to read data_b block from duplex layer #1 in data remap storage!");
-        goto out;
+        goto end;
     }
     
     memcpy(&ctx->duplex_layers[1].info, &ctx->header.duplex_header.layers[1], sizeof(duplex_info_t));
@@ -1344,26 +1344,26 @@ bool save_process(save_ctx_t *ctx)
     if (!ctx->duplex_layers[2].data_a)
     {
         LOGFILE("Failed to allocate memory for data_a block in duplex layer #2!");
-        goto out;
+        goto end;
     }
     
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[2].data_a, ctx->header.layout.duplex_data_offset_a, ctx->header.layout.duplex_data_size) != ctx->header.layout.duplex_data_size)
     {
         LOGFILE("Failed to read data_a block from duplex layer #2 in data remap storage!");
-        goto out;
+        goto end;
     }
     
     ctx->duplex_layers[2].data_b = calloc(1, ctx->header.layout.duplex_data_size);
     if (!ctx->duplex_layers[2].data_b)
     {
         LOGFILE("Failed to allocate memory for data_b block in duplex layer #2!");
-        goto out;
+        goto end;
     }
     
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[2].data_b, ctx->header.layout.duplex_data_offset_b, ctx->header.layout.duplex_data_size) != ctx->header.layout.duplex_data_size)
     {
         LOGFILE("Failed to read data_b block from duplex layer #2 in data remap storage!");
-        goto out;
+        goto end;
     }
     
     memcpy(&ctx->duplex_layers[2].info, &ctx->header.duplex_header.layers[2], sizeof(duplex_info_t));
@@ -1374,7 +1374,7 @@ bool save_process(save_ctx_t *ctx)
     if (!save_duplex_storage_init(&ctx->duplex_storage.layers[0], &ctx->duplex_layers[1], bitmap, ctx->header.layout.duplex_master_size))
     {
         LOGFILE("Failed to initialize duplex storage layer #0!");
-        goto out;
+        goto end;
     }
     
     ctx->duplex_storage.layers[0]._length = ctx->header.layout.duplex_l1_size;
@@ -1383,20 +1383,20 @@ bool save_process(save_ctx_t *ctx)
     if (!bitmap)
     {
         LOGFILE("Failed to allocate memory for duplex storage layer #0 bitmap!");
-        goto out;
+        goto end;
     }
     
     if (save_duplex_storage_read(&ctx->duplex_storage.layers[0], bitmap, 0, ctx->duplex_storage.layers[0]._length) != ctx->duplex_storage.layers[0]._length)
     {
         LOGFILE("Failed to read duplex storage layer #0 bitmap!");
         free(bitmap);
-        goto out;
+        goto end;
     }
     
     if (!save_duplex_storage_init(&ctx->duplex_storage.layers[1], &ctx->duplex_layers[2], bitmap, ctx->duplex_storage.layers[0]._length))
     {
         LOGFILE("Failed to initialize duplex storage layer #1!");
-        goto out;
+        goto end;
     }
     
     ctx->duplex_storage.layers[1]._length = ctx->header.layout.duplex_data_size;
@@ -1413,14 +1413,14 @@ bool save_process(save_ctx_t *ctx)
     if (!ctx->meta_remap_storage.map_entries)
     {
         LOGFILE("Failed to allocate memory for meta remap storage entries!");
-        goto out;
+        goto end;
     }
     
     fr = f_lseek(ctx->file, ctx->header.layout.meta_map_entry_offset);
     if (fr || f_tell(ctx->file) != ctx->header.layout.meta_map_entry_offset)
     {
         LOGFILE("Failed to seek to meta map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.meta_map_entry_offset, fr);
-        goto out;
+        goto end;
     }
     
     for(u32 i = 0; i < ctx->meta_remap_storage.header->map_entry_count; i++)
@@ -1429,7 +1429,7 @@ bool save_process(save_ctx_t *ctx)
         if (fr || br != 0x20)
         {
             LOGFILE("Failed to read meta remap storage entry #%u! (%u).", i, fr);
-            goto out;
+            goto end;
         }
         
         ctx->meta_remap_storage.map_entries[i].physical_offset_end = (ctx->meta_remap_storage.map_entries[i].physical_offset + ctx->meta_remap_storage.map_entries[i].size);
@@ -1440,7 +1440,7 @@ bool save_process(save_ctx_t *ctx)
     if (!ctx->meta_remap_storage.segments)
     {
         LOGFILE("Failed to retrieve meta remap storage segments!");
-        goto out;
+        goto end;
     }
     
     /* Initialize journal map. */
@@ -1448,13 +1448,13 @@ bool save_process(save_ctx_t *ctx)
     if (!ctx->journal_map_info.map_storage)
     {
         LOGFILE("Failed to allocate memory for journal map info!");
-        goto out;
+        goto end;
     }
     
     if (save_remap_read(&ctx->meta_remap_storage, ctx->journal_map_info.map_storage, ctx->header.layout.journal_map_table_offset, ctx->header.layout.journal_map_table_size) != ctx->header.layout.journal_map_table_size)
     {
         LOGFILE("Failed to read map storage from journal map info in meta remap storage!");
-        goto out;
+        goto end;
     }
     
     /* Initialize journal storage. */
@@ -1469,7 +1469,7 @@ bool save_process(save_ctx_t *ctx)
     if (!ctx->journal_storage.map.entries)
     {
         LOGFILE("Failed to allocate memory for journal map storage entries!");
-        goto out;
+        goto end;
     }
     
     u32 *pos = (u32*)ctx->journal_storage.map.map_storage;
@@ -1490,7 +1490,7 @@ bool save_process(save_ctx_t *ctx)
     if (!save_ivfc_storage_init(&ctx->core_data_ivfc_storage, ctx->header.layout.ivfc_master_hash_offset_a, &ctx->header.data_ivfc_header))
     {
         LOGFILE("Failed to initialize core IVFC storage!");
-        goto out;
+        goto end;
     }
     
     /* Initialize FAT storage. */
@@ -1500,13 +1500,13 @@ bool save_process(save_ctx_t *ctx)
         if (!ctx->fat_storage)
         {
             LOGFILE("Failed to allocate memory for FAT storage!");
-            goto out;
+            goto end;
         }
         
         if (save_remap_read(&ctx->meta_remap_storage, ctx->fat_storage, ctx->header.layout.fat_offset, ctx->header.layout.fat_size) != ctx->header.layout.fat_size)
         {
             LOGFILE("Failed to read FAT storage from meta remap storage!");
-            goto out;
+            goto end;
         }
     } else {
         for(u32 i = 0; i < 5; i++) ctx->fat_ivfc_storage.levels[i].save_ctx = ctx;
@@ -1514,20 +1514,20 @@ bool save_process(save_ctx_t *ctx)
         if (!save_ivfc_storage_init(&ctx->fat_ivfc_storage, ctx->header.layout.fat_ivfc_master_hash_a, &ctx->header.fat_ivfc_header))
         {
             LOGFILE("Failed to initialize FAT storage! (IVFC).");
-            goto out;
+            goto end;
         }
         
         ctx->fat_storage = calloc(1, ctx->fat_ivfc_storage._length);
         if (!ctx->fat_storage)
         {
             LOGFILE("Failed to allocate memory for FAT storage! (IVFC).");
-            goto out;
+            goto end;
         }
         
         if (save_remap_read(&ctx->meta_remap_storage, ctx->fat_storage, ctx->header.fat_ivfc_header.level_headers[ctx->header.fat_ivfc_header.num_levels - 2].logical_offset, ctx->fat_ivfc_storage._length) != ctx->fat_ivfc_storage._length)
         {
             LOGFILE("Failed to read FAT storage from meta remap storage! (IVFC).");
-            goto out;
+            goto end;
         }
     }
     
@@ -1536,7 +1536,7 @@ bool save_process(save_ctx_t *ctx)
         if (save_filesystem_verify(ctx) == VALIDITY_INVALID)
         {
             LOGFILE("Savefile FS verification failed!");
-            goto out;
+            goto end;
         }
     }
     
@@ -1545,12 +1545,12 @@ bool save_process(save_ctx_t *ctx)
     if (!save_filesystem_init(&ctx->save_filesystem_core, ctx->fat_storage, &ctx->header.save_header, &ctx->header.fat_header))
     {
         LOGFILE("Failed to initialize savefile FS!");
-        goto out;
+        goto end;
     }
     
     success = true;
     
-out:
+end:
     if (!success) save_free_contexts(ctx);
     
     return success;
@@ -1741,7 +1741,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     if (fr != FR_OK)
     {
         LOGFILE("Failed to open \"%s\" savefile from BIS System partition! (%u).", path, fr);
-        goto out;
+        goto end;
     }
     
     open_savefile = true;
@@ -1750,7 +1750,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     if (!save_ctx)
     {
         LOGFILE("Unable to allocate memory for savefile \"%s\" context!", path);
-        goto out;
+        goto end;
     }
     
     save_ctx->file = save_fd;
@@ -1759,7 +1759,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     success = save_process(save_ctx);
     if (!success) LOGFILE("Failed to process savefile \"%s\"!", path);
     
-out:
+end:
     if (!success)
     {
         if (save_ctx)

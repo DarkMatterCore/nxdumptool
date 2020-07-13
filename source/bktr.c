@@ -66,14 +66,14 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     if (!out->indirect_block)
     {
         LOGFILE("Unable to allocate memory for the BKTR Indirect Storage Block!");
-        goto exit;
+        goto end;
     }
     
     /* Read indirect storage block data. */
     if (!ncaReadFsSection(update_nca_fs_ctx, out->indirect_block, patch_info->indirect_size, patch_info->indirect_offset))
     {
         LOGFILE("Failed to read BKTR Indirect Storage Block data!");
-        goto exit;
+        goto end;
     }
     
     /* Allocate space for an extra (fake) AesCtrEx storage entry, to simplify our logic. */
@@ -81,20 +81,20 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     if (!out->aes_ctr_ex_block)
     {
         LOGFILE("Unable to allocate memory for the BKTR AesCtrEx Storage Block!");
-        goto exit;
+        goto end;
     }
     
     /* Read AesCtrEx storage block data. */
     if (!ncaReadFsSection(update_nca_fs_ctx, out->aes_ctr_ex_block, patch_info->aes_ctr_ex_size, patch_info->aes_ctr_ex_offset))
     {
         LOGFILE("Failed to read BKTR AesCtrEx Storage Block data!");
-        goto exit;
+        goto end;
     }
     
     if (out->aes_ctr_ex_block->physical_size != patch_info->aes_ctr_ex_offset)
     {
         LOGFILE("Invalid BKTR AesCtrEx Storage Block size!");
-        goto exit;
+        goto end;
     }
     
     /* This simplifies logic greatly... */
@@ -144,13 +144,13 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     if (!bktrPhysicalSectionRead(out, &(out->patch_romfs_ctx.header), sizeof(RomFileSystemHeader), out->patch_romfs_ctx.offset))
     {
         LOGFILE("Failed to read update NCA RomFS header!");
-        goto exit;
+        goto end;
     }
     
     if (out->patch_romfs_ctx.header.cur_format.header_size != ROMFS_HEADER_SIZE)
     {
         LOGFILE("Invalid update NCA RomFS header size!");
-        goto exit;
+        goto end;
     }
     
     /* Read directory entries table. */
@@ -160,20 +160,20 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     if (!dir_table_offset || !out->patch_romfs_ctx.dir_table_size)
     {
         LOGFILE("Invalid update NCA RomFS directory entries table!");
-        goto exit;
+        goto end;
     }
     
     out->patch_romfs_ctx.dir_table = malloc(out->patch_romfs_ctx.dir_table_size);
     if (!out->patch_romfs_ctx.dir_table)
     {
         LOGFILE("Unable to allocate memory for the update NCA RomFS directory entries table!");
-        goto exit;
+        goto end;
     }
     
     if (!bktrPhysicalSectionRead(out, out->patch_romfs_ctx.dir_table, out->patch_romfs_ctx.dir_table_size, out->patch_romfs_ctx.offset + dir_table_offset))
     {
         LOGFILE("Failed to read update NCA RomFS directory entries table!");
-        goto exit;
+        goto end;
     }
     
     /* Read file entries table. */
@@ -183,20 +183,20 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     if (!file_table_offset || !out->patch_romfs_ctx.file_table_size)
     {
         LOGFILE("Invalid update NCA RomFS file entries table!");
-        goto exit;
+        goto end;
     }
     
     out->patch_romfs_ctx.file_table = malloc(out->patch_romfs_ctx.file_table_size);
     if (!out->patch_romfs_ctx.file_table)
     {
         LOGFILE("Unable to allocate memory for the update NCA RomFS file entries table!");
-        goto exit;
+        goto end;
     }
     
     if (!bktrPhysicalSectionRead(out, out->patch_romfs_ctx.file_table, out->patch_romfs_ctx.file_table_size, out->patch_romfs_ctx.offset + file_table_offset))
     {
         LOGFILE("Failed to read update NCA RomFS file entries table!");
-        goto exit;
+        goto end;
     }
     
     /* Get file data body offset. */
@@ -204,7 +204,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     
     success = true;
     
-exit:
+end:
     if (!success) bktrFreeContext(out);
     
     return success;

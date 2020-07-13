@@ -102,7 +102,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     if (!ncaReadFsSection(nca_fs_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
     {
         LOGFILE("Failed to read RomFS directory entries table!");
-        goto exit;
+        goto end;
     }
     
     /* Read file entries table. */
@@ -112,20 +112,20 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     if (!out->file_table_size || file_table_offset >= out->size || (file_table_offset + out->file_table_size) > out->size)
     {
         LOGFILE("Invalid RomFS file entries table!");
-        goto exit;
+        goto end;
     }
     
     out->file_table = malloc(out->file_table_size);
     if (!out->file_table)
     {
         LOGFILE("Unable to allocate memory for RomFS file entries table!");
-        goto exit;
+        goto end;
     }
     
     if (!ncaReadFsSection(nca_fs_ctx, out->file_table, out->file_table_size, out->offset + file_table_offset))
     {
         LOGFILE("Failed to read RomFS file entries table!");
-        goto exit;
+        goto end;
     }
     
     /* Get file data body offset. */
@@ -133,12 +133,12 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     if (out->body_offset >= out->size)
     {
         LOGFILE("Invalid RomFS file data body!");
-        goto exit;
+        goto end;
     }
     
     success = true;
     
-exit:
+end:
     if (!success) romfsFreeContext(out);
     
     return success;
@@ -281,7 +281,7 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
     {
         LOGFILE("Failed to tokenize input path!");
         dir_entry = NULL;
-        goto out;
+        goto end;
     }
     
     while(pch)
@@ -295,7 +295,7 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
         pch = strtok(NULL, "/");
     }
     
-out:
+end:
     if (path_dup) free(path_dup);
     
     return dir_entry;
@@ -332,7 +332,7 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     if (!path_len || !(filename = strrchr(path_dup, '/')))
     {
         LOGFILE("Invalid input path!");
-        goto out;
+        goto end;
     }
     
     /* Remove leading slash and adjust filename string pointer. */
@@ -343,13 +343,13 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     if (!(dir_entry = (*path_dup ? romfsGetDirectoryEntryByPath(ctx, path_dup) : romfsGetDirectoryEntryByOffset(ctx, 0))))
     {
         LOGFILE("Failed to retrieve directory entry!");
-        goto out;
+        goto end;
     }
     
     /* Retrieve file entry. */
     if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename))) LOGFILE("Failed to retrieve file entry by name!");
     
-out:
+end:
     if (path_dup) free(path_dup);
     
     return file_entry;
@@ -397,7 +397,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
         if (!(tmp_dir_entries = realloc(dir_entries, (dir_entries_count + 1) * sizeof(RomFileSystemDirectoryEntry*))))
         {
             LOGFILE("Unable to reallocate directory entries buffer!");
-            goto out;
+            goto end;
         }
         
         dir_entries = tmp_dir_entries;
@@ -406,7 +406,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
         if (!(dir_entries[dir_entries_count] = romfsGetDirectoryEntryByOffset(ctx, dir_offset)) || !dir_entries[dir_entries_count]->name_length)
         {
             LOGFILE("Failed to retrieve directory entry!");
-            goto out;
+            goto end;
         }
         
         path_len += (1 + dir_entries[dir_entries_count]->name_length);
@@ -416,7 +416,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
     if (path_len >= out_path_size)
     {
         LOGFILE("Output path length exceeds output buffer size!");
-        goto out;
+        goto end;
     }
     
     /* Generate output path. */
@@ -431,7 +431,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
     
     success = true;
     
-out:
+end:
     if (dir_entries) free(dir_entries);
     
     return success;

@@ -40,11 +40,12 @@
 #define APP_BASE_PATH                   "sdmc:/switch/nxdumptool/"
 #define LOGFILE_PATH                    APP_BASE_PATH "nxdumptool.log"
 
-#define LOGFILE(fmt, ...)               utilsWriteLogMessage(__func__, fmt, ##__VA_ARGS__)
-
 #define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
+
+#define LOGFILE(fmt, ...)               utilsWriteMessageToLogFile(__func__, fmt, ##__VA_ARGS__)
+#define LOGBUF(dst, dst_size, fmt, ...) utilsWriteMessageToLogBuffer(dst, dst_size, __func__, fmt, ##__VA_ARGS__)
 
 #define ALIGN_DOWN(x, y)                ((x) & ~((y) - 1))
 #define ALIGN_UP(x, y)                  ((((y) - 1) + (x)) & ~((y) - 1))
@@ -83,7 +84,10 @@ void utilsCloseResources(void);
 u64 utilsReadInput(u8 input_type);
 void utilsWaitForButtonPress(u64 flag);
 
-void utilsWriteLogMessage(const char *func_name, const char *fmt, ...);
+void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...);
+void utilsWriteMessageToLogBuffer(char *dst, size_t dst_size, const char *func_name, const char *fmt, ...);
+void utilsWriteLogBufferToLogFile(const char *src);
+void utilsLogFileMutexControl(bool lock);
 
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 

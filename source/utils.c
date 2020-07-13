@@ -66,52 +66,52 @@ bool utilsInitializeResources(void)
     mutexLock(&g_resourcesMutex);
     
     bool ret = g_resourcesInitialized;
-    if (ret) goto exit;
+    if (ret) goto end;
     
     /* Initialize needed services. */
     if (!servicesInitialize())
     {
         LOGFILE("Failed to initialize needed services!");
-        goto exit;
+        goto end;
     }
     
     /* Initialize USB interface. */
     if (!usbInitialize())
     {
         LOGFILE("Failed to initialize USB interface!");
-        goto exit;
+        goto end;
     }
     
     /* Load NCA keyset. */
     if (!keysLoadNcaKeyset())
     {
         LOGFILE("Failed to load NCA keyset!");
-        goto exit;
+        goto end;
     }
     
     /* Allocate NCA crypto buffer. */
     if (!ncaAllocateCryptoBuffer())
     {
         LOGFILE("Unable to allocate memory for NCA crypto buffer!");
-        goto exit;
+        goto end;
     }
     
     /* Initialize gamecard interface. */
     if (!gamecardInitialize())
     {
         LOGFILE("Failed to initialize gamecard interface!");
-        goto exit;
+        goto end;
     }
     
     /* Retrieve SD card FsFileSystem element. */
     if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
     {
         LOGFILE("fsdevGetDeviceFileSystem failed!");
-        goto exit;
+        goto end;
     }
     
     /* Mount eMMC BIS System partition. */
-    if (!utilsMountEmmcBisSystemPartitionStorage()) goto exit;
+    if (!utilsMountEmmcBisSystemPartitionStorage()) goto end;
     
     /* Get applet type. */
     g_programAppletType = appletGetAppletType();
@@ -136,7 +136,7 @@ bool utilsInitializeResources(void)
     
     ret = g_resourcesInitialized = true;
     
-exit:
+end:
     mutexUnlock(&g_resourcesMutex);
     
     return ret;
@@ -210,15 +210,17 @@ void utilsWaitForButtonPress(u64 flag)
     }
 }
 
-void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
+void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...)
 {
+    if (!func_name || !strlen(func_name) || !fmt || !strlen(fmt)) return;
+    
     mutexLock(&g_logfileMutex);
     
     va_list args;
     FILE *logfile = NULL;
     
     logfile = fopen(LOGFILE_PATH, "a+");
-    if (!logfile) goto out;
+    if (!logfile) goto end;
     
     time_t now = time(NULL);
     struct tm *ts = localtime(&now);
@@ -232,8 +234,56 @@ void utilsWriteLogMessage(const char *func_name, const char *fmt, ...)
     fprintf(logfile, "\r\n");
     fclose(logfile);
     
-out:
+end:
     mutexUnlock(&g_logfileMutex);
+}
+
+void utilsWriteMessageToLogBuffer(char *dst, size_t dst_size, const char *func_name, const char *fmt, ...)
+{
+    if (!dst || !dst_size || !func_name || !strlen(func_name) || !fmt || !strlen(fmt)) return;
+    
+    va_list args;
+    time_t now = time(NULL);
+    struct tm *ts = localtime(&now);
+    
+    char msg[512] = {0};
+    size_t msg_len = 0, dst_len = strlen(dst);
+    
+    snprintf(msg, sizeof(msg), "%d-%02d-%02d %02d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
+    msg_len = strlen(msg);
+    
+    va_start(args, fmt);
+    vsnprintf(msg + msg_len, sizeof(msg) - msg_len, fmt, args);
+    va_end(args);
+    msg_len = strlen(msg);
+    
+    if ((dst_size - dst_len) > (msg_len + 2)) snprintf(dst + dst_len, dst_size - dst_len, "%s\r\n", msg);
+}
+
+void utilsWriteLogBufferToLogFile(const char *src)
+{
+    if (!src || !strlen(src)) return;
+    
+    mutexLock(&g_logfileMutex);
+    
+    FILE *logfile = fopen(LOGFILE_PATH, "a+");
+    if (!logfile) goto end;
+    
+    fprintf(logfile, "%s", src);
+    fclose(logfile);
+    
+end:
+    mutexUnlock(&g_logfileMutex);
+}
+
+void utilsLogFileMutexControl(bool lock)
+{
+    if (lock)
+    {
+        mutexLock(&g_logfileMutex);
+    } else {
+        mutexUnlock(&g_logfileMutex);
+    }
 }
 
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
