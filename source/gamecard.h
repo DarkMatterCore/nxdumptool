@@ -34,7 +34,7 @@
 
 #define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Root ? "root" : ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : \
                                         ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : \
-                                        ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : "unknown")))))
+                                        ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : ((x) == GameCardHashFileSystemPartitionType_Boot ? "boot" : "unknown"))))))
 
 /// Plaintext area. Dumped from FS program memory.
 typedef struct {
@@ -182,7 +182,8 @@ typedef enum {
     GameCardHashFileSystemPartitionType_Update  = 1,
     GameCardHashFileSystemPartitionType_Logo    = 2,    ///< Only available in GameCardFwVersion_Since400NUP gamecards.
     GameCardHashFileSystemPartitionType_Normal  = 3,
-    GameCardHashFileSystemPartitionType_Secure  = 4
+    GameCardHashFileSystemPartitionType_Secure  = 4,
+    GameCardHashFileSystemPartitionType_Boot    = 5     ///< Only available in Terra (Tencent) gamecards.
 } GameCardHashFileSystemPartitionType;
 
 /// Initializes data needed to access raw gamecard storage areas.

@@ -484,6 +484,8 @@ out2:
     
     bktrFreeContext(&bktr_ctx);
     
+    if (serviceIsActive(&(resolver.s))) serviceClose(&(resolver.s));
+    
     lrExit();
     
     if (serviceIsActive(&(ncm_storage_emmc.s))) ncmContentStorageClose(&ncm_storage_emmc);

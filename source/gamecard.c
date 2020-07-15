@@ -144,7 +144,7 @@ static GameCardHashFileSystemHeader *gamecardGetHashFileSystemPartitionHeader(u8
 NX_INLINE GameCardHashFileSystemEntry *gamecardGetHashFileSystemEntryByIndex(void *header, u32 idx);
 NX_INLINE char *gamecardGetHashFileSystemNameTable(void *header);
 NX_INLINE char *gamecardGetHashFileSystemEntryNameByIndex(void *header, u32 idx);
-NX_INLINE bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx);
+static bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx);
 
 bool gamecardInitialize(void)
 {
@@ -410,7 +410,7 @@ bool gamecardGetEntryInfoFromHashFileSystemPartitionByIndex(u8 hfs_partition_typ
         {
             if (hfs_partition_type == GameCardHashFileSystemPartitionType_Root)
             {
-                *out_offset = g_gameCardHfsPartitions[idx].offset;  /* No need to recalculate what we already have */
+                *out_offset = g_gameCardHfsPartitions[idx].offset;  /* No need to recalculate what we already have. */
             } else {
                 *out_offset = (g_gameCardHfsPartitions[hfs_partition_idx].offset + g_gameCardHfsPartitions[hfs_partition_idx].header_size + fs_entry->offset);
             }
@@ -1108,7 +1108,7 @@ NX_INLINE char *gamecardGetHashFileSystemEntryNameByIndex(void *header, u32 idx)
     return (name_table + fs_entry->name_offset);
 }
 
-NX_INLINE bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx)
+static bool gamecardGetHashFileSystemEntryIndexByName(void *header, const char *name, u32 *out_idx)
 {
     size_t name_len = 0;
     GameCardHashFileSystemEntry *fs_entry = NULL;
