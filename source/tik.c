@@ -21,6 +21,7 @@
 
 #include "utils.h"
 #include "tik.h"
+#include "cert.h"
 #include "save.h"
 #include "es.h"
 #include "keys.h"

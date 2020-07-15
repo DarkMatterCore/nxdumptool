@@ -36,18 +36,40 @@
                                         ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : \
                                         ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : "unknown")))))
 
+/// Plaintext area. Dumped from FS program memory.
 typedef struct {
     union {
-        u8 key_source[0x10];
+        u8 key_source[0x10];        ///< Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
         struct {
-            u64 package_id;     ///< Matches package_id from GameCardHeader.
-            u64 padding;        ///< Just zeroes.
+            u64 package_id;         ///< Matches package_id from GameCardHeader.
+            u64 padding;            ///< Just zeroes.
         };
     };
-    u8 encrypted_titlekey[0x10];
-    u8 mac[0x10];
-    u8 nonce[0xC];
+    u8 encrypted_titlekey[0x10];    ///< Encrypted using AES-128-CCM with the decrypted key_source and the nonce from this section.
+    u8 mac[0x10];                   ///< Used to verify the validity of the decrypted titlekey.
+    u8 nonce[0xC];                  ///< Used as the IV to decrypt the key_source using AES-128-CCM.
     u8 reserved[0x1C4];
+} GameCardInitialData;
+
+/// Encrypted using AES-128-CTR with the key and IV/counter from the `GameCardTitleKeyEncryption` section. Assumed to be all zeroes in retail gamecards.
+typedef struct {
+    u8 titlekey[0x10];  ///< Decrypted titlekey from the `GameCardInitialData` section.
+    u8 reserved[0xCF0];
+} GameCardTitleKey;
+
+/// Encrypted using RSA-2048-OAEP. Assumed to be all zeroes in retail gamecards.
+typedef struct {
+    u8 titlekey_encryption_key[0x10];   ///< Used as the AES-128-CTR key for the `GameCardTitleKey` section.
+    u8 titlekey_encryption_iv[0x10];    ///< Used as the AES-128-CTR IV/counter for the `GameCardTitleKey` section.
+    u8 reserved[0xE0];
+} GameCardTitleKeyEncryption;
+
+/// Used to secure communications between the Lotus and the inserted gamecard.
+/// Precedes the gamecard header.
+typedef struct {
+    GameCardInitialData initial_data;
+    GameCardTitleKey titlekey_block;
+    GameCardTitleKeyEncryption titlekey_encryption;
 } GameCardKeyArea;
 
 typedef enum {
@@ -99,21 +121,38 @@ typedef enum {
 } GameCardCompatibilityType;
 
 typedef struct {
-    u64 fw_version;         ///< GameCardFwVersion.
-    u32 acc_ctrl;           ///< GameCardAccCtrl.
-    u32 wait_1_time_read;   ///< Always 0x1388.
-    u32 wait_2_time_read;   ///< Always 0.
-    u32 wait_1_time_write;  ///< Always 0.
-    u32 wait_2_time_write;  ///< Always 0.
-    u32 fw_mode;
-    u32 upp_version;
-    u8 compatibility_type;  ///< GameCardCompatibilityType.
+    u32 GameCardFwMode_Relstep : 8;
+    u32 GameCardFwMode_Micro   : 8;
+    u32 GameCardFwMode_Minor   : 8;
+    u32 GameCardFwMode_Major   : 8;
+} GameCardFwMode;
+
+typedef struct {
+    u32 GameCardUppVersion_MinorRelstep : 8;
+    u32 GameCardUppVersion_MajorRelstep : 8;
+    u32 GameCardUppVersion_Micro        : 4;
+    u32 GameCardUppVersion_Minor        : 6;
+    u32 GameCardUppVersion_Major        : 6;
+} GameCardUppVersion;
+
+/// Encrypted using AES-128-CBC with the `xci_header_key` (which can't dumped through current methods) and the IV from `GameCardHeader`.
+typedef struct {
+    u64 fw_version;                 ///< GameCardFwVersion.
+    u32 acc_ctrl;                   ///< GameCardAccCtrl.
+    u32 wait_1_time_read;           ///< Always 0x1388.
+    u32 wait_2_time_read;           ///< Always 0.
+    u32 wait_1_time_write;          ///< Always 0.
+    u32 wait_2_time_write;          ///< Always 0.
+    GameCardFwMode fw_mode;
+    GameCardUppVersion upp_version;
+    u8 compatibility_type;          ///< GameCardCompatibilityType.
     u8 reserved_1[0x3];
     u64 upp_hash;
-    u64 upp_id;             ///< Must match GAMECARD_UPDATE_TID.
+    u64 upp_id;                     ///< Must match GAMECARD_UPDATE_TID.
     u8 reserved_2[0x38];
-} GameCardExtendedHeader;
+} GameCardHeaderEncryptedArea;
 
+/// Placed after the `GameCardKeyArea` section.
 typedef struct {
     u8 signature[0x100];                            ///< RSA-2048 PKCS #1 signature over the rest of the header.
     u32 magic;                                      ///< "HEAD".
@@ -135,7 +174,7 @@ typedef struct {
     u32 sel_t1_key_index;
     u32 sel_key_index;
     u32 normal_area_end_address;                    ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
-    GameCardExtendedHeader extended_header;         ///< Encrypted using AES-128-CBC with 'xci_header_key', which can't dumped through current methods.
+    GameCardHeaderEncryptedArea encrypted_area;
 } GameCardHeader;
 
 typedef enum {

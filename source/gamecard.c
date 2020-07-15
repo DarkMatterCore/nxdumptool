@@ -48,7 +48,7 @@ typedef struct {
     u8 card_id_area[0x48];
     u8 reserved[0x1B0];
     FsGameCardCertificate certificate;
-    GameCardKeyArea key_area;
+    GameCardInitialData initial_data;
 } GameCardSecurityInformation;
 
 typedef struct {
@@ -114,6 +114,7 @@ static MemoryLocation g_fsProgramMemory = {
 };
 
 static GameCardSecurityInformation g_gameCardSecurityInfo = {0};
+static GameCardKeyArea g_gameCardKeyArea = {0};
 
 /* Function prototypes. */
 
@@ -278,7 +279,7 @@ bool gamecardGetKeyArea(GameCardKeyArea *out)
 {
     mutexLock(&g_gamecardMutex);
     bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) memcpy(out, &(g_gameCardSecurityInfo.key_area), sizeof(GameCardKeyArea));
+    if (ret) memcpy(out, &g_gameCardKeyArea, sizeof(GameCardKeyArea));
     mutexUnlock(&g_gamecardMutex);
     return ret;
 }
@@ -711,10 +712,10 @@ static void gamecardLoadInfo(void)
         }
     }
     
-    /* Read full FS program memory to retrieve the GameCardSecurityInformation data, which holds the gamecard key area. */
+    /* Read full FS program memory to retrieve the GameCardSecurityInformation data, which holds the gamecard initial data area. */
     /* This must be performed while the gamecard is in secure mode, which is already taken care of in the gamecardReadStorageArea() calls from the last iteration in the previous for() loop. */
     /* GameCardSecurityInformation data is returned by Lotus command "ChangeToSecureMode" (0xF), and kept in FS program memory only after the gamecard secure area has been both mounted and read from. */
-    /* Under some circumstances, the gamecard key area is located *after* the GameCardSecurityInformation area (offset 0x600), instead of its common location at offset 0x400. */
+    /* Under some circumstances, the gamecard initial data is located *after* the GameCardSecurityInformation area (offset 0x600), instead of its common location at offset 0x400. */
     if (!gamecardReadSecurityInformation())
     {
         LOGFILE("Failed to read gamecard security information area from FS program memory!");
@@ -732,6 +733,7 @@ static void gamecardFreeInfo(void)
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
     
     memset(&g_gameCardSecurityInfo, 0, sizeof(GameCardSecurityInformation));
+    memset(&g_gameCardKeyArea, 0, sizeof(GameCardKeyArea));
     
     g_gameCardStorageNormalAreaSize = 0;
     g_gameCardStorageSecureAreaSize = 0;
@@ -786,21 +788,26 @@ static bool gamecardReadSecurityInformation(void)
         memcpy(&g_gameCardSecurityInfo, g_fsProgramMemory.data + offset, sizeof(GameCardSecurityInformation));
         
         /* Check the key_source / package_id value. */
-        if (g_gameCardSecurityInfo.key_area.package_id == g_gameCardHeader.package_id)
+        if (g_gameCardSecurityInfo.initial_data.package_id == g_gameCardHeader.package_id)
         {
             /* Jackpot. */
             found = true;
         } else {
-            /* Copy the sector right after the GameCardSecurityInformation element from the memory dump, since it may hold the gamecard key area. */
+            /* Copy the sector right after the GameCardSecurityInformation element from the memory dump, since it may hold the gamecard initial data. */
             offset += sizeof(GameCardSecurityInformation);
-            memcpy(&(g_gameCardSecurityInfo.key_area), g_fsProgramMemory.data + offset, sizeof(GameCardKeyArea));
-            found = (g_gameCardSecurityInfo.key_area.package_id == g_gameCardHeader.package_id);
+            memcpy(&(g_gameCardSecurityInfo.initial_data), g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
+            found = (g_gameCardSecurityInfo.initial_data.package_id == g_gameCardHeader.package_id);
         }
         
         break;
     }
     
-    if (!found) LOGFILE("Failed to locate gamecard key area!");
+    if (found)
+    {
+        memcpy(&(g_gameCardKeyArea.initial_data), &(g_gameCardSecurityInfo.initial_data), sizeof(GameCardInitialData));
+    } else {
+        LOGFILE("Failed to locate gamecard initial data area!");
+    }
     
     /* Free FS memory dump. */
     memFreeMemoryLocation(&g_fsProgramMemory);

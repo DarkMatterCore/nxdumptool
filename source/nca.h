@@ -75,10 +75,10 @@ typedef enum {
 } NcaKeyAreaEncryptionKeyIndex;
 
 typedef struct {
-    u8 relstep;
-    u8 micro;
-    u8 minor;
-    u8 major;
+    u32 NcaSdkAddOnVersion_Relstep : 8;
+    u32 NcaSdkAddOnVersion_Micro   : 8;
+    u32 NcaSdkAddOnVersion_Minor   : 8;
+    u32 NcaSdkAddOnVersion_Major   : 8;
 } NcaSdkAddOnVersion;
 
 /// 'NcaKeyGeneration_Current' will always point to the last known key generation value.

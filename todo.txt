@@ -2,6 +2,7 @@ todo:
     
     hfs0: filelist generation methods
     
+    tik: make sure the common crypto cert is available when fakesigning a ticket
     tik: automatically dump tickets to the SD card?
     tik: use dumped tickets when the original ones can't be found in the ES savefile?
     

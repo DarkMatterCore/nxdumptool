@@ -34,7 +34,7 @@ bool rsa2048GenerateSha256BasedCustomAcidSignature(void *dst, const void *src, s
 /// Suitable to replace the ACID public key in main.npdm files.
 const u8 *rsa2048GetCustomAcidPublicKey(void);
 
-/// Performs RSA-2048 OAEP decryption and verification. Used to decrypt the titlekey block from tickets with personalized crypto.
+/// Performs RSA-2048-OAEP decryption and verification. Used to decrypt the titlekey block from tickets with personalized crypto.
 bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signature, const void *modulus, const void *exponent, size_t exponent_size, const void *label_hash, size_t *out_size);
 
 #endif /* __RSA_H__ */

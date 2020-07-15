@@ -101,6 +101,7 @@ typedef struct {
     u64 file_table_size;                            ///< RomFS file entries table size.
     RomFileSystemFileEntry *file_table;             ///< RomFS file entries table.
     u64 body_offset;                                ///< RomFS file data body offset (relative to the start of the RomFS).
+    u32 cur_dir_offset;                             ///< Current RomFS directory offset (relative to the start of the directory entries table). Used for RomFS browsing.
 } RomFileSystemContext;
 
 typedef struct {
