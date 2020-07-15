@@ -484,7 +484,8 @@ out2:
     
     bktrFreeContext(&bktr_ctx);
     
-    if (serviceIsActive(&(resolver.s))) serviceClose(&(resolver.s));
+    if (serviceIsActive(&(resolver_emmc.s))) serviceClose(&(resolver_emmc.s));
+    if (serviceIsActive(&(resolver_sdcard.s))) serviceClose(&(resolver_sdcard.s));
     
     lrExit();
     
