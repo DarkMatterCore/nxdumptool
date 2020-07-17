@@ -129,7 +129,7 @@ static void gamecardFreeInfo(void);
 
 static bool gamecardReadSecurityInformation(void);
 
-static bool gamecardGetHandle(void);
+static bool gamecardGetHandleAndStorage(u32 partition);
 NX_INLINE void gamecardCloseHandle(void);
 
 static bool gamecardOpenStorageArea(u8 area);
@@ -262,12 +262,12 @@ UEvent *gamecardGetStatusChangeUserEvent(void)
     return event;
 }
 
-bool gamecardIsReady(void)
+u8 gamecardGetStatus(void)
 {
     mutexLock(&g_gamecardMutex);
-    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded);
+    u8 status = (g_gameCardInserted ? (g_gameCardInfoLoaded ? GameCardStatus_InsertedAndInfoLoaded : GameCardStatus_InsertedAndInfoNotLoaded) : GameCardStatus_NotInserted);
     mutexUnlock(&g_gamecardMutex);
-    return ret;
+    return status;
 }
 
 bool gamecardReadStorage(void *out, u64 read_size, u64 offset)
@@ -527,7 +527,7 @@ static int gamecardDetectionThreadFunc(void *arg)
     Waiter exit_event_waiter = waiterForUEvent(&g_gameCardDetectionThreadExitEvent);
     
     /* Retrieve initial gamecard insertion status. */
-    /* Load gamecard info right away if a gamecard is inserted. */
+    /* Load gamecard info right away if a gamecard is inserted, then signal the user mode gamecard status change event. */
     g_gameCardInserted = gamecardIsInserted();
     if (g_gameCardInserted) gamecardLoadInfo();
     ueventSignal(&g_gameCardStatusChangeEvent);
@@ -559,6 +559,7 @@ static int gamecardDetectionThreadFunc(void *arg)
         
         mutexUnlock(&g_gamecardMutex);
         
+        /* Signal user mode gamecard status change event. */
         ueventSignal(&g_gameCardStatusChangeEvent);
     }
     
@@ -815,49 +816,51 @@ static bool gamecardReadSecurityInformation(void)
     return found;
 }
 
-static bool gamecardGetHandle(void)
+static bool gamecardGetHandleAndStorage(u32 partition)
 {
-    if (!g_gameCardInserted)
+    if (!g_gameCardInserted || partition > 1)
     {
-        LOGFILE("Gamecard not inserted!");
+        LOGFILE("Invalid parameters!");
         return false;
     }
     
     Result rc1 = 0, rc2 = 0;
-    FsStorage tmp_storage = {0};
     
     /* 10 tries. */
     for(u8 i = 0; i < 10; i++)
     {
-        /* First try to open a gamecard storage area using the current gamecard handle. */
-        rc1 = fsOpenGameCardStorage(&tmp_storage, &g_gameCardHandle, 0);
-        if (R_SUCCEEDED(rc1))
+        /* 100 ms wait in case there was an error in the previous loop. */
+        if (R_FAILED(rc1) || R_FAILED(rc2)) svcSleepThread(100000000);
+        
+        /* First, let's try to retrieve a gamecard handle. */
+        /* This can return 0x140A02 if the "nogc" patch is enabled by the running CFW. */
+        rc1 = fsDeviceOperatorGetGameCardHandle(&g_deviceOperator, &g_gameCardHandle);
+        if (R_FAILED(rc1))
         {
-            fsStorageClose(&tmp_storage);
-            break;
+            LOGFILE("fsDeviceOperatorGetGameCardHandle failed on try #%u! (0x%08X).", i + 1, rc1);
+            continue;
         }
         
-        /* If the previous call failed, we may have an invalid handle, so let's close the current one and try to retrieve a new one. */
-        gamecardCloseHandle();
-        rc2 = fsDeviceOperatorGetGameCardHandle(&g_deviceOperator, &g_gameCardHandle);
+        /* If the previous call succeeded, let's try to open the desired gamecard storage area. */
+        rc2 = fsOpenGameCardStorage(&g_gameCardStorage, &g_gameCardHandle, partition);
+        if (R_FAILED(rc2))
+        {
+            gamecardCloseHandle(); /* Close invalid gamecard handle. */
+            LOGFILE("fsOpenGameCardStorage failed to open %s storage area on try #%u! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(partition + 1), i + 1, rc2);
+            continue;
+        }
+        
+        /* If we got up to this point, both a valid gamecard handle and a valid storage area handle are guaranteed. */
+        break;
     }
     
-    if (R_FAILED(rc1) || R_FAILED(rc2))
-    {
-        /* Close leftover gamecard handle. */
-        gamecardCloseHandle();
-        
-        if (R_FAILED(rc1)) LOGFILE("fsOpenGameCardStorage failed! (0x%08X).", rc1);
-        if (R_FAILED(rc2)) LOGFILE("fsDeviceOperatorGetGameCardHandle failed! (0x%08X).", rc2);
-        
-        return false;
-    }
-    
-    return true;
+    return (R_SUCCEEDED(rc1) && R_SUCCEEDED(rc2));
 }
 
 NX_INLINE void gamecardCloseHandle(void)
 {
+    /* I need to find a way to properly close a gamecard handle... */
+    if (!g_gameCardHandle.value) return;
     svcCloseHandle(g_gameCardHandle.value);
     g_gameCardHandle.value = 0;
 }
@@ -870,29 +873,20 @@ static bool gamecardOpenStorageArea(u8 area)
         return false;
     }
     
+    /* Return right away if a valid handle has already been retrieved and the desired gamecard storage area is currently open. */
     if (g_gameCardHandle.value && serviceIsActive(&(g_gameCardStorage.s)) && g_gameCardStorageCurrentArea == area) return true;
     
+    /* Close both gamecard handle and open storage area. */
     gamecardCloseStorageArea();
     
-    Result rc = 0;
-    u32 partition = (area - 1); /* Zero-based index. */
-    
-    /* Retrieve a new gamecard handle. */
-    if (!gamecardGetHandle())
+    /* Retrieve both a new gamecard handle and a storage area handle. */
+    if (!gamecardGetHandleAndStorage(area - 1)) /* Zero-based index. */
     {
-        LOGFILE("Failed to retrieve gamecard handle!");
+        LOGFILE("Failed to retrieve gamecard handle and storage area handle!");
         return false;
     }
     
-    /* Open storage area. */
-    rc = fsOpenGameCardStorage(&g_gameCardStorage, &g_gameCardHandle, partition);
-    if (R_FAILED(rc))
-    {
-        LOGFILE("fsOpenGameCardStorage failed to open %s storage area! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(area), rc);
-        gamecardCloseHandle();
-        return false;
-    }
-    
+    /* Update current gamecard storage area. */
     g_gameCardStorageCurrentArea = area;
     
     return true;

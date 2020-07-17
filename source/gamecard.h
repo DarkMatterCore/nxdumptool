@@ -178,6 +178,12 @@ typedef struct {
 } GameCardHeader;
 
 typedef enum {
+    GameCardStatus_NotInserted              = 0,
+    GameCardStatus_InsertedAndInfoNotLoaded = 1,    ///< Most likely related to the "nogc" patch being enabled. Means nothing at all can be done with the inserted gamecard.
+    GameCardStatus_InsertedAndInfoLoaded    = 2
+} GameCardStatus;
+
+typedef enum {
     GameCardHashFileSystemPartitionType_Root    = 0,
     GameCardHashFileSystemPartitionType_Update  = 1,
     GameCardHashFileSystemPartitionType_Logo    = 2,    ///< Only available in GameCardFwVersion_Since400NUP gamecards.
@@ -198,9 +204,8 @@ void gamecardExit(void);
 /// If the gamecard interface hasn't been initialized, this returns NULL.
 UEvent *gamecardGetStatusChangeUserEvent(void);
 
-/// Used to check if a gamecard has been inserted and if info could be loaded from it (e.g. physical storage access is possible).
-/// If this call returns false, it pretty much means nothing can be done with the inserted gamecard.
-bool gamecardIsReady(void);
+/// Returns the current GameCardStatus value.
+u8 gamecardGetStatus(void);
 
 /// Used to read data from the inserted gamecard.
 /// All required handles, changes between normal <-> secure storage areas and proper offset calculations are managed internally.

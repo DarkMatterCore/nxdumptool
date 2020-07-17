@@ -29,6 +29,8 @@
 #include "usb.h"
 #include "fatfs/ff.h"
 
+#define LOGFILE_PATH    "./nxdumptool.log"
+
 /* Global variables. */
 
 static bool g_resourcesInitialized = false;

@@ -38,7 +38,6 @@
 #include <switch.h>
 
 #define APP_BASE_PATH                   "sdmc:/switch/nxdumptool/"
-#define LOGFILE_PATH                    APP_BASE_PATH "nxdumptool.log"
 
 #define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
 
