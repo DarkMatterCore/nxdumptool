@@ -28,8 +28,8 @@
 
 #define GAMECARD_ACCESS_WAIT_TIME               3                       /* Seconds. */
 
-#define GAMECARD_ECC_BLOCK_SIZE                 0x200
-#define GAMECARD_ECC_DATA_SIZE                  0x24
+#define GAMECARD_UNUSED_AREA_BLOCK_SIZE         0x24
+#define GAMECARD_UNUSED_AREA_SIZE(x)            (((x) / GAMECARD_MEDIA_UNIT_SIZE) * GAMECARD_UNUSED_AREA_BLOCK_SIZE)
 
 #define GAMECARD_STORAGE_AREA_NAME(x)           ((x) == GameCardStorageArea_Normal ? "normal" : ((x) == GameCardStorageArea_Secure ? "secure" : "none"))
 
@@ -323,7 +323,7 @@ bool gamecardGetTrimmedSize(u64 *out)
 {
     mutexLock(&g_gamecardMutex);
     bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) *out = (sizeof(GameCardHeader) + ((u64)g_gameCardHeader.valid_data_end_address * GAMECARD_MEDIA_UNIT_SIZE));
+    if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_MEDIA_UNIT_OFFSET(g_gameCardHeader.valid_data_end_address));
     mutexUnlock(&g_gamecardMutex);
     return ret;
 }
@@ -619,7 +619,7 @@ static void gamecardLoadInfo(void)
     {
         /* The total size for the secure storage area is maxed out under SX OS. */
         /* Let's try to calculate it manually. */
-        g_gameCardStorageSecureAreaSize = ((g_gameCardCapacity - ((g_gameCardCapacity / GAMECARD_ECC_BLOCK_SIZE) * GAMECARD_ECC_DATA_SIZE)) - g_gameCardStorageNormalAreaSize);
+        g_gameCardStorageSecureAreaSize = (g_gameCardCapacity - (g_gameCardStorageNormalAreaSize + GAMECARD_UNUSED_AREA_SIZE(g_gameCardCapacity)));
     }
     
     /* Allocate memory for the root hash FS header. */

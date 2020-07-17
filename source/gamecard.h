@@ -29,6 +29,7 @@
 #define GAMECARD_CERT_MAGIC             0x43455254              /* "CERT". */
 
 #define GAMECARD_MEDIA_UNIT_SIZE        0x200
+#define GAMECARD_MEDIA_UNIT_OFFSET(x)   ((u64)(x) * GAMECARD_MEDIA_UNIT_SIZE)
 
 #define GAMECARD_UPDATE_TID             (u64)0x0100000000000816
 
@@ -57,10 +58,10 @@ typedef struct {
     u8 reserved[0xCF0];
 } GameCardTitleKey;
 
-/// Encrypted using RSA-2048-OAEP. Assumed to be all zeroes in retail gamecards.
+/// Encrypted using RSA-2048-OAEP and a private OAEP key from AuthoringTool. Assumed to be all zeroes in retail gamecards.
 typedef struct {
-    u8 titlekey_encryption_key[0x10];   ///< Used as the AES-128-CTR key for the `GameCardTitleKey` section.
-    u8 titlekey_encryption_iv[0x10];    ///< Used as the AES-128-CTR IV/counter for the `GameCardTitleKey` section.
+    u8 titlekey_encryption_key[0x10];   ///< Used as the AES-128-CTR key for the `GameCardTitleKey` section. Randomly generated during XCI creation by AuthoringTool.
+    u8 titlekey_encryption_iv[0x10];    ///< Used as the AES-128-CTR IV/counter for the `GameCardTitleKey` section. Randomly generated during XCI creation by AuthoringTool.
     u8 reserved[0xE0];
 } GameCardTitleKeyEncryption;
 
