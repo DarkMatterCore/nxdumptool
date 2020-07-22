@@ -23,6 +23,8 @@
 #ifndef __FS_EXT_H__
 #define __FS_EXT_H__
 
+#define GAMECARD_CERT_MAGIC 0x43455254  /* "CERT". */
+
 /// Located at offset 0x7000 in the gamecard image.
 typedef struct {
     u8 signature[0x100];        ///< RSA-2048 PKCS #1 signature over the rest of the data.

@@ -26,7 +26,6 @@
 #include "fs_ext.h"
 
 #define GAMECARD_HEAD_MAGIC             0x48454144              /* "HEAD". */
-#define GAMECARD_CERT_MAGIC             0x43455254              /* "CERT". */
 
 #define GAMECARD_MEDIA_UNIT_SIZE        0x200
 #define GAMECARD_MEDIA_UNIT_OFFSET(x)   ((u64)(x) * GAMECARD_MEDIA_UNIT_SIZE)
@@ -37,18 +36,18 @@
                                         ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : \
                                         ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : ((x) == GameCardHashFileSystemPartitionType_Boot ? "boot" : "unknown"))))))
 
+/// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
+typedef struct {
+    u64 package_id;         ///< Matches package_id from GameCardHeader.
+    u8 reserved[0x8];       ///< Just zeroes.
+} GameCardKeySource;
+
 /// Plaintext area. Dumped from FS program memory.
 typedef struct {
-    union {
-        u8 key_source[0x10];        ///< Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
-        struct {
-            u64 package_id;         ///< Matches package_id from GameCardHeader.
-            u64 padding;            ///< Just zeroes.
-        };
-    };
+    GameCardKeySource key_source;
     u8 encrypted_titlekey[0x10];    ///< Encrypted using AES-128-CCM with the decrypted key_source and the nonce from this section.
     u8 mac[0x10];                   ///< Used to verify the validity of the decrypted titlekey.
-    u8 nonce[0xC];                  ///< Used as the IV to decrypt the key_source using AES-128-CCM.
+    u8 nonce[0xC];                  ///< Used as the IV to decrypt encrypted_titlekey using AES-128-CCM.
     u8 reserved[0x1C4];
 } GameCardInitialData;
 
@@ -81,7 +80,7 @@ typedef enum {
 typedef struct {
     u8 kek_index          : 4;  ///< GameCardKekIndex.
     u8 titlekey_dec_index : 4;
-} GameCardKeyFlags;
+} GameCardKeyIndex;
 
 typedef enum {
     GameCardRomSize_1GiB  = 0xFA,
@@ -101,20 +100,20 @@ typedef enum {
 } GameCardFlags;
 
 typedef enum {
-    GameCardSelSec_ForT1 = 0,
-    GameCardSelSec_ForT2 = 1
+    GameCardSelSec_ForT1 = 1,
+    GameCardSelSec_ForT2 = 2
 } GameCardSelSec;
 
 typedef enum {
-    GameCardFwVersion_Dev         = 0,
-    GameCardFwVersion_Prod        = 1,
-    GameCardFwVersion_Since400NUP = 2
+    GameCardFwVersion_ForDev       = 0,
+    GameCardFwVersion_Before400NUP = 1, ///< cup_version < 268435456 (4.0.0-0.0) in GameCardHeaderEncryptedArea.
+    GameCardFwVersion_Since400NUP  = 2  ///< cup_version >= 268435456 (4.0.0-0.0) in GameCardHeaderEncryptedArea.
 } GameCardFwVersion;
 
 typedef enum {
-    GameCardAccCtrl_25MHz = 0xA10011,
-    GameCardAccCtrl_50MHz = 0xA10010
-} GameCardAccCtrl;
+    GameCardAccCtrl1_25MHz = 0xA10011,
+    GameCardAccCtrl1_50MHz = 0xA10010   ///< GameCardRomSize_8GiB or greater.
+} GameCardAccCtrl1;
 
 typedef enum {
     GameCardCompatibilityType_Normal = 0,
@@ -129,27 +128,27 @@ typedef struct {
 } GameCardFwMode;
 
 typedef struct {
-    u32 GameCardUppVersion_MinorRelstep : 8;
-    u32 GameCardUppVersion_MajorRelstep : 8;
-    u32 GameCardUppVersion_Micro        : 4;
-    u32 GameCardUppVersion_Minor        : 6;
-    u32 GameCardUppVersion_Major        : 6;
-} GameCardUppVersion;
+    u32 GameCardCupVersion_MinorRelstep : 8;
+    u32 GameCardCupVersion_MajorRelstep : 8;
+    u32 GameCardCupVersion_Micro        : 4;
+    u32 GameCardCupVersion_Minor        : 6;
+    u32 GameCardCupVersion_Major        : 6;
+} GameCardCupVersion;
 
 /// Encrypted using AES-128-CBC with the `xci_header_key` (which can't dumped through current methods) and the IV from `GameCardHeader`.
 typedef struct {
     u64 fw_version;                 ///< GameCardFwVersion.
-    u32 acc_ctrl;                   ///< GameCardAccCtrl.
+    u32 acc_ctrl_1;                 ///< GameCardAccCtrl1.
     u32 wait_1_time_read;           ///< Always 0x1388.
     u32 wait_2_time_read;           ///< Always 0.
     u32 wait_1_time_write;          ///< Always 0.
     u32 wait_2_time_write;          ///< Always 0.
     GameCardFwMode fw_mode;
-    GameCardUppVersion upp_version;
+    GameCardCupVersion cup_version;
     u8 compatibility_type;          ///< GameCardCompatibilityType.
     u8 reserved_1[0x3];
-    u64 upp_hash;
-    u64 upp_id;                     ///< Must match GAMECARD_UPDATE_TID.
+    u64 cup_hash;
+    u64 cup_id;                     ///< Must match GAMECARD_UPDATE_TID.
     u8 reserved_2[0x38];
 } GameCardHeaderEncryptedArea;
 
@@ -159,9 +158,9 @@ typedef struct {
     u32 magic;                                      ///< "HEAD".
     u32 secure_area_start_address;                  ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
     u32 backup_area_start_address;                  ///< Always 0xFFFFFFFF.
-    GameCardKeyFlags key_flags;
+    GameCardKeyIndex key_index;
     u8 rom_size;                                    ///< GameCardRomSize.
-    u8 header_version;
+    u8 header_version;                              ///< Always 0.
     u8 flags;                                       ///< GameCardFlags.
     u64 package_id;
     u32 valid_data_end_address;                     ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
@@ -172,8 +171,8 @@ typedef struct {
     u8 partition_fs_header_hash[SHA256_HASH_SIZE];
     u8 initial_data_hash[SHA256_HASH_SIZE];
     u32 sel_sec;                                    ///< GameCardSelSec.
-    u32 sel_t1_key_index;
-    u32 sel_key_index;
+    u32 sel_t1_key;                                 ///< Always 2.
+    u32 sel_key;                                    ///> Always 0.
     u32 normal_area_end_address;                    ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
     GameCardHeaderEncryptedArea encrypted_area;
 } GameCardHeader;

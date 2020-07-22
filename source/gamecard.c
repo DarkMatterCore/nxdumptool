@@ -42,6 +42,8 @@
 
 /* Type definitions. */
 
+/// Only kept for documentation purposes, not really used.
+/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardHeaderEncryptedArea precedes this struct in FS program memory.
 typedef struct {
     u32 memory_interface_mode;
     u32 asic_status;
@@ -106,15 +108,14 @@ static u64 g_gameCardCapacity = 0;
 static u8 *g_gameCardHfsRootHeader = NULL;   /// GameCardHashFileSystemHeader + (entry_count * GameCardHashFileSystemEntry) + Name Table.
 static GameCardHashFileSystemPartitionInfo *g_gameCardHfsPartitions = NULL;
 
+static GameCardKeyArea g_gameCardKeyArea = {0};
+
 static MemoryLocation g_fsProgramMemory = {
     .program_id = FS_SYSMODULE_TID,
     .mask = 0,
     .data = NULL,
     .data_size = 0
 };
-
-static GameCardSecurityInformation g_gameCardSecurityInfo = {0};
-static GameCardKeyArea g_gameCardKeyArea = {0};
 
 /* Function prototypes. */
 
@@ -127,7 +128,7 @@ NX_INLINE bool gamecardIsInserted(void);
 static void gamecardLoadInfo(void);
 static void gamecardFreeInfo(void);
 
-static bool gamecardReadSecurityInformation(void);
+static bool gamecardReadInitialData(void);
 
 static bool gamecardGetHandleAndStorage(u32 partition);
 NX_INLINE void gamecardCloseHandle(void);
@@ -713,13 +714,13 @@ static void gamecardLoadInfo(void)
         }
     }
     
-    /* Read full FS program memory to retrieve the GameCardSecurityInformation data, which holds the gamecard initial data area. */
-    /* This must be performed while the gamecard is in secure mode, which is already taken care of in the gamecardReadStorageArea() calls from the last iteration in the previous for() loop. */
-    /* GameCardSecurityInformation data is returned by Lotus command "ChangeToSecureMode" (0xF), and kept in FS program memory only after the gamecard secure area has been both mounted and read from. */
-    /* Under some circumstances, the gamecard initial data is located *after* the GameCardSecurityInformation area (offset 0x600), instead of its common location at offset 0x400. */
-    if (!gamecardReadSecurityInformation())
+    /* Read full FS program memory to retrieve the GameCardInitialData block, which is part of the GameCardKeyArea block. */
+    /* In FS program memory, this is stored as part of the GameCardSecurityInformation struct, which is returned by Lotus command "ChangeToSecureMode" (0xF). */
+    /* This means it is only available *after* the gamecard secure area has been both mounted and read from, which has already been taken care of in the last iteration from the previous for() loop. */
+    /* The GameCardSecurityInformation struct is only kept for documentation purposes. It isn't used at all to retrieve the GameCardInitialData block. */
+    if (!gamecardReadInitialData())
     {
-        LOGFILE("Failed to read gamecard security information area from FS program memory!");
+        LOGFILE("Failed to read gamecard initial data area from FS program memory!");
         goto end;
     }
     
@@ -731,10 +732,8 @@ end:
 
 static void gamecardFreeInfo(void)
 {
-    memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
-    
-    memset(&g_gameCardSecurityInfo, 0, sizeof(GameCardSecurityInformation));
     memset(&g_gameCardKeyArea, 0, sizeof(GameCardKeyArea));
+    memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
     
     g_gameCardStorageNormalAreaSize = 0;
     g_gameCardStorageSecureAreaSize = 0;
@@ -768,9 +767,10 @@ static void gamecardFreeInfo(void)
     g_gameCardInfoLoaded = false;
 }
 
-static bool gamecardReadSecurityInformation(void)
+static bool gamecardReadInitialData(void)
 {
     bool found = false;
+    u8 tmp_hash[SHA256_HASH_SIZE] = {0};
     
     /* Retrieve full FS program memory dump. */
     if (!memRetrieveFullProgramMemory(&g_fsProgramMemory))
@@ -779,35 +779,20 @@ static bool gamecardReadSecurityInformation(void)
         return false;
     }
     
-    /* Look for the gamecard header in the FS memory dump. */
+    /* Look for the initial data block in the FS memory dump using the package ID and the initial data hash from the gamecard header. */
     for(u64 offset = 0; offset < g_fsProgramMemory.data_size; offset++)
     {
-        if (memcmp(&(g_gameCardHeader.magic), g_fsProgramMemory.data + offset, 0x90) != 0) continue;
+        if (memcmp(g_fsProgramMemory.data + offset, &(g_gameCardHeader.package_id), sizeof(g_gameCardHeader.package_id)) != 0) continue;
         
-        /* Found the gamecard header. Let's read the GameCardSecurityInformation element. */
-        offset += 0x100;
-        memcpy(&g_gameCardSecurityInfo, g_fsProgramMemory.data + offset, sizeof(GameCardSecurityInformation));
+        sha256CalculateHash(tmp_hash, g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
         
-        /* Check the key_source / package_id value. */
-        if (g_gameCardSecurityInfo.initial_data.package_id == g_gameCardHeader.package_id)
+        if (!memcmp(tmp_hash, g_gameCardHeader.initial_data_hash, SHA256_HASH_SIZE))
         {
             /* Jackpot. */
+            memcpy(&(g_gameCardKeyArea.initial_data), g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
             found = true;
-        } else {
-            /* Copy the sector right after the GameCardSecurityInformation element from the memory dump, since it may hold the gamecard initial data. */
-            offset += sizeof(GameCardSecurityInformation);
-            memcpy(&(g_gameCardSecurityInfo.initial_data), g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
-            found = (g_gameCardSecurityInfo.initial_data.package_id == g_gameCardHeader.package_id);
+            break;
         }
-        
-        break;
-    }
-    
-    if (found)
-    {
-        memcpy(&(g_gameCardKeyArea.initial_data), &(g_gameCardSecurityInfo.initial_data), sizeof(GameCardInitialData));
-    } else {
-        LOGFILE("Failed to locate gamecard initial data area!");
     }
     
     /* Free FS memory dump. */
@@ -824,29 +809,29 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         return false;
     }
     
-    Result rc1 = 0, rc2 = 0;
+    Result rc = 0;
     
     /* 10 tries. */
     for(u8 i = 0; i < 10; i++)
     {
         /* 100 ms wait in case there was an error in the previous loop. */
-        if (R_FAILED(rc1) || R_FAILED(rc2)) svcSleepThread(100000000);
+        if (R_FAILED(rc)) svcSleepThread(100000000);
         
         /* First, let's try to retrieve a gamecard handle. */
         /* This can return 0x140A02 if the "nogc" patch is enabled by the running CFW. */
-        rc1 = fsDeviceOperatorGetGameCardHandle(&g_deviceOperator, &g_gameCardHandle);
-        if (R_FAILED(rc1))
+        rc = fsDeviceOperatorGetGameCardHandle(&g_deviceOperator, &g_gameCardHandle);
+        if (R_FAILED(rc))
         {
-            LOGFILE("fsDeviceOperatorGetGameCardHandle failed on try #%u! (0x%08X).", i + 1, rc1);
+            LOGFILE("fsDeviceOperatorGetGameCardHandle failed on try #%u! (0x%08X).", i + 1, rc);
             continue;
         }
         
         /* If the previous call succeeded, let's try to open the desired gamecard storage area. */
-        rc2 = fsOpenGameCardStorage(&g_gameCardStorage, &g_gameCardHandle, partition);
-        if (R_FAILED(rc2))
+        rc = fsOpenGameCardStorage(&g_gameCardStorage, &g_gameCardHandle, partition);
+        if (R_FAILED(rc))
         {
             gamecardCloseHandle(); /* Close invalid gamecard handle. */
-            LOGFILE("fsOpenGameCardStorage failed to open %s storage area on try #%u! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(partition + 1), i + 1, rc2);
+            LOGFILE("fsOpenGameCardStorage failed to open %s storage area on try #%u! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(partition + 1), i + 1, rc);
             continue;
         }
         
@@ -854,7 +839,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         break;
     }
     
-    return (R_SUCCEEDED(rc1) && R_SUCCEEDED(rc2));
+    return R_SUCCEEDED(rc);
 }
 
 NX_INLINE void gamecardCloseHandle(void)

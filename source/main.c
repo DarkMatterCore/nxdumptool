@@ -200,7 +200,7 @@ int main(int argc, char *argv[])
     
     int ret = 0;
     
-    LOGFILE("nxdumptool starting.");
+    LOGFILE(APP_TITLE " starting.");
     
     consoleInit(NULL);
     
@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
     
     u8 *buf = NULL;
     
-    u64 base_tid = (u64)0x01006F8002326000; // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000
+    u64 base_tid = (u64)0x01006A800016E000; // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000
     u64 update_tid = (base_tid | 0x800);
     
     Ticket base_tik = {0}, update_tik = {0};

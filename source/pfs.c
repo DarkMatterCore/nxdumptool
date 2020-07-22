@@ -23,16 +23,20 @@
 
 bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
-    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type != NcaFsSectionType_PartitionFs || !nca_fs_ctx->header || nca_fs_ctx->header->fs_type != NcaFsType_PartitionFs || \
-        nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalSha256)
+    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type != NcaFsSectionType_PartitionFs || nca_fs_ctx->header.fs_type != NcaFsType_PartitionFs || \
+        nca_fs_ctx->header.hash_type != NcaHashType_HierarchicalSha256)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
     u32 magic = 0;
+    
     PartitionFileSystemHeader pfs_header = {0};
     PartitionFileSystemEntry *main_npdm_entry = NULL;
+    
+    u32 hash_region_count = 0;
+    NcaRegion *hash_region = NULL;
     
     /* Clear output partition FS context. */
     memset(out, 0, sizeof(PartitionFileSystemContext));
@@ -40,14 +44,17 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     /* Fill context. */
     out->nca_fs_ctx = nca_fs_ctx;
     
-    if (!ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header->hash_info.hierarchical_sha256), nca_fs_ctx->section_size))
+    if (!ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header.hash_data.hierarchical_sha256_data), nca_fs_ctx->section_size))
     {
         LOGFILE("Invalid HierarchicalSha256 block!");
         return false;
     }
     
-    out->offset = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.offset;
-    out->size = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.size;
+    hash_region_count = nca_fs_ctx->header.hash_data.hierarchical_sha256_data.hash_region_count;
+    hash_region = &(nca_fs_ctx->header.hash_data.hierarchical_sha256_data.hash_region[hash_region_count - 1]);
+    
+    out->offset = hash_region->offset;
+    out->size = hash_region->size;
     
     /* Read partial PFS header. */
     if (!ncaReadFsSection(nca_fs_ctx, &pfs_header, sizeof(PartitionFileSystemHeader), out->offset))

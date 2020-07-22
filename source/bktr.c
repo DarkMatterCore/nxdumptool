@@ -37,14 +37,14 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
 {
     NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
     
-    if (!out || !base_nca_fs_ctx || !base_nca_fs_ctx->enabled || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || !base_nca_fs_ctx->header || \
-        base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || base_nca_fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || !update_nca_fs_ctx || !update_nca_fs_ctx->enabled || \
-        !update_nca_fs_ctx->header || !(update_nca_ctx = (NcaContext*)update_nca_fs_ctx->nca_ctx) || update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || \
-        update_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx || base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || \
-        base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || __builtin_bswap32(update_nca_fs_ctx->header->patch_info.indirect_header.magic) != NCA_BKTR_MAGIC || \
-        __builtin_bswap32(update_nca_fs_ctx->header->patch_info.aes_ctr_ex_header.magic) != NCA_BKTR_MAGIC || \
-        (update_nca_fs_ctx->header->patch_info.indirect_offset + update_nca_fs_ctx->header->patch_info.indirect_size) != update_nca_fs_ctx->header->patch_info.aes_ctr_ex_offset || \
-        (update_nca_fs_ctx->header->patch_info.aes_ctr_ex_offset + update_nca_fs_ctx->header->patch_info.aes_ctr_ex_size) != update_nca_fs_ctx->section_size)
+    if (!out || !base_nca_fs_ctx || !base_nca_fs_ctx->enabled || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
+        base_nca_fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || !update_nca_fs_ctx || !update_nca_fs_ctx->enabled || !(update_nca_ctx = (NcaContext*)update_nca_fs_ctx->nca_ctx) || \
+        update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || update_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx || \
+        base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || \
+        __builtin_bswap32(update_nca_fs_ctx->header.patch_info.indirect_bucket.header.magic) != NCA_BKTR_MAGIC || \
+        __builtin_bswap32(update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.header.magic) != NCA_BKTR_MAGIC || \
+        (update_nca_fs_ctx->header.patch_info.indirect_bucket.offset + update_nca_fs_ctx->header.patch_info.indirect_bucket.size) != update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.offset || \
+        (update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.offset + update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.size) != update_nca_fs_ctx->section_size)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -59,10 +59,10 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     
     /* Fill context. */
     bool success = false;
-    NcaPatchInfo *patch_info = &(update_nca_fs_ctx->header->patch_info);
+    NcaPatchInfo *patch_info = &(update_nca_fs_ctx->header.patch_info);
     
     /* Allocate space for an extra (fake) indirect storage entry, to simplify our logic. */
-    out->indirect_block = calloc(1, patch_info->indirect_size + ((0x3FF0 / sizeof(u64)) * sizeof(BktrIndirectStorageEntry)));
+    out->indirect_block = calloc(1, patch_info->indirect_bucket.size + ((0x3FF0 / sizeof(u64)) * sizeof(BktrIndirectStorageEntry)));
     if (!out->indirect_block)
     {
         LOGFILE("Unable to allocate memory for the BKTR Indirect Storage Block!");
@@ -70,14 +70,14 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     }
     
     /* Read indirect storage block data. */
-    if (!ncaReadFsSection(update_nca_fs_ctx, out->indirect_block, patch_info->indirect_size, patch_info->indirect_offset))
+    if (!ncaReadFsSection(update_nca_fs_ctx, out->indirect_block, patch_info->indirect_bucket.size, patch_info->indirect_bucket.offset))
     {
         LOGFILE("Failed to read BKTR Indirect Storage Block data!");
         goto end;
     }
     
     /* Allocate space for an extra (fake) AesCtrEx storage entry, to simplify our logic. */
-    out->aes_ctr_ex_block = calloc(1, patch_info->aes_ctr_ex_size + (((0x3FF0 / sizeof(u64)) + 1) * sizeof(BktrAesCtrExStorageEntry)));
+    out->aes_ctr_ex_block = calloc(1, patch_info->aes_ctr_ex_bucket.size + (((0x3FF0 / sizeof(u64)) + 1) * sizeof(BktrAesCtrExStorageEntry)));
     if (!out->aes_ctr_ex_block)
     {
         LOGFILE("Unable to allocate memory for the BKTR AesCtrEx Storage Block!");
@@ -85,13 +85,13 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     }
     
     /* Read AesCtrEx storage block data. */
-    if (!ncaReadFsSection(update_nca_fs_ctx, out->aes_ctr_ex_block, patch_info->aes_ctr_ex_size, patch_info->aes_ctr_ex_offset))
+    if (!ncaReadFsSection(update_nca_fs_ctx, out->aes_ctr_ex_block, patch_info->aes_ctr_ex_bucket.size, patch_info->aes_ctr_ex_bucket.offset))
     {
         LOGFILE("Failed to read BKTR AesCtrEx Storage Block data!");
         goto end;
     }
     
-    if (out->aes_ctr_ex_block->physical_size != patch_info->aes_ctr_ex_offset)
+    if (out->aes_ctr_ex_block->physical_size != patch_info->aes_ctr_ex_bucket.offset)
     {
         LOGFILE("Invalid BKTR AesCtrEx Storage Block size!");
         goto end;
@@ -129,16 +129,16 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     BktrIndirectStorageBucket *last_indirect_bucket = bktrGetIndirectStorageBucket(out->indirect_block, out->indirect_block->bucket_count - 1);
     BktrAesCtrExStorageBucket *last_aes_ctr_ex_bucket = bktrGetAesCtrExStorageBucket(out->aes_ctr_ex_block, out->aes_ctr_ex_block->bucket_count - 1);
     last_indirect_bucket->indirect_storage_entries[last_indirect_bucket->entry_count].virtual_offset = out->indirect_block->virtual_size;
-    last_aes_ctr_ex_bucket->aes_ctr_ex_storage_entries[last_aes_ctr_ex_bucket->entry_count].offset = patch_info->indirect_offset;
-    last_aes_ctr_ex_bucket->aes_ctr_ex_storage_entries[last_aes_ctr_ex_bucket->entry_count].generation = update_nca_fs_ctx->header->generation;
+    last_aes_ctr_ex_bucket->aes_ctr_ex_storage_entries[last_aes_ctr_ex_bucket->entry_count].offset = patch_info->indirect_bucket.offset;
+    last_aes_ctr_ex_bucket->aes_ctr_ex_storage_entries[last_aes_ctr_ex_bucket->entry_count].generation = update_nca_fs_ctx->header.aes_ctr_upper_iv.generation;
     last_aes_ctr_ex_bucket->aes_ctr_ex_storage_entries[last_aes_ctr_ex_bucket->entry_count + 1].offset = update_nca_fs_ctx->section_size;
     last_aes_ctr_ex_bucket->aes_ctr_ex_storage_entries[last_aes_ctr_ex_bucket->entry_count + 1].generation = 0;
     
     /* Initialize update NCA RomFS context. */
     /* Don't verify offsets from Patch RomFS sections, because they reflect the full, patched RomFS image. */
     out->patch_romfs_ctx.nca_fs_ctx = update_nca_fs_ctx;
-    out->patch_romfs_ctx.offset = out->offset = update_nca_fs_ctx->header->hash_info.hierarchical_integrity.hash_target_layer_info.offset;
-    out->patch_romfs_ctx.size = out->size = update_nca_fs_ctx->header->hash_info.hierarchical_integrity.hash_target_layer_info.size;
+    out->patch_romfs_ctx.offset = out->offset = update_nca_fs_ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1].offset;
+    out->patch_romfs_ctx.size = out->size = update_nca_fs_ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1].size;
     
     /* Read update NCA RomFS header. */
     if (!bktrPhysicalSectionRead(out, &(out->patch_romfs_ctx.header), sizeof(RomFileSystemHeader), out->patch_romfs_ctx.offset))

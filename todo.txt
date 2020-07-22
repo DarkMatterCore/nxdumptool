@@ -7,6 +7,7 @@ todo:
     tik: use dumped tickets when the original ones can't be found in the ES savefile?
     
     nca: function to write encrypted nca headers / nca fs headers (don't forget nca0 please)
+    nca: function to write hashdata patches
     
     pfs0: filelist generation methods
     pfs0: full header aligned to 0x20 (nsp)
@@ -31,17 +32,3 @@ todo:
         fclose(content_info);
     }
     
-    
-    
-    
-    
-    Result txIsFat32(bool *mode) {
-        Result rc = serviceDispatch(&g_tx, 137);
-        if (rc == 0xa08) {
-            *mode = false;
-            return 0;
-        } else if (rc == 0) {
-            *mode = true;
-        }
-        return rc;
-    }

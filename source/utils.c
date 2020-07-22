@@ -29,7 +29,7 @@
 #include "usb.h"
 #include "fatfs/ff.h"
 
-#define LOGFILE_PATH    "./nxdumptool.log"
+#define LOGFILE_PATH    "./" APP_TITLE ".log"
 
 /* Global variables. */
 

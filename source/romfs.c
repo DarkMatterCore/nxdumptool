@@ -31,13 +31,17 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     NcaContext *nca_ctx = NULL;
     u64 dir_table_offset = 0, file_table_offset = 0;
     
-    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || !nca_fs_ctx->header || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->format_version == NcaVersion_Nca0 && \
-        (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalSha256)) || (nca_ctx->format_version != NcaVersion_Nca0 && \
-        (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || nca_fs_ctx->header->hash_type != NcaHashType_HierarchicalIntegrity)))
+    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->format_version == NcaVersion_Nca0 && \
+        (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->header.hash_type != NcaHashType_HierarchicalSha256)) || (nca_ctx->format_version != NcaVersion_Nca0 && \
+        (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || nca_fs_ctx->header.hash_type != NcaHashType_HierarchicalIntegrity)))
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
+    
+    u32 layer_count = 0;
+    NcaRegion *hash_region = NULL;
+    NcaHierarchicalIntegrityVerificationLevelInformation *level_information = NULL;
     
     /* Clear output RomFS context. */
     memset(out, 0, sizeof(RomFileSystemContext));
@@ -47,23 +51,29 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     
     if (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs)
     {
-        if (!ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header->hash_info.hierarchical_sha256), nca_fs_ctx->section_size))
+        if (!ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header.hash_data.hierarchical_sha256_data), nca_fs_ctx->section_size))
         {
             LOGFILE("Invalid HierarchicalSha256 block!");
             return false;
         }
         
-        out->offset = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.offset;
-        out->size = nca_fs_ctx->header->hash_info.hierarchical_sha256.hash_target_layer_info.size;
+        layer_count = nca_fs_ctx->header.hash_data.hierarchical_sha256_data.hash_region_count;
+        hash_region = &(nca_fs_ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1]);
+        
+        out->offset = hash_region->offset;
+        out->size = hash_region->size;
     } else {
-        if (!ncaValidateHierarchicalIntegrityOffsets(&(nca_fs_ctx->header->hash_info.hierarchical_integrity), nca_fs_ctx->section_size))
+        if (!ncaValidateHierarchicalIntegrityOffsets(&(nca_fs_ctx->header.hash_data.integrity_meta_info), nca_fs_ctx->section_size))
         {
             LOGFILE("Invalid HierarchicalIntegrity block!");
             return false;
         }
         
-        out->offset = nca_fs_ctx->header->hash_info.hierarchical_integrity.hash_target_layer_info.offset;
-        out->size = nca_fs_ctx->header->hash_info.hierarchical_integrity.hash_target_layer_info.size;
+        layer_count = NCA_IVFC_LEVEL_COUNT;
+        level_information = &(nca_fs_ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[layer_count - 1]);
+        
+        out->offset = level_information->offset;
+        out->size = level_information->size;
     }
     
     /* Read RomFS header. */

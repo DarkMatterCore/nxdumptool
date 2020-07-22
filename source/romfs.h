@@ -156,7 +156,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
 /// Generates a path string from a RomFS file entry.
 bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type);
 
-/// Generates HierarchicalSha256 (NCA0) / HierarchicalIntegrity (NCA2/NCA3) FS section patch data using a RomFS context + file entry, which can be used to replace NCA data in content dumping operations.
+/// Generates HierarchicalSha256 (NCA0) / HierarchicalIntegrity (NCA2/NCA3) FS section patch data using a RomFS context + file entry, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the RomFS file entry data.
 /// This function shares the same limitations as ncaGenerateHierarchicalSha256Patch() / ncaGenerateHierarchicalIntegrityPatch().
 bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, const void *data, u64 data_size, u64 data_offset, RomFileSystemFileEntryPatch *out);

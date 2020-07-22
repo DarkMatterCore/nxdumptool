@@ -37,7 +37,7 @@
 #include <stdatomic.h>
 #include <switch.h>
 
-#define APP_BASE_PATH                   "sdmc:/switch/nxdumptool/"
+#define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
 
 #define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
 
