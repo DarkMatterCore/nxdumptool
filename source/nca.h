@@ -332,11 +332,13 @@ typedef struct {
 } NcaHashDataPatch;
 
 typedef struct {
+    NcmContentId content_id;
     u32 hash_region_count;
     NcaHashDataPatch hash_region_patch[NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT];
 } NcaHierarchicalSha256Patch;
 
 typedef struct {
+    NcmContentId content_id;
     NcaHashDataPatch hash_level_patch[NCA_IVFC_LEVEL_COUNT];
 } NcaHierarchicalIntegrityPatch;
 
@@ -378,18 +380,9 @@ void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *d
 /// As such, this function is not designed to generate more than one patch per HierarchicalSha256 FS section.
 bool ncaGenerateHierarchicalSha256Patch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out);
 
-/// Cleanups a previously generated NcaHierarchicalSha256Patch.
-NX_INLINE void ncaFreeHierarchicalSha256Patch(NcaHierarchicalSha256Patch *patch)
-{
-    if (!patch || !patch->hash_region_count || patch->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT) return;
-    
-    for(u8 i = 0; i < patch->hash_region_count; i++)
-    {
-        if (patch->hash_region_patch[i].data) free(patch->hash_region_patch[i].data);
-    }
-    
-    memset(patch, 0, sizeof(NcaHierarchicalSha256Patch));
-}
+/// Overwrites block(s) from a buffer holding raw NCA data using previously initialized NcaContext and NcaHierarchicalSha256Patch.
+/// 'buf_offset' must hold the raw NCA offset where the data stored in 'buf' was read from.
+void ncaWriteHierarchicalSha256PatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset);
 
 /// Generates HierarchicalIntegrity FS section patch data, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the last HierarchicalIntegrity hash level (actual underlying FS).
@@ -397,20 +390,21 @@ NX_INLINE void ncaFreeHierarchicalSha256Patch(NcaHierarchicalSha256Patch *patch)
 /// As such, this function is not designed to generate more than one patch per HierarchicalIntegrity FS section.
 bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalIntegrityPatch *out);
 
-/// Cleanups a previously generated NcaHierarchicalIntegrityPatch.
-NX_INLINE void ncaFreeHierarchicalIntegrityPatch(NcaHierarchicalIntegrityPatch *patch)
-{
-    if (!patch) return;
-    
-    for(u8 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
-    {
-        if (patch->hash_level_patch[i].data) free(patch->hash_level_patch[i].data);
-    }
-    
-    memset(patch, 0, sizeof(NcaHierarchicalIntegrityPatch));
-}
+/// Overwrites block(s) from a buffer holding raw NCA data using a previously initialized NcaContext and NcaHierarchicalIntegrityPatch.
+/// 'buf_offset' must hold the raw NCA offset where the data stored in 'buf' was read from.
+void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset);
 
-/// Removes titlekey crypto dependency from a NCA context by wiping the Rights ID from the underlying NCA header copy and copying the decrypted titlekey to the NCA key area.
+
+
+
+
+
+
+
+
+
+
+/// Removes titlekey crypto dependency from a NCA context by wiping the Rights ID from the underlying NCA header and copying the decrypted titlekey to the NCA key area.
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx);
 
 
@@ -457,7 +451,7 @@ NX_INLINE bool ncaValidateHierarchicalSha256Offsets(NcaHierarchicalSha256Data *h
     if (!hierarchical_sha256_data || !section_size || !hierarchical_sha256_data->hash_block_size || !hierarchical_sha256_data->hash_region_count || \
         hierarchical_sha256_data->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT) return false;
     
-    for(u8 i = 0; i < hierarchical_sha256_data->hash_region_count; i++)
+    for(u32 i = 0; i < hierarchical_sha256_data->hash_region_count; i++)
     {
         if (hierarchical_sha256_data->hash_region[i].offset >= section_size || !hierarchical_sha256_data->hash_region[i].size || \
             (hierarchical_sha256_data->hash_region[i].offset + hierarchical_sha256_data->hash_region[i].size) > section_size) return false;
@@ -471,7 +465,7 @@ NX_INLINE bool ncaValidateHierarchicalIntegrityOffsets(NcaIntegrityMetaInfo *int
     if (!integrity_meta_info || !section_size || __builtin_bswap32(integrity_meta_info->magic) != NCA_IVFC_MAGIC || integrity_meta_info->master_hash_size != SHA256_HASH_SIZE || \
         integrity_meta_info->info_level_hash.max_level_count != NCA_IVFC_MAX_LEVEL_COUNT) return false;
     
-    for(u8 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
+    for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
     {
         if (integrity_meta_info->info_level_hash.level_information[i].offset >= section_size || !integrity_meta_info->info_level_hash.level_information[i].size || \
             !integrity_meta_info->info_level_hash.level_information[i].block_order || \
@@ -479,6 +473,30 @@ NX_INLINE bool ncaValidateHierarchicalIntegrityOffsets(NcaIntegrityMetaInfo *int
     }
     
     return true;
+}
+
+NX_INLINE void ncaFreeHierarchicalSha256Patch(NcaHierarchicalSha256Patch *patch)
+{
+    if (!patch) return;
+    
+    for(u32 i = 0; i < NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT; i++)
+    {
+        if (patch->hash_region_patch[i].data) free(patch->hash_region_patch[i].data);
+    }
+    
+    memset(patch, 0, sizeof(NcaHierarchicalSha256Patch));
+}
+
+NX_INLINE void ncaFreeHierarchicalIntegrityPatch(NcaHierarchicalIntegrityPatch *patch)
+{
+    if (!patch) return;
+    
+    for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
+    {
+        if (patch->hash_level_patch[i].data) free(patch->hash_level_patch[i].data);
+    }
+    
+    memset(patch, 0, sizeof(NcaHierarchicalIntegrityPatch));
 }
 
 #endif /* __NCA_H__ */

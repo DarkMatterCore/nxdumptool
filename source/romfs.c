@@ -496,19 +496,17 @@ bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEnt
     bool success = false;
     u64 fs_offset = (ctx->body_offset + file_entry->offset + data_offset);
     
-    memset(&(out->old_format_patch), 0, sizeof(NcaHierarchicalSha256Patch));
-    memset(&(out->cur_format_patch), 0, sizeof(NcaHierarchicalIntegrityPatch));
-    
     if (ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs)
     {
         out->use_old_format_patch = true;
         success = ncaGenerateHierarchicalSha256Patch(ctx->nca_fs_ctx, data, data_size, fs_offset, &(out->old_format_patch));
-        if (!success) LOGFILE("Failed to generate 0x%lX bytes HierarchicalSha256 patch at offset 0x%lX for RomFS file entry!", data_size, fs_offset);
     } else {
         out->use_old_format_patch = false;
         success = ncaGenerateHierarchicalIntegrityPatch(ctx->nca_fs_ctx, data, data_size, fs_offset, &(out->cur_format_patch));
-        if (!success) LOGFILE("Failed to generate 0x%lX bytes HierarchicalIntegrity patch at offset 0x%lX for RomFS file entry!", data_size, fs_offset);
     }
+    
+    if (!success) LOGFILE("Failed to generate 0x%lX bytes Hierarchical%s patch at offset 0x%lX for RomFS file entry!", data_size, \
+                          ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? "Sha256" : "Integrity", fs_offset);
     
     return success;
 }
