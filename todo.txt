@@ -2,7 +2,7 @@ todo:
     
     nca: function to write re-encrypted nca headers / nca fs headers (don't forget nca0 please)
     
-    tik: make sure the common crypto cert is available when fakesigning a ticket
+    tik: make sure the common crypto cert (XS20, XS22) is available when fakesigning a ticket
     tik: automatically dump tickets to the SD card?
     tik: use dumped tickets when the original ones can't be found in the ES savefile?
     
