@@ -353,7 +353,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
     Aes128XtsContext hdr_aes_ctx = {0}, nca0_fs_header_ctx = {0};
     
     /* Encrypt NCA key area. */
-    if (!ncaEncryptKeyArea(ctx))
+    if (!ctx->rights_id_available && !ncaEncryptKeyArea(ctx))
     {
         LOGFILE("Error encrypting NCA \"%s\" key area!", ctx->content_id_str);
         return false;
