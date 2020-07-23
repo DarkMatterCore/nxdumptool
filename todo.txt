@@ -1,6 +1,7 @@
 todo:
     
     nca: function to write re-encrypted nca headers / nca fs headers (don't forget nca0 please)
+    nca: function to patch the private npdm acid signature from a program nca + patch the acid signature from the nca header
     
     tik: make sure the common crypto cert (XS20, XS22) is available when fakesigning a ticket
     tik: automatically dump tickets to the SD card?

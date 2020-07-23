@@ -320,10 +320,10 @@ void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierar
 
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
 {
-    if (!ctx || !ctx->rights_id_available || !ctx->titlekey_retrieved) return;
+    if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !ctx->rights_id_available || !ctx->titlekey_retrieved) return;
     
     /* Copy decrypted titlekey to the decrypted NCA key area. */
-    /* This will be reecrypted at a later stage. */
+    /* This will be reencrypted at a later stage. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
         /* AES-128-XTS is not used in FS sections from NCAs with titlekey crypto. */
@@ -342,11 +342,14 @@ void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
 
 bool ncaEncryptHeader(NcaContext *ctx)
 {
-    if (!ctx || !strlen(ctx->content_id_str))
+    if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
     {
         LOGFILE("Invalid NCA context!");
         return false;
     }
+    
+    /* Safety check: don't encrypt the header if we don't need to. */
+    if (!ctx->dirty_header) return true;
     
     size_t crypt_res = 0;
     const u8 *header_key = keysGetNcaHeaderKey();
@@ -406,7 +409,7 @@ NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info)
 
 static bool ncaDecryptHeader(NcaContext *ctx)
 {
-    if (!ctx || !strlen(ctx->content_id_str))
+    if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
     {
         LOGFILE("Invalid NCA context!");
         return false;
