@@ -215,6 +215,8 @@ void gamecardExit(void)
 {
     mutexLock(&g_gamecardMutex);
     
+    if (!g_gamecardInterfaceInit) goto end;
+    
     /* Destroy gamecard detection thread. */
     if (g_gameCardDetectionThreadCreated)
     {
@@ -252,6 +254,7 @@ void gamecardExit(void)
     
     g_gamecardInterfaceInit = false;
     
+end:
     mutexUnlock(&g_gamecardMutex);
 }
 
@@ -822,7 +825,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         rc = fsDeviceOperatorGetGameCardHandle(&g_deviceOperator, &g_gameCardHandle);
         if (R_FAILED(rc))
         {
-            LOGFILE("fsDeviceOperatorGetGameCardHandle failed on try #%u! (0x%08X).", i + 1, rc);
+            //LOGFILE("fsDeviceOperatorGetGameCardHandle failed on try #%u! (0x%08X).", i + 1, rc);
             continue;
         }
         
@@ -831,13 +834,15 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         if (R_FAILED(rc))
         {
             gamecardCloseHandle(); /* Close invalid gamecard handle. */
-            LOGFILE("fsOpenGameCardStorage failed to open %s storage area on try #%u! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(partition + 1), i + 1, rc);
+            //LOGFILE("fsOpenGameCardStorage failed to open %s storage area on try #%u! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(partition + 1), i + 1, rc);
             continue;
         }
         
         /* If we got up to this point, both a valid gamecard handle and a valid storage area handle are guaranteed. */
         break;
     }
+    
+    if (R_FAILED(rc)) LOGFILE("fsDeviceOperatorGetGameCardHandle / fsOpenGameCardStorage failed! (0x%08X).", rc);
     
     return R_SUCCEEDED(rc);
 }

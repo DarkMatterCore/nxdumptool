@@ -480,13 +480,15 @@ static u32 usbSendCommand(size_t cmd_size)
     
     if (!usbWrite(g_usbTransferBuffer, cmd_size))
     {
-        LOGFILE("Failed to write 0x%lX bytes long block for type 0x%X command!", cmd_size, cmd);
+        /* Log error message only if the USB session has been started, or if thread exit flag hasn't been enabled. */
+        if (g_usbSessionStarted || !g_usbDetectionThreadExitFlag) LOGFILE("Failed to write 0x%lX bytes long block for type 0x%X command!", cmd_size, cmd);
         return UsbStatusType_WriteCommandFailed;
     }
     
     if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus)))
     {
-        LOGFILE("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd);
+        /* Log error message only if the USB session has been started, or if thread exit flag hasn't been enabled. */
+        if (g_usbSessionStarted || !g_usbDetectionThreadExitFlag) LOGFILE("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd);
         return UsbStatusType_ReadStatusFailed;
     }
     

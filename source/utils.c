@@ -148,6 +148,8 @@ void utilsCloseResources(void)
 {
     mutexLock(&g_resourcesMutex);
     
+    if (!g_resourcesInitialized) goto end;
+    
     /* Free LVGL resources. */
     //lvglHelperExit();
     
@@ -183,6 +185,7 @@ void utilsCloseResources(void)
     
     g_resourcesInitialized = false;
     
+end:
     mutexUnlock(&g_resourcesMutex);
 }
 
