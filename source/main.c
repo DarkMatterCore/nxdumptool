@@ -216,7 +216,7 @@ int main(int argc, char *argv[])
     
     u8 *buf = NULL;
     
-    u64 base_tid = (u64)0x01006A800016E000; // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000
+    u64 base_tid = (u64)0x010082400BCC6000; // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000 | Untitled Goose Game 0x010082400BCC6000
     u64 update_tid = (base_tid | 0x800);
     
     Ticket base_tik = {0}, update_tik = {0};
@@ -370,6 +370,117 @@ int main(int argc, char *argv[])
     }
     
     consolePrint("bktr initialize ctx succeeded\n");
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    FILE *tmp_file = NULL;
+    RomFileSystemFileEntry *romfs_file_entry = NULL;
+    RomFileSystemFileEntryPatch romfs_patch = {0};
+    
+    romfs_file_entry = romfsGetFileEntryByPath(&(bktr_ctx.base_romfs_ctx), "/Data/rawsettings");
+    if (!romfs_file_entry)
+    {
+        consolePrint("romfs get file entry by path failed\n");
+        goto out2;
+    }
+    
+    consolePrint("romfs get file entry by path success: %s | 0x%lX | %p\n", romfs_file_entry->name, romfs_file_entry->size, romfs_file_entry);
+    
+    if (!romfsReadFileEntryData(&(bktr_ctx.base_romfs_ctx), romfs_file_entry, buf, romfs_file_entry->size, 0))
+    {
+        consolePrint("romfs read file entry failed\n");
+        goto out2;
+    }
+    
+    consolePrint("romfs read file entry success\n");
+    
+    memset(buf, 0xAA, romfs_file_entry->size);
+    
+    if (!romfsGenerateFileEntryPatch(&(bktr_ctx.base_romfs_ctx), romfs_file_entry, buf, romfs_file_entry->size, 0, &romfs_patch))
+    {
+        consolePrint("romfs file entry patch failed\n");
+        goto out2;
+    }
+    
+    consolePrint("romfs file entry patch success\n");
+    
+    if (!ncaEncryptHeader(base_nca_ctx))
+    {
+        consolePrint("nca header mod not encrypted\n");
+        romfsFreeFileEntryPatch(&romfs_patch);
+        goto out2;
+    }
+    
+    consolePrint("nca header mod encrypted\n");
+    
+    tmp_file = fopen("sdmc:/program_nca_mod.bin", "wb");
+    if (!tmp_file)
+    {
+        consolePrint("program nca mod not saved\n");
+        romfsFreeFileEntryPatch(&romfs_patch);
+        goto out2;
+    }
+    
+    u64 block_size = TEST_BUF_SIZE;
+    for(u64 i = 0; i < base_nca_ctx->content_size; i += block_size)
+    {
+        if (block_size > (base_nca_ctx->content_size - i)) block_size = (base_nca_ctx->content_size - i);
+        
+        if (!ncaReadContentFile(base_nca_ctx, buf, block_size, i))
+        {
+            consolePrint("failed to read 0x%lX chunk from offset 0x%lX\n", block_size, i);
+            fclose(tmp_file);
+            romfsFreeFileEntryPatch(&romfs_patch);
+            goto out2;
+        }
+        
+        if (i == 0)
+        {
+            memcpy(buf, &(base_nca_ctx->header), sizeof(NcaHeader));
+            for(u64 j = 0; j < 4; j++) memcpy(buf + sizeof(NcaHeader) + (j * sizeof(NcaFsHeader)), &(base_nca_ctx->fs_contexts[j].header), sizeof(NcaFsHeader));
+        }
+        
+        romfsWriteFileEntryPatchToMemoryBuffer(&(bktr_ctx.base_romfs_ctx), &romfs_patch, buf, block_size, i);
+        
+        fwrite(buf, 1, block_size, tmp_file);
+        fflush(tmp_file);
+        
+        consolePrint("wrote 0x%lX bytes to offset 0x%lX\n", block_size, i);
+    }
+    
+    fclose(tmp_file);
+    romfsFreeFileEntryPatch(&romfs_patch);
+    
+    goto out2;
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     shared_data.bktr_ctx = &bktr_ctx;
     shared_data.data = buf;

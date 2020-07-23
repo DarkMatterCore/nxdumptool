@@ -305,7 +305,7 @@ typedef struct {
 
 typedef struct {
     u8 storage_id;                                          ///< NcmStorageId.
-    NcmContentStorage *ncm_storage;                         ///< Pointer to a NcmContentStorage instance. Used to read NCA data.
+    NcmContentStorage *ncm_storage;                         ///< Pointer to a NcmContentStorage instance. Used to read NCA data from eMMC/SD.
     u64 gamecard_offset;                                    ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
     NcmContentId content_id;                                ///< Also used to read NCA data.
     char content_id_str[0x21];
@@ -407,7 +407,8 @@ void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierar
 /// Removes titlekey crypto dependency from a NCA context by wiping the Rights ID from the underlying NCA header and copying the decrypted titlekey to the NCA key area.
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx);
 
-
+/// Encrypts NCA header and NCA FS headers from a NCA context.
+bool ncaEncryptHeader(NcaContext *ctx);
 
 
 

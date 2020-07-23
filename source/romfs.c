@@ -282,14 +282,14 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
     /* Duplicate path to avoid problems with strtok(). */
     if (!(path_dup = strdup(path)))
     {
-        LOGFILE("Unable to duplicate input path!");
+        LOGFILE("Unable to duplicate input path! (\"%s\").", path);
         return NULL;
     }
     
     pch = strtok(path_dup, "/");
     if (!pch)
     {
-        LOGFILE("Failed to tokenize input path!");
+        LOGFILE("Failed to tokenize input path! (\"%s\").", path);
         dir_entry = NULL;
         goto end;
     }
@@ -298,7 +298,7 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
     {
         if (!(dir_entry = romfsGetChildDirectoryEntryByName(ctx, dir_entry, pch)))
         {
-            LOGFILE("Failed to retrieve directory entry by name!");
+            LOGFILE("Failed to retrieve directory entry by name for \"%s\"! (\"%s\").", pch, path);
             break;
         }
         
@@ -327,7 +327,7 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     /* Duplicate path. */
     if (!(path_dup = strdup(path)))
     {
-        LOGFILE("Unable to duplicate input path!");
+        LOGFILE("Unable to duplicate input path! (\"%s\").", path);
         return NULL;
     }
     
@@ -341,7 +341,7 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     /* Safety check. */
     if (!path_len || !(filename = strrchr(path_dup, '/')))
     {
-        LOGFILE("Invalid input path!");
+        LOGFILE("Invalid input path! (\"%s\").", path);
         goto end;
     }
     
@@ -352,12 +352,12 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     /* If the first character is NULL, then just retrieve the root directory entry. */
     if (!(dir_entry = (*path_dup ? romfsGetDirectoryEntryByPath(ctx, path_dup) : romfsGetDirectoryEntryByOffset(ctx, 0))))
     {
-        LOGFILE("Failed to retrieve directory entry!");
+        LOGFILE("Failed to retrieve directory entry for \"%s\"! (\"%s\").", *path_dup ? path_dup : "/", path);
         goto end;
     }
     
     /* Retrieve file entry. */
-    if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename))) LOGFILE("Failed to retrieve file entry by name!");
+    if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename))) LOGFILE("Failed to retrieve file entry by name for \"%s\"! (\"%s\").", filename, path);
     
 end:
     if (path_dup) free(path_dup);
@@ -522,7 +522,7 @@ static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSys
     while(dir_offset != ROMFS_VOID_ENTRY)
     {
         if (!(child_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset)) || !child_dir_entry->name_length) return NULL;
-        if (child_dir_entry->name_length == name_len && !strcmp(child_dir_entry->name, name)) return child_dir_entry;
+        if (child_dir_entry->name_length == name_len && !strncmp(child_dir_entry->name, name, name_len)) return child_dir_entry;
         dir_offset = child_dir_entry->next_offset;
     }
     
@@ -541,7 +541,7 @@ static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext
     while(file_offset != ROMFS_VOID_ENTRY)
     {
         if (!(child_file_entry = romfsGetFileEntryByOffset(ctx, file_offset)) || !child_file_entry->name_length) return NULL;
-        if (child_file_entry->name_length == name_len && !strcmp(child_file_entry->name, name)) return child_file_entry;
+        if (child_file_entry->name_length == name_len && !strncmp(child_file_entry->name, name, name_len)) return child_file_entry;
         file_offset = child_file_entry->next_offset;
     }
     

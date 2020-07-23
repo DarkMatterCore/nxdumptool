@@ -44,7 +44,6 @@ NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info);
 static bool ncaDecryptHeader(NcaContext *ctx);
 static bool ncaDecryptKeyArea(NcaContext *ctx);
 
-static bool ncaEncryptHeader(NcaContext *ctx);
 static bool ncaEncryptKeyArea(NcaContext *ctx);
 
 NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx);
@@ -341,6 +340,63 @@ void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
     ctx->dirty_header = true;
 }
 
+bool ncaEncryptHeader(NcaContext *ctx)
+{
+    if (!ctx || !strlen(ctx->content_id_str))
+    {
+        LOGFILE("Invalid NCA context!");
+        return false;
+    }
+    
+    size_t crypt_res = 0;
+    const u8 *header_key = keysGetNcaHeaderKey();
+    Aes128XtsContext hdr_aes_ctx = {0}, nca0_fs_header_ctx = {0};
+    
+    /* Encrypt NCA key area. */
+    if (!ncaEncryptKeyArea(ctx))
+    {
+        LOGFILE("Error encrypting NCA \"%s\" key area!", ctx->content_id_str);
+        return false;
+    }
+    
+    /* Prepare AES-128-XTS contexts. */
+    aes128XtsContextCreate(&hdr_aes_ctx, header_key, header_key + AES_128_KEY_SIZE, true);
+    if (ctx->format_version == NcaVersion_Nca0) aes128XtsContextCreate(&nca0_fs_header_ctx, ctx->decrypted_key_area.aes_xts_1, ctx->decrypted_key_area.aes_xts_2, true);
+    
+    /* Encrypt NCA header. */
+    crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, &(ctx->header), &(ctx->header), sizeof(NcaHeader), 0, NCA_AES_XTS_SECTOR_SIZE, true);
+    if (crypt_res != sizeof(NcaHeader))
+    {
+        LOGFILE("Error encrypting NCA \"%s\" header!", ctx->content_id_str);
+        return false;
+    }
+    
+    /* Encrypt NCA FS section headers. */
+    /* Both NCA2 and NCA3 place the NCA FS section headers right after the NCA header. However, NCA0 places them at the start sector from each NCA FS section. */
+    /* NCA0 FS section headers will be encrypted in-place, but they need to be written to their proper offsets. */
+    for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
+    {
+        /* Don't proceed if this NCA FS section isn't populated. */
+        if (ctx->format_version != NcaVersion_Nca3 && !ncaIsFsInfoEntryValid(&(ctx->header.fs_info[i]))) continue;
+        
+        /* The AES-XTS sector number for each NCA FS header varies depending on the NCA format version. */
+        /* NCA3 uses sector number 0 for the NCA header, then increases it with each new sector (e.g. making the first NCA FS section header use sector number 2, and so on). */
+        /* NCA2 uses sector number 0 for each NCA FS section header. */
+        /* NCA0 uses sector number 0 for the NCA header, then uses sector number 0 for the rest of the data and increases it with each new sector. */
+        Aes128XtsContext *aes_xts_ctx = (ctx->format_version != NcaVersion_Nca0 ? &hdr_aes_ctx : &nca0_fs_header_ctx);
+        u64 sector = (ctx->format_version == NcaVersion_Nca3 ? (2U + i) : (ctx->format_version == NcaVersion_Nca2 ? 0 : (ctx->header.fs_info[i].start_sector - 2)));
+        
+        crypt_res = aes128XtsNintendoCrypt(aes_xts_ctx, &(ctx->fs_contexts[i].header), &(ctx->fs_contexts[i].header), sizeof(NcaFsHeader), sector, NCA_AES_XTS_SECTOR_SIZE, true);
+        if (crypt_res != sizeof(NcaFsHeader))
+        {
+            LOGFILE("Error encrypting NCA%u \"%s\" FS section header #%u!", ctx->format_version, ctx->content_id_str, i);
+            return false;
+        }
+    }
+    
+    return true;
+}
+
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info)
 {
     if (!fs_info) return false;
@@ -463,63 +519,6 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
         if (R_FAILED(rc))
         {
             LOGFILE("splCryptoGenerateAesKey failed to decrypt NCA key area entry #%u! (0x%08X).", i, rc);
-            return false;
-        }
-    }
-    
-    return true;
-}
-
-static bool ncaEncryptHeader(NcaContext *ctx)
-{
-    if (!ctx || !strlen(ctx->content_id_str))
-    {
-        LOGFILE("Invalid NCA context!");
-        return false;
-    }
-    
-    size_t crypt_res = 0;
-    const u8 *header_key = keysGetNcaHeaderKey();
-    Aes128XtsContext hdr_aes_ctx = {0}, nca0_fs_header_ctx = {0};
-    
-    /* Encrypt NCA key area. */
-    if (!ncaEncryptKeyArea(ctx))
-    {
-        LOGFILE("Error encrypting NCA \"%s\" key area!", ctx->content_id_str);
-        return false;
-    }
-    
-    /* Prepare AES-128-XTS contexts. */
-    aes128XtsContextCreate(&hdr_aes_ctx, header_key, header_key + AES_128_KEY_SIZE, true);
-    if (ctx->format_version == NcaVersion_Nca0) aes128XtsContextCreate(&nca0_fs_header_ctx, ctx->decrypted_key_area.aes_xts_1, ctx->decrypted_key_area.aes_xts_2, true);
-    
-    /* Encrypt NCA header. */
-    crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, &(ctx->header), &(ctx->header), sizeof(NcaHeader), 0, NCA_AES_XTS_SECTOR_SIZE, true);
-    if (crypt_res != sizeof(NcaHeader))
-    {
-        LOGFILE("Error encrypting NCA \"%s\" header!", ctx->content_id_str);
-        return false;
-    }
-    
-    /* Encrypt NCA FS section headers. */
-    /* Both NCA2 and NCA3 place the NCA FS section headers right after the NCA header. However, NCA0 places them at the start sector from each NCA FS section. */
-    /* NCA0 FS section headers will be encrypted in-place, but they need to be written to their proper offsets. */
-    for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
-    {
-        /* Don't proceed if this NCA FS section isn't populated. */
-        if (ctx->format_version != NcaVersion_Nca3 && !ncaIsFsInfoEntryValid(&(ctx->header.fs_info[i]))) continue;
-        
-        /* The AES-XTS sector number for each NCA FS header varies depending on the NCA format version. */
-        /* NCA3 uses sector number 0 for the NCA header, then increases it with each new sector (e.g. making the first NCA FS section header use sector number 2, and so on). */
-        /* NCA2 uses sector number 0 for each NCA FS section header. */
-        /* NCA0 uses sector number 0 for the NCA header, then uses sector number 0 for the rest of the data and increases it with each new sector. */
-        Aes128XtsContext *aes_xts_ctx = (ctx->format_version != NcaVersion_Nca0 ? &hdr_aes_ctx : &nca0_fs_header_ctx);
-        u64 sector = (ctx->format_version == NcaVersion_Nca3 ? (2U + i) : (ctx->format_version == NcaVersion_Nca2 ? 0 : (ctx->header.fs_info[i].start_sector - 2)));
-        
-        crypt_res = aes128XtsNintendoCrypt(aes_xts_ctx, &(ctx->fs_contexts[i].header), &(ctx->fs_contexts[i].header), sizeof(NcaFsHeader), sector, NCA_AES_XTS_SECTOR_SIZE, true);
-        if (crypt_res != sizeof(NcaFsHeader))
-        {
-            LOGFILE("Error encrypting NCA%u \"%s\" FS section header #%u!", ctx->format_version, ctx->content_id_str, i);
             return false;
         }
     }

@@ -175,7 +175,7 @@ NX_INLINE RomFileSystemFileEntry *romfsGetFileEntryByOffset(RomFileSystemContext
     return (RomFileSystemFileEntry*)((u8*)ctx->file_table + file_entry_offset);
 }
 
-NX_INLINE void romfsWriteFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntryPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
+NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx, RomFileSystemFileEntryPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
     if (!ctx || !ctx->nca_fs_ctx || !patch || (!patch->use_old_format_patch && ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
         (patch->use_old_format_patch && ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
