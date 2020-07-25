@@ -38,7 +38,7 @@ static NcmContentMetaDatabase g_ncmDbGameCard = {0}, g_ncmDbEmmcSystem = {0}, g_
 static NcmContentStorage g_ncmStorageGameCard = {0}, g_ncmStorageEmmcSystem = {0}, g_ncmStorageEmmcUser = {0}, g_ncmStorageSdCard = {0};
 
 static TitleInfo *g_titleInfo = NULL;
-static u32 g_titleInfoCount = 0;
+static u32 g_titleInfoCount = 0, g_titleInfoGameCardStartIndex = 0, g_titleInfoGameCardCount = 0;
 
 /* Function prototypes. */
 
@@ -51,8 +51,14 @@ static void titleCloseNcmDatabases(void);
 static bool titleOpenNcmStorages(void);
 static void titleCloseNcmStorages(void);
 
+static bool titleOpenNcmDatabaseAndStorageFromGameCard(void);
+static void titleCloseNcmDatabaseAndStorageFromGameCard(void);
+
 static bool titleLoadTitleInfo(void);
 static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id, NcmContentMetaDatabase *ncm_db);
+
+static bool _titleRefreshGameCardTitleInfo(bool lock);
+static void titleRemoveGameCardTitleInfoEntries(void);
 
 NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id);
 
@@ -62,15 +68,6 @@ bool titleInitialize(void)
     
     bool ret = g_titleInterfaceInit;
     if (ret) goto end;
-    
-    
-    
-    
-    
-    while(!gamecardGetStatusChangeUserEvent());
-    
-    
-    
     
     /* Allocate memory for the ns application control data. */
     /* This will be used each time we need to retrieve application metadata. */
@@ -111,8 +108,8 @@ bool titleInitialize(void)
         goto end;
     }
     
-    
-    
+    /* Initial gamecard title info retrieval. */
+    _titleRefreshGameCardTitleInfo(false);
     
     
     
@@ -210,9 +207,14 @@ void titleExit(void)
     
     
     
+    
+    
+    /* Close gamecard ncm database and storage. */
+    titleCloseNcmDatabaseAndStorageFromGameCard();
+    
     /* Free title info. */
     if (g_titleInfo) free(g_titleInfo);
-    g_titleInfoCount = 0;
+    g_titleInfoCount = g_titleInfoGameCardStartIndex = g_titleInfoGameCardCount = 0;
     
     /* Close eMMC System, eMMC User and SD card ncm storages. */
     titleCloseNcmStorages();
@@ -282,7 +284,10 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id)
     return ncm_storage;
 }
 
-
+bool titleRefreshGameCardTitleInfo(void)
+{
+    return _titleRefreshGameCardTitleInfo(true);
+}
 
 
 
@@ -361,7 +366,7 @@ static bool titleRetrieveApplicationMetadataFromNsRecords(void)
         goto end;
     }
     
-    /* Decrease buffer size if needed. */
+    /* Decrease application metadata buffer size if needed. */
     if (g_appMetadataCount < app_records_count)
     {
         TitleApplicationMetadata *tmp_app_metadata = realloc(g_appMetadata, g_appMetadataCount * sizeof(TitleApplicationMetadata));
@@ -537,6 +542,44 @@ static void titleCloseNcmStorages(void)
     }
 }
 
+static bool titleOpenNcmDatabaseAndStorageFromGameCard(void)
+{
+    Result rc = 0;
+    NcmContentMetaDatabase *ncm_db = &g_ncmDbGameCard;
+    NcmContentStorage *ncm_storage = &g_ncmStorageGameCard;
+    
+    /* Open ncm database. */
+    rc = ncmOpenContentMetaDatabase(ncm_db, NcmStorageId_GameCard);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("ncmOpenContentMetaDatabase failed! (0x%08X).", rc);
+        goto end;
+    }
+    
+    /* Open ncm storage. */
+    rc = ncmOpenContentStorage(ncm_storage, NcmStorageId_GameCard);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("ncmOpenContentStorage failed! (0x%08X).", rc);
+        goto end;
+    }
+    
+end:
+    return R_SUCCEEDED(rc);
+}
+
+static void titleCloseNcmDatabaseAndStorageFromGameCard(void)
+{
+    NcmContentMetaDatabase *ncm_db = &g_ncmDbGameCard;
+    NcmContentStorage *ncm_storage = &g_ncmStorageGameCard;
+    
+    /* Check if the ncm database handle has already been retrieved. */
+    if (serviceIsActive(&(ncm_db->s))) ncmContentMetaDatabaseClose(ncm_db);
+    
+    /* Check if the ncm storage handle has already been retrieved. */
+    if (serviceIsActive(&(ncm_storage->s))) ncmContentStorageClose(ncm_storage);
+}
+
 static bool titleLoadTitleInfo(void)
 {
     /* Return right away if title info has already been retrieved. */
@@ -677,6 +720,155 @@ end:
     if (meta_keys) free(meta_keys);
     
     return success;
+}
+
+static bool _titleRefreshGameCardTitleInfo(bool lock)
+{
+    if (lock) mutexLock(&g_titleMutex);
+    
+    TitleApplicationMetadata *tmp_app_metadata = NULL;
+    u32 orig_app_count = g_appMetadataCount, cur_app_count = g_appMetadataCount, gamecard_app_count = 0, gamecard_metadata_count = 0;
+    bool status = false, success = false, cleanup = true;
+    
+    /* Retrieve current gamecard status. */
+    status = (gamecardGetStatus() == GameCardStatus_InsertedAndInfoLoaded);
+    if (status == g_titleGameCardAvailable || !status)
+    {
+        cleanup = (status != g_titleGameCardAvailable);
+        goto end;
+    }
+    
+    /* Open gamecard ncm database and storage handles. */
+    if (!titleOpenNcmDatabaseAndStorageFromGameCard())
+    {
+        LOGFILE("Failed to open gamecard ncm database and storage handles.");
+        goto end;
+    }
+    
+    /* Update start index for the gamecard title info entries. */
+    g_titleInfoGameCardStartIndex = g_titleInfoCount;
+    
+    /* Retrieve content meta keys from the gamecard ncm database. */
+    if (!titleRetrieveContentMetaKeysFromDatabase(NcmStorageId_GameCard, &g_ncmDbGameCard))
+    {
+        LOGFILE("Failed to retrieve content meta keys from gamecard!");
+        goto end;
+    }
+    
+    /* Update gamecard title info count. */
+    g_titleInfoGameCardCount = (g_titleInfoCount - g_titleInfoGameCardStartIndex);
+    if (!g_titleInfoGameCardCount)
+    {
+        LOGFILE("Empty content meta key count from gamecard!");
+        goto end;
+    }
+    
+    /* Retrieve gamecard application metadata. */
+    for(u32 i = g_titleInfoGameCardStartIndex; i < g_titleInfoCount; i++)
+    {
+        TitleInfo *cur_title_info = &(g_titleInfo[i]);
+        
+        /* Skip current title if it's not an application. */
+        if (cur_title_info->meta_key.type != NcmContentMetaType_Application) continue;
+        gamecard_app_count++;
+        
+        /* Check if we already have an application metadata entry for this title ID. */
+        if ((cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(cur_title_info->meta_key.id)) != NULL)
+        {
+            gamecard_metadata_count++;
+            continue;
+        }
+        
+        /* Reallocate application metadata buffer (if needed). */
+        if (cur_app_count < (g_appMetadataCount + 1))
+        {
+            tmp_app_metadata = realloc(g_appMetadata, (g_appMetadataCount + 1) * sizeof(TitleApplicationMetadata));
+            if (!tmp_app_metadata)
+            {
+                LOGFILE("Failed to reallocate application metadata buffer! (additional entry).");
+                goto end;
+            }
+            
+            g_appMetadata = tmp_app_metadata;
+            tmp_app_metadata = NULL;
+            
+            cur_app_count++;
+        }
+        
+        /* Retrieve application metadata. */
+        if (!titleRetrieveApplicationMetadataByTitleId(cur_title_info->meta_key.id, &(g_appMetadata[g_appMetadataCount]))) continue;
+        
+        cur_title_info->app_metadata = &(g_appMetadata[g_appMetadataCount]);
+        g_appMetadataCount++;
+        
+        gamecard_metadata_count++;
+    }
+    
+    /* Check gamecard application count. */
+    if (!gamecard_app_count)
+    {
+        LOGFILE("Gamecard application count is zero!");
+        goto end;
+    }
+    
+    /* Check retrieved application metadata count. */
+    if (!gamecard_metadata_count)
+    {
+        LOGFILE("Unable to retrieve application metadata from gamecard! (%u %s).", gamecard_app_count, gamecard_app_count > 1 ? "entries" : "entry");
+        goto end;
+    }
+    
+    success = true;
+    cleanup = false;
+    
+end:
+    /* Update gamecard status. */
+    g_titleGameCardAvailable = status;
+    
+    /* Decrease application metadata buffer size if needed. */
+    if ((success && g_appMetadataCount < cur_app_count) || (!success && g_appMetadataCount > orig_app_count))
+    {
+        if (!success) g_appMetadataCount = orig_app_count;
+        
+        tmp_app_metadata = realloc(g_appMetadata, g_appMetadataCount * sizeof(TitleApplicationMetadata));
+        if (tmp_app_metadata)
+        {
+            g_appMetadata = tmp_app_metadata;
+            tmp_app_metadata = NULL;
+        }
+    }
+    
+    if (cleanup)
+    {
+        titleRemoveGameCardTitleInfoEntries();
+        titleCloseNcmDatabaseAndStorageFromGameCard();
+    }
+    
+    if (lock) mutexUnlock(&g_titleMutex);
+    
+    return success;
+}
+
+static void titleRemoveGameCardTitleInfoEntries(void)
+{
+    if (!g_titleInfo || !g_titleInfoCount || !g_titleInfoGameCardCount || g_titleInfoGameCardCount > g_titleInfoCount || \
+        g_titleInfoGameCardStartIndex != (g_titleInfoCount - g_titleInfoGameCardCount)) return;
+    
+    if (g_titleInfoGameCardCount == g_titleInfoCount)
+    {
+        free(g_titleInfo);
+        g_titleInfo = NULL;
+    } else {
+        TitleInfo *tmp_title_info = realloc(g_titleInfo, (g_titleInfoCount - g_titleInfoGameCardCount) * sizeof(TitleInfo));
+        if (tmp_title_info)
+        {
+            g_titleInfo = tmp_title_info;
+            tmp_title_info = NULL;
+        }
+    }
+    
+    g_titleInfoCount = (g_titleInfoCount - g_titleInfoGameCardCount);
+    g_titleInfoGameCardStartIndex = g_titleInfoGameCardCount = 0;
 }
 
 NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id)

@@ -529,8 +529,11 @@ static int gamecardDetectionThreadFunc(void *arg)
     
     /* Retrieve initial gamecard insertion status. */
     /* Load gamecard info right away if a gamecard is inserted, then signal the user mode gamecard status change event. */
+    mutexLock(&g_gamecardMutex);
     g_gameCardInserted = gamecardIsInserted();
     if (g_gameCardInserted) gamecardLoadInfo();
+    mutexUnlock(&g_gamecardMutex);
+    
     ueventSignal(&g_gameCardStatusChangeEvent);
     
     while(true)

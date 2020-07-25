@@ -64,7 +64,9 @@ void titleExit(void);
 NcmContentMetaDatabase *titleGetNcmDatabaseByStorageId(u8 storage_id);
 NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 
-
+/// Returns true if gamecard title info could be loaded.
+/// Suitable for being called between UI updates.
+bool titleRefreshGameCardTitleInfo(void);
 
 
 
