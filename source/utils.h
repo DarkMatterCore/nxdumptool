@@ -33,6 +33,7 @@
 #include <errno.h>
 #include <ctype.h>
 #include <time.h>
+#include <sys/stat.h>
 #include <threads.h>
 #include <stdatomic.h>
 #include <switch.h>

@@ -27,6 +27,7 @@
 #include "services.h"
 #include "nca.h"
 #include "usb.h"
+#include "title.h"
 #include "fatfs/ff.h"
 
 #define LOGFILE_PATH    "./" APP_TITLE ".log"
@@ -105,6 +106,13 @@ bool utilsInitializeResources(void)
         goto end;
     }
     
+    /* Initialize title interface. */
+    if (!titleInitialize())
+    {
+        LOGFILE("Failed to initialize the title interface!");
+        goto end;
+    }
+    
     /* Retrieve SD card FsFileSystem element. */
     if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
     {
@@ -148,8 +156,6 @@ void utilsCloseResources(void)
 {
     mutexLock(&g_resourcesMutex);
     
-    if (!g_resourcesInitialized) goto end;
-    
     /* Free LVGL resources. */
     //lvglHelperExit();
     
@@ -171,6 +177,9 @@ void utilsCloseResources(void)
     /* Unmount eMMC BIS System partition. */
     utilsUnmountEmmcBisSystemPartitionStorage();
     
+    /* Deinitialize title interface. */
+    titleExit();
+    
     /* Deinitialize gamecard interface. */
     gamecardExit();
     
@@ -185,7 +194,6 @@ void utilsCloseResources(void)
     
     g_resourcesInitialized = false;
     
-end:
     mutexUnlock(&g_resourcesMutex);
 }
 

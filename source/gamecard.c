@@ -215,8 +215,6 @@ void gamecardExit(void)
 {
     mutexLock(&g_gamecardMutex);
     
-    if (!g_gamecardInterfaceInit) goto end;
-    
     /* Destroy gamecard detection thread. */
     if (g_gameCardDetectionThreadCreated)
     {
@@ -254,7 +252,6 @@ void gamecardExit(void)
     
     g_gamecardInterfaceInit = false;
     
-end:
     mutexUnlock(&g_gamecardMutex);
 }
 

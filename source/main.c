@@ -212,6 +212,27 @@ int main(int argc, char *argv[])
         goto out;
     }
     
+    
+    
+    
+    
+    goto out;
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     Result rc = 0;
     
     u8 *buf = NULL;
