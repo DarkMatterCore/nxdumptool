@@ -215,7 +215,8 @@ int main(int argc, char *argv[])
     
     u8 *buf = NULL;
     
-    u64 base_tid = (u64)0x01004AB00A260000; // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000 | Untitled Goose Game 0x010082400BCC6000
+    // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000 | Untitled Goose Game 0x010082400BCC6000 | SMO 0x0100000000010000
+    u64 base_tid = (u64)0x0100000000010000;
     u64 update_tid = titleGetPatchIdByApplicationId(base_tid);
     
     TitleInfo *base_title_info = NULL, *update_title_info = NULL;
@@ -265,13 +266,15 @@ int main(int argc, char *argv[])
     
     consolePrint("title info succeeded\n");
     
-    if (!ncaInitializeContext(base_nca_ctx, base_title_info->storage_id, 0, titleGetContentInfoByTypeAndIdOffset(base_title_info, NcmContentType_Program, 0), &base_tik))
+    if (!ncaInitializeContext(base_nca_ctx, base_title_info->storage_id, (base_title_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+        titleGetContentInfoByTypeAndIdOffset(base_title_info, NcmContentType_Program, 0), &base_tik))
     {
         consolePrint("nca initialize base ctx failed\n");
         goto out2;
     }
     
-    if (!ncaInitializeContext(update_nca_ctx, update_title_info->storage_id, 0, titleGetContentInfoByTypeAndIdOffset(update_title_info, NcmContentType_Program, 0), &update_tik))
+    if (!ncaInitializeContext(update_nca_ctx, update_title_info->storage_id, (update_title_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+        titleGetContentInfoByTypeAndIdOffset(update_title_info, NcmContentType_Program, 0), &update_tik))
     {
         consolePrint("nca initialize update ctx failed\n");
         goto out2;

@@ -20,7 +20,6 @@ todo:
     bktr: filelist generation functions (wrappers for romfs filelist generation functions)
     
     title: linked lists for patch / aoc info?
-    title: hardcode names for system titles
     title: more functions for title lookup (filters, patches / aoc, etc.)
     title: more functions for content lookup (based on id?)
     title: find a nice way to deal with orphan content

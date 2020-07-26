@@ -29,7 +29,7 @@
 #define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT". */
 
 #define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB. */
-#define USB_TRANSFER_TIMEOUT        1                   /* 1 second. */
+#define USB_TRANSFER_TIMEOUT        3                   /* 3 seconds. */
 
 /* Type definitions. */
 

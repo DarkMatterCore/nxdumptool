@@ -39,7 +39,7 @@ typedef struct {
     u64 title_id;                   ///< Title ID from the application this data belongs to.
     NacpLanguageEntry lang_entry;   ///< UTF-8 strings in the console language.
     u32 icon_size;                  ///< JPEG icon size.
-    u8 icon[0x20000];               ///< JPEG icon data.
+    u8 *icon;                       ///< JPEG icon data.         
 } TitleApplicationMetadata;
 
 /// Retrieved using ncm databases.
@@ -51,7 +51,7 @@ typedef struct {
     NcmContentInfo *content_infos;          ///< Content info entries from this title.
     u64 title_size;                         ///< Total title size.
     char title_size_str[32];                ///< Total title size string.
-    TitleApplicationMetadata *app_metadata; ///< Only available for applications.
+    TitleApplicationMetadata *app_metadata; ///< Only available for system titles and applications.
     
     
     /* Pointers to patches / AOC? */
