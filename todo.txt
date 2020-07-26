@@ -1,5 +1,6 @@
 todo:
     
+    nca: functions for fs section lookup? (could just let the user choose...)
     nca: function to write re-encrypted nca headers / nca fs headers (don't forget nca0 please)
     nca: function to patch the private npdm acid signature from a program nca + patch the acid signature from the nca header
     
@@ -18,17 +19,10 @@ todo:
     
     bktr: filelist generation functions (wrappers for romfs filelist generation functions)
     
+    title: linked lists for patch / aoc info?
+    title: hardcode names for system titles
+    title: more functions for title lookup (filters, patches / aoc, etc.)
+    title: more functions for content lookup (based on id?)
+    title: find a nice way to deal with orphan content
     
-    
-    
-    
-    char content_info_path[FS_MAX_PATH] = {0};
-    sprintf(content_info_path, "sdmc:/%016lX.bin", xml_program_info.title_id);
-    
-    FILE *content_info = fopen(content_info_path, "wb");
-    if (content_info)
-    {
-        fwrite(titleContentInfos, 1, titleContentInfoCnt * sizeof(NcmContentInfo), content_info);
-        fclose(content_info);
-    }
     

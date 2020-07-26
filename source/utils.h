@@ -32,6 +32,7 @@
 #include <malloc.h>
 #include <errno.h>
 #include <ctype.h>
+#include <math.h>
 #include <time.h>
 #include <sys/stat.h>
 #include <threads.h>
@@ -94,6 +95,8 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 void utilsTrimString(char *str);
 
 void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size);
+
+void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);
 
 bool utilsGetFreeSdCardSpace(u64 *out);
 bool utilsGetFreeFileSystemSpace(FsFileSystem *fs, u64 *out);

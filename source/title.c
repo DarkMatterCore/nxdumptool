@@ -42,6 +42,11 @@ static u32 g_titleInfoCount = 0, g_titleInfoGameCardStartIndex = 0, g_titleInfoG
 
 /* Function prototypes. */
 
+NX_INLINE void titleFreeApplicationMetadata(void);
+NX_INLINE void titleFreeTitleInfo(void);
+
+NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id);
+
 static bool titleRetrieveApplicationMetadataFromNsRecords(void);
 static bool titleRetrieveApplicationMetadataByTitleId(u64 title_id, TitleApplicationMetadata *out);
 
@@ -55,12 +60,11 @@ static bool titleOpenNcmDatabaseAndStorageFromGameCard(void);
 static void titleCloseNcmDatabaseAndStorageFromGameCard(void);
 
 static bool titleLoadTitleInfo(void);
-static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id, NcmContentMetaDatabase *ncm_db);
+static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id);
+static bool titleGetContentInfosFromTitle(u8 storage_id, const NcmContentMetaKey *meta_key, NcmContentInfo **out_content_infos, u32 *out_content_count);
 
 static bool _titleRefreshGameCardTitleInfo(bool lock);
 static void titleRemoveGameCardTitleInfoEntries(void);
-
-NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id);
 
 bool titleInitialize(void)
 {
@@ -70,7 +74,7 @@ bool titleInitialize(void)
     if (ret) goto end;
     
     /* Allocate memory for the ns application control data. */
-    /* This will be used each time we need to retrieve application metadata. */
+    /* This will be used each time we need to retrieve the metadata from an application. */
     g_nsAppControlData = calloc(1, sizeof(NsApplicationControlData));
     if (!g_nsAppControlData)
     {
@@ -120,7 +124,6 @@ bool titleInitialize(void)
     
     
     
-    
     if (g_titleInfo && g_titleInfoCount)
     {
         mkdir("sdmc:/records", 0777);
@@ -133,16 +136,33 @@ bool titleInitialize(void)
         {
             for(u32 i = 0; i < g_titleInfoCount; i++)
             {
-                TitleVersion version;
-                memcpy(&version, &(g_titleInfo[i].meta_key.version), sizeof(u32));
-                
                 fprintf(title_infos_txt, "Storage ID: 0x%02X\r\n", g_titleInfo[i].storage_id);
                 fprintf(title_infos_txt, "Title ID: %016lX\r\n", g_titleInfo[i].meta_key.id);
-                fprintf(title_infos_txt, "Version: %u (%u.%u.%u-%u.%u)\r\n", g_titleInfo[i].meta_key.version, version.TitleVersion_Major, version.TitleVersion_Minor, version.TitleVersion_Micro, \
-                        version.TitleVersion_MajorRelstep, version.TitleVersion_MinorRelstep);
+                fprintf(title_infos_txt, "Version: %u (%u.%u.%u-%u.%u)\r\n", g_titleInfo[i].meta_key.version, g_titleInfo[i].dot_version.TitleVersion_Major, \
+                        g_titleInfo[i].dot_version.TitleVersion_Minor, g_titleInfo[i].dot_version.TitleVersion_Micro, g_titleInfo[i].dot_version.TitleVersion_MajorRelstep, \
+                        g_titleInfo[i].dot_version.TitleVersion_MinorRelstep);
                 fprintf(title_infos_txt, "Type: 0x%02X\r\n", g_titleInfo[i].meta_key.type);
                 fprintf(title_infos_txt, "Install Type: 0x%02X\r\n", g_titleInfo[i].meta_key.install_type);
-                fprintf(title_infos_txt, "Title Size: 0x%lX\r\n", g_titleInfo[i].title_size);
+                fprintf(title_infos_txt, "Title Size: %s (0x%lX)\r\n", g_titleInfo[i].title_size_str, g_titleInfo[i].title_size);
+                
+                fprintf(title_infos_txt, "Content Count: %u\r\n", g_titleInfo[i].content_count);
+                for(u32 j = 0; j < g_titleInfo[i].content_count; j++)
+                {
+                    char content_id_str[SHA256_HASH_SIZE + 1] = {0};
+                    utilsGenerateHexStringFromData(content_id_str, sizeof(content_id_str), g_titleInfo[i].content_infos[j].content_id.c, SHA256_HASH_SIZE / 2);
+                    
+                    u64 content_size = 0;
+                    titleConvertNcmContentSizeToU64(g_titleInfo[i].content_infos[j].size, &content_size);
+                    
+                    char content_size_str[32] = {0};
+                    utilsGenerateFormattedSizeString(content_size, content_size_str, sizeof(content_size_str));
+                    
+                    fprintf(title_infos_txt, "    Content #%u:\r\n", j + 1);
+                    fprintf(title_infos_txt, "        Content ID: %s\r\n", content_id_str);
+                    fprintf(title_infos_txt, "        Content Size: %s (0x%lX)\r\n", content_size_str, content_size);
+                    fprintf(title_infos_txt, "        Content Type: 0x%02X\r\n", g_titleInfo[i].content_infos[j].content_type);
+                    fprintf(title_infos_txt, "        ID Offset: 0x%02X\r\n", g_titleInfo[i].content_infos[j].id_offset);
+                }
                 
                 if (g_titleInfo[i].app_metadata)
                 {
@@ -196,25 +216,11 @@ void titleExit(void)
 {
     mutexLock(&g_titleMutex);
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    /* Free title info. */
+    titleFreeTitleInfo();
     
     /* Close gamecard ncm database and storage. */
     titleCloseNcmDatabaseAndStorageFromGameCard();
-    
-    /* Free title info. */
-    if (g_titleInfo) free(g_titleInfo);
-    g_titleInfoCount = g_titleInfoGameCardStartIndex = g_titleInfoGameCardCount = 0;
     
     /* Close eMMC System, eMMC User and SD card ncm storages. */
     titleCloseNcmStorages();
@@ -223,8 +229,7 @@ void titleExit(void)
     titleCloseNcmDatabases();
     
     /* Free application metadata. */
-    if (g_appMetadata) free(g_appMetadata);
-    g_appMetadataCount = 0;
+    titleFreeApplicationMetadata();
     
     /* Free ns application control data. */
     if (g_nsAppControlData) free(g_nsAppControlData);
@@ -289,6 +294,34 @@ bool titleRefreshGameCardTitleInfo(void)
     return _titleRefreshGameCardTitleInfo(true);
 }
 
+TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
+{
+    mutexLock(&g_titleMutex);
+    
+    TitleInfo *info = NULL;
+    
+    if (!g_titleInfo || !g_titleInfoCount || storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_Any || !title_id)
+    {
+        LOGFILE("Invalid parameters!");
+        goto end;
+    }
+    
+    for(u32 i = 0; i < g_titleInfoCount; i++)
+    {
+        if (g_titleInfo[i].meta_key.id == title_id && (storage_id == NcmStorageId_Any || (storage_id != NcmStorageId_Any && g_titleInfo[i].storage_id == storage_id)))
+        {
+            info = &(g_titleInfo[i]);
+            break;
+        }
+    }
+    
+    if (!info) LOGFILE("Unable to find TitleInfo entry with ID \"%016lX\"! (storage ID %u).", title_id, storage_id);
+    
+end:
+    mutexUnlock(&g_titleMutex);
+    
+    return info;
+}
 
 
 
@@ -304,9 +337,44 @@ bool titleRefreshGameCardTitleInfo(void)
 
 
 
+NX_INLINE void titleFreeApplicationMetadata(void)
+{
+    if (g_appMetadata)
+    {
+        free(g_appMetadata);
+        g_appMetadata = NULL;
+    }
+    
+    g_appMetadataCount = 0;
+}
 
+NX_INLINE void titleFreeTitleInfo(void)
+{
+    if (g_titleInfo)
+    {
+        for(u32 i = 0; i < g_titleInfoCount; i++)
+        {
+            if (g_titleInfo[i].content_infos) free(g_titleInfo[i].content_infos);
+        }
+        
+        free(g_titleInfo);
+        g_titleInfo = NULL;
+    }
+    
+    g_titleInfoCount = g_titleInfoGameCardStartIndex = g_titleInfoGameCardCount = 0;
+}
 
-
+NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id)
+{
+    if (!g_appMetadata || !g_appMetadataCount || !title_id) return NULL;
+    
+    for(u32 i = 0; i < g_appMetadataCount; i++)
+    {
+        if (g_appMetadata[i].title_id == title_id) return &(g_appMetadata[i]);
+    }
+    
+    return NULL;
+}
 
 static bool titleRetrieveApplicationMetadataFromNsRecords(void)
 {
@@ -585,21 +653,12 @@ static bool titleLoadTitleInfo(void)
     /* Return right away if title info has already been retrieved. */
     if (g_titleInfo || g_titleInfoCount) return true;
     
-    NcmContentMetaDatabase *ncm_db = NULL;
-    
     g_titleInfoCount = 0;
     
     for(u8 i = NcmStorageId_BuiltInSystem; i <= NcmStorageId_SdCard; i++)
     {
-        /* Retrieve ncm database pointer. */
-        ncm_db = titleGetNcmDatabaseByStorageId(i);
-        if (!ncm_db) continue;
-        
-        /* Check if the ncm database handle has already been retrieved. */
-        if (!serviceIsActive(&(ncm_db->s))) continue;
-        
-        /* Retrieve content meta keys from this ncm database. */
-        if (!titleRetrieveContentMetaKeysFromDatabase(i, ncm_db))
+        /* Retrieve content meta keys from the current storage. */
+        if (!titleRetrieveContentMetaKeysFromDatabase(i))
         {
             LOGFILE("Failed to retrieve content meta keys from storage ID %u!", i);
             return false;
@@ -609,9 +668,11 @@ static bool titleLoadTitleInfo(void)
     return true;
 }
 
-static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id, NcmContentMetaDatabase *ncm_db)
+static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
 {
-    if (storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_SdCard || !ncm_db || !serviceIsActive(&(ncm_db->s)))
+    NcmContentMetaDatabase *ncm_db = NULL;
+    
+    if (!(ncm_db = titleGetNcmDatabaseByStorageId(storage_id)) || !serviceIsActive(&(ncm_db->s)))
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -705,10 +766,26 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id, NcmContentMe
     {
         TitleInfo *cur_title_info = &(g_titleInfo[g_titleInfoCount + i]);
         
+        /* Fill information. */
         cur_title_info->storage_id = storage_id;
+        memcpy(&(cur_title_info->dot_version), &(meta_keys[i].version), sizeof(u32));
         memcpy(&(cur_title_info->meta_key), &(meta_keys[i]), sizeof(NcmContentMetaKey));
-        /* TO DO: RETRIEVE TITLE SIZE HERE. */
         cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(meta_keys[i].id);
+        
+        /* Retrieve content infos. */
+        if (titleGetContentInfosFromTitle(storage_id, &(meta_keys[i]), &(cur_title_info->content_infos), &(cur_title_info->content_count)))
+        {
+            /* Calculate title size. */
+            for(u32 j = 0; j < cur_title_info->content_count; j++)
+            {
+                u64 tmp_size = 0;
+                titleConvertNcmContentSizeToU64(cur_title_info->content_infos[j].size, &tmp_size);
+                cur_title_info->title_size += tmp_size;
+            }
+        }
+        
+        /* Generate formatted title size string. */
+        utilsGenerateFormattedSizeString(cur_title_info->title_size, cur_title_info->title_size_str, sizeof(cur_title_info->title_size_str));
     }
     
     /* Update title info count. */
@@ -718,6 +795,82 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id, NcmContentMe
     
 end:
     if (meta_keys) free(meta_keys);
+    
+    return success;
+}
+
+static bool titleGetContentInfosFromTitle(u8 storage_id, const NcmContentMetaKey *meta_key, NcmContentInfo **out_content_infos, u32 *out_content_count)
+{
+    NcmContentMetaDatabase *ncm_db = NULL;
+    
+    if (!(ncm_db = titleGetNcmDatabaseByStorageId(storage_id)) || !serviceIsActive(&(ncm_db->s)) || !meta_key || !out_content_infos || !out_content_count)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    Result rc = 0;
+    
+    NcmContentMetaHeader content_meta_header = {0};
+    u64 content_meta_header_read_size = 0;
+    
+    NcmContentInfo *content_infos = NULL;
+    u32 content_count = 0, written = 0;
+    
+    bool success = false;
+    
+    /* Retrieve content meta header. */
+    rc = ncmContentMetaDatabaseGet(ncm_db, meta_key, &content_meta_header_read_size, &content_meta_header, sizeof(NcmContentMetaHeader));
+    if (R_FAILED(rc))
+    {
+        LOGFILE("ncmContentMetaDatabaseGet failed! (0x%08X).", rc);
+        goto end;
+    }
+    
+    if (content_meta_header_read_size != sizeof(NcmContentMetaHeader))
+    {
+        LOGFILE("Content meta header size mismatch! (0x%lX != 0x%lX).", rc, content_meta_header_read_size, sizeof(NcmContentMetaHeader));
+        goto end;
+    }
+    
+    /* Get content count. */
+    content_count = (u32)content_meta_header.content_count;
+    if (!content_count)
+    {
+        LOGFILE("Content count is zero!");
+        goto end;
+    }
+    
+    /* Allocate memory for the content infos. */
+    content_infos = calloc(content_count, sizeof(NcmContentInfo));
+    if (!content_infos)
+    {
+        LOGFILE("Unable to allocate memory for the content infos buffer! (%u content[s]).", content_count);
+        goto end;
+    }
+    
+    /* Retrieve content infos. */
+    rc = ncmContentMetaDatabaseListContentInfo(ncm_db, (s32*)&written, content_infos, (s32)content_count, meta_key, 0);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("ncmContentMetaDatabaseListContentInfo failed! (0x%08X).", rc);
+        goto end;
+    }
+    
+    if (written != content_count)
+    {
+        LOGFILE("Content count mismatch! (%u != %u).", written, content_count);
+        goto end;
+    }
+    
+    /* Update output. */
+    *out_content_infos = content_infos;
+    *out_content_count = content_count;
+    
+    success = true;
+    
+end:
+    if (!success && content_infos) free(content_infos);
     
     return success;
 }
@@ -749,7 +902,7 @@ static bool _titleRefreshGameCardTitleInfo(bool lock)
     g_titleInfoGameCardStartIndex = g_titleInfoCount;
     
     /* Retrieve content meta keys from the gamecard ncm database. */
-    if (!titleRetrieveContentMetaKeysFromDatabase(NcmStorageId_GameCard, &g_ncmDbGameCard))
+    if (!titleRetrieveContentMetaKeysFromDatabase(NcmStorageId_GameCard))
     {
         LOGFILE("Failed to retrieve content meta keys from gamecard!");
         goto end;
@@ -856,29 +1009,21 @@ static void titleRemoveGameCardTitleInfoEntries(void)
     
     if (g_titleInfoGameCardCount == g_titleInfoCount)
     {
-        free(g_titleInfo);
-        g_titleInfo = NULL;
+        titleFreeTitleInfo();
     } else {
+        for(u32 i = (g_titleInfoCount - g_titleInfoGameCardCount); i < g_titleInfoCount; i++)
+        {
+            if (g_titleInfo[i].content_infos) free(g_titleInfo[i].content_infos);
+        }
+        
         TitleInfo *tmp_title_info = realloc(g_titleInfo, (g_titleInfoCount - g_titleInfoGameCardCount) * sizeof(TitleInfo));
         if (tmp_title_info)
         {
             g_titleInfo = tmp_title_info;
             tmp_title_info = NULL;
         }
+        
+        g_titleInfoCount = (g_titleInfoCount - g_titleInfoGameCardCount);
+        g_titleInfoGameCardStartIndex = g_titleInfoGameCardCount = 0;
     }
-    
-    g_titleInfoCount = (g_titleInfoCount - g_titleInfoGameCardCount);
-    g_titleInfoGameCardStartIndex = g_titleInfoGameCardCount = 0;
-}
-
-NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id)
-{
-    if (!g_appMetadata || !g_appMetadataCount || !title_id) return NULL;
-    
-    for(u32 i = 0; i < g_appMetadataCount; i++)
-    {
-        if (g_appMetadata[i].title_id == title_id) return &(g_appMetadata[i]);
-    }
-    
-    return NULL;
 }

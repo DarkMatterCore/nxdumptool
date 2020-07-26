@@ -24,6 +24,7 @@
 #include "aes.h"
 #include "rsa.h"
 #include "gamecard.h"
+#include "title.h"
 
 #define NCA_CRYPTO_BUFFER_SIZE  0x800000    /* 8 MiB. */
 
@@ -82,10 +83,12 @@ void ncaFreeCryptoBuffer(void)
     mutexUnlock(&g_ncaCryptoBufferMutex);
 }
 
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik)
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik)
 {
-    if (!out || !tik || (storage_id != NcmStorageId_GameCard && !ncm_storage) || (storage_id == NcmStorageId_GameCard && hfs_partition_type > GameCardHashFileSystemPartitionType_Secure) || \
-        !content_info || content_info->content_type > NcmContentType_DeltaFragment)
+    NcmContentStorage *ncm_storage = NULL;
+    
+    if (!out || (storage_id != NcmStorageId_GameCard && !(ncm_storage = titleGetNcmStorageByStorageId(storage_id))) || \
+        (storage_id == NcmStorageId_GameCard && hfs_partition_type > GameCardHashFileSystemPartitionType_Boot) || !content_info || content_info->content_type > NcmContentType_DeltaFragment || !tik)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -104,7 +107,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm
     out->content_type = content_info->content_type;
     out->id_offset = content_info->id_offset;
     
-    ncaConvertNcmContentSizeToU64(content_info->size, &(out->content_size));
+    titleConvertNcmContentSizeToU64(content_info->size, &(out->content_size));
     if (out->content_size < NCA_FULL_HEADER_LENGTH)
     {
         LOGFILE("Invalid size for NCA \"%s\"!", out->content_id_str);

@@ -348,11 +348,10 @@ bool ncaAllocateCryptoBuffer(void);
 void ncaFreeCryptoBuffer(void);
 
 /// Initializes a NCA context.
-/// If 'storage_id' != NcmStorageId_GameCard, the 'ncm_storage' argument must point to a valid NcmContentStorage instance, previously opened using the same NcmStorageId value.
 /// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
 /// If the NCA holds a populated Rights ID field, and if the Ticket element pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik);
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
 /// Input offset must be relative to the start of the NCA content file.
@@ -427,18 +426,6 @@ bool ncaEncryptHeader(NcaContext *ctx);
 
 
 /// Miscellaneous functions.
-
-NX_INLINE void ncaConvertNcmContentSizeToU64(const u8 *size, u64 *out)
-{
-    if (!size || !out) return;
-    *out = 0;
-    memcpy(out, size, 6);
-}
-
-NX_INLINE void ncaConvertU64ToNcmContentSize(const u64 *size, u8 *out)
-{
-    if (size && out) memcpy(out, size, 6);
-}
 
 NX_INLINE void ncaSetDownloadDistributionType(NcaContext *ctx)
 {

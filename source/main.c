@@ -22,6 +22,7 @@
 #include "bktr.h"
 #include "gamecard.h"
 #include "usb.h"
+#include "title.h"
 
 #define TEST_BUF_SIZE   0x800000
 
@@ -212,41 +213,14 @@ int main(int argc, char *argv[])
         goto out;
     }
     
-    
-    
-    
-    
-    goto out;
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    Result rc = 0;
-    
     u8 *buf = NULL;
     
-    u64 base_tid = (u64)0x010082400BCC6000; // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000 | Untitled Goose Game 0x010082400BCC6000
-    u64 update_tid = (base_tid | 0x800);
+    u64 base_tid = (u64)0x01004AB00A260000; // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000 | Untitled Goose Game 0x010082400BCC6000
+    u64 update_tid = titleGetPatchIdByApplicationId(base_tid);
     
-    Ticket base_tik = {0}, update_tik = {0};
+    TitleInfo *base_title_info = NULL, *update_title_info = NULL;
     NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
-    NcmContentStorage ncm_storage_sdcard = {0}, ncm_storage_emmc = {0};
-    
-    char path[FS_MAX_PATH] = {0};
-    LrLocationResolver resolver_sdcard = {0}, resolver_emmc = {0};
-    NcmContentInfo content_info = {0};
+    Ticket base_tik = {0}, update_tik = {0};
     
     BktrContext bktr_ctx = {0};
     
@@ -280,108 +254,27 @@ int main(int argc, char *argv[])
     
     consolePrint("update nca ctx buf succeeded\n");
     
-    rc = ncmOpenContentStorage(&ncm_storage_sdcard, NcmStorageId_SdCard);
-    if (R_FAILED(rc))
+    base_title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_Any, base_tid);
+    update_title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_Any, update_tid);
+    
+    if (!base_title_info || !update_title_info)
     {
-        consolePrint("ncm open storage sdcard failed\n");
+        consolePrint("title info failed\n");
         goto out2;
     }
     
-    consolePrint("ncm open storage sdcard succeeded\n");
+    consolePrint("title info succeeded\n");
     
-    rc = ncmOpenContentStorage(&ncm_storage_emmc, NcmStorageId_BuiltInUser);
-    if (R_FAILED(rc))
+    if (!ncaInitializeContext(base_nca_ctx, base_title_info->storage_id, 0, titleGetContentInfoByTypeAndIdOffset(base_title_info, NcmContentType_Program, 0), &base_tik))
     {
-        consolePrint("ncm open storage emmc failed\n");
+        consolePrint("nca initialize base ctx failed\n");
         goto out2;
     }
     
-    consolePrint("ncm open storage emmc succeeded\n");
-    
-    rc = lrInitialize();
-    if (R_FAILED(rc))
+    if (!ncaInitializeContext(update_nca_ctx, update_title_info->storage_id, 0, titleGetContentInfoByTypeAndIdOffset(update_title_info, NcmContentType_Program, 0), &update_tik))
     {
-        consolePrint("lrInitialize failed\n");
+        consolePrint("nca initialize update ctx failed\n");
         goto out2;
-    }
-    
-    consolePrint("lrInitialize succeeded\n");
-    
-    rc = lrOpenLocationResolver(NcmStorageId_SdCard, &resolver_sdcard);
-    if (R_FAILED(rc))
-    {
-        consolePrint("lrOpenLocationResolver sdcard failed\n");
-        goto out2;
-    }
-    
-    consolePrint("lrOpenLocationResolver sdcard succeeded\n");
-    
-    rc = lrOpenLocationResolver(NcmStorageId_BuiltInUser, &resolver_emmc);
-    if (R_FAILED(rc))
-    {
-        consolePrint("lrOpenLocationResolver emmc failed\n");
-        goto out2;
-    }
-    
-    consolePrint("lrOpenLocationResolver emmc succeeded\n");
-    
-    for(u32 i = 0; i < 2; i++)
-    {
-        for(u32 j = 0; j < 2; j++)
-        {
-            NcmContentStorage *ncm_storage = (j == 0 ? &ncm_storage_sdcard : &ncm_storage_emmc);
-            LrLocationResolver *resolver = (j == 0 ? &resolver_sdcard : &resolver_emmc);
-            NcaContext *nca_ctx = (i == 0 ? base_nca_ctx : update_nca_ctx);
-            Ticket *tik = (i == 0 ? &base_tik : &update_tik);
-            
-            rc = lrLrResolveProgramPath(resolver, i == 0 ? base_tid : update_tid, path);
-            if (R_FAILED(rc))
-            {
-                consolePrint("lrLrResolveProgramPath %s,%s failed\n", i == 0 ? "base" : "update", j == 0 ? "sdcard" : "emmc");
-                if (j == 0) continue;
-                goto out2;
-            }
-            
-            consolePrint("lrLrResolveProgramPath %s,%s succeeded\n", i == 0 ? "base" : "update", j == 0 ? "sdcard" : "emmc");
-            
-            memset(&content_info, 0, sizeof(NcmContentInfo));
-            
-            memmove(path, strrchr(path, '/') + 1, SHA256_HASH_SIZE + 4);
-            path[SHA256_HASH_SIZE + 4] = '\0';
-            
-            consolePrint("Program NCA (%s,%s): %s\n", i == 0 ? "base" : "update", j == 0 ? "sdcard" : "emmc", path);
-            
-            for(u32 i = 0; i < SHA256_HASH_SIZE; i++)
-            {
-                char val = (('a' <= path[i] && path[i] <= 'f') ? (path[i] - 'a' + 0xA) : (path[i] - '0'));
-                if ((i & 1) == 0) val <<= 4;
-                content_info.content_id.c[i >> 1] |= val;
-            }
-            
-            content_info.content_type = NcmContentType_Program;
-            
-            u64 content_size = 0;
-            rc = ncmContentStorageGetSizeFromContentId(ncm_storage, (s64*)&content_size, &(content_info.content_id));
-            if (R_FAILED(rc))
-            {
-                consolePrint("ncmContentStorageGetSizeFromContentId %s,%s failed\n", i == 0 ? "base" : "update", j == 0 ? "sdcard" : "emmc");
-                goto out2;
-            }
-            
-            consolePrint("ncmContentStorageGetSizeFromContentId %s,%s succeeded\n", i == 0 ? "base" : "update", j == 0 ? "sdcard" : "emmc");
-            
-            memcpy(&(content_info.size), &content_size, 6);
-            
-            if (!ncaInitializeContext(nca_ctx, i == 0 ? NcmStorageId_SdCard : NcmStorageId_BuiltInUser, ncm_storage, 0, &content_info, tik))
-            {
-                consolePrint("nca initialize ctx %s,%s failed\n", i == 0 ? "base" : "update", j == 0 ? "sdcard" : "emmc");
-                goto out2;
-            }
-            
-            consolePrint("nca initialize ctx %s,%s succeeded\n", i == 0 ? "base" : "update", j == 0 ? "sdcard" : "emmc");
-            
-            break;
-        }
     }
     
     if (!bktrInitializeContext(&bktr_ctx, &(base_nca_ctx->fs_contexts[1]), &(update_nca_ctx->fs_contexts[1])))
@@ -391,117 +284,6 @@ int main(int argc, char *argv[])
     }
     
     consolePrint("bktr initialize ctx succeeded\n");
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    FILE *tmp_file = NULL;
-    RomFileSystemFileEntry *romfs_file_entry = NULL;
-    RomFileSystemFileEntryPatch romfs_patch = {0};
-    
-    romfs_file_entry = romfsGetFileEntryByPath(&(bktr_ctx.base_romfs_ctx), "/Data/rawsettings");
-    if (!romfs_file_entry)
-    {
-        consolePrint("romfs get file entry by path failed\n");
-        goto out2;
-    }
-    
-    consolePrint("romfs get file entry by path success: %s | 0x%lX | %p\n", romfs_file_entry->name, romfs_file_entry->size, romfs_file_entry);
-    
-    if (!romfsReadFileEntryData(&(bktr_ctx.base_romfs_ctx), romfs_file_entry, buf, romfs_file_entry->size, 0))
-    {
-        consolePrint("romfs read file entry failed\n");
-        goto out2;
-    }
-    
-    consolePrint("romfs read file entry success\n");
-    
-    memset(buf, 0xAA, romfs_file_entry->size);
-    
-    if (!romfsGenerateFileEntryPatch(&(bktr_ctx.base_romfs_ctx), romfs_file_entry, buf, romfs_file_entry->size, 0, &romfs_patch))
-    {
-        consolePrint("romfs file entry patch failed\n");
-        goto out2;
-    }
-    
-    consolePrint("romfs file entry patch success\n");
-    
-    if (!ncaEncryptHeader(base_nca_ctx))
-    {
-        consolePrint("nca header mod not encrypted\n");
-        romfsFreeFileEntryPatch(&romfs_patch);
-        goto out2;
-    }
-    
-    consolePrint("nca header mod encrypted\n");
-    
-    tmp_file = fopen("sdmc:/program_nca_mod.bin", "wb");
-    if (!tmp_file)
-    {
-        consolePrint("program nca mod not saved\n");
-        romfsFreeFileEntryPatch(&romfs_patch);
-        goto out2;
-    }
-    
-    u64 block_size = TEST_BUF_SIZE;
-    for(u64 i = 0; i < base_nca_ctx->content_size; i += block_size)
-    {
-        if (block_size > (base_nca_ctx->content_size - i)) block_size = (base_nca_ctx->content_size - i);
-        
-        if (!ncaReadContentFile(base_nca_ctx, buf, block_size, i))
-        {
-            consolePrint("failed to read 0x%lX chunk from offset 0x%lX\n", block_size, i);
-            fclose(tmp_file);
-            romfsFreeFileEntryPatch(&romfs_patch);
-            goto out2;
-        }
-        
-        if (i == 0)
-        {
-            memcpy(buf, &(base_nca_ctx->header), sizeof(NcaHeader));
-            for(u64 j = 0; j < 4; j++) memcpy(buf + sizeof(NcaHeader) + (j * sizeof(NcaFsHeader)), &(base_nca_ctx->fs_contexts[j].header), sizeof(NcaFsHeader));
-        }
-        
-        romfsWriteFileEntryPatchToMemoryBuffer(&(bktr_ctx.base_romfs_ctx), &romfs_patch, buf, block_size, i);
-        
-        fwrite(buf, 1, block_size, tmp_file);
-        fflush(tmp_file);
-        
-        consolePrint("wrote 0x%lX bytes to offset 0x%lX\n", block_size, i);
-    }
-    
-    fclose(tmp_file);
-    romfsFreeFileEntryPatch(&romfs_patch);
-    
-    goto out2;
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     
     shared_data.bktr_ctx = &bktr_ctx;
     shared_data.data = buf;
@@ -615,15 +397,6 @@ out2:
     utilsWaitForButtonPress(KEY_NONE);
     
     bktrFreeContext(&bktr_ctx);
-    
-    if (serviceIsActive(&(resolver_emmc.s))) serviceClose(&(resolver_emmc.s));
-    if (serviceIsActive(&(resolver_sdcard.s))) serviceClose(&(resolver_sdcard.s));
-    
-    lrExit();
-    
-    if (serviceIsActive(&(ncm_storage_emmc.s))) ncmContentStorageClose(&ncm_storage_emmc);
-    
-    if (serviceIsActive(&(ncm_storage_sdcard.s))) ncmContentStorageClose(&ncm_storage_sdcard);
     
     if (update_nca_ctx) free(update_nca_ctx);
     
