@@ -213,13 +213,12 @@ int main(int argc, char *argv[])
         goto out;
     }
     
+    u32 app_count = 0, selected_idx = 0;
+    TitleApplicationMetadata **app_metadata = NULL;
+    TitleUserApplicationData user_app_data = {0};
+    
     u8 *buf = NULL;
     
-    // ACNH 0x01006F8002326000 | Smash 0x01006A800016E000 | Dark Souls 0x01004AB00A260000 | BotW 0x01007EF00011E000 | Untitled Goose Game 0x010082400BCC6000 | SMO 0x0100000000010000
-    u64 base_tid = (u64)0x0100000000010000;
-    u64 update_tid = titleGetPatchIdByApplicationId(base_tid);
-    
-    TitleInfo *base_title_info = NULL, *update_title_info = NULL;
     NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
     Ticket base_tik = {0}, update_tik = {0};
     
@@ -227,6 +226,15 @@ int main(int argc, char *argv[])
     
     ThreadSharedData shared_data = {0};
     thrd_t read_thread, write_thread;
+    
+    app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
+    if (!app_metadata || !app_count)
+    {
+        consolePrint("app metadata failed\n");
+        goto out2;
+    }
+    
+    consolePrint("app metadata succeeded\n");
     
     buf = usbAllocatePageAlignedBuffer(TEST_BUF_SIZE);
     if (!buf)
@@ -255,26 +263,88 @@ int main(int argc, char *argv[])
     
     consolePrint("update nca ctx buf succeeded\n");
     
-    base_title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_Any, base_tid);
-    update_title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_Any, update_tid);
+    utilsSleep(1);
     
-    if (!base_title_info || !update_title_info)
+    while(true)
     {
-        consolePrint("title info failed\n");
-        goto out2;
+        consoleClear();
+        printf("select a base title with an available update.\nthe updated romfs will be dumped via usb.\npress b to cancel.\n\n");
+        
+        for(u32 i = 0; i < app_count; i++) printf("%s%s (%016lX)\n", i == selected_idx ? " -> " : "    ", app_metadata[i]->lang_entry.name, app_metadata[i]->title_id);
+        consoleUpdate(NULL);
+        
+        u64 btn = 0;
+        
+        while(true)
+        {
+            btn = utilsReadInput(UtilsInputType_Down);
+            if (btn) break;
+            
+            if (titleRefreshGameCardTitleInfo())
+            {
+                free(app_metadata);
+                
+                app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
+                if (!app_metadata)
+                {
+                    consolePrint("\napp metadata failed\n");
+                    goto out2;
+                }
+                
+                selected_idx = 0;
+                
+                break;
+            }
+        }
+        
+        if (btn & KEY_A)
+        {
+            if (!titleGetUserApplicationData(app_metadata[selected_idx]->title_id, &user_app_data) || !user_app_data.app_info || !user_app_data.patch_info)
+            {
+                consolePrint("\nthe selected title either doesn't have available base content or update content.\n");
+                utilsSleep(3);
+                continue;
+            }
+            
+            break;
+        } else
+        if (btn & KEY_DOWN)
+        {
+            if ((selected_idx + 1) < app_count)
+            {
+                selected_idx++;
+            } else {
+                selected_idx = 0;
+            }
+        } else
+        if (btn & KEY_UP)
+        {
+            if (selected_idx == 0)
+            {
+                selected_idx = (app_count - 1);
+            } else {
+                selected_idx--;
+            }
+        } else
+        if (btn & KEY_B)
+        {
+            consolePrint("\nprocess cancelled.\n");
+            goto out2;
+        }
     }
     
-    consolePrint("title info succeeded\n");
+    consoleClear();
+    consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[selected_idx]->lang_entry.name, app_metadata[selected_idx]->title_id);
     
-    if (!ncaInitializeContext(base_nca_ctx, base_title_info->storage_id, (base_title_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(base_title_info, NcmContentType_Program, 0), &base_tik))
+    if (!ncaInitializeContext(base_nca_ctx, user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Program, 0), &base_tik))
     {
         consolePrint("nca initialize base ctx failed\n");
         goto out2;
     }
     
-    if (!ncaInitializeContext(update_nca_ctx, update_title_info->storage_id, (update_title_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(update_title_info, NcmContentType_Program, 0), &update_tik))
+    if (!ncaInitializeContext(update_nca_ctx, user_app_data.patch_info->storage_id, (user_app_data.patch_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+        titleGetContentInfoByTypeAndIdOffset(user_app_data.patch_info, NcmContentType_Program, 0), &update_tik))
     {
         consolePrint("nca initialize update ctx failed\n");
         goto out2;
@@ -406,6 +476,8 @@ out2:
     if (base_nca_ctx) free(base_nca_ctx);
     
     if (buf) free(buf);
+    
+    if (app_metadata) free(app_metadata);
     
 out:
     utilsCloseResources();

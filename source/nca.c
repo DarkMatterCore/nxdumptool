@@ -233,13 +233,9 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
                     aes128XtsContextCreate(&(out->fs_contexts[i].xts_decrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, false);
                     aes128XtsContextCreate(&(out->fs_contexts[i].xts_encrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, true);
                 } else
-                if (out->fs_contexts[i].encryption_type == NcaEncryptionType_AesCtr)
+                if (out->fs_contexts[i].encryption_type == NcaEncryptionType_AesCtr || out->fs_contexts[i].encryption_type == NcaEncryptionType_AesCtrEx)
                 {
                     aes128CtrContextCreate(&(out->fs_contexts[i].ctr_ctx), out->decrypted_key_area.aes_ctr, out->fs_contexts[i].ctr);
-                } else
-                if (out->fs_contexts[i].encryption_type == NcaEncryptionType_AesCtrEx)
-                {
-                    aes128CtrContextCreate(&(out->fs_contexts[i].ctr_ctx), out->decrypted_key_area.aes_ctr_ex, out->fs_contexts[i].ctr);
                 }
             }
         }

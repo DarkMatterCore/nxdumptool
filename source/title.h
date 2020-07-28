@@ -23,9 +23,15 @@
 #ifndef __TITLE_H__
 #define __TITLE_H__
 
-#define TITLE_PATCH_ID_MASK         (u64)0x800
-#define TITLE_ADDONCONTENT_ID_MASK  (u64)0xFFFFFFFFFFFF0000
+#define TITLE_PATCH_BASE_ID                 (u64)0x800
 
+#define TITLE_ADDONCONTENT_BASE_ID          (u64)0x1000
+#define TITLE_ADDONCONTENT_CONVERSION_MASK  (u64)0xFFFFFFFFFFFFF000
+#define TITLE_ADDONCONTENT_MAX_ENTRIES      2000
+
+#define TITLE_DELTA_BASE_ID                 (u64)0xC00
+
+/// Used to display version numbers in dot notation (major.minor.micro-major_relstep.minor_relstep).
 typedef struct {
     u32 TitleVersion_MinorRelstep : 8;
     u32 TitleVersion_MajorRelstep : 8;
@@ -35,29 +41,34 @@ typedef struct {
 } TitleVersion;
 
 /// Retrieved using ns application records and/or ncm content meta keys.
+/// Used by the UI to display title lists.
 typedef struct {
-    u64 title_id;                   ///< Title ID from the application this data belongs to.
+    u64 title_id;                   ///< Title ID from the application / system title this data belongs to.
     NacpLanguageEntry lang_entry;   ///< UTF-8 strings in the console language.
     u32 icon_size;                  ///< JPEG icon size.
-    u8 *icon;                       ///< JPEG icon data.         
+    u8 *icon;                       ///< JPEG icon data.
 } TitleApplicationMetadata;
 
 /// Retrieved using ncm databases.
-typedef struct {
-    u8 storage_id;                          ///< NcmStorageId.
-    TitleVersion dot_version;               ///< Holds the same value from meta_key.version. Used to display version numbers in dot notation (major.minor.micro-major_relstep.minor_relstep).
-    NcmContentMetaKey meta_key;             ///< Used with ncm calls.
-    u32 content_count;                      ///< Content info count.
-    NcmContentInfo *content_infos;          ///< Content info entries from this title.
-    u64 title_size;                         ///< Total title size.
-    char title_size_str[32];                ///< Total title size string.
-    TitleApplicationMetadata *app_metadata; ///< Only available for system titles and applications.
-    
-    
-    /* Pointers to patches / AOC? */
-    
-    
+typedef struct _TitleInfo {
+    u8 storage_id;                                  ///< NcmStorageId.
+    TitleVersion dot_version;                       ///< Holds the same value from meta_key.version.
+    NcmContentMetaKey meta_key;                     ///< Used with ncm calls.
+    u32 content_count;                              ///< Content info count.
+    NcmContentInfo *content_infos;                  ///< Content info entries from this title.
+    u64 title_size;                                 ///< Total title size.
+    char title_size_str[32];                        ///< Total title size string.
+    TitleApplicationMetadata *app_metadata;         ///< Only available for system titles and applications.
+    struct _TitleInfo *parent, *previous, *next;    ///< Used with TitleInfo entries from patches and add-on contents.
 } TitleInfo;
+
+/// Used to deal with user applications stored in the eMMC, SD card and/or gamecard.
+typedef struct {
+    bool gamecard_available;    ///< Set to true if one or more titles matching this user application are stored in the inserted gamecard.
+    TitleInfo *app_info;        ///< Pointer to a TitleInfo element for this application.
+    TitleInfo *patch_info;      ///< Pointer to a TitleInfo element for the first detected patch.
+    TitleInfo *aoc_info;        ///< Pointer to a TitleInfo element for the first detected add-on content.
+} TitleUserApplicationData;
 
 /// Initializes the title interface.
 bool titleInitialize(void);
@@ -71,14 +82,30 @@ NcmContentMetaDatabase *titleGetNcmDatabaseByStorageId(u8 storage_id);
 /// Returns a pointer to a ncm storage handle using a NcmStorageId value.
 NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 
-/// Returns true if gamecard title info could be loaded.
+/// Returns true if gamecard title info has been (un)loaded.
 /// Suitable for being called between UI updates.
 bool titleRefreshGameCardTitleInfo(void);
+
+/// Returns a pointer to a dynamically allocated buffer of pointers to TitleApplicationMetadata entries, as well as their count. The allocated buffer must be freed by the user.
+/// If 'is_system' is true, TitleApplicationMetadata entries from available system titles will be returned.
+/// Otherwise, TitleApplicationMetadata entries from user applications with available content data will be returned.
+/// Returns NULL if an error occurs.
+TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count);
 
 /// Retrieves a pointer to a TitleInfo entry with a matching storage ID and title ID.
 /// If NcmStorageId_Any is used, the first entry with a matching title ID is returned.
 /// Returns NULL if an error occurs.
 TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
+
+/// Populates a TitleUserApplicationData element using an user application ID.
+bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
+
+
+
+
+
+
+
 
 
 
@@ -106,22 +133,56 @@ NX_INLINE void titleConvertU64ToNcmContentSize(const u64 *size, u8 *out)
 
 NX_INLINE u64 titleGetPatchIdByApplicationId(u64 app_id)
 {
-    return (app_id | TITLE_PATCH_ID_MASK);
+    return (app_id + TITLE_PATCH_BASE_ID);
 }
 
 NX_INLINE u64 titleGetApplicationIdByPatchId(u64 patch_id)
 {
-    return (patch_id & ~TITLE_PATCH_ID_MASK);
+    return (patch_id - TITLE_PATCH_BASE_ID);
 }
 
 NX_INLINE bool titleCheckIfPatchIdBelongsToApplicationId(u64 app_id, u64 patch_id)
 {
-    return (titleGetPatchIdByApplicationId(app_id) == patch_id);
+    return (patch_id == titleGetPatchIdByApplicationId(app_id));
+}
+
+NX_INLINE u64 titleGetAddOnContentBaseIdByApplicationId(u64 app_id)
+{
+    return ((app_id & TITLE_ADDONCONTENT_CONVERSION_MASK) + TITLE_ADDONCONTENT_BASE_ID);
+}
+
+NX_INLINE u64 titleGetAddOnContentIdWithIndexByApplicationId(u64 app_id, u16 idx)
+{
+    return (titleGetAddOnContentBaseIdByApplicationId(app_id) + idx + 1);
+}
+
+NX_INLINE u64 titleGetApplicationIdByAddOnContentId(u64 aoc_id)
+{
+    return ((aoc_id - TITLE_ADDONCONTENT_BASE_ID) & TITLE_ADDONCONTENT_CONVERSION_MASK);
+}
+
+NX_INLINE u64 titleGetAddOnContentMaxIdByBaseId(u64 aoc_base_id)
+{
+    return (aoc_base_id + TITLE_ADDONCONTENT_MAX_ENTRIES + 1);
+}
+
+NX_INLINE bool titleIsAddOnContentIdValid(u64 aoc_id, u64 aoc_base_id, u64 aoc_max_id)
+{
+    return (aoc_id > aoc_base_id && aoc_id < aoc_max_id);
 }
 
 NX_INLINE bool titleCheckIfAddOnContentIdBelongsToApplicationId(u64 app_id, u64 aoc_id)
 {
-    return ((app_id & TITLE_ADDONCONTENT_ID_MASK) == (aoc_id & TITLE_ADDONCONTENT_ID_MASK));
+    u64 aoc_base_id = titleGetAddOnContentBaseIdByApplicationId(app_id);
+    u64 aoc_max_id = titleGetAddOnContentMaxIdByBaseId(aoc_base_id);
+    return titleIsAddOnContentIdValid(aoc_id, aoc_base_id, aoc_max_id);
+}
+
+NX_INLINE bool titleCheckIfAddOnContentIdsAreSiblings(u64 aoc_id_1, u64 aoc_id_2)
+{
+    u64 app_id_1 = titleGetApplicationIdByAddOnContentId(aoc_id_1);
+    u64 app_id_2 = titleGetApplicationIdByAddOnContentId(aoc_id_2);
+    return (app_id_1 == app_id_2 && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id_1, aoc_id_1) && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id_2, aoc_id_2));
 }
 
 NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, u8 content_type, u8 id_offset)
