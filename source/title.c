@@ -663,7 +663,8 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
     
     if (app_metadata && app_count)
     {
-        /* Sort metadata entries alphabetically. */
+        /* System titles: sort metadata entries by ID. */
+        /* User applications: sort metadata entries alphabetically. */
         qsort(app_metadata, app_count, sizeof(TitleApplicationMetadata*), is_system ? &titleSystemTitleMetadataComparison : &titleUserApplicationMetadataComparison);
         
         /* Update output counter. */

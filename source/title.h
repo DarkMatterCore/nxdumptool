@@ -23,13 +23,13 @@
 #ifndef __TITLE_H__
 #define __TITLE_H__
 
-#define TITLE_PATCH_BASE_ID                 (u64)0x800
+#define TITLE_PATCH_TYPE_VALUE              (u64)0x800
 
-#define TITLE_ADDONCONTENT_BASE_ID          (u64)0x1000
+#define TITLE_ADDONCONTENT_TYPE_VALUE       (u64)0x1000
 #define TITLE_ADDONCONTENT_CONVERSION_MASK  (u64)0xFFFFFFFFFFFFF000
 #define TITLE_ADDONCONTENT_MAX_ENTRIES      2000
 
-#define TITLE_DELTA_BASE_ID                 (u64)0xC00
+#define TITLE_DELTA_TYPE_VALUE              (u64)0xC00
 
 /// Used to display version numbers in dot notation (major.minor.micro-major_relstep.minor_relstep).
 typedef struct {
@@ -86,7 +86,7 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 /// Suitable for being called between UI updates.
 bool titleRefreshGameCardTitleInfo(void);
 
-/// Returns a pointer to a dynamically allocated buffer of pointers to TitleApplicationMetadata entries, as well as their count. The allocated buffer must be freed by the user.
+/// Returns a pointer to a dynamically allocated buffer of pointers to TitleApplicationMetadata entries, as well as their count. The allocated buffer must be freed by the calling function.
 /// If 'is_system' is true, TitleApplicationMetadata entries from available system titles will be returned.
 /// Otherwise, TitleApplicationMetadata entries from user applications with available content data will be returned.
 /// Returns NULL if an error occurs.
@@ -133,12 +133,12 @@ NX_INLINE void titleConvertU64ToNcmContentSize(const u64 *size, u8 *out)
 
 NX_INLINE u64 titleGetPatchIdByApplicationId(u64 app_id)
 {
-    return (app_id + TITLE_PATCH_BASE_ID);
+    return (app_id + TITLE_PATCH_TYPE_VALUE);
 }
 
 NX_INLINE u64 titleGetApplicationIdByPatchId(u64 patch_id)
 {
-    return (patch_id - TITLE_PATCH_BASE_ID);
+    return (patch_id - TITLE_PATCH_TYPE_VALUE);
 }
 
 NX_INLINE bool titleCheckIfPatchIdBelongsToApplicationId(u64 app_id, u64 patch_id)
@@ -148,7 +148,7 @@ NX_INLINE bool titleCheckIfPatchIdBelongsToApplicationId(u64 app_id, u64 patch_i
 
 NX_INLINE u64 titleGetAddOnContentBaseIdByApplicationId(u64 app_id)
 {
-    return ((app_id & TITLE_ADDONCONTENT_CONVERSION_MASK) + TITLE_ADDONCONTENT_BASE_ID);
+    return ((app_id & TITLE_ADDONCONTENT_CONVERSION_MASK) + TITLE_ADDONCONTENT_TYPE_VALUE);
 }
 
 NX_INLINE u64 titleGetAddOnContentIdWithIndexByApplicationId(u64 app_id, u16 idx)
@@ -158,7 +158,7 @@ NX_INLINE u64 titleGetAddOnContentIdWithIndexByApplicationId(u64 app_id, u16 idx
 
 NX_INLINE u64 titleGetApplicationIdByAddOnContentId(u64 aoc_id)
 {
-    return ((aoc_id - TITLE_ADDONCONTENT_BASE_ID) & TITLE_ADDONCONTENT_CONVERSION_MASK);
+    return ((aoc_id - TITLE_ADDONCONTENT_TYPE_VALUE) & TITLE_ADDONCONTENT_CONVERSION_MASK);
 }
 
 NX_INLINE u64 titleGetAddOnContentMaxIdByBaseId(u64 aoc_base_id)
