@@ -372,8 +372,8 @@ static void titleRemoveGameCardTitleInfoEntries(void);
 static bool titleIsUserApplicationContentAvailable(u64 app_id);
 static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id, bool lock);
 
-static int titleUserApplicationMetadataComparison(const void *a, const void *b);
 static int titleSystemTitleMetadataComparison(const void *a, const void *b);
+static int titleUserApplicationMetadataComparison(const void *a, const void *b);
 
 bool titleInitialize(void)
 {
@@ -1582,14 +1582,6 @@ end:
     return info;
 }
 
-static int titleUserApplicationMetadataComparison(const void *a, const void *b)
-{
-	const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
-    const TitleApplicationMetadata *app_metadata_2 = *((const TitleApplicationMetadata**)b);
-    
-    return strcasecmp(app_metadata_1->lang_entry.name, app_metadata_2->lang_entry.name);
-}
-
 static int titleSystemTitleMetadataComparison(const void *a, const void *b)
 {
 	const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
@@ -1605,4 +1597,12 @@ static int titleSystemTitleMetadataComparison(const void *a, const void *b)
     }
     
     return 0;
+}
+
+static int titleUserApplicationMetadataComparison(const void *a, const void *b)
+{
+	const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
+    const TitleApplicationMetadata *app_metadata_2 = *((const TitleApplicationMetadata**)b);
+    
+    return strcasecmp(app_metadata_1->lang_entry.name, app_metadata_2->lang_entry.name);
 }
