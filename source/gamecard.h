@@ -32,10 +32,6 @@
 
 #define GAMECARD_UPDATE_TID             (u64)0x0100000000000816
 
-#define GAMECARD_HFS_PARTITION_NAME(x)  ((x) == GameCardHashFileSystemPartitionType_Root ? "root" : ((x) == GameCardHashFileSystemPartitionType_Update ? "update" : \
-                                        ((x) == GameCardHashFileSystemPartitionType_Logo ? "logo" : ((x) == GameCardHashFileSystemPartitionType_Normal ? "normal" : \
-                                        ((x) == GameCardHashFileSystemPartitionType_Secure ? "secure" : ((x) == GameCardHashFileSystemPartitionType_Boot ? "boot" : "unknown"))))))
-
 /// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
 typedef struct {
     u64 package_id;         ///< Matches package_id from GameCardHeader.
@@ -221,6 +217,9 @@ bool gamecardGetTotalSize(u64 *out);
 bool gamecardGetTrimmedSize(u64 *out);
 bool gamecardGetRomCapacity(u64 *out); ///< Not the same as gamecardGetTotalSize().
 bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
+
+/// Returns a pointer to a string holding the name of the provided hash file system partition type.
+const char *gamecardGetHashFileSystemPartitionName(u8 hfs_partition_type);
 
 /// Retrieves the entry count from a hash FS partition.
 bool gamecardGetEntryCountFromHashFileSystemPartition(u8 hfs_partition_type, u32 *out_count);

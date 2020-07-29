@@ -393,7 +393,8 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 /// 'buf_offset' must hold the raw NCA offset where the data stored in 'buf' was read from.
 void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset);
 
-
+/// Returns a pointer to a string holding the name of the provided NCA FS section type.
+const char *ncaGetFsSectionTypeName(u8 section_type);
 
 
 

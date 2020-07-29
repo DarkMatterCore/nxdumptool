@@ -38,6 +38,14 @@ static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
     0xFF, 0x6B, 0x25, 0xEF, 0x9F, 0x96, 0x85, 0x28, 0x18, 0x9E, 0x76, 0xB0, 0x92, 0xF0, 0x6A, 0xCB
 };
 
+static const char *g_ncaFsSectionTypeNames[] = {
+    [NcaFsSectionType_PartitionFs] = "Partition FS",
+    [NcaFsSectionType_RomFs]       = "RomFS",
+    [NcaFsSectionType_PatchRomFs]  = "Patch RomFS [BKTR]",
+    [NcaFsSectionType_Nca0RomFs]   = "NCA0 RomFS",
+    [NcaFsSectionType_Invalid]     = "Invalid"
+};
+
 /* Function prototypes. */
 
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info);
@@ -158,15 +166,21 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     /* Parse sections. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
-        /* Don't proceed if this NCA FS section isn't populated. */
-        if (!ncaIsFsInfoEntryValid(&(out->header.fs_info[i]))) continue;
-        
         /* Fill section context. */
         out->fs_contexts[i].nca_ctx = out;
         out->fs_contexts[i].section_num = i;
+        out->fs_contexts[i].section_type = NcaFsSectionType_Invalid; /* Placeholder. */
+        
+        /* Don't proceed if this NCA FS section isn't populated. */
+        if (!ncaIsFsInfoEntryValid(&(out->header.fs_info[i]))) continue;
+        
+        /* Calculate section offset and size. */
         out->fs_contexts[i].section_offset = NCA_FS_SECTOR_OFFSET(out->header.fs_info[i].start_sector);
         out->fs_contexts[i].section_size = (NCA_FS_SECTOR_OFFSET(out->header.fs_info[i].end_sector) - out->fs_contexts[i].section_offset);
-        out->fs_contexts[i].section_type = NcaFsSectionType_Invalid; /* Placeholder. */
+        
+        /* Check if we're dealing with an invalid offset/size. */
+        if (out->fs_contexts[i].section_offset < sizeof(NcaHeader) || !out->fs_contexts[i].section_size || \
+            (out->fs_contexts[i].section_offset + out->fs_contexts[i].section_size) > out->content_size) continue;
         
         /* Determine encryption type. */
         out->fs_contexts[i].encryption_type = (out->format_version == NcaVersion_Nca0 ? NcaEncryptionType_AesXts : out->fs_contexts[i].header.encryption_type);
@@ -187,11 +201,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         }
         
         /* Check if we're dealing with an invalid encryption type value. */
-        if (out->fs_contexts[i].encryption_type == NcaEncryptionType_Auto || out->fs_contexts[i].encryption_type > NcaEncryptionType_AesCtrEx)
-        {
-            memset(&(out->fs_contexts[i]), 0, sizeof(NcaFsSectionContext));
-            continue;
-        }
+        if (out->fs_contexts[i].encryption_type == NcaEncryptionType_Auto || out->fs_contexts[i].encryption_type > NcaEncryptionType_AesCtrEx) continue;
         
         /* Determine FS section type. */
         if (out->fs_contexts[i].header.fs_type == NcaFsType_PartitionFs && out->fs_contexts[i].header.hash_type == NcaHashType_HierarchicalSha256)
@@ -208,11 +218,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         }
         
         /* Check if we're dealing with an invalid section type value. */
-        if (out->fs_contexts[i].section_type >= NcaFsSectionType_Invalid)
-        {
-            memset(&(out->fs_contexts[i]), 0, sizeof(NcaFsSectionContext));
-            continue;
-        }
+        if (out->fs_contexts[i].section_type >= NcaFsSectionType_Invalid) continue;
         
         /* Initialize crypto data. */
         if ((!out->rights_id_available || (out->rights_id_available && out->titlekey_retrieved)) && out->fs_contexts[i].encryption_type > NcaEncryptionType_None && \
@@ -315,6 +321,12 @@ void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierar
         buf_offset >= ctx->content_size || (buf_offset + buf_size) > ctx->content_size) return;
     
     for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++) ncaWriteHashDataPatchToMemoryBuffer(ctx, &(patch->hash_level_patch[i]), buf, buf_size, buf_offset);
+}
+
+const char *ncaGetFsSectionTypeName(u8 section_type)
+{
+    u8 idx = (section_type > NcaFsSectionType_Invalid ? NcaFsSectionType_Invalid : section_type);
+    return g_ncaFsSectionTypeNames[idx];
 }
 
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx)

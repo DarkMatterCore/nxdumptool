@@ -167,7 +167,7 @@ bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u
         }
     }
     
-    LOGFILE("Unable to find partition FS entry \"%s\"!", name);
+    //LOGFILE("Unable to find partition FS entry \"%s\"!", name);
     
     return false;
 }

@@ -117,6 +117,16 @@ static MemoryLocation g_fsProgramMemory = {
     .data_size = 0
 };
 
+static const char *g_gameCardHfsPartitionNames[] = {
+    [GameCardHashFileSystemPartitionType_Root]     = "root",
+    [GameCardHashFileSystemPartitionType_Update]   = "update",
+    [GameCardHashFileSystemPartitionType_Logo]     = "logo",
+    [GameCardHashFileSystemPartitionType_Normal]   = "normal",
+    [GameCardHashFileSystemPartitionType_Secure]   = "secure",
+    [GameCardHashFileSystemPartitionType_Boot]     = "boot",
+    [GameCardHashFileSystemPartitionType_Boot + 1] = "unknown"
+};
+
 /* Function prototypes. */
 
 static bool gamecardCreateDetectionThread(void);
@@ -357,6 +367,12 @@ bool gamecardGetBundledFirmwareUpdateVersion(u32 *out)
     mutexUnlock(&g_gamecardMutex);
     
     return ret;
+}
+
+const char *gamecardGetHashFileSystemPartitionName(u8 hfs_partition_type)
+{
+    u8 idx = (hfs_partition_type > GameCardHashFileSystemPartitionType_Boot ? (GameCardHashFileSystemPartitionType_Boot + 1) : hfs_partition_type);
+    return g_gameCardHfsPartitionNames[idx];
 }
 
 bool gamecardGetEntryCountFromHashFileSystemPartition(u8 hfs_partition_type, u32 *out_count)
@@ -1059,7 +1075,7 @@ static GameCardHashFileSystemHeader *gamecardGetHashFileSystemPartitionHeader(u8
     
     if (hfs_partition_type != GameCardHashFileSystemPartitionType_Root)
     {
-        if (gamecardGetHashFileSystemEntryIndexByName(fs_header, GAMECARD_HFS_PARTITION_NAME(hfs_partition_type), &hfs_partition_idx))
+        if (gamecardGetHashFileSystemEntryIndexByName(fs_header, gamecardGetHashFileSystemPartitionName(hfs_partition_type), &hfs_partition_idx))
         {
             fs_header = (GameCardHashFileSystemHeader*)g_gameCardHfsPartitions[hfs_partition_idx].header;
             if (out_hfs_partition_idx) *out_hfs_partition_idx = hfs_partition_idx;

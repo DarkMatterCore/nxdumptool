@@ -47,6 +47,17 @@ static NcmContentStorage g_ncmStorageGameCard = {0}, g_ncmStorageEmmcSystem = {0
 static TitleInfo *g_titleInfo = NULL;
 static u32 g_titleInfoCount = 0, g_titleInfoGameCardStartIndex = 0, g_titleInfoGameCardCount = 0;
 
+static const char *g_titleNcmContentTypeNames[] = {
+    [NcmContentType_Meta]              = "Meta",
+    [NcmContentType_Program]           = "Program",
+    [NcmContentType_Data]              = "Data",
+    [NcmContentType_Control]           = "Control",
+    [NcmContentType_HtmlDocument]      = "HtmlDocument",
+    [NcmContentType_LegalInformation]  = "LegalInformation",
+    [NcmContentType_DeltaFragment]     = "DeltaFragment",
+    [NcmContentType_DeltaFragment + 1] = "Unknown"
+};
+
 /* Info retrieved from https://switchbrew.org/wiki/Title_list. */
 /* Titles bundled with the kernel are excluded. */
 static const SystemTitleName g_systemTitles[] = {
@@ -732,7 +743,11 @@ end:
     return success;
 }
 
-
+const char *titleGetNcmContentTypeName(u8 content_type)
+{
+    u8 idx = (content_type > NcmContentType_DeltaFragment ? (NcmContentType_DeltaFragment + 1) : content_type);
+    return g_titleNcmContentTypeNames[idx];
+}
 
 
 
@@ -1153,7 +1168,7 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
     
     /* Get a full list of all titles available in this storage. */
     /* Meta type '0' means all title types will be retrieved. */
-    rc = ncmContentMetaDatabaseList(ncm_db, (s32*)&total, (s32*)&written, meta_keys, 1, 0, 0, 0, -1, NcmContentInstallType_Full);
+    rc = ncmContentMetaDatabaseList(ncm_db, (s32*)&total, (s32*)&written, meta_keys, 1, 0, 0, 0, UINT64_MAX, NcmContentInstallType_Full);
     if (R_FAILED(rc))
     {
         LOGFILE("ncmContentMetaDatabaseList failed! (0x%08X) (first entry).", rc);
@@ -1186,7 +1201,7 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
         meta_keys_tmp = NULL;
         
         /* Issue call again. */
-        rc = ncmContentMetaDatabaseList(ncm_db, (s32*)&total, (s32*)&written, meta_keys, (s32)total, 0, 0, 0, -1, NcmContentInstallType_Full);
+        rc = ncmContentMetaDatabaseList(ncm_db, (s32*)&total, (s32*)&written, meta_keys, (s32)total, 0, 0, 0, UINT64_MAX, NcmContentInstallType_Full);
         if (R_FAILED(rc))
         {
             LOGFILE("ncmContentMetaDatabaseList failed! (0x%08X) (%u %s).", rc, total, total > 1 ? "entries" : "entry");

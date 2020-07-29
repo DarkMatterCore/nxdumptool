@@ -57,9 +57,6 @@ static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
 
 /* Function prototypes. */
 
-static u64 utilsHidKeysAllDown(void);
-static u64 utilsHidKeysAllHeld(void);
-
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
@@ -200,13 +197,24 @@ void utilsCloseResources(void)
     mutexUnlock(&g_resourcesMutex);
 }
 
-u64 utilsReadInput(u8 input_type)
+u64 utilsHidKeysAllDown(void)
 {
-    if (input_type != UtilsInputType_Down && input_type != UtilsInputType_Held) return 0;
+    u8 controller;
+    u64 keys_down = 0;
     
-    hidScanInput();
+    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_down |= hidKeysDown((HidControllerID)controller);
     
-    return (input_type == UtilsInputType_Down ? utilsHidKeysAllDown() : utilsHidKeysAllHeld());
+    return keys_down;
+}
+
+u64 utilsHidKeysAllHeld(void)
+{
+    u8 controller;
+    u64 keys_held = 0;
+    
+    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_held |= hidKeysHeld((HidControllerID)controller);
+    
+    return keys_held;
 }
 
 void utilsWaitForButtonPress(u64 flag)
@@ -221,7 +229,8 @@ void utilsWaitForButtonPress(u64 flag)
     
     while(appletMainLoop())
     {
-        keys_down = utilsReadInput(UtilsInputType_Down);
+        hidScanInput();
+        keys_down = utilsHidKeysAllDown();
         if (keys_down & flag) break;
     }
 }
@@ -434,6 +443,29 @@ bool utilsCreateConcatenationFile(const char *path)
     return true;
 }
 
+void utilsCreateDirectoryTree(const char *path, bool create_last_element)
+{
+    char *ptr = NULL, *tmp = NULL;
+    size_t path_len = 0;
+    
+    if (!path || !(path_len = strlen(path))) return;
+    
+    tmp = calloc(path_len + 1, sizeof(char));
+    if (!tmp) return;
+    
+    ptr = strchr(path, '/');
+    while(ptr)
+    {
+        sprintf(tmp, "%.*s", (int)(ptr - path), path);
+        mkdir(tmp, 0777);
+        ptr = strchr(++ptr, '/');
+    }
+    
+    if (create_last_element) mkdir(path, 0777);
+    
+    free(tmp);
+}
+
 bool utilsAppletModeCheck(void)
 {
     return (g_programAppletType != AppletType_Application && g_programAppletType != AppletType_SystemApplication);
@@ -474,26 +506,6 @@ void utilsOverclockSystem(bool overclock)
     u32 cpuClkRate = ((overclock ? CPU_CLKRT_OVERCLOCKED : CPU_CLKRT_NORMAL) * 1000000);
     u32 memClkRate = ((overclock ? MEM_CLKRT_OVERCLOCKED : MEM_CLKRT_NORMAL) * 1000000);
     servicesChangeHardwareClockRates(cpuClkRate, memClkRate);
-}
-
-static u64 utilsHidKeysAllDown(void)
-{
-    u8 controller;
-    u64 keys_down = 0;
-    
-    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_down |= hidKeysDown((HidControllerID)controller);
-    
-    return keys_down;
-}
-
-static u64 utilsHidKeysAllHeld(void)
-{
-    u8 controller;
-    u64 keys_held = 0;
-    
-    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_held |= hidKeysHeld((HidControllerID)controller);
-    
-    return keys_held;
 }
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void)

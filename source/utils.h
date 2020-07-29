@@ -66,12 +66,6 @@
 
 
 
-
-typedef enum {
-    UtilsInputType_Down = 0,
-    UtilsInputType_Held = 1
-} UtilsInputType;
-
 typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,
     UtilsCustomFirmwareType_Atmosphere = 1,
@@ -82,7 +76,10 @@ typedef enum {
 bool utilsInitializeResources(void);
 void utilsCloseResources(void);
 
-u64 utilsReadInput(u8 input_type);
+/// hidScanInput() must be called before any of these functions.
+u64 utilsHidKeysAllDown(void);
+u64 utilsHidKeysAllHeld(void);
+
 void utilsWaitForButtonPress(u64 flag);
 
 void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...);
@@ -104,6 +101,8 @@ bool utilsGetFreeFileSystemSpace(FsFileSystem *fs, u64 *out);
 bool utilsCheckIfFileExists(const char *path);
 
 bool utilsCreateConcatenationFile(const char *path);
+
+void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 
 bool utilsAppletModeCheck(void);
 
