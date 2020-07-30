@@ -90,6 +90,9 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
         if (tik_common_block && !memcmp(tik_common_block->rights_id.c, id->c, 0x10)) return true;
     }
     
+    /* Clear output ticket. */
+    memset(dst, 0, sizeof(Ticket));
+    
     bool tik_retrieved = (use_gamecard ? tikRetrieveTicketFromGameCardByRightsId(dst, id) : tikRetrieveTicketFromEsSaveDataByRightsId(dst, id));
     if (!tik_retrieved)
     {

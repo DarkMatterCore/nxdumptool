@@ -79,7 +79,7 @@ int main(int argc, char *argv[])
     
     consolePrint("get gamecard key area ok\n");
     
-    sprintf(path, "sdmc:/card_key_area_%016lX.bin", gc_key_area.initial_data.package_id);
+    sprintf(path, "sdmc:/card_key_area_%016lX.bin", gc_key_area.initial_data.key_source.package_id);
     
     FILE *kafd = fopen(path, "wb");
     if (!kafd)
