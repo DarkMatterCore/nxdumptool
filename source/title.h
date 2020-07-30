@@ -96,6 +96,14 @@ TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
 /// Populates a TitleUserApplicationData element using an user application ID.
 bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
 
+/// Returns true if orphan titles are available.
+/// Orphan titles are patches or add-on contents with no NsApplicationControlData available for its parent user application ID.
+bool titleAreOrphanTitlesAvailable(void);
+
+/// Returns a pointer to a dynamically allocated buffer of pointers to TitleInfo entries from orphan titles, as well as their count. The allocated buffer must be freed by the calling function.
+/// Returns NULL if an error occurs.
+TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count);
+
 /// Returns true if the gamecard title info entries have been updated (e.g. after a new gamecard has been inserted, of after the current one has been taken out).
 /// If titleGetApplicationMetadataEntries() has been previously called, its returned buffer should be freed and a new titleGetApplicationMetadataEntries() call should be issued.
 bool titleIsGameCardInfoUpdated(void);
