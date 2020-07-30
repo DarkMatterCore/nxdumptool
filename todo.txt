@@ -21,6 +21,5 @@ todo:
     
     title: more functions for title lookup (filters, patches / aoc, etc.)
     title: more functions for content lookup (based on id?)
-    title: find a nice way to deal with *true* orphan content (no ns records from parent base game)
     
     
