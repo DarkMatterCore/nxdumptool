@@ -111,30 +111,6 @@ bool titleIsGameCardInfoUpdated(void);
 /// Returns a pointer to a string holding the name of the provided ncm content type.
 const char *titleGetNcmContentTypeName(u8 content_type);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 /// Miscellaneous functions.
 
 NX_INLINE void titleConvertNcmContentSizeToU64(const u8 *size, u64 *out)

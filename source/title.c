@@ -720,19 +720,6 @@ const char *titleGetNcmContentTypeName(u8 content_type)
     return g_titleNcmContentTypeNames[idx];
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
 NX_INLINE void titleFreeApplicationMetadata(void)
 {
     if (g_appMetadata)
