@@ -213,9 +213,12 @@ int main(int argc, char *argv[])
         goto out;
     }
     
-    u32 app_count = 0, selected_idx = 0;
+    u32 app_count = 0;
     TitleApplicationMetadata **app_metadata = NULL;
     TitleUserApplicationData user_app_data = {0};
+    
+    u32 selected_idx = 0, page_size = 30, cur_page = 0;
+    bool exit_prompt = true;
     
     u8 *buf = NULL;
     
@@ -268,21 +271,27 @@ int main(int argc, char *argv[])
     while(true)
     {
         consoleClear();
-        printf("select a base title with an available update.\nthe updated romfs will be dumped via usb.\npress b to cancel.\n\n");
+        printf("select a base title with an available update.\nthe updated romfs will be dumped via usb.\npress b to exit.\n\n");
         
-        for(u32 i = 0; i < app_count; i++) printf("%s%s (%016lX)\n", i == selected_idx ? " -> " : "    ", app_metadata[i]->lang_entry.name, app_metadata[i]->title_id);
+        for(u32 i = cur_page; i < app_count; i++)
+        {
+            if (i >= (cur_page + page_size)) break;
+            printf("%s%s (%016lX)\n", i == selected_idx ? " -> " : "    ", app_metadata[i]->lang_entry.name, app_metadata[i]->title_id);
+        }
+        
+        printf("\n");
+        
         consoleUpdate(NULL);
         
-        u64 btn = 0;
-        
+        u64 btn_down = 0, btn_held = 0;
         while(true)
         {
             hidScanInput();
+            btn_down = utilsHidKeysAllDown();
+            btn_held = utilsHidKeysAllHeld();
+            if (btn_down || btn_held) break;
             
-            btn = utilsHidKeysAllDown();
-            if (btn) break;
-            
-            if (titleRefreshGameCardTitleInfo())
+            if (titleIsGameCardInfoUpdated())
             {
                 free(app_metadata);
                 
@@ -293,13 +302,12 @@ int main(int argc, char *argv[])
                     goto out2;
                 }
                 
-                selected_idx = 0;
-                
+                selected_idx = cur_page = 0;
                 break;
             }
         }
         
-        if (btn & KEY_A)
+        if (btn_down & KEY_A)
         {
             if (!titleGetUserApplicationData(app_metadata[selected_idx]->title_id, &user_app_data) || !user_app_data.app_info || !user_app_data.patch_info)
             {
@@ -310,29 +318,50 @@ int main(int argc, char *argv[])
             
             break;
         } else
-        if (btn & KEY_DOWN)
+        if ((btn_down & KEY_DDOWN) || (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN)))
         {
-            if ((selected_idx + 1) < app_count)
+            selected_idx++;
+            
+            if (selected_idx >= app_count)
             {
-                selected_idx++;
-            } else {
-                selected_idx = 0;
+                if (btn_down & KEY_DDOWN)
+                {
+                    selected_idx = cur_page = 0;
+                } else {
+                    selected_idx = (app_count - 1);
+                }
+            } else
+            if (selected_idx >= (cur_page + page_size))
+            {
+                cur_page += page_size;
             }
         } else
-        if (btn & KEY_UP)
+        if ((btn_down & KEY_DUP) || (btn_held & (KEY_LSTICK_UP | KEY_RSTICK_UP)))
         {
-            if (selected_idx == 0)
+            selected_idx--;
+            
+            if (selected_idx == UINT32_MAX)
             {
-                selected_idx = (app_count - 1);
-            } else {
-                selected_idx--;
+                if (btn_down & KEY_DUP)
+                {
+                    selected_idx = (app_count - 1);
+                    cur_page = (app_count - (app_count % page_size));
+                } else {
+                    selected_idx = 0;
+                }
+            } else
+            if (selected_idx < cur_page)
+            {
+                cur_page -= page_size;
             }
         } else
-        if (btn & KEY_B)
+        if (btn_down & KEY_B)
         {
-            consolePrint("\nprocess cancelled.\n");
+            exit_prompt = false;
             goto out2;
         }
+        
+        if (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN | KEY_LSTICK_UP | KEY_RSTICK_UP)) svcSleepThread(50000000); // 50 ms
     }
     
     consoleClear();
@@ -469,8 +498,11 @@ int main(int argc, char *argv[])
     consolePrint("process completed in %lu seconds\n", start);
     
 out2:
-    consolePrint("press any button to exit\n");
-    utilsWaitForButtonPress(KEY_NONE);
+    if (exit_prompt)
+    {
+        consolePrint("press any button to exit\n");
+        utilsWaitForButtonPress(KEY_NONE);
+    }
     
     bktrFreeContext(&bktr_ctx);
     

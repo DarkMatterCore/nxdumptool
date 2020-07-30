@@ -82,10 +82,6 @@ NcmContentMetaDatabase *titleGetNcmDatabaseByStorageId(u8 storage_id);
 /// Returns a pointer to a ncm storage handle using a NcmStorageId value.
 NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 
-/// Returns true if gamecard title info has been (un)loaded.
-/// Suitable for being called between UI updates.
-bool titleRefreshGameCardTitleInfo(void);
-
 /// Returns a pointer to a dynamically allocated buffer of pointers to TitleApplicationMetadata entries, as well as their count. The allocated buffer must be freed by the calling function.
 /// If 'is_system' is true, TitleApplicationMetadata entries from available system titles (NcmStorageId_BuiltInSystem) will be returned.
 /// Otherwise, TitleApplicationMetadata entries from user applications with available content data (NcmStorageId_Any) will be returned.
@@ -99,6 +95,10 @@ TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
 
 /// Populates a TitleUserApplicationData element using an user application ID.
 bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
+
+/// Returns true if the gamecard title info entries have been updated (e.g. after a new gamecard has been inserted, of after the current one has been taken out).
+/// If titleGetApplicationMetadataEntries() has been previously called, its returned buffer should be freed and a new titleGetApplicationMetadataEntries() call should be issued.
+bool titleIsGameCardInfoUpdated(void);
 
 /// Returns a pointer to a string holding the name of the provided ncm content type.
 const char *titleGetNcmContentTypeName(u8 content_type);

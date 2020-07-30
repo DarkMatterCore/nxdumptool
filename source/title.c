@@ -34,7 +34,10 @@ typedef struct {
 /* Global variables. */
 
 static Mutex g_titleMutex = 0;
-static bool g_titleInterfaceInit = false, g_titleGameCardAvailable = false;
+static thrd_t g_titleGameCardInfoThread;
+static UEvent g_titleGameCardInfoThreadExitEvent = {0}, *g_titleGameCardStatusChangeUserEvent = NULL;
+
+static bool g_titleInterfaceInit = false, g_titleGameCardInfoThreadCreated = false, g_titleGameCardAvailable = false, g_titleGameCardInfoUpdated = false;
 
 static NsApplicationControlData *g_nsAppControlData = NULL;
 
@@ -373,11 +376,15 @@ static void titleCloseNcmStorages(void);
 static bool titleOpenNcmDatabaseAndStorageFromGameCard(void);
 static void titleCloseNcmDatabaseAndStorageFromGameCard(void);
 
-static bool titleLoadTitleInfo(void);
+static bool titleLoadPersistentStorageTitleInfo(void);
 static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id);
 static bool titleGetContentInfosFromTitle(u8 storage_id, const NcmContentMetaKey *meta_key, NcmContentInfo **out_content_infos, u32 *out_content_count);
 
-static bool _titleRefreshGameCardTitleInfo(bool lock);
+static bool titleCreateGameCardInfoThread(void);
+static void titleDestroyGameCardInfoThread(void);
+static int titleGameCardInfoThreadFunc(void *arg);
+
+static bool titleRefreshGameCardTitleInfo(void);
 static void titleRemoveGameCardTitleInfoEntries(void);
 
 static bool titleIsUserApplicationContentAvailable(u64 app_id);
@@ -433,19 +440,25 @@ bool titleInitialize(void)
     }
     
     /* Load title info by retrieving content meta keys from available eMMC System, eMMC User and SD card titles. */
-    if (!titleLoadTitleInfo())
+    if (!titleLoadPersistentStorageTitleInfo())
     {
-        LOGFILE("Failed to load title info!");
+        LOGFILE("Failed to load persistent storage title info!");
         goto end;
     }
     
-    /* Initial gamecard title info retrieval. */
-    _titleRefreshGameCardTitleInfo(false);
+    /* Create usermode exit event. */
+    ueventCreate(&g_titleGameCardInfoThreadExitEvent, true);
     
+    /* Retrieve gamecard status change user event. */
+    g_titleGameCardStatusChangeUserEvent = gamecardGetStatusChangeUserEvent();
+    if (!g_titleGameCardStatusChangeUserEvent)
+    {
+        LOGFILE("Failed to retrieve gamecard status change user event!");
+        goto end;
+    }
     
-    
-    
-    
+    /* Create gamecard title info thread. */
+    if (!(g_titleGameCardInfoThreadCreated = titleCreateGameCardInfoThread())) goto end;
     
     
     /*
@@ -554,10 +567,17 @@ void titleExit(void)
 {
     mutexLock(&g_titleMutex);
     
+    /* Destroy gamecard detection thread. */
+    if (g_titleGameCardInfoThreadCreated)
+    {
+        titleDestroyGameCardInfoThread();
+        g_titleGameCardInfoThreadCreated = false;
+    }
+    
     /* Free title info. */
     titleFreeTitleInfo();
     
-    /* Close gamecard ncm database and storage. */
+    /* Close gamecard ncm database and storage (if needed). */
     titleCloseNcmDatabaseAndStorageFromGameCard();
     
     /* Close eMMC System, eMMC User and SD card ncm storages. */
@@ -625,11 +645,6 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id)
     }
     
     return ncm_storage;
-}
-
-bool titleRefreshGameCardTitleInfo(void)
-{
-    return _titleRefreshGameCardTitleInfo(true);
 }
 
 TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count)
@@ -741,6 +756,15 @@ end:
     mutexUnlock(&g_titleMutex);
     
     return success;
+}
+
+bool titleIsGameCardInfoUpdated(void)
+{
+    mutexLock(&g_titleMutex);
+    bool ret = g_titleGameCardInfoUpdated;
+    if (ret) g_titleGameCardInfoUpdated = false; /* Update flag to avoid updating application metadata entries in the caller function if it's not needed. */
+    mutexUnlock(&g_titleMutex);
+    return ret;
 }
 
 const char *titleGetNcmContentTypeName(u8 content_type)
@@ -1118,7 +1142,7 @@ static void titleCloseNcmDatabaseAndStorageFromGameCard(void)
     if (serviceIsActive(&(ncm_storage->s))) ncmContentStorageClose(ncm_storage);
 }
 
-static bool titleLoadTitleInfo(void)
+static bool titleLoadPersistentStorageTitleInfo(void)
 {
     /* Return right away if title info has already been retrieved. */
     if (g_titleInfo || g_titleInfoCount) return true;
@@ -1384,10 +1408,64 @@ end:
     return success;
 }
 
-static bool _titleRefreshGameCardTitleInfo(bool lock)
+static bool titleCreateGameCardInfoThread(void)
 {
-    if (lock) mutexLock(&g_titleMutex);
+    if (thrd_create(&g_titleGameCardInfoThread, titleGameCardInfoThreadFunc, NULL) != thrd_success)
+    {
+        LOGFILE("Failed to create gamecard title info thread!");
+        return false;
+    }
     
+    return true;
+}
+
+static void titleDestroyGameCardInfoThread(void)
+{
+    /* Signal the exit event to terminate the gamecard title info thread. */
+    ueventSignal(&g_titleGameCardInfoThreadExitEvent);
+    
+    /* Wait for the gamecard title info thread to exit. */
+    thrd_join(g_titleGameCardInfoThread, NULL);
+}
+
+static int titleGameCardInfoThreadFunc(void *arg)
+{
+    (void)arg;
+    
+    Result rc = 0;
+    int idx = 0;
+    
+    Waiter gamecard_status_event_waiter = waiterForUEvent(g_titleGameCardStatusChangeUserEvent);
+    Waiter exit_event_waiter = waiterForUEvent(&g_titleGameCardInfoThreadExitEvent);
+    
+    /* Initial gamecard title info retrieval. */
+    mutexLock(&g_titleMutex);
+    titleRefreshGameCardTitleInfo();
+    mutexUnlock(&g_titleMutex);
+    
+    while(true)
+    {
+        /* Wait until an event is triggered. */
+        rc = waitMulti(&idx, -1, gamecard_status_event_waiter, exit_event_waiter);
+        if (R_FAILED(rc)) continue;
+        
+        /* Exit event triggered. */
+        if (idx == 1) break;
+        
+        /* Update gamecard title info. */
+        mutexLock(&g_titleMutex);
+        g_titleGameCardInfoUpdated = titleRefreshGameCardTitleInfo();
+        mutexUnlock(&g_titleMutex);
+    }
+    
+    /* Update gamecard flags. */
+    g_titleGameCardAvailable = g_titleGameCardInfoUpdated = false;
+    
+    return 0;
+}
+
+static bool titleRefreshGameCardTitleInfo(void)
+{
     TitleApplicationMetadata *tmp_app_metadata = NULL;
     u32 orig_app_count = g_appMetadataCount, cur_app_count = g_appMetadataCount, gamecard_app_count = 0, gamecard_metadata_count = 0;
     bool status = false, success = false, cleanup = true;
@@ -1487,7 +1565,7 @@ end:
     /* Update gamecard status. */
     g_titleGameCardAvailable = status;
     
-    /* Decrease application metadata buffer size if needed. */
+    /* Decrease application metadata buffer size (if needed). */
     if ((success && g_appMetadataCount < cur_app_count) || (!success && g_appMetadataCount > orig_app_count))
     {
         if (!success) g_appMetadataCount = orig_app_count;
@@ -1500,13 +1578,12 @@ end:
         }
     }
     
+    /* Remove gamecard title info entries and close its ncm database and storage handles (if needed). */
     if (cleanup)
     {
         titleRemoveGameCardTitleInfoEntries();
         titleCloseNcmDatabaseAndStorageFromGameCard();
     }
-    
-    if (lock) mutexUnlock(&g_titleMutex);
     
     return success;
 }
