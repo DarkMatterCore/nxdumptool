@@ -90,6 +90,7 @@ int main(int argc, char *argv[])
     
     fwrite(&gc_key_area, 1, sizeof(GameCardKeyArea), kafd);
     fclose(kafd);
+    utilsCommitSdCardFileSystemChanges();
     
     consolePrint("successfully saved key area to \"%s\"\n", path);
     

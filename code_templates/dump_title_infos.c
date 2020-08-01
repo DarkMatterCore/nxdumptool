@@ -58,6 +58,7 @@
                             fwrite(app_metadata->icon, 1, app_metadata->icon_size, icon_jpg);
                             fclose(icon_jpg);
                             icon_jpg = NULL;
+                            utilsCommitSdCardFileSystemChanges();
                         }
                     }
                 }
@@ -75,5 +76,6 @@
             
             fclose(title_infos_txt);
             title_infos_txt = NULL;
+            utilsCommitSdCardFileSystemChanges();
         }
     }

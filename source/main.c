@@ -50,6 +50,7 @@ static void dumpPartitionFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
     char *pfs_entry_name = NULL;
     
     size_t path_len = 0;
+    *path = '\0';
     
     if (!pfsInitializeContext(&pfs_ctx, nca_fs_ctx))
     {
@@ -117,6 +118,8 @@ end:
         remove(path);
     }
     
+    if (*path) utilsCommitFileSystemChangesByPath(path);
+    
     pfsFreeContext(&pfs_ctx);
 }
 
@@ -129,6 +132,7 @@ static void dumpRomFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
     RomFileSystemFileEntry *romfs_file_entry = NULL;
     
     size_t path_len = 0;
+    *path = '\0';
     
     if (!romfsInitializeContext(&romfs_ctx, nca_fs_ctx))
     {
@@ -189,6 +193,8 @@ end:
         fclose(filefd);
         remove(path);
     }
+    
+    if (*path) utilsCommitFileSystemChangesByPath(path);
     
     romfsFreeContext(&romfs_ctx);
 }
