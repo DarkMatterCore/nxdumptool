@@ -10,8 +10,6 @@ todo:
     
     gamecard: hfs0 filelist generation functions
     
-    mem: find a better way to block fs calls while debugging fs
-    
     pfs0: filelist generation functions
     pfs0: full header aligned to 0x20 (nsp)
     
