@@ -60,6 +60,8 @@ static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
+static bool utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(const char *path, FsFileSystem **out_fs, char **out_filepath);
+
 static void _utilsGetCustomFirmwareType(void);
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
@@ -70,6 +72,13 @@ bool utilsInitializeResources(void)
     
     bool ret = g_resourcesInitialized;
     if (ret) goto end;
+    
+    /* Retrieve pointer to the SD card FsFileSystem element. */
+    if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
+    {
+        LOGFILE("Failed to retrieve FsFileSystem from SD card!");
+        goto end;
+    }
     
     /* Initialize needed services. */
     if (!servicesInitialize())
@@ -110,13 +119,6 @@ bool utilsInitializeResources(void)
     if (!titleInitialize())
     {
         LOGFILE("Failed to initialize the title interface!");
-        goto end;
-    }
-    
-    /* Retrieve SD card FsFileSystem element. */
-    if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
-    {
-        LOGFILE("fsdevGetDeviceFileSystem failed!");
         goto end;
     }
     
@@ -199,38 +201,27 @@ void utilsCloseResources(void)
 
 u64 utilsHidKeysAllDown(void)
 {
-    u8 controller;
     u64 keys_down = 0;
-    
-    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_down |= hidKeysDown((HidControllerID)controller);
-    
+    for(u32 i = 0; i < CONTROLLER_UNKNOWN; i++) keys_down |= hidKeysDown(i);
     return keys_down;
 }
 
 u64 utilsHidKeysAllHeld(void)
 {
-    u8 controller;
     u64 keys_held = 0;
-    
-    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keys_held |= hidKeysHeld((HidControllerID)controller);
-    
+    for(u32 i = 0; i < CONTROLLER_UNKNOWN; i++) keys_held |= hidKeysHeld(i);
     return keys_held;
 }
 
 void utilsWaitForButtonPress(u64 flag)
 {
-    u64 keys_down = 0;
-    
-    if (!flag)
-    {
-        /* Don't consider touch screen presses nor stick movement as button inputs. */
-        flag = ~(KEY_TOUCH | KEY_LSTICK_LEFT | KEY_LSTICK_RIGHT | KEY_LSTICK_UP | KEY_LSTICK_DOWN | KEY_RSTICK_LEFT | KEY_RSTICK_RIGHT | KEY_RSTICK_UP | KEY_RSTICK_DOWN);
-    }
+    /* Don't consider touch screen presses nor stick movement as button inputs. */
+    if (!flag) flag = ~(KEY_TOUCH | KEY_LSTICK_LEFT | KEY_LSTICK_RIGHT | KEY_LSTICK_UP | KEY_LSTICK_DOWN | KEY_RSTICK_LEFT | KEY_RSTICK_RIGHT | KEY_RSTICK_UP | KEY_RSTICK_DOWN);
     
     while(appletMainLoop())
     {
         hidScanInput();
-        keys_down = utilsHidKeysAllDown();
+        u64 keys_down = utilsHidKeysAllDown();
         if (keys_down & flag) break;
     }
 }
@@ -258,6 +249,7 @@ void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...)
     
     fprintf(logfile, "\r\n");
     fclose(logfile);
+    utilsCommitSdCardFileSystemChanges();
     
 end:
     mutexUnlock(&g_logfileMutex);
@@ -296,6 +288,7 @@ void utilsWriteLogBufferToLogFile(const char *src)
     
     fprintf(logfile, "%s", src);
     fclose(logfile);
+    utilsCommitSdCardFileSystemChanges();
     
 end:
     mutexUnlock(&g_logfileMutex);
@@ -380,27 +373,54 @@ void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size)
     }
 }
 
-bool utilsGetFreeSdCardSpace(u64 *out)
+bool utilsGetFreeSpaceFromFileSystem(FsFileSystem *fs, u64 *out)
 {
-    return utilsGetFreeFileSystemSpace(g_sdCardFileSystem, out);
-}
-
-bool utilsGetFreeFileSystemSpace(FsFileSystem *fs, u64 *out)
-{
-    if (!fs || !out)
+    if (!fs || !serviceIsActive(&(fs->s)) || !out)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
     Result rc = fsFsGetFreeSpace(fs, "/", (s64*)out);
-    if (R_FAILED(rc))
+    if (R_FAILED(rc)) LOGFILE("fsFsGetFreeSpace failed! (0x%08X).", rc);
+    
+    return R_SUCCEEDED(rc);
+}
+
+bool utilsGetFreeSpaceFromFileSystemByPath(const char *path, u64 *out)
+{
+    FsFileSystem *fs = NULL;
+    
+    if (!utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(path, &fs, NULL) || !out)
     {
-        LOGFILE("fsFsGetFreeSpace failed! (0x%08X).", rc);
+        LOGFILE("Invalid parameters!");
         return false;
     }
     
-    return true;
+    return utilsGetFreeSpaceFromFileSystem(fs, out);
+}
+
+bool utilsGetFreeSdCardFileSystemSpace(u64 *out)
+{
+    return utilsGetFreeSpaceFromFileSystem(g_sdCardFileSystem, out);
+}
+
+bool utilsCommitFileSystemChangesByPath(const char *path)
+{
+    Result rc = 0;
+    FsFileSystem *fs = NULL;
+    
+    if (!utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(path, &fs, NULL)) return false;
+    
+    rc = fsFsCommit(fs);
+    return R_SUCCEEDED(rc);
+}
+
+bool utilsCommitSdCardFileSystemChanges(void)
+{
+    if (!g_sdCardFileSystem) return false;
+    Result rc = fsFsCommit(g_sdCardFileSystem);
+    return R_SUCCEEDED(rc);
 }
 
 bool utilsCheckIfFileExists(const char *path)
@@ -419,8 +439,6 @@ bool utilsCheckIfFileExists(const char *path)
 
 bool utilsCreateConcatenationFile(const char *path)
 {
-    Result rc = 0;
-    
     if (!path || !strlen(path))
     {
         LOGFILE("Invalid parameters!");
@@ -433,14 +451,12 @@ bool utilsCreateConcatenationFile(const char *path)
     
     /* Create ConcatenationFile */
     /* If the call succeeds, the caller function will be able to operate on this file using stdio calls. */
-    rc = fsdevCreateFile(path, 0, FsCreateOption_BigFile);
-    if (R_FAILED(rc))
-    {
-        LOGFILE("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
-        return false;
-    }
+    Result rc = fsdevCreateFile(path, 0, FsCreateOption_BigFile);
+    if (R_FAILED(rc)) LOGFILE("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
     
-    return true;
+    utilsCommitFileSystemChangesByPath(path);
+    
+    return R_SUCCEEDED(rc);
 }
 
 void utilsCreateDirectoryTree(const char *path, bool create_last_element)
@@ -464,6 +480,8 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element)
     if (create_last_element) mkdir(path, 0777);
     
     free(tmp);
+    
+    utilsCommitFileSystemChangesByPath(path);
 }
 
 bool utilsAppletModeCheck(void)
@@ -551,6 +569,25 @@ static void utilsUnmountEmmcBisSystemPartitionStorage(void)
         fsStorageClose(&g_emmcBisSystemPartitionStorage);
         memset(&g_emmcBisSystemPartitionStorage, 0, sizeof(FsStorage));
     }
+}
+
+static bool utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(const char *path, FsFileSystem **out_fs, char **out_filepath)
+{
+    FsFileSystem *fs = NULL;
+    char *name_end = NULL, *filepath = NULL, name[32] = {0};
+    
+    if (!path || !strlen(path) || !(name_end = strchr(path, ':')) || (size_t)(name_end - path) >= MAX_ELEMENTS(name) || (!out_fs && !out_filepath) || \
+        (out_filepath && *(filepath = (name_end + 1)) != '/')) return false;
+    
+    sprintf(name, "%.*s", (int)(name_end - path), path);
+    
+    fs = fsdevGetDeviceFileSystem(name);
+    if (!fs) return false;
+    
+    if (out_fs) *out_fs = fs;
+    if (out_filepath) *out_filepath = filepath;
+    
+    return true;
 }
 
 static void _utilsGetCustomFirmwareType(void)

@@ -95,8 +95,12 @@ void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src,
 
 void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);
 
-bool utilsGetFreeSdCardSpace(u64 *out);
-bool utilsGetFreeFileSystemSpace(FsFileSystem *fs, u64 *out);
+bool utilsGetFreeSpaceFromFileSystem(FsFileSystem *fs, u64 *out);
+bool utilsGetFreeSpaceFromFileSystemByPath(const char *path, u64 *out);
+bool utilsGetFreeSdCardFileSystemSpace(u64 *out);
+
+bool utilsCommitFileSystemChangesByPath(const char *path);
+bool utilsCommitSdCardFileSystemChanges(void);
 
 bool utilsCheckIfFileExists(const char *path);
 
