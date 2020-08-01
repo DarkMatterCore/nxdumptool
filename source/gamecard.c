@@ -108,8 +108,6 @@ static u64 g_gameCardCapacity = 0;
 static u8 *g_gameCardHfsRootHeader = NULL;   /// GameCardHashFileSystemHeader + (entry_count * GameCardHashFileSystemEntry) + Name Table.
 static GameCardHashFileSystemPartitionInfo *g_gameCardHfsPartitions = NULL;
 
-static GameCardKeyArea g_gameCardKeyArea = {0};
-
 static MemoryLocation g_fsProgramMemory = {
     .program_id = FS_SYSMODULE_TID,
     .mask = 0,
@@ -138,7 +136,7 @@ NX_INLINE bool gamecardIsInserted(void);
 static void gamecardLoadInfo(void);
 static void gamecardFreeInfo(void);
 
-static bool gamecardReadInitialData(void);
+static bool gamecardReadInitialData(GameCardKeyArea *out);
 
 static bool gamecardGetHandleAndStorage(u32 partition);
 NX_INLINE void gamecardCloseHandle(void);
@@ -288,9 +286,12 @@ bool gamecardReadStorage(void *out, u64 read_size, u64 offset)
 
 bool gamecardGetKeyArea(GameCardKeyArea *out)
 {
+    /* Read full FS program memory to retrieve the GameCardInitialData block, which is part of the GameCardKeyArea block. */
+    /* In FS program memory, this is stored as part of the GameCardSecurityInformation struct, which is returned by Lotus command "ChangeToSecureMode" (0xF). */
+    /* This means it is only available *after* the gamecard secure area has been mounted, which is taken care of in gamecardReadInitialData(). */
+    /* The GameCardSecurityInformation struct is only kept for documentation purposes. It isn't used at all to retrieve the GameCardInitialData block. */
     mutexLock(&g_gamecardMutex);
-    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) memcpy(out, &g_gameCardKeyArea, sizeof(GameCardKeyArea));
+    bool ret = gamecardReadInitialData(out);
     mutexUnlock(&g_gamecardMutex);
     return ret;
 }
@@ -733,16 +734,6 @@ static void gamecardLoadInfo(void)
         }
     }
     
-    /* Read full FS program memory to retrieve the GameCardInitialData block, which is part of the GameCardKeyArea block. */
-    /* In FS program memory, this is stored as part of the GameCardSecurityInformation struct, which is returned by Lotus command "ChangeToSecureMode" (0xF). */
-    /* This means it is only available *after* the gamecard secure area has been both mounted and read from, which has already been taken care of in the last iteration from the previous for() loop. */
-    /* The GameCardSecurityInformation struct is only kept for documentation purposes. It isn't used at all to retrieve the GameCardInitialData block. */
-    if (!gamecardReadInitialData())
-    {
-        LOGFILE("Failed to read gamecard initial data area from FS program memory!");
-        goto end;
-    }
-    
     g_gameCardInfoLoaded = true;
     
 end:
@@ -751,7 +742,6 @@ end:
 
 static void gamecardFreeInfo(void)
 {
-    memset(&g_gameCardKeyArea, 0, sizeof(GameCardKeyArea));
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
     
     g_gameCardStorageNormalAreaSize = 0;
@@ -786,8 +776,24 @@ static void gamecardFreeInfo(void)
     g_gameCardInfoLoaded = false;
 }
 
-static bool gamecardReadInitialData(void)
+static bool gamecardReadInitialData(GameCardKeyArea *out)
 {
+    if (!g_gameCardInserted || !g_gameCardInfoLoaded || !out)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Clear output. */
+    memset(out, 0, sizeof(GameCardKeyArea));
+    
+    /* Open secure storage area. */
+    if (!gamecardOpenStorageArea(GameCardStorageArea_Secure))
+    {
+        LOGFILE("Failed to open secure storage area!");
+        return false;
+    }
+    
     bool found = false;
     u8 tmp_hash[SHA256_HASH_SIZE] = {0};
     
@@ -808,7 +814,7 @@ static bool gamecardReadInitialData(void)
         if (!memcmp(tmp_hash, g_gameCardHeader.initial_data_hash, SHA256_HASH_SIZE))
         {
             /* Jackpot. */
-            memcpy(&(g_gameCardKeyArea.initial_data), g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
+            memcpy(&(out->initial_data), g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
             found = true;
             break;
         }
