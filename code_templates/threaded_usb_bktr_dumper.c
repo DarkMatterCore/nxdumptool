@@ -217,7 +217,7 @@ int main(int argc, char *argv[])
     TitleApplicationMetadata **app_metadata = NULL;
     TitleUserApplicationData user_app_data = {0};
     
-    u32 selected_idx = 0, page_size = 30, cur_page = 0;
+    u32 selected_idx = 0, page_size = 30, scroll = 0;
     bool exit_prompt = true;
     
     u8 *buf = NULL;
@@ -272,11 +272,12 @@ int main(int argc, char *argv[])
     {
         consoleClear();
         printf("select a base title with an available update.\nthe updated romfs will be dumped via usb.\npress b to exit.\n\n");
+        printf("title: %u / %u\n\n", selected_idx + 1, app_count);
         
-        for(u32 i = cur_page; i < app_count; i++)
+        for(u32 i = scroll; i < app_count; i++)
         {
-            if (i >= (cur_page + page_size)) break;
-            printf("%s%s (%016lX)\n", i == selected_idx ? " -> " : "    ", app_metadata[i]->lang_entry.name, app_metadata[i]->title_id);
+            if (i >= (scroll + page_size)) break;
+            printf("%s%016lX - %s\n", i == selected_idx ? " -> " : "    ", app_metadata[i]->title_id, app_metadata[i]->lang_entry.name);
         }
         
         printf("\n");
@@ -302,7 +303,7 @@ int main(int argc, char *argv[])
                     goto out2;
                 }
                 
-                selected_idx = cur_page = 0;
+                selected_idx = scroll = 0;
                 break;
             }
         }
@@ -326,14 +327,14 @@ int main(int argc, char *argv[])
             {
                 if (btn_down & KEY_DDOWN)
                 {
-                    selected_idx = cur_page = 0;
+                    selected_idx = scroll = 0;
                 } else {
                     selected_idx = (app_count - 1);
                 }
             } else
-            if (selected_idx >= (cur_page + page_size))
+            if (selected_idx >= (scroll + (page_size / 2)) && app_count > (scroll + page_size))
             {
-                cur_page += page_size;
+                scroll++;
             }
         } else
         if ((btn_down & KEY_DUP) || (btn_held & (KEY_LSTICK_UP | KEY_RSTICK_UP)))
@@ -345,14 +346,14 @@ int main(int argc, char *argv[])
                 if (btn_down & KEY_DUP)
                 {
                     selected_idx = (app_count - 1);
-                    cur_page = (app_count - (app_count % page_size));
+                    scroll = (app_count >= page_size ? (app_count - page_size) : 0);
                 } else {
                     selected_idx = 0;
                 }
             } else
-            if (selected_idx < cur_page)
+            if (selected_idx < (scroll + (page_size / 2)) && scroll > 0)
             {
-                cur_page -= page_size;
+                scroll--;
             }
         } else
         if (btn_down & KEY_B)

@@ -241,8 +241,8 @@ int main(int argc, char *argv[])
     TitleApplicationMetadata **app_metadata = NULL;
     TitleInfo *cur_title_info = NULL;
     
-    u32 selected_idx = 0, menu = 0, page_size = 30, cur_page = 0;
-    u32 title_idx = 0, nca_idx = 0;
+    u32 selected_idx = 0, menu = 0, page_size = 30, scroll = 0;
+    u32 title_idx = 0, title_scroll = 0, nca_idx = 0;
     char nca_id_str[0x21] = {0};
     
     NcaContext *nca_ctx = NULL;
@@ -284,14 +284,14 @@ int main(int argc, char *argv[])
         printf("select a %s.", menu == 0 ? "system title to view its contents" : (menu == 1 ? "content" : "fs section"));
         printf("\npress b to %s.\n\n", menu == 0 ? "exit" : "go back");
         
-        if (menu >= 1) printf("selected title: %016lX - %s\n", app_metadata[title_idx]->title_id, app_metadata[title_idx]->lang_entry.name);
-        if (menu == 2) printf("selected content: %s\n", nca_id_str);
-        if (menu >= 1) printf("\n");
+        if (menu == 0) printf("title: %u / %u\n\n", selected_idx + 1, app_count);
+        if (menu >= 1) printf("selected title: %016lX - %s\n\n", app_metadata[title_idx]->title_id, app_metadata[title_idx]->lang_entry.name);
+        if (menu == 2) printf("selected content: %s (%s)\n\n", nca_id_str, titleGetNcmContentTypeName(cur_title_info->content_infos[nca_idx].content_type));
         
         u32 max_val = (menu == 0 ? app_count : (menu == 1 ? cur_title_info->content_count : NCA_FS_HEADER_COUNT));
-        for(u32 i = cur_page; i < max_val; i++)
+        for(u32 i = scroll; i < max_val; i++)
         {
-            if (i >= (cur_page + page_size)) break;
+            if (i >= (scroll + page_size)) break;
             
             printf("%s", i == selected_idx ? " -> " : "    ");
             
@@ -329,6 +329,7 @@ int main(int argc, char *argv[])
             if (menu == 0)
             {
                 title_idx = selected_idx;
+                title_scroll = scroll;
             } else
             if (menu == 1)
             {
@@ -368,7 +369,7 @@ int main(int argc, char *argv[])
                 utilsSleep(3);
                 menu--;
             } else {
-                selected_idx = cur_page = 0;
+                selected_idx = scroll = 0;
             }
         } else
         if ((btn_down & KEY_DDOWN) || (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN)))
@@ -379,14 +380,14 @@ int main(int argc, char *argv[])
             {
                 if (btn_down & KEY_DDOWN)
                 {
-                    selected_idx = cur_page = 0;
+                    selected_idx = scroll = 0;
                 } else {
                     selected_idx = (max_val - 1);
                 }
             } else
-            if (selected_idx >= (cur_page + page_size))
+            if (selected_idx >= (scroll + (page_size / 2)) && max_val > (scroll + page_size))
             {
-                cur_page += page_size;
+                scroll++;
             }
         } else
         if ((btn_down & KEY_DUP) || (btn_held & (KEY_LSTICK_UP | KEY_RSTICK_UP)))
@@ -398,14 +399,14 @@ int main(int argc, char *argv[])
                 if (btn_down & KEY_DUP)
                 {
                     selected_idx = (max_val - 1);
-                    cur_page = (max_val - (max_val % page_size));
+                    scroll = (max_val >= page_size ? (max_val - page_size) : 0);
                 } else {
                     selected_idx = 0;
                 }
             } else
-            if (selected_idx < cur_page)
+            if (selected_idx < (scroll + (page_size / 2)) && scroll > 0)
             {
-                cur_page -= page_size;
+                scroll--;
             }
         } else
         if (btn_down & KEY_B)
@@ -417,7 +418,7 @@ int main(int argc, char *argv[])
                 break;
             } else {
                 selected_idx = (menu == 0 ? title_idx : nca_idx);
-                cur_page = (selected_idx - (selected_idx % page_size));
+                scroll = (menu == 0 ? title_scroll : 0);
             }
         }
         
