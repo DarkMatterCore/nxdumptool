@@ -69,6 +69,8 @@ int main(int argc, char *argv[])
         if (status == GameCardStatus_InsertedAndInfoNotLoaded) consolePrint("gamecard inserted but info couldn't be loaded from it. check nogc patch setting.\n");
     }
     
+    utilsChangeHomeButtonBlockStatus(true);
+    
     consolePrint("gamecard detected.\n");
     
     if (!gamecardGetKeyArea(&gc_key_area))
@@ -93,6 +95,8 @@ int main(int argc, char *argv[])
     utilsCommitSdCardFileSystemChanges();
     
     consolePrint("successfully saved key area to \"%s\"\n", path);
+    
+    utilsChangeHomeButtonBlockStatus(false);
     
 out2:
     consolePrint("press any button to exit\n");

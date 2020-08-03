@@ -358,7 +358,9 @@ int main(int argc, char *argv[])
             if (menu == 3)
             {
                 consoleClear();
+                utilsChangeHomeButtonBlockStatus(true);
                 dumpFsSection(cur_title_info, &(nca_ctx->fs_contexts[selected_idx]));
+                utilsChangeHomeButtonBlockStatus(false);
             }
             
             if (error || menu >= 3)

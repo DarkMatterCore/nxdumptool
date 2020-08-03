@@ -429,6 +429,8 @@ int main(int argc, char *argv[])
     time_t btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
     bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
     
+    utilsChangeHomeButtonBlockStatus(true);
+    
     consolePrint("hold b to cancel\n\n");
     
     start = time(NULL);
@@ -482,6 +484,8 @@ int main(int argc, char *argv[])
     consolePrint("read_thread done: %lu\n", time(NULL));
     thrd_join(write_thread, NULL);
     consolePrint("write_thread done: %lu\n", time(NULL));
+    
+    utilsChangeHomeButtonBlockStatus(false);
     
     if (shared_data.read_error || shared_data.write_error)
     {
