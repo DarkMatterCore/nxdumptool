@@ -32,6 +32,8 @@
 
 #define GAMECARD_UPDATE_TID             (u64)0x0100000000000816
 
+#define GAMECARD_CERTIFICATE_OFFSET     0x7000
+
 /// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
 typedef struct {
     u64 package_id;         ///< Matches package_id from GameCardHeader.

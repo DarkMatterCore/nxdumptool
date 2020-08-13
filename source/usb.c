@@ -29,7 +29,7 @@
 #define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT". */
 
 #define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB. */
-#define USB_TRANSFER_TIMEOUT        6                   /* 6 seconds. */
+#define USB_TRANSFER_TIMEOUT        5                   /* 5 seconds. */
 
 /* Type definitions. */
 
@@ -89,7 +89,7 @@ typedef enum {
 
 typedef struct {
     u32 magic;
-    u32 status;
+    u32 status;         ///< UsbStatusType.
     u8 reserved[0x8];
 } UsbStatus;
 
@@ -106,7 +106,8 @@ static bool g_usbHostAvailable = false, g_usbSessionStarted = false, g_usbDetect
 static atomic_bool g_usbDetectionThreadCreated = false;
 
 static u8 *g_usbTransferBuffer = NULL;
-static u64 g_usbTransferRemainingSize = 0;
+static u64 g_usbTransferRemainingSize = 0, g_usbTransferWrittenSize = 0;
+static u32 g_usbUrbId = 0;
 
 /* Function prototypes. */
 
@@ -119,7 +120,7 @@ static void usbEndSession(void);
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size);
 static u32 usbSendCommand(size_t cmd_size);
-NX_INLINE void usbLogStatusDetail(u32 status);
+static void usbLogStatusDetail(u32 status);
 
 NX_INLINE bool usbAllocateTransferBuffer(void);
 NX_INLINE void usbFreeTransferBuffer(void);
@@ -135,8 +136,10 @@ static bool usbInitializeDeviceInterface1x(void);
 
 NX_INLINE bool usbIsHostAvailable(void);
 
-NX_INLINE bool usbRead(void *buf, size_t size);
-NX_INLINE bool usbWrite(void *buf, size_t size);
+NX_INLINE void usbSetZltPacket(bool enable);
+
+NX_INLINE bool usbRead(void *buf, size_t size, bool reset_urb_id);
+NX_INLINE bool usbWrite(void *buf, size_t size, bool reset_urb_id);
 static bool usbTransferData(void *buf, size_t size, UsbDsEndpoint *endpoint);
 
 bool usbInitialize(void)
@@ -259,6 +262,7 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
     {
         ret = true;
         g_usbTransferRemainingSize = file_size;
+        g_usbTransferWrittenSize = 0;
     } else {
         usbLogStatusDetail(status);
     }
@@ -275,9 +279,9 @@ bool usbSendFileData(void *data, u64 data_size)
     rwlockWriteLock(&g_usbDeviceLock);
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
     
-    bool ret = false;
     void *buf = NULL;
     UsbStatus *cmd_status = NULL;
+    bool ret = false, zlt_required = false;
     
     if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize || !data || \
         !data_size || data_size > USB_TRANSFER_BUFFER_SIZE || data_size > g_usbTransferRemainingSize)
@@ -295,19 +299,47 @@ bool usbSendFileData(void *data, u64 data_size)
         memcpy(buf, data, data_size);
     }
     
-    if (!usbWrite(buf, data_size))
+    /* Determine if we'll need to set a Zero Length Termination (ZLT) packet. */
+    /* This is automatically handled by usbDsEndpoint_PostBufferAsync(), depending on the ZLT setting from the input (write) endpoint. */
+    /* First, check if this is the last data chunk for this file. */
+    if ((g_usbTransferRemainingSize - data_size) == 0)
     {
-        LOGFILE("Failed to write 0x%lX bytes long file data chunk!", data_size);
+        /* Enable ZLT if the last chunk size is aligned to the USB max packet size. */
+        if (IS_ALIGNED(data_size, 0x40) || IS_ALIGNED(data_size, 0x200) || IS_ALIGNED(data_size, 0x400)) /* USB1, USB2 and USB3 max packet sizes, respectively. */
+        {
+            zlt_required = true;
+            usbSetZltPacket(true);
+            //LOGFILE("ZLT enabled. Last chunk size: 0x%lX bytes.", data_size);
+        }
+    } else {
+        /* Disable ZLT if this is the first of multiple data chunks. */
+        if (!g_usbTransferWrittenSize)
+        {
+            usbSetZltPacket(false);
+            //LOGFILE("ZLT disabled (first chunk).");
+        }
+    }
+    
+    /* Send data chunk. */
+    /* Make sure to reset the URB ID if this is the first chunk. */
+    if (!usbWrite(buf, data_size, !g_usbTransferWrittenSize))
+    {
+        LOGFILE("Failed to write 0x%lX bytes long file data chunk from offset 0x%lX! (total size: 0x%lX).", data_size, g_usbTransferWrittenSize, g_usbTransferRemainingSize + g_usbTransferWrittenSize);
         goto end;
     }
     
     ret = true;
     g_usbTransferRemainingSize -= data_size;
+    g_usbTransferWrittenSize += data_size;
     
     /* Check if this is the last chunk. */
     if (!g_usbTransferRemainingSize)
     {
-        if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus)))
+        /* Disable ZLT if it was previously enabled. */
+        if (zlt_required) usbSetZltPacket(false);
+        
+        /* Check response from host device. */
+        if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus), true))
         {
             LOGFILE("Failed to read 0x%lX bytes long status block!", sizeof(UsbStatus));
             ret = false;
@@ -328,12 +360,37 @@ bool usbSendFileData(void *data, u64 data_size)
     }
     
 end:
-    if (!ret) g_usbTransferRemainingSize = 0;
+    if (!ret) g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
     
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
     
     return ret;
+}
+
+void usbCancelFileTransfer(void)
+{
+    rwlockWriteLock(&g_usbDeviceLock);
+    rwlockWriteLock(&(g_usbDeviceInterface.lock));
+    rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
+    
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize) goto end;
+    
+    /* Disable ZLT, just in case it was previously enabled. */
+    usbDsEndpoint_SetZlt(g_usbDeviceInterface.endpoint_in, false);
+    
+    /* Stall input (write) endpoint. */
+    /* This will force the client to stop the current session, so a new one will have to be established. */
+    usbDsEndpoint_Stall(g_usbDeviceInterface.endpoint_in);
+    
+    /* Signal usermode USB timeout event. */
+    /* This will "reset" the USB connection by making the background thread wait until a new session is established. */
+    ueventSignal(&g_usbTimeoutEvent);
+    
+end:
+    rwlockWriteUnlock(&(g_usbDeviceInterface.lock_in));
+    rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
+    rwlockWriteUnlock(&g_usbDeviceLock);
 }
 
 static bool usbCreateDetectionThread(void)
@@ -383,7 +440,7 @@ static int usbDetectionThreadFunc(void *arg)
         /* Only proceed if we're dealing with a status change. */
         g_usbHostAvailable = usbIsHostAvailable();
         g_usbSessionStarted = false;
-        g_usbTransferRemainingSize = 0;
+        g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
         
         /* Start an USB session if we're connected to a host device. */
         /* This will essentially hang this thread and all other threads that call USB-related functions until: */
@@ -406,7 +463,7 @@ static int usbDetectionThreadFunc(void *arg)
     /* Close USB session if needed. */
     if (g_usbHostAvailable && g_usbSessionStarted) usbEndSession();
     g_usbHostAvailable = g_usbSessionStarted = g_usbDetectionThreadExitFlag = false;
-    g_usbTransferRemainingSize = 0;
+    g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
     
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
@@ -454,7 +511,7 @@ static void usbEndSession(void)
     
     usbPrepareCommandHeader(UsbCommandType_EndSession, 0);
     
-    if (!usbWrite(g_usbTransferBuffer, sizeof(UsbCommandHeader))) LOGFILE("Failed to send EndSession command!");
+    if (!usbWrite(g_usbTransferBuffer, sizeof(UsbCommandHeader), true)) LOGFILE("Failed to send EndSession command!");
 }
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size)
@@ -478,14 +535,14 @@ static u32 usbSendCommand(size_t cmd_size)
         return UsbStatusType_InvalidCommandSize;
     }
     
-    if (!usbWrite(g_usbTransferBuffer, cmd_size))
+    if (!usbWrite(g_usbTransferBuffer, cmd_size, true))
     {
         /* Log error message only if the USB session has been started, or if thread exit flag hasn't been enabled. */
         if (g_usbSessionStarted || !g_usbDetectionThreadExitFlag) LOGFILE("Failed to write 0x%lX bytes long block for type 0x%X command!", cmd_size, cmd);
         return UsbStatusType_WriteCommandFailed;
     }
     
-    if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus)))
+    if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus), true))
     {
         /* Log error message only if the USB session has been started, or if thread exit flag hasn't been enabled. */
         if (g_usbSessionStarted || !g_usbDetectionThreadExitFlag) LOGFILE("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd);
@@ -503,7 +560,7 @@ static u32 usbSendCommand(size_t cmd_size)
     return cmd_status->status;
 }
 
-NX_INLINE void usbLogStatusDetail(u32 status)
+static void usbLogStatusDetail(u32 status)
 {
     switch(status)
     {
@@ -625,7 +682,7 @@ static bool usbInitializeComms(void)
         }
         
         /* Super Speed is USB 3.0. */
-        /* Upgrade packet size to 512. */
+        /* Upgrade packet size to 512 (1 << 9). */
         device_descriptor.bcdUSB = 0x0300;
         device_descriptor.bMaxPacketSize0 = 0x09;
         if (R_SUCCEEDED(rc))
@@ -984,19 +1041,27 @@ NX_INLINE bool usbIsHostAvailable(void)
     return (R_SUCCEEDED(rc) && state == 5);
 }
 
-NX_INLINE bool usbRead(void *buf, u64 size)
+NX_INLINE void usbSetZltPacket(bool enable)
+{
+    rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
+    usbDsEndpoint_SetZlt(g_usbDeviceInterface.endpoint_in, enable);
+    rwlockWriteUnlock(&(g_usbDeviceInterface.lock_in));
+}
+
+NX_INLINE bool usbRead(void *buf, u64 size, bool reset_urb_id)
 {
     rwlockWriteLock(&(g_usbDeviceInterface.lock_out));
+    if (reset_urb_id) g_usbUrbId = 0;
     bool ret = usbTransferData(buf, size, g_usbDeviceInterface.endpoint_out);
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock_out));
     return ret;
 }
 
-NX_INLINE bool usbWrite(void *buf, u64 size)
+NX_INLINE bool usbWrite(void *buf, u64 size, bool reset_urb_id)
 {
     rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
+    if (reset_urb_id) g_usbUrbId = 0;
     bool ret = usbTransferData(buf, size, g_usbDeviceInterface.endpoint_in);
-    if (ret) usbDsEndpoint_SetZlt(g_usbDeviceInterface.endpoint_in, true);
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock_in));
     return ret;
 }
@@ -1015,17 +1080,16 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         return false;
     }
     
-    u32 urb_id = 0;
     Result rc = 0;
     UsbDsReportData report_data = {0};
     u32 transferred_size = 0;
     bool thread_exit = false;
     
     /* Start an USB transfer using the provided endpoint. */
-    rc = usbDsEndpoint_PostBufferAsync(endpoint, buf, size, &urb_id);
+    rc = usbDsEndpoint_PostBufferAsync(endpoint, buf, size, &g_usbUrbId);
     if (R_FAILED(rc))
     {
-        LOGFILE("usbDsEndpoint_PostBufferAsync failed! (0x%08X).", rc);
+        LOGFILE("usbDsEndpoint_PostBufferAsync failed! (0x%08X) (URB ID %u).", rc, g_usbUrbId);
         return false;
     }
     
@@ -1065,27 +1129,27 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         /* This will "reset" the USB connection by making the background thread wait until a new session is established. */
         if (g_usbSessionStarted) ueventSignal(&g_usbTimeoutEvent);
         
-        if (!thread_exit) LOGFILE("eventWait failed! (0x%08X).", rc);
+        if (!thread_exit) LOGFILE("eventWait failed! (0x%08X) (URB ID %u).", rc, g_usbUrbId);
         return false;
     }
     
     rc = usbDsEndpoint_GetReportData(endpoint, &report_data);
     if (R_FAILED(rc))
     {
-        LOGFILE("usbDsEndpoint_GetReportData failed! (0x%08X).", rc);
+        LOGFILE("usbDsEndpoint_GetReportData failed! (0x%08X) (URB ID %u).", rc, g_usbUrbId);
         return false;
     }
     
-    rc = usbDsParseReportData(&report_data, urb_id, NULL, &transferred_size);
+    rc = usbDsParseReportData(&report_data, g_usbUrbId, NULL, &transferred_size);
     if (R_FAILED(rc))
     {
-        LOGFILE("usbDsParseReportData failed! (0x%08X).", rc);
+        LOGFILE("usbDsParseReportData failed! (0x%08X) (URB ID %u).", rc, g_usbUrbId);
         return false;
     }
     
     if (transferred_size != size)
     {
-        LOGFILE("USB transfer failed! Expected 0x%lX bytes, got 0x%X bytes.", size, transferred_size);
+        LOGFILE("USB transfer failed! Expected 0x%lX bytes, got 0x%X bytes (URB ID %u).", size, transferred_size, g_usbUrbId);
         return false;
     }
     

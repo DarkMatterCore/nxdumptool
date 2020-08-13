@@ -50,4 +50,8 @@ bool usbSendFileProperties(u64 file_size, const char *filename);
 /// Data chunk size must not exceed USB_TRANSFER_BUFFER_SIZE.
 bool usbSendFileData(void *data, u64 data_size);
 
+/// Used to cancel an ongoing file transfer by stalling the input (write) USB endpoint.
+/// A new USB session must be established afterwards if USB communication with a host device is required.
+void usbCancelFileTransfer(void);
+
 #endif /* __USB_H__ */
