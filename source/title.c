@@ -1542,19 +1542,24 @@ static void titleRemoveGameCardTitleInfoEntries(void)
         /* Free all title info entries. */
         titleFreeTitleInfo();
     } else {
-        /* Update parent, previous and next title info pointers from patches and add-on content entries. */
+        /* Update parent, previous and next title info pointers from user application, patch and add-on content entries. */
         for(u32 i = 0; i < (g_titleInfoCount - g_titleInfoGameCardCount); i++)
         {
-            if (g_titleInfo[i].meta_key.type != NcmContentMetaType_Patch && g_titleInfo[i].meta_key.type != NcmContentMetaType_AddOnContent) continue;
-            if (g_titleInfo[i].parent && g_titleInfo[i].parent->storage_id == NcmStorageId_GameCard) g_titleInfo[i].parent = NULL;
-            if (g_titleInfo[i].previous && g_titleInfo[i].previous->storage_id == NcmStorageId_GameCard) g_titleInfo[i].previous = NULL;
-            if (g_titleInfo[i].next && g_titleInfo[i].next->storage_id == NcmStorageId_GameCard) g_titleInfo[i].next = NULL;
+            TitleInfo *cur_title_info = &(g_titleInfo[i]);
+            
+            if (cur_title_info->meta_key.type != NcmContentMetaType_Application && cur_title_info->meta_key.type != NcmContentMetaType_Patch && \
+                cur_title_info->meta_key.type != NcmContentMetaType_AddOnContent) continue;
+            
+            if (cur_title_info->parent && cur_title_info->parent->storage_id == NcmStorageId_GameCard) cur_title_info->parent = NULL;
+            if (cur_title_info->previous && cur_title_info->previous->storage_id == NcmStorageId_GameCard) cur_title_info->previous = NULL;
+            if (cur_title_info->next && cur_title_info->next->storage_id == NcmStorageId_GameCard) cur_title_info->next = NULL;
         }
         
         /* Free content infos from gamecard title info entries. */
         for(u32 i = (g_titleInfoCount - g_titleInfoGameCardCount); i < g_titleInfoCount; i++)
         {
-            if (g_titleInfo[i].content_infos) free(g_titleInfo[i].content_infos);
+            TitleInfo *cur_title_info = &(g_titleInfo[i]);
+            if (cur_title_info->content_infos) free(cur_title_info->content_infos);
         }
         
         /* Reallocate title info buffer. */
