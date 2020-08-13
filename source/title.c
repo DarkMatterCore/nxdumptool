@@ -629,7 +629,7 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
     /* Clear output. */
     memset(out, 0, sizeof(TitleUserApplicationData));
     
-    /* Get user application title info. */
+    /* Get first user application title info. */
     out->app_info = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, app_id, false);
     
     /* Get first patch title info. */
@@ -652,9 +652,6 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
         LOGFILE("Failed to retrieve user application data for ID \"%016lX\"!", app_id);
         goto end;
     }
-    
-    /* Update 'gamecard_available' flag. */
-    out->gamecard_available = (out->app_info && (out->app_info->storage_id == NcmStorageId_GameCard || _titleGetInfoFromStorageByTitleId(NcmStorageId_GameCard, app_id, false) != NULL));
     
 end:
     mutexUnlock(&g_titleMutex);
@@ -1219,46 +1216,51 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
     /* Update title info count. */
     g_titleInfoCount += total;
     
-    /* Fill patch / add-on content specific info. */
+    /* Update linked lists pointers for user applications, patches and add-on contents. */
     g_titleInfoOrphanCount = 0;
     for(u32 i = 0; i < g_titleInfoCount; i++)
     {
         TitleInfo *child_info = &(g_titleInfo[i]);
-        if (child_info->meta_key.type != NcmContentMetaType_Patch && child_info->meta_key.type != NcmContentMetaType_AddOnContent) continue;
+        child_info->parent = child_info->previous = child_info->next = NULL;
         
-        /* Retrieve pointer to parent entry. */
-        /* Since gamecard title info entries are always appended to the end of the buffer, this guarantees we will first retrieve an eMMC / SD card entry (if available). */
-        for(u32 j = 0; j < g_titleInfoCount; j++)
+        if (child_info->meta_key.type != NcmContentMetaType_Application && child_info->meta_key.type != NcmContentMetaType_Patch && \
+            child_info->meta_key.type != NcmContentMetaType_AddOnContent) continue;
+        
+        if (child_info->meta_key.type == NcmContentMetaType_Patch || child_info->meta_key.type == NcmContentMetaType_AddOnContent)
         {
-            TitleInfo *parent_info = &(g_titleInfo[j]);
-            
-            if (parent_info->meta_key.type == NcmContentMetaType_Application && \
-                ((child_info->meta_key.type == NcmContentMetaType_Patch && titleCheckIfPatchIdBelongsToApplicationId(parent_info->meta_key.id, child_info->meta_key.id)) || \
-                (child_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(parent_info->meta_key.id, child_info->meta_key.id))))
+            /* Retrieve pointer to parent user application entry for patches and add-on contents. */
+            /* Since gamecard title info entries are always appended to the end of the buffer, this guarantees we will first retrieve an eMMC / SD card entry (if available). */
+            for(u32 j = 0; j < g_titleInfoCount; j++)
             {
-                child_info->parent = parent_info;
-                break;
+                TitleInfo *parent_info = &(g_titleInfo[j]);
+                
+                if (parent_info->meta_key.type == NcmContentMetaType_Application && \
+                    ((child_info->meta_key.type == NcmContentMetaType_Patch && titleCheckIfPatchIdBelongsToApplicationId(parent_info->meta_key.id, child_info->meta_key.id)) || \
+                    (child_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(parent_info->meta_key.id, child_info->meta_key.id))))
+                {
+                    child_info->parent = parent_info;
+                    break;
+                }
+            }
+            
+            /* Increase orphan title count if we couldn't find the parent user application. */
+            if (!child_info->parent)
+            {
+                g_titleInfoOrphanCount++;
+                continue;
             }
         }
         
-        /* Increase orphan title count if we couldn't find the parent user application. */
-        if (!child_info->parent)
-        {
-            g_titleInfoOrphanCount++;
-            continue;
-        }
-        
-        /* Locate previous patch / add-on content entry. */
+        /* Locate previous user application, patch or add-on content entry. */
         /* If it's found, we will update both its next pointer and the previous pointer from the current entry. */
-        /* We will also update its parent entry pointer. */
         for(u32 j = i; j > 0; j--)
         {
             TitleInfo *previous_info = &(g_titleInfo[j - 1]);
             
-            if (previous_info->meta_key.type == child_info->meta_key.type && ((child_info->meta_key.type == NcmContentMetaType_Patch && previous_info->meta_key.id == child_info->meta_key.id) || \
-                (child_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdsAreSiblings(previous_info->meta_key.id, child_info->meta_key.id))))
+            if (previous_info->meta_key.type == child_info->meta_key.type && (((child_info->meta_key.type == NcmContentMetaType_Application || child_info->meta_key.type == NcmContentMetaType_Patch) && \
+                previous_info->meta_key.id == child_info->meta_key.id) || (child_info->meta_key.type == NcmContentMetaType_AddOnContent && \
+                titleCheckIfAddOnContentIdsAreSiblings(previous_info->meta_key.id, child_info->meta_key.id))))
             {
-                previous_info->parent = child_info->parent;
                 previous_info->next = child_info;
                 child_info->previous = previous_info;
                 break;

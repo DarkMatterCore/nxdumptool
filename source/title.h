@@ -59,15 +59,15 @@ typedef struct _TitleInfo {
     u64 title_size;                                 ///< Total title size.
     char title_size_str[32];                        ///< Total title size string.
     TitleApplicationMetadata *app_metadata;         ///< Only available for system titles and applications.
-    struct _TitleInfo *parent, *previous, *next;    ///< Used with TitleInfo entries from patches and add-on contents.
+    struct _TitleInfo *parent, *previous, *next;    ///< Used with TitleInfo entries from user applications, patches and add-on contents. The parent pointer is unused in user applications.
 } TitleInfo;
 
 /// Used to deal with user applications stored in the eMMC, SD card and/or gamecard.
+/// The parent, previous and next pointers from the TitleInfo elements are used to traverse through multiple user applications, patches and/or add-on contents.
 typedef struct {
-    bool gamecard_available;    ///< Set to true if one or more titles matching this user application are stored in the inserted gamecard.
-    TitleInfo *app_info;        ///< Pointer to a TitleInfo element for this application.
-    TitleInfo *patch_info;      ///< Pointer to a TitleInfo element for the first detected patch.
-    TitleInfo *aoc_info;        ///< Pointer to a TitleInfo element for the first detected add-on content.
+    TitleInfo *app_info;    ///< Pointer to a TitleInfo element holding info for the first detected user application entry matching the provided application ID.
+    TitleInfo *patch_info;  ///< Pointer to a TitleInfo element holding info for the first detected patch entry matching the provided application ID.
+    TitleInfo *aoc_info;    ///< Pointer to a TitleInfo element holding info for the first detected add-on content entry matching the provided application ID.
 } TitleUserApplicationData;
 
 /// Initializes the title interface.
@@ -97,7 +97,7 @@ TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
 bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
 
 /// Returns true if orphan titles are available.
-/// Orphan titles are patches or add-on contents with no NsApplicationControlData available for its parent user application ID.
+/// Orphan titles are patches or add-on contents with no NsApplicationControlData available for their parent user application ID.
 bool titleAreOrphanTitlesAvailable(void);
 
 /// Returns a pointer to a dynamically allocated buffer of pointers to TitleInfo entries from orphan titles, as well as their count. The allocated buffer must be freed by the calling function.
