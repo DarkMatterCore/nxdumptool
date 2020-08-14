@@ -61,6 +61,19 @@ static const char *g_titleNcmContentTypeNames[] = {
     [NcmContentType_DeltaFragment + 1] = "Unknown"
 };
 
+static const char *g_titleNcmContentMetaTypeNames[] = {
+    [NcmContentMetaType_Unknown]              = "Unknown",
+    [NcmContentMetaType_SystemProgram]        = "SystemProgram",
+    [NcmContentMetaType_SystemData]           = "SystemData",
+    [NcmContentMetaType_SystemUpdate]         = "SystemUpdate",
+    [NcmContentMetaType_BootImagePackage]     = "BootImagePackage",
+    [NcmContentMetaType_BootImagePackageSafe] = "BootImagePackageSafe",
+    [NcmContentMetaType_Application - 0x7A]   = "Application",
+    [NcmContentMetaType_Patch - 0x7A]         = "Patch",
+    [NcmContentMetaType_AddOnContent - 0x7A]  = "AddOnContent",
+    [NcmContentMetaType_Delta - 0x7A]         = "Delta"
+};
+
 /* Info retrieved from https://switchbrew.org/wiki/Title_list. */
 /* Titles bundled with the kernel are excluded. */
 static const SystemTitleName g_systemTitles[] = {
@@ -620,7 +633,7 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
     
     bool success = false;
     
-    if (!titleIsUserApplicationContentAvailable(app_id) || !out)
+    if (!out)
     {
         LOGFILE("Invalid parameters!");
         goto end;
@@ -711,10 +724,153 @@ bool titleIsGameCardInfoUpdated(void)
     return ret;
 }
 
+char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type)
+{
+    mutexLock(&g_titleMutex);
+    
+    char *filename = NULL;
+    char title_name[0x400] = {0};
+    TitleApplicationMetadata *app_metadata = NULL;
+    
+    if (!title_info || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
+        (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
+    {
+        LOGFILE("Invalid parameters!");
+        goto end;
+    }
+    
+    /* Retrieve application metadata. */
+    /* System titles and user applications: just retrieve the app_metadata pointer from the input TitleInfo. */
+    /* Patches and add-on contents: retrieve the app_metadata pointer from the parent TitleInfo if it's available. */
+    app_metadata = (title_info->meta_key.type <= NcmContentMetaType_Application ? title_info->app_metadata : (title_info->parent ? title_info->parent->app_metadata : NULL));
+    
+    /* Generate filename for this title. */
+    if (name_convention == TitleFileNameConvention_Full)
+    {
+        if (app_metadata && strlen(app_metadata->lang_entry.name))
+        {
+            sprintf(title_name, "%s ", app_metadata->lang_entry.name);
+            if (illegal_char_replace_type) utilsReplaceIllegalCharacters(title_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
+        }
+        
+        sprintf(title_name + strlen(title_name), "[%016lX][v%u][%s]", title_info->meta_key.id, title_info->meta_key.version, titleGetNcmContentMetaTypeName(title_info->meta_key.type));
+    } else
+    if (name_convention == TitleFileNameConvention_IdAndVersionOnly)
+    {
+        sprintf(title_name, "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, titleGetNcmContentMetaTypeName(title_info->meta_key.type));
+    }
+    
+    /* Duplicate generated filename. */
+    filename = strdup(title_name);
+    if (!filename) LOGFILE("Failed to duplicate generated filename!");
+    
+end:
+    mutexUnlock(&g_titleMutex);
+    
+    return filename;
+}
+
+char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_type)
+{
+    mutexLock(&g_titleMutex);
+    
+    size_t cur_filename_len = 0;
+    char *filename = NULL, *tmp_filename = NULL;
+    char app_name[0x400] = {0};
+    
+    if (!g_titleGameCardAvailable || !g_titleInfo || !g_titleInfoCount || !g_titleInfoGameCardCount || g_titleInfoGameCardCount > g_titleInfoCount || \
+        g_titleInfoGameCardStartIndex != (g_titleInfoCount - g_titleInfoGameCardCount) || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
+        (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
+    {
+        LOGFILE("Invalid parameters!");
+        goto end;
+    }
+    
+    for(u32 i = g_titleInfoGameCardStartIndex; i < g_titleInfoCount; i++)
+    {
+        TitleInfo *app_info = &(g_titleInfo[i]);
+        u32 app_version = app_info->meta_key.version;
+        
+        if (app_info->meta_key.type != NcmContentMetaType_Application) continue;
+        
+        /* Check if the inserted gamecard holds any bundled patches for the current user application. */
+        /* If so, we'll use the highest patch version available as part of the filename. */
+        for(u32 j = g_titleInfoGameCardStartIndex; j < g_titleInfoCount; j++)
+        {
+            if (j == i) continue;
+            
+            TitleInfo *patch_info = &(g_titleInfo[j]);
+            if (patch_info->meta_key.type != NcmContentMetaType_Patch || !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, patch_info->meta_key.id) || \
+                patch_info->meta_key.version <= app_version) continue;
+            
+            app_version = patch_info->meta_key.version;
+        }
+        
+        /* Generate current user application name. */
+        *app_name = '\0';
+        
+        if (name_convention == TitleFileNameConvention_Full)
+        {
+            if (cur_filename_len) strcat(app_name, " + ");
+            
+            if (app_info->app_metadata && strlen(app_info->app_metadata->lang_entry.name))
+            {
+                sprintf(app_name + strlen(app_name), "%s ", app_info->app_metadata->lang_entry.name);
+                if (illegal_char_replace_type) utilsReplaceIllegalCharacters(app_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
+            }
+            
+            sprintf(app_name + strlen(app_name), "[%016lX][v%u]", app_info->meta_key.id, app_version);
+        } else
+        if (name_convention == TitleFileNameConvention_IdAndVersionOnly)
+        {
+            if (cur_filename_len) strcat(app_name, "+");
+            sprintf(app_name + strlen(app_name), "%016lX_v%u", app_info->meta_key.id, app_version);
+        }
+        
+        /* Reallocate output buffer. */
+        size_t app_name_len = strlen(app_name);
+        
+        tmp_filename = realloc(filename, (cur_filename_len + app_name_len + 1) * sizeof(char));
+        if (!tmp_filename)
+        {
+            LOGFILE("Failed to reallocate filename buffer!");
+            if (filename) free(filename);
+            filename = NULL;
+            goto end;
+        }
+        
+        filename = tmp_filename;
+        tmp_filename = NULL;
+        
+        /* Concatenate current user application name. */
+        filename[cur_filename_len] = '\0';
+        strcat(filename, app_name);
+        cur_filename_len += app_name_len;
+    }
+    
+    if (!filename) LOGFILE("Error: the inserted gamecard doesn't hold any user applications!");
+    
+end:
+    mutexUnlock(&g_titleMutex);
+    
+    /* Fallback string if any errors occur. */
+    /* This function is guaranteed to fail with Kiosk / Quest gamecards, so that's why this is needed. */
+    if (!filename) filename = strdup("gamecard");
+    
+    return filename;
+}
+
 const char *titleGetNcmContentTypeName(u8 content_type)
 {
     u8 idx = (content_type > NcmContentType_DeltaFragment ? (NcmContentType_DeltaFragment + 1) : content_type);
     return g_titleNcmContentTypeNames[idx];
+}
+
+const char *titleGetNcmContentMetaTypeName(u8 content_meta_type)
+{
+    u8 idx = (content_meta_type <= NcmContentMetaType_BootImagePackageSafe ? content_meta_type : \
+             ((content_meta_type < NcmContentMetaType_Application || content_meta_type > NcmContentMetaType_Delta) ? 0 : (content_meta_type - 0x7A)));
+    return g_titleNcmContentMetaTypeNames[idx];
 }
 
 NX_INLINE void titleFreeApplicationMetadata(void)
@@ -1543,7 +1699,7 @@ static void titleRemoveGameCardTitleInfoEntries(void)
         titleFreeTitleInfo();
     } else {
         /* Update parent, previous and next title info pointers from user application, patch and add-on content entries. */
-        for(u32 i = 0; i < (g_titleInfoCount - g_titleInfoGameCardCount); i++)
+        for(u32 i = 0; i < g_titleInfoGameCardStartIndex; i++)
         {
             TitleInfo *cur_title_info = &(g_titleInfo[i]);
             
@@ -1556,14 +1712,14 @@ static void titleRemoveGameCardTitleInfoEntries(void)
         }
         
         /* Free content infos from gamecard title info entries. */
-        for(u32 i = (g_titleInfoCount - g_titleInfoGameCardCount); i < g_titleInfoCount; i++)
+        for(u32 i = g_titleInfoGameCardStartIndex; i < g_titleInfoCount; i++)
         {
             TitleInfo *cur_title_info = &(g_titleInfo[i]);
             if (cur_title_info->content_infos) free(cur_title_info->content_infos);
         }
         
         /* Reallocate title info buffer. */
-        TitleInfo *tmp_title_info = realloc(g_titleInfo, (g_titleInfoCount - g_titleInfoGameCardCount) * sizeof(TitleInfo));
+        TitleInfo *tmp_title_info = realloc(g_titleInfo, g_titleInfoGameCardStartIndex * sizeof(TitleInfo));
         if (tmp_title_info)
         {
             g_titleInfo = tmp_title_info;
@@ -1571,7 +1727,7 @@ static void titleRemoveGameCardTitleInfoEntries(void)
         }
         
         /* Update counters. */
-        g_titleInfoCount = (g_titleInfoCount - g_titleInfoGameCardCount);
+        g_titleInfoCount = g_titleInfoGameCardStartIndex;
         g_titleInfoGameCardStartIndex = g_titleInfoGameCardCount = 0;
     }
 }
@@ -1582,9 +1738,11 @@ static bool titleIsUserApplicationContentAvailable(u64 app_id)
     
     for(u32 i = 0; i < g_titleInfoCount; i++)
     {
-        if ((g_titleInfo[i].meta_key.type == NcmContentMetaType_Application && g_titleInfo[i].meta_key.id == app_id) || \
-            (g_titleInfo[i].meta_key.type == NcmContentMetaType_Patch && titleCheckIfPatchIdBelongsToApplicationId(app_id, g_titleInfo[i].meta_key.id)) || \
-            (g_titleInfo[i].meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, g_titleInfo[i].meta_key.id))) return true;
+        TitleInfo *cur_title_info = &(g_titleInfo[i]);
+        
+        if ((cur_title_info->meta_key.type == NcmContentMetaType_Application && cur_title_info->meta_key.id == app_id) || \
+            (cur_title_info->meta_key.type == NcmContentMetaType_Patch && titleCheckIfPatchIdBelongsToApplicationId(app_id, cur_title_info->meta_key.id)) || \
+            (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, cur_title_info->meta_key.id))) return true;
     }
     
     return false;
@@ -1605,7 +1763,7 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id,
     
     /* Speed up gamecard lookups. */
     u32 start_idx = (storage_id == NcmStorageId_GameCard ? g_titleInfoGameCardStartIndex : 0);
-    u32 max_val = ((storage_id == NcmStorageId_GameCard || storage_id == NcmStorageId_Any) ? g_titleInfoCount : (g_titleInfoCount - g_titleInfoGameCardCount));
+    u32 max_val = ((storage_id == NcmStorageId_GameCard || storage_id == NcmStorageId_Any) ? g_titleInfoCount : g_titleInfoGameCardStartIndex);
     
     for(u32 i = start_idx; i < max_val; i++)
     {

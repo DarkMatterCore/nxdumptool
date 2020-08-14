@@ -70,6 +70,19 @@ typedef struct {
     TitleInfo *aoc_info;    ///< Pointer to a TitleInfo element holding info for the first detected add-on content entry matching the provided application ID.
 } TitleUserApplicationData;
 
+typedef enum {
+    TitleFileNameConvention_Full             = 0,   ///< Individual titles: "[{Name}] [{TitleId}][v{TitleVersion}][{TitleType}]".
+                                                    ///< Gamecards: "[{Name1}] [{TitleId1}][v{TitleVersion1}] + ... + [{NameN}] [{TitleIdN}][v{TitleVersionN}]".
+    TitleFileNameConvention_IdAndVersionOnly = 1    ///< Individual titles: "{TitleId}_v{TitleVersion}_{TitleType}".
+                                                    ///< Gamecards: "{TitleId1}_v{TitleVersion1}_{TitleType1} + ... + {TitleIdN}_v{TitleVersionN}_{TitleTypeN}".
+} TitleFileNameConvention;
+
+typedef enum {
+    TitleFileNameIllegalCharReplaceType_None               = 0,
+    TitleFileNameIllegalCharReplaceType_IllegalFsChars     = 1,
+    TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly = 2
+} TitleFileNameIllegalCharReplaceType;
+
 /// Initializes the title interface.
 bool titleInitialize(void);
 
@@ -108,8 +121,20 @@ TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count);
 /// If titleGetApplicationMetadataEntries() has been previously called, its returned buffer should be freed and a new titleGetApplicationMetadataEntries() call should be issued.
 bool titleIsGameCardInfoUpdated(void);
 
+/// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps.
+/// Returns NULL if an error occurs.
+char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type);
+
+/// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output gamecard dumps.
+/// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.
+/// Returns NULL if an error occurs.
+char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_type);
+
 /// Returns a pointer to a string holding the name of the provided ncm content type.
 const char *titleGetNcmContentTypeName(u8 content_type);
+
+/// Returns a pointer to a string holding the name of the provided ncm content meta type.
+const char *titleGetNcmContentMetaTypeName(u8 content_meta_type);
 
 /// Miscellaneous functions.
 

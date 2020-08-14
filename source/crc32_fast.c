@@ -35,10 +35,10 @@ static void crc32FastInitializeTables(u32 *table, u32 *wtable)
     
     for(u32 k = 0; k < 4; ++k)
     {
-        for(u32 w = 0, i = 0; i < 0x100; ++i)
+        for(u32 w, i = 0; i < 0x100; ++i)
         {
-            for(u32 j = 0; j < 4; ++j) w = (table[(u8)(j == k ? (w ^ i) : w)] ^ w >> 8);
-            wtable[i + (k << 8)] = (w ^ (k ? wtable[0] : 0));
+            for(u32 j = w = 0; j < 4; ++j) w = (table[(u8)(j == k ? (w ^ i) : w)] ^ w >> 8);
+            wtable[(k << 8) + i] = (w ^ (k ? wtable[0] : 0));
         }
     }
 }
@@ -47,16 +47,16 @@ void crc32FastCalculate(const void *data, u64 n_bytes, u32 *crc)
 {
     if (!data || !n_bytes || !crc) return;
     
-    static u32 table[0x100] = {0}, wtable[0x100 * 4] = {0};
+    static u32 table[0x100] = {0}, wtable[0x400] = {0};
     u64 n_accum = (n_bytes / 4);
     
     if (!*table) crc32FastInitializeTables(table, wtable);
     
     for(u64 i = 0; i < n_accum; ++i)
     {
-        u32 a = (*crc ^ ((u32*)data)[i]);
+        u32 a = (*crc ^ ((const u32*)data)[i]);
         for(u32 j = *crc = 0; j < 4; ++j) *crc ^= wtable[(j << 8) + (u8)(a >> 8 * j)];
     }
     
-    for(u64 i = (n_accum * 4); i < n_bytes; ++i) *crc = (table[(u8)*crc ^ ((u8*)data)[i]] ^ *crc >> 8);
+    for(u64 i = (n_accum * 4); i < n_bytes; ++i) *crc = (table[(u8)*crc ^ ((const u8*)data)[i]] ^ *crc >> 8);
 }

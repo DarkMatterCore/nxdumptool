@@ -21,6 +21,8 @@
 #include "utils.h"
 #include "gamecard.h"
 #include "usb.h"
+#include "title.h"
+#include "crc32_fast.h"
 
 #define BLOCK_SIZE  USB_TRANSFER_BUFFER_SIZE
 
@@ -58,6 +60,7 @@ typedef struct
     bool read_error;
     bool write_error;
     bool transfer_cancelled;
+    u32 xci_crc, full_xci_crc;
 } ThreadSharedData;
 
 /* Function prototypes. */
@@ -73,13 +76,14 @@ static bool sendGameCardImageViaUsb(void);
 static void changeKeyAreaOption(u32 idx);
 static void changeCertificateOption(u32 idx);
 static void changeTrimOption(u32 idx);
+static void changeCrcOption(u32 idx);
 
 static int read_thread_func(void *arg);
 static int write_thread_func(void *arg);
 
 /* Global variables. */
 
-static bool g_appendKeyArea = false, g_keepCertificate = false, g_trimDump = false;
+static bool g_appendKeyArea = false, g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
 
 static const char *g_xciOptions[] = { "no", "yes", NULL };
 
@@ -117,6 +121,16 @@ static MenuElement *g_xciMenuElements[] = {
         .element_options = &(MenuElementOption){
             .selected = 0,
             .options_func = &changeTrimOption,
+            .options = g_xciOptions
+        }
+    },
+    &(MenuElement){
+        .str = "calculate crc32",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &(MenuElementOption){
+            .selected = 0,
+            .options_func = &changeCrcOption,
             .options = g_xciOptions
         }
     },
@@ -388,16 +402,22 @@ static bool sendGameCardKeyAreaViaUsb(void)
     
     GameCardKeyArea gc_key_area = {0};
     bool success = false;
+    u32 crc = 0;
+    char *filename = titleGenerateGameCardFileName(TitleFileNameConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
     
-    if (!dumpGameCardKeyArea(&gc_key_area)) goto end;
+    if (!dumpGameCardKeyArea(&gc_key_area) || !filename) goto end;
     
-    sprintf(path, "card_key_area_%016lX.bin", gc_key_area.initial_data.key_source.package_id);
+    crc32FastCalculate(&gc_key_area, sizeof(GameCardKeyArea), &crc);
+    snprintf(path, MAX_ELEMENTS(path), "%s (Key Area) (%08X).bin", filename, crc);
+    
     if (!sendFileData(path, &gc_key_area, sizeof(GameCardKeyArea))) goto end;
     
-    consolePrint("successfully sent key area as \"%s\"\n", path);
+    printf("successfully sent key area as \"%s\"\n", path);
     success = true;
     
 end:
+    if (filename) free(filename);
+    
     utilsChangeHomeButtonBlockStatus(false);
     
     consolePrint("press any button to continue");
@@ -413,10 +433,11 @@ static bool sendGameCardCertificateViaUsb(void)
     utilsChangeHomeButtonBlockStatus(true);
     
     FsGameCardCertificate gc_cert = {0};
-    char device_id_str[0x21] = {0};
     bool success = false;
+    u32 crc = 0;
+    char *filename = titleGenerateGameCardFileName(TitleFileNameConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
     
-    if (!gamecardGetCertificate(&gc_cert))
+    if (!gamecardGetCertificate(&gc_cert) || !filename)
     {
         consolePrint("failed to get gamecard certificate\n");
         goto end;
@@ -424,14 +445,17 @@ static bool sendGameCardCertificateViaUsb(void)
     
     consolePrint("get gamecard certificate ok\n");
     
-    utilsGenerateHexStringFromData(device_id_str, 0x21, gc_cert.device_id, 0x10);
-    sprintf(path, "card_certificate_%s.bin", device_id_str);
+    crc32FastCalculate(&gc_cert, sizeof(FsGameCardCertificate), &crc);
+    snprintf(path, MAX_ELEMENTS(path), "%s (Certificate) (%08X).bin", filename, crc);
+    
     if (!sendFileData(path, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
     
-    consolePrint("successfully sent certificate as \"%s\"\n", path);
+    printf("successfully sent certificate as \"%s\"\n", path);
     success = true;
     
 end:
+    if (filename) free(filename);
+    
     utilsChangeHomeButtonBlockStatus(false);
     
     consolePrint("press any button to continue");
@@ -447,14 +471,24 @@ static bool sendGameCardImageViaUsb(void)
     utilsChangeHomeButtonBlockStatus(true);
     
     u64 gc_size = 0;
+    u32 key_area_crc = 0;
     GameCardKeyArea gc_key_area = {0};
     
     ThreadSharedData shared_data = {0};
     thrd_t read_thread, write_thread;
     
+    char *filename = NULL;
+    
     bool success = false;
     
     consolePrint("gamecard image dump\nappend key area: %s | keep certificate: %s | trim dump: %s\n\n", g_appendKeyArea ? "yes" : "no", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no");
+    
+    filename = titleGenerateGameCardFileName(TitleFileNameConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    if (!filename)
+    {
+        consolePrint("failed to generate gamecard filename!\n");
+        goto end;
+    }
     
     shared_data.data = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     if (!shared_data.data)
@@ -477,10 +511,12 @@ static bool sendGameCardImageViaUsb(void)
     {
         gc_size += sizeof(GameCardKeyArea);
         if (!dumpGameCardKeyArea(&gc_key_area)) goto end;
+        if (g_calcCrc) crc32FastCalculate(&gc_key_area, sizeof(GameCardKeyArea), &key_area_crc);
+        shared_data.full_xci_crc = key_area_crc;
         consolePrint("gamecard size (with key area): 0x%lX\n", gc_size);
     }
     
-    sprintf(path, "gamecard (%s) (%s) (%s).xci", g_appendKeyArea ? "keyarea" : "keyarealess", g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
+    snprintf(path, MAX_ELEMENTS(path), "%s (%s) (%s) (%s).xci", filename, g_appendKeyArea ? "keyarea" : "keyarealess", g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
     if (!usbSendFileProperties(gc_size, path))
     {
         consolePrint("failed to send file properties for \"%s\"!\n", path);
@@ -571,11 +607,21 @@ static bool sendGameCardImageViaUsb(void)
         goto end;
     }
     
-    consolePrint("process completed in %lu seconds\n", start);
+    printf("process completed in %lu seconds\n", start);
     success = true;
+    
+    if (g_calcCrc)
+    {
+        if (g_appendKeyArea) printf("key area crc: %08X | ", key_area_crc);
+        printf("xci crc: %08X", shared_data.xci_crc);
+        if (g_appendKeyArea) printf(" | xci crc (with key area): %08X", shared_data.full_xci_crc);
+        printf("\n");
+    }
     
 end:
     if (shared_data.data) free(shared_data.data);
+    
+    if (filename) free(filename);
     
     utilsChangeHomeButtonBlockStatus(false);
     
@@ -598,6 +644,11 @@ static void changeCertificateOption(u32 idx)
 static void changeTrimOption(u32 idx)
 {
     g_trimDump = (idx > 0);
+}
+
+static void changeCrcOption(u32 idx)
+{
+    g_calcCrc = (idx > 0);
 }
 
 static int read_thread_func(void *arg)
@@ -637,6 +688,13 @@ static int read_thread_func(void *arg)
         
         /* Remove certificate */
         if (!g_keepCertificate && offset == 0) memset(buf + GAMECARD_CERTIFICATE_OFFSET, 0xFF, sizeof(FsGameCardCertificate));
+        
+        /* Update checksum */
+        if (g_calcCrc)
+        {
+            crc32FastCalculate(buf, blksize, &(shared_data->xci_crc));
+            if (g_appendKeyArea) crc32FastCalculate(buf, blksize, &(shared_data->full_xci_crc));
+        }
         
         /* Wait until the previous data chunk has been written */
         mutexLock(&g_fileMutex);
