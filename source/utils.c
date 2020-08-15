@@ -86,7 +86,6 @@ bool utilsInitializeResources(void)
     }
     
     /* Check if we're not running under a development unit. */
-    /* USB comms make development units crash. */
     if (!_utilsIsDevelopmentUnit()) goto end;
     
     /* Initialize USB interface. */
