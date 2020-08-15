@@ -76,6 +76,8 @@ typedef enum {
 bool utilsInitializeResources(void);
 void utilsCloseResources(void);
 
+bool utilsIsDevelopmentUnit(void);
+
 /// hidScanInput() must be called before any of these functions.
 u64 utilsHidKeysAllDown(void);
 u64 utilsHidKeysAllHeld(void);

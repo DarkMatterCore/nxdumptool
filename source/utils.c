@@ -34,7 +34,7 @@
 
 /* Global variables. */
 
-static bool g_resourcesInitialized = false;
+static bool g_resourcesInitialized = false, g_isDevUnit = false;
 static Mutex g_resourcesMutex = 0;
 
 static FsFileSystem *g_sdCardFileSystem = NULL;
@@ -57,12 +57,14 @@ static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
 
 /* Function prototypes. */
 
+static bool _utilsGetCustomFirmwareType(void);
+
+static bool _utilsIsDevelopmentUnit(void);
+
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
 static bool utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(const char *path, FsFileSystem **out_fs, char **out_filepath);
-
-static void _utilsGetCustomFirmwareType(void);
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
@@ -73,12 +75,8 @@ bool utilsInitializeResources(void)
     bool ret = g_resourcesInitialized;
     if (ret) goto end;
     
-    /* Retrieve pointer to the SD card FsFileSystem element. */
-    if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
-    {
-        LOGFILE("Failed to retrieve FsFileSystem from SD card!");
-        goto end;
-    }
+    /* Retrieve custom firmware type. */
+    if (!_utilsGetCustomFirmwareType()) goto end;
     
     /* Initialize needed services. */
     if (!servicesInitialize())
@@ -86,6 +84,10 @@ bool utilsInitializeResources(void)
         LOGFILE("Failed to initialize needed services!");
         goto end;
     }
+    
+    /* Check if we're not running under a development unit. */
+    /* USB comms make development units crash. */
+    if (!_utilsIsDevelopmentUnit()) goto end;
     
     /* Initialize USB interface. */
     if (!usbInitialize())
@@ -122,6 +124,13 @@ bool utilsInitializeResources(void)
         goto end;
     }
     
+    /* Retrieve pointer to the SD card FsFileSystem element. */
+    if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
+    {
+        LOGFILE("Failed to retrieve FsFileSystem from SD card!");
+        goto end;
+    }
+    
     /* Mount eMMC BIS System partition. */
     if (!utilsMountEmmcBisSystemPartitionStorage()) goto end;
     
@@ -130,9 +139,6 @@ bool utilsInitializeResources(void)
     
     /* Disable screen dimming and auto sleep. */
     appletSetMediaPlaybackState(true);
-    
-    /* Retrieve custom firmware type. */
-    _utilsGetCustomFirmwareType();
     
     /* Overclock system. */
     utilsOverclockSystem(true);
@@ -197,6 +203,14 @@ void utilsCloseResources(void)
     g_resourcesInitialized = false;
     
     mutexUnlock(&g_resourcesMutex);
+}
+
+bool utilsIsDevelopmentUnit(void)
+{
+    mutexLock(&g_resourcesMutex);
+    bool ret = (g_resourcesInitialized && g_isDevUnit);
+    mutexUnlock(&g_resourcesMutex);
+    return ret;
 }
 
 u64 utilsHidKeysAllDown(void)
@@ -526,6 +540,57 @@ void utilsOverclockSystem(bool overclock)
     servicesChangeHardwareClockRates(cpuClkRate, memClkRate);
 }
 
+static bool _utilsGetCustomFirmwareType(void)
+{
+    bool has_service = false, tx_srv = false, rnx_srv = false;
+    
+    /* First, check if we're running under Atmosphere or an Atmosphere-based CFW by using a SM API extension that's only provided by it. */
+    if (R_SUCCEEDED(servicesAtmosphereHasService(&has_service, "ncm")))
+    {
+        /* We're running under Atmosphere or an Atmosphere-based CFW. Time to check which one is it. */
+        tx_srv = (R_SUCCEEDED(servicesAtmosphereHasService(&has_service, "tx")) && has_service);
+        rnx_srv = (R_SUCCEEDED(servicesAtmosphereHasService(&has_service, "rnx")) && has_service);
+    } else {
+        /* Odds are we're not running under Atmosphere, or maybe we're running under an old Atmosphere version without SM API extensions. */
+        /* We'll use the smRegisterService() trick to check for running services. */
+        /* But first, we need to re-initialize SM in order to avoid 0xF601 (port remote dead) errors. */
+        smExit();
+        
+        Result rc = smInitialize();
+        if (R_FAILED(rc))
+        {
+            LOGFILE("smInitialize failed! (0x%08X).", rc);
+            return false;
+        }
+        
+        tx_srv = servicesCheckRunningServiceByName("tx");
+        rnx_srv = servicesCheckRunningServiceByName("rnx");
+    }
+    
+    /* Finally, determine the CFW type. */
+    g_customFirmwareType = (rnx_srv ? UtilsCustomFirmwareType_ReiNX : (tx_srv ? UtilsCustomFirmwareType_SXOS : UtilsCustomFirmwareType_Atmosphere));
+    LOGFILE("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphere" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
+    
+    return true;
+}
+
+static bool _utilsIsDevelopmentUnit(void)
+{
+    Result rc = 0;
+    bool tmp = false;
+    
+    rc = splIsDevelopment(&tmp);
+    if (R_SUCCEEDED(rc))
+    {
+        g_isDevUnit = tmp;
+        LOGFILE("Running under %s unit.", g_isDevUnit ? "development" : "retail");
+    } else {
+        LOGFILE("splIsDevelopment failed! (0x%08X).", rc);
+    }
+    
+    return R_SUCCEEDED(rc);
+}
+
 static bool utilsMountEmmcBisSystemPartitionStorage(void)
 {
     Result rc = 0;
@@ -588,13 +653,6 @@ static bool utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(const char *path
     if (out_filepath) *out_filepath = filepath;
     
     return true;
-}
-
-static void _utilsGetCustomFirmwareType(void)
-{
-    bool tx_srv = servicesCheckRunningServiceByName("tx");
-    bool rnx_srv = servicesCheckRunningServiceByName("rnx");
-    g_customFirmwareType = (rnx_srv ? UtilsCustomFirmwareType_ReiNX : (tx_srv ? UtilsCustomFirmwareType_SXOS : UtilsCustomFirmwareType_Atmosphere));
 }
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)

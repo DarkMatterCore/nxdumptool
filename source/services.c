@@ -25,19 +25,21 @@
 
 /* Type definitions. */
 
-typedef bool (*ServiceCondFunction)(void *arg);         /* Used to perform a runtime condition check (e.g. system version) before initializing the service. */
-typedef Result (*ServiceInitFunction)(void);            /* Used to initialize the service. */
-typedef void (*ServiceCloseFunction)(void);             /* Used to close the service. */
+typedef bool (*ServiceCondFunction)(void *arg); /* Used to perform a runtime condition check (e.g. system version) before initializing the service. */
+typedef Result (*ServiceInitFunction)(void);    /* Used to initialize the service. */
+typedef void (*ServiceCloseFunction)(void);     /* Used to close the service. */
 
-typedef struct ServicesInfoEntry {
+typedef struct {
     bool initialized;
     char name[8];
     ServiceCondFunction cond_func;
     ServiceInitFunction init_func;
     ServiceCloseFunction close_func;
-} ServicesInfoEntry;
+} ServiceInfo;
 
 /* Function prototypes. */
+
+static Result smHasService(bool *out_has_service, SmServiceName name);
 
 static Result servicesPlUserInitialize(void);
 static Result servicesNifmUserInitialize(void);
@@ -47,18 +49,18 @@ static bool servicesFspUsbCheckAvailability(void *arg);
 
 /* Global variables. */
 
-static ServicesInfoEntry g_serviceInfo[] = {
+static ServiceInfo g_serviceInfo[] = {
     { false, "ncm", NULL, &ncmInitialize, &ncmExit },
     { false, "ns", NULL, &nsInitialize, &nsExit },
     { false, "csrng", NULL, &csrngInitialize, &csrngExit },
-    { false, "spl", NULL, &splInitialize, &splExit },
+    { false, "spl:", NULL, &splInitialize, &splExit },
     { false, "spl:mig", &servicesSplCryptoCheckAvailability, &splCryptoInitialize, &splCryptoExit },    /* Checks if spl:mig is really available (e.g. avoid calling splInitialize twice). */
     { false, "pm:dmnt", NULL, &pmdmntInitialize, &pmdmntExit },
     { false, "pl:u", NULL, &servicesPlUserInitialize, &plExit },
     { false, "psm", NULL, &psmInitialize, &psmExit },
     { false, "nifm:u", NULL, &servicesNifmUserInitialize, &nifmExit },
     { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst. */
-    { false, "fsp-usb", &servicesFspUsbCheckAvailability, &fspusbInitialize, &fspusbExit },             /* Checks if fsp-usb is really available. */
+    { false, "fsp-usb", &servicesFspUsbCheckAvailability, &fspusbInitialize, &fspusbExit },             /* Checks if fsp-usb really is available. */
     { false, "es", NULL, &esInitialize, &esExit },
     { false, "set:cal", NULL, &setcalInitialize, &setcalExit }
 };
@@ -79,28 +81,30 @@ bool servicesInitialize(void)
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
+        ServiceInfo *service_info = &(g_serviceInfo[i]);
+        
         /* Check if this service has been already initialized or if it actually has a valid initialize function. */
-        if (g_serviceInfo[i].initialized || g_serviceInfo[i].init_func == NULL) continue;
+        if (service_info->initialized || service_info->init_func == NULL) continue;
         
         /* Check if this service depends on a condition function. */
-        if (g_serviceInfo[i].cond_func != NULL)
+        if (service_info->cond_func != NULL)
         {
             /* Run the condition function - it will update the current service member. */
             /* Skip this service if the required conditions aren't met. */
-            if (!g_serviceInfo[i].cond_func(&(g_serviceInfo[i]))) continue;
+            if (!service_info->cond_func(service_info)) continue;
         }
         
         /* Initialize service. */
-        rc = g_serviceInfo[i].init_func();
+        rc = service_info->init_func();
         if (R_FAILED(rc))
         {
-            LOGFILE("Failed to initialize %s service! (0x%08X).", g_serviceInfo[i].name, rc);
+            LOGFILE("Failed to initialize %s service! (0x%08X).", service_info->name, rc);
             ret = false;
             break;
         }
         
         /* Update initialized flag. */
-        g_serviceInfo[i].initialized = true;
+        service_info->initialized = true;
     }
     
     mutexUnlock(&g_servicesMutex);
@@ -114,11 +118,16 @@ void servicesClose(void)
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
+        ServiceInfo *service_info = &(g_serviceInfo[i]);
+        
         /* Check if this service has not been initialized, or if it doesn't have a valid close function. */
-        if (!g_serviceInfo[i].initialized || g_serviceInfo[i].close_func == NULL) continue;
+        if (!service_info->initialized || service_info->close_func == NULL) continue;
         
         /* Close service. */
-        g_serviceInfo[i].close_func();
+        service_info->close_func();
+        
+        /* Update initialized flag. */
+        service_info->initialized = false;
     }
     
     mutexUnlock(&g_servicesMutex);
@@ -128,13 +137,16 @@ bool servicesCheckRunningServiceByName(const char *name)
 {
     if (!name || !strlen(name)) return false;
     
+    Result rc = 0;
     Handle handle = INVALID_HANDLE;
     SmServiceName service_name = smEncodeName(name);
-    Result rc = smRegisterService(&handle, service_name, false, 1);
-    bool running = R_FAILED(rc);
+    bool running = false;
+    
+    rc = smRegisterService(&handle, service_name, false, 1);
+    if (R_FAILED(rc)) LOGFILE("smRegisterService failed for \"%s\"! (0x%08X).", name, rc);
+    running = R_FAILED(rc);
     
     if (handle != INVALID_HANDLE) svcCloseHandle(handle);
-    
     if (!running) smUnregisterService(service_name);
     
     return running;
@@ -152,9 +164,11 @@ bool servicesCheckInitializedServiceByName(const char *name)
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
-        if (strlen(g_serviceInfo[i].name) == name_len && !strcmp(g_serviceInfo[i].name, name))
+        ServiceInfo *service_info = &(g_serviceInfo[i]);
+        
+        if (strlen(service_info->name) == name_len && !strcmp(service_info->name, name))
         {
-            ret = g_serviceInfo[i].initialized;
+            ret = service_info->initialized;
             break;
         }
     }
@@ -179,6 +193,30 @@ void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
     }
     
     mutexUnlock(&g_servicesMutex);
+}
+
+Result servicesAtmosphereHasService(bool *out_has_service, const char *name)
+{
+    if (!out_has_service || !name || !strlen(name))
+    {
+        LOGFILE("Invalid parameters!");
+        return MAKERESULT(Module_Libnx, LibnxError_IoError);
+    }
+    
+    SmServiceName service_name = smEncodeName(name);
+    
+    Result rc = smHasService(out_has_service, service_name);
+    if (R_FAILED(rc)) LOGFILE("smHasService failed for \"%s\"! (0x%08X).", name, rc);
+    
+    return rc;
+}
+
+static Result smHasService(bool *out_has_service, SmServiceName name)
+{
+    u8 tmp = 0;
+    Result rc = serviceDispatchInOut(smGetServiceSession(), 65100, name, tmp);
+    if (R_SUCCEEDED(rc) && out_has_service) *out_has_service = (tmp & 1);
+    return rc;
 }
 
 static Result servicesPlUserInitialize(void)
@@ -234,7 +272,7 @@ static bool servicesClkGetServiceType(void *arg)
 {
     if (!arg) return false;
     
-    ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
+    ServiceInfo *info = (ServiceInfo*)arg;
     if (strlen(info->name) != 3 || strcmp(info->name, "clk") != 0 || info->init_func != NULL || info->close_func != NULL) return false;
     
     /* Determine which service needs to be used to control hardware clock rates, depending on the system version. */
@@ -253,7 +291,7 @@ static bool servicesSplCryptoCheckAvailability(void *arg)
 {
     if (!arg) return false;
     
-    ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
+    ServiceInfo *info = (ServiceInfo*)arg;
     if (strlen(info->name) != 7 || strcmp(info->name, "spl:mig") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
     /* Check if spl:mig is available (sysver equal to or greater than 4.0.0). */
@@ -264,9 +302,11 @@ static bool servicesFspUsbCheckAvailability(void *arg)
 {
     if (!arg) return false;
     
-    ServicesInfoEntry *info = (ServicesInfoEntry*)arg;
+    ServiceInfo *info = (ServiceInfo*)arg;
     if (strlen(info->name) != 7 || strcmp(info->name, "fsp-usb") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
     /* Check if fsp-usb is actually running in the background. */
-    return servicesCheckRunningServiceByName("fsp-usb");
+    bool has_service = false;
+    return (utilsGetCustomFirmwareType() == UtilsCustomFirmwareType_Atmosphere ? (R_SUCCEEDED(servicesAtmosphereHasService(&has_service, info->name)) && has_service) : \
+            servicesCheckRunningServiceByName(info->name));
 }
