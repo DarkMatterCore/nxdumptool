@@ -39,6 +39,7 @@
 
 #define USB_SS_BCD_REVISION         0x0300
 #define USB_SS_EP_MAX_PACKET_SIZE   0x400
+
 /* Type definitions. */
 
 typedef struct {
