@@ -31,6 +31,14 @@
 #define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB. */
 #define USB_TRANSFER_TIMEOUT        5                   /* 5 seconds. */
 
+#define USB_FS_BCD_REVISION         0x0110
+#define USB_FS_EP_MAX_PACKET_SIZE   0x40
+
+#define USB_HS_BCD_REVISION         0x0200
+#define USB_HS_EP_MAX_PACKET_SIZE   0x200
+
+#define USB_SS_BCD_REVISION         0x0300
+#define USB_SS_EP_MAX_PACKET_SIZE   0x400
 /* Type definitions. */
 
 typedef struct {
@@ -108,6 +116,7 @@ static atomic_bool g_usbDetectionThreadCreated = false;
 static u8 *g_usbTransferBuffer = NULL;
 static u64 g_usbTransferRemainingSize = 0, g_usbTransferWrittenSize = 0;
 static u32 g_usbUrbId = 0;
+static u16 g_usbEndpointMaxPacketSize = 0;
 
 /* Function prototypes. */
 
@@ -117,6 +126,7 @@ static int usbDetectionThreadFunc(void *arg);
 
 static bool usbStartSession(void);
 static void usbEndSession(void);
+static bool usbGetMaxPacketSizeFromHost(void);
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size);
 static u32 usbSendCommand(size_t cmd_size);
@@ -304,8 +314,8 @@ bool usbSendFileData(void *data, u64 data_size)
     /* First, check if this is the last data chunk for this file. */
     if ((g_usbTransferRemainingSize - data_size) == 0)
     {
-        /* Enable ZLT if the last chunk size is aligned to the USB max packet size. */
-        if (IS_ALIGNED(data_size, 0x40) || IS_ALIGNED(data_size, 0x200) || IS_ALIGNED(data_size, 0x400)) /* USB1, USB2 and USB3 max packet sizes, respectively. */
+        /* Enable ZLT if the last chunk size is aligned to the USB endpoint max packet size. */
+        if (IS_ALIGNED(data_size, g_usbEndpointMaxPacketSize))
         {
             zlt_required = true;
             usbSetZltPacket(true);
@@ -335,9 +345,6 @@ bool usbSendFileData(void *data, u64 data_size)
     /* Check if this is the last chunk. */
     if (!g_usbTransferRemainingSize)
     {
-        /* Disable ZLT if it was previously enabled. */
-        if (zlt_required) usbSetZltPacket(false);
-        
         /* Check response from host device. */
         if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus), true))
         {
@@ -360,6 +367,10 @@ bool usbSendFileData(void *data, u64 data_size)
     }
     
 end:
+    /* Disable ZLT if it was previously enabled. */
+    if (zlt_required) usbSetZltPacket(false);
+    
+    /* Reset remaining and written sizes in case of errors. */
     if (!ret) g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
     
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
@@ -441,16 +452,20 @@ static int usbDetectionThreadFunc(void *arg)
         g_usbHostAvailable = usbIsHostAvailable();
         g_usbSessionStarted = false;
         g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
+        g_usbEndpointMaxPacketSize = 0;
         
         /* Start an USB session if we're connected to a host device. */
         /* This will essentially hang this thread and all other threads that call USB-related functions until: */
-        /* a) A session is established. */
-        /* b) The console is disconnected. */
+        /* a) A session is successfully established. */
+        /* b) The console is disconnected from the USB host. */
         /* c) The thread exit event is triggered. */
         if (g_usbHostAvailable)
         {
             /* Wait until a session is established. */
-            g_usbSessionStarted = usbStartSession();
+            /* If the session is successfully established, then we'll get the endpoint max packet size from the data chunk sent by the USB host. */
+            /* This is done to accurately know when and where to enable Zero Length Termination (ZLT) packets during bulk transfers. */
+            /* As much as I'd like to avoid this, usb:ds doesn't disclose information such as the exact device descriptor and/or speed used by the USB host. */
+            g_usbSessionStarted = (usbStartSession() && usbGetMaxPacketSizeFromHost());
             
             /* Check if the exit event was triggered while waiting for a session to be established. */
             if (!g_usbSessionStarted && g_usbDetectionThreadExitFlag) break;
@@ -464,6 +479,7 @@ static int usbDetectionThreadFunc(void *arg)
     if (g_usbHostAvailable && g_usbSessionStarted) usbEndSession();
     g_usbHostAvailable = g_usbSessionStarted = g_usbDetectionThreadExitFlag = false;
     g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
+    g_usbEndpointMaxPacketSize = 0;
     
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
@@ -514,6 +530,32 @@ static void usbEndSession(void)
     if (!usbWrite(g_usbTransferBuffer, sizeof(UsbCommandHeader), true)) LOGFILE("Failed to send EndSession command!");
 }
 
+static bool usbGetMaxPacketSizeFromHost(void)
+{
+    /* Get the endpoint max packet size from the data chunk sent by the USB host. */
+    g_usbEndpointMaxPacketSize = *((u16*)(g_usbTransferBuffer + sizeof(UsbStatus)));
+    
+    /* Verify the max packet size value. */
+    if (g_usbEndpointMaxPacketSize != USB_FS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_HS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_SS_EP_MAX_PACKET_SIZE)
+    {
+        /* Stall input (write) endpoint. */
+        /* This will force the client to stop the current session, so a new one will have to be established. */
+        rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
+        usbDsEndpoint_Stall(g_usbDeviceInterface.endpoint_in);
+        rwlockWriteUnlock(&(g_usbDeviceInterface.lock_in));
+        
+        /* Reset updated variables. */
+        g_usbSessionStarted = false;
+        g_usbEndpointMaxPacketSize = 0;
+        
+        return false;
+    }
+    
+    LOGFILE("USB session successfully established. Endpoint max packet size: 0x%04X.", g_usbEndpointMaxPacketSize);
+    
+    return true;
+}
+
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size)
 {
     if (cmd > UsbCommandType_EndSession) return;
@@ -542,7 +584,11 @@ static u32 usbSendCommand(size_t cmd_size)
         return UsbStatusType_WriteCommandFailed;
     }
     
-    if (!usbRead(g_usbTransferBuffer, sizeof(UsbStatus), true))
+    /* Make sure to read the USB endpoint max packet size being used by the host if this is a StartSession command. It must be part of the response after the UsbStatus block. */
+    u64 read_size = sizeof(UsbStatus);
+    if (cmd == UsbCommandType_StartSession) read_size += sizeof(g_usbEndpointMaxPacketSize);
+    
+    if (!usbRead(g_usbTransferBuffer, read_size, true))
     {
         /* Log error message only if the USB session has been started, or if thread exit flag hasn't been enabled. */
         if (g_usbSessionStarted || !g_usbDetectionThreadExitFlag) LOGFILE("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd);
@@ -623,36 +669,36 @@ static bool usbInitializeComms(void)
         u8 manufacturer = 0, product = 0, serial_number = 0;
         static const u16 supported_langs[1] = { 0x0409 };
         
-        /* Send language descriptor. */
+        /* Set language. */
         rc = usbDsAddUsbLanguageStringDescriptor(NULL, supported_langs, sizeof(supported_langs) / sizeof(u16));
         if (R_FAILED(rc)) LOGFILE("usbDsAddUsbLanguageStringDescriptor failed! (0x%08X).", rc);
         
-        /* Send manufacturer. */
+        /* Set manufacturer. */
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsAddUsbStringDescriptor(&manufacturer, APP_AUTHOR);
             if (R_FAILED(rc)) LOGFILE("usbDsAddUsbStringDescriptor failed! (0x%08X) (manufacturer).", rc);
         }
         
-        /* Send product. */
+        /* Set product. */
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsAddUsbStringDescriptor(&product, APP_TITLE);
             if (R_FAILED(rc)) LOGFILE("usbDsAddUsbStringDescriptor failed! (0x%08X) (product).", rc);
         }
         
-        /* Send serial number. */
+        /* Set serial number. */
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsAddUsbStringDescriptor(&serial_number, APP_VERSION);
             if (R_FAILED(rc)) LOGFILE("usbDsAddUsbStringDescriptor failed! (0x%08X) (serial number).", rc);
         }
         
-        /* Send device descriptors. */
+        /* Set device descriptors. */
         struct usb_device_descriptor device_descriptor = {
             .bLength = USB_DT_DEVICE_SIZE,
             .bDescriptorType = USB_DT_DEVICE,
-            .bcdUSB = 0x0110,
+            .bcdUSB = USB_FS_BCD_REVISION,
             .bDeviceClass = 0x00,
             .bDeviceSubClass = 0x00,
             .bDeviceProtocol = 0x00,
@@ -674,7 +720,7 @@ static bool usbInitializeComms(void)
         }
         
         /* High Speed is USB 2.0. */
-        device_descriptor.bcdUSB = 0x0200;
+        device_descriptor.bcdUSB = USB_HS_BCD_REVISION;
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_High, &device_descriptor);
@@ -683,7 +729,7 @@ static bool usbInitializeComms(void)
         
         /* Super Speed is USB 3.0. */
         /* Upgrade packet size to 512 (1 << 9). */
-        device_descriptor.bcdUSB = 0x0300;
+        device_descriptor.bcdUSB = USB_SS_BCD_REVISION;
         device_descriptor.bMaxPacketSize0 = 0x09;
         if (R_SUCCEEDED(rc))
         {
@@ -824,7 +870,7 @@ static bool usbInitializeDeviceInterface5x(void)
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = USB_ENDPOINT_IN,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
-        .wMaxPacketSize = 0x40,
+        .wMaxPacketSize = USB_FS_EP_MAX_PACKET_SIZE,
     };
     
     struct usb_endpoint_descriptor endpoint_descriptor_out = {
@@ -832,7 +878,7 @@ static bool usbInitializeDeviceInterface5x(void)
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = USB_ENDPOINT_OUT,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
-        .wMaxPacketSize = 0x40,
+        .wMaxPacketSize = USB_FS_EP_MAX_PACKET_SIZE,
     };
     
     struct usb_ss_endpoint_companion_descriptor endpoint_companion = {
@@ -881,8 +927,8 @@ static bool usbInitializeDeviceInterface5x(void)
     }
     
     /* High Speed config (USB 2.0). */
-    endpoint_descriptor_in.wMaxPacketSize = 0x200;
-    endpoint_descriptor_out.wMaxPacketSize = 0x200;
+    endpoint_descriptor_in.wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE;
+    endpoint_descriptor_out.wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE;
     
     rc = usbDsInterface_AppendConfigurationData(g_usbDeviceInterface.interface, UsbDeviceSpeed_High, &interface_descriptor, USB_DT_INTERFACE_SIZE);
     if (R_FAILED(rc))
@@ -906,8 +952,8 @@ static bool usbInitializeDeviceInterface5x(void)
     }
     
     /* Super Speed config (USB 3.0). */
-    endpoint_descriptor_in.wMaxPacketSize = 0x400;
-    endpoint_descriptor_out.wMaxPacketSize = 0x400;
+    endpoint_descriptor_in.wMaxPacketSize = USB_SS_EP_MAX_PACKET_SIZE;
+    endpoint_descriptor_out.wMaxPacketSize = USB_SS_EP_MAX_PACKET_SIZE;
     
     rc = usbDsInterface_AppendConfigurationData(g_usbDeviceInterface.interface, UsbDeviceSpeed_Super, &interface_descriptor, USB_DT_INTERFACE_SIZE);
     if (R_FAILED(rc))
@@ -987,7 +1033,7 @@ static bool usbInitializeDeviceInterface1x(void)
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = USB_ENDPOINT_IN,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
-        .wMaxPacketSize = 0x200,
+        .wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE,
     };
     
     struct usb_endpoint_descriptor endpoint_descriptor_out = {
@@ -995,7 +1041,7 @@ static bool usbInitializeDeviceInterface1x(void)
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = USB_ENDPOINT_OUT,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
-        .wMaxPacketSize = 0x200,
+        .wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE,
     };
     
     /* Enable device interface. */
