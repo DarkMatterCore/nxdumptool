@@ -92,7 +92,7 @@ static FsEventNotifier g_gameCardEventNotifier = {0};
 static Event g_gameCardKernelEvent = {0};
 static bool g_openDeviceOperator = false, g_openEventNotifier = false, g_loadKernelEvent = false;
 
-static thrd_t g_gameCardDetectionThread;
+static Thread g_gameCardDetectionThread = {0};
 static UEvent g_gameCardDetectionThreadExitEvent = {0}, g_gameCardStatusChangeEvent = {0};
 static bool g_gameCardDetectionThreadCreated = false, g_gameCardInserted = false, g_gameCardInfoLoaded = false;
 
@@ -129,7 +129,7 @@ static const char *g_gameCardHfsPartitionNames[] = {
 
 static bool gamecardCreateDetectionThread(void);
 static void gamecardDestroyDetectionThread(void);
-static int gamecardDetectionThreadFunc(void *arg);
+static void gamecardDetectionThreadFunc(void *arg);
 
 NX_INLINE bool gamecardIsInserted(void);
 
@@ -516,7 +516,7 @@ end:
 
 static bool gamecardCreateDetectionThread(void)
 {
-    if (thrd_create(&g_gameCardDetectionThread, gamecardDetectionThreadFunc, NULL) != thrd_success)
+    if (!utilsCreateThread(&g_gameCardDetectionThread, gamecardDetectionThreadFunc, NULL, 1))
     {
         LOGFILE("Failed to create gamecard detection thread!");
         return false;
@@ -531,10 +531,10 @@ static void gamecardDestroyDetectionThread(void)
     ueventSignal(&g_gameCardDetectionThreadExitEvent);
     
     /* Wait for the gamecard detection thread to exit. */
-    thrd_join(g_gameCardDetectionThread, NULL);
+    utilsJoinThread(&g_gameCardDetectionThread);
 }
 
-static int gamecardDetectionThreadFunc(void *arg)
+static void gamecardDetectionThreadFunc(void *arg)
 {
     (void)arg;
     
@@ -588,7 +588,7 @@ static int gamecardDetectionThreadFunc(void *arg)
     gamecardFreeInfo();
     g_gameCardInserted = false;
     
-    return 0;
+    threadExit();
 }
 
 NX_INLINE bool gamecardIsInserted(void)

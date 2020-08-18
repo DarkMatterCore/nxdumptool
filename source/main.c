@@ -78,8 +78,8 @@ static void changeCertificateOption(u32 idx);
 static void changeTrimOption(u32 idx);
 static void changeCrcOption(u32 idx);
 
-static int read_thread_func(void *arg);
-static int write_thread_func(void *arg);
+static void read_thread_func(void *arg);
+static void write_thread_func(void *arg);
 
 /* Global variables. */
 
@@ -475,7 +475,7 @@ static bool sendGameCardImageViaUsb(void)
     GameCardKeyArea gc_key_area = {0};
     
     ThreadSharedData shared_data = {0};
-    thrd_t read_thread, write_thread;
+    Thread read_thread = {0}, write_thread = {0};
     
     char *filename = NULL;
     
@@ -530,8 +530,8 @@ static bool sendGameCardImageViaUsb(void)
     }
     
     consolePrint("creating threads\n");
-    thrd_create(&read_thread, read_thread_func, &shared_data);
-    thrd_create(&write_thread, write_thread_func, &shared_data);
+    utilsCreateThread(&read_thread, read_thread_func, &shared_data, 2);
+    utilsCreateThread(&write_thread, write_thread_func, &shared_data, 2);
     
     u8 prev_time = 0;
     u64 prev_size = 0;
@@ -590,9 +590,9 @@ static bool sendGameCardImageViaUsb(void)
     start = (time(NULL) - start);
     
     consolePrint("\nwaiting for threads to join\n");
-    thrd_join(read_thread, NULL);
+    utilsJoinThread(&read_thread);
     consolePrint("read_thread done: %lu\n", time(NULL));
-    thrd_join(write_thread, NULL);
+    utilsJoinThread(&write_thread);
     consolePrint("write_thread done: %lu\n", time(NULL));
     
     if (shared_data.read_error || shared_data.write_error)
@@ -651,20 +651,20 @@ static void changeCrcOption(u32 idx)
     g_calcCrc = (idx > 0);
 }
 
-static int read_thread_func(void *arg)
+static void read_thread_func(void *arg)
 {
     ThreadSharedData *shared_data = (ThreadSharedData*)arg;
     if (!shared_data || !shared_data->data || !shared_data->total_size)
     {
         shared_data->read_error = true;
-        return -1;
+        goto end;
     }
     
     u8 *buf = malloc(BLOCK_SIZE);
     if (!buf)
     {
         shared_data->read_error = true;
-        return -2;
+        goto end;
     }
     
     for(u64 offset = 0, blksize = BLOCK_SIZE; offset < shared_data->total_size; offset += blksize)
@@ -718,16 +718,17 @@ static int read_thread_func(void *arg)
     
     free(buf);
     
-    return (shared_data->read_error ? -3 : 0);
+end:
+    threadExit();
 }
 
-static int write_thread_func(void *arg)
+static void write_thread_func(void *arg)
 {
     ThreadSharedData *shared_data = (ThreadSharedData*)arg;
     if (!shared_data || !shared_data->data)
     {
         shared_data->write_error = true;
-        return -1;
+        goto end;
     }
     
     while(shared_data->data_written < shared_data->total_size)
@@ -758,5 +759,6 @@ static int write_thread_func(void *arg)
         if (shared_data->write_error) break;
     }
     
-    return (shared_data->write_error ? -2 : 0);
+end:
+    threadExit();
 }

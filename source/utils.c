@@ -204,6 +204,84 @@ void utilsCloseResources(void)
     mutexUnlock(&g_resourcesMutex);
 }
 
+bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_id)
+{
+    /* Core 3 is reserved for HOS, so we can only use cores 0, 1 and 2. */
+    /* -2 can be provided to use the default process core. */
+    if (!out_thread || !func || (cpu_id < 0 && cpu_id != -2) || cpu_id > 2)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    Result rc = 0;
+    u64 core_mask = 0;
+    size_t stack_size = 0x20000; /* Same value as libnx's newlib. */
+    bool success = false;
+    
+    memset(out_thread, 0, sizeof(Thread));
+    
+    /* Get process core mask. */
+    rc = svcGetInfo(&core_mask, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("svcGetInfo failed! (0x%08X).", rc);
+        goto end;
+    }
+    
+    /* Create thread. */
+    /* Enable preemptive multithreading by using priority 0x3B. */
+    rc = threadCreate(out_thread, func, arg, NULL, stack_size, 0x3B, cpu_id);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("threadCreate failed! (0x%08X).", rc);
+        goto end;
+    }
+    
+    /* Set thread core mask. */
+    rc = svcSetThreadCoreMask(out_thread->handle, cpu_id == -2 ? -1 : cpu_id, core_mask);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("svcSetThreadCoreMask failed! (0x%08X).", rc);
+        goto end;
+    }
+    
+    /* Start thread. */
+    rc = threadStart(out_thread);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("threadStart failed! (0x%08X).", rc);
+        goto end;
+    }
+    
+    success = true;
+    
+end:
+    if (!success && out_thread->handle != INVALID_HANDLE) threadClose(out_thread);
+    
+    return success;
+}
+
+void utilsJoinThread(Thread *thread)
+{
+    if (!thread || thread->handle == INVALID_HANDLE)
+    {
+        LOGFILE("Invalid parameters!");
+        return;
+    }
+    
+    Result rc = threadWaitForExit(thread);
+    if (R_FAILED(rc))
+    {
+        LOGFILE("threadWaitForExit failed! (0x%08X).", rc);
+        return;
+    }
+    
+    threadClose(thread);
+    
+    memset(thread, 0, sizeof(Thread));
+}
+
 bool utilsIsDevelopmentUnit(void)
 {
     mutexLock(&g_resourcesMutex);

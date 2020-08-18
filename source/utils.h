@@ -35,7 +35,6 @@
 #include <math.h>
 #include <time.h>
 #include <sys/stat.h>
-#include <threads.h>
 #include <stdatomic.h>
 #include <switch.h>
 
@@ -75,6 +74,9 @@ typedef enum {
 
 bool utilsInitializeResources(void);
 void utilsCloseResources(void);
+
+bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_id);
+void utilsJoinThread(Thread *thread);
 
 bool utilsIsDevelopmentUnit(void);
 

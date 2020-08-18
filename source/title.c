@@ -34,7 +34,7 @@ typedef struct {
 /* Global variables. */
 
 static Mutex g_titleMutex = 0;
-static thrd_t g_titleGameCardInfoThread;
+static Thread g_titleGameCardInfoThread = {0};
 static UEvent g_titleGameCardInfoThreadExitEvent = {0}, *g_titleGameCardStatusChangeUserEvent = NULL;
 
 static bool g_titleInterfaceInit = false, g_titleGameCardInfoThreadCreated = false, g_titleGameCardAvailable = false, g_titleGameCardInfoUpdated = false;
@@ -395,7 +395,7 @@ static bool titleGetContentInfosFromTitle(u8 storage_id, const NcmContentMetaKey
 
 static bool titleCreateGameCardInfoThread(void);
 static void titleDestroyGameCardInfoThread(void);
-static int titleGameCardInfoThreadFunc(void *arg);
+static void titleGameCardInfoThreadFunc(void *arg);
 
 static bool titleRefreshGameCardTitleInfo(void);
 static void titleRemoveGameCardTitleInfoEntries(void);
@@ -1510,7 +1510,7 @@ end:
 
 static bool titleCreateGameCardInfoThread(void)
 {
-    if (thrd_create(&g_titleGameCardInfoThread, titleGameCardInfoThreadFunc, NULL) != thrd_success)
+    if (!utilsCreateThread(&g_titleGameCardInfoThread, titleGameCardInfoThreadFunc, NULL, 1))
     {
         LOGFILE("Failed to create gamecard title info thread!");
         return false;
@@ -1525,10 +1525,10 @@ static void titleDestroyGameCardInfoThread(void)
     ueventSignal(&g_titleGameCardInfoThreadExitEvent);
     
     /* Wait for the gamecard title info thread to exit. */
-    thrd_join(g_titleGameCardInfoThread, NULL);
+    utilsJoinThread(&g_titleGameCardInfoThread);
 }
 
-static int titleGameCardInfoThreadFunc(void *arg)
+static void titleGameCardInfoThreadFunc(void *arg)
 {
     (void)arg;
     
@@ -1561,7 +1561,7 @@ static int titleGameCardInfoThreadFunc(void *arg)
     /* Update gamecard flags. */
     g_titleGameCardAvailable = g_titleGameCardInfoUpdated = false;
     
-    return 0;
+    threadExit();
 }
 
 static bool titleRefreshGameCardTitleInfo(void)

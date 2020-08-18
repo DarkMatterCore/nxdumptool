@@ -109,7 +109,7 @@ static usbDeviceInterface g_usbDeviceInterface = {0};
 static bool g_usbDeviceInterfaceInitialized = false;
 
 static Event *g_usbStateChangeEvent = NULL;
-static thrd_t g_usbDetectionThread;
+static Thread g_usbDetectionThread = {0};
 static UEvent g_usbDetectionThreadExitEvent = {0}, g_usbTimeoutEvent = {0};
 static bool g_usbHostAvailable = false, g_usbSessionStarted = false, g_usbDetectionThreadExitFlag = false;
 static atomic_bool g_usbDetectionThreadCreated = false;
@@ -123,7 +123,7 @@ static u16 g_usbEndpointMaxPacketSize = 0;
 
 static bool usbCreateDetectionThread(void);
 static void usbDestroyDetectionThread(void);
-static int usbDetectionThreadFunc(void *arg);
+static void usbDetectionThreadFunc(void *arg);
 
 static bool usbStartSession(void);
 static void usbEndSession(void);
@@ -407,7 +407,7 @@ end:
 
 static bool usbCreateDetectionThread(void)
 {
-    if (thrd_create(&g_usbDetectionThread, usbDetectionThreadFunc, NULL) != thrd_success)
+    if (!utilsCreateThread(&g_usbDetectionThread, usbDetectionThreadFunc, NULL, 1))
     {
         LOGFILE("Failed to create USB detection thread!");
         return false;
@@ -422,10 +422,10 @@ static void usbDestroyDetectionThread(void)
     ueventSignal(&g_usbDetectionThreadExitEvent);
     
     /* Wait for the USB detection thread to exit. */
-    thrd_join(g_usbDetectionThread, NULL);
+    utilsJoinThread(&g_usbDetectionThread);
 }
 
-static int usbDetectionThreadFunc(void *arg)
+static void usbDetectionThreadFunc(void *arg)
 {
     (void)arg;
     
@@ -485,7 +485,7 @@ static int usbDetectionThreadFunc(void *arg)
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
     
-    return 0;
+    threadExit();
 }
 
 static bool usbStartSession(void)
@@ -545,8 +545,7 @@ static bool usbGetMaxPacketSizeFromHost(void)
         usbDsEndpoint_Stall(g_usbDeviceInterface.endpoint_in);
         rwlockWriteUnlock(&(g_usbDeviceInterface.lock_in));
         
-        /* Reset updated variables. */
-        g_usbSessionStarted = false;
+        /* Reset endpoint max packet size. */
         g_usbEndpointMaxPacketSize = 0;
         
         return false;
