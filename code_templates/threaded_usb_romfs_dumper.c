@@ -473,7 +473,7 @@ int main(int argc, char *argv[])
         size_t size = shared_data.data_written;
         
         hidScanInput();
-        btn_cancel_cur_state = (utilsHidKeysAllDown() & KEY_B);
+        btn_cancel_cur_state = (utilsHidKeysAllHeld() & KEY_B);
         
         if (btn_cancel_cur_state && btn_cancel_cur_state != btn_cancel_prev_state)
         {
