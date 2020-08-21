@@ -403,8 +403,9 @@ static void titleRemoveGameCardTitleInfoEntries(void);
 static bool titleIsUserApplicationContentAvailable(u64 app_id);
 static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id, bool lock);
 
-static int titleSystemTitleMetadataComparison(const void *a, const void *b);
-static int titleUserApplicationMetadataComparison(const void *a, const void *b);
+static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *b);
+static int titleUserApplicationMetadataEntrySortFunction(const void *a, const void *b);
+static int titleOrphanTitleInfoSortFunction(const void *a, const void *b);
 
 bool titleInitialize(void)
 {
@@ -606,10 +607,6 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
     
     if (app_metadata && app_count)
     {
-        /* System titles: sort metadata entries by ID. */
-        /* User applications: sort metadata entries alphabetically. */
-        qsort(app_metadata, app_count, sizeof(TitleApplicationMetadata*), is_system ? &titleSystemTitleMetadataComparison : &titleUserApplicationMetadataComparison);
-        
         /* Update output counter. */
         *out_count = app_count;
     } else {
@@ -706,7 +703,10 @@ TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count)
         if ((g_titleInfo[i].meta_key.type == NcmContentMetaType_Patch || g_titleInfo[i].meta_key.type == NcmContentMetaType_AddOnContent) && !g_titleInfo[i].parent) orphan_info[j++] = &(g_titleInfo[i]);
     }
     
-    /* Update counter. */
+    /* Sort orphan title info entries by title ID. */
+    if (g_titleInfoOrphanCount > 1) qsort(orphan_info, g_titleInfoOrphanCount, sizeof(TitleInfo*), &titleOrphanTitleInfoSortFunction);
+    
+    /* Update output counter. */
     *out_count = g_titleInfoOrphanCount;
     
 end:
@@ -943,6 +943,9 @@ static bool titleGenerateMetadataEntriesFromSystemTitles(void)
         sprintf(g_appMetadata[g_appMetadataCount + i].lang_entry.name, g_systemTitles[i].name);
     }
     
+    /* Sort metadata entries by title ID. */
+    qsort(g_appMetadata + g_appMetadataCount, g_systemTitlesCount, sizeof(TitleApplicationMetadata), &titleSystemTitleMetadataEntrySortFunction);
+    
     /* Update application metadata count. */
     g_appMetadataCount += g_systemTitlesCount;
     
@@ -956,7 +959,7 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void)
     NsApplicationRecord *app_records = NULL;
     u32 app_records_count = 0;
     
-    u32 cur_app_count = g_appMetadataCount;
+    u32 cur_app_count = g_appMetadataCount, new_app_count = 0;
     TitleApplicationMetadata *tmp_app_metadata = NULL;
     
     bool success = false;
@@ -998,35 +1001,43 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void)
     /* Retrieve application metadata for each ns application record. */
     for(u32 i = 0; i < app_records_count; i++)
     {
-        if (!titleRetrieveApplicationMetadataByTitleId(app_records[i].application_id, &(g_appMetadata[g_appMetadataCount]))) continue;
-        g_appMetadataCount++;
+        if (!titleRetrieveApplicationMetadataByTitleId(app_records[i].application_id, &(g_appMetadata[g_appMetadataCount + new_app_count]))) continue;
+        new_app_count++;
     }
     
     /* Check retrieved application metadata count. */
-    if (g_appMetadataCount == cur_app_count)
+    if (!new_app_count)
     {
         LOGFILE("Unable to retrieve application metadata from ns application records! (%u %s).", app_records_count, app_records_count > 1 ? "entries" : "entry");
         goto end;
     }
     
-    /* Decrease application metadata buffer size if needed. */
-    if (g_appMetadataCount < (cur_app_count + app_records_count))
-    {
-        TitleApplicationMetadata *tmp_app_metadata = realloc(g_appMetadata, g_appMetadataCount * sizeof(TitleApplicationMetadata));
-        if (!tmp_app_metadata)
-        {
-            LOGFILE("Failed to reallocate application metadata buffer! (%u %s).", g_appMetadataCount, g_appMetadataCount > 1 ? "entries" : "entry");
-            goto end;
-        }
-        
-        g_appMetadata = tmp_app_metadata;
-        tmp_app_metadata = NULL;
-    }
+    /* Sort application metadata entries by name. */
+    if (new_app_count > 1) qsort(g_appMetadata + g_appMetadataCount, new_app_count, sizeof(TitleApplicationMetadata), &titleUserApplicationMetadataEntrySortFunction);
+    
+    /* Update application metadata count. */
+    g_appMetadataCount += new_app_count;
     
     success = true;
     
 end:
-    if (app_records) free(app_records);
+    if (app_records)
+    {
+        /* Decrease application metadata buffer size if needed. */
+        if (app_records_count && g_appMetadataCount < (cur_app_count + app_records_count))
+        {
+            TitleApplicationMetadata *tmp_app_metadata = realloc(g_appMetadata, g_appMetadataCount * sizeof(TitleApplicationMetadata));
+            if (tmp_app_metadata)
+            {
+                g_appMetadata = tmp_app_metadata;
+                tmp_app_metadata = NULL;
+            } else {
+                LOGFILE("Failed to reallocate application metadata buffer! (%u %s).", g_appMetadataCount, g_appMetadataCount > 1 ? "entries" : "entry");
+            }
+        }
+        
+        free(app_records);
+    }
     
     return success;
 }
@@ -1638,9 +1649,7 @@ static bool titleRefreshGameCardTitleInfo(void)
         /* Retrieve application metadata. */
         if (!titleRetrieveApplicationMetadataByTitleId(cur_title_info->meta_key.id, &(g_appMetadata[g_appMetadataCount]))) continue;
         
-        cur_title_info->app_metadata = &(g_appMetadata[g_appMetadataCount]);
-        g_appMetadataCount++;
-        
+        cur_title_info->app_metadata = &(g_appMetadata[g_appMetadataCount++]);
         gamecard_metadata_count++;
     }
     
@@ -1657,6 +1666,11 @@ static bool titleRefreshGameCardTitleInfo(void)
         LOGFILE("Unable to retrieve application metadata from gamecard! (%u %s).", gamecard_app_count, gamecard_app_count > 1 ? "entries" : "entry");
         goto end;
     }
+    
+    /* Sort application metadata entries by name. */
+    u32 new_app_count = (g_appMetadataCount - g_systemTitlesCount);
+    if (g_appMetadataCount > orig_app_count && new_app_count > 1) qsort(g_appMetadata + g_systemTitlesCount, new_app_count, sizeof(TitleApplicationMetadata), \
+                                                                        &titleUserApplicationMetadataEntrySortFunction);
     
     success = true;
     cleanup = false;
@@ -1782,10 +1796,10 @@ end:
     return info;
 }
 
-static int titleSystemTitleMetadataComparison(const void *a, const void *b)
+static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *b)
 {
-	const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
-    const TitleApplicationMetadata *app_metadata_2 = *((const TitleApplicationMetadata**)b);
+	const TitleApplicationMetadata *app_metadata_1 = (const TitleApplicationMetadata*)a;
+    const TitleApplicationMetadata *app_metadata_2 = (const TitleApplicationMetadata*)b;
     
     if (app_metadata_1->title_id < app_metadata_2->title_id)
     {
@@ -1799,10 +1813,27 @@ static int titleSystemTitleMetadataComparison(const void *a, const void *b)
     return 0;
 }
 
-static int titleUserApplicationMetadataComparison(const void *a, const void *b)
+static int titleUserApplicationMetadataEntrySortFunction(const void *a, const void *b)
 {
-	const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
-    const TitleApplicationMetadata *app_metadata_2 = *((const TitleApplicationMetadata**)b);
+	const TitleApplicationMetadata *app_metadata_1 = (const TitleApplicationMetadata*)a;
+    const TitleApplicationMetadata *app_metadata_2 = (const TitleApplicationMetadata*)b;
     
     return strcasecmp(app_metadata_1->lang_entry.name, app_metadata_2->lang_entry.name);
+}
+
+static int titleOrphanTitleInfoSortFunction(const void *a, const void *b)
+{
+	const TitleInfo *title_info_1 = *((const TitleInfo**)a);
+    const TitleInfo *title_info_2 = *((const TitleInfo**)b);
+    
+    if (title_info_1->meta_key.id < title_info_2->meta_key.id)
+    {
+        return -1;
+    } else
+    if (title_info_1->meta_key.id > title_info_2->meta_key.id)
+    {
+        return 1;
+    }
+    
+    return 0;
 }
