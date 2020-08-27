@@ -431,6 +431,7 @@ static void usbDetectionThreadFunc(void *arg)
     
     Result rc = 0;
     int idx = 0;
+    bool skip_wait = false;
     
     Waiter usb_change_event_waiter = waiterForEvent(g_usbStateChangeEvent);
     Waiter usb_timeout_event_waiter = waiterForUEvent(&g_usbTimeoutEvent);
@@ -438,9 +439,12 @@ static void usbDetectionThreadFunc(void *arg)
     
     while(true)
     {
-        /* Wait until an event is triggered. */
-        rc = waitMulti(&idx, -1, usb_change_event_waiter, usb_timeout_event_waiter, exit_event_waiter);
-        if (R_FAILED(rc)) continue;
+        if (!skip_wait)
+        {
+            /* Wait until an event is triggered. */
+            rc = waitMulti(&idx, -1, usb_change_event_waiter, usb_timeout_event_waiter, exit_event_waiter);
+            if (R_FAILED(rc)) continue;
+        }
         
         rwlockWriteLock(&g_usbDeviceLock);
         rwlockWriteLock(&(g_usbDeviceInterface.lock));
@@ -451,7 +455,7 @@ static void usbDetectionThreadFunc(void *arg)
         /* Retrieve current USB connection status. */
         /* Only proceed if we're dealing with a status change. */
         g_usbHostAvailable = usbIsHostAvailable();
-        g_usbSessionStarted = false;
+        g_usbSessionStarted = skip_wait = false;
         g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
         g_usbEndpointMaxPacketSize = 0;
         
@@ -463,13 +467,18 @@ static void usbDetectionThreadFunc(void *arg)
         if (g_usbHostAvailable)
         {
             /* Wait until a session is established. */
-            /* If the session is successfully established, then we'll get the endpoint max packet size from the data chunk sent by the USB host. */
-            /* This is done to accurately know when and where to enable Zero Length Termination (ZLT) packets during bulk transfers. */
-            /* As much as I'd like to avoid this, usb:ds doesn't disclose information such as the exact device descriptor and/or speed used by the USB host. */
-            g_usbSessionStarted = (usbStartSession() && usbGetMaxPacketSizeFromHost());
-            
-            /* Check if the exit event was triggered while waiting for a session to be established. */
-            if (!g_usbSessionStarted && g_usbDetectionThreadExitFlag) break;
+            g_usbSessionStarted = usbStartSession();
+            if (g_usbSessionStarted)
+            {
+                /* Get the endpoint max packet size from the response sent by the USB host. */
+                /* This is done to accurately know when and where to enable Zero Length Termination (ZLT) packets during bulk transfers. */
+                /* As much as I'd like to avoid this, usb:ds doesn't disclose information such as the exact device descriptor and/or speed used by the USB host. */
+                /* If this step fails (e.g. unexpected max packet size), the write endpoint will be stalled and we'll wait until a new USB session is established. */
+                if (!(skip_wait = !usbGetMaxPacketSizeFromHost())) LOGFILE("USB session successfully established. Endpoint max packet size: 0x%04X.", g_usbEndpointMaxPacketSize);
+            } else {
+                /* Check if the exit event was triggered while waiting for a session to be established. */
+                if (g_usbDetectionThreadExitFlag) break;
+            }
         }
         
         rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
@@ -545,13 +554,12 @@ static bool usbGetMaxPacketSizeFromHost(void)
         usbDsEndpoint_Stall(g_usbDeviceInterface.endpoint_in);
         rwlockWriteUnlock(&(g_usbDeviceInterface.lock_in));
         
-        /* Reset endpoint max packet size. */
+        /* Reset flags. */
+        g_usbSessionStarted = false;
         g_usbEndpointMaxPacketSize = 0;
         
         return false;
     }
-    
-    LOGFILE("USB session successfully established. Endpoint max packet size: 0x%04X.", g_usbEndpointMaxPacketSize);
     
     return true;
 }

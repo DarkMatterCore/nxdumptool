@@ -173,9 +173,10 @@ typedef struct {
 /// Titlekey is also RSA-OAEP unwrapped (if needed) and titlekek decrypted right away.
 bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gamecard);
 
-/// This will convert a TikTitleKeyType_Personalized ticket into a TikTitleKeyType_Common ticket.
+/// Converts a TikTitleKeyType_Personalized ticket into a TikTitleKeyType_Common ticket and generates a raw certificate chain for the new signature issuer.
 /// Bear in mind the 'size' member from the Ticket parameter will be updated by this function to remove any possible references to ESV1/ESV2 records.
-void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik);
+/// Raw certificate chain data will be saved to the provided pointers. certGenerateRawCertificateChainBySignatureIssuer() is used internally, so the output buffer must be freed by the user.
+bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_chain, u64 *out_raw_cert_chain_size);
 
 /// Helper inline functions.
 

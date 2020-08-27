@@ -121,7 +121,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
     return true;
 }
 
-void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
+bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_chain, u64 *out_raw_cert_chain_size)
 {
     TikCommonBlock *tik_common_block = NULL;
     
@@ -130,9 +130,34 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
     u64 signature_size = 0;
     
     bool dev_cert = false;
+    char cert_chain_issuer[0x40] = {0};
+    static const char *common_cert_names[] = { "XS00000020", "XS00000022", NULL };
+    
+    u8 *raw_cert_chain = NULL;
+    u64 raw_cert_chain_size = 0;
     
     if (!tik || tik->type == TikType_None || tik->type > TikType_SigHmac160 || tik->size < SIGNED_TIK_MIN_SIZE || tik->size > SIGNED_TIK_MAX_SIZE || \
-        !(tik_common_block = tikGetCommonBlock(tik->data)) || tik_common_block->titlekey_type != TikTitleKeyType_Personalized) return;
+        !(tik_common_block = tikGetCommonBlock(tik->data)) || tik_common_block->titlekey_type != TikTitleKeyType_Personalized || !out_raw_cert_chain || !out_raw_cert_chain_size)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Generate raw certificate chain for the new signature issuer (common). */
+    dev_cert = (strstr(tik_common_block->issuer, "CA00000004") != NULL);
+    
+    for(u8 i = 0; common_cert_names[i] != NULL; i++)
+    {
+        sprintf(cert_chain_issuer, "Root-CA%08X-%s", dev_cert ? 4 : 3, common_cert_names[i]);
+        raw_cert_chain = certGenerateRawCertificateChainBySignatureIssuer(cert_chain_issuer, &raw_cert_chain_size);
+        if (raw_cert_chain) break;
+    }
+    
+    if (!raw_cert_chain)
+    {
+        LOGFILE("Failed to generate raw certificate chain for common ticket signature issuer!");
+        return false;
+    }
     
     /* Wipe signature. */
     sig_type = signatureGetSigType(tik->data, false);
@@ -141,9 +166,8 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
     memset(signature, 0xFF, signature_size);
     
     /* Change signature issuer. */
-    dev_cert = (strstr(tik_common_block->issuer, "CA00000004") != NULL);
     memset(tik_common_block->issuer, 0, sizeof(tik_common_block->issuer));
-    sprintf(tik_common_block->issuer, "Root-CA%08X-XS00000020", (dev_cert ? 4 : 3));
+    sprintf(tik_common_block->issuer, "%s", cert_chain_issuer);
     
     /* Wipe the titlekey block and copy the titlekek-encrypted titlekey to it. */
     memset(tik_common_block->titlekey_block, 0, sizeof(tik_common_block->titlekey_block));
@@ -164,6 +188,12 @@ void tikConvertPersonalizedTicketToCommonTicket(Ticket *tik)
     tik_common_block->sect_hdr_entry_size = 0;
     
     memset(tik->data + tik->size, 0, SIGNED_TIK_MAX_SIZE - tik->size);
+    
+    /* Update output pointers. */
+    *out_raw_cert_chain = raw_cert_chain;
+    *out_raw_cert_chain_size = raw_cert_chain_size;
+    
+    return true;
 }
 
 static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsId *id)
