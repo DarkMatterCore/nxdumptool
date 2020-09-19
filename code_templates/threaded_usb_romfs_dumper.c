@@ -206,6 +206,99 @@ end:
     threadExit();
 }
 
+u8 get_program_id_offset(TitleInfo *info, u32 program_count)
+{
+    if (program_count <= 1) return 0;
+    
+    u8 id_offset = 0;
+    u32 selected_idx = 0, page_size = 30, scroll = 0;
+    char nca_id_str[0x21] = {0};
+    
+    NcmContentInfo **content_infos = calloc(program_count, sizeof(NcmContentInfo*));
+    if (!content_infos) return 0;
+    
+    for(u32 i = 0, j = 0; i < info->content_count && j < program_count; i++)
+    {
+        if (info->content_infos[i].content_type != NcmContentType_Program) continue;
+        content_infos[j++] = &(info->content_infos[i]);
+    }
+    
+    while(true)
+    {
+        consoleClear();
+        printf("select a program nca to dump the romfs from.\n\n");
+        
+        for(u32 i = scroll; i < program_count; i++)
+        {
+            if (i >= (scroll + page_size)) break;
+            utilsGenerateHexStringFromData(nca_id_str, sizeof(nca_id_str), content_infos[i]->content_id.c, SHA256_HASH_SIZE / 2);
+            printf("%s%s.nca (ID offset #%u)\n", i == selected_idx ? " -> " : "    ", nca_id_str, content_infos[i]->id_offset);
+        }
+        
+        printf("\n");
+        
+        consoleUpdate(NULL);
+        
+        u64 btn_down = 0, btn_held = 0;
+        while(true)
+        {
+            hidScanInput();
+            btn_down = utilsHidKeysAllDown();
+            btn_held = utilsHidKeysAllHeld();
+            if (btn_down || btn_held) break;
+        }
+        
+        if (btn_down & KEY_A)
+        {
+            id_offset = content_infos[selected_idx]->id_offset;
+            break;
+        } else
+        if ((btn_down & KEY_DDOWN) || (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN)))
+        {
+            selected_idx++;
+            
+            if (selected_idx >= program_count)
+            {
+                if (btn_down & KEY_DDOWN)
+                {
+                    selected_idx = scroll = 0;
+                } else {
+                    selected_idx = (program_count - 1);
+                }
+            } else
+            if (selected_idx >= (scroll + (page_size / 2)) && program_count > (scroll + page_size))
+            {
+                scroll++;
+            }
+        } else
+        if ((btn_down & KEY_DUP) || (btn_held & (KEY_LSTICK_UP | KEY_RSTICK_UP)))
+        {
+            selected_idx--;
+            
+            if (selected_idx == UINT32_MAX)
+            {
+                if (btn_down & KEY_DUP)
+                {
+                    selected_idx = (program_count - 1);
+                    scroll = (program_count >= page_size ? (program_count - page_size) : 0);
+                } else {
+                    selected_idx = 0;
+                }
+            } else
+            if (selected_idx < (scroll + (page_size / 2)) && scroll > 0)
+            {
+                scroll--;
+            }
+        }
+        
+        if (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN | KEY_LSTICK_UP | KEY_RSTICK_UP)) svcSleepThread(50000000); // 50 ms
+    }
+    
+    free(content_infos);
+    
+    return id_offset;
+}
+
 int main(int argc, char *argv[])
 {
     (void)argc;
@@ -378,11 +471,20 @@ int main(int argc, char *argv[])
         if (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN | KEY_LSTICK_UP | KEY_RSTICK_UP)) svcSleepThread(50000000); // 50 ms
     }
     
+    u32 program_count = titleGetContentCountByType(user_app_data.app_info, NcmContentType_Program);
+    if (!program_count)
+    {
+        consolePrint("base app has no program ncas!\n");
+        goto out2;
+    }
+    
+    u8 program_id_offset = get_program_id_offset(user_app_data.app_info, program_count);
+    
     consoleClear();
-    consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[selected_idx]->lang_entry.name, app_metadata[selected_idx]->title_id);
+    consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[selected_idx]->lang_entry.name, app_metadata[selected_idx]->title_id + program_id_offset);
     
     if (!ncaInitializeContext(base_nca_ctx, user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Program, 0), &base_tik))
+        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Program, program_id_offset), &base_tik))
     {
         consolePrint("nca initialize base ctx failed\n");
         goto out2;
@@ -391,7 +493,7 @@ int main(int argc, char *argv[])
     if (user_app_data.patch_info)
     {
         if (!ncaInitializeContext(update_nca_ctx, user_app_data.patch_info->storage_id, (user_app_data.patch_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-            titleGetContentInfoByTypeAndIdOffset(user_app_data.patch_info, NcmContentType_Program, 0), &update_tik))
+            titleGetContentInfoByTypeAndIdOffset(user_app_data.patch_info, NcmContentType_Program, program_id_offset), &update_tik))
         {
             consolePrint("nca initialize update ctx failed\n");
             goto out2;

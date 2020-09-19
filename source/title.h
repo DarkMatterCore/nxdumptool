@@ -204,6 +204,20 @@ NX_INLINE bool titleCheckIfAddOnContentIdsAreSiblings(u64 aoc_id_1, u64 aoc_id_2
     return (app_id_1 == app_id_2 && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id_1, aoc_id_1) && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id_2, aoc_id_2));
 }
 
+NX_INLINE u32 titleGetContentCountByType(TitleInfo *info, u8 content_type)
+{
+    if (!info || !info->content_count || !info->content_infos || content_type > NcmContentType_DeltaFragment) return 0;
+    
+    u32 cnt = 0;
+    
+    for(u32 i = 0; i < info->content_count; i++)
+    {
+        if (info->content_infos[i].content_type == content_type) cnt++;
+    }
+    
+    return cnt;
+}
+
 NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, u8 content_type, u8 id_offset)
 {
     if (!info || !info->content_count || !info->content_infos || content_type > NcmContentType_DeltaFragment) return NULL;
