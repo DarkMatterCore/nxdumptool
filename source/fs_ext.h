@@ -32,9 +32,9 @@ typedef struct {
     u8 reserved_1[0x4];
     u8 kek_index;
     u8 reserved_2[0x7];
-	u8 device_id[0x10];
-	u8 reserved_3[0x10];
-	u8 encrypted_data[0xD0];
+    u8 device_id[0x10];
+    u8 reserved_3[0x10];
+    u8 encrypted_data[0xD0];
 } FsGameCardCertificate;
 
 /// IFileSystemProxy.
