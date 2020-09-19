@@ -977,7 +977,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         
         memcpy(out_u8, g_gameCardReadBuf + data_start_offset, out_chunk_size);
         
-        success = (block_size > GAMECARD_READ_BUFFER_SIZE ? gamecardReadStorageArea(out_u8 + out_chunk_size, read_size - out_chunk_size, base_offset + out_chunk_size, false) : true);
+        success = (block_size > GAMECARD_READ_BUFFER_SIZE ? gamecardReadStorageArea(out_u8 + out_chunk_size, read_size - out_chunk_size, offset + out_chunk_size, false) : true);
     }
     
 end:
