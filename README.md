@@ -71,6 +71,14 @@ Thanks to
 Changelog
 --------------
 
+**v1.1.11:**
+
+* Built using libnx `f01fb21`.
+* The application will now only attempt to decrypt the eTicket device RSA keypair if the target title uses a ticket with personalized titlekey crypto, instead of always decrypting it regardless of the ticket crypto type.
+* Fixed a NSP dumping issue where the decrypted titlekey wasn't being set for the current NCA if both the ticket and the decrypted titlekey were retrieved while parsing a previous NCA. Big thanks to [sadboys2001](https://github.com/sadboys2001) for reporting it.
+
+This is only a bugfix release. I don't expect to release any new versions until the rewrite is finished - the only exception being fixing some kind of feature-breaking bug. Please understand.
+
 **v1.1.10:**
 
 * Built using libnx v3.1.0.

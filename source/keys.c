@@ -930,6 +930,7 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     if (!foundRightsId || (rightsIdType != 1 && rightsIdType != 2))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: NCA rights ID unavailable in this console!", __func__);
+        breaks++;
         ret = -2;
         return ret;
     }
@@ -937,50 +938,53 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     // Load external keys
     if (!loadExternalKeys()) return ret;
     
-    if (!setcal_eticket_retrieved)
+    if (rightsIdType == 2)
     {
-        // Get extended eTicket RSA key from PRODINFO
-        memset(&eticket_data, 0, sizeof(SetCalRsa2048DeviceKey));
-        
-        result = setcalInitialize();
-        if (R_FAILED(result))
+        if (!setcal_eticket_retrieved)
         {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to initialize the set:cal service! (0x%08X)", __func__, result);
-            return ret;
+            // Get extended eTicket RSA key from PRODINFO
+            memset(&eticket_data, 0, sizeof(SetCalRsa2048DeviceKey));
+            
+            result = setcalInitialize();
+            if (R_FAILED(result))
+            {
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to initialize the set:cal service! (0x%08X)", __func__, result);
+                return ret;
+            }
+            
+            result = setcalGetEticketDeviceKey(&eticket_data);
+            
+            setcalExit();
+            
+            if (R_FAILED(result))
+            {
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: setcalGetEticketDeviceKey failed! (0x%08X)", __func__, result);
+                return ret;
+            }
+            
+            // Decrypt eTicket RSA key
+            memcpy(ctr, eticket_data.key, ETICKET_DEVKEY_RSA_CTR_SIZE);
+            aes128CtrContextCreate(&eticket_aes_ctx, nca_keyset.eticket_rsa_kek, ctr);
+            aes128CtrCrypt(&eticket_aes_ctx, eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET, eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET, ETICKET_DEVKEY_RSA_SIZE);
+            
+            // Public exponent must use RSA-2048 SHA-1 signature method
+            // The value is stored use big endian byte order
+            if (__builtin_bswap32(*((u32*)(eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x200))) != SIGTYPE_RSA2048_SHA1)
+            {
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid public RSA exponent for eTicket data! Wrong keys?\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__);
+                return ret;
+            }
         }
         
-        result = setcalGetEticketDeviceKey(&eticket_data);
+        D = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET);
+        N = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x100);
+        E = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x200);
         
-        setcalExit();
-        
-        if (R_FAILED(result))
+        if (!setcal_eticket_retrieved)
         {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: setcalGetEticketDeviceKey failed! (0x%08X)", __func__, result);
-            return ret;
+            if (!testKeyPair(E, D, N)) return ret;
+            setcal_eticket_retrieved = true;
         }
-        
-        // Decrypt eTicket RSA key
-        memcpy(ctr, eticket_data.key, ETICKET_DEVKEY_RSA_CTR_SIZE);
-        aes128CtrContextCreate(&eticket_aes_ctx, nca_keyset.eticket_rsa_kek, ctr);
-        aes128CtrCrypt(&eticket_aes_ctx, eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET, eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET, ETICKET_DEVKEY_RSA_SIZE);
-        
-        // Public exponent must use RSA-2048 SHA-1 signature method
-        // The value is stored use big endian byte order
-        if (__builtin_bswap32(*((u32*)(eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x200))) != SIGTYPE_RSA2048_SHA1)
-        {
-            uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid public RSA exponent for eTicket data! Wrong keys?\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__);
-            return ret;
-        }
-    }
-    
-    D = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET);
-    N = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x100);
-    E = (eticket_data.key + ETICKET_DEVKEY_RSA_OFFSET + 0x200);
-    
-    if (!setcal_eticket_retrieved)
-    {
-        if (!testKeyPair(E, D, N)) return ret;
-        setcal_eticket_retrieved = true;
     }
     
     eTicketSave = calloc(1, sizeof(FIL));
@@ -1122,6 +1126,7 @@ int retrieveNcaTikTitleKey(nca_header_t *dec_nca_header, u8 *out_tik, u8 *out_en
     if (!foundEticket)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to find a matching eTicket entry for NCA rights ID!", __func__);
+        breaks++;
         ret = -2;
         return ret;
     }
