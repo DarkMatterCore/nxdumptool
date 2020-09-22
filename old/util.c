@@ -908,7 +908,7 @@ static bool initServices()
     initPmdmnt = true;
     
     /* Initialize pl service */
-    result = plInitialize();
+    result = plInitialize(PlServiceType_User);
     if (R_FAILED(result))
     {
         consoleErrorScreen("%s: failed to initialize pl service! (0x%08X)", __func__, result);

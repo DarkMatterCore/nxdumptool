@@ -111,6 +111,8 @@ char *getReferenceTitleIDType(u8 type)
             out = "PatchId";
             break;
         case NcmContentMetaType_Patch:
+            out = "OriginalId";
+            break;
         case NcmContentMetaType_AddOnContent:
             out = "ApplicationId";
             break;
@@ -835,7 +837,13 @@ bool retrieveTitleKeyFromGameCardTicket(title_rights_ctx *rights_info, u8 *decry
     }
     
     // Check if the ticket has already been retrieved from the HFS0 partition in the gamecard
-    if (rights_info->retrieved_tik) return true;
+    if (rights_info->retrieved_tik)
+    {
+        // Save the decrypted NCA key area keys
+        memset(decrypted_nca_keys, 0, NCA_KEY_AREA_SIZE);
+        memcpy(decrypted_nca_keys + (NCA_KEY_AREA_KEY_SIZE * 2), rights_info->dec_titlekey, 0x10);
+        return true;
+    }
     
     // Load external keys
     if (!loadExternalKeys()) return false;
