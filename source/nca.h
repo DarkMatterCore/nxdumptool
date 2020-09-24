@@ -132,7 +132,7 @@ typedef struct {
     NcaSdkAddOnVersion sdk_addon_version;
     u8 key_generation;                                      ///< NcaKeyGeneration.
     u8 main_signature_key_generation;
-    u8 reserved_1[0xE];
+    u8 reserved[0xE];
     FsRightsId rights_id;                                   ///< Used for titlekey crypto.
     NcaFsInfo fs_info[NCA_FS_HEADER_COUNT];                 ///< Start and end sectors for each NCA FS section.
     NcaFsHeaderHash fs_header_hash[NCA_FS_HEADER_COUNT];    ///< SHA-256 hashes calculated over each NCA FS section header.

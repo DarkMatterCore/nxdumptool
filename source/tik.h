@@ -69,7 +69,7 @@ typedef struct {
     u8 license_type;                ///< TikLicenseType.
     u8 key_generation;
     u16 property_mask;              ///< TikPropertyMask.
-    u8 reserved_1[0x8];
+    u8 reserved[0x8];
     u64 ticket_id;
     u64 device_id;
     FsRightsId rights_id;
