@@ -6,6 +6,7 @@ build
 /*.map
 /*.pfs0
 /*.lst
+/*.tar.bz2
 
 # Clion files
 .idea
