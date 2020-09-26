@@ -5035,7 +5035,7 @@ UIResult uiProcess()
         
         bool romfs_fail = false;
         
-        if (readNcaRomFsSection(curIndex, curRomFsType, -1))
+        if (readNcaRomFsSection(curIndex, curRomFsType, -1) == 0)
         {
             if (getRomFsFileList(0, (curRomFsType == ROMFS_TYPE_PATCH)))
             {
