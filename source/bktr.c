@@ -37,8 +37,8 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
 {
     NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
     
-    if (!out || !base_nca_fs_ctx || !base_nca_fs_ctx->enabled || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
-        base_nca_fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || !update_nca_fs_ctx || !update_nca_fs_ctx->enabled || !(update_nca_ctx = (NcaContext*)update_nca_fs_ctx->nca_ctx) || \
+    if (!out || !base_nca_fs_ctx || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || \
+        !update_nca_fs_ctx || !update_nca_fs_ctx->enabled || !(update_nca_ctx = (NcaContext*)update_nca_fs_ctx->nca_ctx) || \
         update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || update_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx || \
         base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || \
         __builtin_bswap32(update_nca_fs_ctx->header.patch_info.indirect_bucket.header.magic) != NCA_BKTR_MAGIC || \
@@ -50,8 +50,11 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         return false;
     }
     
+    /* Update missing base NCA RomFS status. */
+    out->missing_base_romfs = (!base_nca_fs_ctx->enabled || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || base_nca_fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx);
+    
     /* Initialize base NCA RomFS context. */
-    if (!romfsInitializeContext(&(out->base_romfs_ctx), base_nca_fs_ctx))
+    if (!out->missing_base_romfs && !romfsInitializeContext(&(out->base_romfs_ctx), base_nca_fs_ctx))
     {
         LOGFILE("Failed to initialize base NCA RomFS context!");
         return false;
@@ -287,7 +290,7 @@ bool bktrIsFileEntryUpdated(BktrContext *ctx, RomFileSystemFileEntry *file_entry
 
 static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->base_romfs_ctx.nca_fs_ctx || !ctx->indirect_block || !out || !read_size)
+    if (!ctx || (!ctx->missing_base_romfs && !ctx->base_romfs_ctx.nca_fs_ctx) || !ctx->indirect_block || !out || !read_size)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -318,9 +321,13 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
         {
             success = bktrAesCtrExStorageRead(ctx, out, read_size, offset, section_offset);
             if (!success) LOGFILE("Failed to read 0x%lX bytes block from BKTR AesCtrEx storage at offset 0x%lX!", read_size, section_offset);
-        } else {
+        } else
+        if (!ctx->missing_base_romfs)
+        {
             success = ncaReadFsSection(ctx->base_romfs_ctx.nca_fs_ctx, out, read_size, section_offset);
             if (!success) LOGFILE("Failed to read 0x%lX bytes block from base RomFS at offset 0x%lX!", read_size, section_offset);
+        } else {
+            LOGFILE("Attempting to read 0x%lX bytes block from non-existent base RomFS at offset 0x%lX!", read_size, section_offset);
         }
     } else {
         /* Handle reads that span multiple indirect storage entries. */

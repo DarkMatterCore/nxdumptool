@@ -82,6 +82,7 @@ typedef struct {
     u64 body_offset;                            ///< Patched RomFS image file data body offset (relative to the start of the RomFS).
     BktrIndirectStorageBlock *indirect_block;   ///< BKTR Indirect Storage Block.
     BktrAesCtrExStorageBlock *aes_ctr_ex_block; ///< BKTR AesCtrEx Storage Block.
+    bool missing_base_romfs;                    ///< If true, only Patch RomFS data is used. Needed for games with base Program NCAs without a RomFS section (e.g. Fortnite, World of Tanks Blitz, etc.).
 } BktrContext;
 
 /// Initializes a BKTR context.
