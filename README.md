@@ -71,6 +71,12 @@ Thanks to
 Changelog
 --------------
 
+**v1.1.12:**
+
+* Fixed RomFS dumping/browsing support for games with base Program NCAs without a RomFS section (e.g. Fortnite, World of Tanks Blitz, etc.). Big thanks to [bigkahuna666](https://github.com/bigkahuna666) for reporting the issue and providing with testing.
+
+This is only a bugfix release. I don't expect to release any new versions until the rewrite is finished - the only exception being fixing some kind of feature-breaking bug. Please understand.
+
 **v1.1.11:**
 
 * Built using libnx `f01fb21`.

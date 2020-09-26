@@ -4641,7 +4641,7 @@ bool dumpRomFsSectionData(u32 titleIndex, selectedRomFsType curRomFsType, ncaFsO
     }
     
     // Retrieve RomFS from Program NCA
-    if (!readNcaRomFsSection(titleIndex, curRomFsType, -1))
+    if (readNcaRomFsSection(titleIndex, curRomFsType, -1) != 0)
     {
         free(dumpName);
         breaks += 2;

@@ -596,7 +596,7 @@ bool bktrSectionPhysicalRead(void *outBuf, size_t bufSize)
 
 bool readBktrSectionBlock(u64 offset, void *outBuf, size_t bufSize)
 {
-    if (!bktrContext.section_offset || !bktrContext.section_size || !bktrContext.relocation_block || !bktrContext.subsection_block || !romFsContext.section_offset || !romFsContext.section_size || !outBuf || !bufSize)
+    if (!bktrContext.section_offset || !bktrContext.section_size || !bktrContext.relocation_block || (bktrContext.use_base_romfs && (!bktrContext.subsection_block || !romFsContext.section_offset || !romFsContext.section_size || !outBuf || !bufSize)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to read block from NCA BKTR section!", __func__);
         return false;
@@ -622,6 +622,13 @@ bool readBktrSectionBlock(u64 offset, void *outBuf, size_t bufSize)
         {
             if (!bktrSectionPhysicalRead(outBuf, bufSize)) return false;
         } else {
+            if (!bktrContext.use_base_romfs)
+            {
+                breaks++;
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: BKTR references unexistant base RomFS block(s)!", __func__);
+                return false;
+            }
+            
             // Nice and easy read from the base RomFS
             if (!processNcaCtrSectionBlock(&(romFsContext.ncmStorage), &(romFsContext.ncaId), &(romFsContext.aes_ctx), romFsContext.section_offset + bktrContext.base_seek, outBuf, bufSize, false)) return false;
         }
@@ -1686,12 +1693,12 @@ bool parseExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     return true;
 }
 
-bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
+int parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to read RomFS section from NCA!", __func__);
-        return false;
+        return -1;
     }
     
     u8 romfs_index;
@@ -1733,7 +1740,7 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     if (!found_romfs)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: NCA doesn't hold a RomFS section!", __func__);
-        return false;
+        return -2;
     }
     
     section_offset = ((u64)dec_nca_header->section_entries[romfs_index].media_start_offset * (u64)MEDIA_UNIT_SIZE);
@@ -1742,7 +1749,7 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     if (!section_offset || section_offset < NCA_FULL_HEADER_LENGTH || !section_size)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid offset/size for NCA RomFS section! (#%u)", __func__, romfs_index);
-        return false;
+        return -1;
     }
     
     // Generate initial CTR
@@ -1763,13 +1770,13 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     if (__builtin_bswap32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic) != IVFC_MAGIC)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid IVFC magic word for NCA RomFS section! Wrong KAEK? (0x%08X)\nTry running Lockpick_RCM to generate the keys file from scratch.", __func__, __builtin_bswap32(dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.magic));
-        return false;
+        return -1;
     }
     
     if (dec_nca_header->fs_headers[romfs_index].crypt_type != NCA_FS_HEADER_CRYPT_CTR)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid AES crypt type for NCA RomFS section! (0x%02X)", __func__, dec_nca_header->fs_headers[romfs_index].crypt_type);
-        return false;
+        return -1;
     }
     
     romfs_offset = (section_offset + dec_nca_header->fs_headers[romfs_index].romfs_superblock.ivfc_header.level_headers[IVFC_MAX_LEVEL - 1].logical_offset);
@@ -1778,7 +1785,7 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     if (romfs_offset < section_offset || romfs_offset >= (section_offset + section_size) || romfs_size < ROMFS_HEADER_SIZE || (romfs_offset + romfs_size) > (section_offset + section_size))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid offset/size for NCA RomFS section!", __func__);
-        return false;
+        return -1;
     }
     
     // First read the RomFS header
@@ -1786,13 +1793,13 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     {
         breaks++;
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to read NCA RomFS section header!", __func__);
-        return false;
+        return -1;
     }
     
     if (romFsHeader.headerSize != ROMFS_HEADER_SIZE)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid header size for NCA RomFS section! (0x%016lX at 0x%016lX)", __func__, romFsHeader.headerSize, romfs_offset);
-        return false;
+        return -1;
     }
     
     romfs_dirtable_offset = (romfs_offset + romFsHeader.dirTableOff);
@@ -1804,7 +1811,7 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     if (romfs_dirtable_offset >= (section_offset + section_size) || !romfs_dirtable_size || (romfs_dirtable_offset + romfs_dirtable_size) > (section_offset + section_size) || romfs_filetable_offset >= (section_offset + section_size) || !romfs_filetable_size || (romfs_filetable_offset + romfs_filetable_size) > (section_offset + section_size))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid directory/file table for NCA RomFS section!", __func__);
-        return false;
+        return -1;
     }
     
     romfs_filedata_offset = (romfs_offset + romFsHeader.fileDataOff);
@@ -1812,14 +1819,14 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     if (romfs_filedata_offset >= (section_offset + section_size))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid file data block offset for NCA RomFS section!", __func__);
-        return false;
+        return -1;
     }
     
     romfs_dir_entries = calloc(1, romfs_dirtable_size);
     if (!romfs_dir_entries)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to allocate memory for NCA RomFS section directory entries!", __func__);
-        return false;
+        return -1;
     }
     
     if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, romfs_dirtable_offset, romfs_dir_entries, romfs_dirtable_size, false))
@@ -1827,7 +1834,7 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
         breaks++;
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to read NCA RomFS section directory entries!", __func__);
         free(romfs_dir_entries);
-        return false;
+        return -1;
     }
     
     romfs_file_entries = calloc(1, romfs_filetable_size);
@@ -1835,7 +1842,7 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to allocate memory for NCA RomFS section file entries!", __func__);
         free(romfs_dir_entries);
-        return false;
+        return -1;
     }
     
     if (!processNcaCtrSectionBlock(ncmStorage, ncaId, &aes_ctx, romfs_filetable_offset, romfs_file_entries, romfs_filetable_size, false))
@@ -1844,7 +1851,7 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: failed to read NCA RomFS section file entries!", __func__);
         free(romfs_file_entries);
         free(romfs_dir_entries);
-        return false;
+        return -1;
     }
     
     // Save data to output struct
@@ -1864,12 +1871,12 @@ bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
     romFsContext.romfs_file_entries = romfs_file_entries;
     romFsContext.romfs_filedata_offset = romfs_filedata_offset;
     
-    return true;
+    return 0;
 }
 
 bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
 {
-    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || !romFsContext.section_offset || !romFsContext.section_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_file_entries)
+    if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || (bktrContext.use_base_romfs && (!romFsContext.section_offset || !romFsContext.section_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_file_entries)))
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to read BKTR section from NCA!", __func__);
         return false;
@@ -2941,7 +2948,7 @@ bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *
     
     bool availableSGC = false, availableRGC = false;
     
-    if (!parseRomFsEntryFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys)) return false;
+    if (parseRomFsEntryFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys) != 0) return false;
     
     // Look for the control.nacp file
     while(entryOffset < romFsContext.romfs_filetable_size)
@@ -3413,7 +3420,7 @@ bool retrieveLegalInfoXmlFromNca(NcmContentStorage *ncmStorage, const NcmContent
     u64 legalInfoXmlSize = 0;
     char *legalInfoXml = NULL;
     
-    if (!parseRomFsEntryFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys)) return false;
+    if (parseRomFsEntryFromNca(ncmStorage, ncaId, dec_nca_header, decrypted_nca_keys) != 0) return false;
     
     // Look for the legalinfo.xml file
     while(entryOffset < romFsContext.romfs_filetable_size)

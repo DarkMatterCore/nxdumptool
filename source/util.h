@@ -388,7 +388,7 @@ void removeConsoleDataFromTicket(title_rights_ctx *rights_info);
 
 bool readNcaExeFsSection(u32 titleIndex, bool usePatch);
 
-bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int desiredIdOffset);
+int readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int desiredIdOffset);
 
 bool getExeFsFileList();
 

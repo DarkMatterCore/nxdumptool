@@ -669,6 +669,8 @@ void freeBktrContext()
         free(bktrContext.romfs_file_entries);
         bktrContext.romfs_file_entries = NULL;
     }
+    
+    bktrContext.use_base_romfs = false;
 }
 
 static void freeGameCardInfo()
@@ -2727,7 +2729,7 @@ out:
     return success;
 }
 
-bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int desiredIdOffset)
+int readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int desiredIdOffset)
 {
     u32 i = 0;
     Result result;
@@ -2755,7 +2757,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int des
     
     u8 decrypted_nca_keys[NCA_KEY_AREA_SIZE];
     
-    bool success = false;
+    int ret = -1;
     
     if (curRomFsType != ROMFS_TYPE_APP && curRomFsType != ROMFS_TYPE_PATCH && curRomFsType != ROMFS_TYPE_ADDON)
     {
@@ -2879,8 +2881,8 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int des
     if (curRomFsType != ROMFS_TYPE_PATCH)
     {
         // Read directory and file tables from the RomFS section
-        success = parseRomFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys);
-        if (success)
+        ret = parseRomFsEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys);
+        if (ret == 0)
         {
             romFsContext.storageId = curStorageId;
             romFsContext.idOffset = titleContentInfos[contentIndex].id_offset;
@@ -2905,11 +2907,19 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int des
         }
         
         // Read directory and file tables from the RomFS section in the Program NCA from the base application
-        if (!readNcaRomFsSection(appIndex, ROMFS_TYPE_APP, (int)titleContentInfos[contentIndex].id_offset)) goto out;
+        // We'll proceed even if the Program NCA from the base application doesn't hold a RomFS section (ret == -2)
+        ret = readNcaRomFsSection(appIndex, ROMFS_TYPE_APP, (int)titleContentInfos[contentIndex].id_offset);
+        if (ret == -1) goto out;
+        
+        // Remove missing base RomFS error message if needed
+        if (ret == -2) uiFill(0, STRING_Y_POS(breaks), FB_WIDTH, FB_HEIGHT - STRING_Y_POS(breaks), BG_COLOR_RGB);
+        
+        // Update BKTR context to use the base RomFS if available
+        bktrContext.use_base_romfs = (ret == 0);
         
         // Read BKTR entry data in the Program NCA from the update
-        success = parseBktrEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys);
-        if (success)
+        ret = (parseBktrEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys) ? 0 : -1);
+        if (ret == 0)
         {
             bktrContext.storageId = curStorageId;
             bktrContext.idOffset = titleContentInfos[contentIndex].id_offset;
@@ -2917,7 +2927,7 @@ bool readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int des
     }
     
 out:
-    if (!success)
+    if (ret != 0)
     {
         ncmContentStorageClose(&ncmStorage);
         if (curStorageId == NcmStorageId_GameCard) closeGameCardStoragePartition();
@@ -2925,7 +2935,7 @@ out:
     
     if (titleContentInfos) free(titleContentInfos);
     
-    return success;
+    return ret;
 }
 
 bool getExeFsFileList()

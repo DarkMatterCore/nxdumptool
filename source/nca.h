@@ -448,6 +448,7 @@ typedef struct {
     u64 romfs_filetable_size;
     romfs_file *romfs_file_entries;
     u64 romfs_filedata_offset; // Relative to section start
+    bool use_base_romfs;
 } bktr_ctx_t;
 
 // Used in HFS0 / ExeFS / RomFS browsers
@@ -748,7 +749,7 @@ bool patchCnmtNca(u8 *ncaBuf, u64 ncaBufSize, cnmt_xml_program_info *xml_program
 
 bool parseExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
-bool parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
+int parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
 bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
