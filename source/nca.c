@@ -596,7 +596,7 @@ bool bktrSectionPhysicalRead(void *outBuf, size_t bufSize)
 
 bool readBktrSectionBlock(u64 offset, void *outBuf, size_t bufSize)
 {
-    if (!bktrContext.section_offset || !bktrContext.section_size || !bktrContext.relocation_block || (bktrContext.use_base_romfs && (!bktrContext.subsection_block || !romFsContext.section_offset || !romFsContext.section_size || !outBuf || !bufSize)))
+    if (!bktrContext.section_offset || !bktrContext.section_size || !bktrContext.relocation_block || !bktrContext.subsection_block || (bktrContext.use_base_romfs && (!romFsContext.section_offset || !romFsContext.section_size)) || !outBuf || !bufSize)
     {
         uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: invalid parameters to read block from NCA BKTR section!", __func__);
         return false;
@@ -625,7 +625,7 @@ bool readBktrSectionBlock(u64 offset, void *outBuf, size_t bufSize)
             if (!bktrContext.use_base_romfs)
             {
                 breaks++;
-                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: BKTR references unexistant base RomFS block(s)!", __func__);
+                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: BKTR references non-existent base RomFS section!", __func__);
                 return false;
             }
             
