@@ -1874,7 +1874,7 @@ int parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *nc
     return 0;
 }
 
-bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys)
+bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, bool use_base_romfs)
 {
     if (!ncmStorage || !ncaId || !dec_nca_header || !decrypted_nca_keys || (bktrContext.use_base_romfs && (!romFsContext.section_offset || !romFsContext.section_size || !romFsContext.romfs_dir_entries || !romFsContext.romfs_file_entries)))
     {
@@ -1890,6 +1890,7 @@ bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *nc
     romfs_header romFsHeader;
     
     initBktrContext();
+    bktrContext.use_base_romfs = use_base_romfs;
     
     memcpy(&(bktrContext.ncmStorage), ncmStorage, sizeof(NcmContentStorage));
     memcpy(&(bktrContext.ncaId), ncaId, sizeof(NcmContentId));

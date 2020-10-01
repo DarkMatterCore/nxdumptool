@@ -2914,11 +2914,8 @@ int readNcaRomFsSection(u32 titleIndex, selectedRomFsType curRomFsType, int desi
         // Remove missing base RomFS error message if needed
         if (ret == -2) uiFill(0, STRING_Y_POS(breaks), FB_WIDTH, FB_HEIGHT - STRING_Y_POS(breaks), BG_COLOR_RGB);
         
-        // Update BKTR context to use the base RomFS if available
-        bktrContext.use_base_romfs = (ret == 0);
-        
         // Read BKTR entry data in the Program NCA from the update
-        ret = (parseBktrEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys) ? 0 : -1);
+        ret = (parseBktrEntryFromNca(&ncmStorage, &ncaId, &dec_nca_header, decrypted_nca_keys, ret == 0) ? 0 : -1);
         if (ret == 0)
         {
             bktrContext.storageId = curStorageId;
