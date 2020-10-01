@@ -7,6 +7,8 @@ build
 /*.pfs0
 /*.lst
 /*.tar.bz2
+/code_templates/tmp/*
+/source/main.c
 
 # Clion files
 .idea
