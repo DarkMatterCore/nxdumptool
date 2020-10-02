@@ -121,8 +121,8 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     out->nca_ctx = nca_ctx;
     
     /* Verify packaged header. */
-    out->packaged_header = (ContentMetaPackagedHeader*)out->raw_data;
-    cur_offset += sizeof(ContentMetaPackagedHeader);
+    out->packaged_header = (ContentMetaPackagedContentMetaHeader*)out->raw_data;
+    cur_offset += sizeof(ContentMetaPackagedContentMetaHeader);
     
     if (out->packaged_header->title_id != title_id)
     {

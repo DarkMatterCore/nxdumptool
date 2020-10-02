@@ -67,7 +67,7 @@ typedef struct {
     ContentMetaInstallState install_state;
     ContentMetaVersion required_download_system_version;
     u8 reserved_2[0x4];
-} ContentMetaPackagedHeader;
+} ContentMetaPackagedContentMetaHeader;
 
 /// Extended header for the SystemUpdate title.
 /// Equivalent to NcmSystemUpdateMetaExtendedHeader.
@@ -223,26 +223,26 @@ typedef struct {
 } ContentMetaDeltaMetaExtendedDataHeader;
 
 typedef struct {
-    NcaContext *nca_ctx;                            ///< Pointer to the NCA context for the Meta NCA from which CNMT data is retrieved.
-    PartitionFileSystemContext pfs_ctx;             ///< PartitionFileSystemContext for the Meta NCA FS section #0, which is where the CNMT is stored.
-    PartitionFileSystemEntry *pfs_entry;            ///< PartitionFileSystemEntry for the CNMT in the Meta NCA FS section #0. Used to generate a NcaHierarchicalSha256Patch if needed.
-    NcaHierarchicalSha256Patch nca_patch;           ///< NcaHierarchicalSha256Patch generated if CNMT modifications are needed. Used to seamlessly replace Meta NCA data while writing it.
-                                                    ///< Bear in mind that generating a patch modifies the NCA context.
-    char *cnmt_filename;                            ///< Pointer to the CNMT filename in the Meta NCA FS section #0.
-    u8 *raw_data;                                   ///< Pointer to a dynamically allocated buffer that holds the raw CNMT.
-    u64 raw_data_size;                              ///< Raw CNMT size. Kept here for convenience - this is part of 'pfs_entry'.
-    u8 raw_data_hash[SHA256_HASH_SIZE];             ///< SHA-256 checksum calculated over the whole raw CNMT. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
-    ContentMetaPackagedHeader *packaged_header;     ///< Pointer to the ContentMetaPackagedHeader within 'raw_data'.
-    u8 *extended_header;                            ///< Pointer to the extended header within 'raw_data', if available. May be casted to other types. Its size is stored in 'packaged_header'.
-    NcmPackagedContentInfo *packaged_content_info;  ///< Pointer to the NcmPackagedContentInfo entries within 'raw_data'. The content count is stored in 'packaged_header'.
-    NcmContentMetaInfo *content_meta_info;          ///< Pointer to the NcmContentMetaInfo entries within 'raw_data', if available. The content meta count is stored in 'packaged_header'.
-    u8 *extended_data;                              ///< Pointer to the extended data block within 'raw_data', if available.
-    u32 extended_data_size;                         ///< Size of the extended data block within 'raw_data', if available. Kept here for convenience - this is part of the header in 'extended_data'.
-    u8 *digest;                                     ///< Pointer to the digest within 'raw_data'.
-    char *authoring_tool_xml;                       ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
-                                                    ///< This is always NULL unless cnmtGenerateAuthoringToolXml() is used on this ContentMetaContext.
-    u64 authoring_tool_xml_size;                    ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
-                                                    ///< This is always 0 unless cnmtGenerateAuthoringToolXml() is used on this ContentMetaContext.
+    NcaContext *nca_ctx;                                    ///< Pointer to the NCA context for the Meta NCA from which CNMT data is retrieved.
+    PartitionFileSystemContext pfs_ctx;                     ///< PartitionFileSystemContext for the Meta NCA FS section #0, which is where the CNMT is stored.
+    PartitionFileSystemEntry *pfs_entry;                    ///< PartitionFileSystemEntry for the CNMT in the Meta NCA FS section #0. Used to generate a NcaHierarchicalSha256Patch if needed.
+    NcaHierarchicalSha256Patch nca_patch;                   ///< NcaHierarchicalSha256Patch generated if CNMT modifications are needed. Used to seamlessly replace Meta NCA data while writing it.
+                                                            ///< Bear in mind that generating a patch modifies the NCA context.
+    char *cnmt_filename;                                    ///< Pointer to the CNMT filename in the Meta NCA FS section #0.
+    u8 *raw_data;                                           ///< Pointer to a dynamically allocated buffer that holds the raw CNMT.
+    u64 raw_data_size;                                      ///< Raw CNMT size. Kept here for convenience - this is part of 'pfs_entry'.
+    u8 raw_data_hash[SHA256_HASH_SIZE];                     ///< SHA-256 checksum calculated over the whole raw CNMT. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
+    ContentMetaPackagedContentMetaHeader *packaged_header;  ///< Pointer to the ContentMetaPackagedContentMetaHeader within 'raw_data'.
+    u8 *extended_header;                                    ///< Pointer to the extended header within 'raw_data', if available. May be casted to other types. Its size is stored in 'packaged_header'.
+    NcmPackagedContentInfo *packaged_content_info;          ///< Pointer to the NcmPackagedContentInfo entries within 'raw_data'. The content count is stored in 'packaged_header'.
+    NcmContentMetaInfo *content_meta_info;                  ///< Pointer to the NcmContentMetaInfo entries within 'raw_data', if available. The content meta count is stored in 'packaged_header'.
+    u8 *extended_data;                                      ///< Pointer to the extended data block within 'raw_data', if available.
+    u32 extended_data_size;                                 ///< Size of the extended data block within 'raw_data', if available. Kept here for convenience - this is part of the header in 'extended_data'.
+    u8 *digest;                                             ///< Pointer to the digest within 'raw_data'.
+    char *authoring_tool_xml;                               ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
+                                                            ///< This is always NULL unless cnmtGenerateAuthoringToolXml() is used on this ContentMetaContext.
+    u64 authoring_tool_xml_size;                            ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
+                                                            ///< This is always 0 unless cnmtGenerateAuthoringToolXml() is used on this ContentMetaContext.
 } ContentMetaContext;
 
 /// Initializes a ContentMetaContext using a previously initialized NcaContext (which must belong to a Meta NCA).
