@@ -28,6 +28,9 @@
 
 static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filename, size_t cnmt_filename_len, u8 *out_content_meta_type, u64 *out_title_id);
 
+static const char *cnmtGetRequiredTitleVersionString(u8 content_meta_type);
+static const char *cnmtGetRequiredTitleTypeString(u8 content_meta_type);
+
 bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
 {
     if (!out || !nca_ctx || !strlen(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_Meta || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
@@ -111,6 +114,9 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         goto end;
     }
     
+    /* Calculate SHA-256 checksum for the whole raw CNMT. */
+    sha256CalculateHash(out->raw_data_hash, out->raw_data, out->raw_data_size);
+    
     /* Save pointer to NCA context to the output CNMT context. */
     out->nca_ctx = nca_ctx;
     
@@ -143,7 +149,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         goto end;
     }
     
-    /* Save pointer to extended header */
+    /* Save pointer to extended header. */
     if (out->packaged_header->extended_header_size)
     {
         out->extended_header = (out->raw_data + cur_offset);
@@ -227,6 +233,128 @@ end:
     return success;
 }
 
+bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx, u32 nca_ctx_count)
+{
+    if (!cnmtIsValidContext(cnmt_ctx) || !nca_ctx || nca_ctx_count != ((u32)cnmt_ctx->packaged_header->content_count + 1))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    u16 i, j;
+    char *xml_buf = NULL;
+    u64 xml_buf_size = 0;
+    char digest_str[0x41] = {0};
+    bool success = false, invalid_nca = false;
+    
+    /* Free AuthoringTool-like XML data if needed. */
+    if (cnmt_ctx->authoring_tool_xml) free(cnmt_ctx->authoring_tool_xml);
+    cnmt_ctx->authoring_tool_xml = NULL;
+    cnmt_ctx->authoring_tool_xml_size = 0;
+    
+    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
+                                            "<ContentMeta>\n" \
+                                            "  <Type>%s</Type>\n" \
+                                            "  <Id>0x%016lx</Id>\n" \
+                                            "  <Version>%u</Version>\n" \
+                                            "  <RequiredDownloadSystemVersion>%u</RequiredDownloadSystemVersion>\n", \
+                                            titleGetNcmContentMetaTypeName(cnmt_ctx->packaged_header->content_meta_type), \
+                                            cnmt_ctx->packaged_header->title_id, \
+                                            cnmtGetVersionInteger(&(cnmt_ctx->packaged_header->version)), \
+                                            cnmtGetVersionInteger(&(cnmt_ctx->packaged_header->required_download_system_version)))) goto end;
+    
+    for(i = 0; i < nca_ctx_count; i++)
+    {
+        /* Check if this NCA is really referenced by our CNMT. */
+        if (nca_ctx[i].content_type != NcmContentType_Meta)
+        {
+            /* Non-Meta NCAs: check if their content IDs are part of the packaged content info entries from the CNMT. */
+            for(j = 0; j < cnmt_ctx->packaged_header->content_count; j++)
+            {
+                if (!memcmp(cnmt_ctx->packaged_content_info[j].info.content_id.c, nca_ctx[i].content_id.c, 0x10)) break;
+            }
+            
+            invalid_nca = (j >= cnmt_ctx->packaged_header->content_count);
+        } else {
+            /* Meta NCAs: quick and dirty pointer comparison because why not. */
+            invalid_nca = (cnmt_ctx->nca_ctx != &(nca_ctx[i]));
+        }
+        
+        if (invalid_nca)
+        {
+            LOGFILE("NCA \"%s\" isn't referenced by this CNMT!", nca_ctx[i].content_id_str);
+            goto end;
+        }
+        
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                                "  <Content>\n" \
+                                                "    <Type>%s</Type>\n" \
+                                                "    <Id>%s</Id>\n" \
+                                                "    <Size>%lu</Size>\n" \
+                                                "    <Hash>%s</Hash>\n" \
+                                                "    <KeyGeneration>%u</KeyGeneration>\n" \
+                                                "    <IdOffset>%u</IdOffset>\n" \
+                                                "  </Content>\n", \
+                                                titleGetNcmContentTypeName(nca_ctx[i].content_type), \
+                                                nca_ctx[i].content_id_str, \
+                                                nca_ctx[i].content_size, \
+                                                nca_ctx[i].hash_str, \
+                                                nca_ctx[i].key_generation, \
+                                                nca_ctx[i].id_offset)) goto end;
+    }
+    
+    utilsGenerateHexStringFromData(digest_str, sizeof(digest_str), cnmt_ctx->digest, CNMT_DIGEST_SIZE);
+    
+    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                            "  <Digest>%s</Digest>\n" \
+                                            "  <KeyGenerationMin>%u</KeyGenerationMin>\n", \
+                                            digest_str, \
+                                            cnmt_ctx->nca_ctx->key_generation)) goto end;
+    
+    if (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || \
+        cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)
+    {
+        u32 required_title_version = cnmtGetVersionInteger((ContentMetaVersion*)(cnmt_ctx->extended_header + sizeof(u64)));
+        const char *required_title_version_str = cnmtGetRequiredTitleVersionString(cnmt_ctx->packaged_header->content_meta_type);
+        
+        u64 required_title_id = *((u64*)cnmt_ctx->extended_header);
+        const char *required_title_type_str = cnmtGetRequiredTitleTypeString(cnmt_ctx->packaged_header->content_meta_type);
+        
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                                "  <%s>%u</%s>\n" \
+                                                "  <%s>0x%016lx</%s>\n", \
+                                                required_title_version_str, \
+                                                required_title_version, \
+                                                required_title_version_str, \
+                                                required_title_type_str, \
+                                                required_title_id, \
+                                                required_title_type_str)) goto end;
+    }
+    
+    if (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application)
+    {
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                                "  <RequiredApplicationVersion>%u</RequiredApplicationVersion>\n", \
+                                                cnmtGetVersionInteger((ContentMetaVersion*)(cnmt_ctx->extended_header + sizeof(u64) + sizeof(u32))))) goto end;
+    }
+    
+    if (!(success = utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "</ContentMeta>"))) goto end;
+    
+    /* Update CNMT context. */
+    cnmt_ctx->authoring_tool_xml = xml_buf;
+    cnmt_ctx->authoring_tool_xml_size = strlen(xml_buf);
+    
+end:
+    if (!success)
+    {
+        if (xml_buf) free(xml_buf);
+        LOGFILE("Failed to generate CNMT AuthoringTool XML!");
+    }
+    
+    return success;
+}
+
 static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filename, size_t cnmt_filename_len, u8 *out_content_meta_type, u64 *out_title_id)
 {
     if (!cnmt_filename || cnmt_filename_len < CNMT_MINIMUM_FILENAME_LENGTH || !out_content_meta_type || !out_title_id)
@@ -276,4 +404,48 @@ static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filena
     }
     
     return true;
+}
+
+static const char *cnmtGetRequiredTitleVersionString(u8 content_meta_type)
+{
+    const char *str = NULL;
+    
+    switch(content_meta_type)
+    {
+        case NcmContentMetaType_Application:
+        case NcmContentMetaType_Patch:
+            str = "RequiredSystemVersion";
+            break;
+        case NcmContentMetaType_AddOnContent:
+            str = "RequiredApplicationVersion";
+            break;
+        default:
+            str = "Unknown";
+            break;
+    }
+    
+    return str;
+}
+
+static const char *cnmtGetRequiredTitleTypeString(u8 content_meta_type)
+{
+    const char *str = NULL;
+    
+    switch(content_meta_type)
+    {
+        case NcmContentMetaType_Application:
+            str = "PatchId";
+            break;
+        case NcmContentMetaType_Patch:
+            str = "OriginalId";
+            break;
+        case NcmContentMetaType_AddOnContent:
+            str = "ApplicationId";
+            break;
+        default:
+            str = "Unknown";
+            break;
+    }
+    
+    return str;
 }

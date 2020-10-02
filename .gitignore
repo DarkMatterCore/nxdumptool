@@ -9,6 +9,7 @@ build
 /*.tar.bz2
 /code_templates/tmp/*
 /source/main.c
+/*.log
 
 # Clion files
 .idea

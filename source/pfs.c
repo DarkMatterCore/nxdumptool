@@ -38,7 +38,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     u32 hash_region_count = 0;
     NcaRegion *hash_region = NULL;
     
-    /* Clear output partition FS context. */
+    /* Clear output Partition FS context. */
     memset(out, 0, sizeof(PartitionFileSystemContext));
     
     /* Fill context. */
@@ -59,38 +59,38 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     /* Read partial PFS header. */
     if (!ncaReadFsSection(nca_fs_ctx, &pfs_header, sizeof(PartitionFileSystemHeader), out->offset))
     {
-        LOGFILE("Failed to read partial partition FS header!");
+        LOGFILE("Failed to read partial Partition FS header!");
         return false;
     }
     
     magic = __builtin_bswap32(pfs_header.magic);
     if (magic != PFS0_MAGIC)
     {
-        LOGFILE("Invalid partition FS magic word! (0x%08X).", magic);
+        LOGFILE("Invalid Partition FS magic word! (0x%08X).", magic);
         return false;
     }
     
     if (!pfs_header.entry_count || !pfs_header.name_table_size)
     {
-        LOGFILE("Invalid partition FS entry count / name table size!");
+        LOGFILE("Invalid Partition FS entry count / name table size!");
         return false;
     }
     
-    /* Calculate full partition FS header size. */
+    /* Calculate full Partition FS header size. */
     out->header_size = (sizeof(PartitionFileSystemHeader) + (pfs_header.entry_count * sizeof(PartitionFileSystemEntry)) + pfs_header.name_table_size);
     
-    /* Allocate memory for the full partition FS header. */
+    /* Allocate memory for the full Partition FS header. */
     out->header = calloc(out->header_size, sizeof(u8));
     if (!out->header)
     {
-        LOGFILE("Unable to allocate 0x%lX bytes buffer for the full partition FS header!", out->header_size);
+        LOGFILE("Unable to allocate 0x%lX bytes buffer for the full Partition FS header!", out->header_size);
         return false;
     }
     
-    /* Read full partition FS header. */
+    /* Read full Partition FS header. */
     if (!ncaReadFsSection(nca_fs_ctx, out->header, out->header_size, out->offset))
     {
-        LOGFILE("Failed to read full partition FS header!");
+        LOGFILE("Failed to read full Partition FS header!");
         pfsFreeContext(out);
         return false;
     }
@@ -113,7 +113,7 @@ bool pfsReadPartitionData(PartitionFileSystemContext *ctx, void *out, u64 read_s
     /* Read partition data. */
     if (!ncaReadFsSection(ctx->nca_fs_ctx, out, read_size, ctx->offset + offset))
     {
-        LOGFILE("Failed to read partition FS data!");
+        LOGFILE("Failed to read Partition FS data!");
         return false;
     }
     
@@ -132,7 +132,7 @@ bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry 
     /* Read entry data. */
     if (!pfsReadPartitionData(ctx, out, read_size, ctx->header_size + fs_entry->offset + offset))
     {
-        LOGFILE("Failed to read partition FS entry data!");
+        LOGFILE("Failed to read Partition FS entry data!");
         return false;
     }
     
@@ -156,7 +156,7 @@ bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u
     {
         if (!(fs_entry = pfsGetEntryByIndex(ctx, i)))
         {
-            LOGFILE("Failed to retrieve partition FS entry #%u!", i);
+            LOGFILE("Failed to retrieve Partition FS entry #%u!", i);
             return false;
         }
         
@@ -167,7 +167,7 @@ bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u
         }
     }
     
-    //LOGFILE("Unable to find partition FS entry \"%s\"!", name);
+    //LOGFILE("Unable to find Partition FS entry \"%s\"!", name);
     
     return false;
 }
@@ -188,7 +188,7 @@ bool pfsGetTotalDataSize(PartitionFileSystemContext *ctx, u64 *out_size)
     {
         if (!(fs_entry = pfsGetEntryByIndex(ctx, i)))
         {
-            LOGFILE("Failed to retrieve partition FS entry #%u!", i);
+            LOGFILE("Failed to retrieve Partition FS entry #%u!", i);
             return false;
         }
         
@@ -213,7 +213,7 @@ bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemE
     
     if (!ncaGenerateHierarchicalSha256Patch(ctx->nca_fs_ctx, data, data_size, partition_offset, out))
     {
-        LOGFILE("Failed to generate 0x%lX bytes HierarchicalSha256 patch at offset 0x%lX for partition FS entry!", data_size, partition_offset);
+        LOGFILE("Failed to generate 0x%lX bytes HierarchicalSha256 patch at offset 0x%lX for Partition FS entry!", data_size, partition_offset);
         return false;
     }
     

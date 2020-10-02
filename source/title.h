@@ -31,7 +31,7 @@
 
 #define TITLE_DELTA_TYPE_VALUE              (u64)0xC00
 
-/// Used to display version numbers in dot notation (major.minor.micro-major_relstep.minor_relstep).
+/// Used to display version numbers in dot notation: "{Major}.{Minor}.{Micro}-{MajorRelstep}.{MinorRelstep}".
 typedef struct {
     u32 TitleVersion_MinorRelstep : 8;
     u32 TitleVersion_MajorRelstep : 8;
@@ -130,10 +130,10 @@ char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 
 /// Returns NULL if an error occurs.
 char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_type);
 
-/// Returns a pointer to a string holding the name of the provided ncm content type.
+/// Returns a pointer to a string holding the name of the provided NcmContentType value.
 const char *titleGetNcmContentTypeName(u8 content_type);
 
-/// Returns a pointer to a string holding the name of the provided ncm content meta type.
+/// Returns a pointer to a string holding the name of the provided NcmContentMetaType value.
 const char *titleGetNcmContentMetaTypeName(u8 content_meta_type);
 
 /// Miscellaneous functions.
@@ -228,6 +228,11 @@ NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, 
     }
     
     return NULL;
+}
+
+NX_INLINE u32 titleGetVersionInteger(TitleVersion *version)
+{
+    return (version ? *((u32*)version) : 0);
 }
 
 #endif /* __TITLE_H__ */

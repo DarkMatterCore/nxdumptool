@@ -86,8 +86,10 @@ u64 utilsHidKeysAllHeld(void);
 
 void utilsWaitForButtonPress(u64 flag);
 
+bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
+
 void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...);
-void utilsWriteMessageToLogBuffer(char *dst, size_t dst_size, const char *func_name, const char *fmt, ...);
+void utilsWriteMessageToLogBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...);
 void utilsWriteLogBufferToLogFile(const char *src);
 void utilsLogFileMutexControl(bool lock);
 

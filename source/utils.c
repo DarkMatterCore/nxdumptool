@@ -317,6 +317,63 @@ void utilsWaitForButtonPress(u64 flag)
     }
 }
 
+bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
+{
+    if (!dst || !dst_size || !fmt || !strlen(fmt))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    va_list args;
+    va_start(args, fmt);
+    
+    int formatted_str_len = 0;
+    size_t required_dst_size = 0, dst_str_len = (*dst ? strlen(*dst) : 0);
+    char *realloc_dst = NULL;
+    
+    bool success = false;
+    
+    if (dst_str_len > *dst_size)
+    {
+        **dst = '\0';
+        dst_str_len = 0;
+    }
+    
+    formatted_str_len = vsnprintf(NULL, 0, fmt, args);
+    if (formatted_str_len <= 0)
+    {
+        LOGFILE("Failed to retrieve formatted string length!");
+        goto end;
+    }
+    
+    required_dst_size = (dst_str_len + (size_t)formatted_str_len + 1);
+    if (required_dst_size > *dst_size)
+    {
+        realloc_dst = realloc(*dst, required_dst_size);
+        if (!realloc_dst)
+        {
+            LOGFILE("Failed to reallocate destination buffer!");
+            goto end;
+        }
+        
+        *dst = realloc_dst;
+        realloc_dst = NULL;
+        
+        memset(*dst + dst_str_len, 0, (size_t)formatted_str_len + 1);
+        
+        *dst_size = required_dst_size;
+    }
+    
+    vsprintf(*dst + dst_str_len, fmt, args);
+    success = true;
+    
+end:
+    va_end(args);
+    
+    return success;
+}
+
 void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...)
 {
     if (!func_name || !strlen(func_name) || !fmt || !strlen(fmt)) return;
@@ -346,26 +403,52 @@ end:
     mutexUnlock(&g_logfileMutex);
 }
 
-void utilsWriteMessageToLogBuffer(char *dst, size_t dst_size, const char *func_name, const char *fmt, ...)
+void utilsWriteMessageToLogBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...)
 {
     if (!dst || !dst_size || !func_name || !strlen(func_name) || !fmt || !strlen(fmt)) return;
     
     va_list args;
+    va_start(args, fmt);
+    
     time_t now = time(NULL);
     struct tm *ts = localtime(&now);
     
-    char msg[512] = {0};
-    size_t msg_len = 0, dst_len = strlen(dst);
+    int timestamp_len = 0, formatted_str_len = 0;
+    size_t required_dst_size = 0, dst_str_len = (*dst ? strlen(*dst) : 0);
+    char *realloc_dst = NULL;
     
-    snprintf(msg, sizeof(msg), "%d-%02d-%02d %02d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
-    msg_len = strlen(msg);
+    if (dst_str_len > *dst_size)
+    {
+        **dst = '\0';
+        dst_str_len = 0;
+    }
     
-    va_start(args, fmt);
-    vsnprintf(msg + msg_len, sizeof(msg) - msg_len, fmt, args);
+    timestamp_len = snprintf(NULL, 0, "%d-%02d-%02d %02d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
+    if (timestamp_len <= 0) goto end;
+    
+    formatted_str_len = vsnprintf(NULL, 0, fmt, args);
+    if (formatted_str_len <= 0) goto end;
+    
+    required_dst_size = (dst_str_len + (size_t)timestamp_len + (size_t)formatted_str_len + 3);
+    if (required_dst_size > *dst_size)
+    {
+        realloc_dst = realloc(*dst, required_dst_size);
+        if (!realloc_dst) goto end;
+        
+        *dst = realloc_dst;
+        realloc_dst = NULL;
+        
+        memset(*dst + dst_str_len, 0, (size_t)timestamp_len + (size_t)formatted_str_len + 3);
+        
+        *dst_size = required_dst_size;
+    }
+    
+    sprintf(*dst + dst_str_len, "%d-%02d-%02d %02d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
+    vsprintf(*dst + dst_str_len + (size_t)timestamp_len, fmt, args);
+    sprintf(*dst + dst_str_len + (size_t)timestamp_len + (size_t)formatted_str_len, "\r\n");
+    
+end:
     va_end(args);
-    msg_len = strlen(msg);
-    
-    if ((dst_size - dst_len) > (msg_len + 2)) snprintf(dst + dst_len, dst_size - dst_len, "%s\r\n", msg);
 }
 
 void utilsWriteLogBufferToLogFile(const char *src)

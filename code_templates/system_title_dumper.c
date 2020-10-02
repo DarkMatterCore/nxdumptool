@@ -23,7 +23,6 @@
 #include "title.h"
 #include "pfs.h"
 #include "romfs.h"
-#include "cnmt.h"
 
 #define BLOCK_SIZE  0x800000
 #define OUTPATH     "sdmc:/systitle_dumps"
@@ -355,42 +354,6 @@ int main(int argc, char *argv[])
                 {
                     consolePrint("nca initialize ctx failed\n");
                     error = true;
-                } else {
-                    if (nca_ctx->content_type == NcmContentType_Meta)
-                    {
-                        ContentMetaContext cnmt_ctx = {0};
-                        FILE *cnmt_fd = NULL;
-                        size_t path_len = 0;
-                        
-                        snprintf(path, sizeof(path), OUTPATH "/%016lX - %s/%s (%s)", cur_title_info->meta_key.id, cur_title_info->app_metadata->lang_entry.name, nca_ctx->content_id_str, \
-                                 titleGetNcmContentTypeName(nca_ctx->content_type));
-                        utilsCreateDirectoryTree(path, true);
-                        path_len = strlen(path);
-                        
-                        if (cnmtInitializeContext(&cnmt_ctx, nca_ctx))
-                        {
-                            snprintf(path + path_len, sizeof(path) - path_len, "/%s", cnmt_ctx.cnmt_filename);
-                            cnmt_fd = fopen(path, "wb");
-                            if (cnmt_fd)
-                            {
-                                fwrite(cnmt_ctx.raw_data, 1, cnmt_ctx.raw_data_size, cnmt_fd);
-                                fclose(cnmt_fd);
-                                cnmt_fd = NULL;
-                            }
-                            
-                            path[path_len] = '\0';
-                            snprintf(path + path_len, sizeof(path) - path_len, "/%s.ctx", cnmt_ctx.cnmt_filename);
-                            cnmt_fd = fopen(path, "wb");
-                            if (cnmt_fd)
-                            {
-                                fwrite(&cnmt_ctx, 1, sizeof(ContentMetaContext), cnmt_fd);
-                                fclose(cnmt_fd);
-                                cnmt_fd = NULL;
-                            }
-                            
-                            cnmtFreeContext(&cnmt_ctx);
-                        }
-                    }
                 }
             } else
             if (menu == 3)

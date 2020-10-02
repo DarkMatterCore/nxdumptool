@@ -22,11 +22,12 @@
 #include "utils.h"
 #include "mem.h"
 
-#define MEMLOG(fmt, ...)    LOGBUF(g_memLogBuf, sizeof(g_memLogBuf), fmt, ##__VA_ARGS__)
+#define MEMLOG(fmt, ...)    LOGBUF(&g_memLogBuf, &g_memLogBufSize, fmt, ##__VA_ARGS__)
 
 /* Global variables. */
 
-static char g_memLogBuf[512] = {0};
+static char *g_memLogBuf = NULL;
+static size_t g_memLogBufSize = 0;
 static Mutex g_memMutex = 0;
 
 /* Function prototypes. */
@@ -77,8 +78,6 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
     u8 *tmp = NULL;
     
     bool success = true;
-    
-    *g_memLogBuf = '\0';
     
     /* Clear output MemoryLocation element. */
     memFreeMemoryLocation(location);
@@ -167,8 +166,7 @@ end:
     
     if (success && (!location->data || !location->data_size))
     {
-        MEMLOG("total size: 0x%lX", location->data_size);
-        MEMLOG("Unable to locate readable program %016lX memory pages that match the required criteria!", location->program_id);
+        MEMLOG("Unable to locate readable program memory pages for %016lX that match the required criteria!", location->program_id);
         success = false;
     }
     
@@ -176,6 +174,15 @@ end:
     
     /* Write log buffer data. This will do nothing if the log buffer length is zero. */
     utilsWriteLogBufferToLogFile(g_memLogBuf);
+    
+    /* Free memory log buffer. */
+    if (g_memLogBuf)
+    {
+        free(g_memLogBuf);
+        g_memLogBuf = NULL;
+    }
+    
+    g_memLogBufSize = 0;
     
     return success;
 }

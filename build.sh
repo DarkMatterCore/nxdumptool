@@ -22,7 +22,7 @@ for f in ./code_templates/*.c; do
     {
         make clean
         make -j 12
-    } &> /dev/null
+    }
     
     mkdir ./code_templates/tmp/$filename
     cp ./nxdumptool-rewrite.nro ./code_templates/tmp/$filename/nxdumptool-rewrite.nro

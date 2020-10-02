@@ -23,7 +23,6 @@
 #ifndef __CNMT_H__
 #define __CNMT_H__
 
-#include "nca.h"
 #include "pfs.h"
 
 #define CNMT_DIGEST_SIZE    SHA256_HASH_SIZE
@@ -231,7 +230,8 @@ typedef struct {
                                                     ///< Bear in mind that generating a patch modifies the NCA context.
     char *cnmt_filename;                            ///< Pointer to the CNMT filename in the Meta NCA FS section #0.
     u8 *raw_data;                                   ///< Pointer to a dynamically allocated buffer that holds the raw CNMT.
-    u64 raw_data_size;                              ///< Raw CNMT size.
+    u64 raw_data_size;                              ///< Raw CNMT size. Kept here for convenience - this is part of 'pfs_entry'.
+    u8 raw_data_hash[SHA256_HASH_SIZE];             ///< SHA-256 checksum calculated over the whole raw CNMT. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
     ContentMetaPackagedHeader *packaged_header;     ///< Pointer to the ContentMetaPackagedHeader within 'raw_data'.
     u8 *extended_header;                            ///< Pointer to the extended header within 'raw_data', if available. May be casted to other types. Its size is stored in 'packaged_header'.
     NcmPackagedContentInfo *packaged_content_info;  ///< Pointer to the NcmPackagedContentInfo entries within 'raw_data'. The content count is stored in 'packaged_header'.
@@ -239,10 +239,18 @@ typedef struct {
     u8 *extended_data;                              ///< Pointer to the extended data block within 'raw_data', if available.
     u32 extended_data_size;                         ///< Size of the extended data block within 'raw_data', if available. Kept here for convenience - this is part of the header in 'extended_data'.
     u8 *digest;                                     ///< Pointer to the digest within 'raw_data'.
+    char *authoring_tool_xml;                       ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
+                                                    ///< This is always NULL unless cnmtGenerateAuthoringToolXml() is used on this ContentMetaContext.
+    u64 authoring_tool_xml_size;                    ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
+                                                    ///< This is always 0 unless cnmtGenerateAuthoringToolXml() is used on this ContentMetaContext.
 } ContentMetaContext;
 
 /// Initializes a ContentMetaContext using a previously initialized NcaContext (which must belong to a Meta NCA).
 bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx);
+
+/// Generates an AuthoringTool-like XML using information from a previously initialized ContentMetaContext, as well as a pointer to 'nca_ctx_count' NcaContext with content information.
+/// If the function succeeds, XML data and size will get saved to the 'authoring_tool_xml' and 'authoring_tool_xml_size' members from the ContentMetaContext.
+bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx, u32 nca_ctx_count);
 
 /// Helper inline functions.
 
@@ -252,7 +260,34 @@ NX_INLINE void cnmtFreeContext(ContentMetaContext *cnmt_ctx)
     pfsFreeContext(&(cnmt_ctx->pfs_ctx));
     pfsFreeEntryPatch(&(cnmt_ctx->nca_patch));
     if (cnmt_ctx->raw_data) free(cnmt_ctx->raw_data);
+    if (cnmt_ctx->authoring_tool_xml) free(cnmt_ctx->authoring_tool_xml);
     memset(cnmt_ctx, 0, sizeof(ContentMetaContext));
+}
+
+NX_INLINE bool cnmtIsValidContext(ContentMetaContext *cnmt_ctx)
+{
+    return (cnmt_ctx && cnmt_ctx->nca_ctx && cnmt_ctx->pfs_entry && cnmt_ctx->cnmt_filename && cnmt_ctx->raw_data && cnmt_ctx->raw_data_size && cnmt_ctx->packaged_header && \
+            ((cnmt_ctx->packaged_header->extended_header_size && cnmt_ctx->extended_header) || (!cnmt_ctx->packaged_header->extended_header_size && !cnmt_ctx->extended_header)) && \
+            cnmt_ctx->packaged_content_info && ((cnmt_ctx->packaged_header->content_meta_count && cnmt_ctx->content_meta_info) || (!cnmt_ctx->packaged_header->content_meta_count && \
+            !cnmt_ctx->content_meta_info)) && ((cnmt_ctx->extended_data_size && cnmt_ctx->extended_data) || (!cnmt_ctx->extended_data_size && !cnmt_ctx->extended_data)) && cnmt_ctx->digest);
+}
+
+NX_INLINE bool cnmtIsNcaPatchRequired(ContentMetaContext *cnmt_ctx)
+{
+    if (!cnmtIsValidContext(cnmt_ctx) || cnmt_ctx->nca_patch.hash_region_count) return false;
+    u8 tmp_hash[SHA256_HASH_SIZE] = {0};
+    sha256CalculateHash(tmp_hash, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size);
+    return (memcmp(tmp_hash, cnmt_ctx->raw_data_hash, SHA256_HASH_SIZE) != 0);
+}
+
+NX_INLINE bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx)
+{
+    return (cnmtIsValidContext(cnmt_ctx) ? pfsGenerateEntryPatch(&(cnmt_ctx->pfs_ctx), cnmt_ctx->pfs_entry, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size, 0, &(cnmt_ctx->nca_patch)) : false);
+}
+
+NX_INLINE u32 cnmtGetVersionInteger(ContentMetaVersion *version)
+{
+    return (version ? *((u32*)version) : 0);
 }
 
 #endif /* __CNMT_H__ */
