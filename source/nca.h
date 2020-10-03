@@ -393,8 +393,8 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 /// 'buf_offset' must hold the raw NCA offset where the data stored in 'buf' was read from.
 void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset);
 
-/// Returns a pointer to a string holding the name of the provided NCA FS section type.
-const char *ncaGetFsSectionTypeName(u8 section_type);
+/// Returns a pointer to a string holding the name of the section type from the provided NCA FS section context.
+const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx);
 
 
 
@@ -410,6 +410,8 @@ void ncaRemoveTitlekeyCrypto(NcaContext *ctx);
 /// Encrypts NCA header and NCA FS headers from a NCA context.
 bool ncaEncryptHeader(NcaContext *ctx);
 
+/// Updates the content ID and hash from a NCA context using a provided SHA-256 checksum.
+void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE]);
 
 
 
@@ -424,9 +426,7 @@ bool ncaEncryptHeader(NcaContext *ctx);
 
 
 
-
-
-/// Miscellaneous functions.
+/// Helper inline functions.
 
 NX_INLINE void ncaSetDownloadDistributionType(NcaContext *ctx)
 {

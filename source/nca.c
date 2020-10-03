@@ -38,14 +38,6 @@ static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
     0xFF, 0x6B, 0x25, 0xEF, 0x9F, 0x96, 0x85, 0x28, 0x18, 0x9E, 0x76, 0xB0, 0x92, 0xF0, 0x6A, 0xCB
 };
 
-static const char *g_ncaFsSectionTypeNames[] = {
-    [NcaFsSectionType_PartitionFs] = "Partition FS",
-    [NcaFsSectionType_RomFs]       = "RomFS",
-    [NcaFsSectionType_PatchRomFs]  = "Patch RomFS [BKTR]",
-    [NcaFsSectionType_Nca0RomFs]   = "NCA0 RomFS",
-    [NcaFsSectionType_Invalid]     = "Invalid"
-};
-
 /* Function prototypes. */
 
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info);
@@ -111,6 +103,8 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     
     memcpy(&(out->content_id), &(content_info->content_id), sizeof(NcmContentId));
     utilsGenerateHexStringFromData(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c));
+    
+    utilsGenerateHexStringFromData(out->hash_str, sizeof(out->hash_str), out->hash, sizeof(out->hash)); /* Placeholder, needs to be manually calculated. */
     
     out->content_type = content_info->content_type;
     out->id_offset = content_info->id_offset;
@@ -323,10 +317,31 @@ void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierar
     for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++) ncaWriteHashDataPatchToMemoryBuffer(ctx, &(patch->hash_level_patch[i]), buf, buf_size, buf_offset);
 }
 
-const char *ncaGetFsSectionTypeName(u8 section_type)
+const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
 {
-    u8 idx = (section_type > NcaFsSectionType_Invalid ? NcaFsSectionType_Invalid : section_type);
-    return g_ncaFsSectionTypeNames[idx];
+    NcaContext *nca_ctx = NULL;
+    const char *str = "Invalid";
+    if (!ctx || !ctx->enabled || !(nca_ctx = (NcaContext*)ctx->nca_ctx)) return str;
+    
+    switch(ctx->section_type)
+    {
+        case NcaFsSectionType_PartitionFs:
+            str = ((nca_ctx->content_type == NcmContentType_Program && ctx->section_num == 0) ? "ExeFS" : "Partition FS");
+            break;
+        case NcaFsSectionType_RomFs:
+            str = "RomFS";
+            break;
+        case NcaFsSectionType_PatchRomFs:
+            str = "Patch RomFS [BKTR]";
+            break;
+        case NcaFsSectionType_Nca0RomFs:
+            str = "NCA0 RomFS";
+            break;
+        default:
+            break;
+    }
+    
+    return str;
 }
 
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
@@ -409,6 +424,17 @@ bool ncaEncryptHeader(NcaContext *ctx)
     }
     
     return true;
+}
+
+void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE])
+{
+    if (!ctx) return;
+    
+    memcpy(ctx->content_id.c, hash, sizeof(ctx->content_id.c));
+    utilsGenerateHexStringFromData(ctx->content_id_str, sizeof(ctx->content_id_str), ctx->content_id.c, sizeof(ctx->content_id.c));
+    
+    memcpy(ctx->hash, hash, sizeof(ctx->hash));
+    utilsGenerateHexStringFromData(ctx->hash_str, sizeof(ctx->hash_str), ctx->hash, sizeof(ctx->hash));
 }
 
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info)
