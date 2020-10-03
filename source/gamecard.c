@@ -121,8 +121,7 @@ static const char *g_gameCardHfsPartitionNames[] = {
     [GameCardHashFileSystemPartitionType_Logo]     = "logo",
     [GameCardHashFileSystemPartitionType_Normal]   = "normal",
     [GameCardHashFileSystemPartitionType_Secure]   = "secure",
-    [GameCardHashFileSystemPartitionType_Boot]     = "boot",
-    [GameCardHashFileSystemPartitionType_Boot + 1] = "unknown"
+    [GameCardHashFileSystemPartitionType_Boot]     = "boot"
 };
 
 /* Function prototypes. */
@@ -372,8 +371,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(u32 *out)
 
 const char *gamecardGetHashFileSystemPartitionName(u8 hfs_partition_type)
 {
-    u8 idx = (hfs_partition_type > GameCardHashFileSystemPartitionType_Boot ? (GameCardHashFileSystemPartitionType_Boot + 1) : hfs_partition_type);
-    return g_gameCardHfsPartitionNames[idx];
+    return (hfs_partition_type < GameCardHashFileSystemPartitionType_Count ? g_gameCardHfsPartitionNames[hfs_partition_type] : NULL);
 }
 
 bool gamecardGetEntryCountFromHashFileSystemPartition(u8 hfs_partition_type, u32 *out_count)

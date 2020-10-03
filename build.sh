@@ -3,6 +3,8 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 tar_filename="nxdumptool-rewrite_poc_$(shell git rev-parse --short HEAD).tar.bz2"
 
+rm -f $tar_filename
+
 rm -rf ./code_templates/tmp
 mkdir ./code_templates/tmp
 

@@ -187,7 +187,8 @@ typedef enum {
     GameCardHashFileSystemPartitionType_Logo    = 2,    ///< Only available in GameCardFwVersion_Since400NUP gamecards.
     GameCardHashFileSystemPartitionType_Normal  = 3,
     GameCardHashFileSystemPartitionType_Secure  = 4,
-    GameCardHashFileSystemPartitionType_Boot    = 5     ///< Only available in Terra (Tencent) gamecards.
+    GameCardHashFileSystemPartitionType_Boot    = 5,    ///< Only available in Terra (Tencent) gamecards.
+    GameCardHashFileSystemPartitionType_Count   = 6     ///< Not a real value.
 } GameCardHashFileSystemPartitionType;
 
 /// Initializes data needed to access raw gamecard storage areas.
@@ -220,7 +221,7 @@ bool gamecardGetTrimmedSize(u64 *out);
 bool gamecardGetRomCapacity(u64 *out); ///< Not the same as gamecardGetTotalSize().
 bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
 
-/// Returns a pointer to a string holding the name of the provided hash file system partition type.
+/// Returns a pointer to a string holding the name of the provided hash file system partition type. Returns NULL if the provided value is invalid.
 const char *gamecardGetHashFileSystemPartitionName(u8 hfs_partition_type);
 
 /// Retrieves the entry count from a hash FS partition.

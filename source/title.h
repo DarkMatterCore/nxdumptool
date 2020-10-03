@@ -130,10 +130,10 @@ char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 
 /// Returns NULL if an error occurs.
 char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_type);
 
-/// Returns a pointer to a string holding the name of the provided NcmContentType value.
+/// Returns a pointer to a string holding the name of the provided NcmContentType value. Returns NULL if the provided value is invalid.
 const char *titleGetNcmContentTypeName(u8 content_type);
 
-/// Returns a pointer to a string holding the name of the provided NcmContentMetaType value.
+/// Returns a pointer to a string holding the name of the provided NcmContentMetaType value. Returns NULL if the provided value is invalid.
 const char *titleGetNcmContentMetaTypeName(u8 content_meta_type);
 
 /// Miscellaneous functions.

@@ -57,8 +57,7 @@ static const char *g_titleNcmContentTypeNames[] = {
     [NcmContentType_Control]           = "Control",
     [NcmContentType_HtmlDocument]      = "HtmlDocument",
     [NcmContentType_LegalInformation]  = "LegalInformation",
-    [NcmContentType_DeltaFragment]     = "DeltaFragment",
-    [NcmContentType_DeltaFragment + 1] = "Unknown"
+    [NcmContentType_DeltaFragment]     = "DeltaFragment"
 };
 
 static const char *g_titleNcmContentMetaTypeNames[] = {
@@ -862,15 +861,13 @@ end:
 
 const char *titleGetNcmContentTypeName(u8 content_type)
 {
-    u8 idx = (content_type > NcmContentType_DeltaFragment ? (NcmContentType_DeltaFragment + 1) : content_type);
-    return g_titleNcmContentTypeNames[idx];
+    return (content_type <= NcmContentType_DeltaFragment ? g_titleNcmContentTypeNames[content_type] : NULL);
 }
 
 const char *titleGetNcmContentMetaTypeName(u8 content_meta_type)
 {
-    u8 idx = (content_meta_type <= NcmContentMetaType_BootImagePackageSafe ? content_meta_type : \
-             ((content_meta_type < NcmContentMetaType_Application || content_meta_type > NcmContentMetaType_Delta) ? 0 : (content_meta_type - 0x7A)));
-    return g_titleNcmContentMetaTypeNames[idx];
+    return ((content_meta_type <= NcmContentMetaType_BootImagePackageSafe || (content_meta_type >= NcmContentMetaType_Application && content_meta_type <= NcmContentMetaType_Delta)) ? \
+            g_titleNcmContentMetaTypeNames[content_meta_type] : NULL);
 }
 
 NX_INLINE void titleFreeApplicationMetadata(void)

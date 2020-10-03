@@ -274,7 +274,7 @@ NX_INLINE bool cnmtIsValidContext(ContentMetaContext *cnmt_ctx)
 
 NX_INLINE bool cnmtIsNcaPatchRequired(ContentMetaContext *cnmt_ctx)
 {
-    if (!cnmtIsValidContext(cnmt_ctx) || cnmt_ctx->nca_patch.hash_region_count) return false;
+    if (!cnmtIsValidContext(cnmt_ctx)) return false;
     u8 tmp_hash[SHA256_HASH_SIZE] = {0};
     sha256CalculateHash(tmp_hash, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size);
     return (memcmp(tmp_hash, cnmt_ctx->raw_data_hash, SHA256_HASH_SIZE) != 0);
@@ -282,7 +282,7 @@ NX_INLINE bool cnmtIsNcaPatchRequired(ContentMetaContext *cnmt_ctx)
 
 NX_INLINE bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx)
 {
-    return (cnmtIsValidContext(cnmt_ctx) ? pfsGenerateEntryPatch(&(cnmt_ctx->pfs_ctx), cnmt_ctx->pfs_entry, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size, 0, &(cnmt_ctx->nca_patch)) : false);
+    return (cnmtIsValidContext(cnmt_ctx) && pfsGenerateEntryPatch(&(cnmt_ctx->pfs_ctx), cnmt_ctx->pfs_entry, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size, 0, &(cnmt_ctx->nca_patch)));
 }
 
 NX_INLINE u32 cnmtGetVersionInteger(ContentMetaVersion *version)

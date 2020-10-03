@@ -241,7 +241,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
         return false;
     }
     
-    u16 i, j;
+    u32 i, j;
     char *xml_buf = NULL;
     u64 xml_buf_size = 0;
     char digest_str[0x41] = {0};
@@ -437,8 +437,6 @@ static const char *cnmtGetRequiredTitleTypeString(u8 content_meta_type)
             str = "PatchId";
             break;
         case NcmContentMetaType_Patch:
-            str = "OriginalId";
-            break;
         case NcmContentMetaType_AddOnContent:
             str = "ApplicationId";
             break;
