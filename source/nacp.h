@@ -165,7 +165,7 @@ typedef enum {
     NacpRatingAgeOrganization_ACB          = 10,
     NacpRatingAgeOrganization_OFLC         = 11,
     NacpRatingAgeOrganization_IARCGeneric  = 12,
-    NacpRatingAgeOrganization_Count        = 13
+    NacpRatingAgeOrganization_Count        = 13     ///< Not a real value.
 } NacpRatingAgeOrganization;
 
 typedef struct {
@@ -188,51 +188,76 @@ typedef struct {
 typedef enum {
     NacpLogoType_LicensedByNintendo    = 0,
     NacpLogoType_DistributedByNintendo = 1, ///< Removed.
-    NacpLogoType_Nintendo              = 2
+    NacpLogoType_Nintendo              = 2,
+    NacpLogoType_Count                 = 3  ///< Not a real value.
 } NacpLogoType;
 
 typedef enum {
     NacpLogoHandling_Auto   = 0,
-    NacpLogoHandling_Manual = 1
+    NacpLogoHandling_Manual = 1,
+    NacpLogoHandling_Count  = 2     ///< Not a real value.
 } NacpLogoHandling;
 
 typedef enum {
     NacpRuntimeAddOnContentInstall_Deny                                       = 0,
     NacpRuntimeAddOnContentInstall_AllowAppend                                = 1,
-    NacpRuntimeAddOnContentInstall_AllowAppendButDontDownloadWhenUsingNetwork = 2
+    NacpRuntimeAddOnContentInstall_AllowAppendButDontDownloadWhenUsingNetwork = 2,
+    NacpRuntimeAddOnContentInstall_Count                                      = 3   ///< Not a real value.
 } NacpRuntimeAddOnContentInstall;
 
 typedef enum {
     NacpRuntimeParameterDelivery_Always                   = 0,
     NacpRuntimeParameterDelivery_AlwaysIfUserStateMatched = 1,
-    NacpRuntimeParameterDelivery_OnRestart                = 2
+    NacpRuntimeParameterDelivery_OnRestart                = 2,
+    NacpRuntimeParameterDelivery_Count                    = 3   ///< Not a real value.
 } NacpRuntimeParameterDelivery;
 
 typedef enum {
     NacpCrashReport_Deny  = 0,
-    NacpCrashReport_Allow = 1
+    NacpCrashReport_Allow = 1,
+    NacpCrashReport_Count = 2   ///< Not a real value.
 } NacpCrashReport;
 
 typedef enum {
     NacpHdcp_None     = 0,
-    NacpHdcp_Required = 1
+    NacpHdcp_Required = 1,
+    NacpHdcp_Count    = 2   ///< Not a real value.
 } NacpHdcp;
 
-typedef struct {
-    u8 NacpStartupUserAccountOption_IsOptional : 1;
-    u8 NacpStartupUserAccountOption_Reserved   : 7;
+/// Indexes used to access NACP startup user account option info.
+typedef enum {
+    NacpStartupUserAccountOption_IsOptional = 0,
+    NacpStartupUserAccountOption_Count      = 1     ///< Not a real value.
 } NacpStartupUserAccountOption;
+
+typedef struct {
+    u8 NacpStartupUserAccountOptionFlag_IsOptional : 1;
+    u8 NacpStartupUserAccountOptionFlag_Reserved   : 7;
+} NacpStartupUserAccountOptionFlag;
 
 typedef enum {
     NacpPlayLogQueryCapability_None      = 0,
     NacpPlayLogQueryCapability_WhiteList = 1,
-    NacpPlayLogQueryCapability_All       = 2
+    NacpPlayLogQueryCapability_All       = 2,
+    NacpPlayLogQueryCapability_Count     = 3    ///< Not a real value.
 } NacpPlayLogQueryCapability;
+
+/// Indexes used to access NACP repair info.
+typedef enum {
+    NacpRepair_SuppressGameCardAccess = 0,
+    NacpRepair_Count                  = 1   ///< Not a real value.
+} NacpRepair;
 
 typedef struct {
     u8 NacpRepairFlag_SuppressGameCardAccess : 1;
     u8 NacpRepairFlag_Reserved               : 7;
 } NacpRepairFlag;
+
+/// Indexes used to access NACP required network service license on launch info.
+typedef enum {
+    NacpRequiredNetworkServiceLicenseOnLaunch_Common = 0,
+    NacpRequiredNetworkServiceLicenseOnLaunch_Count  = 1    ///< Not a real value.
+} NacpRequiredNetworkServiceLicenseOnLaunch;
 
 typedef struct {
     u8 NacpRequiredNetworkServiceLicenseOnLaunchFlag_Common   : 1;
@@ -241,7 +266,8 @@ typedef struct {
 
 typedef enum {
 	NacpJitConfigurationFlag_None    = 0,
-	NacpJitConfigurationFlag_Enabled = 1
+	NacpJitConfigurationFlag_Enabled = 1,
+    NacpJitConfigurationFlag_Count   = 2    ///< Not a real value.
 } NacpJitConfigurationFlag;
 
 typedef struct {
@@ -251,7 +277,7 @@ typedef struct {
 
 typedef struct {
     u16 NacpDescriptors_Index       : 15;
-    u16 NacpDescriptors_ContinueSet : 1;    ///< Not given a name by Nintendo.
+    u16 NacpDescriptors_ContinueSet : 1;    ///< Called "flag" by Nintendo.
 } NacpDescriptors;
 
 typedef struct {
@@ -260,17 +286,20 @@ typedef struct {
 
 typedef enum {
     NacpPlayReportPermission_None            = 0,
-    NacpPlayReportPermission_TargetMarketing = 1
+    NacpPlayReportPermission_TargetMarketing = 1,
+    NacpPlayReportPermission_Count           = 2    ///< Not a real value.
 } NacpPlayReportPermission;
 
 typedef enum {
     NacpCrashScreenshotForProd_Deny  = 0,
-    NacpCrashScreenshotForProd_Allow = 1
+    NacpCrashScreenshotForProd_Allow = 1,
+    NacpCrashScreenshotForProd_Count = 2    ///< Not a real value.
 } NacpCrashScreenshotForProd;
 
 typedef enum {
     NacpCrashScreenshotForDev_Deny  = 0,
-    NacpCrashScreenshotForDev_Allow = 1
+    NacpCrashScreenshotForDev_Allow = 1,
+    NacpCrashScreenshotForDev_Count = 2     ///< Not a real value.
 } NacpCrashScreenshotForDev;
 
 typedef struct {
@@ -307,7 +336,7 @@ typedef struct {
     u8 hdcp;                                                                                        ///< NacpHdcp.
     u64 seed_for_pseudo_device_id;
     char bcat_passphrase[0x41];
-    NacpStartupUserAccountOption startup_user_account_option;
+    NacpStartupUserAccountOptionFlag startup_user_account_option_flag;
     u8 reserved_2[0x6];
     u64 user_account_save_data_size_max;
     u64 user_account_save_data_journal_size_max;
@@ -348,7 +377,7 @@ typedef struct {
                                                 ///< Bear in mind that generating a patch modifies the NCA context.
     _NacpStruct *data;                          ///< Pointer to a dynamically allocated buffer that holds the full NACP.
     u8 data_hash[SHA256_HASH_SIZE];             ///< SHA-256 checksum calculated over the whole NACP. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
-    u32 icon_count;                             ///< NACP icon count. May be zero if no icons are available.
+    u8 icon_count;                              ///< NACP icon count. May be zero if no icons are available.
     NacpIconContext *icon_ctx;                  ///< Pointer to a dynamically allocated buffer that holds 'icon_count' NACP icon contexts. May be NULL if no icons are available.
     char *authoring_tool_xml;                   ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
                                                 ///< This is always NULL unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
@@ -363,68 +392,32 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx);
 /// If the function succeeds, XML data and size will get saved to the 'authoring_tool_xml' and 'authoring_tool_xml_size' members from the NacpContext.
 bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx);
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-/// Returns a pointer to a string holding the name of the provided NacpLanguage value. Returns "Unknown" if the provided value is invalid.
+/// These functions return pointers to string representations of the input value.
+/// If the provided value is invalid, "Unknown" is returned.
 const char *nacpGetLanguageString(u8 language);
-
-/// Returns a pointer to a string holding the name of the provided NacpStartupUserAccount value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetStartupUserAccountString(u8 startup_user_account);
-
-/// Returns a pointer to a string holding the name of the provided NacpUserAccountSwitchLock value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetUserAccountSwitchLockString(u8 user_account_switch_lock);
-
-/// Returns a pointer to a string holding the name of the provided NacpAddOnContentRegistrationType value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetAddOnContentRegistrationTypeString(u8 add_on_content_registration_type);
-
-/// Returns a pointer to a string holding the name of the provided NacpAttribute value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetAttributeString(u8 attribute);
-
-/// Returns a pointer to a string holding the name of the provided NacpParentalControl value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetParentalControlString(u8 parental_control);
-
-/// Returns a pointer to a string holding the name of the provided NacpScreenshot value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetScreenshotString(u8 screenshot);
-
-/// Returns a pointer to a string holding the name of the provided NacpVideoCapture value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetVideoCaptureString(u8 video_capture);
-
-/// Returns a pointer to a string holding the name of the provided NacpDataLossConfirmation value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetDataLossConfirmationString(u8 data_loss_confirmation);
-
-/// Returns a pointer to a string holding the name of the provided NacpPlayLogPolicy value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetPlayLogPolicyString(u8 play_log_policy);
-
-/// Returns a pointer to a string holding the name of the provided NacpRatingAgeOrganization value. Returns "Unknown" if the provided value is invalid.
 const char *nacpGetRatingAgeOrganizationString(u8 rating_age_organization);
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+const char *nacpGetLogoTypeString(u8 logo_type);
+const char *nacpGetLogoHandlingString(u8 logo_handling);
+const char *nacpGetRuntimeAddOnContentInstallString(u8 runtime_add_on_content_install);
+const char *nacpGetRuntimeParameterDeliveryString(u8 runtime_parameter_delivery);
+const char *nacpGetCrashReportString(u8 crash_report);
+const char *nacpGetHdcpString(u8 hdcp);
+const char *nacpGetStartupUserAccountOptionString(u8 startup_user_account_option);
+const char *nacpGetRepairString(u8 repair);
+const char *nacpGetRequiredNetworkServiceLicenseOnLaunchString(u8 required_network_service_license_on_launch);
+const char *nacpGetJitConfigurationFlagString(u64 jig_configuration_flag);
+const char *nacpGetPlayReportPermissionString(u8 play_report_permission);
+const char *nacpGetCrashScreenshotForProdString(u8 crash_screenshot_for_prod);
+const char *nacpGetCrashScreenshotForDevString(u8 crash_screenshot_for_dev);
 
 /// Helper inline functions.
 
@@ -438,7 +431,7 @@ NX_INLINE void nacpFreeContext(NacpContext *nacp_ctx)
     
     if (nacp_ctx->icon_ctx)
     {
-        for(u32 i = 0; i < nacp_ctx->icon_count; i++)
+        for(u8 i = 0; i < nacp_ctx->icon_count; i++)
         {
             if (nacp_ctx->icon_ctx[i].icon_data) free(nacp_ctx->icon_ctx[i].icon_data);
         }
@@ -459,7 +452,7 @@ NX_INLINE bool nacpIsValidContext(NacpContext *nacp_ctx)
 {
     if (!nacp_ctx || !nacp_ctx->nca_ctx || !nacp_ctx->romfs_file_entry || !nacp_ctx->data || (!nacp_ctx->icon_count && nacp_ctx->icon_ctx) || (nacp_ctx->icon_count && !nacp_ctx->icon_ctx)) return false;
     
-    for(u32 i = 0; i < nacp_ctx->icon_count; i++)
+    for(u8 i = 0; i < nacp_ctx->icon_count; i++)
     {
         if (!nacpIsValidIconContext(&(nacp_ctx->icon_ctx[i]))) return false;
     }
@@ -478,11 +471,6 @@ NX_INLINE bool nacpIsNcaPatchRequired(NacpContext *nacp_ctx)
 NX_INLINE bool nacpGenerateNcaPatch(NacpContext *nacp_ctx)
 {
     return (nacpIsValidContext(nacp_ctx) && romfsGenerateFileEntryPatch(&(nacp_ctx->romfs_ctx), nacp_ctx->romfs_file_entry, nacp_ctx->data, sizeof(_NacpStruct), 0, &(nacp_ctx->nca_patch)));
-}
-
-NX_INLINE bool nacpCheckBitflagField(const void *flag, u8 idx, u8 max_flag_idx)
-{
-    return (flag && idx < 0x20 && idx < max_flag_idx && ((*((const u32*)flag) >> idx) & 0x1));
 }
 
 #endif /* __NACP_H__ */

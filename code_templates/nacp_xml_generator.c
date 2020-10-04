@@ -21,7 +21,7 @@
 #include "utils.h"
 #include "gamecard.h"
 #include "title.h"
-#include "cnmt.h"
+#include "nacp.h"
 
 static void consolePrint(const char *text, ...)
 {
@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
     
     NcaContext *nca_ctx = NULL;
     Ticket tik = {0};
-    ContentMetaContext cnmt_ctx = {0};
+    NacpContext nacp_ctx = {0};
     
     app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
     if (!app_metadata || !app_count)
@@ -76,7 +76,7 @@ int main(int argc, char *argv[])
     while(true)
     {
         consoleClear();
-        printf("select an user application to generate a cnmt xml for.\npress b to exit.\n\n");
+        printf("select an user application to generate a nacp xml for.\npress b to exit.\n\n");
         printf("title: %u / %u\n\n", selected_idx + 1, app_count);
         
         for(u32 i = scroll; i < app_count; i++)
@@ -173,7 +173,7 @@ int main(int argc, char *argv[])
     consoleClear();
     consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[selected_idx]->lang_entry.name, app_metadata[selected_idx]->title_id);
     
-    nca_ctx = calloc(user_app_data.app_info->content_count, sizeof(NcaContext));
+    nca_ctx = calloc(1, sizeof(NcaContext));
     if (!nca_ctx)
     {
         consolePrint("nca ctx calloc failed\n");
@@ -182,57 +182,56 @@ int main(int argc, char *argv[])
     
     consolePrint("nca ctx calloc succeeded\n");
     
-    for(u32 i = 0, j = 0; i < user_app_data.app_info->content_count; i++)
+    if (!ncaInitializeContext(nca_ctx, user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Control, 0), &tik))
     {
-        if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_Meta) continue;
-        
-        if (!ncaInitializeContext(&(nca_ctx[j]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-            &(user_app_data.app_info->content_infos[i]), &tik))
-        {
-            consolePrint("%s nca initialize ctx failed\n", titleGetNcmContentTypeName(user_app_data.app_info->content_infos[i].content_type));
-            goto out2;
-        }
-        
-        consolePrint("%s nca initialize ctx succeeded\n", titleGetNcmContentTypeName(user_app_data.app_info->content_infos[i].content_type));
-        j++;
-    }
-    
-    u32 meta_idx = (user_app_data.app_info->content_count - 1);
-    
-    if (!ncaInitializeContext(&(nca_ctx[meta_idx]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Meta, 0), &tik))
-    {
-        consolePrint("Meta nca initialize ctx failed\n");
+        consolePrint("Control nca initialize ctx failed\n");
         goto out2;
     }
     
-    consolePrint("Meta nca initialize ctx succeeded\n");
+    consolePrint("Control nca initialize ctx succeeded\n");
     
-    if (!cnmtInitializeContext(&cnmt_ctx, &(nca_ctx[meta_idx])))
+    if (!nacpInitializeContext(&nacp_ctx, nca_ctx))
     {
-        consolePrint("cnmt initialize ctx failed\n");
+        consolePrint("nacp initialize ctx failed\n");
         goto out2;
     }
     
-    consolePrint("cnmt initialize ctx succeeded\n");
+    consolePrint("nacp initialize ctx succeeded\n");
     
-    if (cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, user_app_data.app_info->content_count))
+    if (nacpGenerateAuthoringToolXml(&nacp_ctx))
     {
-        consolePrint("cnmt xml succeeded\n");
+        consolePrint("nacp xml succeeded\n");
         
         FILE *xml_fd = NULL;
         char path[FS_MAX_PATH] = {0};
         
-        sprintf(path, "sdmc:/%s.cnmt.xml", nca_ctx[meta_idx].content_id_str);
+        sprintf(path, "sdmc:/%s.nacp.xml", nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
         {
-            fwrite(cnmt_ctx.authoring_tool_xml, 1, cnmt_ctx.authoring_tool_xml_size, xml_fd);
+            fwrite(nacp_ctx.authoring_tool_xml, 1, nacp_ctx.authoring_tool_xml_size, xml_fd);
             fclose(xml_fd);
+            xml_fd = NULL;
+        }
+        
+        for(u8 i = 0; i < nacp_ctx.icon_count; i++)
+        {
+            NacpIconContext *icon_ctx = &(nacp_ctx.icon_ctx[i]);
+            
+            sprintf(path, "sdmc:/%s.nx.%s.jpg", nca_ctx->content_id_str, nacpGetLanguageString(icon_ctx->language));
+            
+            xml_fd = fopen(path, "wb");
+            if (xml_fd)
+            {
+                fwrite(icon_ctx->icon_data, 1, icon_ctx->icon_size, xml_fd);
+                fclose(xml_fd);
+                xml_fd = NULL;
+            }
         }
     } else {
-        consolePrint("cnmt xml failed\n");
+        consolePrint("nacp xml failed\n");
     }
     
 out2:
@@ -242,7 +241,7 @@ out2:
         utilsWaitForButtonPress(KEY_NONE);
     }
     
-    cnmtFreeContext(&cnmt_ctx);
+    nacpFreeContext(&nacp_ctx);
     
     if (nca_ctx) free(nca_ctx);
     
