@@ -133,7 +133,10 @@ typedef struct {
     u32 GameCardCupVersion_Major        : 6;
 } GameCardCupVersion;
 
-/// Encrypted using AES-128-CBC with the `xci_header_key` (which can't dumped through current methods) and the IV from `GameCardHeader`.
+/// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under newer versions of HOS) and the IV from `GameCardHeader`.
+/// Key hashes for documentation purposes:
+/// Production XCI header key hash:  2E36CC55157A351090A73E7AE77CF581F69B0B6E48FB066C984879A6ED7D2E96
+/// Development XCI header key hash: 61D5C02244188810E2E3DE69341AC0F3C7653D370C6D3F77CA82B0B7E59F39AD
 typedef struct {
     u64 fw_version;                 ///< GameCardFwVersion.
     u32 acc_ctrl_1;                 ///< GameCardAccCtrl1.
