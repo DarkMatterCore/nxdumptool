@@ -866,8 +866,8 @@ const char *titleGetNcmContentTypeName(u8 content_type)
 
 const char *titleGetNcmContentMetaTypeName(u8 content_meta_type)
 {
-    return ((content_meta_type <= NcmContentMetaType_BootImagePackageSafe || (content_meta_type >= NcmContentMetaType_Application && content_meta_type <= NcmContentMetaType_Delta)) ? \
-            g_titleNcmContentMetaTypeNames[content_meta_type] : NULL);
+    if ((content_meta_type > NcmContentMetaType_BootImagePackageSafe && content_meta_type < NcmContentMetaType_Application) || content_meta_type > NcmContentMetaType_Delta) return NULL;
+    return (content_meta_type <= NcmContentMetaType_BootImagePackageSafe ? g_titleNcmContentMetaTypeNames[content_meta_type] : g_titleNcmContentMetaTypeNames[content_meta_type - 0x7A]);
 }
 
 NX_INLINE void titleFreeApplicationMetadata(void)

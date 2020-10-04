@@ -206,6 +206,16 @@ int main(int argc, char *argv[])
         FILE *xml_fd = NULL;
         char path[FS_MAX_PATH] = {0};
         
+        sprintf(path, "sdmc:/%s.nacp", nca_ctx->content_id_str);
+        
+        xml_fd = fopen(path, "wb");
+        if (xml_fd)
+        {
+            fwrite(nacp_ctx.data, 1, sizeof(_NacpStruct), xml_fd);
+            fclose(xml_fd);
+            xml_fd = NULL;
+        }
+        
         sprintf(path, "sdmc:/%s.nacp.xml", nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
