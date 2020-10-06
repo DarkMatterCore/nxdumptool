@@ -336,6 +336,14 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     u8 icon_hash[SHA256_HASH_SIZE] = {0};
     char icon_hash_str[SHA256_HASH_SIZE + 1] = {0};
     
+    u8 null_key[0x10] = {0};
+    char key_str[0x21] = {0};
+    bool ndcc_sgc_available = false, ndcc_rgc_available = false;
+    NacpNeighborDetectionClientConfiguration *ndcc = &(nacp->neighbor_detection_client_configuration);
+    
+    bool raocsbd_available = false;
+    NacpRequiredAddOnContentsSetBinaryDescriptor *raocsbd = &(nacp->required_add_on_contents_set_binary_descriptor);
+    
     bool success = false;
     
     /* Free AuthoringTool-like XML data if needed. */
@@ -543,7 +551,48 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "RequiredNetworkServiceLicenseOnLaunch", &(nacp->required_network_service_license_on_launch_flag), \
         sizeof(nacp->required_network_service_license_on_launch_flag), NacpRequiredNetworkServiceLicenseOnLaunch_Count, &nacpGetRequiredNetworkServiceLicenseOnLaunchString)) goto end;
     
-    /* TO DO: add NacpNeighborDetectionClientConfiguration. */
+    /* NeighborDetectionClientConfiguration. */
+    ndcc_sgc_available = (ndcc->send_group_configuration.group_id && memcmp(ndcc->send_group_configuration.key, null_key, sizeof(null_key)));
+    
+    for(i = 0; i < 0x10; i++)
+    {
+        ndcc_rgc_available = (ndcc->receivable_group_configurations[i].group_id && memcmp(ndcc->receivable_group_configurations[i].key, null_key, sizeof(null_key)));
+        if (ndcc_rgc_available) break;
+    }
+    
+    if (ndcc_sgc_available || ndcc_rgc_available)
+    {
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <NeighborDetectionClientConfiguration>\n")) goto end;
+        
+        /* SendDataConfiguration. */
+        utilsGenerateHexStringFromData(key_str, sizeof(key_str), ndcc->send_group_configuration.key, sizeof(ndcc->send_group_configuration.key));
+        
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                                "    <SendDataConfiguration>\n" \
+                                                "      <DataId>0x%016lx</DataId>\n" \
+                                                "      <Key>%s</Key>\n" \
+                                                "    </SendDataConfiguration>\n", \
+                                                ndcc->send_group_configuration.group_id,
+                                                key_str)) goto end;
+        
+        /* ReceivableDataConfiguration. */
+        for(i = 0; i < 0x10; i++)
+        {
+            utilsGenerateHexStringFromData(key_str, sizeof(key_str), ndcc->receivable_group_configurations[i].key, sizeof(ndcc->receivable_group_configurations[i].key));
+            
+            if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                                    "    <ReceivableDataConfiguration>\n" \
+                                                    "      <DataId>0x%016lx</DataId>\n" \
+                                                    "      <Key>%s</Key>\n" \
+                                                    "    </ReceivableDataConfiguration>\n", \
+                                                    ndcc->receivable_group_configurations[i].group_id,
+                                                    key_str)) goto end;
+        }
+        
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  </NeighborDetectionClientConfiguration>\n")) goto end;
+    } else {
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <NeighborDetectionClientConfiguration />\n")) goto end;
+    }
     
     /* JitConfiguration. */
     if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
@@ -554,7 +603,32 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
                                             nacpGetJitConfigurationFlagString(nacp->jit_configuration.jit_configuration_flag),
                                             nacp->jit_configuration.memory_size)) goto end;
     
-    /* TO DO: add NacpRequiredAddOnContentsSetBinaryDescriptor. */
+    /* RequiredAddOnContentsSetBinaryDescriptor. */
+    for(i = 0; i < 0x20; i++)
+    {
+        if (!raocsbd->descriptors[i].NacpDescriptors_ContinueSet) continue;
+        if ((raocsbd_available = (raocsbd->descriptors[i].NacpDescriptors_Index != 0))) break;
+    }
+    
+    if (raocsbd_available)
+    {
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <RequiredAddOnContentsSetBinaryDescriptor>\n")) goto end;
+        
+        for(i = 0; i < 0x20; i++)
+        {
+            if (!raocsbd->descriptors[i].NacpDescriptors_Index || !raocsbd->descriptors[i].NacpDescriptors_ContinueSet) continue;
+            
+            if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                                    "    <Descriptor>\n" \
+                                                    "      <Index>%u</Index>\n"
+                                                    "    </Descriptor>\n",
+                                                    raocsbd->descriptors[i].NacpDescriptors_Index)) goto end;
+        }
+        
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  </RequiredAddOnContentsSetBinaryDescriptor>\n")) goto end;
+    } else {
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <RequiredAddOnContentsSetBinaryDescriptor />\n")) goto end;
+    }
     
     /* PlayReportPermission. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "PlayReportPermission", nacp->play_report_permission, &nacpGetPlayReportPermissionString)) goto end;
@@ -573,7 +647,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
         /* Calculate icon hash. */
         sha256CalculateHash(icon_hash, icon_ctx->icon_data, icon_ctx->icon_size);
         
-        /* Generate icon hash string. */
+        /* Generate icon hash string. Only the first half from the hash is used. */
         utilsGenerateHexStringFromData(icon_hash_str, SHA256_HASH_SIZE + 1, icon_hash, SHA256_HASH_SIZE / 2);
         
         /* Add XML element. */
