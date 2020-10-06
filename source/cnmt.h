@@ -290,4 +290,18 @@ NX_INLINE u32 cnmtGetVersionInteger(ContentMetaVersion *version)
     return (version ? *((u32*)version) : 0);
 }
 
+NX_INLINE u64 cnmtGetRequiredTitleId(ContentMetaContext *cnmt_ctx)
+{
+    return ((cnmtIsValidContext(cnmt_ctx) && (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || \
+            cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)) ? \
+            *((u64*)cnmt_ctx->extended_header) : 0);
+}
+
+NX_INLINE u32 cnmtGetRequiredTitleVersion(ContentMetaContext *cnmt_ctx)
+{
+    return ((cnmtIsValidContext(cnmt_ctx) && (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || \
+            cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)) ? \
+            cnmtGetVersionInteger((ContentMetaVersion*)(cnmt_ctx->extended_header + sizeof(u64))) : 0);
+}
+
 #endif /* __CNMT_H__ */

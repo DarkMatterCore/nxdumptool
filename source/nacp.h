@@ -277,7 +277,7 @@ typedef struct {
 
 typedef struct {
     u16 NacpDescriptors_Index       : 15;
-    u16 NacpDescriptors_ContinueSet : 1;    ///< Called "flag" by Nintendo.
+    u16 NacpDescriptors_ContinueSet : 1;    ///< Called "flag" by Nintendo, which isn't really great...
 } NacpDescriptors;
 
 typedef struct {
@@ -301,6 +301,10 @@ typedef enum {
     NacpCrashScreenshotForDev_Allow = 1,
     NacpCrashScreenshotForDev_Count = 2     ///< Not a real value.
 } NacpCrashScreenshotForDev;
+
+typedef struct {
+    u64 application_id[8];
+} NacpAccessibleLaunchRequiredVersion;
 
 typedef struct {
     NacpTitle title[0x10];
@@ -360,7 +364,9 @@ typedef struct {
     u8 play_report_permission;                                                                      ///< NacpPlayReportPermission.
     u8 crash_screenshot_for_prod;                                                                   ///< NacpCrashScreenshotForProd.
     u8 crash_screenshot_for_dev;                                                                    ///< NacpCrashScreenshotForDev.
-    u8 reserved_5[0xBFD];
+    u8 reserved_5[0x5];
+    NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
+    u8 reserved_6[0xBB8];
 } _NacpStruct;
 
 typedef struct {
@@ -388,9 +394,9 @@ typedef struct {
 /// Initializes a NacpContext using a previously initialized NcaContext (which must belong to a Control NCA).
 bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx);
 
-/// Generates an AuthoringTool-like XML using information from a previously initialized NacpContext.
+/// Generates an AuthoringTool-like XML using information from a previously initialized NacpContext, as well as the Application/Patch version and the required system version.
 /// If the function succeeds, XML data and size will get saved to the 'authoring_tool_xml' and 'authoring_tool_xml_size' members from the NacpContext.
-bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx);
+bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 required_system_version);
 
 /// These functions return pointers to string representations of the input value.
 /// If the provided value is invalid, "Unknown" is returned.
@@ -412,6 +418,7 @@ const char *nacpGetRuntimeParameterDeliveryString(u8 runtime_parameter_delivery)
 const char *nacpGetCrashReportString(u8 crash_report);
 const char *nacpGetHdcpString(u8 hdcp);
 const char *nacpGetStartupUserAccountOptionString(u8 startup_user_account_option);
+const char *nacpGetPlayLogQueryCapabilityString(u8 play_log_query_capability);
 const char *nacpGetRepairString(u8 repair);
 const char *nacpGetRequiredNetworkServiceLicenseOnLaunchString(u8 required_network_service_license_on_launch);
 const char *nacpGetJitConfigurationFlagString(u64 jig_configuration_flag);

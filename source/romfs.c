@@ -357,7 +357,13 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     }
     
     /* Retrieve file entry. */
-    if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename))) LOGFILE("Failed to retrieve file entry by name for \"%s\"! (\"%s\").", filename, path);
+    if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename)))
+    {
+        /* Only log error if we're not dealing with NACP icons. */
+        int res = strncmp("/icon_", path, 6);
+        if (res != 0 || (res == 0 && ((NcaContext*)ctx->nca_fs_ctx->nca_ctx)->content_type != NcmContentType_Control))
+            LOGFILE("Failed to retrieve file entry by name for \"%s\"! (\"%s\").", filename, path);
+    }
     
 end:
     if (path_dup) free(path_dup);

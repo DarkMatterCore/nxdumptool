@@ -150,6 +150,12 @@ static const char *g_nacpStartupUserAccountOptionStrings[] = {
     [NacpStartupUserAccountOption_IsOptional] = "IsOptional"
 };
 
+static const char *g_nacpPlayLogQueryCapabilityStrings[] = {
+    [NacpPlayLogQueryCapability_None]      = "None",
+    [NacpPlayLogQueryCapability_WhiteList] = "WhiteList",
+    [NacpPlayLogQueryCapability_All]       = "All"
+};
+
 static const char *g_nacpRepairStrings[] = {
     [NacpRepair_SuppressGameCardAccess] = "SuppressGameCardAccess"
 };
@@ -185,8 +191,9 @@ NX_INLINE bool nacpCheckBitflagField(const void *flag, u8 flag_bitcount, u8 idx)
 static bool nacpAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const char *value);
 static bool nacpAddEnumFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u8 value, NacpStringFunction str_func);
 static bool nacpAddBitflagFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const void *flag, u8 flag_width, u8 max_flag_idx, NacpStringFunction str_func);
-static bool nacpAddU64FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u64 value);
 static bool nacpAddU16FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u16 value, bool hex);
+static bool nacpAddU32FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u32 value);
+static bool nacpAddU64FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u64 value);
 
 bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
 {
@@ -319,7 +326,7 @@ end:
     return success;
 }
 
-bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
+bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 required_system_version)
 {
     if (!nacpIsValidContext(nacp_ctx))
     {
@@ -341,7 +348,6 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     bool ndcc_sgc_available = false, ndcc_rgc_available = false;
     NacpNeighborDetectionClientConfiguration *ndcc = &(nacp->neighbor_detection_client_configuration);
     
-    bool raocsbd_available = false;
     NacpRequiredAddOnContentsSetBinaryDescriptor *raocsbd = &(nacp->required_add_on_contents_set_binary_descriptor);
     
     bool success = false;
@@ -381,29 +387,23 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     /* StartupUserAccount. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "StartupUserAccount", nacp->startup_user_account, &nacpGetStartupUserAccountString)) goto end;
     
+    /* StartupUserAccountOption. */
+    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "StartupUserAccountOption", &(nacp->startup_user_account_option_flag), sizeof(nacp->startup_user_account_option_flag), \
+        NacpStartupUserAccountOption_Count, &nacpGetStartupUserAccountOptionString)) goto end;
+    
     /* UserAccountSwitchLock. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSwitchLock", nacp->user_account_switch_lock, &nacpGetUserAccountSwitchLockString)) goto end;
     
-    /* AddOnContentRegistrationType. */
-    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "AddOnContentRegistrationType", nacp->add_on_content_registration_type, &nacpGetAddOnContentRegistrationTypeString)) goto end;
-    
-    /* AttributeFlag. */
+    /* Attribute. */
     if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Attribute", &(nacp->attribute_flag), sizeof(nacp->attribute_flag), NacpAttribute_Count, &nacpGetAttributeString)) goto end;
-    
-    /* SupportedLanguage. */
-    /* Even though this is a bitflag field, it doesn't follow the same format as the rest. */
-    for(i = 0, count = 0; i < NacpLanguage_Count; i++)
-    {
-        if (!nacpCheckBitflagField(&(nacp->supported_language_flag), sizeof(nacp->supported_language_flag) * 8, i)) continue;
-        if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SupportedLanguage", i, &nacpGetLanguageString)) goto end;
-        count++;
-    }
-    
-    if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <SupportedLanguage />\n")) goto end;
     
     /* ParentalControl. */
     if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "ParentalControl", &(nacp->parental_control_flag), sizeof(nacp->parental_control_flag), NacpParentalControl_Count, \
         &nacpGetParentalControlString)) goto end;
+    
+    /* SupportedLanguage. */
+    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SupportedLanguage", &(nacp->supported_language_flag), sizeof(nacp->supported_language_flag), NacpLanguage_Count, \
+        &nacpGetLanguageString)) goto end;
     
     /* Screenshot. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Screenshot", nacp->screenshot, &nacpGetScreenshotString)) goto end;
@@ -411,16 +411,13 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     /* VideoCapture. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "VideoCapture", nacp->video_capture, &nacpGetVideoCaptureString)) goto end;
     
-    /* DataLossConfirmation. */
-    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DataLossConfirmation", nacp->data_loss_confirmation, &nacpGetDataLossConfirmationString)) goto end;
-    
-    /* PlayLogPolicy. */
-    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "PlayLogPolicy", nacp->play_log_policy, &nacpGetPlayLogPolicyString)) goto end;
-    
     /* PresenceGroupId. */
     if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "PresenceGroupId", nacp->presence_group_id)) goto end;
     
-    /* RatingAge. */
+    /* DisplayVersion. */
+    if (!nacpAddStringFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DisplayVersion", nacp->display_version)) goto end;
+    
+    /* Rating. */
     for(i = 0, count = 0; i < NacpRatingAgeOrganization_Count; i++)
     {
         u8 age = *((u8*)&(nacp->rating_age) + i);
@@ -439,11 +436,11 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     
     if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <Rating />\n")) goto end;
     
-    /* DisplayVersion. */
-    if (!nacpAddStringFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DisplayVersion", nacp->display_version)) goto end;
+    /* DataLossConfirmation. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DataLossConfirmation", nacp->data_loss_confirmation, &nacpGetDataLossConfirmationString)) goto end;
     
-    /* AddOnContentBaseId. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "AddOnContentBaseId", nacp->add_on_content_base_id)) goto end;
+    /* PlayLogPolicy. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "PlayLogPolicy", nacp->play_log_policy, &nacpGetPlayLogPolicyString)) goto end;
     
     /* SaveDataOwnerId. */
     if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SaveDataOwnerId", nacp->save_data_owner_id)) goto end;
@@ -466,6 +463,23 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     /* ApplicationErrorCodeCategory. */
     if (!nacpAddStringFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "ApplicationErrorCodeCategory", nacp->application_error_code_category)) goto end;
     
+    /* AddOnContentBaseId. */
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "AddOnContentBaseId", nacp->add_on_content_base_id)) goto end;
+    
+    /* Version. */
+    if (!nacpAddU32FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Version", version)) goto end;
+    
+    /* ReleaseVersion and PrivateVersion. Unused but kept anyway. */
+    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                            "  <ReleaseVersion />\n" \
+                                            "  <PrivateVersion />\n")) goto end;
+    
+    /* LogoType. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "LogoType", nacp->logo_type, &nacpGetLogoTypeString)) goto end;
+    
+    /* RequiredSystemVersion. */
+    if (!nacpAddU32FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "RequiredSystemVersion", required_system_version)) goto end;
+    
     /* LocalCommunicationId. */
     for(i = 0, count = 0; i < 0x8; i++)
     {
@@ -476,23 +490,42 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     
     if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <LocalCommunicationId />\n")) goto end;
     
-    /* LogoType. */
-    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "LogoType", nacp->logo_type, &nacpGetLogoTypeString)) goto end;
-    
     /* LogoHandling. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "LogoHandling", nacp->logo_handling, &nacpGetLogoHandlingString)) goto end;
     
-    /* RuntimeAddOnContentInstall. */
-    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "RuntimeAddOnContentInstall", nacp->runtime_add_on_content_install, &nacpGetRuntimeAddOnContentInstallString)) goto end;
+    /* Icon. */
+    for(i = 0, count = 0; i < nacp_ctx->icon_count; i++)
+    {
+        NacpIconContext *icon_ctx = &(nacp_ctx->icon_ctx[i]);
+        
+        /* Calculate icon hash. */
+        sha256CalculateHash(icon_hash, icon_ctx->icon_data, icon_ctx->icon_size);
+        
+        /* Generate icon hash string. Only the first half from the hash is used. */
+        utilsGenerateHexStringFromData(icon_hash_str, SHA256_HASH_SIZE + 1, icon_hash, SHA256_HASH_SIZE / 2);
+        
+        /* Add XML element. */
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                                "  <Icon>\n" \
+                                                "    <Language>%s</Language>\n" \
+                                                "    <IconPath />\n" \
+                                                "    <NxIconPath />\n" \
+                                                "    <RawIconHash />\n" \
+                                                "    <NxIconHash>%s</NxIconHash>\n" \
+                                                "  </Icon>\n", \
+                                                nacpGetLanguageString(icon_ctx->language), \
+                                                icon_hash_str)) goto end;
+        
+        count++;
+    }
     
-    /* RuntimeParameterDelivery. */
-    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "RuntimeParameterDelivery", nacp->runtime_parameter_delivery, &nacpGetRuntimeParameterDeliveryString)) goto end;
+    if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <Icon />\n")) goto end;
     
-    /* CrashReport. */
-    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CrashReport", nacp->crash_report, &nacpGetCrashReportString)) goto end;
-    
-    /* Hdcp. */
-    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Hdcp", nacp->hdcp, &nacpGetHdcpString)) goto end;
+    /* HtmlDocumentPath, LegalInformationFilePath and AccessibleUrlsFilePath. Unused but kept anyway. */
+    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                            "  <HtmlDocumentPath />\n" \
+                                            "  <LegalInformationFilePath />\n" \
+                                            "  <AccessibleUrlsFilePath />\n")) goto end;
     
     /* SeedForPseudoDeviceId. */
     if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SeedForPseudoDeviceId", nacp->seed_for_pseudo_device_id)) goto end;
@@ -500,9 +533,8 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     /* BcatPassphrase. */
     if (!nacpAddStringFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "BcatPassphrase", nacp->bcat_passphrase)) goto end;
     
-    /* StartupUserAccountOption. */
-    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "StartupUserAccountOption", &(nacp->startup_user_account_option_flag), sizeof(nacp->startup_user_account_option_flag), \
-        NacpStartupUserAccountOption_Count, &nacpGetStartupUserAccountOptionString)) goto end;
+    /* AddOnContentRegistrationType. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "AddOnContentRegistrationType", nacp->add_on_content_registration_type, &nacpGetAddOnContentRegistrationTypeString)) goto end;
     
     /* UserAccountSaveDataSizeMax. */
     if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataSizeMax", nacp->user_account_save_data_size_max)) goto end;
@@ -531,6 +563,15 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     /* CacheStorageIndexMax. */
     if (!nacpAddU16FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CacheStorageIndexMax", nacp->cache_storage_index_max, true)) goto end;
     
+    /* Hdcp. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Hdcp", nacp->hdcp, &nacpGetHdcpString)) goto end;
+    
+    /* CrashReport. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CrashReport", nacp->crash_report, &nacpGetCrashReportString)) goto end;
+    
+    /* RuntimeAddOnContentInstall. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "RuntimeAddOnContentInstall", nacp->runtime_add_on_content_install, &nacpGetRuntimeAddOnContentInstallString)) goto end;
+    
     /* PlayLogQueryableApplicationId. */
     for(i = 0, count = 0; i < 0x10; i++)
     {
@@ -540,6 +581,9 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     }
     
     if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <PlayLogQueryableApplicationId />\n")) goto end;
+    
+    /* PlayLogQueryCapability. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "PlayLogQueryCapability", nacp->play_log_query_capability, &nacpGetPlayLogQueryCapabilityString)) goto end;
     
     /* Repair. */
     if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Repair", &(nacp->repair_flag), sizeof(nacp->repair_flag), NacpRepair_Count, &nacpGetRepairString)) goto end;
@@ -564,27 +608,27 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     {
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <NeighborDetectionClientConfiguration>\n")) goto end;
         
-        /* SendDataConfiguration. */
+        /* SendGroupConfiguration. */
         utilsGenerateHexStringFromData(key_str, sizeof(key_str), ndcc->send_group_configuration.key, sizeof(ndcc->send_group_configuration.key));
         
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                "    <SendDataConfiguration>\n" \
-                                                "      <DataId>0x%016lx</DataId>\n" \
+                                                "    <SendGroupConfiguration>\n" \
+                                                "      <GroupId>0x%016lx</GroupId>\n" \
                                                 "      <Key>%s</Key>\n" \
-                                                "    </SendDataConfiguration>\n", \
+                                                "    </SendGroupConfiguration>\n", \
                                                 ndcc->send_group_configuration.group_id,
                                                 key_str)) goto end;
         
-        /* ReceivableDataConfiguration. */
+        /* ReceivableGroupConfiguration. */
         for(i = 0; i < 0x10; i++)
         {
             utilsGenerateHexStringFromData(key_str, sizeof(key_str), ndcc->receivable_group_configurations[i].key, sizeof(ndcc->receivable_group_configurations[i].key));
             
             if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                    "    <ReceivableDataConfiguration>\n" \
-                                                    "      <DataId>0x%016lx</DataId>\n" \
+                                                    "    <ReceivableGroupConfiguration>\n" \
+                                                    "      <GroupId>0x%016lx</GroupId>\n" \
                                                     "      <Key>%s</Key>\n" \
-                                                    "    </ReceivableDataConfiguration>\n", \
+                                                    "    </ReceivableGroupConfiguration>\n", \
                                                     ndcc->receivable_group_configurations[i].group_id,
                                                     key_str)) goto end;
         }
@@ -603,32 +647,21 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
                                             nacpGetJitConfigurationFlagString(nacp->jit_configuration.jit_configuration_flag),
                                             nacp->jit_configuration.memory_size)) goto end;
     
-    /* RequiredAddOnContentsSetBinaryDescriptor. */
-    for(i = 0; i < 0x20; i++)
+    /* RequiredAddOnContentsSet. */
+    for(i = 0, count = 0; i < 0x20; i++)
     {
-        if (!raocsbd->descriptors[i].NacpDescriptors_ContinueSet) continue;
-        if ((raocsbd_available = (raocsbd->descriptors[i].NacpDescriptors_Index != 0))) break;
+        if (!raocsbd->descriptors[i].NacpDescriptors_Index || !raocsbd->descriptors[i].NacpDescriptors_ContinueSet) continue;
+        
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                                "  <RequiredAddOnContentsSet>\n" \
+                                                "    <Index>%u</Index>\n" \
+                                                "  </RequiredAddOnContentsSet>\n",
+                                                raocsbd->descriptors[i].NacpDescriptors_Index)) goto end;
+        
+        count++;
     }
     
-    if (raocsbd_available)
-    {
-        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <RequiredAddOnContentsSetBinaryDescriptor>\n")) goto end;
-        
-        for(i = 0; i < 0x20; i++)
-        {
-            if (!raocsbd->descriptors[i].NacpDescriptors_Index || !raocsbd->descriptors[i].NacpDescriptors_ContinueSet) continue;
-            
-            if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                    "    <Descriptor>\n" \
-                                                    "      <Index>%u</Index>\n"
-                                                    "    </Descriptor>\n",
-                                                    raocsbd->descriptors[i].NacpDescriptors_Index)) goto end;
-        }
-        
-        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  </RequiredAddOnContentsSetBinaryDescriptor>\n")) goto end;
-    } else {
-        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <RequiredAddOnContentsSetBinaryDescriptor />\n")) goto end;
-    }
+    if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <RequiredAddOnContentsSet />\n")) goto end;
     
     /* PlayReportPermission. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "PlayReportPermission", nacp->play_report_permission, &nacpGetPlayReportPermissionString)) goto end;
@@ -639,30 +672,33 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx)
     /* CrashScreenshotForDev. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CrashScreenshotForDev", nacp->crash_screenshot_for_dev, &nacpGetCrashScreenshotForDevString)) goto end;
     
-    /* Icon. */
-    for(i = 0, count = 0; i < nacp_ctx->icon_count; i++)
+    /* AccessibleLaunchRequiredVersion. */
+    for(i = 0, count = 0; i < 0x8; i++)
     {
-        NacpIconContext *icon_ctx = &(nacp_ctx->icon_ctx[i]);
+        if (!nacp->accessible_launch_required_version.application_id[i]) continue;
         
-        /* Calculate icon hash. */
-        sha256CalculateHash(icon_hash, icon_ctx->icon_data, icon_ctx->icon_size);
-        
-        /* Generate icon hash string. Only the first half from the hash is used. */
-        utilsGenerateHexStringFromData(icon_hash_str, SHA256_HASH_SIZE + 1, icon_hash, SHA256_HASH_SIZE / 2);
-        
-        /* Add XML element. */
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                "  <Icon>\n" \
-                                                "    <Language>%s</Language>\n" \
-                                                "    <NxIconHash>%s</NxIconHash>\n" \
-                                                "  </Icon>\n", \
-                                                nacpGetLanguageString(icon_ctx->language), \
-                                                icon_hash_str)) goto end;
+                                                "  <AccessibleLaunchRequiredVersion>\n" \
+                                                "    <ApplicationId>0x%016lx</ApplicationId>\n" \
+                                                "  </AccessibleLaunchRequiredVersion>\n",
+                                                nacp->accessible_launch_required_version.application_id[i])) goto end;
         
         count++;
     }
     
-    if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <Icon />\n")) goto end;
+    if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <AccessibleLaunchRequiredVersion />\n")) goto end;
+    
+    /* History. Unused but kept anyway. */
+    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <History />\n")) goto end;
+    
+    /* RuntimeParameterDelivery. */
+    if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "RuntimeParameterDelivery", nacp->runtime_parameter_delivery, &nacpGetRuntimeParameterDeliveryString)) goto end;
+    
+    /* ApplicationId. */
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "ApplicationId", nacp_ctx->nca_ctx->header.program_id)) goto end;
+    
+    /* FilterDescriptionFilePath. Unused but kept anyway. */
+    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <FilterDescriptionFilePath />\n")) goto end;
     
     if (!(success = utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "</Application>"))) goto end;
     
@@ -770,6 +806,11 @@ const char *nacpGetStartupUserAccountOptionString(u8 startup_user_account_option
     return (startup_user_account_option < NacpStartupUserAccountOption_Count ? g_nacpStartupUserAccountOptionStrings[startup_user_account_option] : g_unknownString);
 }
 
+const char *nacpGetPlayLogQueryCapabilityString(u8 play_log_query_capability)
+{
+    return (play_log_query_capability < NacpPlayLogQueryCapability_Count ? g_nacpPlayLogQueryCapabilityStrings[play_log_query_capability] : g_unknownString);
+}
+
 const char *nacpGetRepairString(u8 repair)
 {
     return (repair < NacpRepair_Count ? g_nacpRepairStrings[repair] : g_unknownString);
@@ -846,8 +887,6 @@ static bool nacpAddBitflagFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_s
         return false;
     }
     
-    if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>", tag_name)) goto end;
-    
     for(i = 0; i < flag_width; i++)
     {
         if (flag_u8[i])
@@ -862,31 +901,20 @@ static bool nacpAddBitflagFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_s
         for(i = 0; i < max_flag_idx; i++)
         {
             if (!nacpCheckBitflagField(flag, flag_bitcount, i)) continue;
-            if (count && !utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, ",")) goto end;
-            if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "%s", str_func(i))) goto end;
+            if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%s</%s>\n", tag_name, str_func(i), tag_name)) goto end;
             count++;
         }
         
-        if (!count && !utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "%s", g_unknownString)) goto end;
-    } else {
-        if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "None")) goto end;
+        /* Edge case for new, unsupported flags. */
+        if (!count) empty_flag = true;
     }
     
-    success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "</%s>\n", tag_name);
+    if (empty_flag && !utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s />\n", tag_name)) goto end;
+    
+    success = true;
     
 end:
     return success;
-}
-
-static bool nacpAddU64FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u64 value)
-{
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    return utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>0x%016lx</%s>\n", tag_name, value, tag_name);
 }
 
 static bool nacpAddU16FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u16 value, bool hex)
@@ -899,4 +927,26 @@ static bool nacpAddU16FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size,
     
     return (hex ? utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>0x%04x</%s>\n", tag_name, value, tag_name) : \
             utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%u</%s>\n", tag_name, value, tag_name));
+}
+
+static bool nacpAddU32FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u32 value)
+{
+    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    return utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%u</%s>\n", tag_name, value, tag_name);
+}
+
+static bool nacpAddU64FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u64 value)
+{
+    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    return utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>0x%016lx</%s>\n", tag_name, value, tag_name);
 }

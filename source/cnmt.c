@@ -315,10 +315,10 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     if (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || \
         cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)
     {
-        u32 required_title_version = cnmtGetVersionInteger((ContentMetaVersion*)(cnmt_ctx->extended_header + sizeof(u64)));
+        u32 required_title_version = cnmtGetRequiredTitleVersion(cnmt_ctx);
         const char *required_title_version_str = cnmtGetRequiredTitleVersionString(cnmt_ctx->packaged_header->content_meta_type);
         
-        u64 required_title_id = *((u64*)cnmt_ctx->extended_header);
+        u64 required_title_id = cnmtGetRequiredTitleId(cnmt_ctx);
         const char *required_title_type_str = cnmtGetRequiredTitleTypeString(cnmt_ctx->packaged_header->content_meta_type);
         
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \

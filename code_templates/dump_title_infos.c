@@ -12,9 +12,9 @@
             {
                 fprintf(title_infos_txt, "Storage ID: 0x%02X\r\n", g_titleInfo[i].storage_id);
                 fprintf(title_infos_txt, "Title ID: %016lX\r\n", g_titleInfo[i].meta_key.id);
-                fprintf(title_infos_txt, "Version: %u (%u.%u.%u-%u.%u)\r\n", g_titleInfo[i].meta_key.version, g_titleInfo[i].dot_version.TitleVersion_Major, \
-                        g_titleInfo[i].dot_version.TitleVersion_Minor, g_titleInfo[i].dot_version.TitleVersion_Micro, g_titleInfo[i].dot_version.TitleVersion_MajorRelstep, \
-                        g_titleInfo[i].dot_version.TitleVersion_MinorRelstep);
+                fprintf(title_infos_txt, "Version: %u (%u.%u.%u-%u.%u)\r\n", g_titleInfo[i].meta_key.version, g_titleInfo[i].version.TitleVersion_Major, \
+                        g_titleInfo[i].version.TitleVersion_Minor, g_titleInfo[i].version.TitleVersion_Micro, g_titleInfo[i].version.TitleVersion_MajorRelstep, \
+                        g_titleInfo[i].version.TitleVersion_MinorRelstep);
                 fprintf(title_infos_txt, "Type: 0x%02X\r\n", g_titleInfo[i].meta_key.type);
                 fprintf(title_infos_txt, "Install Type: 0x%02X\r\n", g_titleInfo[i].meta_key.install_type);
                 fprintf(title_infos_txt, "Title Size: %s (0x%lX)\r\n", g_titleInfo[i].title_size_str, g_titleInfo[i].title_size);
