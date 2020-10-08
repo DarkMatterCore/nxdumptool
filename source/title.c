@@ -1358,7 +1358,7 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
         /* Fill information. */
         cur_title_info->storage_id = storage_id;
         memcpy(&(cur_title_info->meta_key), &(meta_keys[i]), sizeof(NcmContentMetaKey));
-        memcpy(&(cur_title_info->version), &(meta_keys[i].version), sizeof(u32));
+        cur_title_info->version.value = meta_keys[i].version;
         
         if (cur_title_info->meta_key.type <= NcmContentMetaType_Application) cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(meta_keys[i].id);
         

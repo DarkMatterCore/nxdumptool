@@ -118,21 +118,6 @@ typedef enum {
     GameCardCompatibilityType_Terra  = 1
 } GameCardCompatibilityType;
 
-typedef struct {
-    u32 GameCardFwMode_Relstep : 8;
-    u32 GameCardFwMode_Micro   : 8;
-    u32 GameCardFwMode_Minor   : 8;
-    u32 GameCardFwMode_Major   : 8;
-} GameCardFwMode;
-
-typedef struct {
-    u32 GameCardCupVersion_MinorRelstep : 8;
-    u32 GameCardCupVersion_MajorRelstep : 8;
-    u32 GameCardCupVersion_Micro        : 4;
-    u32 GameCardCupVersion_Minor        : 6;
-    u32 GameCardCupVersion_Major        : 6;
-} GameCardCupVersion;
-
 /// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under newer versions of HOS) and the IV from `GameCardHeader`.
 /// Key hashes for documentation purposes:
 /// Production XCI header key hash:  2E36CC55157A351090A73E7AE77CF581F69B0B6E48FB066C984879A6ED7D2E96
@@ -144,8 +129,8 @@ typedef struct {
     u32 wait_2_time_read;           ///< Always 0.
     u32 wait_1_time_write;          ///< Always 0.
     u32 wait_2_time_write;          ///< Always 0.
-    GameCardFwMode fw_mode;
-    GameCardCupVersion cup_version;
+    VersionType2 fw_mode;
+    VersionType1 cup_version;
     u8 compatibility_type;          ///< GameCardCompatibilityType.
     u8 reserved_1[0x3];
     u64 cup_hash;
@@ -155,7 +140,7 @@ typedef struct {
 
 /// Placed after the `GameCardKeyArea` section.
 typedef struct {
-    u8 signature[0x100];                            ///< RSA-2048 PKCS #1 signature over the rest of the header.
+    u8 signature[0x100];                            ///< RSA-2048-PSS with SHA-256 signature over the rest of the header.
     u32 magic;                                      ///< "HEAD".
     u32 secure_area_start_address;                  ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
     u32 backup_area_start_address;                  ///< Always 0xFFFFFFFF.

@@ -51,6 +51,8 @@ static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 static AppletHookCookie g_systemOverclockCookie = {0};
 
 static Mutex g_logfileMutex = 0;
+static const char *g_logfileTimestampFormat = "%d-%02d-%02d %02d:%02d:%02d -> %s: ";
+static const char *g_logfileLineBreak = "\r\n";
 
 static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB" };
 static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
@@ -389,13 +391,13 @@ void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...)
     time_t now = time(NULL);
     struct tm *ts = localtime(&now);
     
-    fprintf(logfile, "%d-%02d-%02d %02d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
+    fprintf(logfile, g_logfileTimestampFormat, ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
     
     va_start(args, fmt);
     vfprintf(logfile, fmt, args);
     va_end(args);
     
-    fprintf(logfile, "\r\n");
+    fprintf(logfile, g_logfileLineBreak);
     fclose(logfile);
     utilsCommitSdCardFileSystemChanges();
     
@@ -423,7 +425,7 @@ void utilsWriteMessageToLogBuffer(char **dst, size_t *dst_size, const char *func
         dst_str_len = 0;
     }
     
-    timestamp_len = snprintf(NULL, 0, "%d-%02d-%02d %02d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
+    timestamp_len = snprintf(NULL, 0, g_logfileTimestampFormat, ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
     if (timestamp_len <= 0) goto end;
     
     formatted_str_len = vsnprintf(NULL, 0, fmt, args);
@@ -443,9 +445,9 @@ void utilsWriteMessageToLogBuffer(char **dst, size_t *dst_size, const char *func
         *dst_size = required_dst_size;
     }
     
-    sprintf(*dst + dst_str_len, "%d-%02d-%02d %02d:%02d:%02d -> %s: ", ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
+    sprintf(*dst + dst_str_len, g_logfileTimestampFormat, ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
     vsprintf(*dst + dst_str_len + (size_t)timestamp_len, fmt, args);
-    sprintf(*dst + dst_str_len + (size_t)timestamp_len + (size_t)formatted_str_len, "\r\n");
+    sprintf(*dst + dst_str_len + (size_t)timestamp_len + (size_t)formatted_str_len, g_logfileLineBreak);
     
 end:
     va_end(args);

@@ -32,7 +32,7 @@
 /* Global variables. */
 
 /// Self-generated private key.
-static const char g_rsa2048CustomAcidPrivateKey[] = "-----BEGIN RSA PRIVATE KEY-----\r\n"
+static const char g_rsa2048CustomPrivateKey[] = "-----BEGIN RSA PRIVATE KEY-----\r\n"
 "MIIEowIBAAKCAQEAvVRzt+8mE7oE4RkmSh3ws4CGlBj7uhHkfwCpPFsn4TNVdLRo\r\n"
 "YYY17jQYWTtcOYPMcHxwUpgJyspGN8QGXEkJqY8jILv2eO0jBGtg7Br2afUBp6/x\r\n"
 "BOMT2RlYVX6H4a1UA19Hzmcn+T1hdDwS6oBYpi8rJSm0+q+yB34dueNkVsk4eKbj\r\n"
@@ -61,7 +61,8 @@ static const char g_rsa2048CustomAcidPrivateKey[] = "-----BEGIN RSA PRIVATE KEY-
 "-----END RSA PRIVATE KEY-----\r\n";
 
 /// Self-generated public key.
-static const u8 g_rsa2048CustomAcidPublicKey[] = {
+/// Used to verify signatures generated with g_rsa2048CustomPrivateKey.
+static const u8 g_rsa2048CustomPublicKey[] = {
     0xBD, 0x54, 0x73, 0xB7, 0xEF, 0x26, 0x13, 0xBA, 0x04, 0xE1, 0x19, 0x26, 0x4A, 0x1D, 0xF0, 0xB3,
     0x80, 0x86, 0x94, 0x18, 0xFB, 0xBA, 0x11, 0xE4, 0x7F, 0x00, 0xA9, 0x3C, 0x5B, 0x27, 0xE1, 0x33,
     0x55, 0x74, 0xB4, 0x68, 0x61, 0x86, 0x35, 0xEE, 0x34, 0x18, 0x59, 0x3B, 0x5C, 0x39, 0x83, 0xCC,
@@ -84,7 +85,7 @@ static const u8 g_rsa2048CustomAcidPublicKey[] = {
 
 static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_src, size_t h_src_size);
 
-bool rsa2048GenerateSha256BasedCustomAcidSignature(void *dst, const void *src, size_t size)
+bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t size)
 {
     if (!dst || !src || !size)
     {
@@ -121,7 +122,7 @@ bool rsa2048GenerateSha256BasedCustomAcidSignature(void *dst, const void *src, s
     }
     
     /* Parse private key. */
-    ret = mbedtls_pk_parse_key(&pk, (u8*)g_rsa2048CustomAcidPrivateKey, strlen(g_rsa2048CustomAcidPrivateKey) + 1, NULL, 0);
+    ret = mbedtls_pk_parse_key(&pk, (const u8*)g_rsa2048CustomPrivateKey, strlen(g_rsa2048CustomPrivateKey) + 1, NULL, 0);
     if (ret != 0)
     {
         LOGFILE("mbedtls_pk_parse_key failed! (%d).", ret);
@@ -151,9 +152,9 @@ end:
     return success;
 }
 
-const u8 *rsa2048GetCustomAcidPublicKey(void)
+const u8 *rsa2048GetCustomPublicKey(void)
 {
-    return g_rsa2048CustomAcidPublicKey;
+    return g_rsa2048CustomPublicKey;
 }
 
 bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signature, const void *modulus, const void *exponent, size_t exponent_size, const void *label_hash, size_t *out_size)

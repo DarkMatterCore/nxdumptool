@@ -262,7 +262,7 @@ int main(int argc, char *argv[])
     
     consolePrint("nacp initialize ctx succeeded\n");
     
-    if (nacpGenerateAuthoringToolXml(&nacp_ctx, titleGetVersionInteger(&(user_app_data.app_info->version)), cnmtGetRequiredTitleVersion(&cnmt_ctx)))
+    if (nacpGenerateAuthoringToolXml(&nacp_ctx, user_app_data.app_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
     {
         consolePrint("nacp xml succeeded\n");
         
@@ -310,6 +310,8 @@ out2:
         consolePrint("press any button to exit\n");
         utilsWaitForButtonPress(KEY_NONE);
     }
+    
+    nacpFreeContext(&nacp_ctx);
     
     cnmtFreeContext(&cnmt_ctx);
     

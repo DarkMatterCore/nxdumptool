@@ -27,15 +27,6 @@
 
 #define CNMT_DIGEST_SIZE    SHA256_HASH_SIZE
 
-/// Used to display version numbers in dot notation: "{Major}.{Minor}.{Micro}-{MajorRelstep}.{MinorRelstep}".
-typedef struct {
-    u32 ContentMetaVersion_MinorRelstep : 8;
-    u32 ContentMetaVersion_MajorRelstep : 8;
-    u32 ContentMetaVersion_Micro        : 4;
-    u32 ContentMetaVersion_Minor        : 6;
-    u32 ContentMetaVersion_Major        : 6;
-} ContentMetaVersion;
-
 /// Equivalent to NcmContentMetaAttribute.
 typedef enum {
     ContentMetaAttribute_IncludesExFatDriver = BIT(0),
@@ -43,9 +34,8 @@ typedef enum {
     ContentMetaAttribute_Compacted           = BIT(2)
 } ContentMetaAttribute;
 
-typedef struct {
-    u8 ContentMetaInstallState_Committed : 1;
-    u8 ContentMetaInstallState_Reserved  : 7;
+typedef enum {
+    ContentMetaInstallState_Committed = BIT(0)
 } ContentMetaInstallState;
 
 /// Extended variation of NcmContentMetaHeader. This is essentially the start of every CNMT file.
@@ -55,7 +45,7 @@ typedef struct {
 /// Finally, a 0x20 byte long digest is appended to the EOF.
 typedef struct {
     u64 title_id;
-    ContentMetaVersion version;
+    VersionType1 version;
     u8 content_meta_type;                                   ///< NcmContentMetaType.
     u8 reserved_1;
     u16 extended_header_size;                               ///< Must match the size from the extended header struct for this content meta type (SystemUpdate, Application, Patch, AddOnContent, Delta).
@@ -64,8 +54,8 @@ typedef struct {
     u8 content_meta_attribute;                              ///< ContentMetaAttribute.
     u8 storage_id;                                          ///< NcmStorageId.
     u8 content_install_type;                                ///< NcmContentInstallType.
-    ContentMetaInstallState install_state;
-    ContentMetaVersion required_download_system_version;
+    u8 install_state;                                       ///< ContentMetaInstallState.
+    VersionType1 required_download_system_version;
     u8 reserved_2[0x4];
 } ContentMetaPackagedContentMetaHeader;
 
@@ -76,27 +66,27 @@ typedef struct {
 } ContentMetaSystemUpdateMetaExtendedHeader;
 
 /// Extended header for Application titles.
-/// Equivalent to NcmApplicationMetaExtendedHeader, but using ContentMetaVersion structs.
+/// Equivalent to NcmApplicationMetaExtendedHeader, but using VersionType1 structs.
 typedef struct {
     u64 patch_id;
-    ContentMetaVersion required_system_version;
-    ContentMetaVersion required_application_version;
+    VersionType1 required_system_version;
+    VersionType1 required_application_version;
 } ContentMetaApplicationMetaExtendedHeader;
 
 /// Extended header for Patch titles.
-/// Equivalent to NcmPatchMetaExtendedHeader, but using a ContentMetaVersion struct.
+/// Equivalent to NcmPatchMetaExtendedHeader, but using a VersionType1 struct.
 typedef struct {
     u64 application_id;
-    ContentMetaVersion required_system_version;
+    VersionType1 required_system_version;
     u32 extended_data_size;
     u8 reserved[0x8];
 } ContentMetaPatchMetaExtendedHeader;
 
 /// Extended header for AddOnContent titles.
-/// Equivalent to NcmAddOnContentMetaExtendedHeader, but using a ContentMetaVersion struct.
+/// Equivalent to NcmAddOnContentMetaExtendedHeader, but using a VersionType1 struct.
 typedef struct {
     u64 application_id;
-    ContentMetaVersion required_application_version;
+    VersionType1 required_application_version;
     u8 reserved[0x4];
 } ContentMetaAddOnContentMetaExtendedHeader;
 
@@ -168,8 +158,8 @@ typedef struct {
 typedef struct {
     u64 source_patch_id;
     u64 destination_patch_id;
-    ContentMetaVersion source_version;
-    ContentMetaVersion destination_version;
+    VersionType1 source_version;
+    VersionType1 destination_version;
     u64 download_size;
     u8 reserved[0x8];
 } ContentMetaPatchDeltaHistory;
@@ -177,8 +167,8 @@ typedef struct {
 typedef struct {
     u64 source_patch_id;
     u64 destination_patch_id;
-    ContentMetaVersion source_version;
-    ContentMetaVersion destination_version;
+    VersionType1 source_version;
+    VersionType1 destination_version;
     u16 fragment_set_count;
     u8 reserved_1[0x6];
     u16 content_info_count;
@@ -191,6 +181,7 @@ typedef enum {
     ContentMetaUpdateType_Create       = 2
 } ContentMetaUpdateType;
 
+#pragma pack(push, 1)
 typedef struct {
     NcmContentId source_content_id;
     NcmContentId destination_content_id;
@@ -199,10 +190,11 @@ typedef struct {
     u32 destination_size_low;
     u16 destination_size_high;
     u16 fragment_count;
-    NcmContentType fragment_target_content_type;
+    u8 fragment_target_content_type;                ///< NcmContentType.
     u8 update_type;                                 ///< ContentMetaUpdateType.
     u8 reserved[0x4];
 } ContentMetaFragmentSet;
+#pragma pack(pop)
 
 typedef struct {
     u16 content_info_index;
@@ -216,8 +208,8 @@ typedef struct {
 typedef struct {
     u64 source_patch_id;
     u64 destination_patch_id;
-    ContentMetaVersion source_version;
-    ContentMetaVersion destination_version;
+    VersionType1 source_version;
+    VersionType1 destination_version;
     u16 fragment_set_count;
     u8 reserved[0x6];
 } ContentMetaDeltaMetaExtendedDataHeader;
@@ -285,11 +277,6 @@ NX_INLINE bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx)
     return (cnmtIsValidContext(cnmt_ctx) && pfsGenerateEntryPatch(&(cnmt_ctx->pfs_ctx), cnmt_ctx->pfs_entry, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size, 0, &(cnmt_ctx->nca_patch)));
 }
 
-NX_INLINE u32 cnmtGetVersionInteger(ContentMetaVersion *version)
-{
-    return (version ? *((u32*)version) : 0);
-}
-
 NX_INLINE u64 cnmtGetRequiredTitleId(ContentMetaContext *cnmt_ctx)
 {
     return ((cnmtIsValidContext(cnmt_ctx) && (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || \
@@ -301,7 +288,7 @@ NX_INLINE u32 cnmtGetRequiredTitleVersion(ContentMetaContext *cnmt_ctx)
 {
     return ((cnmtIsValidContext(cnmt_ctx) && (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || \
             cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)) ? \
-            cnmtGetVersionInteger((ContentMetaVersion*)(cnmt_ctx->extended_header + sizeof(u64))) : 0);
+            ((VersionType1*)(cnmt_ctx->extended_header + sizeof(u64)))->value : 0);
 }
 
 #endif /* __CNMT_H__ */

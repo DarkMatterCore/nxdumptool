@@ -30,158 +30,158 @@ typedef const char *(*NacpStringFunction)(u8 value);    /* Used while adding fie
 
 static const char *g_unknownString = "Unknown";
 
-static const char *g_nacpLanguageStrings[] = {
-    [NacpLanguage_AmericanEnglish]      = "AmericanEnglish",
-    [NacpLanguage_BritishEnglish]       = "BritishEnglish",
-    [NacpLanguage_Japanese]             = "Japanese",
-    [NacpLanguage_French]               = "French",
-    [NacpLanguage_German]               = "German",
-    [NacpLanguage_LatinAmericanSpanish] = "LatinAmericanSpanish",
-    [NacpLanguage_Spanish]              = "Spanish",
-    [NacpLanguage_Italian]              = "Italian",
-    [NacpLanguage_Dutch]                = "Dutch",
-    [NacpLanguage_CanadianFrench]       = "CanadianFrench",
-    [NacpLanguage_Portuguese]           = "Portuguese",
-    [NacpLanguage_Russian]              = "Russian",
-    [NacpLanguage_Korean]               = "Korean",
-    [NacpLanguage_TraditionalChinese]   = "TraditionalChinese",
-    [NacpLanguage_SimplifiedChinese]    = "SimplifiedChinese",
-    [NacpLanguage_BrazilianPortuguese]  = "BrazilianPortuguese"
+static const char *g_nacpLanguageStrings[NacpLanguage_Count] = {
+    "AmericanEnglish",
+    "BritishEnglish",
+    "Japanese",
+    "French",
+    "German",
+    "LatinAmericanSpanish",
+    "Spanish",
+    "Italian",
+    "Dutch",
+    "CanadianFrench",
+    "Portuguese",
+    "Russian",
+    "Korean",
+    "TraditionalChinese",
+    "SimplifiedChinese",
+    "BrazilianPortuguese"
 };
 
-static const char *g_nacpStartupUserAccountStrings[] = {
-    [NacpStartupUserAccount_None]                                       = "None",
-    [NacpStartupUserAccount_Required]                                   = "Required",
-    [NacpStartupUserAccount_RequiredWithNetworkServiceAccountAvailable] = "RequiredWithNetworkServiceAccountAvailable"
+static const char *g_nacpStartupUserAccountStrings[NacpStartupUserAccount_Count] = {
+    "None",
+    "Required",
+    "RequiredWithNetworkServiceAccountAvailable"
 };
 
-static const char *g_nacpUserAccountSwitchLockStrings[] = {
-    [NacpUserAccountSwitchLock_Disable] = "Disable",
-    [NacpUserAccountSwitchLock_Enable]  = "Enable"
+static const char *g_nacpUserAccountSwitchLockStrings[NacpUserAccountSwitchLock_Count] = {
+    "Disable",
+    "Enable"
 };
 
-static const char *g_nacpAddOnContentRegistrationTypeStrings[] = {
-    [NacpAddOnContentRegistrationType_AllOnLaunch] = "AllOnLaunch",
-    [NacpAddOnContentRegistrationType_OnDemand]    = "OnDemand"
+static const char *g_nacpAddOnContentRegistrationTypeStrings[NacpAddOnContentRegistrationType_Count] = {
+    "AllOnLaunch",
+    "OnDemand"
 };
 
-static const char *g_nacpAttributeStrings[] = {
-    [NacpAttribute_Demo]                     = "Demo",
-    [NacpAttribute_RetailInteractiveDisplay] = "RetailInteractiveDisplay"
+static const char *g_nacpAttributeStrings[NacpAttribute_Count] = {
+    "Demo",
+    "RetailInteractiveDisplay"
 };
 
-static const char *g_nacpParentalControlStrings[] = {
-    [NacpParentalControl_FreeCommunication] = "FreeCommunication"
+static const char *g_nacpParentalControlStrings[NacpParentalControl_Count] = {
+    "FreeCommunication"
 };
 
-static const char *g_nacpScreenshotStrings[] = {
-    [NacpScreenshot_Allow] = "Allow",
-    [NacpScreenshot_Deny]  = "Deny"
+static const char *g_nacpScreenshotStrings[NacpScreenshot_Count] = {
+    "Allow",
+    "Deny"
 };
 
-static const char *g_nacpVideoCaptureStrings[] = {
-    [NacpVideoCapture_Disable] = "Disable",
-    [NacpVideoCapture_Manual]  = "Manual",
-    [NacpVideoCapture_Enable]  = "Enable"
+static const char *g_nacpVideoCaptureStrings[NacpVideoCapture_Count] = {
+    "Disable",
+    "Manual",
+    "Enable"
 };
 
-static const char *g_nacpDataLossConfirmationStrings[] = {
-    [NacpDataLossConfirmation_None]     = "None",
-    [NacpDataLossConfirmation_Required] = "Required"
+static const char *g_nacpDataLossConfirmationStrings[NacpDataLossConfirmation_Count] = {
+    "None",
+    "Required"
 };
 
-static const char *g_nacpPlayLogPolicyStrings[] = {
-    [NacpPlayLogPolicy_Open]    = "Open",
-    [NacpPlayLogPolicy_LogOnly] = "LogOnly",
-    [NacpPlayLogPolicy_None]    = "None",
-    [NacpPlayLogPolicy_Closed]  = "Closed"
+static const char *g_nacpPlayLogPolicyStrings[NacpPlayLogPolicy_Count] = {
+    "Open",
+    "LogOnly",
+    "None",
+    "Closed"
 };
 
-static const char *g_nacpRatingAgeOrganizationStrings[] = {
-    [NacpRatingAgeOrganization_CERO]         = "CERO",
-    [NacpRatingAgeOrganization_GRACGCRB]     = "GRACGCRB",
-    [NacpRatingAgeOrganization_GSRMR]        = "GSRMR",
-    [NacpRatingAgeOrganization_ESRB]         = "ESRB",
-    [NacpRatingAgeOrganization_ClassInd]     = "ClassInd",
-    [NacpRatingAgeOrganization_USK]          = "USK",
-    [NacpRatingAgeOrganization_PEGI]         = "PEGI",
-    [NacpRatingAgeOrganization_PEGIPortugal] = "PEGIPortugal",
-    [NacpRatingAgeOrganization_PEGIBBFC]     = "PEGIBBFC",
-    [NacpRatingAgeOrganization_Russian]      = "Russian",
-    [NacpRatingAgeOrganization_ACB]          = "ACB",
-    [NacpRatingAgeOrganization_OFLC]         = "OFLC",
-    [NacpRatingAgeOrganization_IARCGeneric]  = "IARCGeneric"
+static const char *g_nacpRatingAgeOrganizationStrings[NacpRatingAgeOrganization_Count] = {
+    "CERO",
+    "GRACGCRB",
+    "GSRMR",
+    "ESRB",
+    "ClassInd",
+    "USK",
+    "PEGI",
+    "PEGIPortugal",
+    "PEGIBBFC",
+    "Russian",
+    "ACB",
+    "OFLC",
+    "IARCGeneric"
 };
 
-static const char *g_nacpLogoTypeStrings[] = {
-    [NacpLogoType_LicensedByNintendo]    = "LicensedByNintendo",
-    [NacpLogoType_DistributedByNintendo] = "DistributedByNintendo",
-    [NacpLogoType_Nintendo]              = "Nintendo"
+static const char *g_nacpLogoTypeStrings[NacpLogoType_Count] = {
+    "LicensedByNintendo",
+    "DistributedByNintendo",
+    "Nintendo"
 };
 
-static const char *g_nacpLogoHandlingStrings[] = {
-    [NacpLogoHandling_Auto]   = "Auto",
-    [NacpLogoHandling_Manual] = "Manual"
+static const char *g_nacpLogoHandlingStrings[NacpLogoHandling_Count] = {
+    "Auto",
+    "Manual"
 };
 
-static const char *g_nacpRuntimeAddOnContentInstallStrings[] = {
-    [NacpRuntimeAddOnContentInstall_Deny]                                       = "Deny",
-    [NacpRuntimeAddOnContentInstall_AllowAppend]                                = "AllowAppend",
-    [NacpRuntimeAddOnContentInstall_AllowAppendButDontDownloadWhenUsingNetwork] = "AllowAppendButDontDownloadWhenUsingNetwork"
+static const char *g_nacpRuntimeAddOnContentInstallStrings[NacpRuntimeAddOnContentInstall_Count] = {
+    "Deny",
+    "AllowAppend",
+    "AllowAppendButDontDownloadWhenUsingNetwork"
 };
 
-static const char *g_nacpNacpRuntimeParameterDeliveryStrings[] = {
-    [NacpRuntimeParameterDelivery_Always]                   = "Always",
-    [NacpRuntimeParameterDelivery_AlwaysIfUserStateMatched] = "AlwaysIfUserStateMatched",
-    [NacpRuntimeParameterDelivery_OnRestart]                = "OnRestart"
+static const char *g_nacpNacpRuntimeParameterDeliveryStrings[NacpRuntimeParameterDelivery_Count] = {
+    "Always",
+    "AlwaysIfUserStateMatched",
+    "OnRestart"
 };
 
-static const char *g_nacpCrashReportStrings[] = {
-    [NacpCrashReport_Deny]  = "Deny",
-    [NacpCrashReport_Allow] = "Allow"
+static const char *g_nacpCrashReportStrings[NacpCrashReport_Count] = {
+    "Deny",
+    "Allow"
 };
 
-static const char *g_nacpHdcpStrings[] = {
-    [NacpHdcp_None]     = "None",
-    [NacpHdcp_Required] = "Required"
+static const char *g_nacpHdcpStrings[NacpHdcp_Count] = {
+    "None",
+    "Required"
 };
 
-static const char *g_nacpStartupUserAccountOptionStrings[] = {
-    [NacpStartupUserAccountOption_IsOptional] = "IsOptional"
+static const char *g_nacpStartupUserAccountOptionStrings[NacpStartupUserAccountOption_Count] = {
+    "IsOptional"
 };
 
-static const char *g_nacpPlayLogQueryCapabilityStrings[] = {
-    [NacpPlayLogQueryCapability_None]      = "None",
-    [NacpPlayLogQueryCapability_WhiteList] = "WhiteList",
-    [NacpPlayLogQueryCapability_All]       = "All"
+static const char *g_nacpPlayLogQueryCapabilityStrings[NacpPlayLogQueryCapability_Count] = {
+    "None",
+    "WhiteList",
+    "All"
 };
 
-static const char *g_nacpRepairStrings[] = {
-    [NacpRepair_SuppressGameCardAccess] = "SuppressGameCardAccess"
+static const char *g_nacpRepairStrings[NacpRepair_Count] = {
+    "SuppressGameCardAccess"
 };
 
-static const char *g_nacpRequiredNetworkServiceLicenseOnLaunchStrings[] = {
-    [NacpRequiredNetworkServiceLicenseOnLaunch_Common] = "RequiredNetworkServiceLicenseOnLaunch"
+static const char *g_nacpRequiredNetworkServiceLicenseOnLaunchStrings[NacpRequiredNetworkServiceLicenseOnLaunch_Count] = {
+    "Common"
 };
 
-static const char *g_nacpJitConfigurationFlagStrings[] = {
-    [NacpJitConfigurationFlag_None]    = "None",
-    [NacpJitConfigurationFlag_Enabled] = "Enabled"
+static const char *g_nacpJitConfigurationFlagStrings[NacpJitConfigurationFlag_Count] = {
+    "None",
+    "Enabled"
 };
 
-static const char *g_nacpPlayReportPermissionStrings[] = {
-    [NacpPlayReportPermission_None]            = "None",
-    [NacpPlayReportPermission_TargetMarketing] = "TargetMarketing"
+static const char *g_nacpPlayReportPermissionStrings[NacpPlayReportPermission_Count] = {
+    "None",
+    "TargetMarketing"
 };
 
-static const char *g_nacpCrashScreenshotForProdStrings[] = {
-    [NacpCrashScreenshotForProd_Deny]  = "Deny",
-    [NacpCrashScreenshotForProd_Allow] = "Allow"
+static const char *g_nacpCrashScreenshotForProdStrings[NacpCrashScreenshotForProd_Count] = {
+    "Deny",
+    "Allow"
 };
 
-static const char *g_nacpCrashScreenshotForDevStrings[] = {
-    [NacpCrashScreenshotForDev_Deny]  = "Deny",
-    [NacpCrashScreenshotForDev_Allow] = "Allow"
+static const char *g_nacpCrashScreenshotForDevStrings[NacpCrashScreenshotForDev_Count] = {
+    "Deny",
+    "Allow"
 };
 
 /* Function prototypes. */
@@ -260,12 +260,12 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
     out->nca_ctx = nca_ctx;
     
     /* Retrieve NACP icon data. */
-    for(u8 i = 0; i < NacpLanguage_Count; i++)
+    for(u8 i = 0; i < NacpSupportedLanguage_Count; i++)
     {
         NacpIconContext *icon_ctx = NULL;
         
         /* Check if the current language is supported. */
-        if (!nacpCheckBitflagField(&(out->data->supported_language_flag), sizeof(out->data->supported_language_flag) * 8, i)) continue;
+        if (!nacpCheckBitflagField(&(out->data->supported_language), sizeof(out->data->supported_language) * 8, i)) continue;
         
         /* Get language string. */
         language_str = nacpGetLanguageString(i);
@@ -388,21 +388,21 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "StartupUserAccount", nacp->startup_user_account, &nacpGetStartupUserAccountString)) goto end;
     
     /* StartupUserAccountOption. */
-    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "StartupUserAccountOption", &(nacp->startup_user_account_option_flag), sizeof(nacp->startup_user_account_option_flag), \
+    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "StartupUserAccountOption", &(nacp->startup_user_account_option), sizeof(nacp->startup_user_account_option), \
         NacpStartupUserAccountOption_Count, &nacpGetStartupUserAccountOptionString)) goto end;
     
     /* UserAccountSwitchLock. */
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSwitchLock", nacp->user_account_switch_lock, &nacpGetUserAccountSwitchLockString)) goto end;
     
     /* Attribute. */
-    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Attribute", &(nacp->attribute_flag), sizeof(nacp->attribute_flag), NacpAttribute_Count, &nacpGetAttributeString)) goto end;
+    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Attribute", &(nacp->attribute), sizeof(nacp->attribute), NacpAttribute_Count, &nacpGetAttributeString)) goto end;
     
     /* ParentalControl. */
-    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "ParentalControl", &(nacp->parental_control_flag), sizeof(nacp->parental_control_flag), NacpParentalControl_Count, \
+    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "ParentalControl", &(nacp->parental_control), sizeof(nacp->parental_control), NacpParentalControl_Count, \
         &nacpGetParentalControlString)) goto end;
     
     /* SupportedLanguage. */
-    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SupportedLanguage", &(nacp->supported_language_flag), sizeof(nacp->supported_language_flag), NacpLanguage_Count, \
+    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SupportedLanguage", &(nacp->supported_language), sizeof(nacp->supported_language), NacpSupportedLanguage_Count, \
         &nacpGetLanguageString)) goto end;
     
     /* Screenshot. */
@@ -586,14 +586,14 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "PlayLogQueryCapability", nacp->play_log_query_capability, &nacpGetPlayLogQueryCapabilityString)) goto end;
     
     /* Repair. */
-    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Repair", &(nacp->repair_flag), sizeof(nacp->repair_flag), NacpRepair_Count, &nacpGetRepairString)) goto end;
+    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "Repair", &(nacp->repair), sizeof(nacp->repair), NacpRepair_Count, &nacpGetRepairString)) goto end;
     
     /* ProgramIndex. */
     if (!nacpAddU16FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "ProgramIndex", nacp->program_index, false)) goto end;
     
     /* RequiredNetworkServiceLicenseOnLaunch. */
-    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "RequiredNetworkServiceLicenseOnLaunch", &(nacp->required_network_service_license_on_launch_flag), \
-        sizeof(nacp->required_network_service_license_on_launch_flag), NacpRequiredNetworkServiceLicenseOnLaunch_Count, &nacpGetRequiredNetworkServiceLicenseOnLaunchString)) goto end;
+    if (!nacpAddBitflagFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "RequiredNetworkServiceLicenseOnLaunch", &(nacp->required_network_service_license_on_launch), \
+        sizeof(nacp->required_network_service_license_on_launch), NacpRequiredNetworkServiceLicenseOnLaunch_Count, &nacpGetRequiredNetworkServiceLicenseOnLaunchString)) goto end;
     
     /* NeighborDetectionClientConfiguration. */
     ndcc_sgc_available = (ndcc->send_group_configuration.group_id && memcmp(ndcc->send_group_configuration.key, null_key, sizeof(null_key)));
@@ -650,13 +650,13 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     /* RequiredAddOnContentsSet. */
     for(i = 0, count = 0; i < 0x20; i++)
     {
-        if (!raocsbd->descriptors[i].NacpDescriptors_Index || !raocsbd->descriptors[i].NacpDescriptors_ContinueSet) continue;
+        if (!raocsbd->descriptors[i].index || !raocsbd->descriptors[i].continue_set) continue;
         
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                                 "  <RequiredAddOnContentsSet>\n" \
                                                 "    <Index>%u</Index>\n" \
                                                 "  </RequiredAddOnContentsSet>\n",
-                                                raocsbd->descriptors[i].NacpDescriptors_Index)) goto end;
+                                                raocsbd->descriptors[i].index)) goto end;
         
         count++;
     }

@@ -38,6 +38,8 @@
 #include <stdatomic.h>
 #include <switch.h>
 
+#include "common.h"
+
 #define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
 
 #define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
@@ -56,10 +58,6 @@
 
 #define KEY_NONE                        0
 
-
-
-/// Need to move this to npdm.c/h eventually.
-#define NPDM_META_MAGIC                 0x4D455441  /* "META". */
 
 
 

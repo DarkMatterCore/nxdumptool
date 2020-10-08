@@ -73,13 +73,6 @@ typedef enum {
     NcaKeyAreaEncryptionKeyIndex_System      = 2
 } NcaKeyAreaEncryptionKeyIndex;
 
-typedef struct {
-    u32 NcaSdkAddOnVersion_Relstep : 8;
-    u32 NcaSdkAddOnVersion_Micro   : 8;
-    u32 NcaSdkAddOnVersion_Minor   : 8;
-    u32 NcaSdkAddOnVersion_Major   : 8;
-} NcaSdkAddOnVersion;
-
 /// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
     NcaKeyGeneration_301_302  = 3,
@@ -119,8 +112,8 @@ typedef struct {
 
 /// First 0x400 bytes from every NCA.
 typedef struct {
-    u8 main_signature[0x100];                               ///< RSA-PSS signature over header with fixed key.
-    u8 acid_signature[0x100];                               ///< RSA-PSS signature over header with key in NPDM.
+    u8 main_signature[0x100];                               ///< RSA-2048-PSS with SHA-256 signature over header using a fixed key.
+    u8 acid_signature[0x100];                               ///< RSA-2048-PSS with SHA-256 signature over header using the ACID public key from the NPDM in ExeFS. Only used in Program NCAs.
     u32 magic;                                              ///< "NCA0" / "NCA2" / "NCA3".
     u8 distribution_type;                                   ///< NcaDistributionType.
     u8 content_type;                                        ///< NcaContentType.
@@ -129,7 +122,7 @@ typedef struct {
     u64 content_size;
     u64 program_id;
     u32 content_index;
-    NcaSdkAddOnVersion sdk_addon_version;
+    VersionType2 sdk_addon_version;
     u8 key_generation;                                      ///< NcaKeyGeneration.
     u8 main_signature_key_generation;
     u8 reserved[0xE];

@@ -31,15 +31,6 @@
 
 #define TITLE_DELTA_TYPE_VALUE              (u64)0xC00
 
-/// Used to display version numbers in dot notation: "{Major}.{Minor}.{Micro}-{MajorRelstep}.{MinorRelstep}".
-typedef struct {
-    u32 TitleVersion_MinorRelstep : 8;
-    u32 TitleVersion_MajorRelstep : 8;
-    u32 TitleVersion_Micro        : 4;
-    u32 TitleVersion_Minor        : 6;
-    u32 TitleVersion_Major        : 6;
-} TitleVersion;
-
 /// Retrieved using ns application records and/or ncm content meta keys.
 /// Used by the UI to display title lists.
 typedef struct {
@@ -53,7 +44,7 @@ typedef struct {
 typedef struct _TitleInfo {
     u8 storage_id;                                  ///< NcmStorageId.
     NcmContentMetaKey meta_key;                     ///< Used with ncm calls.
-    TitleVersion version;                           ///< Holds the same value from meta_key.version.
+    VersionType1 version;                           ///< Holds the same value from meta_key.version.
     u32 content_count;                              ///< Content info count.
     NcmContentInfo *content_infos;                  ///< Content info entries from this title.
     u64 title_size;                                 ///< Total title size.
@@ -228,11 +219,6 @@ NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, 
     }
     
     return NULL;
-}
-
-NX_INLINE u32 titleGetVersionInteger(TitleVersion *version)
-{
-    return (version ? *((u32*)version) : 0);
 }
 
 #endif /* __TITLE_H__ */

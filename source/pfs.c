@@ -20,6 +20,9 @@
 
 #include "utils.h"
 #include "pfs.h"
+//#include "npdm.h"
+
+#define NPDM_META_MAGIC                 0x4D455441  /* "META". */
 
 bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
@@ -56,7 +59,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     out->offset = hash_region->offset;
     out->size = hash_region->size;
     
-    /* Read partial PFS header. */
+    /* Read partial Partition FS header. */
     if (!ncaReadFsSection(nca_fs_ctx, &pfs_header, sizeof(PartitionFileSystemHeader), out->offset))
     {
         LOGFILE("Failed to read partial Partition FS header!");
@@ -167,7 +170,8 @@ bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u
         }
     }
     
-    //LOGFILE("Unable to find Partition FS entry \"%s\"!", name);
+    /* Only log error if we're not dealing with a NPDM. */
+    if (name_len != 9 || strcmp(name, "main.npdm") != 0) LOGFILE("Unable to find Partition FS entry \"%s\"!", name);
     
     return false;
 }

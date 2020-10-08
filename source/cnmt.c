@@ -261,8 +261,8 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
                                             "  <RequiredDownloadSystemVersion>%u</RequiredDownloadSystemVersion>\n", \
                                             titleGetNcmContentMetaTypeName(cnmt_ctx->packaged_header->content_meta_type), \
                                             cnmt_ctx->packaged_header->title_id, \
-                                            cnmtGetVersionInteger(&(cnmt_ctx->packaged_header->version)), \
-                                            cnmtGetVersionInteger(&(cnmt_ctx->packaged_header->required_download_system_version)))) goto end;
+                                            cnmt_ctx->packaged_header->version.value,
+                                            cnmt_ctx->packaged_header->required_download_system_version.value)) goto end;
     
     for(i = 0; i < nca_ctx_count; i++)
     {
@@ -336,7 +336,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     {
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                                 "  <RequiredApplicationVersion>%u</RequiredApplicationVersion>\n", \
-                                                cnmtGetVersionInteger((ContentMetaVersion*)(cnmt_ctx->extended_header + sizeof(u64) + sizeof(u32))))) goto end;
+                                                ((VersionType1*)(cnmt_ctx->extended_header + sizeof(u64) + sizeof(u32)))->value)) goto end;
     }
     
     if (!(success = utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "</ContentMeta>"))) goto end;
