@@ -20,9 +20,7 @@
 
 #include "utils.h"
 #include "pfs.h"
-//#include "npdm.h"
-
-#define NPDM_META_MAGIC                 0x4D455441  /* "META". */
+#include "npdm.h"
 
 bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
