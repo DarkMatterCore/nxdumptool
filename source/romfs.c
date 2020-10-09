@@ -314,15 +314,18 @@ end:
 RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const char *path)
 {
     size_t path_len = 0;
+    u8 content_type = 0;
     char *path_dup = NULL, *filename = NULL;
     RomFileSystemFileEntry *file_entry = NULL;
     RomFileSystemDirectoryEntry *dir_entry = NULL;
     
-    if (!ctx || !ctx->file_table || !ctx->file_table_size || !path || *path != '/' || (path_len = strlen(path)) <= 1)
+    if (!ctx || !ctx->file_table || !ctx->file_table_size || !ctx->nca_fs_ctx || !ctx->nca_fs_ctx->nca_ctx || !path || *path != '/' || (path_len = strlen(path)) <= 1)
     {
         LOGFILE("Invalid parameters!");
         return NULL;
     }
+    
+    content_type = ((NcaContext*)ctx->nca_fs_ctx->nca_ctx)->content_type;
     
     /* Duplicate path. */
     if (!(path_dup = strdup(path)))
@@ -359,10 +362,9 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     /* Retrieve file entry. */
     if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename)))
     {
-        /* Only log error if we're not dealing with NACP icons. */
-        int res = strncmp("/icon_", path, 6);
-        if (res != 0 || (res == 0 && ((NcaContext*)ctx->nca_fs_ctx->nca_ctx)->content_type != NcmContentType_Control))
-            LOGFILE("Failed to retrieve file entry by name for \"%s\"! (\"%s\").", filename, path);
+        /* Only log error if we're not dealing with NACP icons or a LegalInformation XML. */
+        bool skip_log = ((!strncmp(path, "/icon_", 6) && content_type == NcmContentType_Control) || (!strncmp(path, "/legalinfo.xml", 14) && content_type == NcmContentType_LegalInformation));
+        if (!skip_log) LOGFILE("Failed to retrieve file entry by name for \"%s\"! (\"%s\").", filename, path);
     }
     
 end:

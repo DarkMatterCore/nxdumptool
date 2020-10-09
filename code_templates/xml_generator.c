@@ -23,6 +23,7 @@
 #include "title.h"
 #include "cnmt.h"
 #include "nacp.h"
+#include "legal_info.h"
 
 static void consolePrint(const char *text, ...)
 {
@@ -64,6 +65,7 @@ int main(int argc, char *argv[])
     
     ContentMetaContext cnmt_ctx = {0};
     NacpContext nacp_ctx = {0};
+    LegalInfoContext legal_info_ctx = {0};
     
     FILE *xml_fd = NULL;
     char path[FS_MAX_PATH] = {0};
@@ -188,7 +190,7 @@ int main(int argc, char *argv[])
     
     consolePrint("nca ctx calloc succeeded\n");
     
-    u32 meta_idx = (user_app_data.app_info->content_count - 1), control_idx = 0;
+    u32 meta_idx = (user_app_data.app_info->content_count - 1), control_idx = 0, legal_idx = 0;
     
     for(u32 i = 0, j = 0; i < user_app_data.app_info->content_count; i++)
     {
@@ -202,6 +204,8 @@ int main(int argc, char *argv[])
         }
         
         if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_Control && user_app_data.app_info->content_infos[i].id_offset == 0) control_idx = j;
+        
+        if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_LegalInformation && user_app_data.app_info->content_infos[i].id_offset == 0) legal_idx = j;
         
         consolePrint("%s nca initialize ctx succeeded\n", titleGetNcmContentTypeName(user_app_data.app_info->content_infos[i].content_type));
         j++;
@@ -231,7 +235,7 @@ int main(int argc, char *argv[])
     {
         consolePrint("cnmt xml succeeded\n");
         
-        sprintf(path, "sdmc:/%016lX_xml/%s.cnmt", app_metadata[selected_idx]->title_id, nca_ctx[meta_idx].content_id_str);
+        sprintf(path, "sdmc:/%016lX_xml/%s.cnmt", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
@@ -241,7 +245,7 @@ int main(int argc, char *argv[])
             xml_fd = NULL;
         }
         
-        sprintf(path, "sdmc:/%016lX_xml/%s.cnmt.xml", app_metadata[selected_idx]->title_id, nca_ctx[meta_idx].content_id_str);
+        sprintf(path, "sdmc:/%016lX_xml/%s.cnmt.xml", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
@@ -266,7 +270,7 @@ int main(int argc, char *argv[])
     {
         consolePrint("nacp xml succeeded\n");
         
-        sprintf(path, "sdmc:/%016lX_xml/%s.nacp", app_metadata[selected_idx]->title_id, nca_ctx[control_idx].content_id_str);
+        sprintf(path, "sdmc:/%016lX_xml/%s.nacp", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
@@ -276,7 +280,7 @@ int main(int argc, char *argv[])
             xml_fd = NULL;
         }
         
-        sprintf(path, "sdmc:/%016lX_xml/%s.nacp.xml", app_metadata[selected_idx]->title_id, nca_ctx[control_idx].content_id_str);
+        sprintf(path, "sdmc:/%016lX_xml/%s.nacp.xml", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
@@ -290,7 +294,7 @@ int main(int argc, char *argv[])
         {
             NacpIconContext *icon_ctx = &(nacp_ctx.icon_ctx[i]);
             
-            sprintf(path, "sdmc:/%016lX_xml/%s.nx.%s.jpg", app_metadata[selected_idx]->title_id, nca_ctx[control_idx].content_id_str, nacpGetLanguageString(icon_ctx->language));
+            sprintf(path, "sdmc:/%016lX_xml/%s.nx.%s.jpg", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str, nacpGetLanguageString(icon_ctx->language));
             
             xml_fd = fopen(path, "wb");
             if (xml_fd)
@@ -304,12 +308,32 @@ int main(int argc, char *argv[])
         consolePrint("nacp xml failed\n");
     }
     
+    if (!legalInfoInitializeContext(&legal_info_ctx, &(nca_ctx[legal_idx])))
+    {
+        consolePrint("legalinfo initialize ctx failed\n");
+        goto out2;
+    }
+    
+    consolePrint("legalinfo initialize ctx succeeded\n");
+    
+    sprintf(path, "sdmc:/%016lX_xml/%s.legalinfo.xml", app_metadata[selected_idx]->title_id, legal_info_ctx.nca_ctx->content_id_str);
+    
+    xml_fd = fopen(path, "wb");
+    if (xml_fd)
+    {
+        fwrite(legal_info_ctx.authoring_tool_xml, 1, legal_info_ctx.authoring_tool_xml_size, xml_fd);
+        fclose(xml_fd);
+        xml_fd = NULL;
+    }
+    
 out2:
     if (exit_prompt)
     {
         consolePrint("press any button to exit\n");
         utilsWaitForButtonPress(KEY_NONE);
     }
+    
+    legalInfoFreeContext(&legal_info_ctx);
     
     nacpFreeContext(&nacp_ctx);
     

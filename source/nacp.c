@@ -239,8 +239,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
     }
     
     /* Allocate memory for the NACP data. */
-    out->data = malloc(sizeof(_NacpStruct));
-    if (!out->data)
+    if (!(out->data = malloc(sizeof(_NacpStruct))))
     {
         LOGFILE("Failed to allocate memory for the NACP data!");
         goto end;

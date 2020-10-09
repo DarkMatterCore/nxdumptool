@@ -3,19 +3,21 @@ todo:
     nca: functions for fs section lookup? (could just let the user choose...)
     nca: function to write re-encrypted nca headers / nca fs headers (don't forget nca0 please)
     nca: function to patch the private npdm acid signature from a program nca + patch the acid signature from the nca header
+    nca: add encrypted header to nca context, avoid re-encrypting the plaintext header in place
+    nca: use hash instead of dirty_header flag?
     
     tik: option to wipe elicense property mask
     tik: automatically dump tickets to the SD card?
     tik: use dumped tickets when the original ones can't be found in the ES savefile?
     
-    gamecard: hfs0 filelist generation functions
+    gamecard: hfs0 functions to display filelist
     
-    pfs0: filelist generation functions
+    pfs0: functions to display filelist
     pfs0: full header aligned to 0x20 (nsp)
     
-    romfs: filelist generation functions
+    romfs: functions to display filelist
     
-    bktr: filelist generation functions (wrappers for romfs filelist generation functions)
+    bktr: functions to display filelist (wrappers for romfs functions tbh)
     
     title: more functions for title lookup (filters, patches / aoc, etc.)
     title: more functions for content lookup (based on id?)

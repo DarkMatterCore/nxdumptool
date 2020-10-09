@@ -59,7 +59,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         goto end;
     }
     
-    /* Get Partition FS entry count. */
+    /* Get Partition FS entry count. Edge case, we should never trigger this. */
     if (!(pfs_entry_count = pfsGetEntryCount(&(out->pfs_ctx))))
     {
         LOGFILE("Partition FS has no file entries!");
@@ -100,8 +100,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     
     /* Allocate memory for the raw CNMT data. */
     out->raw_data_size = out->pfs_entry->size;
-    out->raw_data = malloc(out->raw_data_size);
-    if (!out->raw_data)
+    if (!(out->raw_data = malloc(out->raw_data_size)))
     {
         LOGFILE("Failed to allocate memory for the raw CNMT data!");
         goto end;

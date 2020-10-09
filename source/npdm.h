@@ -41,11 +41,6 @@ typedef struct {
     u8 reserved                   : 3;
 } NpdmMetaFlags;
 
-typedef struct {
-    u32 offset;
-    u32 size;
-} NpdmSectionHeader;
-
 /// This is the start of every NPDM file.
 /// This is followed by ACID and ACI0 sections, both with variable offsets and sizes.
 typedef struct {
@@ -63,15 +58,21 @@ typedef struct {
     char name[0x10];                        ///< Usually set to "Application".
     char product_code[0x10];                ///< Usually zeroed out.
     u8 reserved_4[0x30];
-    NpdmSectionHeader aci_section_header;   ///< Offset value relative to the start of this header.
-    NpdmSectionHeader acid_section_header;  ///< Offset value relative to the start of this header.
+    u32 aci_offset;                         ///< Offset value relative to the start of this header.
+    u32 aci_size;
+    u32 acid_offset;                        ///< Offset value relative to the start of this header.
+    u32 acid_size;
 } NpdmMetaHeader;
 
 typedef enum {
     NpdmMemoryRegion_Application     = 0,
     NpdmMemoryRegion_Applet          = 1,
-    NpdmMemoryRegion_SecureSystem    = 2,
-    NpdmMemoryRegion_NonSecureSystem = 3
+    NpdmMemoryRegion_SystemSecure    = 2,
+    NpdmMemoryRegion_SystemNonSecure = 3,
+    
+    /// Old.
+    NpdmMemoryRegion_NonSecure       = NpdmMemoryRegion_Application,
+    NpdmMemoryRegion_Secure          = NpdmMemoryRegion_Applet
 } NpdmMemoryRegion;
 
 typedef struct {
@@ -92,9 +93,12 @@ typedef struct {
     NpdmAcidFlags flags;
     u64 program_id_min;
     u64 program_id_max;
-    NpdmSectionHeader fs_access_control_section_header;     ///< Offset value relative to the start of this header.
-    NpdmSectionHeader srv_access_control_section_header;    ///< Offset value relative to the start of this header.
-    NpdmSectionHeader kernel_capability_section_header;     ///< Offset value relative to the start of this header.
+    u32 fs_access_control_offset;                           ///< Offset value relative to the start of this header.
+    u32 fs_access_control_size;
+    u32 srv_access_control_offset;                          ///< Offset value relative to the start of this header.
+    u32 srv_access_control_size;
+    u32 kernel_capability_offset;                           ///< Offset value relative to the start of this header.
+    u32 kernel_capability_size;
     u8 reserved_2[0x8];
 } NpdmAcidHeader;
 
@@ -105,9 +109,12 @@ typedef struct {
     u8 reserved_1[0xC];
     u64 program_id;
     u8 reserved_2[0x8];
-    NpdmSectionHeader fs_access_control_section_header;     ///< Offset value relative to the start of this header.
-    NpdmSectionHeader srv_access_control_section_header;    ///< Offset value relative to the start of this header.
-    NpdmSectionHeader kernel_capability_section_header;     ///< Offset value relative to the start of this header.
+    u32 fs_access_control_offset;   ///< Offset value relative to the start of this header.
+    u32 fs_access_control_size;
+    u32 srv_access_control_offset;  ///< Offset value relative to the start of this header.
+    u32 srv_access_control_size;
+    u32 kernel_capability_offset;   ///< Offset value relative to the start of this header.
+    u32 kernel_capability_size;
     u8 reserved_3[0x8];
 } NpdmAciHeader;
 
@@ -195,9 +202,8 @@ typedef struct {
 } NpdmAciFsAccessControlDescriptorContentOwnerBlock;
 
 typedef enum {
-    NpdmAccessibility_Read      = 1,
-    NpdmAccessibility_Write     = 2,
-    NpdmAccessibility_ReadWrite = 3
+    NpdmAccessibility_Read  = BIT(0),
+    NpdmAccessibility_Write = BIT(1)
 } NpdmAccessibility;
 
 /// Placed after NpdmAciFsAccessControlDescriptor / NpdmAciFsAccessControlDescriptorContentOwnerBlock if the 'content_owner_info_size' member from NpdmAciFsAccessControlDescriptor is greater than zero.
@@ -207,24 +213,46 @@ typedef struct {
     u8 accessibility[];             ///< 'save_data_owner_id_count' NpdmAccessibility fields.
 } NpdmAciFsAccessControlDescriptorSaveDataOwnerBlock;
 
+/// SrvAccessControl descriptor. Part of the ACID and ACI0 section bodies.
+/// This descriptor is composed of a variable number of NpdmSrvAccessControlDescriptorEntry elements, each one with a variable size.
+/// Since the total number of services isn't stored anywhere, this descriptor must be parsed until its total size is reached.
 typedef struct {
     u8 name_length : 3; ///< Service name length minus 1.
     u8 reserved    : 4;
     u8 is_server   : 1; ///< Indicates if the service is allowed to be registered.
-} NpdmSrvAccessControlEntryDescriptor;
+    char name[];        ///< Service name, stored without a NULL terminator. Supports the "*" wildcard character.
+} NpdmSrvAccessControlDescriptorEntry;
 
-/// SrvAccessControl descriptor. Part of the ACID and ACI0 section bodies.
-/// This descriptor is composed of a variable number of NpdmSrvAccessControlEntry elements, each one with a variable size.
-/// Since the total number of services isn't stored anywhere, this descriptor must be parsed until its total size is reached.
-typedef struct {
-    NpdmSrvAccessControlEntryDescriptor descriptor;
-    char name[];                                    ///< Service name, stored without a NULL terminator. Supports the "*" wildcard character.
-} NpdmSrvAccessControlEntry;
+typedef enum {
+    NpdmKernelCapabilityEntryNumber_ThreadInfo        = 3,
+    NpdmKernelCapabilityEntryNumber_EnableSystemCalls = 4,
+    NpdmKernelCapabilityEntryNumber_MemoryMap         = 6,
+    NpdmKernelCapabilityEntryNumber_IoMemoryMap       = 7,
+    NpdmKernelCapabilityEntryNumber_MemoryRegionMap   = 10,
+    NpdmKernelCapabilityEntryNumber_EnableInterrupts  = 11,
+    NpdmKernelCapabilityEntryNumber_MiscParams        = 13,
+    NpdmKernelCapabilityEntryNumber_KernelVersion     = 14,
+    NpdmKernelCapabilityEntryNumber_HandleTableSize   = 15,
+    NpdmKernelCapabilityEntryNumber_MiscFlags         = 16
+} NpdmKernelCapabilityEntryNumber;
+
+typedef enum {
+    NpdmKernelCapabilityEntryValue_ThreadInfo        = BIT(NpdmKernelCapabilityEntryNumber_ThreadInfo)        - 1,
+    NpdmKernelCapabilityEntryValue_EnableSystemCalls = BIT(NpdmKernelCapabilityEntryNumber_EnableSystemCalls) - 1,
+    NpdmKernelCapabilityEntryValue_MemoryMap         = BIT(NpdmKernelCapabilityEntryNumber_MemoryMap)         - 1,
+    NpdmKernelCapabilityEntryValue_IoMemoryMap       = BIT(NpdmKernelCapabilityEntryNumber_IoMemoryMap)       - 1,
+    NpdmKernelCapabilityEntryValue_MemoryRegionMap   = BIT(NpdmKernelCapabilityEntryNumber_MemoryRegionMap)   - 1,
+    NpdmKernelCapabilityEntryValue_EnableInterrupts  = BIT(NpdmKernelCapabilityEntryNumber_EnableInterrupts)  - 1,
+    NpdmKernelCapabilityEntryValue_MiscParams        = BIT(NpdmKernelCapabilityEntryNumber_MiscParams)        - 1,
+    NpdmKernelCapabilityEntryValue_KernelVersion     = BIT(NpdmKernelCapabilityEntryNumber_KernelVersion)     - 1,
+    NpdmKernelCapabilityEntryValue_HandleTableSize   = BIT(NpdmKernelCapabilityEntryNumber_HandleTableSize)   - 1,
+    NpdmKernelCapabilityEntryValue_MiscFlags         = BIT(NpdmKernelCapabilityEntryNumber_MiscFlags)         - 1
+} NpdmKernelCapabilityEntryValue;
 
 /// ThreadInfo entry for the KernelCapability descriptor.
 typedef struct {
-    u32 entry_number     : 3;   ///< All bits set to one.
-    u32 reserved         : 1;   ///< Always set to zero.
+    u32 entry_value      : NpdmKernelCapabilityEntryNumber_ThreadInfo;  ///< Always set to NpdmKernelCapabilityEntryValue_ThreadInfo.
+    u32 padding          : 1;                                           ///< Always set to zero.
     u32 lowest_priority  : 6;
     u32 highest_priority : 6;
     u32 min_core_number  : 8;
@@ -234,153 +262,153 @@ typedef struct {
 /// System call table.
 typedef enum {
     ///< System calls for index 0.
-    NpdmSystemCallIds_Unknown1                       = BIT(0),
-    NpdmSystemCallIds_SetHeapSize                    = BIT(1),
-    NpdmSystemCallIds_SetMemoryPermission            = BIT(2),
-    NpdmSystemCallIds_SetMemoryAttribute             = BIT(3),
-    NpdmSystemCallIds_MapMemory                      = BIT(4),
-    NpdmSystemCallIds_UnmapMemory                    = BIT(5),
-    NpdmSystemCallIds_QueryMemory                    = BIT(6),
-    NpdmSystemCallIds_ExitProcess                    = BIT(7),
-    NpdmSystemCallIds_CreateThread                   = BIT(8),
-    NpdmSystemCallIds_StartThread                    = BIT(9),
-    NpdmSystemCallIds_ExitThread                     = BIT(10),
-    NpdmSystemCallIds_SleepThread                    = BIT(11),
-    NpdmSystemCallIds_GetThreadPriority              = BIT(12),
-    NpdmSystemCallIds_SetThreadPriority              = BIT(13),
-    NpdmSystemCallIds_GetThreadCoreMask              = BIT(14),
-    NpdmSystemCallIds_SetThreadCoreMask              = BIT(15),
-    NpdmSystemCallIds_GetCurrentProcessorNumber      = BIT(16),
-    NpdmSystemCallIds_SignalEvent                    = BIT(17),
-    NpdmSystemCallIds_ClearEvent                     = BIT(18),
-    NpdmSystemCallIds_MapSharedMemory                = BIT(19),
-    NpdmSystemCallIds_UnmapSharedMemory              = BIT(20),
-    NpdmSystemCallIds_CreateTransferMemory           = BIT(21),
-    NpdmSystemCallIds_CloseHandle                    = BIT(22),
-    NpdmSystemCallIds_ResetSignal                    = BIT(23),
+    NpdmSystemCallId_Reserved1                      = BIT(0),
+    NpdmSystemCallId_SetHeapSize                    = BIT(1),
+    NpdmSystemCallId_SetMemoryPermission            = BIT(2),
+    NpdmSystemCallId_SetMemoryAttribute             = BIT(3),
+    NpdmSystemCallId_MapMemory                      = BIT(4),
+    NpdmSystemCallId_UnmapMemory                    = BIT(5),
+    NpdmSystemCallId_QueryMemory                    = BIT(6),
+    NpdmSystemCallId_ExitProcess                    = BIT(7),
+    NpdmSystemCallId_CreateThread                   = BIT(8),
+    NpdmSystemCallId_StartThread                    = BIT(9),
+    NpdmSystemCallId_ExitThread                     = BIT(10),
+    NpdmSystemCallId_SleepThread                    = BIT(11),
+    NpdmSystemCallId_GetThreadPriority              = BIT(12),
+    NpdmSystemCallId_SetThreadPriority              = BIT(13),
+    NpdmSystemCallId_GetThreadCoreMask              = BIT(14),
+    NpdmSystemCallId_SetThreadCoreMask              = BIT(15),
+    NpdmSystemCallId_GetCurrentProcessorNumber      = BIT(16),
+    NpdmSystemCallId_SignalEvent                    = BIT(17),
+    NpdmSystemCallId_ClearEvent                     = BIT(18),
+    NpdmSystemCallId_MapSharedMemory                = BIT(19),
+    NpdmSystemCallId_UnmapSharedMemory              = BIT(20),
+    NpdmSystemCallId_CreateTransferMemory           = BIT(21),
+    NpdmSystemCallId_CloseHandle                    = BIT(22),
+    NpdmSystemCallId_ResetSignal                    = BIT(23),
     
     ///< System calls for index 1.
-    NpdmSystemCallIds_WaitSynchronization            = BIT(0),
-    NpdmSystemCallIds_CancelSynchronization          = BIT(1),
-    NpdmSystemCallIds_ArbitrateLock                  = BIT(2),
-    NpdmSystemCallIds_ArbitrateUnlock                = BIT(3),
-    NpdmSystemCallIds_WaitProcessWideKeyAtomic       = BIT(4),
-    NpdmSystemCallIds_SignalProcessWideKey           = BIT(5),
-    NpdmSystemCallIds_GetSystemTick                  = BIT(6),
-    NpdmSystemCallIds_ConnectToNamedPort             = BIT(7),
-    NpdmSystemCallIds_SendSyncRequestLight           = BIT(8),
-    NpdmSystemCallIds_SendSyncRequest                = BIT(9),
-    NpdmSystemCallIds_SendSyncRequestWithUserBuffer  = BIT(10),
-    NpdmSystemCallIds_SendAsyncRequestWithUserBuffer = BIT(11),
-    NpdmSystemCallIds_GetProcessId                   = BIT(12),
-    NpdmSystemCallIds_GetThreadId                    = BIT(13),
-    NpdmSystemCallIds_Break                          = BIT(14),
-    NpdmSystemCallIds_OutputDebugString              = BIT(15),
-    NpdmSystemCallIds_ReturnFromException            = BIT(16),
-    NpdmSystemCallIds_GetInfo                        = BIT(17),
-    NpdmSystemCallIds_FlushEntireDataCache           = BIT(18),
-    NpdmSystemCallIds_FlushDataCache                 = BIT(19),
-    NpdmSystemCallIds_MapPhysicalMemory              = BIT(20),
-    NpdmSystemCallIds_UnmapPhysicalMemory            = BIT(21),
-    NpdmSystemCallIds_GetDebugFutureThreadInfo       = BIT(22),
-    NpdmSystemCallIds_GetLastThreadInfo              = BIT(23),
+    NpdmSystemCallId_WaitSynchronization            = BIT(0),
+    NpdmSystemCallId_CancelSynchronization          = BIT(1),
+    NpdmSystemCallId_ArbitrateLock                  = BIT(2),
+    NpdmSystemCallId_ArbitrateUnlock                = BIT(3),
+    NpdmSystemCallId_WaitProcessWideKeyAtomic       = BIT(4),
+    NpdmSystemCallId_SignalProcessWideKey           = BIT(5),
+    NpdmSystemCallId_GetSystemTick                  = BIT(6),
+    NpdmSystemCallId_ConnectToNamedPort             = BIT(7),
+    NpdmSystemCallId_SendSyncRequestLight           = BIT(8),
+    NpdmSystemCallId_SendSyncRequest                = BIT(9),
+    NpdmSystemCallId_SendSyncRequestWithUserBuffer  = BIT(10),
+    NpdmSystemCallId_SendAsyncRequestWithUserBuffer = BIT(11),
+    NpdmSystemCallId_GetProcessId                   = BIT(12),
+    NpdmSystemCallId_GetThreadId                    = BIT(13),
+    NpdmSystemCallId_Break                          = BIT(14),
+    NpdmSystemCallId_OutputDebugString              = BIT(15),
+    NpdmSystemCallId_ReturnFromException            = BIT(16),
+    NpdmSystemCallId_GetInfo                        = BIT(17),
+    NpdmSystemCallId_FlushEntireDataCache           = BIT(18),
+    NpdmSystemCallId_FlushDataCache                 = BIT(19),
+    NpdmSystemCallId_MapPhysicalMemory              = BIT(20),
+    NpdmSystemCallId_UnmapPhysicalMemory            = BIT(21),
+    NpdmSystemCallId_GetDebugFutureThreadInfo       = BIT(22),  ///< Old: SystemCallId_GetFutureThreadInfo.
+    NpdmSystemCallId_GetLastThreadInfo              = BIT(23),
     
     ///< System calls for index 2.
-    NpdmSystemCallIds_GetResourceLimitLimitValue     = BIT(0),
-    NpdmSystemCallIds_GetResourceLimitCurrentValue   = BIT(1),
-    NpdmSystemCallIds_SetThreadActivity              = BIT(2),
-    NpdmSystemCallIds_GetThreadContext3              = BIT(3),
-    NpdmSystemCallIds_WaitForAddress                 = BIT(4),
-    NpdmSystemCallIds_SignalToAddress                = BIT(5),
-    NpdmSystemCallIds_SynchronizePreemptionState     = BIT(6),
-    NpdmSystemCallIds_Unknown2                       = BIT(7),
-    NpdmSystemCallIds_Unknown3                       = BIT(8),
-    NpdmSystemCallIds_Unknown4                       = BIT(9),
-    NpdmSystemCallIds_Unknown5                       = BIT(10),
-    NpdmSystemCallIds_Unknown6                       = BIT(11),
-    NpdmSystemCallIds_KernelDebug                    = BIT(12),
-    NpdmSystemCallIds_ChangeKernelTraceState         = BIT(13),
-    NpdmSystemCallIds_Unknown7                       = BIT(14),
-    NpdmSystemCallIds_Unknown8                       = BIT(15),
-    NpdmSystemCallIds_CreateSession                  = BIT(16),
-    NpdmSystemCallIds_AcceptSession                  = BIT(17),
-    NpdmSystemCallIds_ReplyAndReceiveLight           = BIT(18),
-    NpdmSystemCallIds_ReplyAndReceive                = BIT(19),
-    NpdmSystemCallIds_ReplyAndReceiveWithUserBuffer  = BIT(20),
-    NpdmSystemCallIds_CreateEvent                    = BIT(21),
-    NpdmSystemCallIds_Unknown9                       = BIT(22),
-    NpdmSystemCallIds_Unknown10                      = BIT(23),
+    NpdmSystemCallId_GetResourceLimitLimitValue     = BIT(0),
+    NpdmSystemCallId_GetResourceLimitCurrentValue   = BIT(1),
+    NpdmSystemCallId_SetThreadActivity              = BIT(2),
+    NpdmSystemCallId_GetThreadContext3              = BIT(3),
+    NpdmSystemCallId_WaitForAddress                 = BIT(4),
+    NpdmSystemCallId_SignalToAddress                = BIT(5),
+    NpdmSystemCallId_SynchronizePreemptionState     = BIT(6),
+    NpdmSystemCallId_Reserved2                      = BIT(7),
+    NpdmSystemCallId_Reserved3                      = BIT(8),
+    NpdmSystemCallId_Reserved4                      = BIT(9),
+    NpdmSystemCallId_Reserved5                      = BIT(10),
+    NpdmSystemCallId_Reserved6                      = BIT(11),
+    NpdmSystemCallId_KernelDebug                    = BIT(12),
+    NpdmSystemCallId_ChangeKernelTraceState         = BIT(13),
+    NpdmSystemCallId_Reserved7                      = BIT(14),
+    NpdmSystemCallId_Reserved8                      = BIT(15),
+    NpdmSystemCallId_CreateSession                  = BIT(16),
+    NpdmSystemCallId_AcceptSession                  = BIT(17),
+    NpdmSystemCallId_ReplyAndReceiveLight           = BIT(18),
+    NpdmSystemCallId_ReplyAndReceive                = BIT(19),
+    NpdmSystemCallId_ReplyAndReceiveWithUserBuffer  = BIT(20),
+    NpdmSystemCallId_CreateEvent                    = BIT(21),
+    NpdmSystemCallId_Reserved9                      = BIT(22),
+    NpdmSystemCallId_Reserved10                     = BIT(23),
     
     ///< System calls for index 3.
-    NpdmSystemCallIds_MapPhysicalMemoryUnsafe        = BIT(0),
-    NpdmSystemCallIds_UnmapPhysicalMemoryUnsafe      = BIT(1),
-    NpdmSystemCallIds_SetUnsafeLimit                 = BIT(2),
-    NpdmSystemCallIds_CreateCodeMemory               = BIT(3),
-    NpdmSystemCallIds_ControlCodeMemory              = BIT(4),
-    NpdmSystemCallIds_SleepSystem                    = BIT(5),
-    NpdmSystemCallIds_ReadWriteRegister              = BIT(6),
-    NpdmSystemCallIds_SetProcessActivity             = BIT(7),
-    NpdmSystemCallIds_CreateSharedMemory             = BIT(8),
-    NpdmSystemCallIds_MapTransferMemory              = BIT(9),
-    NpdmSystemCallIds_UnmapTransferMemory            = BIT(10),
-    NpdmSystemCallIds_CreateInterruptEvent           = BIT(11),
-    NpdmSystemCallIds_QueryPhysicalAddress           = BIT(12),
-    NpdmSystemCallIds_QueryIoMapping                 = BIT(13),
-    NpdmSystemCallIds_CreateDeviceAddressSpace       = BIT(14),
-    NpdmSystemCallIds_AttachDeviceAddressSpace       = BIT(15),
-    NpdmSystemCallIds_DetachDeviceAddressSpace       = BIT(16),
-    NpdmSystemCallIds_MapDeviceAddressSpaceByForce   = BIT(17),
-    NpdmSystemCallIds_MapDeviceAddressSpaceAligned   = BIT(18),
-    NpdmSystemCallIds_MapDeviceAddressSpace          = BIT(19),
-    NpdmSystemCallIds_UnmapDeviceAddressSpace        = BIT(20),
-    NpdmSystemCallIds_InvalidateProcessDataCache     = BIT(21),
-    NpdmSystemCallIds_StoreProcessDataCache          = BIT(22),
-    NpdmSystemCallIds_FlushProcessDataCache          = BIT(23),
+    NpdmSystemCallId_MapPhysicalMemoryUnsafe        = BIT(0),
+    NpdmSystemCallId_UnmapPhysicalMemoryUnsafe      = BIT(1),
+    NpdmSystemCallId_SetUnsafeLimit                 = BIT(2),
+    NpdmSystemCallId_CreateCodeMemory               = BIT(3),
+    NpdmSystemCallId_ControlCodeMemory              = BIT(4),
+    NpdmSystemCallId_SleepSystem                    = BIT(5),
+    NpdmSystemCallId_ReadWriteRegister              = BIT(6),
+    NpdmSystemCallId_SetProcessActivity             = BIT(7),
+    NpdmSystemCallId_CreateSharedMemory             = BIT(8),
+    NpdmSystemCallId_MapTransferMemory              = BIT(9),
+    NpdmSystemCallId_UnmapTransferMemory            = BIT(10),
+    NpdmSystemCallId_CreateInterruptEvent           = BIT(11),
+    NpdmSystemCallId_QueryPhysicalAddress           = BIT(12),
+    NpdmSystemCallId_QueryIoMapping                 = BIT(13),
+    NpdmSystemCallId_CreateDeviceAddressSpace       = BIT(14),
+    NpdmSystemCallId_AttachDeviceAddressSpace       = BIT(15),
+    NpdmSystemCallId_DetachDeviceAddressSpace       = BIT(16),
+    NpdmSystemCallId_MapDeviceAddressSpaceByForce   = BIT(17),
+    NpdmSystemCallId_MapDeviceAddressSpaceAligned   = BIT(18),
+    NpdmSystemCallId_MapDeviceAddressSpace          = BIT(19),
+    NpdmSystemCallId_UnmapDeviceAddressSpace        = BIT(20),
+    NpdmSystemCallId_InvalidateProcessDataCache     = BIT(21),
+    NpdmSystemCallId_StoreProcessDataCache          = BIT(22),
+    NpdmSystemCallId_FlushProcessDataCache          = BIT(23),
     
     ///< System calls for index 4.
-    NpdmSystemCallIds_DebugActiveProcess             = BIT(0),
-    NpdmSystemCallIds_BreakDebugProcess              = BIT(1),
-    NpdmSystemCallIds_TerminateDebugProcess          = BIT(2),
-    NpdmSystemCallIds_GetDebugEvent                  = BIT(3),
-    NpdmSystemCallIds_ContinueDebugEvent             = BIT(4),
-    NpdmSystemCallIds_GetProcessList                 = BIT(5),
-    NpdmSystemCallIds_GetThreadList                  = BIT(6),
-    NpdmSystemCallIds_GetDebugThreadContext          = BIT(7),
-    NpdmSystemCallIds_SetDebugThreadContext          = BIT(8),
-    NpdmSystemCallIds_QueryDebugProcessMemory        = BIT(9),
-    NpdmSystemCallIds_ReadDebugProcessMemory         = BIT(10),
-    NpdmSystemCallIds_WriteDebugProcessMemory        = BIT(11),
-    NpdmSystemCallIds_SetHardwareBreakPoint          = BIT(12),
-    NpdmSystemCallIds_GetDebugThreadParam            = BIT(13),
-    NpdmSystemCallIds_Unknown11                      = BIT(14),
-    NpdmSystemCallIds_GetSystemInfo                  = BIT(15),
-    NpdmSystemCallIds_CreatePort                     = BIT(16),
-    NpdmSystemCallIds_ManageNamedPort                = BIT(17),
-    NpdmSystemCallIds_ConnectToPort                  = BIT(18),
-    NpdmSystemCallIds_SetProcessMemoryPermission     = BIT(19),
-    NpdmSystemCallIds_MapProcessMemory               = BIT(20),
-    NpdmSystemCallIds_UnmapProcessMemory             = BIT(21),
-    NpdmSystemCallIds_QueryProcessMemory             = BIT(22),
-    NpdmSystemCallIds_MapProcessCodeMemory           = BIT(23),
+    NpdmSystemCallId_DebugActiveProcess             = BIT(0),
+    NpdmSystemCallId_BreakDebugProcess              = BIT(1),
+    NpdmSystemCallId_TerminateDebugProcess          = BIT(2),
+    NpdmSystemCallId_GetDebugEvent                  = BIT(3),
+    NpdmSystemCallId_ContinueDebugEvent             = BIT(4),
+    NpdmSystemCallId_GetProcessList                 = BIT(5),
+    NpdmSystemCallId_GetThreadList                  = BIT(6),
+    NpdmSystemCallId_GetDebugThreadContext          = BIT(7),
+    NpdmSystemCallId_SetDebugThreadContext          = BIT(8),
+    NpdmSystemCallId_QueryDebugProcessMemory        = BIT(9),
+    NpdmSystemCallId_ReadDebugProcessMemory         = BIT(10),
+    NpdmSystemCallId_WriteDebugProcessMemory        = BIT(11),
+    NpdmSystemCallId_SetHardwareBreakPoint          = BIT(12),
+    NpdmSystemCallId_GetDebugThreadParam            = BIT(13),
+    NpdmSystemCallId_Reserved11                     = BIT(14),
+    NpdmSystemCallId_GetSystemInfo                  = BIT(15),
+    NpdmSystemCallId_CreatePort                     = BIT(16),
+    NpdmSystemCallId_ManageNamedPort                = BIT(17),
+    NpdmSystemCallId_ConnectToPort                  = BIT(18),
+    NpdmSystemCallId_SetProcessMemoryPermission     = BIT(19),
+    NpdmSystemCallId_MapProcessMemory               = BIT(20),
+    NpdmSystemCallId_UnmapProcessMemory             = BIT(21),
+    NpdmSystemCallId_QueryProcessMemory             = BIT(22),
+    NpdmSystemCallId_MapProcessCodeMemory           = BIT(23),
     
     ///< System calls for index 5.
-    NpdmSystemCallIds_UnmapProcessCodeMemory         = BIT(0),
-    NpdmSystemCallIds_CreateProcess                  = BIT(1),
-    NpdmSystemCallIds_StartProcess                   = BIT(2),
-    NpdmSystemCallIds_TerminateProcess               = BIT(3),
-    NpdmSystemCallIds_GetProcessInfo                 = BIT(4),
-    NpdmSystemCallIds_CreateResourceLimit            = BIT(5),
-    NpdmSystemCallIds_SetResourceLimitLimitValue     = BIT(6),
-    NpdmSystemCallIds_CallSecureMonitor              = BIT(7),
-    NpdmSystemCallIds_Count                          = 0x80     ///< Total values supported by this enum.
-} NpdmSystemCallIds;
+    NpdmSystemCallId_UnmapProcessCodeMemory         = BIT(0),
+    NpdmSystemCallId_CreateProcess                  = BIT(1),
+    NpdmSystemCallId_StartProcess                   = BIT(2),
+    NpdmSystemCallId_TerminateProcess               = BIT(3),
+    NpdmSystemCallId_GetProcessInfo                 = BIT(4),
+    NpdmSystemCallId_CreateResourceLimit            = BIT(5),
+    NpdmSystemCallId_SetResourceLimitLimitValue     = BIT(6),
+    NpdmSystemCallId_CallSecureMonitor              = BIT(7),
+    NpdmSystemCallId_Count                          = 0x80     ///< Total values supported by this enum.
+} NpdmSystemCallId;
 
 /// EnableSystemCalls entry for the KernelCapability descriptor.
 typedef struct {
-    u32 entry_number                                        : 4;    ///< All bits set to one.
-    u32 reserved                                            : 1;    ///< Always set to zero.
-    u32 system_call_ids                                     : 24;   ///< NpdmSystemCallIds.
-    u32 index                                               : 3;    ///< System calls index.
+    u32 entry_value     : NpdmKernelCapabilityEntryNumber_EnableSystemCalls;    ///< Always set to NpdmKernelCapabilityEntryValue_EnableSystemCalls.
+    u32 padding         : 1;                                                    ///< Always set to zero.
+    u32 system_call_ids : 24;                                                   ///< NpdmSystemCallId.
+    u32 index           : 3;                                                    ///< System calls index.
 } NpdmEnableSystemCalls;
 
 typedef enum {
@@ -389,34 +417,39 @@ typedef enum {
 } NpdmPermissionType;
 
 typedef enum {
-    NpdmMapType_Io     = 0,
-    NpdmMapType_Static = 1
-} NpdmMapType;
+    NpdmMappingType_Io     = 0,
+    NpdmMappingType_Static = 1
+} NpdmMappingType;
 
-/// MemoryMapType1 entry for the KernelCapability descriptor.
-/// Always followed by a MemoryMapType2 entry.
 typedef struct {
-    u32 entry_number    : 6;    ///< All bits set to one.
-    u32 reserved        : 1;    ///< Always set to zero.
-    u32 begin_address   : 24;   ///< begin_address << 12.
-    u32 permission_type : 1;    ///< NpdmPermissionType.
+    u32 entry_value     : NpdmKernelCapabilityEntryNumber_MemoryMap;    ///< Always set to NpdmKernelCapabilityEntryValue_MemoryMap.
+    u32 padding         : 1;                                            ///< Always set to zero.
+    u32 begin_address   : 24;                                           ///< begin_address << 12.
+    u32 permission_type : 1;                                            ///< NpdmPermissionType.
 } NpdmMemoryMapType1;
 
-/// MemoryMapType2 entry for the KernelCapability descriptor.
-/// Always preceded by a MemoryMapType1 entry.
 typedef struct {
-    u32 entry_number : 6;   ///< All bits set to one.
-    u32 reserved_1   : 1;   ///< Always set to zero.
-    u32 size         : 20;  ///< size << 12.
-    u32 reserved_2   : 4;
-    u32 map_type     : 1;   ///< NpdmMapType.
+    u32 entry_value  : NpdmKernelCapabilityEntryNumber_MemoryMap;   ///< Always set to NpdmKernelCapabilityEntryValue_MemoryMap.
+    u32 padding      : 1;                                           ///< Always set to zero.
+    u32 size         : 20;                                          ///< size << 12.
+    u32 reserved     : 4;
+    u32 mapping_type : 1;                                           ///< NpdmMappingType.
 } NpdmMemoryMapType2;
+
+/// MemoryMap entry for the KernelCapability descriptor.
+/// These are always stored in pairs of MemoryMapType1 + MemoryMapType2 entries.
+typedef struct {
+    union {
+        NpdmMemoryMapType1 type1;
+        NpdmMemoryMapType2 type2;
+    };
+} NpdmMemoryMap;
 
 /// IoMemoryMap entry for the KernelCapability descriptor.
 typedef struct {
-    u32 entry_number  : 7;  ///< All bits set to one.
-    u32 reserved      : 1;  ///< Always set to zero.
-    u32 begin_address : 24; ///< begin_address << 12.
+    u32 entry_value   : NpdmKernelCapabilityEntryNumber_IoMemoryMap;    ///< Always set to NpdmKernelCapabilityEntryValue_IoMemoryMap.
+    u32 padding       : 1;                                              ///< Always set to zero.
+    u32 begin_address : 24;                                             ///< begin_address << 12.
 } NpdmIoMemoryMap;
 
 typedef enum {
@@ -428,22 +461,22 @@ typedef enum {
 
 /// MemoryRegionMap entry for the KernelCapability descriptor.
 typedef struct {
-    u32 entry_number      : 10; ///< All bits set to one.
-    u32 reserved          : 1;  ///< Always set to zero.
-    u32 region_type_1     : 6;  ///< NpdmRegionType.
-    u32 permission_type_1 : 1;  ///< NpdmPermissionType.
-    u32 region_type_2     : 6;  ///< NpdmRegionType.
-    u32 permission_type_2 : 1;  ///< NpdmPermissionType.
-    u32 region_type_3     : 6;  ///< NpdmRegionType.
-    u32 permission_type_3 : 1;  ///< NpdmPermissionType.
+    u32 entry_value       : NpdmKernelCapabilityEntryNumber_MemoryRegionMap;    ///< Always set to NpdmKernelCapabilityEntryValue_MemoryRegionMap.
+    u32 padding           : 1;                                                  ///< Always set to zero.
+    u32 region_type_1     : 6;                                                  ///< NpdmRegionType.
+    u32 permission_type_1 : 1;                                                  ///< NpdmPermissionType.
+    u32 region_type_2     : 6;                                                  ///< NpdmRegionType.
+    u32 permission_type_2 : 1;                                                  ///< NpdmPermissionType.
+    u32 region_type_3     : 6;                                                  ///< NpdmRegionType.
+    u32 permission_type_3 : 1;                                                  ///< NpdmPermissionType.
 } NpdmMemoryRegionMap;
 
 /// EnableInterrupts entry for the KernelCapability descriptor.
 typedef struct {
-    u32 entry_number       : 11;    ///< All bits set to one.
-    u32 reserved           : 1;     ///< Always set to zero.
-    u32 interrupt_number_1 : 10;    ///< 0x3FF means empty.
-    u32 interrupt_number_2 : 10;    ///< 0x3FF means empty.
+    u32 entry_value        : NpdmKernelCapabilityEntryNumber_EnableInterrupts;  ///< Always set to NpdmKernelCapabilityEntryValue_EnableInterrupts.
+    u32 padding            : 1;                                                 ///< Always set to zero.
+    u32 interrupt_number_1 : 10;                                                ///< 0x3FF means empty.
+    u32 interrupt_number_2 : 10;                                                ///< 0x3FF means empty.
 } NpdmEnableInterrupts;
 
 typedef enum {
@@ -455,35 +488,35 @@ typedef enum {
 /// MiscParams entry for the KernelCapability descriptor.
 /// Defaults to 0 if this entry doesn't exist.
 typedef struct {
-    u32 entry_number : 13;  ///< All bits set to one.
-    u32 reserved_1   : 1;   ///< Always set to zero.
-    u32 program_type : 3;   ///< NpdmProgramType.
-    u32 reserved_2   : 15;
+    u32 entry_value  : NpdmKernelCapabilityEntryNumber_MiscParams;  ///< Always set to NpdmKernelCapabilityEntryValue_MiscParams.
+    u32 padding      : 1;                                           ///< Always set to zero.
+    u32 program_type : 3;                                           ///< NpdmProgramType.
+    u32 reserved     : 15;
 } NpdmMiscParams;
 
 /// KernelVersion entry for the KernelCapability descriptor.
 typedef struct {
-    u32 entry_number  : 14; ///< All bits set to one.
-    u32 reserved      : 1;  ///< Always set to zero.
+    u32 entry_value   : NpdmKernelCapabilityEntryNumber_KernelVersion;  ///< Always set to NpdmKernelCapabilityEntryValue_KernelVersion.
+    u32 padding       : 1;                                              ///< Always set to zero.
     u32 minor_version : 4;
     u32 major_version : 13;
 } NpdmKernelVersion;
 
 /// HandleTableSize entry for the KernelCapability descriptor.
 typedef struct {
-    u32 entry_number      : 15; ///< All bits set to one.
-    u32 reserved_1        : 1;  ///< Always set to zero.
+    u32 entry_value       : NpdmKernelCapabilityEntryNumber_HandleTableSize;    ///< Always set to NpdmKernelCapabilityEntryValue_HandleTableSize.
+    u32 padding           : 1;                                                  ///< Always set to zero.
     u32 handle_table_size : 10;
-    u32 reserved_2        : 6;
+    u32 reserved          : 6;
 } NpdmHandleTableSize;
 
 /// MiscFlags entry for the KernelCapability descriptor.
 typedef struct {
-    u32 entry_number : 16;  ///< All bits set to one.
-    u32 reserved_1   : 1;   ///< Always set to zero.
+    u32 entry_value  : NpdmKernelCapabilityEntryNumber_MiscFlags;   ///< Always set to NpdmKernelCapabilityEntryValue_MiscFlags.
+    u32 padding      : 1;                                           ///< Always set to zero.
     u32 enable_debug : 1;
     u32 force_debug  : 1;
-    u32 reserved_2   : 13;
+    u32 reserved     : 13;
 } NpdmMiscFlags;
 
 /// KernelCapability descriptor. Part of the ACID and ACI0 section bodies.
@@ -491,6 +524,12 @@ typedef struct {
 /// The entry type is identified by a pattern of "01...11" (zero followed by ones) in the low u16, counting from the LSB. The variable number of ones must never exceed 16 (entirety of the low u16).
 typedef struct {
     u32 value;
-} NpdmKernelCapabilityEntry;
+} NpdmKernelCapabilityDescriptorEntry;
+
+/// Returns a value that can be compared to values from the NpdmKernelCapabilityEntryValue enum.
+NX_INLINE u32 npdmGetKernelCapabilityDescriptorEntryValue(NpdmKernelCapabilityDescriptorEntry *entry)
+{
+    return (entry ? (((entry->value + 1) & ~entry->value) - 1) : 0);
+}
 
 #endif /* __NPDM_H__ */
