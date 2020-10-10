@@ -25,7 +25,6 @@
 
 #define NSO_HEADER_MAGIC    0x4E534F30  /* "NSO0". */
 #define NSO_MOD_MAGIC       0x4D4F4430  /* "MOD0". */
-#define NSO_LNY_MAGIC       0x4C4E5930  /* "LNY0". */
 
 typedef enum {
     NsoFlags_TextCompress = BIT(0), ///< Determines if .text segment is LZ4-compressed.
@@ -100,14 +99,6 @@ typedef struct  {
     s32 eh_frame_hdr_end_offset;
     s32 module_object_offset;       ///< Typically equal to .bss base.
 } NsoModHeader;
-
-/// Placed right after the NsoModHeader block (decompressed .text segment only).
-/// Only valid if the 'magic' member holds the expected value.
-typedef struct {
-    u32 magic;              ///< "LNY0".
-    u32 got_start_offset;
-    u32 got_end_offset;
-} NsoLnyHeader;
 
 /// Placed at the start of the decompressed .rodata segment + 0x4.
 /// If the 'name_length' element is greater than 0, 'name' will hold the module name.
