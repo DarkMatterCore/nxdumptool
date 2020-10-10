@@ -555,6 +555,9 @@ typedef struct {
 /// Initializes a NpdmContext using a previously initialized PartitionFileSystemContext (which must belong to the ExeFS from a Program NCA).
 bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx);
 
+/// Changes the ACID public key from the NPDM in the input NpdmContext and updates the ACID signature from the NCA header in the underlying NCA context.
+bool npdmChangeAcidPublicKeyAndNcaSignature(NpdmContext *npdm_ctx);
+
 /// Helper inline functions.
 
 NX_INLINE void npdmFreeContext(NpdmContext *npdm_ctx)

@@ -107,4 +107,36 @@ typedef struct {
     char name[];
 } NsoModuleInfo;
 
+
+
+
+/*
+
+
+typedef struct {
+    PartitionFileSystemContext *pfs_ctx;                        ///< PartitionFileSystemContext for the Program NCA FS section #0, which is where this NSO is stored.
+    PartitionFileSystemEntry *pfs_entry;                        ///< PartitionFileSystemEntry for this NSO in the Program NCA FS section #0. Used to read NSO data.
+    NsoHeader nso_header;                                       ///< Copy of the NSO header.
+    
+    
+    
+    
+    
+    
+} NsoContext;
+
+
+
+
+
+*/
+
+
+
+
+
+
+
+
+
 #endif /* __NSO_H__ */

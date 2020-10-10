@@ -20,6 +20,7 @@
 
 #include "utils.h"
 #include "npdm.h"
+#include "rsa.h"
 
 bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx)
 {
@@ -258,4 +259,27 @@ end:
     if (!success) npdmFreeContext(out);
     
     return success;
+}
+
+bool npdmChangeAcidPublicKeyAndNcaSignature(NpdmContext *npdm_ctx)
+{
+    NcaContext *nca_ctx = NULL;
+    
+    if (!npdmIsValidContext(npdm_ctx) || !(nca_ctx = (NcaContext*)npdm_ctx->pfs_ctx->nca_fs_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Program)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Update NPDM ACID public key. */
+    memcpy(npdm_ctx->acid_header->public_key, rsa2048GetCustomPublicKey(), RSA2048_PUBKEY_SIZE);
+    
+    /* Update NCA ACID signature. */
+    if (!rsa2048GenerateSha256BasedPssSignature(nca_ctx->header.acid_signature, &(nca_ctx->header.magic), NCA_ACID_SIGNATURE_AREA_SIZE))
+    {
+        LOGFILE("Failed to generate RSA-2048-PSS NCA ACID signature!");
+        return false;
+    }
+    
+    return true;
 }

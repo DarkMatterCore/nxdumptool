@@ -48,6 +48,8 @@
 
 #define NCA_AES_XTS_SECTOR_SIZE                     0x200
 
+#define NCA_ACID_SIGNATURE_AREA_SIZE                0x100                       /* Signature is calculated starting at the NCA header magic word. */
+
 typedef enum {
     NcaDistributionType_Download = 0,
     NcaDistributionType_GameCard = 1
@@ -312,8 +314,8 @@ typedef struct {
     bool rights_id_available;
     bool titlekey_retrieved;
     u8 titlekey[AES_128_KEY_SIZE];                          ///< Decrypted titlekey from the ticket.
-    bool dirty_header;
     NcaHeader header;                                       ///< NCA header.
+    u8 header_hash[SHA256_HASH_SIZE];                       ///< NCA header hash. Used to determine if it's necessary to replace the NCA header while dumping this NCA.
     NcaFsSectionContext fs_contexts[NCA_FS_HEADER_COUNT];
     NcaDecryptedKeyArea decrypted_key_area;
 } NcaContext;
@@ -368,7 +370,7 @@ void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *d
 
 /// Generates HierarchicalSha256 FS section patch data, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the last HierarchicalSha256 hash region (actual underlying FS).
-/// Bear in mind that this function recalculates both the NcaHashData block master hash and the NCA FS header hash from the NCA header, and enables the 'dirty_header' flag from the NCA context.
+/// Bear in mind that this function recalculates both the NcaHashData block master hash and the NCA FS header hash from the NCA header.
 /// As such, this function is not designed to generate more than one patch per HierarchicalSha256 FS section.
 bool ncaGenerateHierarchicalSha256Patch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out);
 
@@ -378,7 +380,7 @@ void ncaWriteHierarchicalSha256PatchToMemoryBuffer(NcaContext *ctx, NcaHierarchi
 
 /// Generates HierarchicalIntegrity FS section patch data, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the last HierarchicalIntegrity hash level (actual underlying FS).
-/// Bear in mind that this function recalculates both the NcaHashData block master hash and the NCA FS header hash from the NCA header, and enables the 'dirty_header' flag from the NCA context.
+/// Bear in mind that this function recalculates both the NcaHashData block master hash and the NCA FS header hash from the NCA header.
 /// As such, this function is not designed to generate more than one patch per HierarchicalIntegrity FS section.
 bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalIntegrityPatch *out);
 
@@ -425,7 +427,14 @@ NX_INLINE void ncaSetDownloadDistributionType(NcaContext *ctx)
 {
     if (!ctx || ctx->header.distribution_type == NcaDistributionType_Download) return;
     ctx->header.distribution_type = NcaDistributionType_Download;
-    ctx->dirty_header = true;
+}
+
+NX_INLINE bool ncaIsHeaderDirty(NcaContext *ctx)
+{
+    if (!ctx) return false;
+    u8 tmp_hash[SHA256_HASH_SIZE] = {0};
+    sha256CalculateHash(tmp_hash, &(ctx->header), sizeof(NcaHeader));
+    return (memcmp(tmp_hash, ctx->header_hash, SHA256_HASH_SIZE) != 0);
 }
 
 NX_INLINE bool ncaValidateHierarchicalSha256Offsets(NcaHierarchicalSha256Data *hierarchical_sha256_data, u64 section_size)

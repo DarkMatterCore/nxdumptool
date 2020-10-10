@@ -1,10 +1,8 @@
 todo:
     
     nca: functions for fs section lookup? (could just let the user choose...)
+    nca: add encrypted headers to nca context, avoid re-encrypting plaintext headers in place
     nca: function to write re-encrypted nca headers / nca fs headers (don't forget nca0 please)
-    nca: function to patch the private npdm acid signature from a program nca + patch the acid signature from the nca header
-    nca: add encrypted header to nca context, avoid re-encrypting the plaintext header in place
-    nca: use hash instead of dirty_header flag?
     
     tik: option to wipe elicense property mask
     tik: automatically dump tickets to the SD card?

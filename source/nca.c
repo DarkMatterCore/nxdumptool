@@ -143,6 +143,9 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         return false;
     }
     
+    /* Calculate decrypted header hash. */
+    sha256CalculateHash(out->header_hash, &(out->header), sizeof(NcaHeader));
+    
     if (out->rights_id_available)
     {
         /* Retrieve ticket. */
@@ -363,7 +366,6 @@ void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
     
     /* Update context flags. */
     ctx->rights_id_available = false;
-    ctx->dirty_header = true;
 }
 
 bool ncaEncryptHeader(NcaContext *ctx)
@@ -375,7 +377,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
     }
     
     /* Safety check: don't encrypt the header if we don't need to. */
-    if (!ctx->dirty_header) return true;
+    if (!ncaIsHeaderDirty(ctx)) return true;
     
     size_t crypt_res = 0;
     const u8 *header_key = keysGetNcaHeaderKey();
@@ -1067,9 +1069,6 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
     
     /* Recalculate FS header hash. */
     sha256CalculateHash(nca_ctx->header.fs_header_hash[ctx->section_num].hash, &(ctx->header), sizeof(NcaFsHeader));
-    
-    /* Enable the 'dirty_header' flag. */
-    nca_ctx->dirty_header = true;
     
     /* Copy content ID. */
     memcpy(!is_integrity_patch ? &(hierarchical_sha256_patch->content_id) : &(hierarchical_integrity_patch->content_id), &(nca_ctx->content_id), sizeof(NcmContentId));

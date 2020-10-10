@@ -26,6 +26,7 @@
 #define __RSA_H__
 
 #define RSA2048_SIG_SIZE    0x100
+#define RSA2048_PUBKEY_SIZE RSA2048_SIG_SIZE
 
 /// Generates a RSA-2048-PSS with SHA-256 signature using a custom RSA-2048 private key.
 /// Suitable to replace the ACID signature in a Program NCA header.
