@@ -48,7 +48,7 @@
 
 #define NCA_AES_XTS_SECTOR_SIZE                     0x200
 
-#define NCA_ACID_SIGNATURE_AREA_SIZE                0x100                       /* Signature is calculated starting at the NCA header magic word. */
+#define NCA_ACID_SIGNATURE_AREA_SIZE                0x200                       /* Signature is calculated starting at the NCA header magic word. */
 
 typedef enum {
     NcaDistributionType_Download = 0,
