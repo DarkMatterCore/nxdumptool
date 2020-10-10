@@ -220,7 +220,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     /* Safety check: verify raw CNMT size. */
     if (cur_offset != out->raw_data_size)
     {
-        LOGFILE("Raw CNMT size mismatch! (0x%X != 0x%X).", cur_offset, out->raw_data_size);
+        LOGFILE("Raw CNMT size mismatch! (0x%lX != 0x%lX).", cur_offset, out->raw_data_size);
         goto end;
     }
     
