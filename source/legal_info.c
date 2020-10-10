@@ -78,6 +78,9 @@ bool legalInfoInitializeContext(LegalInfoContext *out, NcaContext *nca_ctx)
         goto end;
     }
     
+    /* Update NCA context pointer in output context. */
+    out->nca_ctx = nca_ctx;
+    
     success = true;
     
 end:

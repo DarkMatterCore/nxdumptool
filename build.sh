@@ -3,7 +3,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 tar_filename="nxdumptool-rewrite_poc_$(shell git rev-parse --short HEAD).tar.bz2"
 
-rm -f $tar_filename
+rm -f ./*.tar.bz2
 
 rm -rf ./code_templates/tmp
 mkdir ./code_templates/tmp
@@ -23,7 +23,7 @@ for f in ./code_templates/*.c; do
     
     {
         make clean
-        make -j 12
+        make -j 12 BUILD_TYPE="$filename"
     }
     
     mkdir ./code_templates/tmp/$filename

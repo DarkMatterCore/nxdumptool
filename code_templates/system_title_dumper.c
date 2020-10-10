@@ -284,8 +284,14 @@ int main(int argc, char *argv[])
         printf("select a %s.", menu == 0 ? "system title to view its contents" : (menu == 1 ? "content" : "fs section"));
         printf("\npress b to %s.\n\n", menu == 0 ? "exit" : "go back");
         
-        if (menu == 0) printf("title: %u / %u\n\n", selected_idx + 1, app_count);
+        if (menu == 0)
+        {
+            printf("title: %u / %u\n", selected_idx + 1, app_count);
+            printf("selected title: %016lX - %s\n\n", app_metadata[selected_idx]->title_id, app_metadata[selected_idx]->lang_entry.name);
+        }
+        
         if (menu >= 1) printf("selected title: %016lX - %s\n\n", app_metadata[title_idx]->title_id, app_metadata[title_idx]->lang_entry.name);
+        
         if (menu == 2) printf("selected content: %s (%s)\n\n", nca_id_str, titleGetNcmContentTypeName(cur_title_info->content_infos[nca_idx].content_type));
         
         u32 max_val = (menu == 0 ? app_count : (menu == 1 ? cur_title_info->content_count : NCA_FS_HEADER_COUNT));
@@ -366,7 +372,8 @@ int main(int argc, char *argv[])
             
             if (error || menu >= 3)
             {
-                utilsSleep(3);
+                consolePrint("press any button to continue\n");
+                utilsWaitForButtonPress(KEY_NONE);
                 menu--;
             } else {
                 selected_idx = scroll = 0;

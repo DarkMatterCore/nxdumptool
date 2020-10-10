@@ -39,6 +39,10 @@ APP_TITLE	:=	nxdumptool-rewrite
 APP_AUTHOR	:=	DarkMatterCore
 APP_VERSION	:=  ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_MICRO}
 
+ifneq ($(origin BUILD_TYPE),undefined)
+APP_VERSION := ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_MICRO}-${BUILD_TYPE}
+endif
+
 TARGET		:=	${APP_TITLE}
 BUILD		:=	build
 SOURCES		:=	source source/fatfs
