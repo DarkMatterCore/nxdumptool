@@ -41,6 +41,7 @@ int main(int argc, char *argv[])
     
     int ret = 0;
     
+    utilsWriteLogBufferToLogFile("________________________________________________________________");
     LOGFILE(APP_TITLE " starting.");
     
     consoleInit(NULL);
