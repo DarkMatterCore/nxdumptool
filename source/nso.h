@@ -116,8 +116,9 @@ typedef struct {
     NsoHeader nso_header;                   ///< NSO header.
     char *module_name;                      ///< Pointer to a dynamically allocated buffer that holds the NSO module name, if available. Otherwise, this is set to NULL.
     char *module_info_name;                 ///< Pointer to a dynamically allocated buffer that holds the .rodata module info module name, if available. Otherwise, this is set to NULL.
-    char *rodata_api_info_section;          ///< Pointer to a dynamically allocated buffer that holds the .rodata API info section data. Middleware/GuidelineApi data is retrieved from this section.
-    u64 rodata_api_info_section_size;       ///< .rodata API info section size. Kept here for convenience - this is part of 'nso_header'.
+    char *rodata_api_info_section;          ///< Pointer to a dynamically allocated buffer that holds the .rodata API info section data, if available. Otherwise, this is set to NULL.
+                                            ///< Middleware and GuidelineApi entries are retrieved from this section.
+    u64 rodata_api_info_section_size;       ///< .rodata API info section size, if available. Otherwise, this is set to 0. Kept here for convenience - this is part of 'nso_header'.
     char *rodata_dynstr_section;            ///< Pointer to a dynamically allocated buffer that holds the .rodata dynamic string section data. UnresolvedApi data is retrieved from this section.
     u64 rodata_dynstr_section_size;         ///< .rodata dynamic string section size. Kept here for convenience - this is part of 'nso_header'.
     u8 *rodata_dynsym_section;              ///< Pointer to a dynamically allocated buffer that holds the .rodata dynamic symbol section data. Used to retrieve pointers to symbol strings within dynstr.

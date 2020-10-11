@@ -22,6 +22,7 @@
 #include "gamecard.h"
 #include "title.h"
 #include "cnmt.h"
+#include "program_info.h"
 #include "nacp.h"
 #include "legal_info.h"
 
@@ -65,6 +66,7 @@ int main(int argc, char *argv[])
     Ticket tik = {0};
     
     ContentMetaContext cnmt_ctx = {0};
+    ProgramInfoContext program_info_ctx = {0};
     NacpContext nacp_ctx = {0};
     LegalInfoContext legal_info_ctx = {0};
     
@@ -192,7 +194,7 @@ int main(int argc, char *argv[])
     
     consolePrint("nca ctx calloc succeeded\n");
     
-    u32 meta_idx = (user_app_data.app_info->content_count - 1), control_idx = 0, legal_idx = 0;
+    u32 meta_idx = (user_app_data.app_info->content_count - 1), program_idx = 0, control_idx = 0, legal_idx = 0;
     
     for(u32 i = 0, j = 0; i < user_app_data.app_info->content_count; i++)
     {
@@ -204,6 +206,8 @@ int main(int argc, char *argv[])
             consolePrint("%s nca initialize ctx failed\n", titleGetNcmContentTypeName(user_app_data.app_info->content_infos[i].content_type));
             goto out2;
         }
+        
+        if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_Program && user_app_data.app_info->content_infos[i].id_offset == 0) control_idx = j;
         
         if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_Control && user_app_data.app_info->content_infos[i].id_offset == 0) control_idx = j;
         
@@ -222,7 +226,9 @@ int main(int argc, char *argv[])
     
     consolePrint("Meta nca initialize ctx succeeded\n");
     
-    sprintf(path, "sdmc:/%016lX_xml", app_metadata[selected_idx]->title_id);
+    mkdir("sdmc:/at_xml", 0777);
+    
+    sprintf(path, "sdmc:/at_xml/%016lX", app_metadata[selected_idx]->title_id);
     mkdir(path, 0777);
     
     if (!cnmtInitializeContext(&cnmt_ctx, &(nca_ctx[meta_idx])))
@@ -237,7 +243,7 @@ int main(int argc, char *argv[])
     {
         consolePrint("cnmt xml succeeded\n");
         
-        sprintf(path, "sdmc:/%016lX_xml/%s.cnmt", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
+        sprintf(path, "sdmc:/at_xml/%016lX/%s.cnmt", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
@@ -247,7 +253,7 @@ int main(int argc, char *argv[])
             xml_fd = NULL;
         }
         
-        sprintf(path, "sdmc:/%016lX_xml/%s.cnmt.xml", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
+        sprintf(path, "sdmc:/at_xml/%016lX/%s.cnmt.xml", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
@@ -259,6 +265,27 @@ int main(int argc, char *argv[])
     } else {
         consolePrint("cnmt xml failed\n");
     }
+    
+    if (!programInfoInitializeContext(&program_info_ctx, &(nca_ctx[program_idx])))
+    {
+        consolePrint("program info initialize ctx failed\n");
+        goto out2;
+    }
+    
+    consolePrint("program info initialize ctx succeeded\n");
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     
     if (!nacpInitializeContext(&nacp_ctx, &(nca_ctx[control_idx])))
     {
@@ -272,7 +299,7 @@ int main(int argc, char *argv[])
     {
         consolePrint("nacp xml succeeded\n");
         
-        sprintf(path, "sdmc:/%016lX_xml/%s.nacp", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str);
+        sprintf(path, "sdmc:/at_xml/%016lX/%s.nacp", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
@@ -282,7 +309,7 @@ int main(int argc, char *argv[])
             xml_fd = NULL;
         }
         
-        sprintf(path, "sdmc:/%016lX_xml/%s.nacp.xml", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str);
+        sprintf(path, "sdmc:/at_xml/%016lX/%s.nacp.xml", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");
         if (xml_fd)
@@ -296,7 +323,7 @@ int main(int argc, char *argv[])
         {
             NacpIconContext *icon_ctx = &(nacp_ctx.icon_ctx[i]);
             
-            sprintf(path, "sdmc:/%016lX_xml/%s.nx.%s.jpg", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str, nacpGetLanguageString(icon_ctx->language));
+            sprintf(path, "sdmc:/at_xml/%016lX/%s.nx.%s.jpg", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str, nacpGetLanguageString(icon_ctx->language));
             
             xml_fd = fopen(path, "wb");
             if (xml_fd)
@@ -318,7 +345,7 @@ int main(int argc, char *argv[])
     
     consolePrint("legalinfo initialize ctx succeeded\n");
     
-    sprintf(path, "sdmc:/%016lX_xml/%s.legalinfo.xml", app_metadata[selected_idx]->title_id, legal_info_ctx.nca_ctx->content_id_str);
+    sprintf(path, "sdmc:/at_xml/%016lX/%s.legalinfo.xml", app_metadata[selected_idx]->title_id, legal_info_ctx.nca_ctx->content_id_str);
     
     xml_fd = fopen(path, "wb");
     if (xml_fd)
@@ -338,6 +365,8 @@ out2:
     legalInfoFreeContext(&legal_info_ctx);
     
     nacpFreeContext(&nacp_ctx);
+    
+    programInfoFreeContext(&program_info_ctx);
     
     cnmtFreeContext(&cnmt_ctx);
     
