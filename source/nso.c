@@ -197,7 +197,8 @@ static bool nsoGetModuleName(NsoContext *nso_ctx)
 
 static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
 {
-    bool compressed = (nso_ctx->nso_header.flags & NsoFlags_RoCompress);
+    int lz4_res = 0;
+    bool compressed = (nso_ctx->nso_header.flags & NsoFlags_RoCompress), verify = (nso_ctx->nso_header.flags & NsoFlags_RoHash);
     
     u8 *rodata_buf = NULL;
     u64 rodata_buf_size = (compressed ? LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(nso_ctx->nso_header.rodata_segment_header.size) : nso_ctx->nso_header.rodata_segment_header.size);
@@ -205,7 +206,8 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     u8 *rodata_read_ptr = (compressed ? (rodata_buf + (rodata_buf_size - nso_ctx->nso_header.rodata_file_size)) : rodata_buf);
     u64 rodata_read_size = (compressed ? nso_ctx->nso_header.rodata_file_size : nso_ctx->nso_header.rodata_segment_header.size);
     
-    int lz4_res = 0;
+    u8 rodata_hash[SHA256_HASH_SIZE] = {0};
+    
     bool success = false;
     
     /* Allocate memory for the .rodata buffer. */
@@ -229,6 +231,17 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
             (int)nso_ctx->nso_header.rodata_segment_header.size)
         {
             LOGFILE("LZ4 decompression failed for NRO \"%s\"! (0x%08X).", nso_ctx->nso_filename, (u32)lz4_res);
+            goto end;
+        }
+    }
+    
+    if (verify)
+    {
+        /* Verify .rodata segment hash. */
+        sha256CalculateHash(rodata_hash, rodata_buf, nso_ctx->nso_header.rodata_segment_header.size);
+        if (memcmp(rodata_hash, nso_ctx->nso_header.rodata_segment_hash, SHA256_HASH_SIZE) != 0)
+        {
+            LOGFILE(".rodata segment checksum mismatch for NRO \"%s\"!", nso_ctx->nso_filename);
             goto end;
         }
     }
