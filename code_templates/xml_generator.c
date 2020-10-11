@@ -274,18 +274,20 @@ int main(int argc, char *argv[])
     
     consolePrint("program info initialize ctx succeeded\n");
     
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
+    if (programInfoGenerateAuthoringToolXml(&program_info_ctx))
+    {
+        sprintf(path, "sdmc:/at_xml/%016lX/%s.programinfo.xml", app_metadata[selected_idx]->title_id, program_info_ctx.nca_ctx->content_id_str);
+        
+        xml_fd = fopen(path, "wb");
+        if (xml_fd)
+        {
+            fwrite(program_info_ctx.authoring_tool_xml, 1, program_info_ctx.authoring_tool_xml_size, xml_fd);
+            fclose(xml_fd);
+            xml_fd = NULL;
+        }
+    } else {
+        consolePrint("program info xml failed\n");
+    }
     
     if (!nacpInitializeContext(&nacp_ctx, &(nca_ctx[control_idx])))
     {
