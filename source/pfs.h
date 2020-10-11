@@ -101,6 +101,13 @@ NX_INLINE char *pfsGetNameTable(PartitionFileSystemContext *ctx)
     return (char*)(ctx->header + sizeof(PartitionFileSystemHeader) + (entry_count * sizeof(PartitionFileSystemEntry)));
 }
 
+NX_INLINE char *pfsGetEntryName(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry)
+{
+    char *name_table = pfsGetNameTable(ctx);
+    if (!name_table || !fs_entry || fs_entry->name_offset >= ((PartitionFileSystemHeader*)ctx->header)->name_table_size || !name_table[fs_entry->name_offset]) return NULL;
+    return (name_table + fs_entry->name_offset);
+}
+
 NX_INLINE char *pfsGetEntryNameByIndex(PartitionFileSystemContext *ctx, u32 idx)
 {
     PartitionFileSystemEntry *fs_entry = pfsGetEntryByIndex(ctx, idx);

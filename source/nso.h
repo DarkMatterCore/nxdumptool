@@ -23,6 +23,8 @@
 #ifndef __NSO_H__
 #define __NSO_H__
 
+#include "pfs.h"
+
 #define NSO_HEADER_MAGIC    0x4E534F30  /* "NSO0". */
 #define NSO_MOD_MAGIC       0x4D4F4430  /* "MOD0". */
 
@@ -88,7 +90,7 @@ typedef struct {
 /// This is essentially a replacement for the PT_DYNAMIC program header available in ELF binaries.
 /// All offsets are signed 32-bit values relative to the start of this header.
 /// This is usually placed at the start of the decompressed .text segment, right after a NsoModStart block.
-/// However, in some NSOs, it can instead be placed at the start of the uncompressed .rodata segment, right after its NsoModuleInfo block.
+/// However, in some NSOs, it can instead be placed at the start of the decompressed .rodata segment, right after its NsoModuleInfo block.
 /// In these cases, the 'mod_offset' value from the NsoModStart block will point to an offset within the .rodata segment.
 typedef struct  {
     u32 magic;                      ///< "MOD0".
@@ -97,7 +99,7 @@ typedef struct  {
     s32 bss_end_offset;
     s32 eh_frame_hdr_start_offset;
     s32 eh_frame_hdr_end_offset;
-    s32 module_object_offset;       ///< Typically equal to .bss base.
+    s32 module_object_offset;       ///< Typically equal to bss_start_offset.
 } NsoModHeader;
 
 /// Placed at the start of the decompressed .rodata segment + 0x4.
@@ -107,36 +109,35 @@ typedef struct {
     char name[];
 } NsoModuleInfo;
 
-
-
-
-/*
-
-
 typedef struct {
-    PartitionFileSystemContext *pfs_ctx;                        ///< PartitionFileSystemContext for the Program NCA FS section #0, which is where this NSO is stored.
-    PartitionFileSystemEntry *pfs_entry;                        ///< PartitionFileSystemEntry for this NSO in the Program NCA FS section #0. Used to read NSO data.
-    NsoHeader nso_header;                                       ///< Copy of the NSO header.
-    
-    
-    
-    
-    
-    
+    PartitionFileSystemContext *pfs_ctx;    ///< PartitionFileSystemContext for the Program NCA FS section #0, which is where this NSO is stored.
+    PartitionFileSystemEntry *pfs_entry;    ///< PartitionFileSystemEntry for this NSO in the Program NCA FS section #0. Used to read NSO data.
+    char *nso_filename;                     ///< Pointer to the NSO filename in the Program NCA FS section #0.
+    NsoHeader nso_header;                   ///< NSO header.
+    char *module_name;                      ///< Pointer to a dynamically allocated buffer that holds the NSO module name, if available. Otherwise, this is set to NULL.
+    char *module_info_name;                 ///< Pointer to a dynamically allocated buffer that holds the .rodata module info module name, if available. Otherwise, this is set to NULL.
+    char *rodata_api_info_section;          ///< Pointer to a dynamically allocated buffer that holds the .rodata API info section data. Middleware/GuidelineApi data is retrieved from this section.
+    u64 rodata_api_info_section_size;       ///< .rodata API info section size. Kept here for convenience - this is part of 'nso_header'.
+    char *rodata_dynstr_section;            ///< Pointer to a dynamically allocated buffer that holds the .rodata dynamic string section data. UnresolvedApi data is retrieved from this section.
+    u64 rodata_dynstr_section_size;         ///< .rodata dynamic string section size. Kept here for convenience - this is part of 'nso_header'.
+    u8 *rodata_dynsym_section;              ///< Pointer to a dynamically allocated buffer that holds the .rodata dynamic symbol section data. Used to retrieve pointers to symbol strings within dynstr.
+    u64 rodata_dynsym_section_size;         ///< .rodata dynamic symbol section size. Kept here for convenience - this is part of 'nso_header'.
 } NsoContext;
 
+/// Initializes a NsoContext using a previously initialized PartitionFileSystemContext (which must belong to the ExeFS from a Program NCA) and a PartitionFileSystemEntry belonging to an underlying NSO.
+bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, PartitionFileSystemEntry *pfs_entry);
 
+/// Helper inline functions.
 
-
-
-*/
-
-
-
-
-
-
-
-
+NX_INLINE void nsoFreeContext(NsoContext *nso_ctx)
+{
+    if (!nso_ctx) return;
+    if (nso_ctx->module_name) free(nso_ctx->module_name);
+    if (nso_ctx->module_info_name) free(nso_ctx->module_info_name);
+    if (nso_ctx->rodata_api_info_section) free(nso_ctx->rodata_api_info_section);
+    if (nso_ctx->rodata_dynstr_section) free(nso_ctx->rodata_dynstr_section);
+    if (nso_ctx->rodata_dynsym_section) free(nso_ctx->rodata_dynsym_section);
+    memset(nso_ctx, 0, sizeof(NsoContext));
+}
 
 #endif /* __NSO_H__ */
