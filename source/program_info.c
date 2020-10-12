@@ -27,15 +27,21 @@
 /* Global variables. */
 
 static const char *g_trueString = "True", *g_falseString = "False";
-static const char *g_nnSdkString = "NintendoSdk_nnSdk";
+
+static const char g_nnSdkString[] = "NintendoSdk_nnSdk";
+static const size_t g_nnSdkStringLength = (MAX_ELEMENTS(g_nnSdkString) - 1);
 
 /* Function prototypes. */
 
 static bool programInfoGetSdkVersionAndBuildTypeFromSdkNso(ProgramInfoContext *program_info_ctx, char **sdk_version, char **build_type);
-static bool programInfoAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const char *value);
 static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, ProgramInfoContext *program_info_ctx, const char *api_list_tag, const char *api_entry_prefix, \
                                                        const char *sdk_prefix);
+static bool programInfoIsApiInfoEntryValid(const char *sdk_prefix, size_t sdk_prefix_len, char *sdk_entry, char **sdk_entry_vender, int *sdk_entry_vender_len, char **sdk_entry_name, bool nnsdk);
+
+static bool programInfoAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const char *value);
+
 static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, ProgramInfoContext *program_info_ctx);
+static bool programInfoIsElfSymbolValid(u8 *dynsym_ptr, char *dynstr_base_ptr, u64 dynstr_size, bool is_64bit, char **symbol_str);
 
 bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
 {
@@ -278,6 +284,9 @@ static bool programInfoGetSdkVersionAndBuildTypeFromSdkNso(ProgramInfoContext *p
     size_t sdk_entry_version_len = 0;
     bool success = true;
     
+    /* Set output pointers to NULL beforehand just in case we have no usable nnSdk information. */
+    *sdk_version = *build_type = NULL;
+    
     /* Locate "sdk" NSO. */
     for(u32 i = 0; i < program_info_ctx->nso_count; i++)
     {
@@ -293,49 +302,32 @@ static bool programInfoGetSdkVersionAndBuildTypeFromSdkNso(ProgramInfoContext *p
     for(u64 i = 0; i < nso_ctx->rodata_api_info_section_size; i++)
     {
         sdk_entry = (nso_ctx->rodata_api_info_section + i);
-        if (strncmp(sdk_entry, "SDK ", 4) != 0)
-        {
-            i += strlen(sdk_entry);
-            sdk_entry = NULL;
-            continue;
-        }
         
-        sdk_entry_vender = (strchr(sdk_entry, '+') + 1);
-        sdk_entry_name = (strchr(sdk_entry_vender, '+') + 1);
+        if (programInfoIsApiInfoEntryValid("SDK ", 4, sdk_entry, &sdk_entry_vender, NULL, &sdk_entry_name, true)) break;
         
-        /* Check if we're dealing with a "nnSdk" entry. */
-        if (strncmp(sdk_entry_name, g_nnSdkString, strlen(g_nnSdkString)) != 0)
-        {
-            i += strlen(sdk_entry);
-            sdk_entry = sdk_entry_vender = sdk_entry_name = NULL;
-            continue;
-        }
-        
-        /* Jackpot. */
-        break;
+        i += strlen(sdk_entry);
+        sdk_entry = sdk_entry_vender = sdk_entry_name = NULL;
     }
     
     /* Bail out if we couldn't find the "nnSdk" entry. */
     if (!sdk_entry) goto end;
     
     /* Get the SDK version and build type. */
-    sdk_entry_version = (strchr(sdk_entry_name, '-') + 1);
-    sdk_entry_build_type = (strchr(sdk_entry_version, '-') + 1);
+    sdk_entry_version = strchr(sdk_entry_name, '-');
+    if (!sdk_entry_version) goto end;
+    sdk_entry_version++;
+    
+    sdk_entry_build_type = strchr(sdk_entry_version, '-');
+    if (!sdk_entry_build_type) goto end;
+    sdk_entry_build_type++;
+    
     sdk_entry_version_len = (sdk_entry_build_type - sdk_entry_version - 1);
     
     /* Duplicate strings. */
     if (!(*sdk_version = strndup(sdk_entry_version, sdk_entry_version_len)) || !(*build_type = strdup(sdk_entry_build_type)))
     {
         LOGFILE("Failed to allocate memory for output strings!");
-        success = false;
-    }
-    
-end:
-    if (success)
-    {
-        /* Set output pointers to NULL if we have no usable nnSdk information. */
-        if (!nso_ctx || !sdk_entry) *sdk_version = *build_type = NULL;
-    } else {
+        
         if (*sdk_version)
         {
             free(*sdk_version);
@@ -347,27 +339,20 @@ end:
             free(*build_type);
             *build_type = NULL;
         }
+        
+        success = false;
     }
     
+end:
     return success;
-}
-
-static bool programInfoAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const char *value)
-{
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    return ((value && strlen(value)) ? utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%s</%s>\n", tag_name, value, tag_name) : \
-            utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s />\n", tag_name));
 }
 
 static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, ProgramInfoContext *program_info_ctx, const char *api_list_tag, const char *api_entry_prefix, \
                                                        const char *sdk_prefix)
 {
     size_t sdk_prefix_len = 0;
+    int sdk_entry_vender_len = 0;
+    char *sdk_entry = NULL, *sdk_entry_vender = NULL, *sdk_entry_name = NULL;
     bool success = false, api_list_exists = false;
     
     if (!xml_buf || !xml_buf_size || !program_info_ctx || !program_info_ctx->nso_count || !program_info_ctx->nso_ctx || !api_list_tag || !strlen(api_list_tag) || !api_entry_prefix || \
@@ -385,26 +370,15 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
         
         for(u64 j = 0; j < nso_ctx->rodata_api_info_section_size; j++)
         {
-            char *sdk_entry = (nso_ctx->rodata_api_info_section + j);
-            if (strncmp(sdk_entry, sdk_prefix, sdk_prefix_len) != 0)
+            sdk_entry = (nso_ctx->rodata_api_info_section + j);
+            
+            if (programInfoIsApiInfoEntryValid(sdk_prefix, sdk_prefix_len, sdk_entry, &sdk_entry_vender, NULL, &sdk_entry_name, false))
             {
-                j += strlen(sdk_entry);
-                continue;
+                api_list_exists = true;
+                break;
             }
             
-            char *sdk_entry_vender = (strchr(sdk_entry, '+') + 1);
-            char *sdk_entry_name = (strchr(sdk_entry_vender, '+') + 1);
-            
-            /* Filter "nnSdk" entries. */
-            if (!strncmp(sdk_entry_name, g_nnSdkString, strlen(g_nnSdkString)))
-            {
-                j += strlen(sdk_entry);
-                continue;
-            }
-            
-            /* Jackpot. */
-            api_list_exists = true;
-            break;
+            j += strlen(sdk_entry);
         }
         
         if (api_list_exists) break;
@@ -427,36 +401,23 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
         
         for(u64 j = 0; j < nso_ctx->rodata_api_info_section_size; j++)
         {
-            char *sdk_entry = (nso_ctx->rodata_api_info_section + j);
-            if (strncmp(sdk_entry, sdk_prefix, sdk_prefix_len) != 0)
+            sdk_entry = (nso_ctx->rodata_api_info_section + j);
+            
+            if (programInfoIsApiInfoEntryValid(sdk_prefix, sdk_prefix_len, sdk_entry, &sdk_entry_vender, &sdk_entry_vender_len, &sdk_entry_name, false))
             {
-                j += strlen(sdk_entry);
-                continue;
+                if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, \
+                                                        "    <%s>\n" \
+                                                        "      <%sName>%s</%sName>\n" \
+                                                        "      <VenderName>%.*s</VenderName>\n" \
+                                                        "      <NsoName>%s</NsoName>\n" \
+                                                        "    </%s>\n", \
+                                                        api_list_tag, \
+                                                        api_entry_prefix, sdk_entry_name, api_entry_prefix, \
+                                                        sdk_entry_vender_len, sdk_entry_vender, \
+                                                        nso_ctx->nso_filename, \
+                                                        api_list_tag)) goto end;
             }
             
-            char *sdk_entry_vender = (strchr(sdk_entry, '+') + 1);
-            char *sdk_entry_name = (strchr(sdk_entry_vender, '+') + 1);
-            
-            /* Filter "nnSdk" entries. */
-            if (!strncmp(sdk_entry_name, g_nnSdkString, strlen(g_nnSdkString)))
-            {
-                j += strlen(sdk_entry);
-                continue;
-            }
-            
-            if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, \
-                                                    "    <%s>\n" \
-                                                    "      <%sName>%s</%sName>\n" \
-                                                    "      <VenderName>%.*s</VenderName>\n" \
-                                                    "      <NsoName>%s</NsoName>\n" \
-                                                    "    </%s>\n", \
-                                                    api_list_tag, \
-                                                    api_entry_prefix, sdk_entry_name, api_entry_prefix, \
-                                                    (int)(sdk_entry_name - sdk_entry_vender - 1), sdk_entry_vender, \
-                                                    nso_ctx->nso_filename, \
-                                                    api_list_tag)) goto end;
-            
-            /* Update counter. */
             j += strlen(sdk_entry);
         }
     }
@@ -465,6 +426,38 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
     
 end:
     return success;
+}
+
+static bool programInfoIsApiInfoEntryValid(const char *sdk_prefix, size_t sdk_prefix_len, char *sdk_entry, char **sdk_entry_vender, int *sdk_entry_vender_len, char **sdk_entry_name, bool nnsdk)
+{
+    if (!sdk_prefix || !sdk_prefix_len || !sdk_entry || !sdk_entry_vender || !sdk_entry_name || strncmp(sdk_entry, sdk_prefix, sdk_prefix_len) != 0) return false;
+    
+    *sdk_entry_vender = strchr(sdk_entry, '+');
+    if (!*sdk_entry_vender) return false;
+    (*sdk_entry_vender)++;
+    
+    *sdk_entry_name = strchr(*sdk_entry_vender, '+');
+    if (!*sdk_entry_name) return false;
+    (*sdk_entry_name)++;
+    
+    if (sdk_entry_vender_len) *sdk_entry_vender_len = (*sdk_entry_name - *sdk_entry_vender - 1);
+    
+    int res = strncmp(*sdk_entry_name, g_nnSdkString, g_nnSdkStringLength);
+    if ((nnsdk && res != 0) || (!nnsdk && res == 0)) return false;
+    
+    return true;
+}
+
+static bool programInfoAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const char *value)
+{
+    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    return ((value && strlen(value)) ? utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%s</%s>\n", tag_name, value, tag_name) : \
+            utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s />\n", tag_name));
 }
 
 static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, ProgramInfoContext *program_info_ctx)
@@ -476,9 +469,10 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
     }
     
     NsoContext *nso_ctx = NULL;
-    bool is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags.is_64bit_instruction == 1);
+    bool success = false, symbols_exist = false, is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags.is_64bit_instruction == 1);
+    
+    char *symbol_str = NULL;
     u64 symbol_size = (!is_64bit ? sizeof(Elf32Symbol) : sizeof(Elf64Symbol));
-    bool success = false, symbols_exist = false;
     
     /* Locate "main" NSO. */
     for(u32 i = 0; i < program_info_ctx->nso_count; i++)
@@ -497,23 +491,11 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
     {
         if ((nso_ctx->rodata_dynsym_section_size - i) < symbol_size) break;
         
-        u8 st_type = 0;
-        
-        /* To do: change ELF symbol filters? */
-        if (!is_64bit)
+        if (programInfoIsElfSymbolValid(nso_ctx->rodata_dynsym_section + i, nso_ctx->rodata_dynstr_section, nso_ctx->rodata_dynstr_section_size, is_64bit, NULL))
         {
-            /* Parse 32-bit ELF symbol. */
-            Elf32Symbol *elf32_symbol = (Elf32Symbol*)(nso_ctx->rodata_dynsym_section + i);
-            st_type = ELF_ST_TYPE(elf32_symbol->st_info);
-            symbols_exist = (elf32_symbol->st_name < nso_ctx->rodata_dynstr_section_size && (st_type == STT_NOTYPE || st_type == STT_FUNC) && elf32_symbol->st_shndx == SHN_UNDEF);
-        } else {
-            /* Parse 64-bit ELF symbol. */
-            Elf64Symbol *elf64_symbol = (Elf64Symbol*)(nso_ctx->rodata_dynsym_section + i);
-            st_type = ELF_ST_TYPE(elf64_symbol->st_info);
-            symbols_exist = (elf64_symbol->st_name < nso_ctx->rodata_dynstr_section_size && (st_type == STT_NOTYPE || st_type == STT_FUNC) && elf64_symbol->st_shndx == SHN_UNDEF);
+            symbols_exist = true;
+            break;
         }
-        
-        if (symbols_exist) break;
     }
     
     /* Bail out if we couldn't find any valid symbols. */
@@ -526,28 +508,7 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
     {
         if ((nso_ctx->rodata_dynsym_section_size - i) < symbol_size) break;
         
-        char *symbol_str = NULL;
-        u8 st_type = 0;
-        
-        /* To do: change ELF symbol filters? */
-        if (!is_64bit)
-        {
-            /* Parse 32-bit ELF symbol. */
-            Elf32Symbol *elf32_symbol = (Elf32Symbol*)(nso_ctx->rodata_dynsym_section + i);
-            st_type = ELF_ST_TYPE(elf32_symbol->st_info);
-            
-            symbol_str = ((elf32_symbol->st_name < nso_ctx->rodata_dynstr_section_size && (st_type == STT_NOTYPE || st_type == STT_FUNC) && elf32_symbol->st_shndx == SHN_UNDEF) ? \
-                          (nso_ctx->rodata_dynstr_section + elf32_symbol->st_name) : NULL);
-        } else {
-            /* Parse 64-bit ELF symbol. */
-            Elf64Symbol *elf64_symbol = (Elf64Symbol*)(nso_ctx->rodata_dynsym_section + i);
-            st_type = ELF_ST_TYPE(elf64_symbol->st_info);
-            
-            symbol_str = ((elf64_symbol->st_name < nso_ctx->rodata_dynstr_section_size && (st_type == STT_NOTYPE || st_type == STT_FUNC) && elf64_symbol->st_shndx == SHN_UNDEF) ? \
-                          (nso_ctx->rodata_dynstr_section + elf64_symbol->st_name) : NULL);
-        }
-        
-        if (!symbol_str) continue;
+        if (!programInfoIsElfSymbolValid(nso_ctx->rodata_dynsym_section + i, nso_ctx->rodata_dynstr_section, nso_ctx->rodata_dynstr_section_size, is_64bit, &symbol_str)) continue;
         
         if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, \
                                                 "    <UnresolvedApi>\n" \
@@ -565,4 +526,29 @@ end:
     if (!success && (!nso_ctx || !symbols_exist)) success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <UnresolvedApiList />\n");
     
     return success;
+}
+
+static bool programInfoIsElfSymbolValid(u8 *dynsym_ptr, char *dynstr_base_ptr, u64 dynstr_size, bool is_64bit, char **symbol_str)
+{
+    if (!dynsym_ptr || !dynstr_base_ptr || !dynstr_size) return false;
+    
+    u8 st_type = 0;
+    bool is_valid = false;
+    
+    if (!is_64bit)
+    {
+        /* Parse 32-bit ELF symbol. */
+        Elf32Symbol *elf32_symbol = (Elf32Symbol*)dynsym_ptr;
+        st_type = ELF_ST_TYPE(elf32_symbol->st_info);
+        is_valid = (elf32_symbol->st_name < dynstr_size && (st_type == STT_NOTYPE || st_type == STT_FUNC) && elf32_symbol->st_shndx == SHN_UNDEF);
+        if (is_valid && symbol_str) *symbol_str = (dynstr_base_ptr + elf32_symbol->st_name);
+    } else {
+        /* Parse 64-bit ELF symbol. */
+        Elf64Symbol *elf64_symbol = (Elf64Symbol*)dynsym_ptr;
+        st_type = ELF_ST_TYPE(elf64_symbol->st_info);
+        is_valid = (elf64_symbol->st_name < dynstr_size && (st_type == STT_NOTYPE || st_type == STT_FUNC) && elf64_symbol->st_shndx == SHN_UNDEF);
+        if (is_valid && symbol_str) *symbol_str = (dynstr_base_ptr + elf64_symbol->st_name);
+    }
+    
+    return is_valid;
 }
