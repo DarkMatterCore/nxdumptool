@@ -8,7 +8,7 @@ todo:
     tik: automatically dump tickets to the SD card?
     tik: use dumped tickets when the original ones can't be found in the ES savefile?
     
-    gamecard: hfs0 functions to display filelist
+    gamecard: functions to display filelist
     
     pfs0: functions to display filelist
     pfs0: full header aligned to 0x20 (nsp)
@@ -17,7 +17,8 @@ todo:
     
     bktr: functions to display filelist (wrappers for romfs functions tbh)
     
-    title: more functions for title lookup (filters, patches / aoc, etc.)
-    title: more functions for content lookup (based on id?)
+    title: more functions for title lookup? (filters, patches / aoc, etc.)
+    title: more functions for content lookup? (based on id)
+    title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
     
     

@@ -318,6 +318,7 @@ typedef struct {
     u8 header_hash[SHA256_HASH_SIZE];                       ///< NCA header hash. Used to determine if it's necessary to replace the NCA header while dumping this NCA.
     NcaFsSectionContext fs_contexts[NCA_FS_HEADER_COUNT];
     NcaDecryptedKeyArea decrypted_key_area;
+    void *content_type_ctx;                                 ///< Pointer to a content type context (e.g. ContentMetaContext, ProgramInfoContext, NacpContext, LegalInfoContext). Set to NULL if unused.
 } NcaContext;
 
 typedef struct {

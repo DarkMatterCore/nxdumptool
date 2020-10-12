@@ -195,9 +195,9 @@ typedef struct {
     u8 version;
     u8 reserved_1[0x3];
     u64 flags;
-    u32 content_owner_info_offset;
+    u32 content_owner_info_offset;      ///< Relative to the start of this block. Only valid if 'content_owner_info_size' is greater than 0.
     u32 content_owner_info_size;
-    u32 save_data_owner_info_offset;
+    u32 save_data_owner_info_offset;    ///< Relative to the start of this block. Only valid if 'save_data_owner_info_size' is greater than 0.
     u32 save_data_owner_info_size;
 } NpdmAciFsAccessControlDescriptor;
 #pragma pack(pop)

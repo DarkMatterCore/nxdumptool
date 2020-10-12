@@ -383,9 +383,8 @@ void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...)
     mutexLock(&g_logfileMutex);
     
     va_list args;
-    FILE *logfile = NULL;
     
-    logfile = fopen(LOGFILE_PATH, "a+");
+    FILE *logfile = fopen(LOGFILE_PATH, "a+");
     if (!logfile) goto end;
     
     time_t now = time(NULL);

@@ -105,25 +105,21 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
     if (out->nso_header.module_name_offset < sizeof(NsoHeader) || !out->nso_header.module_name_size || (out->nso_header.module_name_offset + out->nso_header.module_name_size) > pfs_entry->size)
     {
         LOGFILE("Invalid module name offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.module_name_offset, out->nso_header.module_name_size);
-        goto end;
     }
     
     if (out->nso_header.api_info_section_header.size && (out->nso_header.api_info_section_header.offset + out->nso_header.api_info_section_header.size) > out->nso_header.rodata_segment_header.size)
     {
         LOGFILE("Invalid .api_info section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.api_info_section_header.offset, out->nso_header.api_info_section_header.size);
-        goto end;
     }
     
     if (!out->nso_header.dynstr_section_header.size || (out->nso_header.dynstr_section_header.offset + out->nso_header.dynstr_section_header.size) > out->nso_header.rodata_segment_header.size)
     {
         LOGFILE("Invalid .dynstr section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.dynstr_section_header.offset, out->nso_header.dynstr_section_header.size);
-        goto end;
     }
     
     if (!out->nso_header.dynsym_section_header.size || (out->nso_header.dynsym_section_header.offset + out->nso_header.dynsym_section_header.size) > out->nso_header.rodata_segment_header.size)
     {
         LOGFILE("Invalid .dynsym section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.dynsym_section_header.offset, out->nso_header.dynsym_section_header.size);
-        goto end;
     }
     
     /* Get module name. */
@@ -159,7 +155,7 @@ end:
 
 static bool nsoGetModuleName(NsoContext *nso_ctx)
 {
-    if (nso_ctx->nso_header.module_name_size <= 1) return true;
+    if (nso_ctx->nso_header.module_name_offset < sizeof(NsoHeader) || nso_ctx->nso_header.module_name_size <= 1) return true;
     
     NsoModuleName module_name = {0};
     
@@ -281,7 +277,7 @@ static bool nsoGetModuleInfoName(NsoContext *nso_ctx, u8 *rodata_buf)
 
 static bool nsoGetSectionFromRodataSegment(NsoContext *nso_ctx, u8 *rodata_buf, u8 **section_ptr, u64 section_offset, u64 section_size)
 {
-    if (!section_size) return true;
+    if (!section_size || (section_offset + section_size) > nso_ctx->nso_header.rodata_segment_header.size) return true;
     
     /* Allocate memory for the desired .rodata section. */
     if (!(*section_ptr = malloc(section_size)))

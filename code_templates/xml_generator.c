@@ -35,6 +35,17 @@ static void consolePrint(const char *text, ...)
     consoleUpdate(NULL);
 }
 
+static void writeFile(void *buf, size_t buf_size, const char *path)
+{
+    FILE *fd = fopen(path, "wb");
+    if (fd)
+    {
+        fwrite(buf, 1, buf_size, fd);
+        fclose(fd);
+        utilsCommitSdCardFileSystemChanges();
+    }
+}
+
 int main(int argc, char *argv[])
 {
     (void)argc;
@@ -65,12 +76,18 @@ int main(int argc, char *argv[])
     NcaContext *nca_ctx = NULL;
     Ticket tik = {0};
     
+    u32 meta_idx = 0;
     ContentMetaContext cnmt_ctx = {0};
-    ProgramInfoContext program_info_ctx = {0};
-    NacpContext nacp_ctx = {0};
-    LegalInfoContext legal_info_ctx = {0};
     
-    FILE *xml_fd = NULL;
+    u32 program_count = 0, program_idx = 0;
+    ProgramInfoContext *program_info_ctx = NULL;
+    
+    u32 control_count = 0, control_idx = 0;
+    NacpContext *nacp_ctx = NULL;
+    
+    u32 legal_info_count = 0, legal_info_idx = 0;
+    LegalInfoContext *legal_info_ctx = NULL;
+    
     char path[FS_MAX_PATH] = {0};
     
     app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
@@ -194,26 +211,80 @@ int main(int argc, char *argv[])
     
     consolePrint("nca ctx calloc succeeded\n");
     
-    u32 meta_idx = (user_app_data.app_info->content_count - 1), program_idx = 0, control_idx = 0, legal_idx = 0;
+    meta_idx = (user_app_data.app_info->content_count - 1);
+    
+    program_count = titleGetContentCountByType(user_app_data.app_info, NcmContentType_Program);
+    if (program_count && !(program_info_ctx = calloc(program_count, sizeof(ProgramInfoContext))))
+    {
+        consolePrint("program info ctx calloc failed\n");
+        goto out2;
+    }
+    
+    control_count = titleGetContentCountByType(user_app_data.app_info, NcmContentType_Control);
+    if (control_count && !(nacp_ctx = calloc(control_count, sizeof(NacpContext))))
+    {
+        consolePrint("nacp ctx calloc failed\n");
+        goto out2;
+    }
+    
+    legal_info_count = titleGetContentCountByType(user_app_data.app_info, NcmContentType_LegalInformation);
+    if (legal_info_count && !(legal_info_ctx = calloc(legal_info_count, sizeof(LegalInfoContext))))
+    {
+        consolePrint("legal info ctx calloc failed\n");
+        goto out2;
+    }
     
     for(u32 i = 0, j = 0; i < user_app_data.app_info->content_count; i++)
     {
-        if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_Meta) continue;
+        // set meta nca as the last nca
+        NcmContentInfo *content_info = &(user_app_data.app_info->content_infos[i]);
+        if (content_info->content_type == NcmContentType_Meta) continue;
         
         if (!ncaInitializeContext(&(nca_ctx[j]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-            &(user_app_data.app_info->content_infos[i]), &tik))
+            content_info, &tik))
         {
-            consolePrint("%s nca initialize ctx failed\n", titleGetNcmContentTypeName(user_app_data.app_info->content_infos[i].content_type));
+            consolePrint("%s #%u initialize nca ctx failed\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
             goto out2;
         }
         
-        if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_Program && user_app_data.app_info->content_infos[i].id_offset == 0) control_idx = j;
+        consolePrint("%s #%u initialize nca ctx succeeded\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
         
-        if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_Control && user_app_data.app_info->content_infos[i].id_offset == 0) control_idx = j;
+        switch(content_info->content_type)
+        {
+            case NcmContentType_Program:
+                if (!programInfoInitializeContext(&(program_info_ctx[program_idx]), &(nca_ctx[j])))
+                {
+                    consolePrint("initialize program info ctx failed (%s)\n", nca_ctx[j].content_id_str);
+                    goto out2;
+                }
+                
+                nca_ctx[j].content_type_ctx = &(program_info_ctx[program_idx++]);
+                
+                break;
+            case NcmContentType_Control:
+                if (!nacpInitializeContext(&(nacp_ctx[control_idx]), &(nca_ctx[j])))
+                {
+                    consolePrint("initialize nacp ctx failed (%s)\n", nca_ctx[j].content_id_str);
+                    goto out2;
+                }
+                
+                nca_ctx[j].content_type_ctx = &(nacp_ctx[control_idx++]);
+                
+                break;
+            case NcmContentType_LegalInformation:
+                if (!legalInfoInitializeContext(&(legal_info_ctx[legal_info_idx]), &(nca_ctx[j])))
+                {
+                    consolePrint("initialize legal info ctx failed (%s)\n", nca_ctx[j].content_id_str);
+                    goto out2;
+                }
+                
+                nca_ctx[j].content_type_ctx = &(legal_info_ctx[legal_info_idx++]);
+                
+                break;
+            default:
+                break;
+        }
         
-        if (user_app_data.app_info->content_infos[i].content_type == NcmContentType_LegalInformation && user_app_data.app_info->content_infos[i].id_offset == 0) legal_idx = j;
-        
-        consolePrint("%s nca initialize ctx succeeded\n", titleGetNcmContentTypeName(user_app_data.app_info->content_infos[i].content_type));
         j++;
     }
     
@@ -226,11 +297,6 @@ int main(int argc, char *argv[])
     
     consolePrint("Meta nca initialize ctx succeeded\n");
     
-    mkdir("sdmc:/at_xml", 0777);
-    
-    sprintf(path, "sdmc:/at_xml/%016lX", app_metadata[selected_idx]->title_id);
-    mkdir(path, 0777);
-    
     if (!cnmtInitializeContext(&cnmt_ctx, &(nca_ctx[meta_idx])))
     {
         consolePrint("cnmt initialize ctx failed\n");
@@ -239,124 +305,86 @@ int main(int argc, char *argv[])
     
     consolePrint("cnmt initialize ctx succeeded\n");
     
+    sprintf(path, "sdmc:/at_xml/%016lX", app_metadata[selected_idx]->title_id);
+    utilsCreateDirectoryTree(path, true);
+    
     if (cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, user_app_data.app_info->content_count))
     {
         consolePrint("cnmt xml succeeded\n");
         
-        sprintf(path, "sdmc:/at_xml/%016lX/%s.cnmt", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
-        
-        xml_fd = fopen(path, "wb");
-        if (xml_fd)
-        {
-            fwrite(cnmt_ctx.raw_data, 1, cnmt_ctx.raw_data_size, xml_fd);
-            fclose(xml_fd);
-            xml_fd = NULL;
-        }
+        //sprintf(path, "sdmc:/at_xml/%016lX/%s.cnmt", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
+        //writeFile(cnmt_ctx.raw_data, cnmt_ctx.raw_data_size, path);
         
         sprintf(path, "sdmc:/at_xml/%016lX/%s.cnmt.xml", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
-        
-        xml_fd = fopen(path, "wb");
-        if (xml_fd)
-        {
-            fwrite(cnmt_ctx.authoring_tool_xml, 1, cnmt_ctx.authoring_tool_xml_size, xml_fd);
-            fclose(xml_fd);
-            xml_fd = NULL;
-        }
+        writeFile(cnmt_ctx.authoring_tool_xml, cnmt_ctx.authoring_tool_xml_size, path);
     } else {
         consolePrint("cnmt xml failed\n");
     }
     
-    if (!programInfoInitializeContext(&program_info_ctx, &(nca_ctx[program_idx])))
+    for(u32 i = 0; i < user_app_data.app_info->content_count; i++)
     {
-        consolePrint("program info initialize ctx failed\n");
-        goto out2;
-    }
-    
-    consolePrint("program info initialize ctx succeeded\n");
-    
-    if (programInfoGenerateAuthoringToolXml(&program_info_ctx))
-    {
-        consolePrint("program info xml succeeded\n");
+        NcaContext *cur_nca_ctx = &(nca_ctx[i]);
         
-        sprintf(path, "sdmc:/at_xml/%016lX/%s.programinfo.xml", app_metadata[selected_idx]->title_id, program_info_ctx.nca_ctx->content_id_str);
+        if (!cur_nca_ctx->content_type_ctx || cur_nca_ctx->content_type == NcmContentType_Meta) continue;
         
-        xml_fd = fopen(path, "wb");
-        if (xml_fd)
+        switch(cur_nca_ctx->content_type)
         {
-            fwrite(program_info_ctx.authoring_tool_xml, 1, program_info_ctx.authoring_tool_xml_size, xml_fd);
-            fclose(xml_fd);
-            xml_fd = NULL;
-        }
-    } else {
-        consolePrint("program info xml failed\n");
-    }
-    
-    if (!nacpInitializeContext(&nacp_ctx, &(nca_ctx[control_idx])))
-    {
-        consolePrint("nacp initialize ctx failed\n");
-        goto out2;
-    }
-    
-    consolePrint("nacp initialize ctx succeeded\n");
-    
-    if (nacpGenerateAuthoringToolXml(&nacp_ctx, user_app_data.app_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
-    {
-        consolePrint("nacp xml succeeded\n");
-        
-        sprintf(path, "sdmc:/at_xml/%016lX/%s.nacp", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str);
-        
-        xml_fd = fopen(path, "wb");
-        if (xml_fd)
-        {
-            fwrite(nacp_ctx.data, 1, sizeof(_NacpStruct), xml_fd);
-            fclose(xml_fd);
-            xml_fd = NULL;
-        }
-        
-        sprintf(path, "sdmc:/at_xml/%016lX/%s.nacp.xml", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str);
-        
-        xml_fd = fopen(path, "wb");
-        if (xml_fd)
-        {
-            fwrite(nacp_ctx.authoring_tool_xml, 1, nacp_ctx.authoring_tool_xml_size, xml_fd);
-            fclose(xml_fd);
-            xml_fd = NULL;
-        }
-        
-        for(u8 i = 0; i < nacp_ctx.icon_count; i++)
-        {
-            NacpIconContext *icon_ctx = &(nacp_ctx.icon_ctx[i]);
-            
-            sprintf(path, "sdmc:/at_xml/%016lX/%s.nx.%s.jpg", app_metadata[selected_idx]->title_id, nacp_ctx.nca_ctx->content_id_str, nacpGetLanguageString(icon_ctx->language));
-            
-            xml_fd = fopen(path, "wb");
-            if (xml_fd)
+            case NcmContentType_Program:
             {
-                fwrite(icon_ctx->icon_data, 1, icon_ctx->icon_size, xml_fd);
-                fclose(xml_fd);
-                xml_fd = NULL;
+                ProgramInfoContext *cur_program_info_ctx = (ProgramInfoContext*)cur_nca_ctx->content_type_ctx;
+                if (!programInfoGenerateAuthoringToolXml(cur_program_info_ctx))
+                {
+                    consolePrint("program info xml failed (%s | id offset #%u)\n", cur_nca_ctx->content_id_str, cur_nca_ctx->id_offset);
+                    goto out2;
+                }
+                
+                consolePrint("program info xml succeeded (%s | id offset #%u)\n", cur_nca_ctx->content_id_str, cur_nca_ctx->id_offset);
+                
+                sprintf(path, "sdmc:/at_xml/%016lX/%s.programinfo.xml", app_metadata[selected_idx]->title_id, cur_nca_ctx->content_id_str);
+                writeFile(cur_program_info_ctx->authoring_tool_xml, cur_program_info_ctx->authoring_tool_xml_size, path);
+                
+                break;
             }
+            case NcmContentType_Control:
+            {
+                NacpContext *cur_nacp_ctx = (NacpContext*)cur_nca_ctx->content_type_ctx;
+                if (!nacpGenerateAuthoringToolXml(cur_nacp_ctx, user_app_data.app_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
+                {
+                    consolePrint("nacp xml failed (%s | id offset #%u)\n", cur_nca_ctx->content_id_str, cur_nca_ctx->id_offset);
+                    goto out2;
+                }
+                
+                consolePrint("nacp xml succeeded (%s | id offset #%u)\n", cur_nca_ctx->content_id_str, cur_nca_ctx->id_offset);
+                
+                //sprintf(path, "sdmc:/at_xml/%016lX/%s.nacp", app_metadata[selected_idx]->title_id, cur_nca_ctx->content_id_str);
+                //writeFile(cur_nacp_ctx->data, sizeof(_NacpStruct), path);
+                
+                sprintf(path, "sdmc:/at_xml/%016lX/%s.nacp.xml", app_metadata[selected_idx]->title_id, cur_nca_ctx->content_id_str);
+                writeFile(cur_nacp_ctx->authoring_tool_xml, cur_nacp_ctx->authoring_tool_xml_size, path);
+                
+                for(u8 j = 0; j < cur_nacp_ctx->icon_count; j++)
+                {
+                    NacpIconContext *icon_ctx = &(cur_nacp_ctx->icon_ctx[j]);
+                    sprintf(path, "sdmc:/at_xml/%016lX/%s.nx.%s.jpg", app_metadata[selected_idx]->title_id, cur_nca_ctx->content_id_str, nacpGetLanguageString(icon_ctx->language));
+                    writeFile(icon_ctx->icon_data, icon_ctx->icon_size, path);
+                }
+                
+                break;
+            }
+            case NcmContentType_LegalInformation:
+            {
+                LegalInfoContext *cur_legal_info_ctx = (LegalInfoContext*)cur_nca_ctx->content_type_ctx;
+                
+                sprintf(path, "sdmc:/at_xml/%016lX/%s.legalinfo.xml", app_metadata[selected_idx]->title_id, cur_nca_ctx->content_id_str);
+                writeFile(cur_legal_info_ctx->authoring_tool_xml, cur_legal_info_ctx->authoring_tool_xml_size, path);
+                
+                consolePrint("legal info xml succeeded (%s | id offset #%u)\n", cur_nca_ctx->content_id_str, cur_nca_ctx->id_offset);
+                
+                break;
+            }
+            default:
+                break;
         }
-    } else {
-        consolePrint("nacp xml failed\n");
-    }
-    
-    if (!legalInfoInitializeContext(&legal_info_ctx, &(nca_ctx[legal_idx])))
-    {
-        consolePrint("legalinfo initialize ctx failed\n");
-        goto out2;
-    }
-    
-    consolePrint("legalinfo initialize ctx succeeded\n");
-    
-    sprintf(path, "sdmc:/at_xml/%016lX/%s.legalinfo.xml", app_metadata[selected_idx]->title_id, legal_info_ctx.nca_ctx->content_id_str);
-    
-    xml_fd = fopen(path, "wb");
-    if (xml_fd)
-    {
-        fwrite(legal_info_ctx.authoring_tool_xml, 1, legal_info_ctx.authoring_tool_xml_size, xml_fd);
-        fclose(xml_fd);
-        xml_fd = NULL;
     }
     
 out2:
@@ -366,11 +394,23 @@ out2:
         utilsWaitForButtonPress(KEY_NONE);
     }
     
-    legalInfoFreeContext(&legal_info_ctx);
+    if (legal_info_ctx)
+    {
+        for(u32 i = 0; i < legal_info_count; i++) legalInfoFreeContext(&(legal_info_ctx[i]));
+        free(legal_info_ctx);
+    }
     
-    nacpFreeContext(&nacp_ctx);
+    if (nacp_ctx)
+    {
+        for(u32 i = 0; i < control_count; i++) nacpFreeContext(&(nacp_ctx[i]));
+        free(nacp_ctx);
+    }
     
-    programInfoFreeContext(&program_info_ctx);
+    if (program_info_ctx)
+    {
+        for(u32 i = 0; i < program_count; i++) programInfoFreeContext(&(program_info_ctx[i]));
+        free(program_info_ctx);
+    }
     
     cnmtFreeContext(&cnmt_ctx);
     
