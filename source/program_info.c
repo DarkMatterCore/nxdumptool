@@ -114,6 +114,9 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
         goto end;
     }
     
+    /* Update output context. */
+    out->nca_ctx = nca_ctx;
+    
     success = true;
     
 end:
@@ -169,7 +172,6 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
         goto end;
     }
     
-    /* To do: add more NPDM ACID flags? */
     if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                             "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
                                             "<ProgramInfo>\n" \
@@ -204,8 +206,9 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     for(u32 i = 0; i < program_info_ctx->nso_count; i++)
     {
         /* Only proceed if we're dealing with the main NSO. */
-        if (!program_info_ctx->nso_ctx->nso_filename || strlen(program_info_ctx->nso_ctx->nso_filename) != 4 || !strcmp(program_info_ctx->nso_ctx->nso_filename, "main")) continue;
-        if (!programInfoAddNsoSymbolsToAuthoringToolXml(&xml_buf, &xml_buf_size, &(program_info_ctx->nso_ctx[i]), is_64bit)) goto end;
+        NsoContext *nso_ctx = &(program_info_ctx->nso_ctx[i]);
+        if (!nso_ctx->nso_filename || strlen(nso_ctx->nso_filename) != 4 || strcmp(nso_ctx->nso_filename, "main") != 0) continue;
+        if (!programInfoAddNsoSymbolsToAuthoringToolXml(&xml_buf, &xml_buf_size, nso_ctx, is_64bit)) goto end;
         break;
     }
     
@@ -297,20 +300,23 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
         if ((nso_ctx->rodata_dynsym_section_size - i) < symbol_size) break;
         
         char *symbol_str = NULL;
+        u8 st_type = 0;
         
         /* To do: change ELF symbol filters? */
         if (!is_64bit)
         {
             /* Parse 32-bit ELF symbol. */
-            Elf32Symbol *elf32_symbol = (Elf32Symbol*)(nso_ctx->rodata_dynsym_section_size + i);
+            Elf32Symbol *elf32_symbol = (Elf32Symbol*)(nso_ctx->rodata_dynsym_section + i);
+            st_type = ELF_ST_TYPE(elf32_symbol->st_info);
             
-            symbol_str = ((elf32_symbol->st_name < nso_ctx->rodata_dynstr_section_size && !elf32_symbol->st_value && ELF_ST_TYPE(elf32_symbol->st_info) == STT_FUNC && \
+            symbol_str = ((elf32_symbol->st_name < nso_ctx->rodata_dynstr_section_size && !elf32_symbol->st_value && (st_type == STT_NOTYPE || st_type == STT_FUNC) && \
                           elf32_symbol->st_shndx == SHN_UNDEF) ? (nso_ctx->rodata_dynstr_section + elf32_symbol->st_name) : NULL);
         } else {
             /* Parse 64-bit ELF symbol. */
-            Elf64Symbol *elf64_symbol = (Elf64Symbol*)(nso_ctx->rodata_dynsym_section_size + i);
+            Elf64Symbol *elf64_symbol = (Elf64Symbol*)(nso_ctx->rodata_dynsym_section + i);
+            st_type = ELF_ST_TYPE(elf64_symbol->st_info);
             
-            symbol_str = ((elf64_symbol->st_name < nso_ctx->rodata_dynstr_section_size && !elf64_symbol->st_value && ELF_ST_TYPE(elf64_symbol->st_info) == STT_FUNC && \
+            symbol_str = ((elf64_symbol->st_name < nso_ctx->rodata_dynstr_section_size && !elf64_symbol->st_value && (st_type == STT_NOTYPE || st_type == STT_FUNC) && \
                           elf64_symbol->st_shndx == SHN_UNDEF) ? (nso_ctx->rodata_dynstr_section + elf64_symbol->st_name) : NULL);
         }
         

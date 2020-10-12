@@ -42,7 +42,7 @@ int main(int argc, char *argv[])
     
     int ret = 0;
     
-    utilsWriteLogBufferToLogFile("________________________________________________________________");
+    utilsWriteLogBufferToLogFile("________________________________________________________________\r\n");
     LOGFILE(APP_TITLE " starting.");
     
     consoleInit(NULL);
@@ -276,6 +276,8 @@ int main(int argc, char *argv[])
     
     if (programInfoGenerateAuthoringToolXml(&program_info_ctx))
     {
+        consolePrint("program info xml succeeded\n");
+        
         sprintf(path, "sdmc:/at_xml/%016lX/%s.programinfo.xml", app_metadata[selected_idx]->title_id, program_info_ctx.nca_ctx->content_id_str);
         
         xml_fd = fopen(path, "wb");

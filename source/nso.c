@@ -203,7 +203,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     u8 *rodata_buf = NULL;
     u64 rodata_buf_size = (compressed ? LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(nso_ctx->nso_header.rodata_segment_header.size) : nso_ctx->nso_header.rodata_segment_header.size);
     
-    u8 *rodata_read_ptr = (compressed ? (rodata_buf + (rodata_buf_size - nso_ctx->nso_header.rodata_file_size)) : rodata_buf);
+    u8 *rodata_read_ptr = NULL;
     u64 rodata_read_size = (compressed ? nso_ctx->nso_header.rodata_file_size : nso_ctx->nso_header.rodata_segment_header.size);
     
     u8 rodata_hash[SHA256_HASH_SIZE] = {0};
@@ -216,6 +216,8 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
         LOGFILE("Failed to allocate 0x%lX bytes for the .rodata segment in NSO \"%s\"!", rodata_buf_size, nso_ctx->nso_filename);
         return NULL;
     }
+    
+    rodata_read_ptr = (compressed ? (rodata_buf + (rodata_buf_size - nso_ctx->nso_header.rodata_file_size)) : rodata_buf);
     
     /* Read .rodata segment data. */
     if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, rodata_read_ptr, rodata_read_size, nso_ctx->nso_header.rodata_segment_header.file_offset))
