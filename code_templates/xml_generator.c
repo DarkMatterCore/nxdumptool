@@ -87,7 +87,7 @@ int main(int argc, char *argv[])
     while(true)
     {
         consoleClear();
-        printf("select an user application to generate a cnmt xml for.\npress b to exit.\n\n");
+        printf("select an user application to generate xmls for.\npress b to exit.\n\n");
         printf("title: %u / %u\n", selected_idx + 1, app_count);
         printf("selected title: %016lX - %s\n\n", app_metadata[selected_idx]->title_id, app_metadata[selected_idx]->lang_entry.name);
         
