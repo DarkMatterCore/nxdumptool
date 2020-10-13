@@ -119,67 +119,6 @@
 #define CANCEL_BTN_SEC_HOLD             2                           // The cancel button must be held for at least CANCEL_BTN_SEC_HOLD seconds to cancel an ongoing operation
 
 typedef struct {
-    u8 signature[0x100];
-    u32 magic;
-    u32 secureAreaStartAddr;
-    u32 backupAreaStartAddr;
-    u8 titleKeyIndex;
-    u8 size;
-    u8 headerVersion;
-    u8 flags;
-    u64 packageId;
-    u64 validDataEndAddr;
-    u8 iv[0x10];
-    u64 rootHfs0HeaderOffset;
-    u64 rootHfs0HeaderSize;
-    u8 rootHfs0HeaderHash[SHA256_HASH_SIZE];
-    u8 initialDataHash[SHA256_HASH_SIZE];
-    u32 securityMode;
-    u32 t1KeyIndex;
-    u32 keyIndex;
-    u32 normalAreaEndAddr;
-    u8 encryptedInfoBlock[0x70];
-} PACKED gamecard_header_t;
-
-typedef struct {
-    u64 offset;
-    u64 size;
-    u8 *header;
-    u64 header_size;
-    u32 file_cnt;
-    u32 str_table_size;
-} PACKED hfs0_partition_info;
-
-typedef enum {
-    ISTORAGE_PARTITION_NONE = 0,
-    ISTORAGE_PARTITION_NORMAL,
-    ISTORAGE_PARTITION_SECURE,
-    ISTORAGE_PARTITION_INVALID
-} openIStoragePartition;
-
-typedef struct {
-    FsDeviceOperator fsOperatorInstance;
-    FsEventNotifier fsGameCardEventNotifier;
-    Event fsGameCardKernelEvent;
-    FsGameCardHandle fsGameCardHandle;
-    FsStorage fsGameCardStorage;
-    openIStoragePartition curIStorageIndex;
-    volatile bool isInserted;
-    gamecard_header_t header;
-    u8 *rootHfs0Header;
-    u32 hfs0PartitionCnt;
-    hfs0_partition_info *hfs0Partitions;
-    u64 size;
-    char sizeStr[32];
-    u64 trimmedSize;
-    char trimmedSizeStr[32];
-    u64 IStoragePartitionSizes[ISTORAGE_PARTITION_CNT];
-    u64 updateTitleId;
-    u32 updateVersion;
-    char updateVersionStr[64];
-} gamecard_ctx_t;
-
-typedef struct {
     u64 titleId;
     u32 version;
     u32 ncmIndex;
@@ -210,22 +149,6 @@ typedef struct {
     char fixedName[NACP_APPNAME_LEN];
     char orphanListStr[NACP_APPNAME_LEN * 2];
 } orphan_patch_addon_entry;
-
-typedef struct {
-    u32 magic;
-    u32 file_cnt;
-    u32 str_table_size;
-    u32 reserved;
-} PACKED hfs0_header;
-
-typedef struct {
-    u64 file_offset;
-    u64 file_size;
-    u32 filename_offset;
-    u32 hashed_region_size;
-    u64 reserved;
-    u8 hashed_region_sha256[0x20];
-} PACKED hfs0_file_entry;
 
 typedef struct {
     int line_offset;
@@ -323,68 +246,23 @@ typedef struct {
 void loadConfig();
 void saveConfig();
 
-void closeGameCardStoragePartition();
-Result openGameCardStoragePartition(openIStoragePartition partitionIndex);
-Result readGameCardStoragePartition(u64 off, void *buf, size_t len);
-
-void delay(u8 seconds);
-
-void convertSize(u64 size, char *out, size_t outSize);
-void updateFreeSpace();
-
 void freeFilenameBuffer(void);
-
-void initExeFsContext();
-void freeExeFsContext();
-
-void initRomFsContext();
-void freeRomFsContext();
-
-void initBktrContext();
-void freeBktrContext();
 
 void freeRomFsBrowserEntries();
 void freeHfs0ExeFsEntriesSizes();
 
-u64 hidKeysAllDown();
-u64 hidKeysAllHeld();
-
-void consoleErrorScreen(const char *fmt, ...);
 bool initApplicationResources(int argc, char **argv);
 void deinitApplicationResources();
 
-bool appletModeCheck();
 void appletModeOperationWarning();
-void changeHomeButtonBlockStatus(bool block);
 
 void formatETAString(u64 curTime, char *out, size_t outSize);
 
 void generateSdCardEmmcTitleList();
 
-bool loadTitlesFromSdCardAndEmmc(NcmContentMetaType metaType);
-void freeTitlesFromSdCardAndEmmc(NcmContentMetaType metaType);
-
-void removeIllegalCharacters(char *name);
-
-void strtrim(char *str);
-
-void loadTitleInfo();
-
 void truncateBrowserEntryName(char *str);
 
 bool getHfs0FileList(u32 partition);
-
-bool readFileFromSecureHfs0PartitionByName(const char *filename, u64 offset, void *outBuf, size_t bufSize);
-
-bool calculateExeFsExtractedDataSize(u64 *out);
-
-bool calculateRomFsFullExtractedSize(bool usePatch, u64 *out);
-
-bool calculateRomFsExtractedDirSize(u32 dir_offset, bool usePatch, u64 *out);
-
-bool retrieveContentInfosFromTitle(NcmStorageId storageId, NcmContentMetaType metaType, u32 titleCount, u32 titleIndex, NcmContentInfo **outContentInfos, u32 *outContentInfoCnt);
-
-void removeConsoleDataFromTicket(title_rights_ctx *rights_info);
 
 bool readNcaExeFsSection(u32 titleIndex, bool usePatch);
 
@@ -394,39 +272,11 @@ bool getExeFsFileList();
 
 bool getRomFsFileList(u32 dir_offset, bool usePatch);
 
-char *generateGameCardDumpName(bool useBrackets);
-
-char *generateNSPDumpName(nspDumpType selectedNspDumpType, u32 titleIndex, bool useBrackets);
-
-void retrieveDescriptionForPatchOrAddOn(u32 titleIndex, bool addOn, bool addAppName, const char *prefix, char *outBuf, size_t outBufSize);
-
-u32 calculateOrphanPatchOrAddOnCount(bool addOn);
-
-void generateOrphanPatchOrAddOnList();
-
-bool checkIfBaseApplicationHasPatchOrAddOn(u32 appIndex, bool addOn);
-
-bool checkIfPatchOrAddOnBelongsToBaseApplication(u32 titleIndex, u32 appIndex, bool addOn);
-
-u32 retrieveFirstPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn);
-
-u32 retrievePreviousPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 appIndex, bool addOn);
-
-u32 retrieveNextPatchOrAddOnIndexFromBaseApplication(u32 startTitleIndex, u32 appIndex, bool addOn);
-
-u32 retrieveLastPatchOrAddOnIndexFromBaseApplication(u32 appIndex, bool addOn);
-
-void waitForButtonPress();
-
 void printProgressBar(progress_ctx_t *progressCtx, bool calcData, u64 chunkSize);
 
 void setProgressBarError(progress_ctx_t *progressCtx);
 
 bool cancelProcessCheck(progress_ctx_t *progressCtx);
-
-void convertDataToHexString(const u8 *data, const u32 dataSize, char *outBuf, const u32 outBufSize);
-
-bool checkIfFileExists(const char *path);
 
 bool yesNoPrompt(const char *message);
 
