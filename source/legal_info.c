@@ -41,7 +41,7 @@ bool legalInfoInitializeContext(LegalInfoContext *out, NcaContext *nca_ctx)
     legalInfoFreeContext(out);
     
     /* Initialize RomFS context. */
-    if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_contexts[0])))
+    if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[0])))
     {
         LOGFILE("Failed to initialize RomFS context!");
         goto end;

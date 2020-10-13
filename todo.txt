@@ -1,7 +1,6 @@
 todo:
     
     nca: functions for fs section lookup? (could just let the user choose...)
-    nca: add encrypted headers to nca context, avoid re-encrypting plaintext headers in place
     nca: function to write re-encrypted nca headers / nca fs headers (don't forget nca0 please)
     
     tik: option to wipe elicense property mask

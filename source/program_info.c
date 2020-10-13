@@ -71,7 +71,7 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
     programInfoFreeContext(out);
     
     /* Initialize Partition FS context. */
-    if (!pfsInitializeContext(&(out->pfs_ctx), &(nca_ctx->fs_contexts[0])))
+    if (!pfsInitializeContext(&(out->pfs_ctx), &(nca_ctx->fs_ctx[0])))
     {
         LOGFILE("Failed to initialize Partition FS context!");
         goto end;
@@ -552,32 +552,32 @@ static bool programInfoIsElfSymbolValid(u8 *dynsym_ptr, char *dynstr_base_ptr, u
 
 static bool programInfoAddFsAccessControlDataToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, ProgramInfoContext *program_info_ctx)
 {
-    NpdmAciFsAccessControlDescriptor *aci_fac_descriptor = NULL;
-    NpdmAciFsAccessControlDescriptorSaveDataOwnerBlock *save_data_owner_block = NULL;
+    NpdmFsAccessControlData *aci_fac_data = NULL;
+    NpdmFsAccessControlDataSaveDataOwnerBlock *save_data_owner_block = NULL;
     u64 *save_data_owner_ids = NULL;
-    bool success = false, fac_data_available = false;
+    bool success = false, sdo_data_available = false;
     
-    if (!xml_buf || !xml_buf_size || !program_info_ctx || !(aci_fac_descriptor = program_info_ctx->npdm_ctx.aci_fac_descriptor))
+    if (!xml_buf || !xml_buf_size || !program_info_ctx || !(aci_fac_data = program_info_ctx->npdm_ctx.aci_fac_data))
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
-    /* Check if there's save data owner data available in the FS access control data descriptor from the ACI0 section in the NPDM. */
-    fac_data_available = (aci_fac_descriptor->save_data_owner_info_offset >= sizeof(NpdmAciFsAccessControlDescriptor) && aci_fac_descriptor->save_data_owner_info_size);
-    if (!fac_data_available) goto end;
+    /* Check if there's save data owner data available in the FS access control data region from the ACI0 section in the NPDM. */
+    sdo_data_available = (aci_fac_data->save_data_owner_info_offset >= sizeof(NpdmFsAccessControlData) && aci_fac_data->save_data_owner_info_size);
+    if (!sdo_data_available) goto end;
     
     /* Get save data owner block and check the ID count. */
-    save_data_owner_block = (NpdmAciFsAccessControlDescriptorSaveDataOwnerBlock*)((u8*)aci_fac_descriptor + aci_fac_descriptor->save_data_owner_info_offset);
+    save_data_owner_block = (NpdmFsAccessControlDataSaveDataOwnerBlock*)((u8*)aci_fac_data + aci_fac_data->save_data_owner_info_offset);
     if (!save_data_owner_block->save_data_owner_id_count)
     {
-        fac_data_available = false;
+        sdo_data_available = false;
         goto end;
     }
     
     /* Get save data owner IDs. */
     /* Padding to a 0x4-byte boundary is needed. Each accessibility field takes up a single byte, so we can get away with it by aligning the ID count. */
-    save_data_owner_ids = (u64*)((u8*)save_data_owner_block + sizeof(NpdmAciFsAccessControlDescriptorSaveDataOwnerBlock) + ALIGN_UP(save_data_owner_block->save_data_owner_id_count, 0x4));
+    save_data_owner_ids = (u64*)((u8*)save_data_owner_block + sizeof(NpdmFsAccessControlDataSaveDataOwnerBlock) + ALIGN_UP(save_data_owner_block->save_data_owner_id_count, 0x4));
     
     if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <FsAccessControlData>\n")) goto end;
     
@@ -597,7 +597,7 @@ static bool programInfoAddFsAccessControlDataToAuthoringToolXml(char **xml_buf, 
     
 end:
     /* Append an empty XML element if no FS access control data exists. */
-    if (!success && !fac_data_available) success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <FsAccessControlData />\n");
+    if (!success && !sdo_data_available) success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <FsAccessControlData />\n");
     
     return success;
 }

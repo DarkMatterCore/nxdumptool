@@ -156,14 +156,14 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
         goto end;
     }
     
-    if (out->acid_header->fs_access_control_offset < sizeof(NpdmAcidHeader) || out->acid_header->fs_access_control_size < sizeof(NpdmAcidFsAccessControlDescriptor) || \
+    if (out->acid_header->fs_access_control_offset < sizeof(NpdmAcidHeader) || out->acid_header->fs_access_control_size < sizeof(NpdmFsAccessControlDescriptor) || \
         (out->acid_header->fs_access_control_offset + out->acid_header->fs_access_control_size) > out->meta_header->acid_size)
     {
         LOGFILE("Invalid ACID FsAccessControl offset/size! (0x%08X, 0x%08X).", out->acid_header->fs_access_control_offset, out->acid_header->fs_access_control_size);
         goto end;
     }
     
-    out->acid_fac_descriptor = (NpdmAcidFsAccessControlDescriptor*)(out->raw_data + out->meta_header->acid_offset + out->acid_header->fs_access_control_offset);
+    out->acid_fac_descriptor = (NpdmFsAccessControlDescriptor*)(out->raw_data + out->meta_header->acid_offset + out->acid_header->fs_access_control_offset);
     
     if (out->acid_header->srv_access_control_size)
     {
@@ -212,14 +212,14 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
         goto end;
     }
     
-    if (out->aci_header->fs_access_control_offset < sizeof(NpdmAciHeader) || out->aci_header->fs_access_control_size < sizeof(NpdmAciFsAccessControlDescriptor) || \
+    if (out->aci_header->fs_access_control_offset < sizeof(NpdmAciHeader) || out->aci_header->fs_access_control_size < sizeof(NpdmFsAccessControlData) || \
         (out->aci_header->fs_access_control_offset + out->aci_header->fs_access_control_size) > out->meta_header->aci_size)
     {
         LOGFILE("Invalid ACI0 FsAccessControl offset/size! (0x%08X, 0x%08X).", out->aci_header->fs_access_control_offset, out->aci_header->fs_access_control_size);
         goto end;
     }
     
-    out->aci_fac_descriptor = (NpdmAciFsAccessControlDescriptor*)(out->raw_data + out->meta_header->aci_offset + out->aci_header->fs_access_control_offset);
+    out->aci_fac_data = (NpdmFsAccessControlData*)(out->raw_data + out->meta_header->aci_offset + out->aci_header->fs_access_control_offset);
     
     if (out->aci_header->srv_access_control_size)
     {

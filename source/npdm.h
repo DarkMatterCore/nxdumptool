@@ -51,23 +51,23 @@ typedef struct {
 /// This is the start of every NPDM file.
 /// This is followed by ACID and ACI0 sections, both with variable offsets and sizes.
 typedef struct {
-    u32 magic;                              ///< "NPDM".
+    u32 magic;                          ///< "NPDM".
     u8 acid_signature_key_generation;
     u8 reserved_1[0x7];
     NpdmMetaFlags flags;
     u8 reserved_2;
-    u8 main_thread_priority;                ///< Must not exceed NPDM_MAIN_THREAD_MAX_PRIORITY.
-    u8 main_thread_core_number;             ///< Must not exceed NPDM_MAIN_THREAD_MAX_CORE_NUMBER.
+    u8 main_thread_priority;            ///< Must not exceed NPDM_MAIN_THREAD_MAX_PRIORITY.
+    u8 main_thread_core_number;         ///< Must not exceed NPDM_MAIN_THREAD_MAX_CORE_NUMBER.
     u8 reserved_3[0x4];
-    u32 system_resource_size;               ///< Must not exceed NPDM_SYSTEM_RESOURCE_MAX_SIZE.
+    u32 system_resource_size;           ///< Must not exceed NPDM_SYSTEM_RESOURCE_MAX_SIZE.
     VersionType1 version;
-    u32 main_thread_stack_size;             ///< Must be aligned to NPDM_MAIN_THREAD_STACK_SIZE_ALIGNMENT.
-    char name[0x10];                        ///< Usually set to "Application".
-    char product_code[0x10];                ///< Usually zeroed out.
+    u32 main_thread_stack_size;         ///< Must be aligned to NPDM_MAIN_THREAD_STACK_SIZE_ALIGNMENT.
+    char name[0x10];                    ///< Usually set to "Application".
+    char product_code[0x10];            ///< Usually zeroed out.
     u8 reserved_4[0x30];
-    u32 aci_offset;                         ///< Offset value relative to the start of this header.
+    u32 aci_offset;                     ///< Offset value relative to the start of this header.
     u32 aci_size;
-    u32 acid_offset;                        ///< Offset value relative to the start of this header.
+    u32 acid_offset;                    ///< Offset value relative to the start of this header.
     u32 acid_size;
 } NpdmMetaHeader;
 
@@ -90,27 +90,27 @@ typedef struct {
 } NpdmAcidFlags;
 
 /// This is the start of an ACID section.
-/// This is followed by FsAccessControl (ACID), SrvAccessControl and KernelCapability descriptors, each one aligned to a 0x10 byte boundary using zero padding (if needed).
+/// This is followed by FsAccessControl, SrvAccessControl and KernelCapability descriptors, each one aligned to a 0x10 byte boundary using zero padding (if needed).
 typedef struct {
-    u8 signature[0x100];                                    ///< RSA-2048-PSS with SHA-256 signature over the rest of the ACID section, using the value from the 'size' member.
-    u8 public_key[0x100];                                   ///< RSA public key used to verify the ACID signature from the Program NCA header.
-    u32 magic;                                              ///< "ACID".
-    u32 size;                                               ///< Must be equal to ACID section size from the META header minus 0x100 (ACID signature size).
+    u8 signature[0x100];            ///< RSA-2048-PSS with SHA-256 signature over the rest of the ACID section, using the value from the 'size' member.
+    u8 public_key[0x100];           ///< RSA public key used to verify the ACID signature from the Program NCA header.
+    u32 magic;                      ///< "ACID".
+    u32 size;                       ///< Must be equal to ACID section size from the META header minus 0x100 (ACID signature size).
     u8 reserved_1[0x4];
     NpdmAcidFlags flags;
     u64 program_id_min;
     u64 program_id_max;
-    u32 fs_access_control_offset;                           ///< Offset value relative to the start of this header.
+    u32 fs_access_control_offset;   ///< Offset value relative to the start of this header.
     u32 fs_access_control_size;
-    u32 srv_access_control_offset;                          ///< Offset value relative to the start of this header.
+    u32 srv_access_control_offset;  ///< Offset value relative to the start of this header.
     u32 srv_access_control_size;
-    u32 kernel_capability_offset;                           ///< Offset value relative to the start of this header.
+    u32 kernel_capability_offset;   ///< Offset value relative to the start of this header.
     u32 kernel_capability_size;
     u8 reserved_2[0x8];
 } NpdmAcidHeader;
 
 /// This is the start of an ACI0 section.
-/// This is followed by FsAccessControl (ACI0), SrvAccessControl and KernelCapability descriptors, each one aligned to a 0x10 byte boundary using zero padding (if needed).
+/// This is followed by a FsAccessControl data block, as well as SrvAccessControl and KernelCapability descriptors, each one aligned to a 0x10 byte boundary using zero padding (if needed).
 typedef struct {
     u32 magic;
     u8 reserved_1[0xC];
@@ -167,13 +167,13 @@ typedef enum {
     NpdmFsAccessControlFlags_FullPermission              = BIT_LONG(63)
 } NpdmFsAccessControlFlags;
 
-/// AcidFsAccessControl descriptor. Part of the ACID section body.
+/// FsAccessControl descriptor. Part of the ACID section body.
 /// This is followed by:
 ///     * 'content_owner_id_count' content owner IDs.
 ///     * 'save_data_owner_id_count' save data owner IDs.
 #pragma pack(push, 1)
 typedef struct {
-    u8 version;                                             ///< Always non-zero. Usually set to 1.
+    u8 version;                     ///< Always non-zero. Usually set to 1.
     u8 content_owner_id_count;
     u8 save_data_owner_id_count;
     u8 reserved;
@@ -182,13 +182,13 @@ typedef struct {
     u64 content_owner_id_max;
     u64 save_data_owner_id_min;
     u64 save_data_owner_id_max;
-} NpdmAcidFsAccessControlDescriptor;
+} NpdmFsAccessControlDescriptor;
 #pragma pack(pop)
 
-/// AciFsAccessControl descriptor. Part of the ACI0 section body.
+/// FsAccessControl data. Part of the ACI0 section body.
 /// This is followed by:
-///     * A NpdmAciFsAccessControlDescriptorContentOwnerBlock if 'content_owner_info_size' is greater than zero.
-///     * A NpdmAciFsAccessControlDescriptorSaveDataOwnerBlock if 'save_data_owner_info_size' is greater than zero.
+///     * A NpdmFsAccessControlDataContentOwnerBlock if 'content_owner_info_size' is greater than zero.
+///     * A NpdmFsAccessControlDataSaveDataOwnerBlock if 'save_data_owner_info_size' is greater than zero.
 ///         * If available, this block is padded to a 0x4-byte boundary and followed by 'save_data_owner_id_count' save data owner IDs.
 #pragma pack(push, 1)
 typedef struct {
@@ -199,26 +199,26 @@ typedef struct {
     u32 content_owner_info_size;
     u32 save_data_owner_info_offset;    ///< Relative to the start of this block. Only valid if 'save_data_owner_info_size' is greater than 0.
     u32 save_data_owner_info_size;
-} NpdmAciFsAccessControlDescriptor;
+} NpdmFsAccessControlData;
 #pragma pack(pop)
 
-/// Placed after NpdmAciFsAccessControlDescriptor if its 'content_owner_info_size' member is greater than zero.
+/// Placed after NpdmFsAccessControlData if its 'content_owner_info_size' member is greater than zero.
 typedef struct {
     u32 content_owner_id_count;
     u64 content_owner_id[];     ///< 'content_owner_id_count' content owned IDs.
-} NpdmAciFsAccessControlDescriptorContentOwnerBlock;
+} NpdmFsAccessControlDataContentOwnerBlock;
 
 typedef enum {
     NpdmAccessibility_Read  = BIT(0),
     NpdmAccessibility_Write = BIT(1)
 } NpdmAccessibility;
 
-/// Placed after NpdmAciFsAccessControlDescriptor / NpdmAciFsAccessControlDescriptorContentOwnerBlock if the 'content_owner_info_size' member from NpdmAciFsAccessControlDescriptor is greater than zero.
+/// Placed after NpdmFsAccessControlData / NpdmFsAccessControlDataContentOwnerBlock if the 'content_owner_info_size' member from NpdmFsAccessControlData is greater than zero.
 /// If available, this block is padded to a 0x4-byte boundary and followed by 'save_data_owner_id_count' save data owner IDs.
 typedef struct {
     u32 save_data_owner_id_count;
     u8 accessibility[];             ///< 'save_data_owner_id_count' NpdmAccessibility fields.
-} NpdmAciFsAccessControlDescriptorSaveDataOwnerBlock;
+} NpdmFsAccessControlDataSaveDataOwnerBlock;
 
 /// SrvAccessControl descriptor. Part of the ACID and ACI0 section bodies.
 /// This descriptor is composed of a variable number of NpdmSrvAccessControlDescriptorEntry elements, each one with a variable size.
@@ -543,11 +543,11 @@ typedef struct {
     u8 raw_data_hash[SHA256_HASH_SIZE];                         ///< SHA-256 checksum calculated over the whole raw NPDM. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
     NpdmMetaHeader *meta_header;                                ///< Pointer to the NpdmMetaHeader within 'raw_data'.
     NpdmAcidHeader *acid_header;                                ///< Pointer to the NpdmAcidHeader within 'raw_data'.
-    NpdmAcidFsAccessControlDescriptor *acid_fac_descriptor;     ///< Pointer to the NpdmAcidFsAccessControlDescriptor within the NPDM ACID section.
+    NpdmFsAccessControlDescriptor *acid_fac_descriptor;         ///< Pointer to the NpdmFsAccessControlDescriptor within the NPDM ACID section.
     NpdmSrvAccessControlDescriptorEntry *acid_sac_descriptor;   ///< Pointer to the first NpdmSrvAccessControlDescriptorEntry within the NPDM ACID section, if available.
     NpdmKernelCapabilityDescriptorEntry *acid_kc_descriptor;    ///< Pointer to the first NpdmKernelCapabilityDescriptorEntry within the NPDM ACID section, if available.
     NpdmAciHeader *aci_header;                                  ///< Pointer to the NpdmAciHeader within 'raw_data'.
-    NpdmAciFsAccessControlDescriptor *aci_fac_descriptor;       ///< Pointer to the NpdmAciFsAccessControlDescriptor within the NPDM ACI0 section.
+    NpdmFsAccessControlData *aci_fac_data;                      ///< Pointer to the NpdmFsAccessControlData within the NPDM ACI0 section.
     NpdmSrvAccessControlDescriptorEntry *aci_sac_descriptor;    ///< Pointer to the first NpdmSrvAccessControlDescriptorEntry within the NPDM ACI0 section, if available.
     NpdmKernelCapabilityDescriptorEntry *aci_kc_descriptor;     ///< Pointer to the first NpdmKernelCapabilityDescriptorEntry within the NPDM ACI0 section, if available.
 } NpdmContext;
@@ -573,7 +573,7 @@ NX_INLINE bool npdmIsValidContext(NpdmContext *npdm_ctx)
     return (npdm_ctx && npdm_ctx->pfs_ctx && npdm_ctx->pfs_entry && npdm_ctx->raw_data && npdm_ctx->raw_data_size && npdm_ctx->meta_header && npdm_ctx->acid_header && npdm_ctx->acid_fac_descriptor && \
             ((npdm_ctx->acid_header->srv_access_control_size && npdm_ctx->acid_sac_descriptor) || (!npdm_ctx->acid_header->srv_access_control_size && !npdm_ctx->acid_sac_descriptor)) && \
             ((npdm_ctx->acid_header->kernel_capability_size && npdm_ctx->acid_kc_descriptor) || (!npdm_ctx->acid_header->kernel_capability_size && !npdm_ctx->acid_kc_descriptor)) && \
-            npdm_ctx->aci_header && npdm_ctx->aci_fac_descriptor && \
+            npdm_ctx->aci_header && npdm_ctx->aci_fac_data && \
             ((npdm_ctx->aci_header->srv_access_control_size && npdm_ctx->aci_sac_descriptor) || (!npdm_ctx->aci_header->srv_access_control_size && !npdm_ctx->aci_sac_descriptor)) && \
             ((npdm_ctx->aci_header->kernel_capability_size && npdm_ctx->aci_kc_descriptor) || (!npdm_ctx->aci_header->kernel_capability_size && !npdm_ctx->aci_kc_descriptor)));
 }

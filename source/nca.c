@@ -42,7 +42,7 @@ static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
 
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info);
 
-static bool ncaDecryptHeader(NcaContext *ctx);
+static bool ncaReadDecryptedHeader(NcaContext *ctx);
 static bool ncaDecryptKeyArea(NcaContext *ctx);
 
 static bool ncaEncryptKeyArea(NcaContext *ctx);
@@ -129,22 +129,12 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         }
     }
     
-    /* Read NCA header. */
-    if (!ncaReadContentFile(out, &(out->header), sizeof(NcaHeader), 0))
+    /* Read decrypted NCA header and NCA FS section headers. */
+    if (!ncaReadDecryptedHeader(out))
     {
-        LOGFILE("Failed to read NCA \"%s\" header!", out->content_id_str);
+        LOGFILE("Failed to read decrypted NCA \"%s\" header!", out->content_id_str);
         return false;
     }
-    
-    /* Decrypt NCA header. */
-    if (!ncaDecryptHeader(out))
-    {
-        LOGFILE("Failed to decrypt NCA \"%s\" header!", out->content_id_str);
-        return false;
-    }
-    
-    /* Calculate decrypted header hash. */
-    sha256CalculateHash(out->header_hash, &(out->header), sizeof(NcaHeader));
     
     if (out->rights_id_available)
     {
@@ -163,34 +153,37 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     /* Parse sections. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
+        NcaFsInfo *fs_info = &(out->header.fs_info[i]);
+        NcaFsSectionContext *fs_ctx = &(out->fs_ctx[i]);
+        
         /* Fill section context. */
-        out->fs_contexts[i].nca_ctx = out;
-        out->fs_contexts[i].section_num = i;
-        out->fs_contexts[i].section_type = NcaFsSectionType_Invalid; /* Placeholder. */
+        fs_ctx->nca_ctx = out;
+        fs_ctx->section_num = i;
+        fs_ctx->section_type = NcaFsSectionType_Invalid; /* Placeholder. */
         
         /* Don't proceed if this NCA FS section isn't populated. */
-        if (!ncaIsFsInfoEntryValid(&(out->header.fs_info[i]))) continue;
+        if (!ncaIsFsInfoEntryValid(fs_info)) continue;
         
         /* Calculate section offset and size. */
-        out->fs_contexts[i].section_offset = NCA_FS_SECTOR_OFFSET(out->header.fs_info[i].start_sector);
-        out->fs_contexts[i].section_size = (NCA_FS_SECTOR_OFFSET(out->header.fs_info[i].end_sector) - out->fs_contexts[i].section_offset);
+        fs_ctx->section_offset = NCA_FS_SECTOR_OFFSET(fs_info->start_sector);
+        fs_ctx->section_size = (NCA_FS_SECTOR_OFFSET(fs_info->end_sector) - fs_ctx->section_offset);
         
         /* Check if we're dealing with an invalid offset/size. */
-        if (out->fs_contexts[i].section_offset < sizeof(NcaHeader) || !out->fs_contexts[i].section_size || \
-            (out->fs_contexts[i].section_offset + out->fs_contexts[i].section_size) > out->content_size) continue;
+        if (fs_ctx->section_offset < sizeof(NcaHeader) || !fs_ctx->section_size || \
+            (fs_ctx->section_offset + fs_ctx->section_size) > out->content_size) continue;
         
         /* Determine encryption type. */
-        out->fs_contexts[i].encryption_type = (out->format_version == NcaVersion_Nca0 ? NcaEncryptionType_AesXts : out->fs_contexts[i].header.encryption_type);
-        if (out->fs_contexts[i].encryption_type == NcaEncryptionType_Auto)
+        fs_ctx->encryption_type = (out->format_version == NcaVersion_Nca0 ? NcaEncryptionType_AesXts : fs_ctx->header.encryption_type);
+        if (fs_ctx->encryption_type == NcaEncryptionType_Auto)
         {
-            switch(out->fs_contexts[i].section_num)
+            switch(fs_ctx->section_num)
             {
                 case 0: /* ExeFS Partition FS. */
                 case 1: /* RomFS. */
-                    out->fs_contexts[i].encryption_type = NcaEncryptionType_AesCtr;
+                    fs_ctx->encryption_type = NcaEncryptionType_AesCtr;
                     break;
                 case 2: /* Logo Partition FS. */
-                    out->fs_contexts[i].encryption_type = NcaEncryptionType_None;
+                    fs_ctx->encryption_type = NcaEncryptionType_None;
                     break;
                 default:
                     break;
@@ -198,53 +191,53 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         }
         
         /* Check if we're dealing with an invalid encryption type value. */
-        if (out->fs_contexts[i].encryption_type == NcaEncryptionType_Auto || out->fs_contexts[i].encryption_type > NcaEncryptionType_AesCtrEx) continue;
+        if (fs_ctx->encryption_type == NcaEncryptionType_Auto || fs_ctx->encryption_type > NcaEncryptionType_AesCtrEx) continue;
         
         /* Determine FS section type. */
-        if (out->fs_contexts[i].header.fs_type == NcaFsType_PartitionFs && out->fs_contexts[i].header.hash_type == NcaHashType_HierarchicalSha256)
+        if (fs_ctx->header.fs_type == NcaFsType_PartitionFs && fs_ctx->header.hash_type == NcaHashType_HierarchicalSha256)
         {
-            out->fs_contexts[i].section_type = NcaFsSectionType_PartitionFs;
+            fs_ctx->section_type = NcaFsSectionType_PartitionFs;
         } else
-        if (out->fs_contexts[i].header.fs_type == NcaFsType_RomFs && out->fs_contexts[i].header.hash_type == NcaHashType_HierarchicalIntegrity)
+        if (fs_ctx->header.fs_type == NcaFsType_RomFs && fs_ctx->header.hash_type == NcaHashType_HierarchicalIntegrity)
         {
-            out->fs_contexts[i].section_type = (out->fs_contexts[i].encryption_type == NcaEncryptionType_AesCtrEx ? NcaFsSectionType_PatchRomFs : NcaFsSectionType_RomFs);
+            fs_ctx->section_type = (fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx ? NcaFsSectionType_PatchRomFs : NcaFsSectionType_RomFs);
         } else
-        if (out->fs_contexts[i].header.fs_type == NcaFsType_RomFs && out->fs_contexts[i].header.hash_type == NcaHashType_HierarchicalSha256 && out->format_version == NcaVersion_Nca0)
+        if (fs_ctx->header.fs_type == NcaFsType_RomFs && fs_ctx->header.hash_type == NcaHashType_HierarchicalSha256 && out->format_version == NcaVersion_Nca0)
         {
-            out->fs_contexts[i].section_type = NcaFsSectionType_Nca0RomFs;
+            fs_ctx->section_type = NcaFsSectionType_Nca0RomFs;
         }
         
         /* Check if we're dealing with an invalid section type value. */
-        if (out->fs_contexts[i].section_type >= NcaFsSectionType_Invalid) continue;
+        if (fs_ctx->section_type >= NcaFsSectionType_Invalid) continue;
         
         /* Initialize crypto data. */
-        if ((!out->rights_id_available || (out->rights_id_available && out->titlekey_retrieved)) && out->fs_contexts[i].encryption_type > NcaEncryptionType_None && \
-            out->fs_contexts[i].encryption_type <= NcaEncryptionType_AesCtrEx)
+        if ((!out->rights_id_available || (out->rights_id_available && out->titlekey_retrieved)) && fs_ctx->encryption_type > NcaEncryptionType_None && \
+            fs_ctx->encryption_type <= NcaEncryptionType_AesCtrEx)
         {
             /* Initialize section CTR. */
-            ncaInitializeAesCtrIv(out->fs_contexts[i].ctr, out->fs_contexts[i].header.aes_ctr_upper_iv.value, out->fs_contexts[i].section_offset);
+            ncaInitializeAesCtrIv(fs_ctx->ctr, fs_ctx->header.aes_ctr_upper_iv.value, fs_ctx->section_offset);
             
             /* Initialize AES context. */
             if (out->rights_id_available)
             {
                 /* AES-128-CTR is always used for FS crypto in NCAs with a rights ID. */
-                aes128CtrContextCreate(&(out->fs_contexts[i].ctr_ctx), out->titlekey, out->fs_contexts[i].ctr);
+                aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->titlekey, fs_ctx->ctr);
             } else {
-                if (out->fs_contexts[i].encryption_type == NcaEncryptionType_AesXts)
+                if (fs_ctx->encryption_type == NcaEncryptionType_AesXts)
                 {
                     /* We need to create two different contexts: one for decryption and another one for encryption. */
-                    aes128XtsContextCreate(&(out->fs_contexts[i].xts_decrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, false);
-                    aes128XtsContextCreate(&(out->fs_contexts[i].xts_encrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, true);
+                    aes128XtsContextCreate(&(fs_ctx->xts_decrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, false);
+                    aes128XtsContextCreate(&(fs_ctx->xts_encrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, true);
                 } else
-                if (out->fs_contexts[i].encryption_type == NcaEncryptionType_AesCtr || out->fs_contexts[i].encryption_type == NcaEncryptionType_AesCtrEx)
+                if (fs_ctx->encryption_type == NcaEncryptionType_AesCtr || fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx)
                 {
-                    aes128CtrContextCreate(&(out->fs_contexts[i].ctr_ctx), out->decrypted_key_area.aes_ctr, out->fs_contexts[i].ctr);
+                    aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->decrypted_key_area.aes_ctr, fs_ctx->ctr);
                 }
             }
         }
         
         /* Enable FS context if we got up to this point. */
-        out->fs_contexts[i].enabled = true;
+        fs_ctx->enabled = true;
     }
     
     return true;
@@ -356,8 +349,10 @@ void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
         /* AES-128-XTS is not used in FS sections from NCAs with titlekey crypto. */
-        if (!ctx->fs_contexts[i].enabled || (ctx->fs_contexts[i].encryption_type != NcaEncryptionType_AesCtr && ctx->fs_contexts[i].encryption_type != NcaEncryptionType_AesCtrEx)) continue;
-        u8 *key_ptr = (ctx->fs_contexts[i].encryption_type == NcaEncryptionType_AesCtr ? ctx->decrypted_key_area.aes_ctr : ctx->decrypted_key_area.aes_ctr_ex);
+        NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
+        if (!fs_ctx->enabled || (fs_ctx->encryption_type != NcaEncryptionType_AesCtr && fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx)) continue;
+        
+        u8 *key_ptr = (fs_ctx->encryption_type == NcaEncryptionType_AesCtr ? ctx->decrypted_key_area.aes_ctr : ctx->decrypted_key_area.aes_ctr_ex);
         memcpy(key_ptr, ctx->titlekey, AES_128_KEY_SIZE);
     }
     
@@ -395,7 +390,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
     if (ctx->format_version == NcaVersion_Nca0) aes128XtsContextCreate(&nca0_fs_header_ctx, ctx->decrypted_key_area.aes_xts_1, ctx->decrypted_key_area.aes_xts_2, true);
     
     /* Encrypt NCA header. */
-    crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, &(ctx->header), &(ctx->header), sizeof(NcaHeader), 0, NCA_AES_XTS_SECTOR_SIZE, true);
+    crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, &(ctx->encrypted_header), &(ctx->header), sizeof(NcaHeader), 0, NCA_AES_XTS_SECTOR_SIZE, true);
     if (crypt_res != sizeof(NcaHeader))
     {
         LOGFILE("Error encrypting NCA \"%s\" header!", ctx->content_id_str);
@@ -404,20 +399,22 @@ bool ncaEncryptHeader(NcaContext *ctx)
     
     /* Encrypt NCA FS section headers. */
     /* Both NCA2 and NCA3 place the NCA FS section headers right after the NCA header. However, NCA0 places them at the start sector from each NCA FS section. */
-    /* NCA0 FS section headers will be encrypted in-place, but they need to be written to their proper offsets. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
+        NcaFsInfo *fs_info = &(ctx->header.fs_info[i]);
+        NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
+        
         /* Don't proceed if this NCA FS section isn't populated. */
-        if (ctx->format_version != NcaVersion_Nca3 && !ncaIsFsInfoEntryValid(&(ctx->header.fs_info[i]))) continue;
+        if (ctx->format_version != NcaVersion_Nca3 && !ncaIsFsInfoEntryValid(fs_info)) continue;
         
         /* The AES-XTS sector number for each NCA FS header varies depending on the NCA format version. */
         /* NCA3 uses sector number 0 for the NCA header, then increases it with each new sector (e.g. making the first NCA FS section header use sector number 2, and so on). */
         /* NCA2 uses sector number 0 for each NCA FS section header. */
         /* NCA0 uses sector number 0 for the NCA header, then uses sector number 0 for the rest of the data and increases it with each new sector. */
         Aes128XtsContext *aes_xts_ctx = (ctx->format_version != NcaVersion_Nca0 ? &hdr_aes_ctx : &nca0_fs_header_ctx);
-        u64 sector = (ctx->format_version == NcaVersion_Nca3 ? (2U + i) : (ctx->format_version == NcaVersion_Nca2 ? 0 : (ctx->header.fs_info[i].start_sector - 2)));
+        u64 sector = (ctx->format_version == NcaVersion_Nca3 ? (2U + i) : (ctx->format_version == NcaVersion_Nca2 ? 0 : (fs_info->start_sector - 2)));
         
-        crypt_res = aes128XtsNintendoCrypt(aes_xts_ctx, &(ctx->fs_contexts[i].header), &(ctx->fs_contexts[i].header), sizeof(NcaFsHeader), sector, NCA_AES_XTS_SECTOR_SIZE, true);
+        crypt_res = aes128XtsNintendoCrypt(aes_xts_ctx, &(fs_ctx->encrypted_header), &(fs_ctx->header), sizeof(NcaFsHeader), sector, NCA_AES_XTS_SECTOR_SIZE, true);
         if (crypt_res != sizeof(NcaFsHeader))
         {
             LOGFILE("Error encrypting NCA%u \"%s\" FS section header #%u!", ctx->format_version, ctx->content_id_str, i);
@@ -446,7 +443,7 @@ NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info)
     return (memcmp(&tmp_fs_info, fs_info, sizeof(NcaFsInfo)) != 0);
 }
 
-static bool ncaDecryptHeader(NcaContext *ctx)
+static bool ncaReadDecryptedHeader(NcaContext *ctx)
 {
     if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
     {
@@ -459,11 +456,18 @@ static bool ncaDecryptHeader(NcaContext *ctx)
     const u8 *header_key = keysGetNcaHeaderKey();
     Aes128XtsContext hdr_aes_ctx = {0}, nca0_fs_header_ctx = {0};
     
+    /* Read NCA header. */
+    if (!ncaReadContentFile(ctx, &(ctx->encrypted_header), sizeof(NcaHeader), 0))
+    {
+        LOGFILE("Failed to read NCA \"%s\" header!", ctx->content_id_str);
+        return false;
+    }
+    
     /* Prepare NCA header AES-128-XTS context. */
     aes128XtsContextCreate(&hdr_aes_ctx, header_key, header_key + AES_128_KEY_SIZE, false);
     
     /* Decrypt NCA header. */
-    crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, &(ctx->header), &(ctx->header), sizeof(NcaHeader), 0, NCA_AES_XTS_SECTOR_SIZE, false);
+    crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, &(ctx->header), &(ctx->encrypted_header), sizeof(NcaHeader), 0, NCA_AES_XTS_SECTOR_SIZE, false);
     magic = __builtin_bswap32(ctx->header.magic);
     
     if (crypt_res != sizeof(NcaHeader) || (magic != NCA_NCA3_MAGIC && magic != NCA_NCA2_MAGIC && magic != NCA_NCA0_MAGIC) || ctx->header.content_size != ctx->content_size)
@@ -476,6 +480,7 @@ static bool ncaDecryptHeader(NcaContext *ctx)
     ctx->format_version = (magic == NCA_NCA3_MAGIC ? NcaVersion_Nca3 : (magic == NCA_NCA2_MAGIC ? NcaVersion_Nca2 : NcaVersion_Nca0));
     ctx->key_generation = ncaGetKeyGenerationValue(ctx);
     ctx->rights_id_available = ncaCheckRightsIdAvailability(ctx);
+    sha256CalculateHash(ctx->header_hash, &(ctx->header), sizeof(NcaHeader));
     
     /* Decrypt NCA key area (if needed). */
     if (!ctx->rights_id_available && !ncaDecryptKeyArea(ctx))
@@ -491,12 +496,15 @@ static bool ncaDecryptHeader(NcaContext *ctx)
     /* Both NCA2 and NCA3 place the NCA FS section headers right after the NCA header. However, NCA0 places them at the start sector from each NCA FS section. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
+        NcaFsInfo *fs_info = &(ctx->header.fs_info[i]);
+        NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
+        
         /* Don't proceed if this NCA FS section isn't populated. */
-        if (ctx->format_version != NcaVersion_Nca3 && !ncaIsFsInfoEntryValid(&(ctx->header.fs_info[i]))) continue;
+        if (ctx->format_version != NcaVersion_Nca3 && !ncaIsFsInfoEntryValid(fs_info)) continue;
         
         /* Read NCA FS section header. */
-        u64 fs_header_offset = (ctx->format_version != NcaVersion_Nca0 ? (sizeof(NcaHeader) + (i * sizeof(NcaFsHeader))) : NCA_FS_SECTOR_OFFSET(ctx->header.fs_info[i].start_sector));
-        if (!ncaReadContentFile(ctx, &(ctx->fs_contexts[i].header), sizeof(NcaFsHeader), fs_header_offset))
+        u64 fs_header_offset = (ctx->format_version != NcaVersion_Nca0 ? (sizeof(NcaHeader) + (i * sizeof(NcaFsHeader))) : NCA_FS_SECTOR_OFFSET(fs_info->start_sector));
+        if (!ncaReadContentFile(ctx, &(fs_ctx->encrypted_header), sizeof(NcaFsHeader), fs_header_offset))
         {
             LOGFILE("Failed to read NCA%u \"%s\" FS section header #%u at offset 0x%lX!", ctx->format_version, ctx->content_id_str, i, fs_header_offset);
             return false;
@@ -507,9 +515,9 @@ static bool ncaDecryptHeader(NcaContext *ctx)
         /* NCA2 uses sector number 0 for each NCA FS section header. */
         /* NCA0 uses sector number 0 for the NCA header, then uses sector number 0 for the rest of the data and increases it with each new sector. */
         Aes128XtsContext *aes_xts_ctx = (ctx->format_version != NcaVersion_Nca0 ? &hdr_aes_ctx : &nca0_fs_header_ctx);
-        u64 sector = (ctx->format_version == NcaVersion_Nca3 ? (2U + i) : (ctx->format_version == NcaVersion_Nca2 ? 0 : (ctx->header.fs_info[i].start_sector - 2)));
+        u64 sector = (ctx->format_version == NcaVersion_Nca3 ? (2U + i) : (ctx->format_version == NcaVersion_Nca2 ? 0 : (fs_info->start_sector - 2)));
         
-        crypt_res = aes128XtsNintendoCrypt(aes_xts_ctx, &(ctx->fs_contexts[i].header), &(ctx->fs_contexts[i].header), sizeof(NcaFsHeader), sector, NCA_AES_XTS_SECTOR_SIZE, false);
+        crypt_res = aes128XtsNintendoCrypt(aes_xts_ctx, &(fs_ctx->header), &(fs_ctx->encrypted_header), sizeof(NcaFsHeader), sector, NCA_AES_XTS_SECTOR_SIZE, false);
         if (crypt_res != sizeof(NcaFsHeader))
         {
             LOGFILE("Error decrypting NCA%u \"%s\" FS section header #%u!", ctx->format_version, ctx->content_id_str, i);

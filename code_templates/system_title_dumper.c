@@ -313,7 +313,7 @@ int main(int argc, char *argv[])
             } else
             if (menu == 2)
             {
-                printf("fs section #%u (%s)\n", i + 1, ncaGetFsSectionTypeName(&(nca_ctx->fs_contexts[i])));
+                printf("fs section #%u (%s)\n", i + 1, ncaGetFsSectionTypeName(&(nca_ctx->fs_ctx[i])));
             }
         }
         
@@ -367,7 +367,7 @@ int main(int argc, char *argv[])
             {
                 consoleClear();
                 utilsChangeHomeButtonBlockStatus(true);
-                dumpFsSection(cur_title_info, &(nca_ctx->fs_contexts[selected_idx]));
+                dumpFsSection(cur_title_info, &(nca_ctx->fs_ctx[selected_idx]));
                 utilsChangeHomeButtonBlockStatus(false);
             }
             

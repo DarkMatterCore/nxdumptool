@@ -270,10 +270,14 @@ typedef enum {
     NcaFsSectionType_Invalid     = 4
 } NcaFsSectionType;
 
+/// Unlike NCA contexts, we don't need to keep a hash for the NCA FS section header in NCA FS section contexts.
+/// This is because the functions that modify the NCA FS section header also update the NCA FS section header hash stored in the NCA header.
 typedef struct {
     bool enabled;
     void *nca_ctx;                      ///< NcaContext. Used to perform NCA reads.
-    NcaFsHeader header;                 ///< NCA FS section header.
+    NcaFsHeader header;                 ///< Plaintext NCA FS section header.
+    NcaFsHeader encrypted_header;       ///< Encrypted NCA FS section header. If the plaintext NCA FS section header is modified, this will hold an encrypted copy of it.
+                                        ///< Otherwise, this holds the unmodified, encrypted NCA FS section header.
     u8 section_num;
     u64 section_offset;
     u64 section_size;
@@ -299,26 +303,28 @@ typedef struct {
 } NcaDecryptedKeyArea;
 
 typedef struct {
-    u8 storage_id;                                          ///< NcmStorageId.
-    NcmContentStorage *ncm_storage;                         ///< Pointer to a NcmContentStorage instance. Used to read NCA data from eMMC/SD.
-    u64 gamecard_offset;                                    ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
-    NcmContentId content_id;                                ///< Also used to read NCA data.
+    u8 storage_id;                                      ///< NcmStorageId.
+    NcmContentStorage *ncm_storage;                     ///< Pointer to a NcmContentStorage instance. Used to read NCA data from eMMC/SD.
+    u64 gamecard_offset;                                ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
+    NcmContentId content_id;                            ///< Also used to read NCA data.
     char content_id_str[0x21];
-    u8 hash[SHA256_HASH_SIZE];                              ///< Manually calculated (if needed).
+    u8 hash[SHA256_HASH_SIZE];                          ///< Manually calculated (if needed).
     char hash_str[0x41];
-    u8 format_version;                                      ///< NcaVersion.
-    u8 content_type;                                        ///< NcmContentType. Retrieved from NcmContentInfo.
-    u64 content_size;                                       ///< Retrieved from NcmContentInfo.
-    u8 key_generation;                                      ///< NcaKeyGenerationOld / NcaKeyGeneration. Retrieved from the decrypted header.
-    u8 id_offset;                                           ///< Retrieved from NcmContentInfo.
+    u8 format_version;                                  ///< NcaVersion.
+    u8 content_type;                                    ///< NcmContentType. Retrieved from NcmContentInfo.
+    u64 content_size;                                   ///< Retrieved from NcmContentInfo.
+    u8 key_generation;                                  ///< NcaKeyGenerationOld / NcaKeyGeneration. Retrieved from the decrypted header.
+    u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
     bool rights_id_available;
     bool titlekey_retrieved;
-    u8 titlekey[AES_128_KEY_SIZE];                          ///< Decrypted titlekey from the ticket.
-    NcaHeader header;                                       ///< NCA header.
-    u8 header_hash[SHA256_HASH_SIZE];                       ///< NCA header hash. Used to determine if it's necessary to replace the NCA header while dumping this NCA.
-    NcaFsSectionContext fs_contexts[NCA_FS_HEADER_COUNT];
+    u8 titlekey[AES_128_KEY_SIZE];                      ///< Decrypted titlekey from the ticket.
+    NcaHeader header;                                   ///< Plaintext NCA header.
+    u8 header_hash[SHA256_HASH_SIZE];                   ///< Plaintext NCA header hash. Used to determine if it's necessary to replace the NCA header while dumping this NCA.
+    NcaHeader encrypted_header;                         ///< Encrypted NCA header. If the plaintext NCA header is modified, this will hold an encrypted copy of it.
+                                                        ///< Otherwise, this holds the unmodified, encrypted NCA header.
+    NcaFsSectionContext fs_ctx[NCA_FS_HEADER_COUNT];
     NcaDecryptedKeyArea decrypted_key_area;
-    void *content_type_ctx;                                 ///< Pointer to a content type context (e.g. ContentMetaContext, ProgramInfoContext, NacpContext, LegalInfoContext). Set to NULL if unused.
+    void *content_type_ctx;                             ///< Pointer to a content type context (e.g. ContentMetaContext, ProgramInfoContext, NacpContext, LegalInfoContext). Set to NULL if unused.
 } NcaContext;
 
 typedef struct {
@@ -362,11 +368,12 @@ bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 of
 /// Input offset must be relative to the start of the NCA FS section.
 bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val);
 
-/// Returns a pointer to a heap-allocated buffer used to encrypt the input plaintext data, based on the encryption type used by the input NCA FS section, as well as its offset and size.
+/// Returns a pointer to a dynamically allocated buffer used to encrypt the input plaintext data, based on the encryption type used by the input NCA FS section, as well as its offset and size.
 /// Input offset must be relative to the start of the NCA FS section.
 /// Output size and offset are guaranteed to be aligned to the AES sector size used by the encryption type from the FS section.
 /// Output offset is relative to the start of the NCA content file, making it easier to use the output encrypted block to seamlessly replace data while dumping a NCA.
 /// This function isn't compatible with Patch RomFS sections.
+/// Used internally by both ncaGenerateHierarchicalSha256Patch() and ncaGenerateHierarchicalIntegrityPatch().
 void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
 
 /// Generates HierarchicalSha256 FS section patch data, which can be used to seamlessly replace NCA data.
@@ -403,7 +410,8 @@ const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx);
 /// Removes titlekey crypto dependency from a NCA context by wiping the Rights ID from the underlying NCA header and copying the decrypted titlekey to the NCA key area.
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx);
 
-/// Encrypts NCA header and NCA FS headers from a NCA context.
+/// Encrypts NCA header and NCA FS headers.
+/// The 'encrypted_header' member from the NCA context and its underlying NCA FS section contexts is updated by this function.
 bool ncaEncryptHeader(NcaContext *ctx);
 
 /// Updates the content ID and hash from a NCA context using a provided SHA-256 checksum.

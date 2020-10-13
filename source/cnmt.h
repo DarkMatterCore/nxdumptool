@@ -107,7 +107,7 @@ typedef enum {
 /// Header for the extended data region in the SystemUpdate title, pointed to by the extended header.
 /// If version is ContentMetaFirmwareVariationVersion_V1, this is followed by 'variation_count' ContentMetaFirmwareVariationInfoV1 entries.
 /// Otherwise, if version is ContentMetaFirmwareVariationVersion_V2, this is followed by:
-///     * 'variation_count' firmware variation IDs.
+///     * 'variation_count' firmware variation IDs (4 bytes each).
 ///     * 'variation_count' ContentMetaFirmwareVariationInfoV2 entries.
 ///     * (Optionally) A variable number of NcmContentMetaInfo entries, which is the sum of all 'meta_count' values from ContentMetaFirmwareVariationInfoV2 entries where 'refer_to_base' is set to false.
 typedef struct {

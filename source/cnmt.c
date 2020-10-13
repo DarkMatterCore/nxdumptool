@@ -53,7 +53,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     cnmtFreeContext(out);
     
     /* Initialize Partition FS context. */
-    if (!pfsInitializeContext(&(out->pfs_ctx), &(nca_ctx->fs_contexts[0])))
+    if (!pfsInitializeContext(&(out->pfs_ctx), &(nca_ctx->fs_ctx[0])))
     {
         LOGFILE("Failed to initialize Partition FS context!");
         goto end;

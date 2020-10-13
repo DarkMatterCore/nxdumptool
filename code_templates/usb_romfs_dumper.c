@@ -501,7 +501,7 @@ int main(int argc, char *argv[])
             goto out2;
         }
         
-        if (!bktrInitializeContext(&bktr_ctx, &(base_nca_ctx->fs_contexts[1]), &(update_nca_ctx->fs_contexts[1])))
+        if (!bktrInitializeContext(&bktr_ctx, &(base_nca_ctx->fs_ctx[1]), &(update_nca_ctx->fs_ctx[1])))
         {
             consolePrint("bktr initialize ctx failed\n");
             goto out2;
@@ -512,7 +512,7 @@ int main(int argc, char *argv[])
         
         consolePrint("bktr initialize ctx succeeded\n");
     } else {
-        if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_contexts[1])))
+        if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1])))
         {
             consolePrint("romfs initialize ctx failed\n");
             goto out2;
