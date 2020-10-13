@@ -23,6 +23,8 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
+#define SYSTEM_UPDATE_TID   (u64)0x0100000000000816
+
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
 /// Referenced by multiple header files.
 typedef struct {

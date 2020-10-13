@@ -226,7 +226,7 @@ typedef struct {
     u8 raw_data_hash[SHA256_HASH_SIZE];                     ///< SHA-256 checksum calculated over the whole raw CNMT. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
     ContentMetaPackagedContentMetaHeader *packaged_header;  ///< Pointer to the ContentMetaPackagedContentMetaHeader within 'raw_data'.
     u8 *extended_header;                                    ///< Pointer to the extended header within 'raw_data', if available. May be casted to other types. Its size is stored in 'packaged_header'.
-    NcmPackagedContentInfo *packaged_content_info;          ///< Pointer to the NcmPackagedContentInfo entries within 'raw_data'. The content count is stored in 'packaged_header'.
+    NcmPackagedContentInfo *packaged_content_info;          ///< Pointer to the NcmPackagedContentInfo entries within 'raw_data', if available. The content count is stored in 'packaged_header'.
     NcmContentMetaInfo *content_meta_info;                  ///< Pointer to the NcmContentMetaInfo entries within 'raw_data', if available. The content meta count is stored in 'packaged_header'.
     u8 *extended_data;                                      ///< Pointer to the extended data block within 'raw_data', if available.
     u32 extended_data_size;                                 ///< Size of the extended data block within 'raw_data', if available. Kept here for convenience - this is part of the header in 'extended_data'.
@@ -260,8 +260,9 @@ NX_INLINE bool cnmtIsValidContext(ContentMetaContext *cnmt_ctx)
 {
     return (cnmt_ctx && cnmt_ctx->nca_ctx && cnmt_ctx->pfs_entry && cnmt_ctx->cnmt_filename && cnmt_ctx->raw_data && cnmt_ctx->raw_data_size && cnmt_ctx->packaged_header && \
             ((cnmt_ctx->packaged_header->extended_header_size && cnmt_ctx->extended_header) || (!cnmt_ctx->packaged_header->extended_header_size && !cnmt_ctx->extended_header)) && \
-            cnmt_ctx->packaged_content_info && ((cnmt_ctx->packaged_header->content_meta_count && cnmt_ctx->content_meta_info) || (!cnmt_ctx->packaged_header->content_meta_count && \
-            !cnmt_ctx->content_meta_info)) && ((cnmt_ctx->extended_data_size && cnmt_ctx->extended_data) || (!cnmt_ctx->extended_data_size && !cnmt_ctx->extended_data)) && cnmt_ctx->digest);
+            ((cnmt_ctx->packaged_header->content_count && cnmt_ctx->packaged_content_info) || (!cnmt_ctx->packaged_header->content_count && !cnmt_ctx->packaged_content_info)) && \
+            ((cnmt_ctx->packaged_header->content_meta_count && cnmt_ctx->content_meta_info) || (!cnmt_ctx->packaged_header->content_meta_count && !cnmt_ctx->content_meta_info)) && \
+            ((cnmt_ctx->extended_data_size && cnmt_ctx->extended_data) || (!cnmt_ctx->extended_data_size && !cnmt_ctx->extended_data)) && cnmt_ctx->digest);
 }
 
 NX_INLINE bool cnmtIsNcaPatchRequired(ContentMetaContext *cnmt_ctx)

@@ -135,7 +135,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         goto end;
     }
     
-    if (!out->packaged_header->content_count)
+    if (!out->packaged_header->content_count && out->packaged_header->content_meta_type != NcmContentMetaType_SystemUpdate)
     {
         LOGFILE("Invalid content count!");
         goto end;
@@ -196,8 +196,11 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     }
     
     /* Save pointer to packaged content infos. */
-    out->packaged_content_info = (NcmPackagedContentInfo*)(out->raw_data + cur_offset);
-    cur_offset += (out->packaged_header->content_count * sizeof(NcmPackagedContentInfo));
+    if (out->packaged_header->content_count)
+    {
+        out->packaged_content_info = (NcmPackagedContentInfo*)(out->raw_data + cur_offset);
+        cur_offset += (out->packaged_header->content_count * sizeof(NcmPackagedContentInfo));
+    }
     
     /* Save pointer to content meta infos. */
     if (out->packaged_header->content_meta_count)
