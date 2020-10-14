@@ -41,7 +41,6 @@ typedef struct {
 
 static Result smHasService(bool *out_has_service, SmServiceName name);
 
-static Result servicesPlUserInitialize(void);
 static Result servicesNifmUserInitialize(void);
 static bool servicesClkGetServiceType(void *arg);
 static bool servicesSplCryptoCheckAvailability(void *arg);
@@ -56,7 +55,6 @@ static ServiceInfo g_serviceInfo[] = {
     { false, "spl:", NULL, &splInitialize, &splExit },
     { false, "spl:mig", &servicesSplCryptoCheckAvailability, &splCryptoInitialize, &splCryptoExit },    /* Checks if spl:mig is really available (e.g. avoid calling splInitialize twice). */
     { false, "pm:dmnt", NULL, &pmdmntInitialize, &pmdmntExit },
-    { false, "pl:u", NULL, &servicesPlUserInitialize, &plExit },
     { false, "psm", NULL, &psmInitialize, &psmExit },
     { false, "nifm:u", NULL, &servicesNifmUserInitialize, &nifmExit },
     { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst. */
@@ -217,11 +215,6 @@ static Result smHasService(bool *out_has_service, SmServiceName name)
     Result rc = serviceDispatchInOut(smGetServiceSession(), 65100, name, tmp);
     if (R_SUCCEEDED(rc) && out_has_service) *out_has_service = (tmp & 1);
     return rc;
-}
-
-static Result servicesPlUserInitialize(void)
-{
-    return plInitialize(PlServiceType_User);
 }
 
 static Result servicesNifmUserInitialize(void)

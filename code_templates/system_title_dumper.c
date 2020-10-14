@@ -247,7 +247,6 @@ int main(int argc, char *argv[])
     char nca_id_str[0x21] = {0};
     
     NcaContext *nca_ctx = NULL;
-    Ticket tik = {0};
     
     app_metadata = titleGetApplicationMetadataEntries(true, &app_count);
     if (!app_metadata || !app_count)
@@ -357,7 +356,7 @@ int main(int argc, char *argv[])
             } else
             if (menu == 2)
             {
-                if (!ncaInitializeContext(nca_ctx, cur_title_info->storage_id, 0, &(cur_title_info->content_infos[nca_idx]), &tik))
+                if (!ncaInitializeContext(nca_ctx, cur_title_info->storage_id, 0, &(cur_title_info->content_infos[nca_idx]), NULL))
                 {
                     consolePrint("nca initialize ctx failed\n");
                     error = true;

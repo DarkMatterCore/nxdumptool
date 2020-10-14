@@ -43,8 +43,8 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     NcaRegion *hash_region = NULL;
     NcaHierarchicalIntegrityVerificationLevelInformation *level_information = NULL;
     
-    /* Clear output RomFS context. */
-    memset(out, 0, sizeof(RomFileSystemContext));
+    /* Free output context beforehand. */
+    romfsFreeContext(out);
     
     /* Fill context. */
     out->nca_fs_ctx = nca_fs_ctx;

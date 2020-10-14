@@ -28,6 +28,7 @@
 #include "nca.h"
 #include "usb.h"
 #include "title.h"
+#include "bfttf.h"
 #include "fatfs/ff.h"
 
 #define LOGFILE_PATH    "./" APP_TITLE ".log"
@@ -125,6 +126,13 @@ bool utilsInitializeResources(void)
         goto end;
     }
     
+    /* Initialize BFTTF interface. */
+    if (!bfttfInitialize())
+    {
+        LOGFILE("Failed to initialize BFTTF interface!");
+        goto end;
+    }
+    
     /* Retrieve pointer to the SD card FsFileSystem element. */
     if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
     {
@@ -185,6 +193,9 @@ void utilsCloseResources(void)
     
     /* Unmount eMMC BIS System partition. */
     utilsUnmountEmmcBisSystemPartitionStorage();
+    
+    /* Deinitialize BFTTF interface. */
+    bfttfExit();
     
     /* Deinitialize title interface. */
     titleExit();

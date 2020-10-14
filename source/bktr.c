@@ -50,6 +50,9 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         return false;
     }
     
+    /* Free output context beforehand. */
+    bktrFreeContext(out);
+    
     /* Update missing base NCA RomFS status. */
     out->missing_base_romfs = (!base_nca_fs_ctx->enabled || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || base_nca_fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx);
     

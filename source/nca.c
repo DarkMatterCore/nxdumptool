@@ -88,7 +88,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     NcmContentStorage *ncm_storage = NULL;
     
     if (!out || (storage_id != NcmStorageId_GameCard && !(ncm_storage = titleGetNcmStorageByStorageId(storage_id))) || \
-        (storage_id == NcmStorageId_GameCard && hfs_partition_type >= GameCardHashFileSystemPartitionType_Count) || !content_info || content_info->content_type > NcmContentType_DeltaFragment || !tik)
+        (storage_id == NcmStorageId_GameCard && hfs_partition_type >= GameCardHashFileSystemPartitionType_Count) || !content_info || content_info->content_type > NcmContentType_DeltaFragment)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -138,12 +138,15 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     
     if (out->rights_id_available)
     {
+        Ticket tmp_tik = {0};
+        Ticket *usable_tik = (tik ? tik : &tmp_tik);
+        
         /* Retrieve ticket. */
         /* This will return true if it has already been retrieved. */
-        if (tikRetrieveTicketByRightsId(tik, &(out->header.rights_id), out->storage_id == NcmStorageId_GameCard))
+        if (tikRetrieveTicketByRightsId(usable_tik, &(out->header.rights_id), out->storage_id == NcmStorageId_GameCard))
         {
             /* Copy decrypted titlekey. */
-            memcpy(out->titlekey, tik->dec_titlekey, 0x10);
+            memcpy(out->titlekey, usable_tik->dec_titlekey, 0x10);
             out->titlekey_retrieved = true;
         } else {
             LOGFILE("Error retrieving ticket for NCA \"%s\"!", out->content_id_str);
@@ -953,7 +956,12 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
     }
     
     /* Clear output patch. */
-    memset(out, 0, !is_integrity_patch ? sizeof(NcaHierarchicalSha256Patch) : sizeof(NcaHierarchicalIntegrityPatch));
+    if (!is_integrity_patch)
+    {
+        ncaFreeHierarchicalSha256Patch(hierarchical_sha256_patch);
+    } else {
+        ncaFreeHierarchicalIntegrityPatch(hierarchical_integrity_patch);
+    }
     
     /* Process each layer. */
     for(u32 i = layer_count; i > 0; i--)

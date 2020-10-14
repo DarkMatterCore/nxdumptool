@@ -39,8 +39,8 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     u32 hash_region_count = 0;
     NcaRegion *hash_region = NULL;
     
-    /* Clear output Partition FS context. */
-    memset(out, 0, sizeof(PartitionFileSystemContext));
+    /* Free output context beforehand. */
+    pfsFreeContext(out);
     
     /* Fill context. */
     out->nca_fs_ctx = nca_fs_ctx;

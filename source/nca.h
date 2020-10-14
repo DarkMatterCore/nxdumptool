@@ -351,7 +351,9 @@ void ncaFreeCryptoBuffer(void);
 
 /// Initializes a NCA context.
 /// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
-/// If the NCA holds a populated Rights ID field, and if the Ticket element pointed to by 'tik' hasn't been filled, ticket data will be retrieved.
+/// If the NCA holds a populated Rights ID field, ticket data will need to be retrieved.
+/// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or be used to read ticket data that has already been retrieved.
+/// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
 bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik);
 
