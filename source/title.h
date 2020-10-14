@@ -215,7 +215,8 @@ NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, 
     
     for(u32 i = 0; i < info->content_count; i++)
     {
-        if (info->content_infos[i].content_type == content_type && info->content_infos[i].id_offset == id_offset) return &(info->content_infos[i]);
+        NcmContentInfo *cur_content_info = &(info->content_infos[i]);
+        if (cur_content_info->content_type == content_type && cur_content_info->id_offset == id_offset) return cur_content_info;
     }
     
     return NULL;

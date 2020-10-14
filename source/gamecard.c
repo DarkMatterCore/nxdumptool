@@ -682,6 +682,8 @@ static void gamecardLoadInfo(void)
     /* Read hash FS partitions. */
     for(u32 i = 0; i < fs_header->entry_count; i++)
     {
+        GameCardHashFileSystemPartitionInfo *hfs_partition = &(g_gameCardHfsPartitions[i]);
+        
         fs_entry = gamecardGetHashFileSystemEntryByIndex(g_gameCardHfsRootHeader, i);
         if (!fs_entry || !fs_entry->size)
         {
@@ -689,14 +691,14 @@ static void gamecardLoadInfo(void)
             goto end;
         }
         
-        g_gameCardHfsPartitions[i].offset = (g_gameCardHeader.partition_fs_header_address + g_gameCardHeader.partition_fs_header_size + fs_entry->offset);
-        g_gameCardHfsPartitions[i].size = fs_entry->size;
+        hfs_partition->offset = (g_gameCardHeader.partition_fs_header_address + g_gameCardHeader.partition_fs_header_size + fs_entry->offset);
+        hfs_partition->size = fs_entry->size;
         
         /* Partially read the current hash FS partition header. */
         GameCardHashFileSystemHeader partition_header = {0};
-        if (!gamecardReadStorageArea(&partition_header, sizeof(GameCardHashFileSystemHeader), g_gameCardHfsPartitions[i].offset, false))
+        if (!gamecardReadStorageArea(&partition_header, sizeof(GameCardHashFileSystemHeader), hfs_partition->offset, false))
         {
-            LOGFILE("Failed to partially read hash FS partition #%u header from offset 0x%lX!", i, g_gameCardHfsPartitions[i].offset);
+            LOGFILE("Failed to partially read hash FS partition #%u header from offset 0x%lX!", i, hfs_partition->offset);
             goto end;
         }
         
@@ -713,21 +715,21 @@ static void gamecardLoadInfo(void)
         }
         
         /* Calculate the full header size for the current hash FS partition and round it to a GAMECARD_MEDIA_UNIT_SIZE bytes boundary. */
-        g_gameCardHfsPartitions[i].header_size = (sizeof(GameCardHashFileSystemHeader) + (partition_header.entry_count * sizeof(GameCardHashFileSystemEntry)) + partition_header.name_table_size);
-        g_gameCardHfsPartitions[i].header_size = ALIGN_UP(g_gameCardHfsPartitions[i].header_size, GAMECARD_MEDIA_UNIT_SIZE);
+        hfs_partition->header_size = (sizeof(GameCardHashFileSystemHeader) + (partition_header.entry_count * sizeof(GameCardHashFileSystemEntry)) + partition_header.name_table_size);
+        hfs_partition->header_size = ALIGN_UP(hfs_partition->header_size, GAMECARD_MEDIA_UNIT_SIZE);
         
         /* Allocate memory for the hash FS partition header. */
-        g_gameCardHfsPartitions[i].header = calloc(g_gameCardHfsPartitions[i].header_size, sizeof(u8));
-        if (!g_gameCardHfsPartitions[i].header)
+        hfs_partition->header = calloc(hfs_partition->header_size, sizeof(u8));
+        if (!hfs_partition->header)
         {
             LOGFILE("Unable to allocate memory for the hash FS partition #%u header!", i);
             goto end;
         }
         
         /* Finally, read the full hash FS partition header. */
-        if (!gamecardReadStorageArea(g_gameCardHfsPartitions[i].header, g_gameCardHfsPartitions[i].header_size, g_gameCardHfsPartitions[i].offset, false))
+        if (!gamecardReadStorageArea(hfs_partition->header, hfs_partition->header_size, hfs_partition->offset, false))
         {
-            LOGFILE("Failed to read full hash FS partition #%u header from offset 0x%lX!", i, g_gameCardHfsPartitions[i].offset);
+            LOGFILE("Failed to read full hash FS partition #%u header from offset 0x%lX!", i, hfs_partition->offset);
             goto end;
         }
     }

@@ -441,8 +441,8 @@ NX_INLINE bool ncaValidateHierarchicalSha256Offsets(NcaHierarchicalSha256Data *h
     
     for(u32 i = 0; i < hierarchical_sha256_data->hash_region_count; i++)
     {
-        if (hierarchical_sha256_data->hash_region[i].offset >= section_size || !hierarchical_sha256_data->hash_region[i].size || \
-            (hierarchical_sha256_data->hash_region[i].offset + hierarchical_sha256_data->hash_region[i].size) > section_size) return false;
+        NcaRegion *hash_region = &(hierarchical_sha256_data->hash_region[i]);
+        if (hash_region->offset >= section_size || !hash_region->size || (hash_region->offset + hash_region->size) > section_size) return false;
     }
     
     return true;
@@ -455,9 +455,8 @@ NX_INLINE bool ncaValidateHierarchicalIntegrityOffsets(NcaIntegrityMetaInfo *int
     
     for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
     {
-        if (integrity_meta_info->info_level_hash.level_information[i].offset >= section_size || !integrity_meta_info->info_level_hash.level_information[i].size || \
-            !integrity_meta_info->info_level_hash.level_information[i].block_order || \
-            (integrity_meta_info->info_level_hash.level_information[i].offset + integrity_meta_info->info_level_hash.level_information[i].size) > section_size) return false;
+        NcaHierarchicalIntegrityVerificationLevelInformation *level_information = &(integrity_meta_info->info_level_hash.level_information[i]);
+        if (level_information->offset >= section_size || !level_information->size || !level_information->block_order || (level_information->offset + level_information->size) > section_size) return false;
     }
     
     return true;

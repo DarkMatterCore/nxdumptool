@@ -385,7 +385,8 @@ static void certCopyCertificateChainDataToMemoryBuffer(void *dst, const Certific
     u8 *dst_u8 = (u8*)dst;
     for(u32 i = 0; i < chain->count; i++)
     {
-        memcpy(dst_u8, chain->certs[i].data, chain->certs[i].size);
-        dst_u8 += chain->certs[i].size;
+        Certificate *cert = &(chain->certs[i]);
+        memcpy(dst_u8, cert->data, cert->size);
+        dst_u8 += cert->size;
     }
 }

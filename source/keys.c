@@ -265,23 +265,25 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
     {
         found = false;
         
-        if (!info->keys[i].dst)
+        KeysMemoryKey *key = &(info->keys[i]);
+        
+        if (!key->dst)
         {
-            LOGFILE("Invalid destination pointer for key \"%s\" in program %016lX!", info->keys[i].name, info->location.program_id);
+            LOGFILE("Invalid destination pointer for key \"%s\" in program %016lX!", key->name, info->location.program_id);
             goto end;
         }
         
         /* Hash every key length-sized byte chunk in the process memory buffer until a match is found. */
         for(u64 j = 0; j < info->location.data_size; j++)
         {
-            if ((info->location.data_size - j) < info->keys[i].size) break;
+            if ((info->location.data_size - j) < key->size) break;
             
-            sha256CalculateHash(tmp_hash, info->location.data + j, info->keys[i].size);
+            sha256CalculateHash(tmp_hash, info->location.data + j, key->size);
             
-            if (!memcmp(tmp_hash, info->keys[i].hash, SHA256_HASH_SIZE))
+            if (!memcmp(tmp_hash, key->hash, SHA256_HASH_SIZE))
             {
                 /* Jackpot. */
-                memcpy(info->keys[i].dst, info->location.data + j, info->keys[i].size);
+                memcpy(key->dst, info->location.data + j, key->size);
                 found = true;
                 break;
             }
@@ -289,7 +291,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
         
         if (!found)
         {
-            LOGFILE("Unable to locate key \"%s\" in process memory from program %016lX!", info->keys[i].name, info->location.program_id);
+            LOGFILE("Unable to locate key \"%s\" in process memory from program %016lX!", key->name, info->location.program_id);
             goto end;
         }
     }

@@ -583,9 +583,11 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
     
     for(u32 i = start_idx; i < max_val; i++)
     {
+        TitleApplicationMetadata *cur_app_metadata = &(g_appMetadata[i]);
+        
         /* Skip current metadata entry if content data for this title isn't available. */
-        if ((is_system && !_titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, g_appMetadata[i].title_id, false)) || \
-            (!is_system && !titleIsUserApplicationContentAvailable(g_appMetadata[i].title_id))) continue;
+        if ((is_system && !_titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, cur_app_metadata->title_id, false)) || \
+            (!is_system && !titleIsUserApplicationContentAvailable(cur_app_metadata->title_id))) continue;
         
         /* Reallocate pointer buffer. */
         tmp_app_metadata = realloc(app_metadata, (app_count + 1) * sizeof(TitleApplicationMetadata*));
@@ -601,7 +603,7 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
         tmp_app_metadata = NULL;
         
         /* Set current pointer and increase counter. */
-        app_metadata[app_count++] = &(g_appMetadata[i]);
+        app_metadata[app_count++] = cur_app_metadata;
     }
     
     if (app_metadata && app_count)
@@ -647,9 +649,10 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
     /* Get first add-on content title info. */
     for(u32 i = 0; i < g_titleInfoCount; i++)
     {
-        if (g_titleInfo[i].meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, g_titleInfo[i].meta_key.id))
+        TitleInfo *title_info = &(g_titleInfo[i]);
+        if (title_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, title_info->meta_key.id))
         {
-            out->aoc_info = &(g_titleInfo[i]);
+            out->aoc_info = title_info;
             break;
         }
     }
@@ -699,7 +702,8 @@ TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count)
     /* Get pointers to orphan title info entries. */
     for(u32 i = 0, j = 0; i < g_titleInfoCount && j < g_titleInfoOrphanCount; i++)
     {
-        if ((g_titleInfo[i].meta_key.type == NcmContentMetaType_Patch || g_titleInfo[i].meta_key.type == NcmContentMetaType_AddOnContent) && !g_titleInfo[i].parent) orphan_info[j++] = &(g_titleInfo[i]);
+        TitleInfo *title_info = &(g_titleInfo[i]);
+        if ((title_info->meta_key.type == NcmContentMetaType_Patch || title_info->meta_key.type == NcmContentMetaType_AddOnContent) && !title_info->parent) orphan_info[j++] = title_info;
     }
     
     /* Sort orphan title info entries by title ID. */
@@ -936,8 +940,11 @@ static bool titleGenerateMetadataEntriesFromSystemTitles(void)
     /* Fill new application metadata entries. */
     for(u32 i = 0; i < g_systemTitlesCount; i++)
     {
-        g_appMetadata[g_appMetadataCount + i].title_id = g_systemTitles[i].title_id;
-        sprintf(g_appMetadata[g_appMetadataCount + i].lang_entry.name, g_systemTitles[i].name);
+        TitleApplicationMetadata *app_metadata = &(g_appMetadata[g_appMetadataCount + i]);
+        const SystemTitleName *system_title = &(g_systemTitles[i]);
+        
+        app_metadata->title_id = system_title->title_id;
+        sprintf(app_metadata->lang_entry.name, system_title->name);
     }
     
     /* Sort metadata entries by title ID. */
@@ -1358,12 +1365,12 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
         /* Fill information. */
         cur_title_info->storage_id = storage_id;
         memcpy(&(cur_title_info->meta_key), &(meta_keys[i]), sizeof(NcmContentMetaKey));
-        cur_title_info->version.value = meta_keys[i].version;
+        cur_title_info->version.value = cur_title_info->meta_key.version;
         
-        if (cur_title_info->meta_key.type <= NcmContentMetaType_Application) cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(meta_keys[i].id);
+        if (cur_title_info->meta_key.type <= NcmContentMetaType_Application) cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(cur_title_info->meta_key.id);
         
         /* Retrieve content infos. */
-        if (titleGetContentInfosFromTitle(storage_id, &(meta_keys[i]), &(cur_title_info->content_infos), &(cur_title_info->content_count)))
+        if (titleGetContentInfosFromTitle(storage_id, &(cur_title_info->meta_key), &(cur_title_info->content_infos), &(cur_title_info->content_count)))
         {
             /* Calculate title size. */
             u64 tmp_size = 0;
@@ -1779,9 +1786,11 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id,
     
     for(u32 i = start_idx; i < max_val; i++)
     {
-        if (g_titleInfo[i].meta_key.id == title_id && (storage_id == NcmStorageId_Any || (storage_id != NcmStorageId_Any && g_titleInfo[i].storage_id == storage_id)))
+        TitleInfo *title_info = &(g_titleInfo[i]);
+        
+        if (title_info->meta_key.id == title_id && (storage_id == NcmStorageId_Any || (storage_id != NcmStorageId_Any && title_info->storage_id == storage_id)))
         {
-            info = &(g_titleInfo[i]);
+            info = title_info;
             break;
         }
     }

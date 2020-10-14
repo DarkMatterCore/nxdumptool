@@ -363,7 +363,8 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     /* Title. */
     for(i = 0, count = 0; i < NacpLanguage_Count; i++)
     {
-        if (!strlen(nacp->title[i].name) || !strlen(nacp->title[i].publisher)) continue;
+        NacpTitle *title = &(nacp->title[i]);
+        if (!strlen(title->name) || !strlen(title->publisher)) continue;
         
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                                 "  <Title>\n" \
@@ -372,8 +373,8 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
                                                 "    <Publisher>%s</Publisher>\n" \
                                                 "  </Title>\n", \
                                                 nacpGetLanguageString(i),
-                                                nacp->title[i].name,
-                                                nacp->title[i].publisher)) goto end;
+                                                title->name,
+                                                title->publisher)) goto end;
         
         count++;
     }
@@ -621,14 +622,16 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
         /* ReceivableGroupConfiguration. */
         for(i = 0; i < 0x10; i++)
         {
-            utilsGenerateHexStringFromData(key_str, sizeof(key_str), ndcc->receivable_group_configurations[i].key, sizeof(ndcc->receivable_group_configurations[i].key));
+            NacpApplicationNeighborDetectionGroupConfiguration *rgc = &(ndcc->receivable_group_configurations[i]);
+            
+            utilsGenerateHexStringFromData(key_str, sizeof(key_str), rgc->key, sizeof(rgc->key));
             
             if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                                     "    <ReceivableGroupConfiguration>\n" \
                                                     "      <GroupId>0x%016lx</GroupId>\n" \
                                                     "      <Key>%s</Key>\n" \
                                                     "    </ReceivableGroupConfiguration>\n", \
-                                                    ndcc->receivable_group_configurations[i].group_id,
+                                                    rgc->group_id,
                                                     key_str)) goto end;
         }
         
@@ -649,13 +652,14 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     /* RequiredAddOnContentsSet. */
     for(i = 0, count = 0; i < 0x20; i++)
     {
-        if (!raocsbd->descriptors[i].index || !raocsbd->descriptors[i].continue_set) continue;
+        NacpDescriptors *descriptor = &(raocsbd->descriptors[i]);
+        if (!descriptor->index || !descriptor->continue_set) continue;
         
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                                 "  <RequiredAddOnContentsSet>\n" \
                                                 "    <Index>%u</Index>\n" \
                                                 "  </RequiredAddOnContentsSet>\n",
-                                                raocsbd->descriptors[i].index)) goto end;
+                                                descriptor->index)) goto end;
         
         count++;
     }

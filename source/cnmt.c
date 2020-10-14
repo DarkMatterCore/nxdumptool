@@ -290,24 +290,26 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     
     for(i = 0; i < nca_ctx_count; i++)
     {
+        NcaContext *cur_nca_ctx = &(nca_ctx[i]);
+        
         /* Check if this NCA is really referenced by our CNMT. */
-        if (nca_ctx[i].content_type != NcmContentType_Meta)
+        if (cur_nca_ctx->content_type != NcmContentType_Meta)
         {
             /* Non-Meta NCAs: check if their content IDs are part of the packaged content info entries from the CNMT. */
             for(j = 0; j < cnmt_ctx->packaged_header->content_count; j++)
             {
-                if (!memcmp(cnmt_ctx->packaged_content_info[j].info.content_id.c, nca_ctx[i].content_id.c, 0x10)) break;
+                if (!memcmp(cnmt_ctx->packaged_content_info[j].info.content_id.c, cur_nca_ctx->content_id.c, 0x10)) break;
             }
             
             invalid_nca = (j >= cnmt_ctx->packaged_header->content_count);
         } else {
             /* Meta NCAs: quick and dirty pointer comparison because why not. */
-            invalid_nca = (cnmt_ctx->nca_ctx != &(nca_ctx[i]));
+            invalid_nca = (cnmt_ctx->nca_ctx != cur_nca_ctx);
         }
         
         if (invalid_nca)
         {
-            LOGFILE("NCA \"%s\" isn't referenced by this CNMT!", nca_ctx[i].content_id_str);
+            LOGFILE("NCA \"%s\" isn't referenced by this CNMT!", cur_nca_ctx->content_id_str);
             goto end;
         }
         
@@ -320,12 +322,12 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
                                                 "    <KeyGeneration>%u</KeyGeneration>\n" \
                                                 "    <IdOffset>%u</IdOffset>\n" \
                                                 "  </Content>\n", \
-                                                titleGetNcmContentTypeName(nca_ctx[i].content_type), \
-                                                nca_ctx[i].content_id_str, \
-                                                nca_ctx[i].content_size, \
-                                                nca_ctx[i].hash_str, \
-                                                nca_ctx[i].key_generation, \
-                                                nca_ctx[i].id_offset)) goto end;
+                                                titleGetNcmContentTypeName(cur_nca_ctx->content_type), \
+                                                cur_nca_ctx->content_id_str, \
+                                                cur_nca_ctx->content_size, \
+                                                cur_nca_ctx->hash_str, \
+                                                cur_nca_ctx->key_generation, \
+                                                cur_nca_ctx->id_offset)) goto end;
     }
     
     utilsGenerateHexStringFromData(digest_str, sizeof(digest_str), cnmt_ctx->digest, CNMT_DIGEST_SIZE);
