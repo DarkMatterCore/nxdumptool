@@ -1,9 +1,66 @@
+reminder:
+
+list of top level functions designed to alter nca data in order of (possible) usage:
+    
+    out of loop:
+        * ncaSetDownloadDistributionType (instead of always using it like legacy, offer it as an option)
+        
+        * ncaRemoveTitlekeyCrypto (can be used with digital titles + game updates in gamecards)
+        
+        * cnmtGenerateNcaPatch (Meta)
+            * calls pfsGenerateEntryPatch
+                * calls ncaGenerateHierarchicalSha256Patch
+            * cnmtIsNcaPatchRequired -> not sure if i'll keep this
+            * missing wrapper for pfsWriteEntryPatchToMemoryBuffer
+        
+        * programInfoChangeAcidPublicKeyAndNcaSignature (Program)
+            * calls npdmChangeAcidPublicKeyAndNcaSignature (Program)
+            * requires programInfoGenerateNcaPatch to be effective
+                * calls npdmGenerateNcaPatch (Program)
+                    * calls pfsGenerateEntryPatch
+                        * calls ncaGenerateHierarchicalSha256Patch
+                * programInfoIsNcaPatchRequired -> not sure if i'll keep this
+                    * calls npdmIsNcaPatchRequired -> not sure if i'll keep this
+                * call inside programInfoChangeAcidPublicKeyAndNcaSignature maybe ???
+                * missing wrapper for pfsWriteEntryPatchToMemoryBuffer
+        
+        * nacpGenerateNcaPatch (Control)
+            * calls romfsGenerateFileEntryPatch
+                * calls ncaGenerateHierarchicalSha256Patch / ncaGenerateHierarchicalIntegrityPatch
+            * nacpIsNcaPatchRequired -> not sure if i'll keep this
+            * missing wrapper for romfsWriteFileEntryPatchToMemoryBuffer
+        
+        * ncaIsHeaderDirty (doesn't modify anything per se, but it's used to check if any of the functions above has been used, basically)
+        * ncaEncryptHeader (doesn't modify anything per se, but it's used to generate new encrypted header data if needed)
+    
+    inside loop:
+        * ncaWriteEncryptedHeaderDataToMemoryBuffer
+        
+        * pfsWriteEntryPatchToMemoryBuffer
+            * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer
+            * missing cnmt, program wrappers
+        
+        * romfsWriteFileEntryPatchToMemoryBuffer
+            * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer / ncaWriteHierarchicalIntegrityPatchToMemoryBuffer
+            * missing nacp wrapper
+
+minor steps to take into account:
+    
+    * check if rights_id_available == true and titlekey_retrieved == false (preload handling)
+
+
+
+
+
+
+
+
+
 todo:
     
     nca: functions for fs section lookup? (could just let the user choose...)
-    nca: function to write re-encrypted nca headers / nca fs headers (don't forget nca0 please)
     
-    tik: option to wipe elicense property mask
+    tik: option to wipe elicense property mask (otherwise, the console will attempt to connect to the Internet to perform elicense verification before launching the title the ticket belongs to)
     tik: automatically dump tickets to the SD card?
     tik: use dumped tickets when the original ones can't be found in the ES savefile?
     

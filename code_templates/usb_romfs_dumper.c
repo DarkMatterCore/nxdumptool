@@ -378,7 +378,7 @@ int main(int argc, char *argv[])
     while(true)
     {
         consoleClear();
-        printf("select an user application to dump its romfs.\nif an update is available, patch romfs data will be dumped instead.\ndata will be transferred via usb.\npress b to exit.\n\n");
+        printf("select a user application to dump its romfs.\nif an update is available, patch romfs data will be dumped instead.\ndata will be transferred via usb.\npress b to exit.\n\n");
         printf("title: %u / %u\n", selected_idx + 1, app_count);
         printf("selected title: %016lX - %s\n\n", app_metadata[selected_idx]->title_id, app_metadata[selected_idx]->lang_entry.name);
         

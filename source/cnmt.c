@@ -24,6 +24,14 @@
 
 #define CNMT_MINIMUM_FILENAME_LENGTH    23  /* Content Meta Type + "_" + Title ID + ".cnmt". */
 
+/* Global variables. */
+
+static const char *g_cnmtAttributeStrings[ContentMetaAttribute_Count] = {
+    "IncludesExFatDriver",
+    "Rebootless",
+    "Compacted"
+};
+
 /* Function prototypes. */
 
 static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filename, size_t cnmt_filename_len, u8 *out_content_meta_type, u64 *out_title_id);
@@ -247,6 +255,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     char *xml_buf = NULL;
     u64 xml_buf_size = 0;
     char digest_str[0x41] = {0};
+    u8 count = 0;
     bool success = false, invalid_nca = false;
     
     /* Free AuthoringTool-like XML data if needed. */
@@ -260,10 +269,23 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
                                             "  <Type>%s</Type>\n" \
                                             "  <Id>0x%016lx</Id>\n" \
                                             "  <Version>%u</Version>\n" \
-                                            "  <RequiredDownloadSystemVersion>%u</RequiredDownloadSystemVersion>\n", \
+                                            "  <ReleaseVersion />\n" \
+                                            "  <PrivateVersion />\n",
                                             titleGetNcmContentMetaTypeName(cnmt_ctx->packaged_header->content_meta_type), \
                                             cnmt_ctx->packaged_header->title_id, \
-                                            cnmt_ctx->packaged_header->version.value,
+                                            cnmt_ctx->packaged_header->version.value)) goto end;
+    
+    /* ContentMetaAttribute. */
+    for(i = 0; i < ContentMetaAttribute_Count; i++)
+    {
+        if (!(cnmt_ctx->packaged_header->content_meta_attribute & (u8)BIT(i))) continue;
+        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <ContentMetaAttribute>%s</ContentMetaAttribute>\n", g_cnmtAttributeStrings[i])) goto end;
+        count++;
+    }
+    
+    if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <ContentMetaAttribute />\n")) goto end;
+    
+    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <RequiredDownloadSystemVersion>%u</RequiredDownloadSystemVersion>\n", \
                                             cnmt_ctx->packaged_header->required_download_system_version.value)) goto end;
     
     for(i = 0; i < nca_ctx_count; i++)
@@ -309,8 +331,11 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     utilsGenerateHexStringFromData(digest_str, sizeof(digest_str), cnmt_ctx->digest, CNMT_DIGEST_SIZE);
     
     if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
+                                            "  <ContentMeta />\n" \
                                             "  <Digest>%s</Digest>\n" \
-                                            "  <KeyGenerationMin>%u</KeyGenerationMin>\n", \
+                                            "  <KeyGenerationMin>%u</KeyGenerationMin>\n" \
+                                            "  <KeepGeneration />\n" \
+                                            "  <KeepGenerationSpecified />\n", \
                                             digest_str, \
                                             cnmt_ctx->nca_ctx->key_generation)) goto end;
     
@@ -326,12 +351,8 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                                 "  <%s>%u</%s>\n" \
                                                 "  <%s>0x%016lx</%s>\n", \
-                                                required_title_version_str, \
-                                                required_title_version, \
-                                                required_title_version_str, \
-                                                required_title_type_str, \
-                                                required_title_id, \
-                                                required_title_type_str)) goto end;
+                                                required_title_version_str, required_title_version, required_title_version_str, \
+                                                required_title_type_str, required_title_id, required_title_type_str)) goto end;
     }
     
     if (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application)

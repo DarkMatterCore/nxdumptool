@@ -396,39 +396,25 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 /// 'buf_offset' must hold the raw NCA offset where the data stored in 'buf' was read from.
 void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset);
 
-/// Returns a pointer to a string holding the name of the section type from the provided NCA FS section context.
-const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx);
-
-
-
-
-
-
-
-
-
 /// Removes titlekey crypto dependency from a NCA context by wiping the Rights ID from the underlying NCA header and copying the decrypted titlekey to the NCA key area.
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx);
 
 /// Encrypts NCA header and NCA FS headers.
 /// The 'encrypted_header' member from the NCA context and its underlying NCA FS section contexts is updated by this function.
+/// Internally uses ncaIsHeaderDirty() to determine if NCA header / NCA FS section header re-encryption is needed.
 bool ncaEncryptHeader(NcaContext *ctx);
+
+/// Used to replace the NCA header and the NCA FS section headers while writing a NCA if they were modified in any way.
+/// Overwrites block(s) from a buffer holding raw NCA data using a previously initialized NcaContext.
+/// 'buf_offset' must hold the raw NCA offset where the data stored in 'buf' was read from.
+/// Bear in mind this function doesn't call ncaIsHeaderDirty() on its own to avoid taking up too much execution time, so it will attempt to overwrite data even if it isn't needed.
+void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 buf_size, u64 buf_offset);
 
 /// Updates the content ID and hash from a NCA context using a provided SHA-256 checksum.
 void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE]);
 
-
-
-
-
-
-
-
-
-
-
-
-
+/// Returns a pointer to a string holding the name of the section type from the provided NCA FS section context.
+const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx);
 
 /// Helper inline functions.
 

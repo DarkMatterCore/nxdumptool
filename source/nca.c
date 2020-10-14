@@ -59,7 +59,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
 static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool lock);
 
 static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, void *out, bool is_integrity_patch);
-static void ncaWriteHashDataPatchToMemoryBuffer(NcaContext *ctx, NcaHashDataPatch *layer_patch, void *buf, u64 buf_size, u64 buf_offset);
+static void ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 patch_offset, u64 patch_size, void *buf, u64 buf_offset, u64 buf_size);
 
 static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset, bool lock);
 
@@ -297,7 +297,11 @@ void ncaWriteHierarchicalSha256PatchToMemoryBuffer(NcaContext *ctx, NcaHierarchi
     if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !patch->hash_region_count || \
         patch->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !buf || !buf_size || buf_offset >= ctx->content_size || (buf_offset + buf_size) > ctx->content_size) return;
     
-    for(u32 i = 0; i < patch->hash_region_count; i++) ncaWriteHashDataPatchToMemoryBuffer(ctx, &(patch->hash_region_patch[i]), buf, buf_size, buf_offset);
+    for(u32 i = 0; i < patch->hash_region_count; i++)
+    {
+        NcaHashDataPatch *hash_region_patch = &(patch->hash_region_patch[i]);
+        ncaWritePatchToMemoryBuffer(ctx, hash_region_patch->data, hash_region_patch->offset, hash_region_patch->size, buf, buf_offset, buf_size);
+    }
 }
 
 bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalIntegrityPatch *out)
@@ -310,34 +314,11 @@ void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierar
     if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !buf || !buf_size || \
         buf_offset >= ctx->content_size || (buf_offset + buf_size) > ctx->content_size) return;
     
-    for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++) ncaWriteHashDataPatchToMemoryBuffer(ctx, &(patch->hash_level_patch[i]), buf, buf_size, buf_offset);
-}
-
-const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
-{
-    NcaContext *nca_ctx = NULL;
-    const char *str = "Invalid";
-    if (!ctx || !ctx->enabled || !(nca_ctx = (NcaContext*)ctx->nca_ctx)) return str;
-    
-    switch(ctx->section_type)
+    for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
     {
-        case NcaFsSectionType_PartitionFs:
-            str = ((nca_ctx->content_type == NcmContentType_Program && ctx->section_num == 0) ? "ExeFS" : "Partition FS");
-            break;
-        case NcaFsSectionType_RomFs:
-            str = "RomFS";
-            break;
-        case NcaFsSectionType_PatchRomFs:
-            str = "Patch RomFS [BKTR]";
-            break;
-        case NcaFsSectionType_Nca0RomFs:
-            str = "NCA0 RomFS";
-            break;
-        default:
-            break;
+        NcaHashDataPatch *hash_level_patch = &(patch->hash_level_patch[i]);
+        ncaWritePatchToMemoryBuffer(ctx, hash_level_patch->data, hash_level_patch->offset, hash_level_patch->size, buf, buf_offset, buf_size);
     }
-    
-    return str;
 }
 
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
@@ -425,6 +406,27 @@ bool ncaEncryptHeader(NcaContext *ctx)
     return true;
 }
 
+void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 buf_size, u64 buf_offset)
+{
+    /* Return right away if we're dealing with invalid parameters, or if the buffer data is not part of the range covered by the encrypted header data (NCA2/3 optimization, last condition). */
+    /* In order to avoid taking up too much execution time when this function is called (ideally inside a loop), we won't use ncaIsHeaderDirty() here. Let the user take care of it instead. */
+    if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !buf || !buf_size || buf_offset >= ctx->content_size || \
+        (buf_offset + buf_size) > ctx->content_size || (ctx->format_version != NcaVersion_Nca0 && buf_offset >= NCA_FULL_HEADER_LENGTH)) return;
+    
+    /* Attempt to write the NCA header. */
+    if (buf_offset < sizeof(NcaHeader)) ncaWritePatchToMemoryBuffer(ctx, &(ctx->encrypted_header), 0, sizeof(NcaHeader), buf, buf_offset, buf_size);
+    
+    /* Attempt to write NCA FS section headers. */
+    for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
+    {
+        NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
+        if (!fs_ctx->enabled) continue;
+        
+        u64 fs_header_offset = (ctx->format_version != NcaVersion_Nca0 ? (sizeof(NcaHeader) + (i * sizeof(NcaFsHeader))) : fs_ctx->section_offset);
+        ncaWritePatchToMemoryBuffer(ctx, &(fs_ctx->encrypted_header), fs_header_offset, sizeof(NcaFsHeader), buf, buf_offset, buf_size);
+    }
+}
+
 void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE])
 {
     if (!ctx) return;
@@ -434,6 +436,33 @@ void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE])
     
     memcpy(ctx->hash, hash, sizeof(ctx->hash));
     utilsGenerateHexStringFromData(ctx->hash_str, sizeof(ctx->hash_str), ctx->hash, sizeof(ctx->hash));
+}
+
+const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
+{
+    NcaContext *nca_ctx = NULL;
+    const char *str = "Invalid";
+    if (!ctx || !ctx->enabled || !(nca_ctx = (NcaContext*)ctx->nca_ctx)) return str;
+    
+    switch(ctx->section_type)
+    {
+        case NcaFsSectionType_PartitionFs:
+            str = ((nca_ctx->content_type == NcmContentType_Program && ctx->section_num == 0) ? "ExeFS" : "Partition FS");
+            break;
+        case NcaFsSectionType_RomFs:
+            str = "RomFS";
+            break;
+        case NcaFsSectionType_PatchRomFs:
+            str = "Patch RomFS [BKTR]";
+            break;
+        case NcaFsSectionType_Nca0RomFs:
+            str = "NCA0 RomFS";
+            break;
+        default:
+            break;
+    }
+    
+    return str;
 }
 
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info)
@@ -1106,20 +1135,22 @@ end:
     return success;
 }
 
-static void ncaWriteHashDataPatchToMemoryBuffer(NcaContext *ctx, NcaHashDataPatch *layer_patch, void *buf, u64 buf_size, u64 buf_offset)
+static void ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 patch_offset, u64 patch_size, void *buf, u64 buf_offset, u64 buf_size)
 {
     /* Return right away if we're dealing with invalid parameters, or if the buffer data is not part of the range covered by the patch (last two conditions). */
-    if (!ctx || !layer_patch || layer_patch->offset < sizeof(NcaHeader) || layer_patch->offset >= ctx->content_size || !layer_patch->size || !layer_patch->data || \
-        (layer_patch->offset + layer_patch->size) > ctx->content_size || !buf || (buf_offset + buf_size) <= layer_patch->offset || (layer_patch->offset + layer_patch->size) <= buf_offset) return;
+    if (!ctx || !patch || patch_offset >= ctx->content_size || !patch_size || (patch_offset + patch_size) > ctx->content_size || (buf_offset + buf_size) <= patch_offset || \
+        (patch_offset + patch_size) <= buf_offset) return;
     
     /* Overwrite buffer data using patch data. */
-    u64 patch_block_offset = (buf_offset > layer_patch->offset ? (buf_offset - layer_patch->offset) : 0);
-    u64 patch_block_size = (layer_patch->size - patch_block_offset);
+    u64 patch_block_offset = (patch_offset < buf_offset ? (buf_offset - patch_offset) : 0);
+    u64 patch_remaining_size = (patch_size - patch_block_offset);
     
-    u64 buf_block_offset = (buf_offset > layer_patch->offset ? 0 : (layer_patch->offset - buf_offset));
-    u64 buf_block_size = ((buf_size - buf_block_offset) > patch_block_size ? patch_block_size : (buf_size - buf_block_offset));
+    u64 buf_block_offset = (buf_offset < patch_offset ? (patch_offset - buf_offset) : 0);
+    u64 buf_remaining_size = (buf_size - buf_block_offset);
     
-    memcpy((u8*)buf + buf_block_offset, layer_patch->data + patch_block_offset, buf_block_size);
+    u64 buf_block_size = (buf_remaining_size < patch_remaining_size ? buf_remaining_size : patch_remaining_size);
+    
+    memcpy((u8*)buf + buf_block_offset, (const u8*)patch + patch_block_offset, buf_block_size);
     
     LOGFILE("Overwrote 0x%lX bytes block at offset 0x%lX from raw NCA \"%s\" buffer (size 0x%lX, NCA offset 0x%lX).", buf_block_size, buf_block_offset, ctx->content_id_str, buf_size, buf_offset);
 }
