@@ -78,8 +78,16 @@ bool utilsInitializeResources(void)
     bool ret = g_resourcesInitialized;
     if (ret) goto end;
     
+    utilsWriteLogBufferToLogFile("________________________________________________________________\r\n");
+    LOGFILE(APP_TITLE " v%u.%u.%u starting.", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+    
+    /* Log Horizon OS version. */
+    u32 hos_version = hosversionGet();
+    LOGFILE("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
+    
     /* Retrieve custom firmware type. */
     if (!_utilsGetCustomFirmwareType()) goto end;
+    LOGFILE("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphere" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
     
     /* Initialize needed services. */
     if (!servicesInitialize())
@@ -90,6 +98,7 @@ bool utilsInitializeResources(void)
     
     /* Check if we're not running under a development unit. */
     if (!_utilsIsDevelopmentUnit()) goto end;
+    LOGFILE("Running under %s unit.", g_isDevUnit ? "development" : "retail");
     
     /* Initialize USB interface. */
     if (!usbInitialize())
@@ -145,6 +154,7 @@ bool utilsInitializeResources(void)
     
     /* Get applet type. */
     g_programAppletType = appletGetAppletType();
+    LOGFILE("Running under %s mode.", utilsAppletModeCheck() ? "applet" : "title override");
     
     /* Disable screen dimming and auto sleep. */
     appletSetMediaPlaybackState(true);
@@ -741,7 +751,6 @@ static bool _utilsGetCustomFirmwareType(void)
     
     /* Finally, determine the CFW type. */
     g_customFirmwareType = (rnx_srv ? UtilsCustomFirmwareType_ReiNX : (tx_srv ? UtilsCustomFirmwareType_SXOS : UtilsCustomFirmwareType_Atmosphere));
-    LOGFILE("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphere" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
     
     return true;
 }
@@ -755,7 +764,6 @@ static bool _utilsIsDevelopmentUnit(void)
     if (R_SUCCEEDED(rc))
     {
         g_isDevUnit = tmp;
-        LOGFILE("Running under %s unit.", g_isDevUnit ? "development" : "retail");
     } else {
         LOGFILE("splIsDevelopment failed! (0x%08X).", rc);
     }

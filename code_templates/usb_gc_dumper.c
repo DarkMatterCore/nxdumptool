@@ -188,9 +188,6 @@ int main(int argc, char *argv[])
     Menu *cur_menu = &g_rootMenu;
     u32 element_count = menuGetElementCount(cur_menu), page_size = 30;
     
-    utilsWriteLogBufferToLogFile("________________________________________________________________\r\n");
-    LOGFILE(APP_TITLE " starting.");
-    
     consoleInit(NULL);
     
     consolePrint("initializing...\n");

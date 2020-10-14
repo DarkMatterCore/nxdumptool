@@ -306,9 +306,6 @@ int main(int argc, char *argv[])
     
     int ret = 0;
     
-    utilsWriteLogBufferToLogFile("________________________________________________________________\r\n");
-    LOGFILE(APP_TITLE " starting.");
-    
     consoleInit(NULL);
     
     consolePrint("initializing...\n");

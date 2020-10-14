@@ -22,7 +22,7 @@ Steps to reproduce the behavior:
 - CFW: [e.g. Atmosphère, SX OS, etc.]
 - CFW version: [e.g. 0.11.1, 2.9.4, etc.]
 - Atmosphère launch method (if applicable): [e.g. Hekate, fusee-primary]
-- NXDumpTool version: [e.g. 1.2.0]
+- nxdumptool version: [e.g. 2.0.0]
 - Homebrew launch method: [e.g. title override, applet]
 - Source storage used with the application (if applicable): [e.g. gamecard, SD/eMMC]
 - SD card specs: [e.g. Samsung EVO 256 GB, FAT32 partition]
