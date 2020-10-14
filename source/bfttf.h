@@ -40,7 +40,7 @@ typedef enum {
 typedef struct {
     u8 type;    ///< BfttfFontType.
     u32 size;   ///< Decoded BFTFF font size.
-    u8 *ptr;   ///< Pointer to font data.
+    u8 *ptr;    ///< Pointer to font data.
 } BfttfFontData;
 
 /// Initializes the BFTTF interface.
