@@ -481,7 +481,7 @@ static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 siz
     u32 hex_str_len = (2 * size);
     size_t value_len = 0;
     
-    if (!out || !key || !strlen(key) || !value || !(value_len = strlen(value)) || !size)
+    if (!out || !key || !*key || !value || !(value_len = strlen(value)) || !size)
     {
         LOGFILE("Invalid parameters!");
         return false;

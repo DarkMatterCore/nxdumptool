@@ -197,7 +197,7 @@ static bool nacpAddU64FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size,
 
 bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
 {
-    if (!out || !nca_ctx || !strlen(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_Control || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
+    if (!out || !nca_ctx || !*(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_Control || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
         (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         nca_ctx->header.content_type != NcaContentType_Control || !out)
     {
@@ -364,7 +364,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     for(i = 0, count = 0; i < NacpLanguage_Count; i++)
     {
         NacpTitle *title = &(nacp->title[i]);
-        if (!strlen(title->name) || !strlen(title->publisher)) continue;
+        if (!*(title->name) || !*(title->publisher)) continue;
         
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                                 "  <Title>\n" \
@@ -856,19 +856,19 @@ NX_INLINE bool nacpCheckBitflagField(const void *flag, u8 flag_bitcount, u8 idx)
 
 static bool nacpAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const char *value)
 {
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name) || !value)
+    if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name || !value)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
-    return (strlen(value) ? utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%s</%s>\n", tag_name, value, tag_name) : \
+    return (*value ? utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%s</%s>\n", tag_name, value, tag_name) : \
             utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s />\n", tag_name));
 }
 
 static bool nacpAddEnumFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u8 value, NacpStringFunction str_func)
 {
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name) || !str_func)
+    if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name || !str_func)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -883,7 +883,7 @@ static bool nacpAddBitflagFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_s
     const u8 *flag_u8 = (const u8*)flag;
     bool success = false, empty_flag = true;
     
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name) || !flag || !flag_width || (flag_width > 1 && !IS_POWER_OF_TWO(flag_width)) || flag_width > 0x10 || \
+    if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name || !flag || !flag_width || (flag_width > 1 && !IS_POWER_OF_TWO(flag_width)) || flag_width > 0x10 || \
         (flag_bitcount = (flag_width * 8)) < max_flag_idx || !str_func)
     {
         LOGFILE("Invalid parameters!");
@@ -922,7 +922,7 @@ end:
 
 static bool nacpAddU16FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u16 value, bool hex)
 {
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
+    if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -934,7 +934,7 @@ static bool nacpAddU16FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size,
 
 static bool nacpAddU32FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u32 value)
 {
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
+    if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -945,7 +945,7 @@ static bool nacpAddU32FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size,
 
 static bool nacpAddU64FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, u64 value)
 {
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
+    if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name)
     {
         LOGFILE("Invalid parameters!");
         return false;

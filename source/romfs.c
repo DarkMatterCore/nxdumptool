@@ -421,13 +421,14 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
         dir_entries = tmp_dir_entries;
         tmp_dir_entries = NULL;
         
-        if (!(dir_entries[dir_entries_count] = romfsGetDirectoryEntryByOffset(ctx, dir_offset)) || !dir_entries[dir_entries_count]->name_length)
+        RomFileSystemDirectoryEntry **cur_dir_entry = &(dir_entries[dir_entries_count]);
+        if (!(*cur_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset)) || !(*cur_dir_entry)->name_length)
         {
             LOGFILE("Failed to retrieve directory entry!");
             goto end;
         }
         
-        path_len += (1 + dir_entries[dir_entries_count]->name_length);
+        path_len += (1 + (*cur_dir_entry)->name_length);
         dir_entries_count++;
     }
     
@@ -439,12 +440,19 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
     
     /* Generate output path. */
     *out_path = '\0';
+    path_len = 0;
+    
     for(u32 i = dir_entries_count; i > 0; i--)
     {
+        RomFileSystemDirectoryEntry **cur_dir_entry = &(dir_entries[i - 1]);
+        
         strcat(out_path, "/");
-        strncat(out_path, dir_entries[i - 1]->name, dir_entries[i - 1]->name_length);
-        if (illegal_char_replace_type) utilsReplaceIllegalCharacters(out_path + (strlen(out_path) - dir_entries[i - 1]->name_length), \
-                                                                     illegal_char_replace_type == RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly);
+        strncat(out_path, (*cur_dir_entry)->name, (*cur_dir_entry)->name_length);
+        path_len++;
+        
+        if (illegal_char_replace_type) utilsReplaceIllegalCharacters(out_path + path_len, illegal_char_replace_type == RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly);
+        
+        path_len += (*cur_dir_entry)->name_length;
     }
     
     success = true;
@@ -483,10 +491,15 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
     }
     
     /* Concatenate file entry name. */
-    if (file_entry->parent_offset) strcat(out_path, "/");
+    if (file_entry->parent_offset)
+    {
+        strcat(out_path, "/");
+        path_len++;
+    }
+    
     strncat(out_path, file_entry->name, file_entry->name_length);
-    if (illegal_char_replace_type) utilsReplaceIllegalCharacters(out_path + (strlen(out_path) - file_entry->name_length), \
-                                                                 illegal_char_replace_type == RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly);
+    
+    if (illegal_char_replace_type) utilsReplaceIllegalCharacters(out_path + path_len, illegal_char_replace_type == RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly);
     
     return true;
 }

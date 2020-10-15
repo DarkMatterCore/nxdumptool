@@ -342,7 +342,7 @@ void utilsWaitForButtonPress(u64 flag)
 
 bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
 {
-    if (!dst || !dst_size || !fmt || !strlen(fmt))
+    if (!dst || !dst_size || !fmt || !*fmt)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -399,7 +399,7 @@ end:
 
 void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...)
 {
-    if (!func_name || !strlen(func_name) || !fmt || !strlen(fmt)) return;
+    if (!func_name || !*func_name || !fmt || !*fmt) return;
     
     mutexLock(&g_logfileMutex);
     
@@ -427,7 +427,7 @@ end:
 
 void utilsWriteMessageToLogBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...)
 {
-    if (!dst || !dst_size || !func_name || !strlen(func_name) || !fmt || !strlen(fmt)) return;
+    if (!dst || !dst_size || !func_name || !*func_name || !fmt || !*fmt) return;
     
     va_list args;
     va_start(args, fmt);
@@ -475,7 +475,7 @@ end:
 
 void utilsWriteLogBufferToLogFile(const char *src)
 {
-    if (!src || !strlen(src)) return;
+    if (!src || !*src) return;
     
     mutexLock(&g_logfileMutex);
     
@@ -621,7 +621,7 @@ bool utilsCommitSdCardFileSystemChanges(void)
 
 bool utilsCheckIfFileExists(const char *path)
 {
-    if (!path || !strlen(path)) return false;
+    if (!path || !*path) return false;
     
     FILE *chkfile = fopen(path, "rb");
     if (chkfile)
@@ -635,7 +635,7 @@ bool utilsCheckIfFileExists(const char *path)
 
 bool utilsCreateConcatenationFile(const char *path)
 {
-    if (!path || !strlen(path))
+    if (!path || !*path)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -821,7 +821,7 @@ static bool utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(const char *path
     FsFileSystem *fs = NULL;
     char *name_end = NULL, *filepath = NULL, name[32] = {0};
     
-    if (!path || !strlen(path) || !(name_end = strchr(path, ':')) || (size_t)(name_end - path) >= MAX_ELEMENTS(name) || (!out_fs && !out_filepath) || \
+    if (!path || !*path || !(name_end = strchr(path, ':')) || (size_t)(name_end - path) >= MAX_ELEMENTS(name) || (!out_fs && !out_filepath) || \
         (out_filepath && *(filepath = (name_end + 1)) != '/')) return false;
     
     sprintf(name, "%.*s", (int)(name_end - path), path);

@@ -54,7 +54,7 @@ static bool programInfoAddFsAccessControlDataToAuthoringToolXml(char **xml_buf, 
 
 bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
 {
-    if (!out || !nca_ctx || !strlen(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_Program || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
+    if (!out || !nca_ctx || !*(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_Program || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
         (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         nca_ctx->header.content_type != NcaContentType_Program || !out)
     {
@@ -352,8 +352,8 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
     char *sdk_entry = NULL, *sdk_entry_vender = NULL, *sdk_entry_name = NULL;
     bool success = false, api_list_exists = false;
     
-    if (!xml_buf || !xml_buf_size || !program_info_ctx || !program_info_ctx->nso_count || !program_info_ctx->nso_ctx || !api_list_tag || !strlen(api_list_tag) || !api_entry_prefix || \
-        !strlen(api_entry_prefix) || !sdk_prefix || !(sdk_prefix_len = strlen(sdk_prefix)))
+    if (!xml_buf || !xml_buf_size || !program_info_ctx || !program_info_ctx->nso_count || !program_info_ctx->nso_ctx || !api_list_tag || !*api_list_tag || !api_entry_prefix || \
+        !*api_entry_prefix || !sdk_prefix || !(sdk_prefix_len = strlen(sdk_prefix)))
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -363,7 +363,7 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
     for(u32 i = 0; i < program_info_ctx->nso_count; i++)
     {
         NsoContext *nso_ctx = &(program_info_ctx->nso_ctx[i]);
-        if (!nso_ctx->nso_filename || !strlen(nso_ctx->nso_filename) || !nso_ctx->rodata_api_info_section || !nso_ctx->rodata_api_info_section_size) continue;
+        if (!nso_ctx->nso_filename || !*(nso_ctx->nso_filename) || !nso_ctx->rodata_api_info_section || !nso_ctx->rodata_api_info_section_size) continue;
         
         for(u64 j = 0; j < nso_ctx->rodata_api_info_section_size; j++)
         {
@@ -394,7 +394,7 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
     for(u32 i = 0; i < program_info_ctx->nso_count; i++)
     {
         NsoContext *nso_ctx = &(program_info_ctx->nso_ctx[i]);
-        if (!nso_ctx->nso_filename || !strlen(nso_ctx->nso_filename) || !nso_ctx->rodata_api_info_section || !nso_ctx->rodata_api_info_section_size) continue;
+        if (!nso_ctx->nso_filename || !*(nso_ctx->nso_filename) || !nso_ctx->rodata_api_info_section || !nso_ctx->rodata_api_info_section_size) continue;
         
         for(u64 j = 0; j < nso_ctx->rodata_api_info_section_size; j++)
         {
@@ -447,13 +447,13 @@ static bool programInfoIsApiInfoEntryValid(const char *sdk_prefix, size_t sdk_pr
 
 static bool programInfoAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, const char *tag_name, const char *value)
 {
-    if (!xml_buf || !xml_buf_size || !tag_name || !strlen(tag_name))
+    if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
     
-    return ((value && strlen(value)) ? utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%s</%s>\n", tag_name, value, tag_name) : \
+    return ((value && *value) ? utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%s</%s>\n", tag_name, value, tag_name) : \
             utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s />\n", tag_name));
 }
 

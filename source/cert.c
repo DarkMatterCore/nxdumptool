@@ -54,7 +54,7 @@ bool certRetrieveCertificateByName(Certificate *dst, const char *name)
     
     bool ret = false;
     
-    if (!dst || !name || !strlen(name))
+    if (!dst || !name || !*name)
     {
         LOGFILE("Invalid parameters!");
         goto end;
@@ -99,7 +99,7 @@ end:
 
 u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *out_size)
 {
-    if (!issuer || !strlen(issuer) || !out_size)
+    if (!issuer || !*issuer || !out_size)
     {
         LOGFILE("Invalid parameters!");
         return NULL;
@@ -350,7 +350,7 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
 
 static u32 certGetCertificateCountInSignatureIssuer(const char *issuer)
 {
-    if (!issuer || !strlen(issuer)) return 0;
+    if (!issuer || !*issuer) return 0;
     
     u32 count = 0;
     char issuer_copy[0x40] = {0};

@@ -133,7 +133,7 @@ void servicesClose(void)
 
 bool servicesCheckRunningServiceByName(const char *name)
 {
-    if (!name || !strlen(name)) return false;
+    if (!name || !*name) return false;
     
     Result rc = 0;
     Handle handle = INVALID_HANDLE;
@@ -156,7 +156,7 @@ bool servicesCheckInitializedServiceByName(const char *name)
     
     bool ret = false;
     
-    if (!name || !strlen(name)) goto end;
+    if (!name || !*name) goto end;
     
     size_t name_len = strlen(name);
     
@@ -195,7 +195,7 @@ void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
 
 Result servicesAtmosphereHasService(bool *out_has_service, const char *name)
 {
-    if (!out_has_service || !name || !strlen(name))
+    if (!out_has_service || !name || !*name)
     {
         LOGFILE("Invalid parameters!");
         return MAKERESULT(Module_Libnx, LibnxError_IoError);

@@ -437,7 +437,7 @@ bool gamecardGetEntryInfoFromHashFileSystemPartitionByIndex(u8 hfs_partition_typ
         if (out_name)
         {
             entry_name = gamecardGetHashFileSystemEntryNameByIndex(fs_header, idx);
-            if (!entry_name || !strlen(entry_name))
+            if (!entry_name || !*entry_name)
             {
                 LOGFILE("Invalid hash FS partition entry name!");
                 goto end;

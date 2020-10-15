@@ -24,7 +24,7 @@
 
 bool legalInfoInitializeContext(LegalInfoContext *out, NcaContext *nca_ctx)
 {
-    if (!out || !nca_ctx || !strlen(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_LegalInformation || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
+    if (!out || !nca_ctx || !*(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_LegalInformation || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
         (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         nca_ctx->header.content_type != NcaContentType_Manual || !out)
     {

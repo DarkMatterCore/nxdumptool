@@ -52,7 +52,7 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
     out->pfs_entry = pfs_entry;
     
     /* Get entry filename. */
-    if (!(out->nso_filename = pfsGetEntryName(pfs_ctx, pfs_entry)) || !strlen(out->nso_filename))
+    if (!(out->nso_filename = pfsGetEntryName(pfs_ctx, pfs_entry)) || !*(out->nso_filename))
     {
         LOGFILE("Invalid Partition FS entry filename!");
         goto end;

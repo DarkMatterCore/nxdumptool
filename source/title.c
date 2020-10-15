@@ -750,7 +750,7 @@ char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 
     /* Generate filename for this title. */
     if (name_convention == TitleFileNameConvention_Full)
     {
-        if (app_metadata && strlen(app_metadata->lang_entry.name))
+        if (app_metadata && *(app_metadata->lang_entry.name))
         {
             sprintf(title_name, "%s ", app_metadata->lang_entry.name);
             if (illegal_char_replace_type) utilsReplaceIllegalCharacters(title_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
@@ -816,7 +816,7 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
         {
             if (cur_filename_len) strcat(app_name, " + ");
             
-            if (app_info->app_metadata && strlen(app_info->app_metadata->lang_entry.name))
+            if (app_info->app_metadata && *(app_info->app_metadata->lang_entry.name))
             {
                 sprintf(app_name + strlen(app_name), "%s ", app_info->app_metadata->lang_entry.name);
                 if (illegal_char_replace_type) utilsReplaceIllegalCharacters(app_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);

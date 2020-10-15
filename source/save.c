@@ -958,7 +958,7 @@ end:
 
 bool save_hierarchical_file_table_find_path_recursive(hierarchical_save_file_table_ctx_t *ctx, save_entry_key_t *key, const char *path)
 {
-    if (!ctx || !key || !path || !strlen(path))
+    if (!ctx || !key || !path || !*path)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -991,7 +991,7 @@ bool save_hierarchical_file_table_find_path_recursive(hierarchical_save_file_tab
 
 bool save_hierarchical_file_table_get_file_entry_by_path(hierarchical_save_file_table_ctx_t *ctx, const char *path, save_fs_list_entry_t *entry)
 {
-    if (!ctx || !path || !strlen(path) || !entry)
+    if (!ctx || !path || !*path || !entry)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -1719,7 +1719,7 @@ void save_free_contexts(save_ctx_t *ctx)
 
 save_ctx_t *save_open_savefile(const char *path, u32 action)
 {
-    if (!path || !strlen(path))
+    if (!path || !*path)
     {
         LOGFILE("Invalid savefile path!");
         return NULL;
@@ -1795,7 +1795,7 @@ void save_close_savefile(save_ctx_t *ctx)
 
 bool save_get_fat_storage_from_file_entry_by_path(save_ctx_t *ctx, const char *path, allocation_table_storage_ctx_t *out_fat_storage, u64 *out_file_entry_size)
 {
-    if (!ctx || !path || !strlen(path) || !out_fat_storage || !out_file_entry_size)
+    if (!ctx || !path || !*path || !out_fat_storage || !out_file_entry_size)
     {
         LOGFILE("Invalid file entry path!");
         return false;

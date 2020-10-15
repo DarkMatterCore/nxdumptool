@@ -248,7 +248,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
 
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !strlen(ctx->content_id_str) || (ctx->storage_id != NcmStorageId_GameCard && !ctx->ncm_storage) || (ctx->storage_id == NcmStorageId_GameCard && !ctx->gamecard_offset) || !out || \
+    if (!ctx || !*(ctx->content_id_str) || (ctx->storage_id != NcmStorageId_GameCard && !ctx->ncm_storage) || (ctx->storage_id == NcmStorageId_GameCard && !ctx->gamecard_offset) || !out || \
         !read_size || offset >= ctx->content_size || (offset + read_size) > ctx->content_size)
     {
         LOGFILE("Invalid parameters!");
@@ -297,7 +297,7 @@ bool ncaGenerateHierarchicalSha256Patch(NcaFsSectionContext *ctx, const void *da
 
 void ncaWriteHierarchicalSha256PatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !patch->hash_region_count || \
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !patch->hash_region_count || \
         patch->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !buf || !buf_size || buf_offset >= ctx->content_size || (buf_offset + buf_size) > ctx->content_size) return;
     
     for(u32 i = 0; i < patch->hash_region_count; i++)
@@ -314,7 +314,7 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 
 void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !buf || !buf_size || \
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !buf || !buf_size || \
         buf_offset >= ctx->content_size || (buf_offset + buf_size) > ctx->content_size) return;
     
     for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
@@ -349,7 +349,7 @@ void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
 
 bool ncaEncryptHeader(NcaContext *ctx)
 {
-    if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
     {
         LOGFILE("Invalid NCA context!");
         return false;
@@ -413,7 +413,7 @@ void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 b
 {
     /* Return right away if we're dealing with invalid parameters, or if the buffer data is not part of the range covered by the encrypted header data (NCA2/3 optimization, last condition). */
     /* In order to avoid taking up too much execution time when this function is called (ideally inside a loop), we won't use ncaIsHeaderDirty() here. Let the user take care of it instead. */
-    if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !buf || !buf_size || buf_offset >= ctx->content_size || \
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !buf || !buf_size || buf_offset >= ctx->content_size || \
         (buf_offset + buf_size) > ctx->content_size || (ctx->format_version != NcaVersion_Nca0 && buf_offset >= NCA_FULL_HEADER_LENGTH)) return;
     
     /* Attempt to write the NCA header. */
@@ -477,7 +477,7 @@ NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info)
 
 static bool ncaReadDecryptedHeader(NcaContext *ctx)
 {
-    if (!ctx || !strlen(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
     {
         LOGFILE("Invalid NCA context!");
         return false;
@@ -746,7 +746,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     u64 block_start_offset = 0, block_end_offset = 0, block_size = 0;
     u64 data_start_offset = 0, chunk_size = 0, out_chunk_size = 0;
     
-    if (!strlen(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
+    if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         (nca_ctx->format_version != NcaVersion_Nca0 && nca_ctx->format_version != NcaVersion_Nca2 && nca_ctx->format_version != NcaVersion_Nca3) || content_offset >= nca_ctx->content_size || \
         (content_offset + read_size) > nca_ctx->content_size)
     {
@@ -865,7 +865,7 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
     u64 block_start_offset = 0, block_end_offset = 0, block_size = 0;
     u64 data_start_offset = 0, chunk_size = 0, out_chunk_size = 0;
     
-    if (!strlen(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
+    if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         content_offset >= nca_ctx->content_size || (content_offset + read_size) > nca_ctx->content_size)
     {
         LOGFILE("Invalid NCA header parameters!");
@@ -1187,7 +1187,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     u64 block_start_offset = 0, block_end_offset = 0, block_size = 0;
     u64 plain_chunk_offset = 0;
     
-    if (!strlen(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
+    if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         (nca_ctx->format_version != NcaVersion_Nca0 && nca_ctx->format_version != NcaVersion_Nca2 && nca_ctx->format_version != NcaVersion_Nca3) || content_offset >= nca_ctx->content_size || \
         (content_offset + data_size) > nca_ctx->content_size)
     {
