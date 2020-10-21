@@ -1746,6 +1746,32 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     
     open_savefile = true;
     
+    /* Code to dump the requested file in its entirety. Useful to retrieve protected system savefiles without exiting HOS. */
+    /*char sd_path[FS_MAX_PATH] = {0};
+    sprintf(sd_path, "sdmc:/%s", strrchr(path, '/') + 1);
+    
+    UINT blksize = 0x100000;
+    u8 *buf = malloc(blksize);
+    FILE *fd = fopen(sd_path, "wb");
+    
+    if (buf && fd)
+    {
+        u64 size = f_size(save_fd);
+        UINT br = 0;
+        
+        for(u64 i = 0; i < size; i += blksize)
+        {
+            if ((size - i) < blksize) blksize = (size - i);
+            if (f_read(save_fd, buf, blksize, &br) != FR_OK || br != blksize) break;
+            fwrite(buf, 1, blksize, fd);
+        }
+        
+        f_rewind(save_fd);
+    }
+    
+    if (fd) fclose(fd);
+    if (buf) free(buf);*/
+    
     save_ctx = calloc(1, sizeof(save_ctx_t));
     if (!save_ctx)
     {

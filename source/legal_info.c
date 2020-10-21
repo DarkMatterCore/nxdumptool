@@ -81,6 +81,10 @@ bool legalInfoInitializeContext(LegalInfoContext *out, NcaContext *nca_ctx)
     /* Update NCA context pointer in output context. */
     out->nca_ctx = nca_ctx;
     
+    /* Update content type context info in NCA context. */
+    nca_ctx->content_type_ctx = out;
+    nca_ctx->content_type_ctx_patch = false;
+    
     success = true;
     
 end:

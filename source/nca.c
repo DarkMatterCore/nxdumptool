@@ -51,15 +51,11 @@ NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx);
 NX_INLINE u8 ncaGetKeyGenerationValue(NcaContext *ctx);
 NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx);
 
-NX_INLINE void ncaInitializeAesCtrIv(u8 *out, const u8 *ctr, u64 offset);
-NX_INLINE void ncaUpdateAesCtrIv(u8 *ctr, u64 offset);
-NX_INLINE void ncaUpdateAesCtrExIv(u8 *ctr, u32 ctr_val, u64 offset);
-
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, bool lock);
 static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool lock);
 
 static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, void *out, bool is_integrity_patch);
-static void ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 patch_offset, u64 patch_size, void *buf, u64 buf_offset, u64 buf_size);
+static bool ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 patch_size, u64 patch_offset, void *buf, u64 buf_size, u64 buf_offset);
 
 static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset, bool lock);
 
@@ -217,8 +213,8 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         if ((!out->rights_id_available || (out->rights_id_available && out->titlekey_retrieved)) && fs_ctx->encryption_type > NcaEncryptionType_None && \
             fs_ctx->encryption_type <= NcaEncryptionType_AesCtrEx)
         {
-            /* Initialize section CTR. */
-            ncaInitializeAesCtrIv(fs_ctx->ctr, fs_ctx->header.aes_ctr_upper_iv.value, fs_ctx->section_offset);
+            /* Initialize the partial AES counter for this section. */
+            aes128CtrInitializePartialCtr(fs_ctx->ctr, fs_ctx->header.aes_ctr_upper_iv.value, fs_ctx->section_offset);
             
             /* Initialize AES context. */
             if (out->rights_id_available)
@@ -249,7 +245,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
 {
     if (!ctx || !*(ctx->content_id_str) || (ctx->storage_id != NcmStorageId_GameCard && !ctx->ncm_storage) || (ctx->storage_id == NcmStorageId_GameCard && !ctx->gamecard_offset) || !out || \
-        !read_size || offset >= ctx->content_size || (offset + read_size) > ctx->content_size)
+        !read_size || (offset + read_size) > ctx->content_size)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -297,13 +293,18 @@ bool ncaGenerateHierarchicalSha256Patch(NcaFsSectionContext *ctx, const void *da
 
 void ncaWriteHierarchicalSha256PatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !patch->hash_region_count || \
-        patch->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !buf || !buf_size || buf_offset >= ctx->content_size || (buf_offset + buf_size) > ctx->content_size) return;
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || \
+        !patch->hash_region_count || patch->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
+    
+    patch->written = true;
     
     for(u32 i = 0; i < patch->hash_region_count; i++)
     {
         NcaHashDataPatch *hash_region_patch = &(patch->hash_region_patch[i]);
-        ncaWritePatchToMemoryBuffer(ctx, hash_region_patch->data, hash_region_patch->offset, hash_region_patch->size, buf, buf_offset, buf_size);
+        if (hash_region_patch->written) continue;
+        
+        hash_region_patch->written = ncaWritePatchToMemoryBuffer(ctx, hash_region_patch->data, hash_region_patch->size, hash_region_patch->offset, buf, buf_size, buf_offset);
+        if (!hash_region_patch->written) patch->written = false;
     }
 }
 
@@ -314,19 +315,34 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 
 void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !buf || !buf_size || \
-        buf_offset >= ctx->content_size || (buf_offset + buf_size) > ctx->content_size) return;
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !buf || !buf_size || \
+        (buf_offset + buf_size) > ctx->content_size) return;
+    
+    patch->written = true;
     
     for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
     {
         NcaHashDataPatch *hash_level_patch = &(patch->hash_level_patch[i]);
-        ncaWritePatchToMemoryBuffer(ctx, hash_level_patch->data, hash_level_patch->offset, hash_level_patch->size, buf, buf_offset, buf_size);
+        if (hash_level_patch->written) continue;
+        
+        hash_level_patch->written = ncaWritePatchToMemoryBuffer(ctx, hash_level_patch->data, hash_level_patch->size, hash_level_patch->offset, buf, buf_size, buf_offset);
+        if (!hash_level_patch->written) patch->written = false;
     }
+}
+
+void ncaSetDownloadDistributionType(NcaContext *ctx)
+{
+    if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !*(ctx->content_id_str) || ctx->content_type > NcmContentType_DeltaFragment || \
+        ctx->header.distribution_type == NcaDistributionType_Download) return;
+    LOGFILE("Setting download distribution type to %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
+    ctx->header.distribution_type = NcaDistributionType_Download;
 }
 
 void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
 {
-    if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !ctx->rights_id_available || !ctx->titlekey_retrieved) return;
+    if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !*(ctx->content_id_str) || ctx->content_type > NcmContentType_DeltaFragment || !ctx->rights_id_available || !ctx->titlekey_retrieved) return;
+    
+    LOGFILE("Removing titlekey crypto from %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
     
     /* Copy decrypted titlekey to the decrypted NCA key area. */
     /* This will be reencrypted at a later stage. */
@@ -413,11 +429,12 @@ void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 b
 {
     /* Return right away if we're dealing with invalid parameters, or if the buffer data is not part of the range covered by the encrypted header data (NCA2/3 optimization, last condition). */
     /* In order to avoid taking up too much execution time when this function is called (ideally inside a loop), we won't use ncaIsHeaderDirty() here. Let the user take care of it instead. */
-    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !buf || !buf_size || buf_offset >= ctx->content_size || \
-        (buf_offset + buf_size) > ctx->content_size || (ctx->format_version != NcaVersion_Nca0 && buf_offset >= NCA_FULL_HEADER_LENGTH)) return;
+    if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size || \
+        (ctx->format_version != NcaVersion_Nca0 && buf_offset >= NCA_FULL_HEADER_LENGTH)) return;
     
     /* Attempt to write the NCA header. */
-    if (buf_offset < sizeof(NcaHeader)) ncaWritePatchToMemoryBuffer(ctx, &(ctx->encrypted_header), 0, sizeof(NcaHeader), buf, buf_offset, buf_size);
+    /* Return right away if the NCA header was only partially written. */
+    if (buf_offset < sizeof(NcaHeader) && !ncaWritePatchToMemoryBuffer(ctx, &(ctx->encrypted_header), sizeof(NcaHeader), 0, buf, buf_size, buf_offset)) return;
     
     /* Attempt to write NCA FS section headers. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
@@ -426,7 +443,7 @@ void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 b
         if (!fs_ctx->enabled) continue;
         
         u64 fs_header_offset = (ctx->format_version != NcaVersion_Nca0 ? (sizeof(NcaHeader) + (i * sizeof(NcaFsHeader))) : fs_ctx->section_offset);
-        ncaWritePatchToMemoryBuffer(ctx, &(fs_ctx->encrypted_header), fs_header_offset, sizeof(NcaFsHeader), buf, buf_offset, buf_size);
+        ncaWritePatchToMemoryBuffer(ctx, &(fs_ctx->encrypted_header), sizeof(NcaFsHeader), fs_header_offset, buf, buf_size, buf_offset);
     }
 }
 
@@ -677,52 +694,6 @@ NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx)
     return rights_id_available;
 }
 
-NX_INLINE void ncaInitializeAesCtrIv(u8 *out, const u8 *ctr, u64 offset)
-{
-    if (!out || !ctr) return;
-    
-    offset >>= 4;
-    
-    for(u8 i = 0; i < 8; i++)
-    {
-        out[i] = ctr[0x8 - i - 1];
-        out[0x10 - i - 1] = (u8)(offset & 0xFF);
-        offset >>= 8;
-    }
-}
-
-NX_INLINE void ncaUpdateAesCtrIv(u8 *ctr, u64 offset)
-{
-    if (!ctr) return;
-    
-    offset >>= 4;
-    
-    for(u8 i = 0; i < 8; i++)
-    {
-        ctr[0x10 - i - 1] = (u8)(offset & 0xFF);
-        offset >>= 8;
-    }
-}
-
-NX_INLINE void ncaUpdateAesCtrExIv(u8 *ctr, u32 ctr_val, u64 offset)
-{
-    if (!ctr) return;
-    
-    offset >>= 4;
-    
-    for(u8 i = 0; i < 8; i++)
-    {
-        ctr[0x10 - i - 1] = (u8)(offset & 0xFF);
-        offset >>= 8;
-    }
-    
-    for(u8 i = 0; i < 4; i++)
-    {
-        ctr[0x8 - i - 1] = (u8)(ctr_val & 0xFF);
-        ctr_val >>= 8;
-    }
-}
-
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, bool lock)
 {
     if (lock) mutexLock(&g_ncaCryptoBufferMutex);
@@ -731,7 +702,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
         ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_AesCtrEx || !out || !read_size || \
-        offset >= ctx->section_size || (offset + read_size) > ctx->section_size)
+        (offset + read_size) > ctx->section_size)
     {
         LOGFILE("Invalid NCA FS section header parameters!");
         goto end;
@@ -747,8 +718,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     u64 data_start_offset = 0, chunk_size = 0, out_chunk_size = 0;
     
     if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
-        (nca_ctx->format_version != NcaVersion_Nca0 && nca_ctx->format_version != NcaVersion_Nca2 && nca_ctx->format_version != NcaVersion_Nca3) || content_offset >= nca_ctx->content_size || \
-        (content_offset + read_size) > nca_ctx->content_size)
+        (nca_ctx->format_version != NcaVersion_Nca0 && nca_ctx->format_version != NcaVersion_Nca2 && nca_ctx->format_version != NcaVersion_Nca3) || (content_offset + read_size) > nca_ctx->content_size)
     {
         LOGFILE("Invalid NCA header parameters!");
         goto end;
@@ -788,7 +758,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         } else
         if (ctx->encryption_type == NcaEncryptionType_AesCtr || ctx->encryption_type == NcaEncryptionType_AesCtrEx)
         {
-            ncaUpdateAesCtrIv(ctx->ctr, content_offset);
+            aes128CtrUpdatePartialCtr(ctx->ctr, content_offset);
             aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
             aes128CtrCrypt(&(ctx->ctr_ctx), out, out, read_size);
         }
@@ -829,7 +799,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     } else
     if (ctx->encryption_type == NcaEncryptionType_AesCtr || ctx->encryption_type == NcaEncryptionType_AesCtrEx)
     {
-        ncaUpdateAesCtrIv(ctx->ctr, block_start_offset);
+        aes128CtrUpdatePartialCtr(ctx->ctr, block_start_offset);
         aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
         aes128CtrCrypt(&(ctx->ctr_ctx), g_ncaCryptoBuffer, g_ncaCryptoBuffer, chunk_size);
     }
@@ -852,8 +822,7 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
     bool ret = false;
     
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
-        ctx->section_type != NcaFsSectionType_PatchRomFs || ctx->encryption_type != NcaEncryptionType_AesCtrEx || !out || !read_size || offset >= ctx->section_size || \
-        (offset + read_size) > ctx->section_size)
+        ctx->section_type != NcaFsSectionType_PatchRomFs || ctx->encryption_type != NcaEncryptionType_AesCtrEx || !out || !read_size || (offset + read_size) > ctx->section_size)
     {
         LOGFILE("Invalid NCA FS section header parameters!");
         goto end;
@@ -866,7 +835,7 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
     u64 data_start_offset = 0, chunk_size = 0, out_chunk_size = 0;
     
     if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
-        content_offset >= nca_ctx->content_size || (content_offset + read_size) > nca_ctx->content_size)
+        (content_offset + read_size) > nca_ctx->content_size)
     {
         LOGFILE("Invalid NCA header parameters!");
         goto end;
@@ -883,7 +852,7 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
         }
         
         /* Decrypt data */
-        ncaUpdateAesCtrExIv(ctx->ctr, ctr_val, content_offset);
+        aes128CtrUpdatePartialCtrEx(ctx->ctr, ctr_val, content_offset);
         aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
         aes128CtrCrypt(&(ctx->ctr_ctx), out, out, read_size);
         
@@ -909,7 +878,7 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
     }
     
     /* Decrypt data. */
-    ncaUpdateAesCtrExIv(ctx->ctr, ctr_val, block_start_offset);
+    aes128CtrUpdatePartialCtrEx(ctx->ctr, ctr_val, block_start_offset);
     aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
     aes128CtrCrypt(&(ctx->ctr_ctx), g_ncaCryptoBuffer, g_ncaCryptoBuffer, chunk_size);
     
@@ -949,7 +918,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
         (is_integrity_patch && (ctx->header.hash_type != NcaHashType_HierarchicalIntegrity || \
         !(layer_count = (ctx->header.hash_data.integrity_meta_info.info_level_hash.max_level_count - 1)) || layer_count != NCA_IVFC_LEVEL_COUNT || \
         !(last_layer_size = ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1].size))) || !data || !data_size || \
-        data_offset >= last_layer_size || (data_offset + data_size) > last_layer_size || !out)
+        (data_offset + data_size) > last_layer_size || !out)
     {
         LOGFILE("Invalid parameters!");
         goto end;
@@ -998,8 +967,8 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
         }
         
         /* Validate layer properties. */
-        if (hash_block_size <= 1 || cur_layer_offset >= ctx->section_size || !cur_layer_size || (cur_layer_offset + cur_layer_size) > ctx->section_size || \
-            (i > 1 && (parent_layer_offset >= ctx->section_size || !parent_layer_size || (parent_layer_offset + parent_layer_size) > ctx->section_size)))
+        if (hash_block_size <= 1 || !cur_layer_size || (cur_layer_offset + cur_layer_size) > ctx->section_size || (i > 1 && (!parent_layer_size || \
+            (parent_layer_offset + parent_layer_size) > ctx->section_size)))
         {
             LOGFILE("Invalid hierarchical parent/child layer!");
             goto end;
@@ -1143,11 +1112,11 @@ end:
     return success;
 }
 
-static void ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 patch_offset, u64 patch_size, void *buf, u64 buf_offset, u64 buf_size)
+static bool ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 patch_size, u64 patch_offset, void *buf, u64 buf_size, u64 buf_offset)
 {
     /* Return right away if we're dealing with invalid parameters, or if the buffer data is not part of the range covered by the patch (last two conditions). */
-    if (!ctx || !patch || patch_offset >= ctx->content_size || !patch_size || (patch_offset + patch_size) > ctx->content_size || (buf_offset + buf_size) <= patch_offset || \
-        (patch_offset + patch_size) <= buf_offset) return;
+    if (!ctx || !patch || !patch_size || (patch_offset + patch_size) > ctx->content_size || (buf_offset + buf_size) <= patch_offset || \
+        (patch_offset + patch_size) <= buf_offset) return false;
     
     /* Overwrite buffer data using patch data. */
     u64 patch_block_offset = (patch_offset < buf_offset ? (buf_offset - patch_offset) : 0);
@@ -1161,6 +1130,8 @@ static void ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 
     memcpy((u8*)buf + buf_block_offset, (const u8*)patch + patch_block_offset, buf_block_size);
     
     LOGFILE("Overwrote 0x%lX bytes block at offset 0x%lX from raw NCA \"%s\" buffer (size 0x%lX, NCA offset 0x%lX).", buf_block_size, buf_block_offset, ctx->content_id_str, buf_size, buf_offset);
+    
+    return ((patch_block_offset + buf_block_size) == patch_size);
 }
 
 static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset, bool lock)
@@ -1172,7 +1143,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
         ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type >= NcaEncryptionType_AesCtrEx || !data || !data_size || \
-        data_offset >= ctx->section_size || (data_offset + data_size) > ctx->section_size || !out_block_size || !out_block_offset)
+        (data_offset + data_size) > ctx->section_size || !out_block_size || !out_block_offset)
     {
         LOGFILE("Invalid NCA FS section header parameters!");
         goto end;
@@ -1188,8 +1159,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     u64 plain_chunk_offset = 0;
     
     if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
-        (nca_ctx->format_version != NcaVersion_Nca0 && nca_ctx->format_version != NcaVersion_Nca2 && nca_ctx->format_version != NcaVersion_Nca3) || content_offset >= nca_ctx->content_size || \
-        (content_offset + data_size) > nca_ctx->content_size)
+        (nca_ctx->format_version != NcaVersion_Nca0 && nca_ctx->format_version != NcaVersion_Nca2 && nca_ctx->format_version != NcaVersion_Nca3) || (content_offset + data_size) > nca_ctx->content_size)
     {
         LOGFILE("Invalid NCA header parameters!");
         goto end;
@@ -1225,7 +1195,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
         } else
         if (ctx->encryption_type == NcaEncryptionType_AesCtr)
         {
-            ncaUpdateAesCtrIv(ctx->ctr, content_offset);
+            aes128CtrUpdatePartialCtr(ctx->ctr, content_offset);
             aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
             aes128CtrCrypt(&(ctx->ctr_ctx), out, out, data_size);
         }
@@ -1277,7 +1247,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     } else
     if (ctx->encryption_type == NcaEncryptionType_AesCtr)
     {
-        ncaUpdateAesCtrIv(ctx->ctr, content_offset);
+        aes128CtrUpdatePartialCtr(ctx->ctr, content_offset);
         aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
         aes128CtrCrypt(&(ctx->ctr_ctx), out, out, block_size);
     }

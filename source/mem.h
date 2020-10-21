@@ -27,6 +27,7 @@
 #define FS_SYSMODULE_TID    (u64)0x0100000000000000
 #define BOOT_SYSMODULE_TID  (u64)0x0100000000000005
 #define SPL_SYSMODULE_TID   (u64)0x0100000000000028
+#define ES_SYSMODULE_TID    (u64)0x0100000000000033
 
 typedef enum {
     MemoryProgramSegmentType_Text   = BIT(0),
@@ -46,8 +47,8 @@ typedef struct {
 bool memRetrieveProgramMemorySegment(MemoryLocation *location);
 
 /// Retrieves full memory data from a running program.
-/// These are any type of memory pages with read permission (Perm_R) enabled.
-/// MemType_Unmapped, MemType_Io, MemType_ThreadLocal and MemType_Reserved memory pages are excluded, as well as memory pages with a populated MemoryAttribute value.
+/// These are any type of memory pages with read permission (Perm_R) enabled and no MemoryAttribute flag set.
+/// MemType_Unmapped, MemType_Io, MemType_ThreadLocal and MemType_Reserved memory pages are excluded if FS program memory is being retrieved, in order to avoid hangs.
 bool memRetrieveFullProgramMemory(MemoryLocation *location);
 
 /// Frees a populated MemoryLocation element.

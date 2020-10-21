@@ -255,9 +255,6 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
     /* Calculate SHA-256 checksum for the whole NACP. */
     sha256CalculateHash(out->data_hash, out->data, sizeof(_NacpStruct));
     
-    /* Save pointer to NCA context to the output NACP context. */
-    out->nca_ctx = nca_ctx;
-    
     /* Retrieve NACP icon data. */
     for(u8 i = 0; i < NacpSupportedLanguage_Count; i++)
     {
@@ -316,6 +313,13 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         /* Update icon count. */
         out->icon_count++;
     }
+    
+    /* Update NCA context pointer in output context. */
+    out->nca_ctx = nca_ctx;
+    
+    /* Update content type context info in NCA context. */
+    nca_ctx->content_type_ctx = out;
+    nca_ctx->content_type_ctx_patch = false;
     
     success = true;
     

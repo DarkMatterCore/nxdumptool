@@ -17,7 +17,7 @@
                         g_titleInfo[i].version.minor_relstep);
                 fprintf(title_infos_txt, "Type: 0x%02X\r\n", g_titleInfo[i].meta_key.type);
                 fprintf(title_infos_txt, "Install Type: 0x%02X\r\n", g_titleInfo[i].meta_key.install_type);
-                fprintf(title_infos_txt, "Title Size: %s (0x%lX)\r\n", g_titleInfo[i].title_size_str, g_titleInfo[i].title_size);
+                fprintf(title_infos_txt, "Title Size: %s (0x%lX)\r\n", g_titleInfo[i].size_str, g_titleInfo[i].size);
                 
                 fprintf(title_infos_txt, "Content Count: %u\r\n", g_titleInfo[i].content_count);
                 for(u32 j = 0; j < g_titleInfo[i].content_count; j++)

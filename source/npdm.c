@@ -70,9 +70,6 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
         goto end;
     }
     
-    /* Calculate SHA-256 checksum for the whole raw NPDM. */
-    sha256CalculateHash(out->raw_data_hash, out->raw_data, out->raw_data_size);
-    
     /* Verify meta header. */
     out->meta_header = (NpdmMetaHeader*)out->raw_data;
     cur_offset += sizeof(NpdmMetaHeader);
@@ -281,5 +278,34 @@ bool npdmChangeAcidPublicKeyAndNcaSignature(NpdmContext *npdm_ctx)
         return false;
     }
     
+    /* Generate Partition FS entry patch. */
+    if (!pfsGenerateEntryPatch(npdm_ctx->pfs_ctx, npdm_ctx->pfs_entry, npdm_ctx->raw_data, npdm_ctx->raw_data_size, 0, &(npdm_ctx->nca_patch)))
+    {
+        LOGFILE("Failed to generate Partition FS entry patch!");
+        return false;
+    }
+    
+    /* Update NCA content type context patch status. */
+    nca_ctx->content_type_ctx_patch = true;
+    
     return true;
+}
+
+void npdmWriteNcaPatch(NpdmContext *npdm_ctx, void *buf, u64 buf_size, u64 buf_offset)
+{
+    NcaContext *nca_ctx = NULL;
+    
+    /* Using npdmIsValidContext() here would probably take up precious CPU cycles. */
+    if (!npdm_ctx || !npdm_ctx->pfs_ctx || !npdm_ctx->pfs_ctx->nca_fs_ctx || !(nca_ctx = (NcaContext*)npdm_ctx->pfs_ctx->nca_fs_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Program || \
+        !nca_ctx->content_type_ctx_patch || npdm_ctx->nca_patch.written) return;
+    
+    /* Attempt to write Partition FS entry. */
+    pfsWriteEntryPatchToMemoryBuffer(npdm_ctx->pfs_ctx, &(npdm_ctx->nca_patch), buf, buf_size, buf_offset);
+    
+    /* Check if we need to update the NCA content type context patch status. */
+    if (npdm_ctx->nca_patch.written)
+    {
+        nca_ctx->content_type_ctx_patch = false;
+        LOGFILE("NPDM Partition FS file entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
+    }
 }

@@ -75,14 +75,9 @@ NX_INLINE bool programInfoChangeAcidPublicKeyAndNcaSignature(ProgramInfoContext 
     return (programInfoIsValidContext(program_info_ctx) && npdmChangeAcidPublicKeyAndNcaSignature(&(program_info_ctx->npdm_ctx)));
 }
 
-NX_INLINE bool programInfoIsNcaPatchRequired(ProgramInfoContext *program_info_ctx)
+NX_INLINE void programInfoWriteNcaPatch(ProgramInfoContext *program_info_ctx, void *buf, u64 buf_size, u64 buf_offset)
 {
-    return (programInfoIsValidContext(program_info_ctx) && npdmIsNcaPatchRequired(&(program_info_ctx->npdm_ctx)));
-}
-
-NX_INLINE bool programInfoGenerateNcaPatch(ProgramInfoContext *program_info_ctx)
-{
-    return (programInfoIsValidContext(program_info_ctx) && npdmGenerateNcaPatch(&(program_info_ctx->npdm_ctx)));
+    if (program_info_ctx) npdmWriteNcaPatch(&(program_info_ctx->npdm_ctx), buf, buf_size, buf_offset);
 }
 
 #endif /* __PROGRAM_INFO_H__ */

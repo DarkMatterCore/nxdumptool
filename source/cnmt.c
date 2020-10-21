@@ -124,9 +124,6 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     /* Calculate SHA-256 checksum for the whole raw CNMT. */
     sha256CalculateHash(out->raw_data_hash, out->raw_data, out->raw_data_size);
     
-    /* Save pointer to NCA context to the output CNMT context. */
-    out->nca_ctx = nca_ctx;
-    
     /* Verify packaged header. */
     out->packaged_header = (ContentMetaPackagedContentMetaHeader*)out->raw_data;
     cur_offset += sizeof(ContentMetaPackagedContentMetaHeader);
@@ -234,6 +231,13 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         LOGFILE("Raw CNMT size mismatch! (0x%lX != 0x%lX).", cur_offset, out->raw_data_size);
         goto end;
     }
+    
+    /* Update output context. */
+    out->nca_ctx = nca_ctx;
+    
+    /* Update content type context info in NCA context. */
+    nca_ctx->content_type_ctx = out;
+    nca_ctx->content_type_ctx_patch = false;
     
     success = true;
     

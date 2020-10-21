@@ -55,8 +55,8 @@ typedef enum {
     TikPropertyMask_SharedTitle          = BIT(1),
     TikPropertyMask_AllContents          = BIT(2),
     TikPropertyMask_DeviceLinkIndepedent = BIT(3),
-    TikPropertyMask_Volatile             = BIT(4),
-    TikPropertyMask_ELicenseRequired     = BIT(5)
+    TikPropertyMask_Volatile             = BIT(4),  ///< Used to determine if the ticket copy inside ticket.bin should be encrypted or not.
+    TikPropertyMask_ELicenseRequired     = BIT(5)   ///< Used to determine if the console should connect to the Internet to perform elicense verification.
 } TikPropertyMask;
 
 /// Placed after the ticket signature block.
@@ -167,6 +167,7 @@ typedef struct {
     u8 data[SIGNED_TIK_MAX_SIZE];   ///< Raw ticket data.
     u8 enc_titlekey[0x10];          ///< Titlekey with titlekek crypto (RSA-OAEP unwrapped if dealing with a TikTitleKeyType_Personalized ticket).
     u8 dec_titlekey[0x10];          ///< Titlekey without titlekek crypto. Ready to use for NCA FS section decryption.
+    char rights_id_str[0x21];       ///< Character string representation of the rights ID from the ticket.
 } Ticket;
 
 /// Retrieves a ticket from either the ES ticket system savedata file (eMMC BIS System partition) or the secure hash FS partition from an inserted gamecard, using a Rights ID value.

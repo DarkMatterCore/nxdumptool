@@ -1377,12 +1377,12 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
             for(u32 j = 0; j < cur_title_info->content_count; j++)
             {
                 titleConvertNcmContentSizeToU64(cur_title_info->content_infos[j].size, &tmp_size);
-                cur_title_info->title_size += tmp_size;
+                cur_title_info->size += tmp_size;
             }
         }
         
         /* Generate formatted title size string. */
-        utilsGenerateFormattedSizeString(cur_title_info->title_size, cur_title_info->title_size_str, sizeof(cur_title_info->title_size_str));
+        utilsGenerateFormattedSizeString(cur_title_info->size, cur_title_info->size_str, sizeof(cur_title_info->size_str));
     }
     
     /* Update title info count. */

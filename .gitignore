@@ -7,6 +7,7 @@ build
 /*.pfs0
 /*.lst
 /*.tar.bz2
+/code_templates/nsp_dumper.c
 /code_templates/tmp/*
 /source/main.c
 /*.log

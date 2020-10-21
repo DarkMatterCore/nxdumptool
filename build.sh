@@ -21,13 +21,12 @@ for f in ./code_templates/*.c; do
     rm -f ./source/main.c
     cp $f ./source/main.c
     
-    {
-        make clean
-        make -j 12 BUILD_TYPE="$filename"
-    }
+    make clean &> /dev/null
+    make -j 12 BUILD_TYPE="$filename"
     
     mkdir ./code_templates/tmp/$filename
     cp ./nxdumptool-rewrite.nro ./code_templates/tmp/$filename/nxdumptool-rewrite.nro
+    #cp ./nxdumptool-rewrite.elf ./code_templates/tmp/$filename/nxdumptool-rewrite.elf
 done
 
 cd ./code_templates/tmp

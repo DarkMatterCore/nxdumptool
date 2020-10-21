@@ -59,7 +59,7 @@ typedef struct {
     u8 eticket_rsa_kek_personalized[0x10];      ///< eTicket RSA kek (console-specific).
     u8 titlekeks[0x20][0x10];                   ///< Titlekey encryption keys.
     
-    ///< Needed to reencrypt the NCA key area for tik-less NSP dumps. Retrieved from the Lockpick_RCM keys file.
+    ///< Needed to reencrypt the key area from NCAs with titlekey crypto removed. Retrieved from the Lockpick_RCM keys file.
     u8 key_area_keys[0x20][3][0x10];            ///< Key area encryption keys.
 } keysNcaKeyset;
 
@@ -518,7 +518,7 @@ static bool keysReadKeysFromFile(void)
     FILE *keys_file = NULL;
     char *key = NULL, *value = NULL;
     char test_name[0x40] = {0};
-    bool parse_fail = false;
+    bool parse_fail = false, eticket_rsa_kek_available = false;
     
     keys_file = fopen(KEYS_FILE_PATH, "rb");
     if (!keys_file)
@@ -538,12 +538,14 @@ static bool keysReadKeysFromFile(void)
         if (strlen(key) == 15 && !strcasecmp(key, "eticket_rsa_kek"))
         {
             if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek)))) break;
+            eticket_rsa_kek_available = true;
             key_count++;
         } else
         if (strlen(key) == 28 && !strcasecmp(key, "eticket_rsa_kek_personalized"))
         {
             /* This only appears on consoles that use the new PRODINFO key generation scheme. */
             if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek_personalized, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek_personalized)))) break;
+            eticket_rsa_kek_available = true;
             key_count++;
         } else {
             for(u32 i = 0; i < 0x20; i++)
@@ -590,6 +592,12 @@ static bool keysReadKeysFromFile(void)
     if (parse_fail || !key_count)
     {
         if (!key_count) LOGFILE("Unable to parse necessary keys from \"%s\"! (keys file empty?).", KEYS_FILE_PATH);
+        return false;
+    }
+    
+    if (!eticket_rsa_kek_available)
+    {
+        LOGFILE("\"eticket_rsa_kek\" unavailable in \"%s\"!", KEYS_FILE_PATH);
         return false;
     }
     

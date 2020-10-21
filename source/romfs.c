@@ -33,7 +33,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     
     if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->format_version == NcaVersion_Nca0 && \
         (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->header.hash_type != NcaHashType_HierarchicalSha256)) || (nca_ctx->format_version != NcaVersion_Nca0 && \
-        (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || nca_fs_ctx->header.hash_type != NcaHashType_HierarchicalIntegrity)))
+        (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || nca_fs_ctx->header.hash_type != NcaHashType_HierarchicalIntegrity)) || (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved))
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -96,7 +96,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     dir_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_offset : out->header.cur_format.directory_entry_offset);
     out->dir_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_size : out->header.cur_format.directory_entry_size);
     
-    if (!out->dir_table_size || dir_table_offset >= out->size || (dir_table_offset + out->dir_table_size) > out->size)
+    if (!out->dir_table_size || (dir_table_offset + out->dir_table_size) > out->size)
     {
         LOGFILE("Invalid RomFS directory entries table!");
         return false;
@@ -119,7 +119,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     file_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_offset : out->header.cur_format.file_entry_offset);
     out->file_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_size : out->header.cur_format.file_entry_size);
     
-    if (!out->file_table_size || file_table_offset >= out->size || (file_table_offset + out->file_table_size) > out->size)
+    if (!out->file_table_size || (file_table_offset + out->file_table_size) > out->size)
     {
         LOGFILE("Invalid RomFS file entries table!");
         goto end;
@@ -156,7 +156,7 @@ end:
 
 bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->nca_fs_ctx || !ctx->size || !out || !read_size || offset >= ctx->size || (offset + read_size) > ctx->size)
+    if (!ctx || !ctx->nca_fs_ctx || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -174,8 +174,7 @@ bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size
 
 bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->body_offset || !file_entry || !file_entry->size || file_entry->offset >= ctx->size || (file_entry->offset + file_entry->size) > ctx->size || \
-        !out || !read_size || offset >= file_entry->size || (offset + read_size) > file_entry->size)
+    if (!ctx || !ctx->body_offset || !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !out || !read_size || (offset + read_size) > file_entry->size)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -507,8 +506,7 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
 bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, const void *data, u64 data_size, u64 data_offset, RomFileSystemFileEntryPatch *out)
 {
     if (!ctx || !ctx->nca_fs_ctx || !ctx->body_offset || (ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || !file_entry || \
-        !file_entry->size || file_entry->offset >= ctx->size || (file_entry->offset + file_entry->size) > ctx->size || !data || !data_size || data_offset >= file_entry->size || \
-        (data_offset + data_size) > file_entry->size || !out)
+        !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > file_entry->size || !out)
     {
         LOGFILE("Invalid parameters!");
         return false;

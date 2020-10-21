@@ -47,8 +47,8 @@ typedef struct _TitleInfo {
     VersionType1 version;                           ///< Holds the same value from meta_key.version.
     u32 content_count;                              ///< Content info count.
     NcmContentInfo *content_infos;                  ///< Content info entries from this title.
-    u64 title_size;                                 ///< Total title size.
-    char title_size_str[32];                        ///< Total title size string.
+    u64 size;                                       ///< Total title size.
+    char size_str[32];                              ///< Total title size string.
     TitleApplicationMetadata *app_metadata;         ///< Only available for system titles and applications.
     struct _TitleInfo *parent, *previous, *next;    ///< Used with TitleInfo entries from user applications, patches and add-on contents. The parent pointer is unused in user applications.
 } TitleInfo;
@@ -220,6 +220,30 @@ NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, 
     }
     
     return NULL;
+}
+
+NX_INLINE u32 titleGetCountFromInfoBlock(TitleInfo *title_info)
+{
+    if (!title_info) return 0;
+    
+    u32 count = 1;
+    TitleInfo *cur_info = title_info->previous;
+    
+    while(cur_info)
+    {
+        count++;
+        cur_info = cur_info->previous;
+    }
+    
+    cur_info = title_info->next;
+    
+    while(cur_info)
+    {
+        count++;
+        cur_info = cur_info->next;
+    }
+    
+    return count;
 }
 
 #endif /* __TITLE_H__ */

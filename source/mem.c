@@ -128,8 +128,9 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
         mem_type = (u8)(mem_info.type & 0xFF);
         
         /* Code to allow for bitmasking segments. */
-        if ((mem_info.perm & Perm_R) && ((!is_segment && mem_type != MemType_Unmapped && mem_type != MemType_Io && mem_type != MemType_ThreadLocal && mem_type != MemType_Reserved && !mem_info.attr) || \
-            (is_segment && (mem_type == MemType_CodeStatic || mem_type == MemType_CodeMutable) && (((segment <<= 1) >> 1) & location->mask))))
+        if ((mem_info.perm & Perm_R) && ((!is_segment && !mem_info.attr && (location->program_id != FS_SYSMODULE_TID || (location->program_id == FS_SYSMODULE_TID && mem_type != MemType_Unmapped && \
+            mem_type != MemType_Io && mem_type != MemType_ThreadLocal && mem_type != MemType_Reserved))) || (is_segment && (mem_type == MemType_CodeStatic || mem_type == MemType_CodeMutable) && \
+            (((segment <<= 1) >> 1) & location->mask))))
         {
             /* If location->data == NULL, realloc() will essentially act as a malloc(). */
             tmp = realloc(location->data, location->data_size + mem_info.size);

@@ -540,7 +540,6 @@ typedef struct {
                                                                 ///< Bear in mind that generating a patch modifies the NCA context.
     u8 *raw_data;                                               ///< Pointer to a dynamically allocated buffer that holds the raw NPDM.
     u64 raw_data_size;                                          ///< Raw NPDM size. Kept here for convenience - this is part of 'pfs_entry'.
-    u8 raw_data_hash[SHA256_HASH_SIZE];                         ///< SHA-256 checksum calculated over the whole raw NPDM. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
     NpdmMetaHeader *meta_header;                                ///< Pointer to the NpdmMetaHeader within 'raw_data'.
     NpdmAcidHeader *acid_header;                                ///< Pointer to the NpdmAcidHeader within 'raw_data'.
     NpdmFsAccessControlDescriptor *acid_fac_descriptor;         ///< Pointer to the NpdmFsAccessControlDescriptor within the NPDM ACID section.
@@ -555,8 +554,11 @@ typedef struct {
 /// Initializes a NpdmContext using a previously initialized PartitionFileSystemContext (which must belong to the ExeFS from a Program NCA).
 bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx);
 
-/// Changes the ACID public key from the NPDM in the input NpdmContext and updates the ACID signature from the NCA header in the underlying NCA context.
+/// Changes the ACID public key from the NPDM in the input NpdmContext, updates the ACID signature from the NCA header in the underlying NCA context and generates a Partition FS entry patch.
 bool npdmChangeAcidPublicKeyAndNcaSignature(NpdmContext *npdm_ctx);
+
+/// Writes data from the Partition FS patch in the input NpdmContext to the provided buffer.
+void npdmWriteNcaPatch(NpdmContext *npdm_ctx, void *buf, u64 buf_size, u64 buf_offset);
 
 /// Helper inline functions.
 
@@ -576,19 +578,6 @@ NX_INLINE bool npdmIsValidContext(NpdmContext *npdm_ctx)
             npdm_ctx->aci_header && npdm_ctx->aci_fac_data && \
             ((npdm_ctx->aci_header->srv_access_control_size && npdm_ctx->aci_sac_descriptor) || (!npdm_ctx->aci_header->srv_access_control_size && !npdm_ctx->aci_sac_descriptor)) && \
             ((npdm_ctx->aci_header->kernel_capability_size && npdm_ctx->aci_kc_descriptor) || (!npdm_ctx->aci_header->kernel_capability_size && !npdm_ctx->aci_kc_descriptor)));
-}
-
-NX_INLINE bool npdmIsNcaPatchRequired(NpdmContext *npdm_ctx)
-{
-    if (!npdmIsValidContext(npdm_ctx)) return false;
-    u8 tmp_hash[SHA256_HASH_SIZE] = {0};
-    sha256CalculateHash(tmp_hash, npdm_ctx->raw_data, npdm_ctx->raw_data_size);
-    return (memcmp(tmp_hash, npdm_ctx->raw_data_hash, SHA256_HASH_SIZE) != 0);
-}
-
-NX_INLINE bool npdmGenerateNcaPatch(NpdmContext *npdm_ctx)
-{
-    return (npdmIsValidContext(npdm_ctx) && pfsGenerateEntryPatch(npdm_ctx->pfs_ctx, npdm_ctx->pfs_entry, npdm_ctx->raw_data, npdm_ctx->raw_data_size, 0, &(npdm_ctx->nca_patch)));
 }
 
 NX_INLINE u32 npdmGetKernelCapabilityDescriptorEntryValue(NpdmKernelCapabilityDescriptorEntry *entry)

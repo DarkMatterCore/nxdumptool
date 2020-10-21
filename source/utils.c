@@ -680,6 +680,28 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element)
     utilsCommitFileSystemChangesByPath(path);
 }
 
+char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension)
+{
+    if (!prefix || !*prefix || !filename || !*filename || !extension || !*extension)
+    {
+        LOGFILE("Invalid parameters!");
+        return NULL;
+    }
+    
+    char *path = NULL;
+    size_t path_len = (strlen(prefix) + strlen(filename) + strlen(extension) + 1);
+    
+    if (!(path = calloc(path_len, sizeof(char))))
+    {
+        LOGFILE("Failed to allocate 0x%lX bytes for output path!", path_len);
+        return NULL;
+    }
+    
+    sprintf(path, "%s%s%s", prefix, filename, extension);
+    
+    return path;
+}
+
 bool utilsAppletModeCheck(void)
 {
     return (g_programAppletType != AppletType_Application && g_programAppletType != AppletType_SystemApplication);

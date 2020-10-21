@@ -115,6 +115,8 @@ bool utilsCreateConcatenationFile(const char *path);
 
 void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 
+char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
+
 bool utilsAppletModeCheck(void);
 
 void utilsChangeHomeButtonBlockStatus(bool block);

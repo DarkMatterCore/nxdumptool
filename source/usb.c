@@ -672,7 +672,7 @@ static bool usbInitializeComms(void)
         goto end;
     }
     
-    if (hosversionAtLeast(5,0,0))
+    if (hosversionAtLeast(5, 0, 0))
     {
         u8 manufacturer = 0, product = 0, serial_number = 0;
         static const u16 supported_langs[1] = { 0x0409 };
@@ -805,7 +805,7 @@ static bool usbInitializeComms(void)
         goto end;
     }
     
-    if (hosversionAtLeast(5,0,0))
+    if (hosversionAtLeast(5, 0, 0))
     {
         rc = usbDsEnable();
         if (R_FAILED(rc))
@@ -856,7 +856,7 @@ static void usbFreeDeviceInterface(void)
 
 NX_INLINE bool usbInitializeDeviceInterface(void)
 {
-    return (hosversionAtLeast(5,0,0) ? usbInitializeDeviceInterface5x() : usbInitializeDeviceInterface1x());
+    return (hosversionAtLeast(5, 0, 0) ? usbInitializeDeviceInterface5x() : usbInitializeDeviceInterface1x());
 }
 
 static bool usbInitializeDeviceInterface5x(void)

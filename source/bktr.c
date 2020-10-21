@@ -44,7 +44,8 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         __builtin_bswap32(update_nca_fs_ctx->header.patch_info.indirect_bucket.header.magic) != NCA_BKTR_MAGIC || \
         __builtin_bswap32(update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.header.magic) != NCA_BKTR_MAGIC || \
         (update_nca_fs_ctx->header.patch_info.indirect_bucket.offset + update_nca_fs_ctx->header.patch_info.indirect_bucket.size) != update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.offset || \
-        (update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.offset + update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.size) != update_nca_fs_ctx->section_size)
+        (update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.offset + update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.size) != update_nca_fs_ctx->section_size || \
+        (base_nca_ctx->rights_id_available && !base_nca_ctx->titlekey_retrieved) || (update_nca_ctx->rights_id_available && !update_nca_ctx->titlekey_retrieved))
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -218,7 +219,7 @@ end:
 
 bool bktrReadFileSystemData(BktrContext *ctx, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->size || !out || !read_size || offset >= ctx->size || (offset + read_size) > ctx->size)
+    if (!ctx || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -236,8 +237,7 @@ bool bktrReadFileSystemData(BktrContext *ctx, void *out, u64 read_size, u64 offs
 
 bool bktrReadFileEntryData(BktrContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->body_offset || !file_entry || !file_entry->size || file_entry->offset >= ctx->size || (file_entry->offset + file_entry->size) > ctx->size || \
-        !out || !read_size || offset >= file_entry->size || (offset + read_size) > file_entry->size)
+    if (!ctx || !ctx->body_offset || !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !out || !read_size || (offset + read_size) > file_entry->size)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -255,7 +255,7 @@ bool bktrReadFileEntryData(BktrContext *ctx, RomFileSystemFileEntry *file_entry,
 
 bool bktrIsFileEntryUpdated(BktrContext *ctx, RomFileSystemFileEntry *file_entry, bool *out)
 {
-    if (!ctx || !ctx->body_offset || !ctx->indirect_block || !file_entry || !file_entry->size || file_entry->offset >= ctx->size || (file_entry->offset + file_entry->size) > ctx->size || !out)
+    if (!ctx || !ctx->body_offset || !ctx->indirect_block || !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !out)
     {
         LOGFILE("Invalid parameters!");
         return false;

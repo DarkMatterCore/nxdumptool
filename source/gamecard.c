@@ -102,7 +102,7 @@ static u8 g_gameCardStorageCurrentArea = GameCardStorageArea_None;
 static u8 *g_gameCardReadBuf = NULL;
 
 static GameCardHeader g_gameCardHeader = {0};
-static u64 g_gameCardStorageNormalAreaSize = 0, g_gameCardStorageSecureAreaSize = 0;
+static u64 g_gameCardStorageNormalAreaSize = 0, g_gameCardStorageSecureAreaSize = 0, g_gameCardStorageTotalSize = 0;
 static u64 g_gameCardCapacity = 0;
 
 static u8 *g_gameCardHfsRootHeader = NULL;   /// GameCardHashFileSystemHeader + (entry_count * GameCardHashFileSystemEntry) + Name Table.
@@ -325,7 +325,7 @@ bool gamecardGetTotalSize(u64 *out)
 {
     mutexLock(&g_gamecardMutex);
     bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) *out = (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize);
+    if (ret) *out = g_gameCardStorageTotalSize;
     mutexUnlock(&g_gamecardMutex);
     return ret;
 }
@@ -744,8 +744,7 @@ static void gamecardFreeInfo(void)
 {
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
     
-    g_gameCardStorageNormalAreaSize = 0;
-    g_gameCardStorageSecureAreaSize = 0;
+    g_gameCardStorageNormalAreaSize = g_gameCardStorageSecureAreaSize = g_gameCardStorageTotalSize = 0;
     
     g_gameCardCapacity = 0;
     
@@ -807,6 +806,8 @@ static bool gamecardReadInitialData(GameCardKeyArea *out)
     /* Look for the initial data block in the FS memory dump using the package ID and the initial data hash from the gamecard header. */
     for(u64 offset = 0; offset < g_fsProgramMemory.data_size; offset++)
     {
+        if ((g_fsProgramMemory.data_size - offset) < sizeof(GameCardInitialData)) break;
+        
         if (memcmp(g_fsProgramMemory.data + offset, &(g_gameCardHeader.package_id), sizeof(g_gameCardHeader.package_id)) != 0) continue;
         
         sha256CalculateHash(tmp_hash, g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
@@ -910,8 +911,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
     
     bool success = false;
     
-    if (!g_gameCardInserted || !g_gameCardStorageNormalAreaSize || !g_gameCardStorageSecureAreaSize || !out || !read_size || \
-        offset >= (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize) || (offset + read_size) > (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize))
+    if (!g_gameCardInserted || !g_gameCardStorageNormalAreaSize || !g_gameCardStorageSecureAreaSize || !out || !read_size || (offset + read_size) > g_gameCardStorageTotalSize)
     {
         LOGFILE("Invalid parameters!");
         goto end;
@@ -1026,7 +1026,7 @@ static bool gamecardGetStorageAreasSizes(void)
         if (R_FAILED(rc) || !area_size)
         {
             LOGFILE("fsStorageGetSize failed to retrieve %s storage area size! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(area), rc);
-            g_gameCardStorageNormalAreaSize = g_gameCardStorageSecureAreaSize = 0;
+            g_gameCardStorageNormalAreaSize = g_gameCardStorageSecureAreaSize = g_gameCardStorageTotalSize = 0;
             return false;
         }
         
@@ -1037,6 +1037,8 @@ static bool gamecardGetStorageAreasSizes(void)
             g_gameCardStorageSecureAreaSize = area_size;
         }
     }
+    
+    g_gameCardStorageTotalSize = (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize);
     
     return true;
 }
