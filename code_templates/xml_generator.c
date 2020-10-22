@@ -388,7 +388,7 @@ out2:
     if (exit_prompt)
     {
         consolePrint("press any button to exit\n");
-        utilsWaitForButtonPress(KEY_NONE);
+        utilsWaitForButtonPress(KEY_ANY);
     }
     
     if (legal_info_ctx)

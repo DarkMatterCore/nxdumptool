@@ -419,7 +419,7 @@ end:
     utilsChangeHomeButtonBlockStatus(false);
     
     consolePrint("press any button to continue");
-    utilsWaitForButtonPress(KEY_NONE);
+    utilsWaitForButtonPress(KEY_ANY);
     
     return success;
 }
@@ -457,7 +457,7 @@ end:
     utilsChangeHomeButtonBlockStatus(false);
     
     consolePrint("press any button to continue");
-    utilsWaitForButtonPress(KEY_NONE);
+    utilsWaitForButtonPress(KEY_ANY);
     
     return success;
 }
@@ -624,7 +624,7 @@ end:
     utilsChangeHomeButtonBlockStatus(false);
     
     consolePrint("press any button to continue");
-    utilsWaitForButtonPress(KEY_NONE);
+    utilsWaitForButtonPress(KEY_ANY);
     
     return success;
 }

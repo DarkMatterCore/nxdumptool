@@ -918,7 +918,7 @@ int main(int argc, char *argv[])
             if (error || menu >= 3)
             {
                 consolePrint("press any button to continue\n");
-                utilsWaitForButtonPress(KEY_NONE);
+                utilsWaitForButtonPress(KEY_ANY);
                 menu--;
             } else {
                 selected_idx = scroll = 0;
@@ -995,7 +995,7 @@ out2:
     if (menu != UINT32_MAX)
     {
         consolePrint("press any button to exit\n");
-        utilsWaitForButtonPress(KEY_NONE);
+        utilsWaitForButtonPress(KEY_ANY);
     }
     
     if (app_metadata) free(app_metadata);

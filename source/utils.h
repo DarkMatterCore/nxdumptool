@@ -58,7 +58,7 @@
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
-#define KEY_NONE                        0
+#define KEY_ANY                         0
 
 
 
