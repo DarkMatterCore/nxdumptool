@@ -2,7 +2,7 @@ reminder:
 
 list of top level functions designed to alter nca data in order of (possible) usage:
     
-    out of loop:
+    out of dump loop:
         * ncaSetDownloadDistributionType (instead of always using it like legacy, offer it as an option)
         
         * ncaRemoveTitlekeyCrypto (can be used with digital titles + game updates in gamecards)
@@ -10,17 +10,11 @@ list of top level functions designed to alter nca data in order of (possible) us
         * cnmtGenerateNcaPatch (Meta)
             * calls pfsGenerateEntryPatch
                 * calls ncaGenerateHierarchicalSha256Patch
-            * cnmtIsNcaPatchRequired -> not sure if i'll keep this
-            * missing wrapper for pfsWriteEntryPatchToMemoryBuffer !!!
         
-        * programInfoChangeAcidPublicKeyAndNcaSignature (Program)
+        * programInfoGenerateNcaPatch (Program)
             * calls npdmChangeAcidPublicKeyAndNcaSignature
                 * calls pfsGenerateEntryPatch
                     * calls ncaGenerateHierarchicalSha256Patch
-            * needs programInfoWriteNcaPatch to write patched data
-                * calls npdmWriteNcaPatch
-                    * calls pfsWriteEntryPatchToMemoryBuffer
-                        * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer
         
         * nacpGenerateNcaPatch (Control)
             * calls romfsGenerateFileEntryPatch
@@ -29,15 +23,26 @@ list of top level functions designed to alter nca data in order of (possible) us
             * missing wrapper for romfsWriteFileEntryPatchToMemoryBuffer !!!
             * missing functions for nacp mods !!!
         
-        * ncaIsHeaderDirty (doesn't modify anything per se, but it's used to check if any of the functions above has been used, basically)
         * ncaEncryptHeader (doesn't modify anything per se, but it's used to generate new encrypted header data if needed)
     
-    inside loop:
-        * ncaWriteEncryptedHeaderDataToMemoryBuffer
+    inside dump loop:
+        * ncaIsHeaderDirty (doesn't modify anything per se, but it's used to check if any of the functions above has been used, basically - and by extension, if the functions below need to be used)
+        
+        * ncaWriteEncryptedHeaderDataToMemoryBuffer (write encrypted nca header data)
+        
+        * cnmtUpdateContentInfo (used to update content entry info in the raw cnmt copy after dumping each one)
+        
+        * cnmtWriteNcaPatch (writes cnmt patch)
+            * calls pfsWriteEntryPatchToMemoryBuffer
+                * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer
+        
+        * programInfoWriteNcaPatch (writes ndpm patch)
+            * calls npdmWriteNcaPatch
+                * calls pfsWriteEntryPatchToMemoryBuffer
+                    * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer
         
         * pfsWriteEntryPatchToMemoryBuffer
             * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer
-            * missing cnmt, program wrappers
         
         * romfsWriteFileEntryPatchToMemoryBuffer
             * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer / ncaWriteHierarchicalIntegrityPatchToMemoryBuffer
@@ -60,8 +65,6 @@ todo:
     nca: support for compressed fs sections?
     nca: support for sparse sections?
     
-    tik: option to wipe elicense property mask (otherwise, the console will attempt to connect to the Internet to perform elicense verification before launching the title the ticket belongs to)
-    tik: option to wipe volatile property mask (otherwise, the imported ticket will use an additional aes-ctr crypto layer in ticket.bin)
     tik: automatically dump tickets to the SD card?
     tik: use dumped tickets when the original ones can't be found in the ES savefile?
     

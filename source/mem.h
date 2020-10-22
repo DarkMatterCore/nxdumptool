@@ -24,11 +24,6 @@
 #ifndef __MEM_H__
 #define __MEM_H__
 
-#define FS_SYSMODULE_TID    (u64)0x0100000000000000
-#define BOOT_SYSMODULE_TID  (u64)0x0100000000000005
-#define SPL_SYSMODULE_TID   (u64)0x0100000000000028
-#define ES_SYSMODULE_TID    (u64)0x0100000000000033
-
 typedef enum {
     MemoryProgramSegmentType_Text   = BIT(0),
     MemoryProgramSegmentType_Rodata = BIT(1),

@@ -555,7 +555,7 @@ typedef struct {
 bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx);
 
 /// Changes the ACID public key from the NPDM in the input NpdmContext, updates the ACID signature from the NCA header in the underlying NCA context and generates a Partition FS entry patch.
-bool npdmChangeAcidPublicKeyAndNcaSignature(NpdmContext *npdm_ctx);
+bool npdmGenerateNcaPatch(NpdmContext *npdm_ctx);
 
 /// Writes data from the Partition FS patch in the input NpdmContext to the provided buffer.
 void npdmWriteNcaPatch(NpdmContext *npdm_ctx, void *buf, u64 buf_size, u64 buf_offset);

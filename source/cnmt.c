@@ -247,6 +247,90 @@ end:
     return success;
 }
 
+bool cnmtUpdateContentInfo(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx)
+{
+    if (!cnmtIsValidContext(cnmt_ctx) || !nca_ctx || !*(nca_ctx->content_id_str) || !*(nca_ctx->hash_str) || nca_ctx->content_type > NcmContentType_DeltaFragment || !nca_ctx->content_size)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Return right away if we're dealing with a Meta NCA. */
+    if (nca_ctx->content_type == NcmContentType_Meta) return true;
+    
+    bool success = false;
+    
+    for(u16 i = 0; i < cnmt_ctx->packaged_header->content_count; i++)
+    {
+        NcmPackagedContentInfo *packaged_content_info = &(cnmt_ctx->packaged_content_info[i]);
+        NcmContentInfo *content_info = &(packaged_content_info->info);
+        u64 content_size = 0;
+        
+        titleConvertNcmContentSizeToU64(content_info->size, &content_size);
+        
+        if (content_size == nca_ctx->content_size && content_info->content_type == nca_ctx->content_type && content_info->id_offset == nca_ctx->id_offset)
+        {
+            /* Jackpot. Copy content ID and hash to our raw CNMT. */
+            memcpy(packaged_content_info->hash, nca_ctx->hash, sizeof(nca_ctx->hash));
+            memcpy(&(content_info->content_id), &(nca_ctx->content_id), sizeof(NcmContentId));
+            LOGFILE("Updated CNMT content record #%u (size 0x%lX, type 0x%02X, ID offset 0x%02X).", i, content_size, content_info->content_type, content_info->id_offset);
+            success = true;
+            break;
+        }
+    }
+    
+    if (!success) LOGFILE("Unable to find CNMT content info entry for \"%s\" NCA! (size 0x%lX, type 0x%02X, ID offset 0x%02X).", nca_ctx->content_id_str, nca_ctx->content_size, nca_ctx->content_type, \
+                          nca_ctx->id_offset);
+    
+    return success;
+}
+
+bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx)
+{
+    if (!cnmtIsValidContext(cnmt_ctx))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    /* Check if we really need to generate this patch. */
+    u8 cnmt_hash[SHA256_HASH_SIZE] = {0};
+    sha256CalculateHash(cnmt_hash, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size);
+    if (!memcmp(cnmt_hash, cnmt_ctx->raw_data_hash, sizeof(cnmt_hash)))
+    {
+        LOGFILE("Skipping CNMT patching - no content records have been changed.");
+        return true;
+    }
+    
+    /* Generate Partition FS entry patch. */
+    if (!pfsGenerateEntryPatch(&(cnmt_ctx->pfs_ctx), cnmt_ctx->pfs_entry, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size, 0, &(cnmt_ctx->nca_patch)))
+    {
+        LOGFILE("Failed to generate Partition FS entry patch!");
+        return false;
+    }
+    
+    /* Update NCA content type context patch status. */
+    cnmt_ctx->nca_ctx->content_type_ctx_patch = true;
+    
+    return true;
+}
+
+void cnmtWriteNcaPatch(ContentMetaContext *cnmt_ctx, void *buf, u64 buf_size, u64 buf_offset)
+{
+    /* Using cnmtIsValidContext() here would probably take up precious CPU cycles. */
+    if (!cnmt_ctx || !cnmt_ctx->nca_ctx || cnmt_ctx->nca_ctx->content_type != NcmContentType_Meta || !cnmt_ctx->nca_ctx->content_type_ctx_patch || cnmt_ctx->nca_patch.written) return;
+    
+    /* Attempt to write Partition FS entry. */
+    pfsWriteEntryPatchToMemoryBuffer(&(cnmt_ctx->pfs_ctx), &(cnmt_ctx->nca_patch), buf, buf_size, buf_offset);
+    
+    /* Check if we need to update the NCA content type context patch status. */
+    if (cnmt_ctx->nca_patch.written)
+    {
+        cnmt_ctx->nca_ctx->content_type_ctx_patch = false;
+        LOGFILE("CNMT Partition FS file entry patch successfully written to NCA \"%s\"!", cnmt_ctx->nca_ctx->content_id_str);
+    }
+}
+
 bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx, u32 nca_ctx_count)
 {
     if (!cnmtIsValidContext(cnmt_ctx) || !nca_ctx || nca_ctx_count != ((u32)cnmt_ctx->packaged_header->content_count + 1))

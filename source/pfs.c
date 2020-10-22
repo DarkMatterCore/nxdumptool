@@ -336,13 +336,12 @@ bool pfsWriteFileContextHeaderToMemoryBuffer(PartitionFileSystemFileContext *ctx
         return false;
     }
     
-    /* Update name table size in Partition FS header to make it reflect the padding. */
-    header->name_table_size += padding_size;
-    
     /* Write full header. */
+    header->name_table_size += padding_size;
     block_size = sizeof(PartitionFileSystemHeader);
     memcpy(buf_u8 + block_offset, header, block_size);
     block_offset += block_size;
+    header->name_table_size -= padding_size;
     
     block_size = (header->entry_count * sizeof(PartitionFileSystemEntry));
     memcpy(buf_u8 + block_offset, ctx->entries, block_size);
@@ -356,9 +355,6 @@ bool pfsWriteFileContextHeaderToMemoryBuffer(PartitionFileSystemFileContext *ctx
     
     /* Update output header size. */
     *out_header_size = full_header_size;
-    
-    /* Restore name table size in Partition FS header. */
-    header->name_table_size -= padding_size;
     
     return true;
 }

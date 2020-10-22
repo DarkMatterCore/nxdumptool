@@ -111,6 +111,7 @@ bool utilsCommitSdCardFileSystemChanges(void);
 
 bool utilsCheckIfFileExists(const char *path);
 
+void utilsRemoveConcatenationFile(const char *path);
 bool utilsCreateConcatenationFile(const char *path);
 
 void utilsCreateDirectoryTree(const char *path, bool create_last_element);

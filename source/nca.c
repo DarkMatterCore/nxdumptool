@@ -334,15 +334,20 @@ void ncaSetDownloadDistributionType(NcaContext *ctx)
 {
     if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !*(ctx->content_id_str) || ctx->content_type > NcmContentType_DeltaFragment || \
         ctx->header.distribution_type == NcaDistributionType_Download) return;
-    LOGFILE("Setting download distribution type to %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
     ctx->header.distribution_type = NcaDistributionType_Download;
+    LOGFILE("Set download distribution type to %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
 }
 
-void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
+bool ncaRemoveTitlekeyCrypto(NcaContext *ctx)
 {
-    if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !*(ctx->content_id_str) || ctx->content_type > NcmContentType_DeltaFragment || !ctx->rights_id_available || !ctx->titlekey_retrieved) return;
+    if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !*(ctx->content_id_str) || ctx->content_type > NcmContentType_DeltaFragment)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
     
-    LOGFILE("Removing titlekey crypto from %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
+    /* Don't proceed if we're not dealing with a NCA with a populated rights ID field, or if we couldn't retrieve the titlekey for it. */
+    if (!ctx->rights_id_available || !ctx->titlekey_retrieved) return true;
     
     /* Copy decrypted titlekey to the decrypted NCA key area. */
     /* This will be reencrypted at a later stage. */
@@ -356,11 +361,22 @@ void ncaRemoveTitlekeyCrypto(NcaContext *ctx)
         memcpy(key_ptr, ctx->titlekey, AES_128_KEY_SIZE);
     }
     
+    /* Encrypt NCA key area. */
+    if (!ncaEncryptKeyArea(ctx))
+    {
+        LOGFILE("Error encrypting %s NCA \"%s\" key area!", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
+        return false;
+    }
+    
     /* Wipe Rights ID. */
     memset(&(ctx->header.rights_id), 0, sizeof(FsRightsId));
     
     /* Update context flags. */
     ctx->rights_id_available = false;
+    
+    LOGFILE("Removed titlekey crypto from %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
+    
+    return true;
 }
 
 bool ncaEncryptHeader(NcaContext *ctx)
@@ -377,13 +393,6 @@ bool ncaEncryptHeader(NcaContext *ctx)
     size_t crypt_res = 0;
     const u8 *header_key = keysGetNcaHeaderKey();
     Aes128XtsContext hdr_aes_ctx = {0}, nca0_fs_header_ctx = {0};
-    
-    /* Encrypt NCA key area. */
-    if (!ctx->rights_id_available && !ncaEncryptKeyArea(ctx))
-    {
-        LOGFILE("Error encrypting NCA \"%s\" key area!", ctx->content_id_str);
-        return false;
-    }
     
     /* Prepare AES-128-XTS contexts. */
     aes128XtsContextCreate(&hdr_aes_ctx, header_key, header_key + AES_128_KEY_SIZE, true);
@@ -1129,7 +1138,8 @@ static bool ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 
     
     memcpy((u8*)buf + buf_block_offset, (const u8*)patch + patch_block_offset, buf_block_size);
     
-    LOGFILE("Overwrote 0x%lX bytes block at offset 0x%lX from raw NCA \"%s\" buffer (size 0x%lX, NCA offset 0x%lX).", buf_block_size, buf_block_offset, ctx->content_id_str, buf_size, buf_offset);
+    LOGFILE("Overwrote 0x%lX bytes block at offset 0x%lX from raw %s NCA \"%s\" buffer (size 0x%lX, NCA offset 0x%lX).", buf_block_size, buf_block_offset, titleGetNcmContentTypeName(ctx->content_type), \
+            ctx->content_id_str, buf_size, buf_offset);
     
     return ((patch_block_offset + buf_block_size) == patch_size);
 }

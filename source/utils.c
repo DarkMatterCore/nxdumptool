@@ -633,6 +633,13 @@ bool utilsCheckIfFileExists(const char *path)
     return false;
 }
 
+void utilsRemoveConcatenationFile(const char *path)
+{
+    if (!path || !*path) return;
+    remove(path);
+    fsdevDeleteDirectoryRecursively(path);
+}
+
 bool utilsCreateConcatenationFile(const char *path)
 {
     if (!path || !*path)
@@ -642,8 +649,7 @@ bool utilsCreateConcatenationFile(const char *path)
     }
     
     /* Safety check: remove any existant file/directory at the destination path. */
-    remove(path);
-    fsdevDeleteDirectoryRecursively(path);
+    utilsRemoveConcatenationFile(path);
     
     /* Create ConcatenationFile */
     /* If the call succeeds, the caller function will be able to operate on this file using stdio calls. */

@@ -70,9 +70,9 @@ NX_INLINE bool programInfoIsValidContext(ProgramInfoContext *program_info_ctx)
             program_info_ctx->nso_count && program_info_ctx->nso_ctx);
 }
 
-NX_INLINE bool programInfoChangeAcidPublicKeyAndNcaSignature(ProgramInfoContext *program_info_ctx)
+NX_INLINE bool programInfoGenerateNcaPatch(ProgramInfoContext *program_info_ctx)
 {
-    return (programInfoIsValidContext(program_info_ctx) && npdmChangeAcidPublicKeyAndNcaSignature(&(program_info_ctx->npdm_ctx)));
+    return (programInfoIsValidContext(program_info_ctx) && npdmGenerateNcaPatch(&(program_info_ctx->npdm_ctx)));
 }
 
 NX_INLINE void programInfoWriteNcaPatch(ProgramInfoContext *program_info_ctx, void *buf, u64 buf_size, u64 buf_offset)

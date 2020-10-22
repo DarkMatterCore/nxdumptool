@@ -241,6 +241,15 @@ typedef struct {
 /// Initializes a ContentMetaContext using a previously initialized NcaContext (which must belong to a Meta NCA).
 bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx);
 
+/// Updates NcmPackagedContentInfo data for the content entry with size, type and ID offset values that match the ones from the input NcaContext.
+bool cnmtUpdateContentInfo(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx);
+
+/// Generates a Partition FS entry patch for the NcaContext pointed to by the input ContentMetaContext, using its raw CNMT data.
+bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx);
+
+/// Writes data from the Partition FS patch in the input ContentMetaContext to the provided buffer.
+void cnmtWriteNcaPatch(ContentMetaContext *cnmt_ctx, void *buf, u64 buf_size, u64 buf_offset);
+
 /// Generates an AuthoringTool-like XML using information from a previously initialized ContentMetaContext, as well as a pointer to 'nca_ctx_count' NcaContext with content information.
 /// If the function succeeds, XML data and size will get saved to the 'authoring_tool_xml' and 'authoring_tool_xml_size' members from the ContentMetaContext.
 bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx, u32 nca_ctx_count);
@@ -264,19 +273,6 @@ NX_INLINE bool cnmtIsValidContext(ContentMetaContext *cnmt_ctx)
             ((cnmt_ctx->packaged_header->content_count && cnmt_ctx->packaged_content_info) || (!cnmt_ctx->packaged_header->content_count && !cnmt_ctx->packaged_content_info)) && \
             ((cnmt_ctx->packaged_header->content_meta_count && cnmt_ctx->content_meta_info) || (!cnmt_ctx->packaged_header->content_meta_count && !cnmt_ctx->content_meta_info)) && \
             ((cnmt_ctx->extended_data_size && cnmt_ctx->extended_data) || (!cnmt_ctx->extended_data_size && !cnmt_ctx->extended_data)) && cnmt_ctx->digest);
-}
-
-NX_INLINE bool cnmtIsNcaPatchRequired(ContentMetaContext *cnmt_ctx)
-{
-    if (!cnmtIsValidContext(cnmt_ctx)) return false;
-    u8 tmp_hash[SHA256_HASH_SIZE] = {0};
-    sha256CalculateHash(tmp_hash, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size);
-    return (memcmp(tmp_hash, cnmt_ctx->raw_data_hash, SHA256_HASH_SIZE) != 0);
-}
-
-NX_INLINE bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx)
-{
-    return (cnmtIsValidContext(cnmt_ctx) && pfsGenerateEntryPatch(&(cnmt_ctx->pfs_ctx), cnmt_ctx->pfs_entry, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size, 0, &(cnmt_ctx->nca_patch)));
 }
 
 NX_INLINE u64 cnmtGetRequiredTitleId(ContentMetaContext *cnmt_ctx)

@@ -79,7 +79,7 @@ bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const 
     bool ret = false;
     size_t issuer_len = 0;
     
-    if (!dst || !issuer || !(issuer_len = strlen(issuer)) || issuer_len <= 5 || strcmp(issuer, "Root-") != 0)
+    if (!dst || !issuer || (issuer_len = strlen(issuer)) <= 5 || strncmp(issuer, "Root-", 5) != 0)
     {
         LOGFILE("Invalid parameters!");
         goto end;

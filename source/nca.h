@@ -410,7 +410,7 @@ void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierar
 void ncaSetDownloadDistributionType(NcaContext *ctx);
 
 /// Removes titlekey crypto dependency from a NCA context by wiping the Rights ID from the underlying NCA header and copying the decrypted titlekey to the NCA key area.
-void ncaRemoveTitlekeyCrypto(NcaContext *ctx);
+bool ncaRemoveTitlekeyCrypto(NcaContext *ctx);
 
 /// Encrypts NCA header and NCA FS headers.
 /// The 'encrypted_header' member from the NCA context and its underlying NCA FS section contexts is updated by this function.

@@ -93,8 +93,8 @@ bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t s
         return false;
     }
     
-    u8 hash[SHA256_HASH_SIZE];
-    u8 buf[MBEDTLS_MPI_MAX_SIZE];
+    u8 hash[SHA256_HASH_SIZE] = {0};
+    u8 buf[MBEDTLS_MPI_MAX_SIZE] = {0};
     const char *pers = "rsa_sign_pss";
     size_t olen = 0;
     

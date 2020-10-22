@@ -32,7 +32,9 @@
 
 #define TIK_COMMON_SAVEFILE_PATH        BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e1"
 #define TIK_PERSONALIZED_SAVEFILE_PATH  BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e2"
-#define TIK_SAVEFILE_STORAGE_PATH       "/ticket.bin"
+
+#define TIK_LIST_STORAGE_PATH           "/ticket_list.bin"
+#define TIK_DB_STORAGE_PATH             "/ticket.bin"
 
 #define ETICKET_DEVKEY_PUBLIC_EXPONENT  0x10001
 
@@ -40,6 +42,31 @@
 
 /* Type definitions. */
 
+/// Used to parse ticket_list.bin entries.
+typedef struct {
+    FsRightsId rights_id;
+    u64 ticket_id;
+    u32 account_id;
+    u8 reserved[0x04];
+} TikListEntry;
+
+/// 9.x+ CTR key entry in ES .data segment. Used to store CTR key/IV data for encrypted volatile tickets in ticket.bin and/or encrypted entries in ticket_list.bin.
+/// This is always stored in pairs. The first entry holds the key/IV for the encrypted volatile ticket, while the second entry holds the key/IV for the encrypted entry in ticket_list.bin.
+/// First index in this list is always 0, and it's aligned to ES_CTRKEY_ENTRY_ALIGNMENT.
+typedef struct {
+    u32 idx;                ///< Entry index.
+    u8 key[AES_BLOCK_SIZE]; ///< AES-128-CTR key.
+    u8 ctr[AES_BLOCK_SIZE]; ///< AES-128-CTR counter/IV. Always zeroed out.
+} TikEsCtrKeyEntry9x;
+
+/// Lookup pattern for TikEsCtrKeyEntry9x.
+typedef struct {
+    u32 idx1;                       ///< Always set to 0 (first entry).
+    u8 ctrdata[AES_BLOCK_SIZE * 2];
+    u32 idx2;                       ///< Always set to 1 (second entry).
+} TikEsCtrKeyPattern9x;
+
+/// Used to parse the eTicket device key retrieved from PRODINFO via setcalGetEticketDeviceKey().
 /// Everything after the AES CTR is encrypted.
 typedef struct {
     u8 ctr[0x10];
@@ -49,23 +76,7 @@ typedef struct {
     u8 padding[0x14];
     u64 device_id;
     u8 ghash[0x10];
-} tikEticketDeviceKeyData;
-
-/// 9.x+ CTR key entry in ES .data segment. Used to store CTR key/IV data for encrypted volatile tickets in ticket.bin and/or encrypted entries in ticket_list.bin.
-/// This is always stored in pairs. The first entry holds the key/IV for the encrypted volatile ticket, while the second entry holds the key/IV for the encrypted entry in ticket_list.bin.
-/// First index in this list is always 0, and it's aligned to ES_CTRKEY_ENTRY_ALIGNMENT.
-typedef struct {
-    u32 idx;                ///< Entry index.
-    u8 key[AES_BLOCK_SIZE]; ///< AES-128-CTR key.
-    u8 ctr[AES_BLOCK_SIZE]; ///< AES-128-CTR counter/IV. Always zeroed out.
-} tikEsCtrKeyEntry9x;
-
-/// Lookup pattern for tikEsCtrKeyEntry9x.
-typedef struct {
-    u32 idx1;                       ///< Always set to 0 (first entry).
-    u8 ctrdata[AES_BLOCK_SIZE * 2];
-    u32 idx2;                       ///< Always set to 1 (second entry).
-} tikEsCtrKeyPattern9x;
+} TikEticketDeviceKeyData;
 
 /* Global variables. */
 
@@ -101,7 +112,9 @@ static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_g
 
 static bool tikGetTitleKeyTypeFromRightsId(const FsRightsId *id, u8 *out);
 static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized);
-static u8 *tikRetrieveTicketEntryFromTicketBin(allocation_table_storage_ctx_t *fat_storage, u64 ticket_bin_size, u8 *buf, u64 buf_size, const FsRightsId *id, u8 titlekey_type);
+
+static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u64 *out_offset, u8 titlekey_type);
+static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u64 ticket_offset, u8 titlekey_type);
 
 static bool tikGetTicketTypeAndSize(void *data, u64 data_size, u8 *out_type, u64 *out_size);
 
@@ -288,66 +301,63 @@ static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRight
     u8 titlekey_type = 0;
     
     save_ctx_t *save_ctx = NULL;
-    allocation_table_storage_ctx_t fat_storage = {0};
-    u64 ticket_bin_size = 0;
     
-    u64 buf_size = (SIGNED_TIK_MAX_SIZE * 0x10);
-    u8 *buf = NULL, *ticket_entry = NULL;
+    u64 buf_size = (SIGNED_TIK_MAX_SIZE * 0x100);
+    u8 *buf = NULL;
+    u64 ticket_offset = 0;
     
     bool success = false;
     
+    /* Allocate memory to retrieve the ticket. */
+    if (!(buf = malloc(buf_size)))
+    {
+        LOGFILE("Unable to allocate 0x%lX bytes block for temporary read buffer!", buf_size);
+        return false;
+    }
+    
+    /* Get titlekey type. */
     if (!tikGetTitleKeyTypeFromRightsId(id, &titlekey_type))
     {
         LOGFILE("Unable to retrieve ticket titlekey type!");
-        return false;
+        goto end;
     }
     
-    save_ctx = save_open_savefile(titlekey_type == TikTitleKeyType_Common ? TIK_COMMON_SAVEFILE_PATH : TIK_PERSONALIZED_SAVEFILE_PATH, 0);
-    if (!save_ctx)
+    /* Open ES common/personalized system savefile. */
+    if (!(save_ctx = save_open_savefile(titlekey_type == TikTitleKeyType_Common ? TIK_COMMON_SAVEFILE_PATH : TIK_PERSONALIZED_SAVEFILE_PATH, 0)))
     {
         LOGFILE("Failed to open ES %s ticket system savefile!", g_tikTitleKeyTypeStrings[titlekey_type]);
-        return false;
-    }
-    
-    if (!save_get_fat_storage_from_file_entry_by_path(save_ctx, TIK_SAVEFILE_STORAGE_PATH, &fat_storage, &ticket_bin_size))
-    {
-        LOGFILE("Failed to locate \"%s\" in ES %s ticket system save!", TIK_SAVEFILE_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type]);
         goto end;
     }
     
-    if (ticket_bin_size < SIGNED_TIK_MIN_SIZE || (ticket_bin_size % SIGNED_TIK_MAX_SIZE) != 0)
+    /* Get ticket entry offset from ticket_list.bin. */
+    if (!tikGetTicketEntryOffsetFromTicketList(save_ctx, buf, buf_size, id, &ticket_offset, titlekey_type))
     {
-        LOGFILE("Invalid size for \"%s\" in ES %s ticket system save! (0x%lX).", TIK_SAVEFILE_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type], ticket_bin_size);
+        LOGFILE("Unable to find an entry with a matching Rights ID in \"%s\" from ES %s ticket system save!", TIK_LIST_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type]);
         goto end;
     }
     
-    buf = malloc(buf_size);
-    if (!buf)
-    {
-        LOGFILE("Unable to allocate 0x%lX bytes block for temporary read buffer!", buf_size);
-        goto end;
-    }
-    
-    if (!(ticket_entry = tikRetrieveTicketEntryFromTicketBin(&fat_storage, ticket_bin_size, buf, buf_size, id, titlekey_type)))
+    /* Get ticket entry from ticket.bin. */
+    if (!tikRetrieveTicketEntryFromTicketBin(save_ctx, buf, buf_size, id, ticket_offset, titlekey_type))
     {
         LOGFILE("Unable to find a matching %s ticket entry for the provided Rights ID!", g_tikTitleKeyTypeStrings[titlekey_type]);
         goto end;
     }
     
-    if (!tikGetTicketTypeAndSize(ticket_entry, SIGNED_TIK_MAX_SIZE, &(dst->type), &(dst->size)))
+    /* Get ticket type and size. */
+    if (!tikGetTicketTypeAndSize(buf, SIGNED_TIK_MAX_SIZE, &(dst->type), &(dst->size)))
     {
         LOGFILE("Unable to determine ticket type and size!");
         goto end;
     }
     
-    memcpy(dst->data, ticket_entry, dst->size);
+    memcpy(dst->data, buf, dst->size);
     
     success = true;
     
 end:
-    if (buf) free(buf);
-    
     if (save_ctx) save_close_savefile(save_ctx);
+    
+    if (buf) free(buf);
     
     return success;
 }
@@ -365,7 +375,7 @@ static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
     size_t out_keydata_size = 0;
     u8 out_keydata[0x100] = {0};
     
-    tikEticketDeviceKeyData *eticket_devkey = NULL;
+    TikEticketDeviceKeyData *eticket_devkey = NULL;
     
     switch(tik_common_block->titlekey_type)
     {
@@ -381,7 +391,7 @@ static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
                 return false;
             }
             
-            eticket_devkey = (tikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
+            eticket_devkey = (TikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
             
             /* Perform a RSA-OAEP decrypt operation to get the titlekey. */
             if (!rsa2048OaepDecryptAndVerify(out_keydata, 0x100, tik_common_block->titlekey_block, eticket_devkey->modulus, eticket_devkey->exponent, 0x100, g_nullHash, &out_keydata_size) || \
@@ -520,104 +530,184 @@ static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count,
     return true;
 }
 
-static u8 *tikRetrieveTicketEntryFromTicketBin(allocation_table_storage_ctx_t *fat_storage, u64 ticket_bin_size, u8 *buf, u64 buf_size, const FsRightsId *id, u8 titlekey_type)
+static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u64 *out_offset, u8 titlekey_type)
 {
-    if (!fat_storage || ticket_bin_size < SIGNED_TIK_MIN_SIZE || (ticket_bin_size % SIGNED_TIK_MAX_SIZE) != 0 || !buf || !buf_size || (buf_size % SIGNED_TIK_MAX_SIZE) != 0 || !id)
+    if (!save_ctx || !buf || !buf_size || (buf_size % sizeof(TikListEntry)) != 0 || !id || !out_offset)
     {
         LOGFILE("Invalid parameters!");
-        return NULL;
+        return false;
     }
     
-    u64 br = 0, total_br = 0;
-    u8 *out_tik = NULL;
+    allocation_table_storage_ctx_t fat_storage = {0};
+    u64 ticket_list_bin_size = 0, br = 0, total_br = 0;
     
-    Aes128CtrContext ctr_ctx = {0};
-    u8 null_ctr[AES_BLOCK_SIZE] = {0}, ctr[AES_BLOCK_SIZE] = {0}, dec_tik[SIGNED_TIK_MAX_SIZE] = {0};
+    u8 last_rights_id[0x10];
+    memset(last_rights_id, 0xFF, sizeof(last_rights_id));
     
-    bool is_9x = hosversionAtLeast(9, 0, 0);
+    bool last_entry_found = false, success = false;
     
-    if (is_9x && !memRetrieveFullProgramMemory(&g_esMemoryLocation))
+    /* Get FAT storage info for the ticket_list.bin stored within the opened system savefile. */
+    if (!save_get_fat_storage_from_file_entry_by_path(save_ctx, TIK_LIST_STORAGE_PATH, &fat_storage, &ticket_list_bin_size))
     {
-        LOGFILE("Failed to retrieve ES program memory!");
-        return NULL;
+        LOGFILE("Failed to locate \"%s\" in ES %s ticket system save!", TIK_LIST_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type]);
+        return false;
     }
     
-    while(total_br < ticket_bin_size)
+    /* Check ticket_list.bin size. */
+    if (ticket_list_bin_size < sizeof(TikListEntry) || (ticket_list_bin_size % sizeof(TikListEntry)) != 0)
     {
-        if (buf_size > (ticket_bin_size - total_br)) buf_size = (ticket_bin_size - total_br);
+        LOGFILE("Invalid size for \"%s\" in ES %s ticket system save! (0x%lX).", TIK_LIST_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type], ticket_list_bin_size);
+        return false;
+    }
+    
+    /* Look for an entry matching our rights ID in ticket_list.bin. */
+    while(total_br < ticket_list_bin_size)
+    {
+        if (buf_size > (ticket_list_bin_size - total_br)) buf_size = (ticket_list_bin_size - total_br);
         
-        br = save_allocation_table_storage_read(fat_storage, buf, total_br, buf_size);
-        if (br != buf_size)
+        if ((br = save_allocation_table_storage_read(&fat_storage, buf, total_br, buf_size)) != buf_size)
         {
-            LOGFILE("Failed to read 0x%lX bytes chunk at offset 0x%lX from \"%s\" in ES %s ticket system save!", buf_size, total_br, TIK_SAVEFILE_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type]);
+            LOGFILE("Failed to read 0x%lX bytes chunk at offset 0x%lX from \"%s\" in ES %s ticket system save!", buf_size, total_br, TIK_LIST_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type]);
             break;
         }
         
-        for(u64 i = 0; i < buf_size; i += SIGNED_TIK_MAX_SIZE)
+        for(u64 i = 0; i < buf_size; i += sizeof(TikListEntry))
         {
-            if ((buf_size - i) < SIGNED_TIK_MIN_SIZE) break;
+            if ((buf_size - i) < sizeof(TikListEntry)) break;
             
-            u8 *cur_tik = (buf + i);
-            u64 tik_offset = (total_br + i);
-            TikCommonBlock *tik_common_block = tikGetCommonBlock(cur_tik);
+            u64 entry_offset = (total_br + i);
+            TikListEntry *entry = (TikListEntry*)(buf + i);
             
-            if (!tik_common_block)
+            /* Check if we found the last entry. */
+            if (!memcmp(entry->rights_id.c, last_rights_id, sizeof(last_rights_id)))
             {
-                /* Check if we're dealing with a padding block. */
-                if (!memcmp(cur_tik, null_ctr, sizeof(null_ctr))) continue;
-                
-                /* We're most likely dealing with an encrypted ticket. Don't proceed if HOS version isn't at least 9.0.0. */
-                if (!is_9x) continue;
-                
-                /* Sad path. We need to retrieve the CTR key/IV from ES program memory in order to decrypt this ticket. */
-                for(u64 j = 0; j < g_esMemoryLocation.data_size; j += ES_CTRKEY_ENTRY_ALIGNMENT)
-                {
-                    if ((g_esMemoryLocation.data_size - j) < (sizeof(tikEsCtrKeyEntry9x) * 2)) break;
-                    
-                    /* Check if the key indexes are valid. idx2 should always be an odd number.*/
-                    tikEsCtrKeyPattern9x *pattern = (tikEsCtrKeyPattern9x*)(g_esMemoryLocation.data + j);
-                    if (pattern->idx2 != (pattern->idx1 + 1) || !(pattern->idx2 & 1)) continue;
-                    
-                    /* Seems like indexes are valid. Check if the key is not null and if the CTR is. */
-                    tikEsCtrKeyEntry9x *key_entry = (tikEsCtrKeyEntry9x*)pattern;
-                    if (!memcmp(key_entry->key, null_ctr, sizeof(null_ctr)) || memcmp(key_entry->ctr, null_ctr, sizeof(null_ctr)) != 0) continue;
-                    
-                    /* Check if we can decrypt the current ticket with this data. */
-                    memset(&ctr_ctx, 0, sizeof(Aes128CtrContext));
-                    aes128CtrInitializePartialCtr(ctr, key_entry->ctr, tik_offset);
-                    aes128CtrContextCreate(&ctr_ctx, key_entry->key, ctr);
-                    aes128CtrCrypt(&ctr_ctx, dec_tik, cur_tik, SIGNED_TIK_MAX_SIZE);
-                    
-                    if ((tik_common_block = tikGetCommonBlock(dec_tik)) != NULL && !strncmp(tik_common_block->issuer, "Root", 4))
-                    {
-                        /* Ticket successfully decrypted. */
-                        memcpy(cur_tik, dec_tik, SIGNED_TIK_MAX_SIZE);
-                        tik_common_block = tikGetCommonBlock(cur_tik);
-                        break;
-                    }
-                }
-                
-                /* Don't proceed if we couldn't decrypt the ticket. */
-                if (!tik_common_block || strncmp(tik_common_block->issuer, "Root", 4) != 0) continue;
+                last_entry_found = true;
+                break;
             }
             
-            /* Check if the rights ID from the ticket common block matches the one we're looking for. */
-            if (!memcmp(tik_common_block->rights_id.c, id->c, 0x10))
+            /* Check if this is the entry we're looking for. */
+            if (!memcmp(entry->rights_id.c, id->c, sizeof(id->c)))
             {
                 /* Jackpot. */
-                out_tik = cur_tik;
+                *out_offset = (entry_offset << 5); /* (entry_offset / 0x20) * 0x400 */
+                success = true;
                 break;
             }
         }
         
         total_br += br;
         
-        if (out_tik) break;
+        if (last_entry_found || success) break;
     }
     
-    if (is_9x) memFreeMemoryLocation(&g_esMemoryLocation);
+    return success;
+}
+
+static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u64 ticket_offset, u8 titlekey_type)
+{
+    if (!save_ctx || !buf || buf_size < SIGNED_TIK_MAX_SIZE || !id || (ticket_offset % SIGNED_TIK_MAX_SIZE) != 0)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
     
-    return out_tik;
+    allocation_table_storage_ctx_t fat_storage = {0};
+    u64 ticket_bin_size = 0, br = 0;
+    
+    TikCommonBlock *tik_common_block = NULL;
+    
+    Aes128CtrContext ctr_ctx = {0};
+    u8 null_ctr[AES_BLOCK_SIZE] = {0}, ctr[AES_BLOCK_SIZE] = {0}, dec_tik[SIGNED_TIK_MAX_SIZE] = {0};
+    
+    bool is_volatile = false, success = false;
+    
+    /* Get FAT storage info for the ticket.bin stored within the opened system savefile. */
+    if (!save_get_fat_storage_from_file_entry_by_path(save_ctx, TIK_DB_STORAGE_PATH, &fat_storage, &ticket_bin_size))
+    {
+        LOGFILE("Failed to locate \"%s\" in ES %s ticket system save!", TIK_DB_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type]);
+        return false;
+    }
+    
+    /* Check ticket.bin size. */
+    if (ticket_bin_size < SIGNED_TIK_MIN_SIZE || (ticket_bin_size % SIGNED_TIK_MAX_SIZE) != 0 || ticket_bin_size < (ticket_offset + SIGNED_TIK_MAX_SIZE))
+    {
+        LOGFILE("Invalid size for \"%s\" in ES %s ticket system save! (0x%lX).", TIK_DB_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type], ticket_bin_size);
+        return false;
+    }
+    
+    /* Read ticket data. */
+    if ((br = save_allocation_table_storage_read(&fat_storage, buf, ticket_offset, SIGNED_TIK_MAX_SIZE)) != SIGNED_TIK_MAX_SIZE)
+    {
+        LOGFILE("Failed to read 0x%lX bytes long ticket at offset 0x%lX from \"%s\" in ES %s ticket system save!", SIGNED_TIK_MAX_SIZE, ticket_offset, TIK_DB_STORAGE_PATH, \
+                g_tikTitleKeyTypeStrings[titlekey_type]);
+        return false;
+    }
+    
+    /* Check if we're dealing with a volatile (encrypted) ticket. */
+    if (!(tik_common_block = tikGetCommonBlock(buf)) || strncmp(tik_common_block->issuer, "Root", 4) != 0)
+    {
+        tik_common_block = NULL;
+        is_volatile = true;
+        
+        /* Don't proceed if HOS version isn't at least 9.0.0. */
+        if (!hosversionAtLeast(9, 0, 0))
+        {
+            LOGFILE("Unable to retrieve ES key entry for volatile tickets under HOS versions below 9.0.0!");
+            return false;
+        }
+        
+        /* Retrieve ES program memory. */
+        if (!memRetrieveFullProgramMemory(&g_esMemoryLocation))
+        {
+            LOGFILE("Failed to retrieve ES program memory!");
+            return false;
+        }
+        
+        /* Retrieve the CTR key/IV from ES program memory in order to decrypt this ticket. */
+        for(u64 i = 0; i < g_esMemoryLocation.data_size; i += ES_CTRKEY_ENTRY_ALIGNMENT)
+        {
+            if ((g_esMemoryLocation.data_size - i) < (sizeof(TikEsCtrKeyEntry9x) * 2)) break;
+            
+            /* Check if the key indexes are valid. idx2 should always be an odd number equal to idx + 1. */
+            TikEsCtrKeyPattern9x *pattern = (TikEsCtrKeyPattern9x*)(g_esMemoryLocation.data + i);
+            if (pattern->idx2 != (pattern->idx1 + 1) || !(pattern->idx2 & 1)) continue;
+            
+            /* Check if the key is not null and if the CTR is. */
+            TikEsCtrKeyEntry9x *key_entry = (TikEsCtrKeyEntry9x*)pattern;
+            if (!memcmp(key_entry->key, null_ctr, sizeof(null_ctr)) || memcmp(key_entry->ctr, null_ctr, sizeof(null_ctr)) != 0) continue;
+            
+            /* Check if we can decrypt the current ticket with this data. */
+            memset(&ctr_ctx, 0, sizeof(Aes128CtrContext));
+            aes128CtrInitializePartialCtr(ctr, key_entry->ctr, ticket_offset);
+            aes128CtrContextCreate(&ctr_ctx, key_entry->key, ctr);
+            aes128CtrCrypt(&ctr_ctx, dec_tik, buf, SIGNED_TIK_MAX_SIZE);
+            
+            /* Check if we successfully decrypted this ticket. */
+            if ((tik_common_block = tikGetCommonBlock(dec_tik)) != NULL && !strncmp(tik_common_block->issuer, "Root", 4))
+            {
+                memcpy(buf, dec_tik, SIGNED_TIK_MAX_SIZE);
+                tik_common_block = tikGetCommonBlock(buf);
+                break;
+            }
+            
+            tik_common_block = NULL;
+        }
+        
+        /* Check if we were able to decrypt the ticket. */
+        if (!tik_common_block)
+        {
+            LOGFILE("Unable to decrypt volatile ticket at offset 0x%lX in \"%s\" from ES %s ticket system save!", ticket_offset, TIK_DB_STORAGE_PATH, g_tikTitleKeyTypeStrings[titlekey_type]);
+            goto end;
+        }
+    }
+    
+    /* Check if the rights ID from the ticket common block matches the one we're looking for. */
+    if (!(success = (memcmp(tik_common_block->rights_id.c, id->c, 0x10) == 0))) LOGFILE("Retrieved ticket doesn't hold a matching Rights ID!");
+    
+end:
+    if (is_volatile) memFreeMemoryLocation(&g_esMemoryLocation);
+    
+    return success;
 }
 
 static bool tikGetTicketTypeAndSize(void *data, u64 data_size, u8 *out_type, u64 *out_size)
@@ -673,7 +763,7 @@ static bool tikRetrieveEticketDeviceKey(void)
     
     Result rc = 0;
     u32 public_exponent = 0;
-    tikEticketDeviceKeyData *eticket_devkey = NULL;
+    TikEticketDeviceKeyData *eticket_devkey = NULL;
     Aes128CtrContext eticket_aes_ctx = {0};
     
     rc = setcalGetEticketDeviceKey(&g_eTicketDeviceKey);
@@ -684,9 +774,9 @@ static bool tikRetrieveEticketDeviceKey(void)
     }
     
     /* Decrypt eTicket RSA key. */
-    eticket_devkey = (tikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
+    eticket_devkey = (TikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
     aes128CtrContextCreate(&eticket_aes_ctx, keysGetEticketRsaKek(g_eTicketDeviceKey.generation > 0), eticket_devkey->ctr);
-    aes128CtrCrypt(&eticket_aes_ctx, &(eticket_devkey->exponent), &(eticket_devkey->exponent), sizeof(tikEticketDeviceKeyData) - 0x10);
+    aes128CtrCrypt(&eticket_aes_ctx, &(eticket_devkey->exponent), &(eticket_devkey->exponent), sizeof(TikEticketDeviceKeyData) - 0x10);
     
     /* Public exponent value must be 0x10001. */
     /* It is stored using big endian byte order. */

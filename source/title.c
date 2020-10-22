@@ -73,6 +73,13 @@ static const char *g_titleNcmContentMetaTypeNames[] = {
     [NcmContentMetaType_Delta - 0x7A]         = "Delta"
 };
 
+static const char *g_filenameTypeStrings[] = {
+    [NcmContentMetaType_Application - 0x80]  = "BASE",
+    [NcmContentMetaType_Patch - 0x80]        = "UPD",
+    [NcmContentMetaType_AddOnContent - 0x80] = "DLC",
+    [NcmContentMetaType_Delta - 0x80]        = "DELTA"
+};
+
 /* Info retrieved from https://switchbrew.org/wiki/Title_list. */
 /* Titles bundled with the kernel are excluded. */
 static const SystemTitleName g_systemTitles[] = {
@@ -735,12 +742,14 @@ char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 
     char title_name[0x400] = {0};
     TitleApplicationMetadata *app_metadata = NULL;
     
-    if (!title_info || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
+    if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_Delta || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
         (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
     {
         LOGFILE("Invalid parameters!");
         goto end;
     }
+    
+    u8 type = (title_info->meta_key.type - 0x80);
     
     /* Retrieve application metadata. */
     /* System titles and user applications: just retrieve the app_metadata pointer from the input TitleInfo. */
@@ -756,11 +765,11 @@ char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 
             if (illegal_char_replace_type) utilsReplaceIllegalCharacters(title_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
         }
         
-        sprintf(title_name + strlen(title_name), "[%016lX][v%u][%s]", title_info->meta_key.id, title_info->meta_key.version, titleGetNcmContentMetaTypeName(title_info->meta_key.type));
+        sprintf(title_name + strlen(title_name), "[%016lX][v%u][%s]", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type]);
     } else
     if (name_convention == TitleFileNameConvention_IdAndVersionOnly)
     {
-        sprintf(title_name, "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, titleGetNcmContentMetaTypeName(title_info->meta_key.type));
+        sprintf(title_name, "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type]);
     }
     
     /* Duplicate generated filename. */

@@ -23,7 +23,13 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
-#define SYSTEM_UPDATE_TID   (u64)0x0100000000000816
+#define FS_SYSMODULE_TID        (u64)0x0100000000000000
+#define BOOT_SYSMODULE_TID      (u64)0x0100000000000005
+#define SPL_SYSMODULE_TID       (u64)0x0100000000000028
+#define ES_SYSMODULE_TID        (u64)0x0100000000000033
+#define SYSTEM_UPDATE_TID       (u64)0x0100000000000816
+
+#define FAT32_FILESIZE_LIMIT    (u64)0xFFFFFFFF         /* 4 GiB - 1 (4294967295 bytes). */
 
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
 /// Referenced by multiple header files.

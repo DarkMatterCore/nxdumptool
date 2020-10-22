@@ -258,7 +258,7 @@ end:
     return success;
 }
 
-bool npdmChangeAcidPublicKeyAndNcaSignature(NpdmContext *npdm_ctx)
+bool npdmGenerateNcaPatch(NpdmContext *npdm_ctx)
 {
     NcaContext *nca_ctx = NULL;
     
@@ -268,20 +268,27 @@ bool npdmChangeAcidPublicKeyAndNcaSignature(NpdmContext *npdm_ctx)
         return false;
     }
     
+    /* Check if we really need to generate this patch. */
+    if (!ncaIsHeaderDirty(nca_ctx))
+    {
+        LOGFILE("Skipping NPDM patching - NCA header hasn't been modified.");
+        return true;
+    }
+    
     /* Update NPDM ACID public key. */
     memcpy(npdm_ctx->acid_header->public_key, rsa2048GetCustomPublicKey(), RSA2048_PUBKEY_SIZE);
-    
-    /* Update NCA ACID signature. */
-    if (!rsa2048GenerateSha256BasedPssSignature(nca_ctx->header.acid_signature, &(nca_ctx->header.magic), NCA_ACID_SIGNATURE_AREA_SIZE))
-    {
-        LOGFILE("Failed to generate RSA-2048-PSS NCA ACID signature!");
-        return false;
-    }
     
     /* Generate Partition FS entry patch. */
     if (!pfsGenerateEntryPatch(npdm_ctx->pfs_ctx, npdm_ctx->pfs_entry, npdm_ctx->raw_data, npdm_ctx->raw_data_size, 0, &(npdm_ctx->nca_patch)))
     {
         LOGFILE("Failed to generate Partition FS entry patch!");
+        return false;
+    }
+    
+    /* Update NCA ACID signature. */
+    if (!rsa2048GenerateSha256BasedPssSignature(nca_ctx->header.acid_signature, &(nca_ctx->header.magic), NCA_ACID_SIGNATURE_AREA_SIZE))
+    {
+        LOGFILE("Failed to generate RSA-2048-PSS NCA ACID signature!");
         return false;
     }
     
