@@ -97,7 +97,7 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
 /// Returns NULL if an error occurs.
 TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
 
-/// Populates a TitleUserApplicationData element using an user application ID.
+/// Populates a TitleUserApplicationData element using a user application ID.
 bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
 
 /// Returns true if orphan titles are available.
