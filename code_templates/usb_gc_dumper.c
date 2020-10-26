@@ -359,7 +359,7 @@ static bool sendFileData(const char *path, void *data, size_t data_size)
         return false;
     }
     
-    if (!usbSendFileProperties(data_size, path))
+    if (!usbSendFilePropertiesCommon(data_size, path))
     {
         consolePrint("failed to send file properties for \"%s\"!\n", path);
         return false;
@@ -515,7 +515,7 @@ static bool sendGameCardImageViaUsb(void)
     }
     
     snprintf(path, MAX_ELEMENTS(path), "%s (%s) (%s) (%s).xci", filename, g_appendKeyArea ? "keyarea" : "keyarealess", g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
-    if (!usbSendFileProperties(gc_size, path))
+    if (!usbSendFilePropertiesCommon(gc_size, path))
     {
         consolePrint("failed to send file properties for \"%s\"!\n", path);
         goto end;

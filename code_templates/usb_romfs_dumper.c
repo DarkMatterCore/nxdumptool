@@ -105,7 +105,7 @@ static void read_thread_func(void *arg)
         if (shared_data->write_error) break;
         
         /* Send current file properties */
-        shared_data->read_error = !usbSendFileProperties(file_entry->size, path);
+        shared_data->read_error = !usbSendFilePropertiesCommon(file_entry->size, path);
         if (shared_data->read_error)
         {
             condvarWakeAll(&g_writeCondvar);

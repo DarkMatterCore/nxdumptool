@@ -168,4 +168,22 @@ NX_INLINE void pfsInitializeFileContext(PartitionFileSystemFileContext *ctx)
     ctx->header.magic = __builtin_bswap32(PFS0_MAGIC);
 }
 
+NX_INLINE u32 pfsGetEntryCountFromFileContext(PartitionFileSystemFileContext *ctx)
+{
+    return (ctx ? ctx->header.entry_count : 0);
+}
+
+NX_INLINE PartitionFileSystemEntry *pfsGetEntryByIndexFromFileContext(PartitionFileSystemFileContext *ctx, u32 idx)
+{
+    if (idx >= pfsGetEntryCountFromFileContext(ctx)) return NULL;
+    return &(ctx->entries[idx]);
+}
+
+NX_INLINE char *pfsGetEntryNameByIndexFromFileContext(PartitionFileSystemFileContext *ctx, u32 idx)
+{
+    PartitionFileSystemEntry *fs_entry = pfsGetEntryByIndexFromFileContext(ctx, idx);
+    if (!fs_entry || !ctx->name_table) return NULL;
+    return (ctx->name_table + fs_entry->name_offset);
+}
+
 #endif /* __PFS_H__ */

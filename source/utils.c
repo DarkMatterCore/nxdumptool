@@ -688,14 +688,15 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element)
 
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension)
 {
-    if (!prefix || !*prefix || !filename || !*filename || !extension || !*extension)
+    if (!filename || !*filename || !extension || !*extension)
     {
         LOGFILE("Invalid parameters!");
         return NULL;
     }
     
     char *path = NULL;
-    size_t path_len = (strlen(prefix) + strlen(filename) + strlen(extension) + 1);
+    size_t path_len = (strlen(filename) + strlen(extension) + 1);
+    if (prefix && *prefix) path_len += strlen(prefix);
     
     if (!(path = calloc(path_len, sizeof(char))))
     {
@@ -703,7 +704,9 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
         return NULL;
     }
     
-    sprintf(path, "%s%s%s", prefix, filename, extension);
+    if (prefix && *prefix) strcat(path, prefix);
+    strcat(path, filename);
+    strcat(path, extension);
     
     return path;
 }

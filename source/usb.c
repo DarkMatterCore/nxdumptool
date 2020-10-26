@@ -52,7 +52,7 @@ typedef struct {
 typedef enum {
     UsbCommandType_StartSession       = 0,
     UsbCommandType_SendFileProperties = 1,
-    UsbCommandType_SendNspHeader      = 2,  ///< Needs to be implemented.
+    UsbCommandType_SendNspHeader      = 2,
     UsbCommandType_EndSession         = 3
 } UsbCommandType;
 
@@ -74,7 +74,7 @@ typedef struct {
 typedef struct {
     u64 file_size;
     u32 filename_length;
-    u8 reserved_1[0x4];
+    u32 nsp_header_size;
     char filename[FS_MAX_PATH];
     u8 reserved_2[0xF];
 } UsbCommandSendFileProperties;
@@ -112,7 +112,7 @@ static bool g_usbDeviceInterfaceInitialized = false;
 static Event *g_usbStateChangeEvent = NULL;
 static Thread g_usbDetectionThread = {0};
 static UEvent g_usbDetectionThreadExitEvent = {0}, g_usbTimeoutEvent = {0};
-static bool g_usbHostAvailable = false, g_usbSessionStarted = false, g_usbDetectionThreadExitFlag = false;
+static bool g_usbHostAvailable = false, g_usbSessionStarted = false, g_usbDetectionThreadExitFlag = false, g_nspTransferMode = false;
 static atomic_bool g_usbDetectionThreadCreated = false;
 
 static u8 *g_usbTransferBuffer = NULL;
@@ -239,7 +239,7 @@ bool usbIsReady(void)
     return ret;
 }
 
-bool usbSendFileProperties(u64 file_size, const char *filename)
+bool usbSendFileProperties(u64 file_size, const char *filename, u32 nsp_header_size)
 {
     rwlockWriteLock(&g_usbDeviceLock);
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
@@ -248,10 +248,11 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
     UsbCommandSendFileProperties *cmd_block = NULL;
     size_t cmd_size = 0;
     u32 status = UsbStatusType_Success;
-    u32 filename_length = 0;
+    size_t filename_length = 0;
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize > 0 || !filename || \
-        !(filename_length = (u32)strlen(filename)) || filename_length >= FS_MAX_PATH)
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !filename || \
+        !(filename_length = strlen(filename)) || filename_length >= FS_MAX_PATH || (!g_nspTransferMode && ((file_size && nsp_header_size >= file_size) || g_usbTransferRemainingSize)) || \
+        (g_nspTransferMode && nsp_header_size))
     {
         LOGFILE("Invalid parameters!");
         goto end;
@@ -263,7 +264,8 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
     memset(cmd_block, 0, sizeof(UsbCommandSendFileProperties));
     
     cmd_block->file_size = file_size;
-    cmd_block->filename_length = filename_length;
+    cmd_block->filename_length = (u32)filename_length;
+    cmd_block->nsp_header_size = nsp_header_size;
     sprintf(cmd_block->filename, "%s", filename);
     
     cmd_size = (sizeof(UsbCommandHeader) + sizeof(UsbCommandSendFileProperties));
@@ -274,11 +276,14 @@ bool usbSendFileProperties(u64 file_size, const char *filename)
         ret = true;
         g_usbTransferRemainingSize = file_size;
         g_usbTransferWrittenSize = 0;
+        if (!g_nspTransferMode) g_nspTransferMode = (file_size && nsp_header_size);
     } else {
         usbLogStatusDetail(status);
     }
     
 end:
+    if (!ret && g_nspTransferMode) g_nspTransferMode = false;
+    
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
     
@@ -371,9 +376,59 @@ end:
     /* Disable ZLT if it was previously enabled. */
     if (zlt_required) usbSetZltPacket(false);
     
-    /* Reset remaining and written sizes in case of errors. */
-    if (!ret) g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
+    /* Reset variables in case of errors. */
+    if (!ret)
+    {
+        g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
+        g_nspTransferMode = false;
+    }
     
+    rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
+    rwlockWriteUnlock(&g_usbDeviceLock);
+    
+    return ret;
+}
+
+bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size)
+{
+    rwlockWriteLock(&g_usbDeviceLock);
+    rwlockWriteLock(&(g_usbDeviceInterface.lock));
+    
+    size_t cmd_size = 0;
+    u32 status = UsbStatusType_Success;
+    bool ret = false, zlt_required = false;
+    
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || \
+        !g_nspTransferMode || !nsp_header || !nsp_header_size || nsp_header_size > (USB_TRANSFER_BUFFER_SIZE - sizeof(UsbCommandHeader)))
+    {
+        LOGFILE("Invalid parameters!");
+        goto end;
+    }
+    
+    /* Disable NSP transfer mode right away. */
+    g_nspTransferMode = false;
+    
+    /* Prepare command data. */
+    usbPrepareCommandHeader(UsbCommandType_SendNspHeader, nsp_header_size);
+    memcpy(g_usbTransferBuffer + sizeof(UsbCommandHeader), nsp_header, nsp_header_size);
+    cmd_size = (sizeof(UsbCommandHeader) + nsp_header_size);
+    
+    /* Determine if we'll need to set a Zero Length Termination (ZLT) packet. */
+    zlt_required = IS_ALIGNED(cmd_size, g_usbEndpointMaxPacketSize);
+    if (zlt_required)
+    {
+        usbSetZltPacket(true);
+        //LOGFILE("ZLT enabled. SendNspHeader command size: 0x%lX.", cmd_size);
+    }
+    
+    /* Send command. */
+    ret = ((status = usbSendCommand(cmd_size)) == UsbStatusType_Success);
+    if (!ret) usbLogStatusDetail(status);
+    
+    /* Disable ZLT if it was previously enabled. */
+    if (zlt_required) usbSetZltPacket(false);
+    
+end:
     rwlockWriteUnlock(&(g_usbDeviceInterface.lock));
     rwlockWriteUnlock(&g_usbDeviceLock);
     
@@ -386,7 +441,12 @@ void usbCancelFileTransfer(void)
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
     rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize) goto end;
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || (!g_usbTransferRemainingSize && \
+        !g_nspTransferMode)) goto end;
+    
+    /* Reset variables. */
+    g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
+    g_nspTransferMode = false;
     
     /* Disable ZLT, just in case it was previously enabled. */
     usbDsEndpoint_SetZlt(g_usbDeviceInterface.endpoint_in, false);

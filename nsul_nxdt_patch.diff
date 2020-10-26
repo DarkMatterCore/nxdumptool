@@ -1,8 +1,42 @@
 diff --git a/src/main/java/nsusbloader/Utilities/nxdumptool/NxdtUsbAbi1.java b/src/main/java/nsusbloader/Utilities/nxdumptool/NxdtUsbAbi1.java
-index dd2a1bc..4a3d7fd 100644
+index dd2a1bc..58add89 100644
 --- a/src/main/java/nsusbloader/Utilities/nxdumptool/NxdtUsbAbi1.java
 +++ b/src/main/java/nsusbloader/Utilities/nxdumptool/NxdtUsbAbi1.java
-@@ -111,6 +111,9 @@ class NxdtUsbAbi1 {
+@@ -42,7 +42,7 @@ class NxdtUsbAbi1 {
+     private final boolean isWindows;
+     private boolean isWindows10;
+ 
+-    private static final int NXDT_MAX_DIRECTIVE_SIZE = 0x1000;
++    private static final int NXDT_MAX_DIRECTIVE_SIZE = 0x800000;
+     private static final int NXDT_FILE_CHUNK_SIZE = 0x800000;
+     private static final int NXDT_FILE_PROPERTIES_MAX_NAME_LENGTH = 0x300;
+ 
+@@ -51,6 +51,7 @@ class NxdtUsbAbi1 {
+ 
+     private static final int CMD_HANDSHAKE = 0;
+     private static final int CMD_SEND_FILE_PROPERTIES = 1;
++    private static final int CMD_SEND_NSP_HEADER = 2;
+     private static final int CMD_ENDSESSION = 3;
+ 
+     // Standard set of possible replies
+@@ -79,9 +80,15 @@ class NxdtUsbAbi1 {
+                                                     0x00, 0x00, 0x00, 0x00,
+                                                     0x00, 0x00, 0x00, 0x00 };
+ 
+-    private short endpointMaxPacketSize;
++    private short endpointMaxPacketSize = 0;
+ 
+     private static final int NXDT_USB_TIMEOUT = 5000;
++    
++    private boolean nspTransferMode = false;
++    private long nspSize = 0;
++    private int nspHeaderSize = 0;
++    private long nspRemainingSize = 0;
++    private File nspFile = null;
+ 
+     public NxdtUsbAbi1(DeviceHandle handler,
+                        ILogPrinter logPrinter,
+@@ -111,6 +118,9 @@ class NxdtUsbAbi1 {
          DeviceInformation deviceInformation = DeviceInformation.build(handlerNS);
          NsUsbEndpointDescriptor endpointInDescriptor = deviceInformation.getSimplifiedDefaultEndpointDescriptorIn();
          this.endpointMaxPacketSize = endpointInDescriptor.getwMaxPacketSize();
@@ -12,7 +46,17 @@ index dd2a1bc..4a3d7fd 100644
      }
  
      private void readLoop(){
-@@ -187,16 +190,8 @@ class NxdtUsbAbi1 {
+@@ -134,6 +144,9 @@ class NxdtUsbAbi1 {
+                     case CMD_SEND_FILE_PROPERTIES:
+                         handleSendFileProperties(directive);
+                         break;
++                    case CMD_SEND_NSP_HEADER:
++                        handleSendNspHeader(directive);
++                        break;
+                     case CMD_ENDSESSION:
+                         logPrinter.print("Session successfully ended.", EMsgType.PASS);
+                         return;
+@@ -187,30 +200,52 @@ class NxdtUsbAbi1 {
              writeUsb(USBSTATUS_UNSUPPORTED_ABI);
              throw new Exception("ABI v"+versionABI+" is not supported in current version.");
          }
@@ -31,6 +75,197 @@ index dd2a1bc..4a3d7fd 100644
      }
  
      private void handleSendFileProperties(byte[] message) throws Exception{
+         final long fileSize = getLElong(message, 0x10);
+         final int fileNameLen = getLEint(message, 0x18);
++        final int headerSize = getLEint(message, 0x1C);
+         String filename = new String(message, 0x20, fileNameLen, StandardCharsets.UTF_8);
+ 
++        if (!this.nspTransferMode && fileSize > 0 && headerSize >= fileSize) {
++            writeUsb(USBSTATUS_MALFORMED_REQUEST);
++            logPrinter.print("NSP header size non-zero in NSP transfer mode!", EMsgType.FAIL);
++            return;
++        }
++
++        if (this.nspTransferMode && headerSize > 0) {
++            writeUsb(USBSTATUS_MALFORMED_REQUEST);
++            logPrinter.print("NSP header size non-zero in NSP transfer mode!", EMsgType.FAIL);
++            resetNspInfo();
++            return;
++        }
++
+         if (fileNameLen <= 0 || fileNameLen > NXDT_FILE_PROPERTIES_MAX_NAME_LENGTH){
+             writeUsb(USBSTATUS_MALFORMED_REQUEST);
+             logPrinter.print("Invalid filename length!", EMsgType.FAIL);
++            resetNspInfo();
+             return;
+         }
++
+         // TODO: Note, in case of a big amount of small files performace decreses dramatically. It's better to handle this only in case of 1-big-file-transfer
+-        logPrinter.print("Receiving: '"+filename+"' ("+fileSize+" b)", EMsgType.INFO);
++        if (!this.nspTransferMode) {
++            logPrinter.print("Receiving: '"+filename+"' ("+fileSize+" b)", EMsgType.INFO);
++        } else {
++            logPrinter.print("Receiving NSP file entry: '"+filename+"' ("+fileSize+" b)", EMsgType.INFO);
++        }
++
++        if (!this.nspTransferMode && fileSize > 0 && headerSize > 0) {
++            // Enable NSP transfer mode
++            this.nspTransferMode = true;
++            this.nspSize = fileSize;
++            this.nspRemainingSize = (fileSize - headerSize);
++            this.nspHeaderSize = headerSize;
++            this.nspFile = null;
++        }
++
+         // If RomFs related
+         if (isRomFs(filename)) {
+             if (isWindows)
+@@ -225,24 +260,48 @@ class NxdtUsbAbi1 {
+             filename = saveToPath + filename;
+         }
+ 
+-        File fileToDump = new File(filename);
+-        // Check if enough space
+-        if (fileToDump.getParentFile().getFreeSpace() <= fileSize){
+-            writeUsb(USBSTATUS_HOSTIOERROR);
+-            logPrinter.print("Not enough space on selected volume. Need: "+fileSize+
+-                    " while available: "+fileToDump.getParentFile().getFreeSpace(), EMsgType.FAIL);
+-            return;
+-        }
+-        // Check if FS is NOT read-only
+-        if (! (fileToDump.canWrite() || fileToDump.createNewFile()) ){
+-            writeUsb(USBSTATUS_HOSTIOERROR);
+-            logPrinter.print("Unable to write into selected volume: "+fileToDump.getAbsolutePath(), EMsgType.FAIL);
+-            return;
++        File fileToDump;
++
++        if (!this.nspTransferMode || (this.nspTransferMode && this.nspFile == null)) {
++            fileToDump = new File(filename);
++
++            // Check if enough space
++            if (fileToDump.getParentFile().getFreeSpace() <= fileSize){
++                writeUsb(USBSTATUS_HOSTIOERROR);
++                logPrinter.print("Not enough space on selected volume. Need: "+fileSize+
++                        " while available: "+fileToDump.getParentFile().getFreeSpace(), EMsgType.FAIL);
++                resetNspInfo();
++                return;
++            }
++
++            // Check if FS is NOT read-only
++            if (! (fileToDump.canWrite() || fileToDump.createNewFile()) ){
++                writeUsb(USBSTATUS_HOSTIOERROR);
++                logPrinter.print("Unable to write into selected volume: "+fileToDump.getAbsolutePath(), EMsgType.FAIL);
++                resetNspInfo();
++                return;
++            }
++
++            // Delete file if it exists
++            if (fileToDump.exists()) fileToDump.delete();
++
++            if (this.nspTransferMode) {
++                // Update NSP file object
++                this.nspFile = fileToDump;
++
++                // Write padding
++                try (FileOutputStream fos = new FileOutputStream(this.nspFile, false)) {
++                    byte[] reserved = new byte[this.nspHeaderSize];
++                    fos.write(reserved);
++                }
++            }
++        } else {
++            fileToDump = this.nspFile;
+         }
+ 
+         writeUsb(USBSTATUS_SUCCESS);
+ 
+-        if (fileSize == 0)
++        if (fileSize == 0 || (this.nspTransferMode && fileSize == this.nspSize))
+             return;
+ 
+         dumpFile(fileToDump, fileSize);
+@@ -251,6 +310,49 @@ class NxdtUsbAbi1 {
+ 
+     }
+ 
++    private void handleSendNspHeader(byte[] message) throws Exception{
++        final int headerSize = getLEint(message, 0x8);
++        
++        if (!this.nspTransferMode) {
++            writeUsb(USBSTATUS_MALFORMED_REQUEST);
++            logPrinter.print("Received NSP send header request outside of NSP transfer mode!", EMsgType.FAIL);
++            resetNspInfo();
++            return;
++        }
++
++        if (this.nspRemainingSize > 0) {
++            writeUsb(USBSTATUS_MALFORMED_REQUEST);
++            logPrinter.print("Received NSP send header request without receiving all NSP file entry data!", EMsgType.FAIL);
++            resetNspInfo();
++            return;
++        }
++
++        if (headerSize != this.nspHeaderSize) {
++            writeUsb(USBSTATUS_MALFORMED_REQUEST);
++            logPrinter.print("Received NSP header size mismatch! "+headerSize+" != "+this.nspHeaderSize, EMsgType.FAIL);
++            resetNspInfo();
++            return;
++        }
++
++        try (RandomAccessFile raf = new RandomAccessFile(this.nspFile, "rw")) {
++            byte[] headerData = Arrays.copyOfRange(message, 0x10, headerSize + 0x10);
++            raf.seek(0);
++            raf.write(headerData);
++        }
++
++        resetNspInfo();
++
++        writeUsb(USBSTATUS_SUCCESS);
++    }
++
++    private void resetNspInfo(){
++        this.nspTransferMode = false;
++        this.nspSize = 0;
++        this.nspHeaderSize = 0;
++        this.nspRemainingSize = 0;
++        this.nspFile = null;
++    }
++
+     private int getLEint(byte[] bytes, int fromOffset){
+         return ByteBuffer.wrap(bytes, fromOffset, 0x4).order(ByteOrder.LITTLE_ENDIAN).getInt();
+     }
+@@ -279,7 +381,7 @@ class NxdtUsbAbi1 {
+ 
+     // @see https://bugs.openjdk.java.net/browse/JDK-8146538
+     private void dumpFile(File file, long size) throws Exception{
+-        FileOutputStream fos = new FileOutputStream(file, true);
++        FileOutputStream fos = new FileOutputStream(file, this.nspTransferMode);
+ 
+         try (BufferedOutputStream bos = new BufferedOutputStream(fos)) {
+             FileDescriptor fd = fos.getFD();
+@@ -296,15 +398,21 @@ class NxdtUsbAbi1 {
+                 bufferSize = readBuffer.length;
+                 received += bufferSize;
+ 
+-                logPrinter.updateProgress((double)received / (double)size);
++                if (!this.nspTransferMode) {
++                    logPrinter.updateProgress((double)received / (double)size);
++                } else {
++                    this.nspRemainingSize -= bufferSize;
++                    logPrinter.updateProgress((double)(this.nspSize - this.nspRemainingSize) / (double)this.nspSize);
++                }
+             }
+             int lastChunkSize = (int)(size - received) + 1;
+             readBuffer = readUsbFileDebug(lastChunkSize);
+             bos.write(readBuffer);
+             if (isWindows10)
+                 fd.sync();
++            if (this.nspTransferMode) this.nspRemainingSize -= (lastChunkSize - 1);
+         } finally {
+-            logPrinter.updateProgress(1.0);
++            if (!this.nspTransferMode || (this.nspTransferMode && this.nspRemainingSize == 0)) logPrinter.updateProgress(1.0);
+         }
+     }
+     /* Handle Zero-length terminator
 diff --git a/src/main/resources/NSLMain.fxml b/src/main/resources/NSLMain.fxml
 index a2d42d6..9114c3d 100644
 --- a/src/main/resources/NSLMain.fxml
