@@ -115,7 +115,7 @@ static void nspDump(TitleInfo *title_info)
     pfsInitializeFileContext(&pfs_file_ctx);
     
     char entry_name[64] = {0};
-    u64 nsp_header_size = 0, nsp_size = 0;
+    u64 nsp_header_size = 0, nsp_size = 0, nsp_offset = 0;
     
     Sha256Context sha256_ctx = {0};
     u8 sha256_hash[SHA256_HASH_SIZE] = {0};
@@ -457,13 +457,14 @@ static void nspDump(TitleInfo *title_info)
         goto end;
     }
     
-    consolePrint("dump process started. please wait... yes, i'm too lazy to print progress here...\n");
+    consolePrint("dump process started. please wait...\n");
     
     time_t start = time(NULL);
     
     // write placeholder header
     memset(buf, 0, nsp_header_size);
     fwrite(buf, 1, nsp_header_size, fd);
+    nsp_offset += nsp_header_size;
     
     // write ncas
     for(u32 i = 0; i < title_info->content_count; i++)
@@ -482,7 +483,7 @@ static void nspDump(TitleInfo *title_info)
         
         bool dirty_header = ncaIsHeaderDirty(cur_nca_ctx);
         
-        for(u64 offset = 0; offset < cur_nca_ctx->content_size; offset += blksize)
+        for(u64 offset = 0; offset < cur_nca_ctx->content_size; offset += blksize, nsp_offset += blksize)
         {
             if ((cur_nca_ctx->content_size - offset) < blksize) blksize = (cur_nca_ctx->content_size - offset);
             
@@ -496,7 +497,7 @@ static void nspDump(TitleInfo *title_info)
             if (dirty_header)
             {
                 // write re-encrypted headers
-                ncaWriteEncryptedHeaderDataToMemoryBuffer(cur_nca_ctx, buf, blksize, offset);
+                if (!cur_nca_ctx->header_written) ncaWriteEncryptedHeaderDataToMemoryBuffer(cur_nca_ctx, buf, blksize, offset);
                 
                 if (cur_nca_ctx->content_type_ctx_patch)
                 {
@@ -521,6 +522,9 @@ static void nspDump(TitleInfo *title_info)
                             break;
                     }
                 }
+                
+                // update flag to avoid entering this code block if it's not needed anymore
+                dirty_header = (!cur_nca_ctx->header_written || cur_nca_ctx->content_type_ctx_patch);
             }
             
             // update hash calculation
@@ -560,6 +564,7 @@ static void nspDump(TitleInfo *title_info)
     
     // write cnmt xml
     fwrite(cnmt_ctx.authoring_tool_xml, 1, cnmt_ctx.authoring_tool_xml_size, fd);
+    nsp_offset += cnmt_ctx.authoring_tool_xml_size;
     
     // update cnmt xml pfs entry name
     if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx, meta_nca_ctx->content_id_str))
@@ -600,6 +605,7 @@ static void nspDump(TitleInfo *title_info)
                     
                     // write icon
                     fwrite(icon_ctx->icon_data, 1, icon_ctx->icon_size, fd);
+                    nsp_offset += icon_ctx->icon_size;
                     
                     // update pfs entry name
                     if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, data_idx++, cur_nca_ctx->content_id_str))
@@ -624,6 +630,7 @@ static void nspDump(TitleInfo *title_info)
         
         // write xml
         fwrite(authoring_tool_xml, 1, authoring_tool_xml_size, fd);
+        nsp_offset += authoring_tool_xml_size;
         
         // update pfs entry name
         if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, data_idx, cur_nca_ctx->content_id_str))
@@ -637,9 +644,11 @@ static void nspDump(TitleInfo *title_info)
     {
         // write ticket
         fwrite(tik.data, 1, tik.size, fd);
+        nsp_offset += tik.size;
         
         // write cert
         fwrite(raw_cert_chain, 1, raw_cert_chain_size, fd);
+        nsp_offset += raw_cert_chain_size;
     }
     
     // write new pfs0 header

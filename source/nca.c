@@ -436,23 +436,29 @@ bool ncaEncryptHeader(NcaContext *ctx)
 
 void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 buf_size, u64 buf_offset)
 {
-    /* Return right away if we're dealing with invalid parameters, or if the buffer data is not part of the range covered by the encrypted header data (NCA2/3 optimization, last condition). */
+    /* Return right away if we're dealing with invalid parameters. */
     /* In order to avoid taking up too much execution time when this function is called (ideally inside a loop), we won't use ncaIsHeaderDirty() here. Let the user take care of it instead. */
-    if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size || \
-        (ctx->format_version != NcaVersion_Nca0 && buf_offset >= NCA_FULL_HEADER_LENGTH)) return;
+    if (!ctx || ctx->header_written || ctx->content_size < NCA_FULL_HEADER_LENGTH || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
+    
+    ctx->header_written = true;
     
     /* Attempt to write the NCA header. */
     /* Return right away if the NCA header was only partially written. */
-    if (buf_offset < sizeof(NcaHeader) && !ncaWritePatchToMemoryBuffer(ctx, &(ctx->encrypted_header), sizeof(NcaHeader), 0, buf, buf_size, buf_offset)) return;
+    if (buf_offset < sizeof(NcaHeader) && !ncaWritePatchToMemoryBuffer(ctx, &(ctx->encrypted_header), sizeof(NcaHeader), 0, buf, buf_size, buf_offset))
+    {
+        ctx->header_written = false;
+        return;
+    }
     
     /* Attempt to write NCA FS section headers. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
         NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
-        if (!fs_ctx->enabled) continue;
+        if (!fs_ctx->enabled || fs_ctx->header_written) continue;
         
         u64 fs_header_offset = (ctx->format_version != NcaVersion_Nca0 ? (sizeof(NcaHeader) + (i * sizeof(NcaFsHeader))) : fs_ctx->section_offset);
-        ncaWritePatchToMemoryBuffer(ctx, &(fs_ctx->encrypted_header), sizeof(NcaFsHeader), fs_header_offset, buf, buf_size, buf_offset);
+        fs_ctx->header_written = ncaWritePatchToMemoryBuffer(ctx, &(fs_ctx->encrypted_header), sizeof(NcaFsHeader), fs_header_offset, buf, buf_size, buf_offset);
+        if (!fs_ctx->header_written) ctx->header_written = false;
     }
 }
 

@@ -278,6 +278,7 @@ typedef struct {
     NcaFsHeader header;                 ///< Plaintext NCA FS section header.
     NcaFsHeader encrypted_header;       ///< Encrypted NCA FS section header. If the plaintext NCA FS section header is modified, this will hold an encrypted copy of it.
                                         ///< Otherwise, this holds the unmodified, encrypted NCA FS section header.
+    bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
     u8 section_num;
     u64 section_offset;
     u64 section_size;
@@ -322,6 +323,7 @@ typedef struct {
     u8 header_hash[SHA256_HASH_SIZE];                   ///< Plaintext NCA header hash. Used to determine if it's necessary to replace the NCA header while dumping this NCA.
     NcaHeader encrypted_header;                         ///< Encrypted NCA header. If the plaintext NCA header is modified, this will hold an encrypted copy of it.
                                                         ///< Otherwise, this holds the unmodified, encrypted NCA header.
+    bool header_written;                                ///< Set to true after the NCA header and the FS section headers have been written to an output dump.
     NcaFsSectionContext fs_ctx[NCA_FS_HEADER_COUNT];
     NcaDecryptedKeyArea decrypted_key_area;
     void *content_type_ctx;                             ///< Pointer to a content type context (e.g. ContentMetaContext, ProgramInfoContext, NacpContext, LegalInfoContext). Set to NULL if unused.
