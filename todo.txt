@@ -77,7 +77,6 @@ todo:
     
     bktr: functions to display filelist (wrappers for romfs functions tbh)
     
-    title: fix titleinfo issue
     title: more functions for title lookup? (filters, patches / aoc, etc.)
     title: more functions for content lookup? (based on id)
     title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
