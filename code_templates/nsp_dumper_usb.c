@@ -796,26 +796,6 @@ int main(int argc, char *argv[])
     {
         consoleClear();
         
-        if (menu == 2 && titleIsGameCardInfoUpdated())
-        {
-            free(app_metadata);
-            
-            app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
-            if (!app_metadata)
-            {
-                consolePrint("\napp metadata failed\n");
-                goto out2;
-            }
-            
-            menu = selected_idx = scroll = 0;
-            
-            title_idx = title_scroll = 0;
-            type_idx = type_scroll = 0;
-            list_count = list_idx = 0;
-            
-            continue;
-        }
-        
         printf("press b to %s.\n", menu == 0 ? "exit" : "go back");
         printf("______________________________\n\n");
         

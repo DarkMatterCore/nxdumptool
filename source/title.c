@@ -35,7 +35,8 @@ typedef struct {
 
 static Mutex g_titleMutex = 0;
 static Thread g_titleGameCardInfoThread = {0};
-static UEvent g_titleGameCardInfoThreadExitEvent = {0}, *g_titleGameCardStatusChangeUserEvent = NULL;
+static UEvent g_titleGameCardInfoThreadExitEvent = {0}, *g_titleGameCardStatusChangeUserEvent = NULL, g_titleGameCardUpdateInfoUserEvent = {0};
+static CondVar g_gameCardCondVar = 0;
 
 static bool g_titleInterfaceInit = false, g_titleGameCardInfoThreadCreated = false, g_titleGameCardAvailable = false, g_titleGameCardInfoUpdated = false;
 
@@ -477,6 +478,9 @@ bool titleInitialize(void)
         goto end;
     }
     
+    /* Create usermode gamecard update info event. */
+    ueventCreate(&g_titleGameCardUpdateInfoUserEvent, true);
+    
     /* Create gamecard title info thread. */
     if (!(g_titleGameCardInfoThreadCreated = titleCreateGameCardInfoThread())) goto end;
     
@@ -728,8 +732,22 @@ end:
 bool titleIsGameCardInfoUpdated(void)
 {
     mutexLock(&g_titleMutex);
+    
+    /* Check if the gamecard thread detected a gamecard status change. */
     bool ret = g_titleGameCardInfoUpdated;
-    if (ret) g_titleGameCardInfoUpdated = false; /* Update flag to avoid updating application metadata entries in the caller function if it's not needed. */
+    if (!ret) goto end;
+    
+    /* Signal the gamecard update info user event. */
+    ueventSignal(&g_titleGameCardUpdateInfoUserEvent);
+    
+    /* Wait for the gamecard thread to wakes us up. */
+    condvarWait(&g_gameCardCondVar, &g_titleMutex);
+    
+    /* Update output value and gamecard info updated flag (if needed). */
+    ret = g_titleGameCardInfoUpdated;
+    if (ret) g_titleGameCardInfoUpdated = false;
+    
+end:
     mutexUnlock(&g_titleMutex);
     return ret;
 }
@@ -1258,8 +1276,6 @@ static bool titleLoadPersistentStorageTitleInfo(void)
     /* Return right away if title info has already been retrieved. */
     if (g_titleInfo || g_titleInfoCount) return true;
     
-    g_titleInfoCount = 0;
-    
     for(u8 i = NcmStorageId_BuiltInSystem; i <= NcmStorageId_SdCard; i++)
     {
         /* Retrieve content meta keys from the current storage. */
@@ -1397,6 +1413,11 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
     /* Update title info count. */
     g_titleInfoCount += total;
     
+    /* Update success flag. Nothing past this point will generate errors. */
+    /* Also jump to the end of this function if we're dealing with eMMC System titles. */
+    success = true;
+    if (storage_id == NcmStorageId_BuiltInSystem) goto end;
+    
     /* Update linked lists pointers for user applications, patches and add-on contents. */
     g_titleInfoOrphanCount = 0;
     for(u32 i = 0; i < g_titleInfoCount; i++)
@@ -1448,8 +1469,6 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
             }
         }
     }
-    
-    success = true;
     
 end:
     if (meta_keys) free(meta_keys);
@@ -1559,14 +1578,11 @@ static void titleGameCardInfoThreadFunc(void *arg)
     
     Result rc = 0;
     int idx = 0;
+    bool first_run = true;
     
     Waiter gamecard_status_event_waiter = waiterForUEvent(g_titleGameCardStatusChangeUserEvent);
     Waiter exit_event_waiter = waiterForUEvent(&g_titleGameCardInfoThreadExitEvent);
-    
-    /* Initial gamecard title info retrieval. */
-    mutexLock(&g_titleMutex);
-    titleRefreshGameCardTitleInfo();
-    mutexUnlock(&g_titleMutex);
+    Waiter update_info_waiter = waiterForUEvent(&g_titleGameCardUpdateInfoUserEvent);
     
     while(true)
     {
@@ -1577,10 +1593,40 @@ static void titleGameCardInfoThreadFunc(void *arg)
         /* Exit event triggered. */
         if (idx == 1) break;
         
+        if (!first_run)
+        {
+            /* Update gamecard info updated flag. */
+            mutexLock(&g_titleMutex);
+            g_titleGameCardInfoUpdated = true;
+            mutexUnlock(&g_titleMutex);
+            
+            /* Wait until another function signals us (titleIsGameCardInfoUpdated() or titleExit()). */
+            rc = waitMulti(&idx, -1, update_info_waiter, exit_event_waiter);
+            if (R_FAILED(rc))
+            {
+                mutexLock(&g_titleMutex);
+                g_titleGameCardInfoUpdated = false;
+                mutexUnlock(&g_titleMutex);
+                continue;
+            }
+            
+            /* Exit event triggered. */
+            if (idx == 1) break;
+        }
+        
         /* Update gamecard title info. */
         mutexLock(&g_titleMutex);
-        g_titleGameCardInfoUpdated = titleRefreshGameCardTitleInfo();
+        g_titleGameCardInfoUpdated = (titleRefreshGameCardTitleInfo() && !first_run);
         mutexUnlock(&g_titleMutex);
+        
+        if (first_run)
+        {
+            /* Disable first run flag. */
+            first_run = false;
+        } else {
+            /* Wake up titleIsGameCardInfoUpdated(). */
+            condvarWakeAll(&g_gameCardCondVar);
+        }
     }
     
     /* Update gamecard flags. */
@@ -1791,7 +1837,7 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id,
     
     /* Speed up gamecard lookups. */
     u32 start_idx = (storage_id == NcmStorageId_GameCard ? g_titleInfoGameCardStartIndex : 0);
-    u32 max_val = ((storage_id == NcmStorageId_GameCard || storage_id == NcmStorageId_Any) ? g_titleInfoCount : g_titleInfoGameCardStartIndex);
+    u32 max_val = ((storage_id == NcmStorageId_GameCard || storage_id == NcmStorageId_Any) ? g_titleInfoCount : (g_titleInfoGameCardCount ? g_titleInfoGameCardStartIndex : g_titleInfoCount));
     
     for(u32 i = start_idx; i < max_val; i++)
     {
@@ -1804,7 +1850,7 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id,
         }
     }
     
-    //if (!info) LOGFILE("Unable to find TitleInfo entry with ID \"%016lX\"! (storage ID %u).", title_id, storage_id);
+    if (!info && lock) LOGFILE("Unable to find TitleInfo entry with ID \"%016lX\"! (storage ID %u).", title_id, storage_id);
     
 end:
     if (lock) mutexUnlock(&g_titleMutex);

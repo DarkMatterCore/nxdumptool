@@ -108,8 +108,9 @@ bool titleAreOrphanTitlesAvailable(void);
 /// Returns NULL if an error occurs.
 TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count);
 
-/// Returns true if the gamecard title info entries have been updated (e.g. after a new gamecard has been inserted, of after the current one has been taken out).
-/// If titleGetApplicationMetadataEntries() has been previously called, its returned buffer should be freed and a new titleGetApplicationMetadataEntries() call should be issued.
+/// Checks if a gamecard status update has been detected by the background gamecard title info thread (e.g. after a new gamecard has been inserted, of after the current one has been taken out).
+/// If so, gamecard title info entries will be updated or freed during this call, depending on the current gamecard status.
+/// If this function returns true and titleGetApplicationMetadataEntries() has been previously called, its returned buffer should be freed and titleGetApplicationMetadataEntries() should be called again.
 bool titleIsGameCardInfoUpdated(void);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps.
