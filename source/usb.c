@@ -491,7 +491,6 @@ static void usbDetectionThreadFunc(void *arg)
     
     Result rc = 0;
     int idx = 0;
-    bool skip_wait = false;
     
     Waiter usb_change_event_waiter = waiterForEvent(g_usbStateChangeEvent);
     Waiter usb_timeout_event_waiter = waiterForUEvent(&g_usbTimeoutEvent);
@@ -499,12 +498,9 @@ static void usbDetectionThreadFunc(void *arg)
     
     while(true)
     {
-        if (!skip_wait)
-        {
-            /* Wait until an event is triggered. */
-            rc = waitMulti(&idx, -1, usb_change_event_waiter, usb_timeout_event_waiter, exit_event_waiter);
-            if (R_FAILED(rc)) continue;
-        }
+        /* Wait until an event is triggered. */
+        rc = waitMulti(&idx, -1, usb_change_event_waiter, usb_timeout_event_waiter, exit_event_waiter);
+        if (R_FAILED(rc)) continue;
         
         rwlockWriteLock(&g_usbDeviceLock);
         rwlockWriteLock(&(g_usbDeviceInterface.lock));
@@ -515,7 +511,7 @@ static void usbDetectionThreadFunc(void *arg)
         /* Retrieve current USB connection status. */
         /* Only proceed if we're dealing with a status change. */
         g_usbHostAvailable = usbIsHostAvailable();
-        g_usbSessionStarted = skip_wait = false;
+        g_usbSessionStarted = false;
         g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
         g_usbEndpointMaxPacketSize = 0;
         
@@ -583,18 +579,11 @@ static bool usbStartSession(void)
         /* Get the endpoint max packet size from the response sent by the USB host. */
         /* This is done to accurately know when and where to enable Zero Length Termination (ZLT) packets during bulk transfers. */
         /* As much as I'd like to avoid this, usb:ds doesn't disclose information such as the exact device descriptor and/or speed used by the USB host. */
-        /* If this step fails (e.g. unexpected max packet size), the write endpoint will be stalled and we'll wait until a new USB session is established. */
         UsbStatus *cmd_status = (UsbStatus*)g_usbTransferBuffer;
         g_usbEndpointMaxPacketSize = cmd_status->max_packet_size;
         if (g_usbEndpointMaxPacketSize != USB_FS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_HS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_SS_EP_MAX_PACKET_SIZE)
         {
             LOGFILE("Invalid endpoint max packet size value received from USB host: 0x%04X.", g_usbEndpointMaxPacketSize);
-            
-            /* Stall input (write) endpoint. */
-            /* This will force the client to stop the current session, so a new one will have to be established. */
-            rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
-            usbDsEndpoint_Stall(g_usbDeviceInterface.endpoint_in);
-            rwlockWriteUnlock(&(g_usbDeviceInterface.lock_in));
             
             /* Reset flags. */
             g_usbEndpointMaxPacketSize = 0;
