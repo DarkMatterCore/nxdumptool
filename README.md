@@ -2,9 +2,11 @@
 <img width="200" src="icon.jpg">
 Nintendo Switch Dump Tool
 
-## The application is being rewritten from scratch to improve things such as code quality, code maintenance and code readability.
+## The application is being rewritten from scratch to improve things such as code quality, maintainability and readability.
 
 ## All the changes will be pushed to this branch once the new codebase reaches an usable + stable state. Sorry for any possible inconveniences.
+
+## Official Discord server: https://discord.gg/SCbbcQx.
 
 Main features
 --------------
