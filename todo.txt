@@ -71,7 +71,6 @@ todo:
     gamecard: functions to display filelist
     
     pfs0: functions to display filelist
-    pfs0: full header aligned to 0x20 (nsp)
     
     romfs: functions to display filelist
     
@@ -81,4 +80,8 @@ todo:
     title: more functions for content lookup? (based on id)
     title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
     
+    others: config load/save using json
+    others: dump verification via nswdb / no-intro
+    others: update application feature
+    others: fatfs browser for emmc partitions
     

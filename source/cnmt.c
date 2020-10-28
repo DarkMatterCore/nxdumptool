@@ -333,7 +333,7 @@ void cnmtWriteNcaPatch(ContentMetaContext *cnmt_ctx, void *buf, u64 buf_size, u6
 
 bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx, u32 nca_ctx_count)
 {
-    if (!cnmtIsValidContext(cnmt_ctx) || !nca_ctx || nca_ctx_count != ((u32)cnmt_ctx->packaged_header->content_count + 1))
+    if (!cnmtIsValidContext(cnmt_ctx) || !nca_ctx || !nca_ctx_count || nca_ctx_count > ((u32)cnmt_ctx->packaged_header->content_count + 1))
     {
         LOGFILE("Invalid parameters!");
         return false;
