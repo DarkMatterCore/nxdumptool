@@ -320,14 +320,14 @@ void cnmtWriteNcaPatch(ContentMetaContext *cnmt_ctx, void *buf, u64 buf_size, u6
     /* Using cnmtIsValidContext() here would probably take up precious CPU cycles. */
     if (!cnmt_ctx || !cnmt_ctx->nca_ctx || cnmt_ctx->nca_ctx->content_type != NcmContentType_Meta || !cnmt_ctx->nca_ctx->content_type_ctx_patch || cnmt_ctx->nca_patch.written) return;
     
-    /* Attempt to write Partition FS entry. */
+    /* Attempt to write Partition FS entry patch. */
     pfsWriteEntryPatchToMemoryBuffer(&(cnmt_ctx->pfs_ctx), &(cnmt_ctx->nca_patch), buf, buf_size, buf_offset);
     
     /* Check if we need to update the NCA content type context patch status. */
     if (cnmt_ctx->nca_patch.written)
     {
         cnmt_ctx->nca_ctx->content_type_ctx_patch = false;
-        LOGFILE("CNMT Partition FS file entry patch successfully written to NCA \"%s\"!", cnmt_ctx->nca_ctx->content_id_str);
+        LOGFILE("CNMT Partition FS entry patch successfully written to NCA \"%s\"!", cnmt_ctx->nca_ctx->content_id_str);
     }
 }
 

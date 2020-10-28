@@ -329,6 +329,71 @@ end:
     return success;
 }
 
+bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_screenshot, bool patch_video_capture)
+{
+    if (!nacpIsValidContext(nacp_ctx))
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    _NacpStruct *data = nacp_ctx->data;
+    u8 nacp_hash[SHA256_HASH_SIZE] = {0};
+    
+    /* Check if we're not patching anything. */
+    if (!patch_sua && !patch_screenshot && !patch_video_capture) return true;
+    
+    /* Patch StartupUserAccount, StartupUserAccountOption and UserAccountSwitchLock. */
+    if (patch_sua)
+    {
+        data->startup_user_account = NacpStartupUserAccount_None;
+        data->startup_user_account_option &= ~NacpStartupUserAccountOption_IsOptional;
+        data->user_account_switch_lock = NacpUserAccountSwitchLock_Disable;
+    }
+    
+    /* Patch Screenshot. */
+    if (patch_screenshot) data->screenshot = NacpScreenshot_Allow;
+    
+    /* Patch VideoCapture. */
+    if (patch_video_capture) data->video_capture = NacpVideoCapture_Enable;
+    
+    /* Check if we really need to generate this patch. */
+    sha256CalculateHash(nacp_hash, data, sizeof(_NacpStruct));
+    if (!memcmp(nacp_hash, nacp_ctx->data_hash, sizeof(nacp_hash)))
+    {
+        LOGFILE("Skipping NACP patching - no flags have changed.");
+        return true;
+    }
+    
+    /* Generate RomFS file entry patch. */
+    if (!romfsGenerateFileEntryPatch(&(nacp_ctx->romfs_ctx), nacp_ctx->romfs_file_entry, data, sizeof(_NacpStruct), 0, &(nacp_ctx->nca_patch)))
+    {
+        LOGFILE("Failed to generate RomFS file entry patch!");
+        return false;
+    }
+    
+    /* Update NCA content type context patch status. */
+    nacp_ctx->nca_ctx->content_type_ctx_patch = true;
+    
+    return true;
+}
+
+void nacpWriteNcaPatch(NacpContext *nacp_ctx, void *buf, u64 buf_size, u64 buf_offset)
+{
+    /* Using nacpIsValidContext() here would probably take up precious CPU cycles. */
+    if (!nacp_ctx || !nacp_ctx->nca_ctx || nacp_ctx->nca_ctx->content_type != NcmContentType_Control || !nacp_ctx->nca_ctx->content_type_ctx_patch || nacp_ctx->nca_patch.written) return;
+    
+    /* Attempt to write RomFS file entry patch. */
+    romfsWriteFileEntryPatchToMemoryBuffer(&(nacp_ctx->romfs_ctx), &(nacp_ctx->nca_patch), buf, buf_size, buf_offset);
+    
+    /* Check if we need to update the NCA content type context patch status. */
+    if (nacp_ctx->nca_patch.written)
+    {
+        nacp_ctx->nca_ctx->content_type_ctx_patch = false;
+        LOGFILE("NACP RomFS file entry patch successfully written to NCA \"%s\"!", nacp_ctx->nca_ctx->content_id_str);
+    }
+}
+
 bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 required_system_version)
 {
     if (!nacpIsValidContext(nacp_ctx))
@@ -424,13 +489,13 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     /* Rating. */
     for(i = 0, count = 0; i < NacpRatingAgeOrganization_Count; i++)
     {
-        u8 age = *((u8*)&(nacp->rating_age) + i);
-        if (age == 0xFF) continue;
+        s8 age = *(((s8*)&(nacp->rating_age)) + i);
+        if (age < 0) continue;
         
         if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                                 "  <Rating>\n" \
                                                 "    <Organization>%s</Organization>\n" \
-                                                "    <Age>%u</Age>\n" \
+                                                "    <Age>%d</Age>\n" \
                                                 "  </Rating>\n", \
                                                 nacpGetRatingAgeOrganizationString(i),
                                                 age)) goto end;
@@ -450,19 +515,19 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SaveDataOwnerId", nacp->save_data_owner_id)) goto end;
     
     /* UserAccountSaveDataSize. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataSize", nacp->user_account_save_data_size)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataSize", (u64)nacp->user_account_save_data_size)) goto end;
     
     /* UserAccountSaveDataJournalSize. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataJournalSize", nacp->user_account_save_data_journal_size)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataJournalSize", (u64)nacp->user_account_save_data_journal_size)) goto end;
     
     /* DeviceSaveDataSize. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DeviceSaveDataSize", nacp->device_save_data_size)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DeviceSaveDataSize", (u64)nacp->device_save_data_size)) goto end;
     
     /* DeviceSaveDataJournalSize. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DeviceSaveDataJournalSize", nacp->device_save_data_journal_size)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DeviceSaveDataJournalSize", (u64)nacp->device_save_data_journal_size)) goto end;
     
     /* BcatDeliveryCacheStorageSize. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "BcatDeliveryCacheStorageSize", nacp->bcat_delivery_cache_storage_size)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "BcatDeliveryCacheStorageSize", (u64)nacp->bcat_delivery_cache_storage_size)) goto end;
     
     /* ApplicationErrorCodeCategory. */
     if (!nacpAddStringFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "ApplicationErrorCodeCategory", nacp->application_error_code_category)) goto end;
@@ -541,28 +606,28 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     if (!nacpAddEnumFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "AddOnContentRegistrationType", nacp->add_on_content_registration_type, &nacpGetAddOnContentRegistrationTypeString)) goto end;
     
     /* UserAccountSaveDataSizeMax. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataSizeMax", nacp->user_account_save_data_size_max)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataSizeMax", (u64)nacp->user_account_save_data_size_max)) goto end;
     
     /* UserAccountSaveDataJournalSizeMax. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataJournalSizeMax", nacp->user_account_save_data_journal_size_max)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "UserAccountSaveDataJournalSizeMax", (u64)nacp->user_account_save_data_journal_size_max)) goto end;
     
     /* DeviceSaveDataSizeMax. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DeviceSaveDataSizeMax", nacp->device_save_data_size_max)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DeviceSaveDataSizeMax", (u64)nacp->device_save_data_size_max)) goto end;
     
     /* DeviceSaveDataJournalSizeMax. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DeviceSaveDataJournalSizeMax", nacp->device_save_data_journal_size_max)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "DeviceSaveDataJournalSizeMax", (u64)nacp->device_save_data_journal_size_max)) goto end;
     
     /* TemporaryStorageSize. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "TemporaryStorageSize", nacp->temporary_storage_size)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "TemporaryStorageSize", (u64)nacp->temporary_storage_size)) goto end;
     
     /* CacheStorageSize. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CacheStorageSize", nacp->cache_storage_size)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CacheStorageSize", (u64)nacp->cache_storage_size)) goto end;
     
     /* CacheStorageJournalSize. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CacheStorageJournalSize", nacp->cache_storage_journal_size)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CacheStorageJournalSize", (u64)nacp->cache_storage_journal_size)) goto end;
     
     /* CacheStorageDataAndJournalSizeMax. */
-    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CacheStorageDataAndJournalSizeMax", nacp->cache_storage_data_and_journal_size_max)) goto end;
+    if (!nacpAddU64FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CacheStorageDataAndJournalSizeMax", (u64)nacp->cache_storage_data_and_journal_size_max)) goto end;
     
     /* CacheStorageIndexMax. */
     if (!nacpAddU16FieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "CacheStorageIndexMax", nacp->cache_storage_index_max, true)) goto end;

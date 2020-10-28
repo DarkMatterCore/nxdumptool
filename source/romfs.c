@@ -524,6 +524,8 @@ bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEnt
         success = ncaGenerateHierarchicalIntegrityPatch(ctx->nca_fs_ctx, data, data_size, fs_offset, &(out->cur_format_patch));
     }
     
+    out->written = false;
+    
     if (!success) LOGFILE("Failed to generate 0x%lX bytes Hierarchical%s patch at offset 0x%lX for RomFS file entry!", data_size, \
                           ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? "Sha256" : "Integrity", fs_offset);
     

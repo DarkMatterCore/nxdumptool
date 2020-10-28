@@ -306,13 +306,13 @@ void npdmWriteNcaPatch(NpdmContext *npdm_ctx, void *buf, u64 buf_size, u64 buf_o
     if (!npdm_ctx || !npdm_ctx->pfs_ctx || !npdm_ctx->pfs_ctx->nca_fs_ctx || !(nca_ctx = (NcaContext*)npdm_ctx->pfs_ctx->nca_fs_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Program || \
         !nca_ctx->content_type_ctx_patch || npdm_ctx->nca_patch.written) return;
     
-    /* Attempt to write Partition FS entry. */
+    /* Attempt to write Partition FS entry patch. */
     pfsWriteEntryPatchToMemoryBuffer(npdm_ctx->pfs_ctx, &(npdm_ctx->nca_patch), buf, buf_size, buf_offset);
     
     /* Check if we need to update the NCA content type context patch status. */
     if (npdm_ctx->nca_patch.written)
     {
         nca_ctx->content_type_ctx_patch = false;
-        LOGFILE("NPDM Partition FS file entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
+        LOGFILE("NPDM Partition FS entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
     }
 }

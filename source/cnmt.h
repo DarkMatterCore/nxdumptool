@@ -247,7 +247,7 @@ bool cnmtUpdateContentInfo(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx);
 /// Generates a Partition FS entry patch for the NcaContext pointed to by the input ContentMetaContext, using its raw CNMT data.
 bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx);
 
-/// Writes data from the Partition FS patch in the input ContentMetaContext to the provided buffer.
+/// Writes data from the Partition FS entry patch in the input ContentMetaContext to the provided buffer.
 void cnmtWriteNcaPatch(ContentMetaContext *cnmt_ctx, void *buf, u64 buf_size, u64 buf_offset);
 
 /// Generates an AuthoringTool-like XML using information from a previously initialized ContentMetaContext, as well as a pointer to 'nca_ctx_count' NcaContext with content information.

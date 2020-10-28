@@ -106,6 +106,7 @@ typedef struct {
 
 typedef struct {
     bool use_old_format_patch;                      ///< Old format patch flag.
+    bool written;                                   ///< Set to true if the patch has been completely written.
     NcaHierarchicalSha256Patch old_format_patch;    ///< Used with NCA0 RomFS sections.
     NcaHierarchicalIntegrityPatch cur_format_patch; ///< Used with NCA2/NCA3 RomFS sections.
 } RomFileSystemFileEntryPatch;
@@ -183,17 +184,19 @@ NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx,
     if (patch->use_old_format_patch)
     {
         ncaWriteHierarchicalSha256PatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, &(patch->old_format_patch), buf, buf_size, buf_offset);
+        patch->written = patch->old_format_patch.written;
     } else {
         ncaWriteHierarchicalIntegrityPatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, &(patch->cur_format_patch), buf, buf_size, buf_offset);
+        patch->written = patch->cur_format_patch.written;
     }
 }
 
 NX_INLINE void romfsFreeFileEntryPatch(RomFileSystemFileEntryPatch *patch)
 {
     if (!patch) return;
-    patch->use_old_format_patch = false;
     ncaFreeHierarchicalSha256Patch(&(patch->old_format_patch));
     ncaFreeHierarchicalIntegrityPatch(&(patch->cur_format_patch));
+    memset(patch, 0, sizeof(RomFileSystemFileEntryPatch));
 }
 
 #endif /* __ROMFS_H__ */

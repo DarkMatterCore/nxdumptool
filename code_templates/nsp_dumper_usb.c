@@ -46,8 +46,11 @@ typedef struct {
 static options_t options[] = {
     { "set download distribution type", false },
     { "remove console specific data", false },
-    { "remove titlekey crypto (implies previous option)", false },
-    { "change acid rsa key/sig", false }
+    { "remove titlekey crypto (overrides previous option)", false },
+    { "change acid rsa key/sig", false },
+    { "disable linked account requirement", false },
+    { "enable screenshots", false },
+    { "enable video capture", false }
 };
 
 static const u32 options_count = MAX_ELEMENTS(options);
@@ -84,7 +87,13 @@ static void nspDump(TitleInfo *title_info)
     for(u32 i = 0; i < options_count; i++) printf("%s: %s\n", options[i].str, options[i].val ? "yes" : "no");
     printf("______________________________\n\n");
     
-    bool set_download_type = options[0].val, remove_console_data = options[1].val, remove_titlekey_crypto = options[2].val, change_acid_rsa = options[3].val;
+    bool set_download_type = options[0].val;
+    bool remove_console_data = options[1].val;
+    bool remove_titlekey_crypto = options[2].val;
+    bool change_acid_rsa = options[3].val;
+    bool patch_sua = options[4].val;
+    bool patch_screenshot = options[5].val;
+    bool patch_video_capture = options[6].val;
     
     u8 *buf = NULL;
     char *dump_name = NULL, *path = NULL;
@@ -262,7 +271,11 @@ static void nspDump(TitleInfo *title_info)
                     goto end;
                 }
                 
-                // add nacp mods here
+                if (!nacpGenerateNcaPatch(cur_nacp_ctx, patch_sua, patch_screenshot, patch_video_capture))
+                {
+                    consolePrint("nacp nca patch failed (%s)\n", cur_nca_ctx->content_id_str);
+                    goto end;
+                }
                 
                 if (!nacpGenerateAuthoringToolXml(cur_nacp_ctx, title_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
                 {
@@ -523,18 +536,13 @@ static void nspDump(TitleInfo *title_info)
                     switch(cur_nca_ctx->content_type)
                     {
                         case NcmContentType_Meta:
-                        {
                             cnmtWriteNcaPatch(&cnmt_ctx, buf, blksize, offset);
                             break;
-                        }
                         case NcmContentType_Program:
-                        {
-                            ProgramInfoContext *cur_program_info_ctx = (ProgramInfoContext*)cur_nca_ctx->content_type_ctx;
-                            programInfoWriteNcaPatch(cur_program_info_ctx, buf, blksize, offset);
+                            programInfoWriteNcaPatch((ProgramInfoContext*)cur_nca_ctx->content_type_ctx, buf, blksize, offset);
                             break;
-                        }
                         case NcmContentType_Control:
-                            // write nacp patches here
+                            nacpWriteNcaPatch((NacpContext*)cur_nca_ctx->content_type_ctx, buf, blksize, offset);
                             break;
                         default:
                             break;

@@ -75,7 +75,11 @@ typedef enum {
     NacpLanguage_TraditionalChinese   = 13,
     NacpLanguage_SimplifiedChinese    = 14,
     NacpLanguage_BrazilianPortuguese  = 15,
-    NacpLanguage_Count                = 16  ///< Total values supported by this enum.
+    NacpLanguage_Count                = 16,                                 ///< Total values supported by this enum.
+    
+    /// Old.
+    NacpLanguage_Taiwanese            = NacpLanguage_TraditionalChinese,
+    NacpLanguage_Chinese              = NacpLanguage_SimplifiedChinese
 } NacpLanguage;
 
 typedef enum {
@@ -156,20 +160,20 @@ typedef enum {
 } NacpRatingAgeOrganization;
 
 typedef struct {
-    u8 cero;
-    u8 gracgcrb;
-    u8 gsrmr;
-    u8 esrb;
-    u8 class_ind;
-    u8 usk;
-    u8 pegi;
-    u8 pegi_portugal;
-    u8 pegibbfc;
-    u8 russian;
-    u8 acb;
-    u8 oflc;
-    u8 iarc_generic;
-    u8 reserved[0x13];
+    s8 cero;
+    s8 grac_gcrb;
+    s8 gsrmr;
+    s8 esrb;
+    s8 class_ind;
+    s8 usk;
+    s8 pegi;
+    s8 pegi_portugal;
+    s8 pegi_bbfc;
+    s8 russian;
+    s8 acb;
+    s8 oflc;
+    s8 iarc_generic;
+    s8 reserved[0x13];
 } NacpRatingAge;
 
 typedef enum {
@@ -293,11 +297,11 @@ typedef struct {
     char display_version[0x10];
     u64 add_on_content_base_id;
     u64 save_data_owner_id;
-    u64 user_account_save_data_size;
-    u64 user_account_save_data_journal_size;
-    u64 device_save_data_size;
-    u64 device_save_data_journal_size;
-    u64 bcat_delivery_cache_storage_size;
+    s64 user_account_save_data_size;
+    s64 user_account_save_data_journal_size;
+    s64 device_save_data_size;
+    s64 device_save_data_journal_size;
+    s64 bcat_delivery_cache_storage_size;
     char application_error_code_category[0x8];
     u64 local_communication_id[8];
     u8 logo_type;                                                                                   ///< NacpLogoType.
@@ -311,14 +315,14 @@ typedef struct {
     char bcat_passphrase[0x41];
     u8 startup_user_account_option;                                                                 ///< NacpStartupUserAccountOption.
     u8 reserved_2[0x6];
-    u64 user_account_save_data_size_max;
-    u64 user_account_save_data_journal_size_max;
-    u64 device_save_data_size_max;
-    u64 device_save_data_journal_size_max;
-    u64 temporary_storage_size;
-    u64 cache_storage_size;
-    u64 cache_storage_journal_size;
-    u64 cache_storage_data_and_journal_size_max;
+    s64 user_account_save_data_size_max;
+    s64 user_account_save_data_journal_size_max;
+    s64 device_save_data_size_max;
+    s64 device_save_data_journal_size_max;
+    s64 temporary_storage_size;
+    s64 cache_storage_size;
+    s64 cache_storage_journal_size;
+    s64 cache_storage_data_and_journal_size_max;
     u16 cache_storage_index_max;
     u8 reserved_3[0x6];
     u64 play_log_queryable_application_id[0x10];
@@ -362,6 +366,15 @@ typedef struct {
 
 /// Initializes a NacpContext using a previously initialized NcaContext (which must belong to a Control NCA).
 bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx);
+
+/// Changes flags in the NACP from the input NacpContext and generates a RomFS file entry patch if needed.
+/// If 'patch_sua' is true, StartupUserAccount is set to None, the IsOptional bit in StartupUserAccountOption is cleared and UserAccountSwitchLock is set to Disable.
+/// If 'patch_screenshot' is true, Screenshot is set to Allow.
+/// If 'patch_video_capture' is true, VideoCapture is set to Enable.
+bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_screenshot, bool patch_video_capture);
+
+/// Writes data from the RomFS file entry patch in the input NacpContext to the provided buffer.
+void nacpWriteNcaPatch(NacpContext *nacp_ctx, void *buf, u64 buf_size, u64 buf_offset);
 
 /// Generates an AuthoringTool-like XML using information from a previously initialized NacpContext, as well as the Application/Patch version and the required system version.
 /// If the function succeeds, XML data and size will get saved to the 'authoring_tool_xml' and 'authoring_tool_xml_size' members from the NacpContext.
@@ -436,19 +449,6 @@ NX_INLINE bool nacpIsValidContext(NacpContext *nacp_ctx)
     }
     
     return true;
-}
-
-NX_INLINE bool nacpIsNcaPatchRequired(NacpContext *nacp_ctx)
-{
-    if (!nacpIsValidContext(nacp_ctx)) return false;
-    u8 tmp_hash[SHA256_HASH_SIZE] = {0};
-    sha256CalculateHash(tmp_hash, nacp_ctx->data, sizeof(_NacpStruct));
-    return (memcmp(tmp_hash, nacp_ctx->data_hash, SHA256_HASH_SIZE) != 0);
-}
-
-NX_INLINE bool nacpGenerateNcaPatch(NacpContext *nacp_ctx)
-{
-    return (nacpIsValidContext(nacp_ctx) && romfsGenerateFileEntryPatch(&(nacp_ctx->romfs_ctx), nacp_ctx->romfs_file_entry, nacp_ctx->data, sizeof(_NacpStruct), 0, &(nacp_ctx->nca_patch)));
 }
 
 #endif /* __NACP_H__ */
