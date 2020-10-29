@@ -956,7 +956,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
         u64 cur_layer_read_start_offset = 0, cur_layer_read_end_offset = 0, cur_layer_read_size = 0, cur_layer_read_patch_offset = 0;
         
         u64 parent_layer_offset = 0, parent_layer_size = 0;
-        u64 parent_layer_read_start_offset = 0, parent_layer_read_end_offset = 0, parent_layer_read_size = 0;
+        u64 parent_layer_read_start_offset = 0, parent_layer_read_size = 0;
         
         NcaHashDataPatch *cur_layer_patch = NULL;
         
@@ -996,13 +996,12 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
         if (i > 1)
         {
             /* HierarchicalSha256 hash region with index 1 through 4, or HierarchicalIntegrity verification level with index 1 through 5. */
-            parent_layer_read_start_offset = ((cur_data_offset / hash_block_size) * SHA256_HASH_SIZE);
-            parent_layer_read_end_offset = (((cur_data_offset + cur_data_size) / hash_block_size) * SHA256_HASH_SIZE);
-            parent_layer_read_size = (parent_layer_read_end_offset != parent_layer_read_start_offset ? (parent_layer_read_end_offset - parent_layer_read_start_offset) : SHA256_HASH_SIZE);
-            
             cur_layer_read_start_offset = (cur_layer_offset + ALIGN_DOWN(cur_data_offset, hash_block_size));
             cur_layer_read_end_offset = (cur_layer_offset + ALIGN_UP(cur_data_offset + cur_data_size, hash_block_size));
             cur_layer_read_size = (cur_layer_read_end_offset - cur_layer_read_start_offset);
+            
+            parent_layer_read_start_offset = ((cur_data_offset / hash_block_size) * SHA256_HASH_SIZE);
+            parent_layer_read_size = ((cur_layer_read_size / hash_block_size) * SHA256_HASH_SIZE);
         } else {
             /* HierarchicalSha256 master hash region, or HierarchicalIntegrity master verification level. Both with index 0. */
             /* The master hash is calculated over the whole layer and saved to the HashData block from the NCA FS section header. */
