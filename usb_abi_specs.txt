@@ -1,0 +1,125 @@
+USB command header:
+
+*--------*--------*------------------------------*
+| Offset |  Size  |      Description             |
+*--------*--------*------------------------------*
+|  0x00  |  0x04  | Magic word ("NXDT").         |
+*--------*--------*------------------------------*
+|  0x04  |  0x04  | Command ID (LE u32).         |
+*--------*--------*------------------------------*
+|  0x08  |  0x04  | Command Block Size (LE u32). |
+*--------*--------*------------------------------*
+|  0x0C  |  0x04  | Reserved.                    |
+*--------*--------*------------------------------*
+
+USB command IDs:
+
+*--------*--------------------------------------*
+|  Value |      Description                     |
+*--------*--------------------------------------*
+|   0    | StartSession.                        |
+*--------*--------------------------------------*
+|   1    | SendFileProperties.                  |
+*--------*--------------------------------------*
+|   2    | SendNspHeader.                       |
+*--------*--------------------------------------*
+|   3    | EndSession.                          |
+*--------*--------------------------------------*
+
+StartSession Command Block: 0x10 byte-long, set by nxdumptool as the value for the Command Block Size field in the command header (along with its matching command ID).
+
+This is the first USB command issued by nxdumptool. If it succeeds, further USB commands may be sent.
+
+*--------*--------*-----------------------------*
+| Offset |  Size  |      Description            |
+*--------*--------*-----------------------------*
+|  0x00  |  0x01  | nxdumptool version (major). |
+*--------*--------*-----------------------------*
+|  0x01  |  0x01  | nxdumptool version (minor). |
+*--------*--------*-----------------------------*
+|  0x02  |  0x01  | nxdumptool version (micro). |
+*--------*--------*-----------------------------*
+|  0x03  |  0x01  | nxdumptool USB ABI version. | -> Currently, always v1.
+*--------*--------*-----------------------------*
+|  0x04  |  0x0C  | Reserved.                   |
+*--------*--------*-----------------------------*
+
+SendFileProperties Command Block: 0x320 byte-long, set by nxdumptool as the value for the Command Block Size field in the command header (along with its matching command ID).
+
+Sent right before starting a file transfer. If it succeeds, file data will be transferred in bulk mode using 0x800000-sized chunks (the last one is truncated if needed).
+
+*--------*--------*-----------------------------*
+| Offset |  Size  |      Description            |
+*--------*--------*-----------------------------*
+|  0x00  |  0x08  | File size (LE u64).         |
+*--------*--------*-----------------------------*
+|  0x08  |  0x04  | Filename length (LE u32).   |
+*--------*--------*-----------------------------*
+|  0x0C  |  0x04  | NSP header size (LE u32).   |
+*--------*--------*-----------------------------*
+|  0x10  |  0x301 | NULL terminated filename.   | -> 0x301 is defined as FS_MAX_PATH in libnx. Always encoded using UTF-8.
+*--------*--------*-----------------------------*
+|  0x311 |  0x0F  | Reserved #2                 |
+*--------*--------*-----------------------------*
+
+SendNspHeader Command Block: variable length. The Command Block Size field in the command header holds the NSP header size. The NSP header data is placed after the command header.
+
+____________________________________________________________________________________________________________________________________
+
+
+USB status block (returned by the client application):
+
+*--------*--------*------------------------------------*
+| Offset |  Size  |      Description                   |
+*--------*--------*------------------------------------*
+|  0x00  |  0x04  | Magic word ("NXDT").               |
+*--------*--------*------------------------------------*
+|  0x04  |  0x04  | Status code (LE u32).              |
+*--------*--------*------------------------------------*
+|  0x08  |  0x02  | Endpoint max packet size (LE u16). | -> Value used by the endpoint in the USB host device (I can't detect it using usb:ds calls on the Switch).
+*--------*--------*------------------------------------*
+|  0x0A  |  0x06  | Reserved.                          |
+*--------*--------*------------------------------------*
+
+USB status codes:
+
+*--------*-----------------------------------------*
+|  Value |      Description                        |
+*--------*-----------------------------------------*
+|   0    | Success.                                |
+*--------*-----------------------------------------*
+|   1    | Reserved for internal nxdumptool usage. |
+*--------*-----------------------------------------*
+|   2    | Reserved for internal nxdumptool usage. |
+*--------*-----------------------------------------*
+|   3    | Reserved for internal nxdumptool usage. |
+*--------*-----------------------------------------*
+|   4    | Invalid magic word.                     |
+*--------*-----------------------------------------*
+|   5    | Unsupported command.                    |
+*--------*-----------------------------------------*
+|   6    | Unsupported USB ABI version.            |
+*--------*-----------------------------------------*
+|   7    | Malformed command.                      |
+*--------*-----------------------------------------*
+|   8    | I/O error in USB host.                  |
+*--------*-----------------------------------------*
+
+____________________________________________________________________________________________________________________________________
+
+
+Highlights:
+
+* All transfers are performed in USB bulk mode.
+* A USB status response is always expected to be issued by the USB host device right after each time a USB command is issued by nxdumptool. This includes the SendFileProperties command, right before expecting any file data to be transferred from nxdumptool.
+* A USB status response is expected by nxdumptool right after the last file data chunk has been sent.
+* If, while transferring file data, the last data chunk is aligned to the endpoint max packet size used by the USB host, a Zero Length Termination (ZLT) packet will be issued after transferring the last chunk, in order to comply with the USB bulk transfer specs.
+* In the case of extracted RomFS transfers, the filename field from the SendFileProperties block may actually contain a filepath - this will always start with a '/'. The client application is free to decide how to handle this (e.g. create full directory tree, etc.).
+
+NSP transfer mode:
+
+* If the NSP header size from a SendFileProperties block is greater than zero, the client should enter NSP transfer mode. The file size from this block represents, then, the full NSP size (including the NSP header).
+* In this mode, the client should immediately create the output file, write "NSP header size" bytes of padding to it, reply with a USB status response and expect additional SendFileProperties commands. No data is transferred for this very first SendFileProperties block.
+* Each further SendFileProperties block will hold the filename and size for a NSP file entry, and the NSP header size value will always be set to zero. The data received from each one of these file entries must be written to the output file created during the first SendFileProperties command. The sum of all file entry sizes should be equal to the full NSP size minus the NSP header size received during the first SendFileProperties command.
+* Finally, the client will receive a SendNspHeader command with the NSP header data, which should be written at the start of the output file. The value from the Command Block Size in the command header from this block should match the NSP header size received in the first SendFileProperties command.
+* If the sum of the command header length (0x10) plus the NSP header size is aligned to the endpoint max packet size, the client should also expect a ZLT packet after the SendNspHeader command.

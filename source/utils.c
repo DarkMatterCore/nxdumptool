@@ -79,7 +79,7 @@ bool utilsInitializeResources(void)
     if (ret) goto end;
     
     utilsWriteLogBufferToLogFile("________________________________________________________________\r\n");
-    LOGFILE(APP_TITLE " v%u.%u.%u starting.", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+    LOGFILE(APP_TITLE " v%u.%u.%u starting. Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
     
     /* Log Horizon OS version. */
     u32 hos_version = hosversionGet();
