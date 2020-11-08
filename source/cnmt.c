@@ -43,7 +43,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
 {
     if (!out || !nca_ctx || !*(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_Meta || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
         (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
-        nca_ctx->header.content_type != NcaContentType_Meta || !out)
+        nca_ctx->header.content_type != NcaContentType_Meta || nca_ctx->content_type_ctx || !out)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -317,17 +317,20 @@ bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx)
 
 void cnmtWriteNcaPatch(ContentMetaContext *cnmt_ctx, void *buf, u64 buf_size, u64 buf_offset)
 {
+    NcaContext *nca_ctx = NULL;
+    NcaHierarchicalSha256Patch *nca_patch = (cnmt_ctx ? &(cnmt_ctx->nca_patch) : NULL);
+    
     /* Using cnmtIsValidContext() here would probably take up precious CPU cycles. */
-    if (!cnmt_ctx || !cnmt_ctx->nca_ctx || cnmt_ctx->nca_ctx->content_type != NcmContentType_Meta || !cnmt_ctx->nca_ctx->content_type_ctx_patch || cnmt_ctx->nca_patch.written) return;
+    if (!nca_patch || nca_patch->written || !(nca_ctx = cnmt_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Meta || !nca_ctx->content_type_ctx_patch) return;
     
     /* Attempt to write Partition FS entry patch. */
-    pfsWriteEntryPatchToMemoryBuffer(&(cnmt_ctx->pfs_ctx), &(cnmt_ctx->nca_patch), buf, buf_size, buf_offset);
+    pfsWriteEntryPatchToMemoryBuffer(&(cnmt_ctx->pfs_ctx), nca_patch, buf, buf_size, buf_offset);
     
     /* Check if we need to update the NCA content type context patch status. */
-    if (cnmt_ctx->nca_patch.written)
+    if (nca_patch->written)
     {
-        cnmt_ctx->nca_ctx->content_type_ctx_patch = false;
-        LOGFILE("CNMT Partition FS entry patch successfully written to NCA \"%s\"!", cnmt_ctx->nca_ctx->content_id_str);
+        nca_ctx->content_type_ctx_patch = false;
+        LOGFILE("CNMT Partition FS entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
     }
 }
 

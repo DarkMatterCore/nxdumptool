@@ -19,6 +19,8 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <usbhsfs.h>
+
 #include "utils.h"
 //#include "freetype_helper.h"
 //#include "lvgl_helper.h"
@@ -75,6 +77,7 @@ bool utilsInitializeResources(void)
 {
     mutexLock(&g_resourcesMutex);
     
+    Result rc = 0;
     bool ret = g_resourcesInitialized;
     if (ret) goto end;
     
@@ -104,6 +107,14 @@ bool utilsInitializeResources(void)
     if (!usbInitialize())
     {
         LOGFILE("Failed to initialize USB interface!");
+        goto end;
+    }
+    
+    /* Initialize USB host FS interface. */
+    rc = usbHsFsInitialize();
+    if (R_FAILED(rc))
+    {
+        LOGFILE("Failed to initialize USB host FS interface! (0x%08X).", rc);
         goto end;
     }
     
@@ -215,6 +226,9 @@ void utilsCloseResources(void)
     
     /* Free NCA crypto buffer. */
     ncaFreeCryptoBuffer();
+    
+    /* Close USB host FS interface. */
+    usbHsFsExit();
     
     /* Close USB interface. */
     usbExit();

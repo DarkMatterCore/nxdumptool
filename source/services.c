@@ -21,7 +21,6 @@
 #include "utils.h"
 #include "services.h"
 #include "es.h"
-#include "fspusb.h"
 
 /* Type definitions. */
 
@@ -44,7 +43,6 @@ static Result smHasService(bool *out_has_service, SmServiceName name);
 static Result servicesNifmUserInitialize(void);
 static bool servicesClkGetServiceType(void *arg);
 static bool servicesSplCryptoCheckAvailability(void *arg);
-static bool servicesFspUsbCheckAvailability(void *arg);
 
 /* Global variables. */
 
@@ -58,7 +56,6 @@ static ServiceInfo g_serviceInfo[] = {
     { false, "psm", NULL, &psmInitialize, &psmExit },
     { false, "nifm:u", NULL, &servicesNifmUserInitialize, &nifmExit },
     { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst. */
-    { false, "fsp-usb", &servicesFspUsbCheckAvailability, &fspusbInitialize, &fspusbExit },             /* Checks if fsp-usb really is available. */
     { false, "es", NULL, &esInitialize, &esExit },
     { false, "set:cal", NULL, &setcalInitialize, &setcalExit }
 };
@@ -289,17 +286,4 @@ static bool servicesSplCryptoCheckAvailability(void *arg)
     
     /* Check if spl:mig is available (sysver equal to or greater than 4.0.0). */
     return !hosversionBefore(4, 0, 0);
-}
-
-static bool servicesFspUsbCheckAvailability(void *arg)
-{
-    if (!arg) return false;
-    
-    ServiceInfo *info = (ServiceInfo*)arg;
-    if (strlen(info->name) != 7 || strcmp(info->name, "fsp-usb") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
-    
-    /* Check if fsp-usb is actually running in the background. */
-    bool has_service = false;
-    return (utilsGetCustomFirmwareType() == UtilsCustomFirmwareType_Atmosphere ? (R_SUCCEEDED(servicesAtmosphereHasService(&has_service, info->name)) && has_service) : \
-            servicesCheckRunningServiceByName(info->name));
 }

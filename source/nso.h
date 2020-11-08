@@ -41,12 +41,12 @@ typedef struct {
     u32 file_offset;    ///< NSO segment offset.
     u32 memory_offset;  ///< Memory segment offset.
     u32 size;           ///< Decompressed segment size.
-} NsoSegmentHeader;
+} NsoSegmentInfo;
 
 typedef struct {
     u32 offset; ///< Relative to the .rodata segment start.
     u32 size;
-} NsoSectionHeader;
+} NsoSectionInfo;
 
 /// This is the start of every NSO.
 /// This is always followed by a NsoModuleName block.
@@ -55,20 +55,20 @@ typedef struct {
     u32 version;                                ///< Always set to 0.
     u8 reserved_1[0x4];
     u32 flags;                                  ///< NsoFlags.
-    NsoSegmentHeader text_segment_header;
+    NsoSegmentInfo text_segment_info;
     u32 module_name_offset;                     ///< NsoModuleName block offset.
-    NsoSegmentHeader rodata_segment_header;
+    NsoSegmentInfo rodata_segment_info;
     u32 module_name_size;                       ///< NsoModuleName block size.
-    NsoSegmentHeader data_segment_header;
+    NsoSegmentInfo data_segment_info;
     u32 bss_size;
     u8 module_id[0x20];                         ///< Also known as build ID.
     u32 text_file_size;                         ///< .text segment compressed size (if NsoFlags_TextCompress is enabled).
     u32 rodata_file_size;                       ///< .rodata segment compressed size (if NsoFlags_RoCompress is enabled).
     u32 data_file_size;                         ///< .data segment compressed size (if NsoFlags_DataCompress is enabled).
     u8 reserved_2[0x1C];
-    NsoSectionHeader api_info_section_header;
-    NsoSectionHeader dynstr_section_header;
-    NsoSectionHeader dynsym_section_header;
+    NsoSectionInfo api_info_section_info;
+    NsoSectionInfo dynstr_section_info;
+    NsoSectionInfo dynsym_section_info;
     u8 text_segment_hash[0x20];                 ///< Decompressed .text segment SHA-256 checksum.
     u8 rodata_segment_hash[0x20];               ///< Decompressed .rodata segment SHA-256 checksum.
     u8 data_segment_hash[0x20];                 ///< Decompressed .data segment SHA-256 checksum.

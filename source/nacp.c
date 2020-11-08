@@ -199,7 +199,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
 {
     if (!out || !nca_ctx || !*(nca_ctx->content_id_str) || nca_ctx->content_type != NcmContentType_Control || nca_ctx->content_size < NCA_FULL_HEADER_LENGTH || \
         (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
-        nca_ctx->header.content_type != NcaContentType_Control || !out)
+        nca_ctx->header.content_type != NcaContentType_Control || nca_ctx->content_type_ctx || !out)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -380,17 +380,20 @@ bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_scre
 
 void nacpWriteNcaPatch(NacpContext *nacp_ctx, void *buf, u64 buf_size, u64 buf_offset)
 {
+    NcaContext *nca_ctx = NULL;
+    RomFileSystemFileEntryPatch *nca_patch = (nacp_ctx ? &(nacp_ctx->nca_patch) : NULL);
+    
     /* Using nacpIsValidContext() here would probably take up precious CPU cycles. */
-    if (!nacp_ctx || !nacp_ctx->nca_ctx || nacp_ctx->nca_ctx->content_type != NcmContentType_Control || !nacp_ctx->nca_ctx->content_type_ctx_patch || nacp_ctx->nca_patch.written) return;
+    if (!nca_patch || nca_patch->written || !(nca_ctx = nacp_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Control || !nca_ctx->content_type_ctx_patch) return;
     
     /* Attempt to write RomFS file entry patch. */
-    romfsWriteFileEntryPatchToMemoryBuffer(&(nacp_ctx->romfs_ctx), &(nacp_ctx->nca_patch), buf, buf_size, buf_offset);
+    romfsWriteFileEntryPatchToMemoryBuffer(&(nacp_ctx->romfs_ctx), nca_patch, buf, buf_size, buf_offset);
     
     /* Check if we need to update the NCA content type context patch status. */
-    if (nacp_ctx->nca_patch.written)
+    if (nca_patch->written)
     {
-        nacp_ctx->nca_ctx->content_type_ctx_patch = false;
-        LOGFILE("NACP RomFS file entry patch successfully written to NCA \"%s\"!", nacp_ctx->nca_ctx->content_id_str);
+        nca_ctx->content_type_ctx_patch = false;
+        LOGFILE("NACP RomFS file entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
     }
 }
 

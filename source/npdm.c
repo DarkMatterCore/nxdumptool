@@ -39,6 +39,7 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
     npdmFreeContext(out);
     
     /* Get 'main.npdm' file entry. */
+    out->nca_ctx = nca_ctx;
     out->pfs_ctx = pfs_ctx;
     if (!(out->pfs_entry = pfsGetEntryByName(out->pfs_ctx, "main.npdm")))
     {
@@ -260,13 +261,13 @@ end:
 
 bool npdmGenerateNcaPatch(NpdmContext *npdm_ctx)
 {
-    NcaContext *nca_ctx = NULL;
-    
-    if (!npdmIsValidContext(npdm_ctx) || !(nca_ctx = (NcaContext*)npdm_ctx->pfs_ctx->nca_fs_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Program)
+    if (!npdmIsValidContext(npdm_ctx) || npdm_ctx->nca_ctx->content_type != NcmContentType_Program)
     {
         LOGFILE("Invalid parameters!");
         return false;
     }
+    
+    NcaContext *nca_ctx = npdm_ctx->nca_ctx;
     
     /* Check if we really need to generate this patch. */
     if (!ncaIsHeaderDirty(nca_ctx))
@@ -301,16 +302,16 @@ bool npdmGenerateNcaPatch(NpdmContext *npdm_ctx)
 void npdmWriteNcaPatch(NpdmContext *npdm_ctx, void *buf, u64 buf_size, u64 buf_offset)
 {
     NcaContext *nca_ctx = NULL;
+    NcaHierarchicalSha256Patch *nca_patch = (npdm_ctx ? &(npdm_ctx->nca_patch) : NULL);
     
     /* Using npdmIsValidContext() here would probably take up precious CPU cycles. */
-    if (!npdm_ctx || !npdm_ctx->pfs_ctx || !npdm_ctx->pfs_ctx->nca_fs_ctx || !(nca_ctx = (NcaContext*)npdm_ctx->pfs_ctx->nca_fs_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Program || \
-        !nca_ctx->content_type_ctx_patch || npdm_ctx->nca_patch.written) return;
+    if (!nca_patch || nca_patch->written || !(nca_ctx = npdm_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Program || !nca_ctx->content_type_ctx_patch) return;
     
     /* Attempt to write Partition FS entry patch. */
-    pfsWriteEntryPatchToMemoryBuffer(npdm_ctx->pfs_ctx, &(npdm_ctx->nca_patch), buf, buf_size, buf_offset);
+    pfsWriteEntryPatchToMemoryBuffer(npdm_ctx->pfs_ctx, nca_patch, buf, buf_size, buf_offset);
     
     /* Check if we need to update the NCA content type context patch status. */
-    if (npdm_ctx->nca_patch.written)
+    if (nca_patch->written)
     {
         nca_ctx->content_type_ctx_patch = false;
         LOGFILE("NPDM Partition FS entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);

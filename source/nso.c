@@ -72,33 +72,33 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
         goto end;
     }
     
-    if (out->nso_header.text_segment_header.file_offset < sizeof(NsoHeader) || !out->nso_header.text_segment_header.size || \
-        ((out->nso_header.flags & NsoFlags_TextCompress) && (!out->nso_header.text_file_size || out->nso_header.text_file_size > out->nso_header.text_segment_header.size)) || \
-        (!(out->nso_header.flags & NsoFlags_TextCompress) && out->nso_header.text_file_size != out->nso_header.text_segment_header.size) || \
-        (out->nso_header.text_segment_header.file_offset + out->nso_header.text_file_size) > pfs_entry->size)
+    if (out->nso_header.text_segment_info.file_offset < sizeof(NsoHeader) || !out->nso_header.text_segment_info.size || \
+        ((out->nso_header.flags & NsoFlags_TextCompress) && (!out->nso_header.text_file_size || out->nso_header.text_file_size > out->nso_header.text_segment_info.size)) || \
+        (!(out->nso_header.flags & NsoFlags_TextCompress) && out->nso_header.text_file_size != out->nso_header.text_segment_info.size) || \
+        (out->nso_header.text_segment_info.file_offset + out->nso_header.text_file_size) > pfs_entry->size)
     {
-        LOGFILE("Invalid .text segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.text_segment_header.file_offset, out->nso_header.text_file_size, \
-                out->nso_header.text_segment_header.size);
+        LOGFILE("Invalid .text segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.text_segment_info.file_offset, out->nso_header.text_file_size, \
+                out->nso_header.text_segment_info.size);
         goto end;
     }
     
-    if (out->nso_header.rodata_segment_header.file_offset < sizeof(NsoHeader) || !out->nso_header.rodata_segment_header.size || \
-        ((out->nso_header.flags & NsoFlags_RoCompress) && (!out->nso_header.rodata_file_size || out->nso_header.rodata_file_size > out->nso_header.rodata_segment_header.size)) || \
-        (!(out->nso_header.flags & NsoFlags_RoCompress) && out->nso_header.rodata_file_size != out->nso_header.rodata_segment_header.size) || \
-        (out->nso_header.rodata_segment_header.file_offset + out->nso_header.rodata_file_size) > pfs_entry->size)
+    if (out->nso_header.rodata_segment_info.file_offset < sizeof(NsoHeader) || !out->nso_header.rodata_segment_info.size || \
+        ((out->nso_header.flags & NsoFlags_RoCompress) && (!out->nso_header.rodata_file_size || out->nso_header.rodata_file_size > out->nso_header.rodata_segment_info.size)) || \
+        (!(out->nso_header.flags & NsoFlags_RoCompress) && out->nso_header.rodata_file_size != out->nso_header.rodata_segment_info.size) || \
+        (out->nso_header.rodata_segment_info.file_offset + out->nso_header.rodata_file_size) > pfs_entry->size)
     {
-        LOGFILE("Invalid .rodata segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.rodata_segment_header.file_offset, out->nso_header.rodata_file_size, \
-                out->nso_header.rodata_segment_header.size);
+        LOGFILE("Invalid .rodata segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.rodata_segment_info.file_offset, out->nso_header.rodata_file_size, \
+                out->nso_header.rodata_segment_info.size);
         goto end;
     }
     
-    if (out->nso_header.data_segment_header.file_offset < sizeof(NsoHeader) || !out->nso_header.data_segment_header.size || \
-        ((out->nso_header.flags & NsoFlags_DataCompress) && (!out->nso_header.data_file_size || out->nso_header.data_file_size > out->nso_header.data_segment_header.size)) || \
-        (!(out->nso_header.flags & NsoFlags_DataCompress) && out->nso_header.data_file_size != out->nso_header.data_segment_header.size) || \
-        (out->nso_header.data_segment_header.file_offset + out->nso_header.data_file_size) > pfs_entry->size)
+    if (out->nso_header.data_segment_info.file_offset < sizeof(NsoHeader) || !out->nso_header.data_segment_info.size || \
+        ((out->nso_header.flags & NsoFlags_DataCompress) && (!out->nso_header.data_file_size || out->nso_header.data_file_size > out->nso_header.data_segment_info.size)) || \
+        (!(out->nso_header.flags & NsoFlags_DataCompress) && out->nso_header.data_file_size != out->nso_header.data_segment_info.size) || \
+        (out->nso_header.data_segment_info.file_offset + out->nso_header.data_file_size) > pfs_entry->size)
     {
-        LOGFILE("Invalid .data segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.data_segment_header.file_offset, out->nso_header.data_file_size, \
-                out->nso_header.data_segment_header.size);
+        LOGFILE("Invalid .data segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.data_segment_info.file_offset, out->nso_header.data_file_size, \
+                out->nso_header.data_segment_info.size);
         goto end;
     }
     
@@ -107,19 +107,19 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
         LOGFILE("Invalid module name offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.module_name_offset, out->nso_header.module_name_size);
     }
     
-    if (out->nso_header.api_info_section_header.size && (out->nso_header.api_info_section_header.offset + out->nso_header.api_info_section_header.size) > out->nso_header.rodata_segment_header.size)
+    if (out->nso_header.api_info_section_info.size && (out->nso_header.api_info_section_info.offset + out->nso_header.api_info_section_info.size) > out->nso_header.rodata_segment_info.size)
     {
-        LOGFILE("Invalid .api_info section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.api_info_section_header.offset, out->nso_header.api_info_section_header.size);
+        LOGFILE("Invalid .api_info section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.api_info_section_info.offset, out->nso_header.api_info_section_info.size);
     }
     
-    if (!out->nso_header.dynstr_section_header.size || (out->nso_header.dynstr_section_header.offset + out->nso_header.dynstr_section_header.size) > out->nso_header.rodata_segment_header.size)
+    if (!out->nso_header.dynstr_section_info.size || (out->nso_header.dynstr_section_info.offset + out->nso_header.dynstr_section_info.size) > out->nso_header.rodata_segment_info.size)
     {
-        LOGFILE("Invalid .dynstr section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.dynstr_section_header.offset, out->nso_header.dynstr_section_header.size);
+        LOGFILE("Invalid .dynstr section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.dynstr_section_info.offset, out->nso_header.dynstr_section_info.size);
     }
     
-    if (!out->nso_header.dynsym_section_header.size || (out->nso_header.dynsym_section_header.offset + out->nso_header.dynsym_section_header.size) > out->nso_header.rodata_segment_header.size)
+    if (!out->nso_header.dynsym_section_info.size || (out->nso_header.dynsym_section_info.offset + out->nso_header.dynsym_section_info.size) > out->nso_header.rodata_segment_info.size)
     {
-        LOGFILE("Invalid .dynsym section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.dynsym_section_header.offset, out->nso_header.dynsym_section_header.size);
+        LOGFILE("Invalid .dynsym section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.dynsym_section_info.offset, out->nso_header.dynsym_section_info.size);
     }
     
     /* Get module name. */
@@ -132,16 +132,16 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
     if (!nsoGetModuleInfoName(out, rodata_buf)) goto end;
     
     /* Get .api_info section data. */
-    if (!nsoGetSectionFromRodataSegment(out, rodata_buf, (u8**)&(out->rodata_api_info_section), out->nso_header.api_info_section_header.offset, out->nso_header.api_info_section_header.size)) goto end;
-    out->rodata_api_info_section_size = out->nso_header.api_info_section_header.size;
+    if (!nsoGetSectionFromRodataSegment(out, rodata_buf, (u8**)&(out->rodata_api_info_section), out->nso_header.api_info_section_info.offset, out->nso_header.api_info_section_info.size)) goto end;
+    out->rodata_api_info_section_size = out->nso_header.api_info_section_info.size;
     
     /* Get .dynstr section data. */
-    if (!nsoGetSectionFromRodataSegment(out, rodata_buf, (u8**)&(out->rodata_dynstr_section), out->nso_header.dynstr_section_header.offset, out->nso_header.dynstr_section_header.size)) goto end;
-    out->rodata_dynstr_section_size = out->nso_header.dynstr_section_header.size;
+    if (!nsoGetSectionFromRodataSegment(out, rodata_buf, (u8**)&(out->rodata_dynstr_section), out->nso_header.dynstr_section_info.offset, out->nso_header.dynstr_section_info.size)) goto end;
+    out->rodata_dynstr_section_size = out->nso_header.dynstr_section_info.size;
     
     /* Get .dynsym section data. */
-    if (!nsoGetSectionFromRodataSegment(out, rodata_buf, &(out->rodata_dynsym_section), out->nso_header.dynsym_section_header.offset, out->nso_header.dynsym_section_header.size)) goto end;
-    out->rodata_dynsym_section_size = out->nso_header.dynsym_section_header.size;
+    if (!nsoGetSectionFromRodataSegment(out, rodata_buf, &(out->rodata_dynsym_section), out->nso_header.dynsym_section_info.offset, out->nso_header.dynsym_section_info.size)) goto end;
+    out->rodata_dynsym_section_size = out->nso_header.dynsym_section_info.size;
     
     success = true;
     
@@ -197,10 +197,10 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     bool compressed = (nso_ctx->nso_header.flags & NsoFlags_RoCompress), verify = (nso_ctx->nso_header.flags & NsoFlags_RoHash);
     
     u8 *rodata_buf = NULL;
-    u64 rodata_buf_size = (compressed ? LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(nso_ctx->nso_header.rodata_segment_header.size) : nso_ctx->nso_header.rodata_segment_header.size);
+    u64 rodata_buf_size = (compressed ? LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(nso_ctx->nso_header.rodata_segment_info.size) : nso_ctx->nso_header.rodata_segment_info.size);
     
     u8 *rodata_read_ptr = NULL;
-    u64 rodata_read_size = (compressed ? nso_ctx->nso_header.rodata_file_size : nso_ctx->nso_header.rodata_segment_header.size);
+    u64 rodata_read_size = (compressed ? nso_ctx->nso_header.rodata_file_size : nso_ctx->nso_header.rodata_segment_info.size);
     
     u8 rodata_hash[SHA256_HASH_SIZE] = {0};
     
@@ -216,7 +216,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     rodata_read_ptr = (compressed ? (rodata_buf + (rodata_buf_size - nso_ctx->nso_header.rodata_file_size)) : rodata_buf);
     
     /* Read .rodata segment data. */
-    if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, rodata_read_ptr, rodata_read_size, nso_ctx->nso_header.rodata_segment_header.file_offset))
+    if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, rodata_read_ptr, rodata_read_size, nso_ctx->nso_header.rodata_segment_info.file_offset))
     {
         LOGFILE("Failed to read %s .rodata segment in NRO \"%s\"!", nso_ctx->nso_filename);
         goto end;
@@ -226,7 +226,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     {
         /* Decompress .rodata segment in-place. */
         if ((lz4_res = LZ4_decompress_safe((char*)rodata_read_ptr, (char*)rodata_buf, (int)nso_ctx->nso_header.rodata_file_size, (int)rodata_buf_size)) != \
-            (int)nso_ctx->nso_header.rodata_segment_header.size)
+            (int)nso_ctx->nso_header.rodata_segment_info.size)
         {
             LOGFILE("LZ4 decompression failed for NRO \"%s\"! (0x%08X).", nso_ctx->nso_filename, (u32)lz4_res);
             goto end;
@@ -236,7 +236,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     if (verify)
     {
         /* Verify .rodata segment hash. */
-        sha256CalculateHash(rodata_hash, rodata_buf, nso_ctx->nso_header.rodata_segment_header.size);
+        sha256CalculateHash(rodata_hash, rodata_buf, nso_ctx->nso_header.rodata_segment_info.size);
         if (memcmp(rodata_hash, nso_ctx->nso_header.rodata_segment_hash, SHA256_HASH_SIZE) != 0)
         {
             LOGFILE(".rodata segment checksum mismatch for NRO \"%s\"!", nso_ctx->nso_filename);
@@ -277,7 +277,7 @@ static bool nsoGetModuleInfoName(NsoContext *nso_ctx, u8 *rodata_buf)
 
 static bool nsoGetSectionFromRodataSegment(NsoContext *nso_ctx, u8 *rodata_buf, u8 **section_ptr, u64 section_offset, u64 section_size)
 {
-    if (!section_size || (section_offset + section_size) > nso_ctx->nso_header.rodata_segment_header.size) return true;
+    if (!section_size || (section_offset + section_size) > nso_ctx->nso_header.rodata_segment_info.size) return true;
     
     /* Allocate memory for the desired .rodata section. */
     if (!(*section_ptr = malloc(section_size)))

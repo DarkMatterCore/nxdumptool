@@ -94,6 +94,7 @@ static void nspDump(TitleInfo *title_info)
     bool patch_sua = options[4].val;
     bool patch_screenshot = options[5].val;
     bool patch_video_capture = options[6].val;
+    bool success = false, usb_conn = false;
     
     u8 *buf = NULL;
     char *dump_name = NULL, *path = NULL;
@@ -458,7 +459,6 @@ static void nspDump(TitleInfo *title_info)
     consolePrint("waiting for usb connection... ");
     
     time_t start = time(NULL);
-    bool usb_conn = false;
     
     while(true)
     {
@@ -727,7 +727,11 @@ static void nspDump(TitleInfo *title_info)
     start = (time(NULL) - start);
     consolePrint("process successfully completed in %lu seconds!\n", start);
     
+    success = true;
+    
 end:
+    if (usb_conn && !success) usbCancelFileTransfer();
+    
     pfsFreeFileContext(&pfs_file_ctx);
     
     if (raw_cert_chain) free(raw_cert_chain);
