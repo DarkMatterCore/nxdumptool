@@ -321,7 +321,7 @@ bool readNcaDataByContentId(NcmContentStorage *ncmStorage, const NcmContentId *n
     {
         // Retrieve NCA data using raw IStorage reads
         // Fixes NCA access problems with gamecards under low HOS versions when using ncmContentStorageReadContentIdFile()
-        success = readFileFromSecureHfs0PartitionByName(strchr(nca_path, '/') + 1, offset, outBuf, bufSize);
+        success = readFileFromSecureHfs0PartitionByName(strrchr(nca_path, '/') + 1, offset, outBuf, bufSize);
         if (!success) breaks++;
     } else {
         // Retrieve NCA data normally

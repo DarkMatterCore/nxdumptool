@@ -2482,7 +2482,7 @@ bool listDesiredNcaType(NcmContentInfo *titleContentInfos, u32 titleContentInfoC
     
     // Display a selection list
     breaks++;
-    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Select one of the available %s NCAs from the list below:", getContentType(type));
+    uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Select one of the available %s NCAs from the list below. Press B to go back.", getContentType(type));
     breaks += 2;
     
     while(true)
@@ -2545,6 +2545,14 @@ bool listDesiredNcaType(NcmContentInfo *titleContentInfos, u32 titleContentInfoC
         if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
         {
             if (selectedContent < (cnt - 1)) selectedContent++;
+        }
+        
+        if (keysDown & KEY_B)
+        {
+            breaks = initial_breaks;
+            uiFill(0, 8 + (breaks * LINE_HEIGHT), FB_WIDTH, FB_HEIGHT - (8 + (breaks * LINE_HEIGHT)), BG_COLOR_RGB);
+            uiRefreshDisplay();
+            goto out;
         }
     }
     
