@@ -201,10 +201,10 @@ bool gamecardInitialize(void)
     
     g_loadKernelEvent = true;
     
-    /* Create usermode exit event. */
+    /* Create user-mode exit event. */
     ueventCreate(&g_gameCardDetectionThreadExitEvent, true);
     
-    /* Create usermode gamecard status change event. */
+    /* Create user-mode gamecard status change event. */
     ueventCreate(&g_gameCardStatusChangeEvent, true);
     
     /* Create gamecard detection thread. */

@@ -187,7 +187,7 @@ bool gamecardInitialize(void);
 /// This includes destroying the background gamecard detection thread and freeing all cached gamecard data.
 void gamecardExit(void);
 
-/// Returns a usermode gamecard status change event that can be used to wait for status changes on other threads.
+/// Returns a user-mode gamecard status change event that can be used to wait for status changes on other threads.
 /// If the gamecard interface hasn't been initialized, this returns NULL.
 UEvent *gamecardGetStatusChangeUserEvent(void);
 

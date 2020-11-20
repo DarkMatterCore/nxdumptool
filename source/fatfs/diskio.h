@@ -26,11 +26,11 @@ typedef enum {
 /* Prototypes for disk control functions */
 
 
-DSTATUS disk_initialize (BYTE pdrv);
-DSTATUS disk_status (BYTE pdrv);
-DRESULT disk_read (BYTE pdrv, BYTE* buff, LBA_t sector, UINT count);
-DRESULT disk_write (BYTE pdrv, const BYTE* buff, LBA_t sector, UINT count);
-DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff);
+DSTATUS ff_disk_initialize (BYTE pdrv);
+DSTATUS ff_disk_status (BYTE pdrv);
+DRESULT ff_disk_read (BYTE pdrv, BYTE* buff, LBA_t sector, UINT count);
+DRESULT ff_disk_write (BYTE pdrv, const BYTE* buff, LBA_t sector, UINT count);
+DRESULT ff_disk_ioctl (BYTE pdrv, BYTE cmd, void* buff);
 
 
 /* Disk Status Bits (DSTATUS) */
@@ -40,7 +40,7 @@ DRESULT disk_ioctl (BYTE pdrv, BYTE cmd, void* buff);
 #define STA_PROTECT		0x04	/* Write protected */
 
 
-/* Command code for disk_ioctrl fucntion */
+/* Command code for ff_disk_ioctrl fucntion */
 
 /* Generic command (Used by FatFs) */
 #define CTRL_SYNC			0	/* Complete pending write process (needed at FF_FS_READONLY == 0) */

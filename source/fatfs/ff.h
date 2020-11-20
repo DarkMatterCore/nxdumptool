@@ -288,7 +288,7 @@ typedef enum {
 	FR_INVALID_DRIVE,		/* (11) The logical drive number is invalid */
 	FR_NOT_ENABLED,			/* (12) The volume has no work area */
 	FR_NO_FILESYSTEM,		/* (13) There is no valid FAT volume */
-	FR_MKFS_ABORTED,		/* (14) The f_mkfs() aborted due to any problem */
+	FR_MKFS_ABORTED,		/* (14) The ff_mkfs() aborted due to any problem */
 	FR_TIMEOUT,				/* (15) Could not get a grant to access the volume within defined period */
 	FR_LOCKED,				/* (16) The operation is rejected according to the file sharing policy */
 	FR_NOT_ENOUGH_CORE,		/* (17) LFN working buffer could not be allocated */
@@ -301,49 +301,49 @@ typedef enum {
 /*--------------------------------------------------------------*/
 /* FatFs module application interface                           */
 
-FRESULT f_open (FIL* fp, const TCHAR* path, BYTE mode);				/* Open or create a file */
-FRESULT f_close (FIL* fp);											/* Close an open file object */
-FRESULT f_read (FIL* fp, void* buff, UINT btr, UINT* br);			/* Read data from the file */
-FRESULT f_write (FIL* fp, const void* buff, UINT btw, UINT* bw);	/* Write data to the file */
-FRESULT f_lseek (FIL* fp, FSIZE_t ofs);								/* Move file pointer of the file object */
-FRESULT f_truncate (FIL* fp);										/* Truncate the file */
-FRESULT f_sync (FIL* fp);											/* Flush cached data of the writing file */
-FRESULT f_opendir (DIR* dp, const TCHAR* path);						/* Open a directory */
-FRESULT f_closedir (DIR* dp);										/* Close an open directory */
-FRESULT f_readdir (DIR* dp, FILINFO* fno);							/* Read a directory item */
-FRESULT f_findfirst (DIR* dp, FILINFO* fno, const TCHAR* path, const TCHAR* pattern);	/* Find first file */
-FRESULT f_findnext (DIR* dp, FILINFO* fno);							/* Find next file */
-FRESULT f_mkdir (const TCHAR* path);								/* Create a sub directory */
-FRESULT f_unlink (const TCHAR* path);								/* Delete an existing file or directory */
-FRESULT f_rename (const TCHAR* path_old, const TCHAR* path_new);	/* Rename/Move a file or directory */
-FRESULT f_stat (const TCHAR* path, FILINFO* fno);					/* Get file status */
-FRESULT f_chmod (const TCHAR* path, BYTE attr, BYTE mask);			/* Change attribute of a file/dir */
-FRESULT f_utime (const TCHAR* path, const FILINFO* fno);			/* Change timestamp of a file/dir */
-FRESULT f_chdir (const TCHAR* path);								/* Change current directory */
-FRESULT f_chdrive (const TCHAR* path);								/* Change current drive */
-FRESULT f_getcwd (TCHAR* buff, UINT len);							/* Get current directory */
-FRESULT f_getfree (const TCHAR* path, DWORD* nclst, FATFS** fatfs);	/* Get number of free clusters on the drive */
-FRESULT f_getlabel (const TCHAR* path, TCHAR* label, DWORD* vsn);	/* Get volume label */
-FRESULT f_setlabel (const TCHAR* label);							/* Set volume label */
-FRESULT f_forward (FIL* fp, UINT(*func)(const BYTE*,UINT), UINT btf, UINT* bf);	/* Forward data to the stream */
-FRESULT f_expand (FIL* fp, FSIZE_t fsz, BYTE opt);					/* Allocate a contiguous block to the file */
-FRESULT f_mount (FATFS* fs, const TCHAR* path, BYTE opt);			/* Mount/Unmount a logical drive */
-FRESULT f_mkfs (const TCHAR* path, const MKFS_PARM* opt, void* work, UINT len);	/* Create a FAT volume */
-FRESULT f_fdisk (BYTE pdrv, const LBA_t ptbl[], void* work);		/* Divide a physical drive into some partitions */
-FRESULT f_setcp (WORD cp);											/* Set current code page */
-int f_putc (TCHAR c, FIL* fp);										/* Put a character to the file */
-int f_puts (const TCHAR* str, FIL* cp);								/* Put a string to the file */
-int f_printf (FIL* fp, const TCHAR* str, ...);						/* Put a formatted string to the file */
-TCHAR* f_gets (TCHAR* buff, int len, FIL* fp);						/* Get a string from the file */
+FRESULT ff_open (FIL* fp, const TCHAR* path, BYTE mode);				/* Open or create a file */
+FRESULT ff_close (FIL* fp);											/* Close an open file object */
+FRESULT ff_read (FIL* fp, void* buff, UINT btr, UINT* br);			/* Read data from the file */
+FRESULT ff_write (FIL* fp, const void* buff, UINT btw, UINT* bw);	/* Write data to the file */
+FRESULT ff_lseek (FIL* fp, FSIZE_t ofs);								/* Move file pointer of the file object */
+FRESULT ff_truncate (FIL* fp);										/* Truncate the file */
+FRESULT ff_sync (FIL* fp);											/* Flush cached data of the writing file */
+FRESULT ff_opendir (DIR* dp, const TCHAR* path);						/* Open a directory */
+FRESULT ff_closedir (DIR* dp);										/* Close an open directory */
+FRESULT ff_readdir (DIR* dp, FILINFO* fno);							/* Read a directory item */
+FRESULT ff_findfirst (DIR* dp, FILINFO* fno, const TCHAR* path, const TCHAR* pattern);	/* Find first file */
+FRESULT ff_findnext (DIR* dp, FILINFO* fno);							/* Find next file */
+FRESULT ff_mkdir (const TCHAR* path);								/* Create a sub directory */
+FRESULT ff_unlink (const TCHAR* path);								/* Delete an existing file or directory */
+FRESULT ff_rename (const TCHAR* path_old, const TCHAR* path_new);	/* Rename/Move a file or directory */
+FRESULT ff_stat (const TCHAR* path, FILINFO* fno);					/* Get file status */
+FRESULT ff_chmod (const TCHAR* path, BYTE attr, BYTE mask);			/* Change attribute of a file/dir */
+FRESULT ff_utime (const TCHAR* path, const FILINFO* fno);			/* Change timestamp of a file/dir */
+FRESULT ff_chdir (const TCHAR* path);								/* Change current directory */
+FRESULT ff_chdrive (const TCHAR* path);								/* Change current drive */
+FRESULT ff_getcwd (TCHAR* buff, UINT len);							/* Get current directory */
+FRESULT ff_getfree (const TCHAR* path, DWORD* nclst, FATFS** fatfs);	/* Get number of free clusters on the drive */
+FRESULT ff_getlabel (const TCHAR* path, TCHAR* label, DWORD* vsn);	/* Get volume label */
+FRESULT ff_setlabel (const TCHAR* label);							/* Set volume label */
+FRESULT ff_forward (FIL* fp, UINT(*func)(const BYTE*,UINT), UINT btf, UINT* bf);	/* Forward data to the stream */
+FRESULT ff_expand (FIL* fp, FSIZE_t fsz, BYTE opt);					/* Allocate a contiguous block to the file */
+FRESULT ff_mount (FATFS* fs, const TCHAR* path, BYTE opt);			/* Mount/Unmount a logical drive */
+FRESULT ff_mkfs (const TCHAR* path, const MKFS_PARM* opt, void* work, UINT len);	/* Create a FAT volume */
+FRESULT ff_fdisk (BYTE pdrv, const LBA_t ptbl[], void* work);		/* Divide a physical drive into some partitions */
+FRESULT ff_setcp (WORD cp);											/* Set current code page */
+int ff_putc (TCHAR c, FIL* fp);										/* Put a character to the file */
+int ff_puts (const TCHAR* str, FIL* cp);								/* Put a string to the file */
+int ff_printf (FIL* fp, const TCHAR* str, ...);						/* Put a formatted string to the file */
+TCHAR* ff_gets (TCHAR* buff, int len, FIL* fp);						/* Get a string from the file */
 
-#define f_eof(fp) ((int)((fp)->fptr == (fp)->obj.objsize))
-#define f_error(fp) ((fp)->err)
-#define f_tell(fp) ((fp)->fptr)
-#define f_size(fp) ((fp)->obj.objsize)
-#define f_rewind(fp) f_lseek((fp), 0)
-#define f_rewinddir(dp) f_readdir((dp), 0)
-#define f_rmdir(path) f_unlink(path)
-#define f_unmount(path) f_mount(0, path, 0)
+#define ff_eof(fp) ((int)((fp)->fptr == (fp)->obj.objsize))
+#define ff_error(fp) ((fp)->err)
+#define ff_tell(fp) ((fp)->fptr)
+#define ff_size(fp) ((fp)->obj.objsize)
+#define ff_rewind(fp) ff_lseek((fp), 0)
+#define ff_rewinddir(dp) ff_readdir((dp), 0)
+#define ff_rmdir(path) ff_unlink(path)
+#define ff_unmount(path) ff_mount(0, path, 0)
 
 #ifndef EOF
 #define EOF (-1)

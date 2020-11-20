@@ -467,7 +467,7 @@ bool titleInitialize(void)
         goto end;
     }
     
-    /* Create usermode exit event. */
+    /* Create user-mode exit event. */
     ueventCreate(&g_titleGameCardInfoThreadExitEvent, true);
     
     /* Retrieve gamecard status change user event. */
@@ -478,7 +478,7 @@ bool titleInitialize(void)
         goto end;
     }
     
-    /* Create usermode gamecard update info event. */
+    /* Create user-mode gamecard update info event. */
     ueventCreate(&g_titleGameCardUpdateInfoUserEvent, true);
     
     /* Create gamecard title info thread. */
