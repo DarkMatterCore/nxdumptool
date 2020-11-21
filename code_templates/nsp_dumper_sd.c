@@ -681,7 +681,7 @@ end:
     {
         fclose(fd);
         if (!success) utilsRemoveConcatenationFile(path);
-        utilsCommitFileSystemChangesByPath(path);
+        utilsCommitSdCardFileSystemChanges();
     }
     
     pfsFreeFileContext(&pfs_file_ctx);

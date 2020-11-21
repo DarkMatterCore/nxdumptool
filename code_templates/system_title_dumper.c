@@ -118,7 +118,7 @@ end:
         remove(path);
     }
     
-    if (*path) utilsCommitFileSystemChangesByPath(path);
+    if (*path) utilsCommitSdCardFileSystemChanges();
     
     pfsFreeContext(&pfs_ctx);
 }
@@ -194,7 +194,7 @@ end:
         remove(path);
     }
     
-    if (*path) utilsCommitFileSystemChangesByPath(path);
+    if (*path) utilsCommitSdCardFileSystemChanges();
     
     romfsFreeContext(&romfs_ctx);
 }

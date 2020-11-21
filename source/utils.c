@@ -69,8 +69,6 @@ static bool _utilsIsDevelopmentUnit(void);
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
-static bool utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(const char *path, FsFileSystem **out_fs, char **out_filepath);
-
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
 bool utilsInitializeResources(void)
@@ -583,46 +581,11 @@ void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size)
     }
 }
 
-bool utilsGetFreeSpaceFromFileSystem(FsFileSystem *fs, u64 *out)
-{
-    if (!fs || !serviceIsActive(&(fs->s)) || !out)
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    Result rc = fsFsGetFreeSpace(fs, "/", (s64*)out);
-    if (R_FAILED(rc)) LOGFILE("fsFsGetFreeSpace failed! (0x%08X).", rc);
-    
-    return R_SUCCEEDED(rc);
-}
-
-bool utilsGetFreeSpaceFromFileSystemByPath(const char *path, u64 *out)
-{
-    FsFileSystem *fs = NULL;
-    
-    if (!utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(path, &fs, NULL) || !out)
-    {
-        LOGFILE("Invalid parameters!");
-        return false;
-    }
-    
-    return utilsGetFreeSpaceFromFileSystem(fs, out);
-}
-
 bool utilsGetFreeSdCardFileSystemSpace(u64 *out)
 {
-    return utilsGetFreeSpaceFromFileSystem(g_sdCardFileSystem, out);
-}
-
-bool utilsCommitFileSystemChangesByPath(const char *path)
-{
-    Result rc = 0;
-    FsFileSystem *fs = NULL;
-    
-    if (!utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(path, &fs, NULL)) return false;
-    
-    rc = fsFsCommit(fs);
+    if (!g_sdCardFileSystem) return false;
+    Result rc = fsFsGetFreeSpace(g_sdCardFileSystem, "/", (s64*)out);
+    if (R_FAILED(rc)) LOGFILE("fsFsGetFreeSpace failed! (0x%08X).", rc);
     return R_SUCCEEDED(rc);
 }
 
@@ -670,8 +633,6 @@ bool utilsCreateConcatenationFile(const char *path)
     Result rc = fsdevCreateFile(path, 0, FsCreateOption_BigFile);
     if (R_FAILED(rc)) LOGFILE("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
     
-    utilsCommitFileSystemChangesByPath(path);
-    
     return R_SUCCEEDED(rc);
 }
 
@@ -696,8 +657,6 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element)
     if (create_last_element) mkdir(path, 0777);
     
     free(tmp);
-    
-    utilsCommitFileSystemChangesByPath(path);
 }
 
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension)
@@ -859,25 +818,6 @@ static void utilsUnmountEmmcBisSystemPartitionStorage(void)
         fsStorageClose(&g_emmcBisSystemPartitionStorage);
         memset(&g_emmcBisSystemPartitionStorage, 0, sizeof(FsStorage));
     }
-}
-
-static bool utilsGetDeviceFileSystemAndFilePathFromAbsolutePath(const char *path, FsFileSystem **out_fs, char **out_filepath)
-{
-    FsFileSystem *fs = NULL;
-    char *name_end = NULL, *filepath = NULL, name[32] = {0};
-    
-    if (!path || !*path || !(name_end = strchr(path, ':')) || (size_t)(name_end - path) >= MAX_ELEMENTS(name) || (!out_fs && !out_filepath) || \
-        (out_filepath && *(filepath = (name_end + 1)) != '/')) return false;
-    
-    sprintf(name, "%.*s", (int)(name_end - path), path);
-    
-    fs = fsdevGetDeviceFileSystem(name);
-    if (!fs) return false;
-    
-    if (out_fs) *out_fs = fs;
-    if (out_filepath) *out_filepath = filepath;
-    
-    return true;
 }
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)

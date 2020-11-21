@@ -1,7 +1,7 @@
 #!/bin/bash
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-tar_filename="nxdumptool-rewrite_poc_$(shell git rev-parse --short HEAD).tar.bz2"
+tar_filename="nxdumptool-rewrite_poc_$(git rev-parse --short HEAD).tar.bz2"
 
 rm -f ./*.tar.bz2
 
