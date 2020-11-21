@@ -8,6 +8,8 @@ rm -f ./*.tar.bz2
 rm -rf ./code_templates/tmp
 mkdir ./code_templates/tmp
 
+make clean
+
 for f in ./code_templates/*.c; do
     basename="$(basename "$f")"
     filename="${basename%.*}"
@@ -21,15 +23,17 @@ for f in ./code_templates/*.c; do
     rm -f ./source/main.c
     cp $f ./source/main.c
     
-    make BUILD_TYPE="$filename" clean
-    make BUILD_TYPE="$filename" -j 12
+    make BUILD_TYPE="$filename"
+    rm -f ./build/main.o ./build/main.d
     
     mkdir ./code_templates/tmp/$filename
     cp ./$filename.nro ./code_templates/tmp/$filename/nxdumptool-rewrite.nro
     #cp ./$filename.elf ./code_templates/tmp/$filename/nxdumptool-rewrite.elf
     
-    make BUILD_TYPE="$filename" clean
+    rm -f ./$filename.*
 done
+
+make clean
 
 cd ./code_templates/tmp
 tar -cjf ../../$tar_filename *
