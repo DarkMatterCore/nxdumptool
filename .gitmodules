@@ -1,0 +1,3 @@
+[submodule "libusbhsfs"]
+	path = libusbhsfs
+	url = https://github.com/DarkMatterCore/libusbhsfs

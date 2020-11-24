@@ -75,7 +75,7 @@ LIBS	:= -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lusbhsfs -lnx -ljso
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(PORTLIBS) $(LIBNX) $(CURDIR)/../libusbhsfs
+LIBDIRS	:= $(PORTLIBS) $(LIBNX) $(CURDIR)/libusbhsfs
 
 
 #---------------------------------------------------------------------------------
@@ -159,13 +159,17 @@ endif
 #---------------------------------------------------------------------------------
 all: $(BUILD)
 
-$(BUILD):
+usbhsfs:
+	@$(MAKE) --no-print-directory -C libusbhsfs release
+
+$(BUILD): usbhsfs
 	@[ -d $@ ] || mkdir -p $@
 	@$(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
 
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
+	@$(MAKE) --no-print-directory -C libusbhsfs clean
 	@rm -fr $(BUILD) $(TARGET).pfs0 $(TARGET).nso $(TARGET).nro $(TARGET).nacp $(TARGET).elf
 
 
