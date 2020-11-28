@@ -109,7 +109,7 @@ bool utilsInitializeResources(void)
     }
     
     /* Initialize USB host FS interface. */
-    rc = usbHsFsInitialize();
+    rc = usbHsFsInitialize(0);
     if (R_FAILED(rc))
     {
         LOGFILE("Failed to initialize USB host FS interface! (0x%08X).", rc);
