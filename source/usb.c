@@ -181,10 +181,10 @@ bool usbInitialize(void)
         goto end;
     }
     
-    /* Create user-mode exit event. */
+    /* Create usermode exit event. */
     ueventCreate(&g_usbDetectionThreadExitEvent, true);
     
-    /* Create user-mode USB timeout event. */
+    /* Create usermode USB timeout event. */
     ueventCreate(&g_usbTimeoutEvent, true);
     
     /* Create USB detection thread. */
@@ -455,7 +455,7 @@ void usbCancelFileTransfer(void)
     /* This will force the client to stop the current session, so a new one will have to be established. */
     usbDsEndpoint_Stall(g_usbDeviceInterface.endpoint_in);
     
-    /* Signal user-mode USB timeout event. */
+    /* Signal usermode USB timeout event. */
     /* This will "reset" the USB connection by making the background thread wait until a new session is established. */
     ueventSignal(&g_usbTimeoutEvent);
     
@@ -1222,7 +1222,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         eventWait(&(endpoint->CompletionEvent), UINT64_MAX);
         eventClear(&(endpoint->CompletionEvent));
         
-        /* Signal user-mode USB timeout event if needed. */
+        /* Signal usermode USB timeout event if needed. */
         /* This will "reset" the USB connection by making the background thread wait until a new session is established. */
         if (g_usbSessionStarted) ueventSignal(&g_usbTimeoutEvent);
         

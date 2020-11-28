@@ -794,7 +794,7 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void)
         return false;
     }
     
-    fr = ff_mount(g_emmcBisSystemPartitionFatFsObj, BIS_SYSTEM_PARTITION_MOUNT_NAME, 1);
+    fr = f_mount(g_emmcBisSystemPartitionFatFsObj, BIS_SYSTEM_PARTITION_MOUNT_NAME, 1);
     if (fr != FR_OK)
     {
         LOGFILE("Failed to mount eMMC BIS System partition! (%u).", fr);
@@ -808,7 +808,7 @@ static void utilsUnmountEmmcBisSystemPartitionStorage(void)
 {
     if (g_emmcBisSystemPartitionFatFsObj)
     {
-        ff_unmount(BIS_SYSTEM_PARTITION_MOUNT_NAME);
+        f_unmount(BIS_SYSTEM_PARTITION_MOUNT_NAME);
         free(g_emmcBisSystemPartitionFatFsObj);
         g_emmcBisSystemPartitionFatFsObj = NULL;
     }

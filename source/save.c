@@ -266,14 +266,14 @@ static u32 save_remap_read(remap_storage_ctx_t *ctx, void *buffer, u64 offset, s
         switch (ctx->type)
         {
             case STORAGE_BYTES:
-                fr = ff_lseek(ctx->file, ctx->base_storage_offset + entry->physical_offset + entry_pos);
-                if (fr || ff_tell(ctx->file) != (ctx->base_storage_offset + entry->physical_offset + entry_pos))
+                fr = f_lseek(ctx->file, ctx->base_storage_offset + entry->physical_offset + entry_pos);
+                if (fr || f_tell(ctx->file) != (ctx->base_storage_offset + entry->physical_offset + entry_pos))
                 {
                     LOGFILE("Failed to seek to offset 0x%lX in savefile! (%u).", ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
                     return out_pos;
                 }
                 
-                fr = ff_read(ctx->file, (u8*)buffer + out_pos, bytes_to_read, &br);
+                fr = f_read(ctx->file, (u8*)buffer + out_pos, bytes_to_read, &br);
                 if (fr || br != bytes_to_read)
                 {
                     LOGFILE("Failed to read %u bytes chunk from offset 0x%lX in savefile! (%u).", bytes_to_read, ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
@@ -467,14 +467,14 @@ static size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u6
     switch (ctx->type)
     {
         case STORAGE_BYTES:
-            fr = ff_lseek(ctx->save_ctx->file, ctx->hash_offset + offset);
-            if (fr || ff_tell(ctx->save_ctx->file) != (ctx->hash_offset + offset))
+            fr = f_lseek(ctx->save_ctx->file, ctx->hash_offset + offset);
+            if (fr || f_tell(ctx->save_ctx->file) != (ctx->hash_offset + offset))
             {
                 LOGFILE("Failed to seek to offset 0x%lX in savefile! (%u).", ctx->hash_offset + offset, fr);
                 return (size_t)br;
             }
             
-            fr = ff_read(ctx->save_ctx->file, buffer, count, &br);
+            fr = f_read(ctx->save_ctx->file, buffer, count, &br);
             if (fr || br != count)
             {
                 LOGFILE("Failed to read IVFC level data from offset 0x%lX in savefile! (%u).", ctx->hash_offset + offset, fr);
@@ -1228,9 +1228,9 @@ bool save_process(save_ctx_t *ctx)
     bool success = false;
     
     /* Try to parse Header A. */
-    ff_rewind(ctx->file);
+    f_rewind(ctx->file);
     
-    fr = ff_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
+    fr = f_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
     if (fr || br != sizeof(ctx->header))
     {
         LOGFILE("Failed to read savefile header A! (%u).", fr);
@@ -1240,14 +1240,14 @@ bool save_process(save_ctx_t *ctx)
     if (!save_process_header(ctx) || ctx->header_hash_validity == VALIDITY_INVALID)
     {
         /* Try to parse Header B. */
-        fr = ff_lseek(ctx->file, 0x4000);
-        if (fr || ff_tell(ctx->file) != 0x4000)
+        fr = f_lseek(ctx->file, 0x4000);
+        if (fr || f_tell(ctx->file) != 0x4000)
         {
             LOGFILE("Failed to seek to offset 0x4000 in savefile! (%u).", fr);
             return success;
         }
         
-        fr = ff_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
+        fr = f_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
         if (fr || br != sizeof(ctx->header))
         {
             LOGFILE("Failed to read savefile header B! (%u).", fr);
@@ -1279,8 +1279,8 @@ bool save_process(save_ctx_t *ctx)
         return success;
     }
     
-    fr = ff_lseek(ctx->file, ctx->header.layout.file_map_entry_offset);
-    if (fr || ff_tell(ctx->file) != ctx->header.layout.file_map_entry_offset)
+    fr = f_lseek(ctx->file, ctx->header.layout.file_map_entry_offset);
+    if (fr || f_tell(ctx->file) != ctx->header.layout.file_map_entry_offset)
     {
         LOGFILE("Failed to seek to file map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.file_map_entry_offset, fr);
         return success;
@@ -1288,7 +1288,7 @@ bool save_process(save_ctx_t *ctx)
     
     for(u32 i = 0; i < ctx->data_remap_storage.header->map_entry_count; i++)
     {
-        fr = ff_read(ctx->file, &ctx->data_remap_storage.map_entries[i], 0x20, &br);
+        fr = f_read(ctx->file, &ctx->data_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
         {
             LOGFILE("Failed to read data remap storage entry #%u! (%u).", i, fr);
@@ -1416,8 +1416,8 @@ bool save_process(save_ctx_t *ctx)
         goto end;
     }
     
-    fr = ff_lseek(ctx->file, ctx->header.layout.meta_map_entry_offset);
-    if (fr || ff_tell(ctx->file) != ctx->header.layout.meta_map_entry_offset)
+    fr = f_lseek(ctx->file, ctx->header.layout.meta_map_entry_offset);
+    if (fr || f_tell(ctx->file) != ctx->header.layout.meta_map_entry_offset)
     {
         LOGFILE("Failed to seek to meta map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.meta_map_entry_offset, fr);
         goto end;
@@ -1425,7 +1425,7 @@ bool save_process(save_ctx_t *ctx)
     
     for(u32 i = 0; i < ctx->meta_remap_storage.header->map_entry_count; i++)
     {
-        fr = ff_read(ctx->file, &ctx->meta_remap_storage.map_entries[i], 0x20, &br);
+        fr = f_read(ctx->file, &ctx->meta_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
         {
             LOGFILE("Failed to read meta remap storage entry #%u! (%u).", i, fr);
@@ -1737,7 +1737,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
         return NULL;
     }
     
-    fr = ff_open(save_fd, path, FA_READ | FA_OPEN_EXISTING);
+    fr = f_open(save_fd, path, FA_READ | FA_OPEN_EXISTING);
     if (fr != FR_OK)
     {
         LOGFILE("Failed to open \"%s\" savefile from BIS System partition! (%u).", path, fr);
@@ -1756,7 +1756,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     
     if (buf && fd)
     {
-        u64 size = ff_size(save_fd);
+        u64 size = f_size(save_fd);
         UINT br = 0;
         
         for(u64 i = 0; i < size; i += blksize)
@@ -1766,7 +1766,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
             fwrite(buf, 1, blksize, fd);
         }
         
-        ff_rewind(save_fd);
+        f_rewind(save_fd);
     }
     
     if (fd) fclose(fd);
@@ -1796,7 +1796,7 @@ end:
         
         if (save_fd)
         {
-            if (open_savefile) ff_close(save_fd);
+            if (open_savefile) f_close(save_fd);
             free(save_fd);
         }
     }
@@ -1810,7 +1810,7 @@ void save_close_savefile(save_ctx_t *ctx)
     
     if (ctx->file)
     {
-        ff_close(ctx->file);
+        f_close(ctx->file);
         free(ctx->file);
     }
     

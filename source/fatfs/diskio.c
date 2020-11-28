@@ -18,7 +18,7 @@
 /* Get Drive Status                                                      */
 /*-----------------------------------------------------------------------*/
 
-DSTATUS ff_disk_status (
+DSTATUS disk_status (
     BYTE pdrv		/* Physical drive number to identify the drive */
 )
 {
@@ -33,7 +33,7 @@ DSTATUS ff_disk_status (
 /* Inidialize a Drive                                                    */
 /*-----------------------------------------------------------------------*/
 
-DSTATUS ff_disk_initialize (
+DSTATUS disk_initialize (
     BYTE pdrv				/* Physical drive number to identify the drive */
 )
 {
@@ -48,7 +48,7 @@ DSTATUS ff_disk_initialize (
 /* Read Sector(s)                                                        */
 /*-----------------------------------------------------------------------*/
 
-DRESULT ff_disk_read (
+DRESULT disk_read (
     BYTE pdrv,		/* Physical drive number to identify the drive */
     BYTE *buff,		/* Data buffer to store read data */
     LBA_t sector,	/* Start sector in LBA */
@@ -74,7 +74,7 @@ DRESULT ff_disk_read (
 
 #if FF_FS_READONLY == 0
 
-DRESULT ff_disk_write (
+DRESULT disk_write (
     BYTE pdrv,			/* Physical drive number to identify the drive */
     const BYTE *buff,	/* Data to be written */
     LBA_t sector,		/* Start sector in LBA */
@@ -96,7 +96,7 @@ DRESULT ff_disk_write (
 /* Miscellaneous Functions                                               */
 /*-----------------------------------------------------------------------*/
 
-DRESULT ff_disk_ioctl (
+DRESULT disk_ioctl (
     BYTE pdrv,		/* Physical drive nmuber (0..) */
     BYTE cmd,		/* Control code */
     void *buff		/* Buffer to send/receive control data */

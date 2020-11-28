@@ -10,8 +10,8 @@
 
 #define FF_FS_READONLY	1
 /* This option switches read-only configuration. (0:Read/Write or 1:Read-only)
-/  Read-only configuration removes writing API functions, ff_write(), ff_sync(),
-/  ff_unlink(), ff_mkdir(), ff_chmod(), ff_rename(), ff_truncate(), ff_getfree()
+/  Read-only configuration removes writing API functions, f_write(), f_sync(),
+/  f_unlink(), f_mkdir(), f_chmod(), f_rename(), f_truncate(), f_getfree()
 /  and optional writing functions as well. */
 
 
@@ -19,14 +19,14 @@
 /* This option defines minimization level to remove some basic API functions.
 /
 /   0: Basic functions are fully enabled.
-/   1: ff_stat(), ff_getfree(), ff_unlink(), ff_mkdir(), ff_truncate() and ff_rename()
+/   1: f_stat(), f_getfree(), f_unlink(), f_mkdir(), f_truncate() and f_rename()
 /      are removed.
-/   2: ff_opendir(), ff_readdir() and ff_closedir() are removed in addition to 1.
-/   3: ff_lseek() function is removed in addition to 2. */
+/   2: f_opendir(), f_readdir() and f_closedir() are removed in addition to 1.
+/   3: f_lseek() function is removed in addition to 2. */
 
 
 #define FF_USE_STRFUNC	0
-/* This option switches string functions, ff_gets(), ff_putc(), ff_puts() and ff_printf().
+/* This option switches string functions, f_gets(), f_putc(), f_puts() and f_printf().
 /
 /  0: Disable string functions.
 /  1: Enable without LF-CRLF conversion.
@@ -34,12 +34,12 @@
 
 
 #define FF_USE_FIND		0
-/* This option switches filtered directory read functions, ff_findfirst() and
-/  ff_findnext(). (0:Disable, 1:Enable 2:Enable with matching altname[] too) */
+/* This option switches filtered directory read functions, f_findfirst() and
+/  f_findnext(). (0:Disable, 1:Enable 2:Enable with matching altname[] too) */
 
 
 #define FF_USE_MKFS		0
-/* This option switches ff_mkfs() function. (0:Disable or 1:Enable) */
+/* This option switches f_mkfs() function. (0:Disable or 1:Enable) */
 
 
 #define FF_USE_FASTSEEK	0
@@ -47,21 +47,21 @@
 
 
 #define FF_USE_EXPAND	0
-/* This option switches ff_expand function. (0:Disable or 1:Enable) */
+/* This option switches f_expand function. (0:Disable or 1:Enable) */
 
 
 #define FF_USE_CHMOD	0
-/* This option switches attribute manipulation functions, ff_chmod() and ff_utime().
+/* This option switches attribute manipulation functions, f_chmod() and f_utime().
 /  (0:Disable or 1:Enable) Also FF_FS_READONLY needs to be 0 to enable this option. */
 
 
 #define FF_USE_LABEL	0
-/* This option switches volume label functions, ff_getlabel() and ff_setlabel().
+/* This option switches volume label functions, f_getlabel() and f_setlabel().
 /  (0:Disable or 1:Enable) */
 
 
 #define FF_USE_FORWARD	0
-/* This option switches ff_forward() function. (0:Disable or 1:Enable) */
+/* This option switches f_forward() function. (0:Disable or 1:Enable) */
 
 
 /*---------------------------------------------------------------------------/
@@ -138,8 +138,8 @@
 
 
 #define FF_STRF_ENCODE	0
-/* When FF_LFN_UNICODE >= 1 with LFN enabled, string I/O functions, ff_gets(),
-/  ff_putc(), ff_puts and ff_printf() convert the character encoding in it.
+/* When FF_LFN_UNICODE >= 1 with LFN enabled, string I/O functions, f_gets(),
+/  f_putc(), f_puts and f_printf() convert the character encoding in it.
 /  This option selects assumption of character encoding ON THE FILE to be
 /  read/written via those functions.
 /
@@ -154,8 +154,8 @@
 /* This option configures support for relative path.
 /
 /   0: Disable relative path and remove related functions.
-/   1: Enable relative path. ff_chdir() and ff_chdrive() are available.
-/   2: ff_getcwd() function is available in addition to 1.
+/   1: Enable relative path. f_chdir() and f_chdrive() are available.
+/   2: f_getcwd() function is available in addition to 1.
 */
 
 
@@ -196,7 +196,7 @@
 /  1024, 2048 or 4096) Always set both 512 for most systems, generic memory card and
 /  harddisk. But a larger value may be required for on-board flash memory and some
 /  type of optical media. When FF_MAX_SS is larger than FF_MIN_SS, FatFs is configured
-/  for variable sector size mode and ff_disk_ioctl() function needs to implement
+/  for variable sector size mode and disk_ioctl() function needs to implement
 /  GET_SECTOR_SIZE command. */
 
 
@@ -213,7 +213,7 @@
 #define FF_USE_TRIM		0
 /* This option switches support for ATA-TRIM. (0:Disable or 1:Enable)
 /  To enable Trim function, also CTRL_TRIM command should be implemented to the
-/  ff_disk_ioctl() function. */
+/  disk_ioctl() function. */
 
 
 
@@ -250,7 +250,7 @@
 
 #define FF_FS_NOFSINFO	0
 /* If you need to know correct free space on the FAT32 volume, set bit 0 of this
-/  option, and ff_getfree() function at first time after volume mount will force
+/  option, and f_getfree() function at first time after volume mount will force
 /  a full FAT scan. Bit 1 controls the use of last allocated cluster number.
 /
 /  bit0=0: Use free cluster count in the FSINFO if available.
@@ -278,8 +278,8 @@
 #define FF_SYNC_t		HANDLE
 /* The option FF_FS_REENTRANT switches the re-entrancy (thread safe) of the FatFs
 /  module itself. Note that regardless of this option, file access to different
-/  volume is always re-entrant and volume control functions, ff_mount(), ff_mkfs()
-/  and ff_fdisk() function, are always not re-entrant. Only file/directory access
+/  volume is always re-entrant and volume control functions, f_mount(), f_mkfs()
+/  and f_fdisk() function, are always not re-entrant. Only file/directory access
 /  to the same volume is under control of this function.
 /
 /   0: Disable re-entrancy. FF_FS_TIMEOUT and FF_SYNC_t have no effect.
