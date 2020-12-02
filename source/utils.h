@@ -65,7 +65,7 @@
 
 
 
-
+/// Used to determine which CFW is the application running under.
 typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,
     UtilsCustomFirmwareType_Atmosphere = 1,
@@ -73,57 +73,90 @@ typedef enum {
     UtilsCustomFirmwareType_ReiNX      = 3
 } UtilsCustomFirmwareType;
 
+/// Resource (de)initialization.
+/// Called at program startup.
 bool utilsInitializeResources(void);
 void utilsCloseResources(void);
 
+/// Thread management functions.
 bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_id);
 void utilsJoinThread(Thread *thread);
 
+/// Returns true if the application is running under a development unit.
 bool utilsIsDevelopmentUnit(void);
 
-/// hidScanInput() must be called before any of these functions.
+/// Functions to retrieve down/held keys from all input controllers.
+/// hidScanInput() must be called before any of these.
 u64 utilsHidKeysAllDown(void);
 u64 utilsHidKeysAllHeld(void);
 
+/// Waits until any key matching the provided input flag is pressed.
+/// If 'flag' is set to zero (KEY_ANY), any key press will count.
 void utilsWaitForButtonPress(u64 flag);
 
+/// Formats a string and appends it to the provided buffer.
+/// If the buffer isn't big enough to hold both its current contents and the new formatted string, it will be resized.
 bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
+/// Logfile management functions.
 void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...);
 void utilsWriteMessageToLogBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...);
 void utilsWriteLogBufferToLogFile(const char *src);
 void utilsLogFileMutexControl(bool lock);
 
+/// Replaces illegal FAT characters in the provided string with underscores.
+/// If 'ascii_only' is set to true, all characters outside the (0x20,0x7E] range will also be replaced with underscores.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 
+/// Trims whitespace characters from the provided string.
 void utilsTrimString(char *str);
 
+/// Generates a lowercase hex string representation of the binary data stored in 'src' and stores it in 'dst'.
 void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size);
 
+/// Formats the provided 'size' value to a human readable size string and stores it in 'dst'.
 void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);
 
-bool utilsGetFreeSdCardFileSystemSpace(u64 *out);
+/// Saves the free file space from the filesystem pointed to by the input path (e.g. "sdmc:/") to 'out'.
+/// Returns false if there's an error.
+bool utilsGetFreeSpaceFromFileSystemByPath(const char *path, u64 *out);
+
+/// Commits SD card filesystem changes.
+/// Must be used after closing a file handle from the SD card.
 bool utilsCommitSdCardFileSystemChanges(void);
 
+/// Returns true if a file exists.
 bool utilsCheckIfFileExists(const char *path);
 
+/// Deletes a ConcatenationFile located at the input path.
 void utilsRemoveConcatenationFile(const char *path);
+
+/// Creates a ConcatenationFile at the input path.
 bool utilsCreateConcatenationFile(const char *path);
 
+/// Creates a full directory tree using the provided path.
+/// If 'create_last_element' is true, the last element from the provided path will be created as well.
 void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 
+/// Returns a pointer to a dynamically allocated string that holds the full path formed by the provided arguments.
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
 
+/// Returns true if the application is running under Applet Mode.
 bool utilsAppletModeCheck(void);
 
+/// (Un)blocks HOME button presses.
 void utilsChangeHomeButtonBlockStatus(bool block);
 
-u8 utilsGetCustomFirmwareType(void);    ///< UtilsCustomFirmwareType.
+/// Returns a UtilsCustomFirmwareType value.
+u8 utilsGetCustomFirmwareType(void);
 
+/// Returns a pointer to the FsStorage object for the eMMC BIS System partition.
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
 
+/// Enables/disables CPU/MEM overclocking.
 void utilsOverclockSystem(bool overclock);
 
+/// Simple wrapper to sleep the current thread for a specific number of full seconds.
 NX_INLINE void utilsSleep(u64 seconds)
 {
     if (seconds) svcSleepThread(seconds * (u64)1000000000);

@@ -23,7 +23,7 @@ for f in ./code_templates/*.c; do
     rm -f ./source/main.c
     cp $f ./source/main.c
     
-    make BUILD_TYPE="$filename"
+    make BUILD_TYPE="$filename" -j12
     rm -f ./build/main.o ./build/main.d
     
     mkdir ./code_templates/tmp/$filename

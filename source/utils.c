@@ -19,6 +19,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#include <sys/statvfs.h>
 #include <usbhsfs.h>
 
 #include "utils.h"
@@ -581,12 +582,29 @@ void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size)
     }
 }
 
-bool utilsGetFreeSdCardFileSystemSpace(u64 *out)
+bool utilsGetFreeSpaceFromFileSystemByPath(const char *path, u64 *out)
 {
-    if (!g_sdCardFileSystem) return false;
-    Result rc = fsFsGetFreeSpace(g_sdCardFileSystem, "/", (s64*)out);
-    if (R_FAILED(rc)) LOGFILE("fsFsGetFreeSpace failed! (0x%08X).", rc);
-    return R_SUCCEEDED(rc);
+    char *name_end = NULL, stat_path[32] = {0};
+    struct statvfs info = {0};
+    int ret = -1;
+    
+    if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || !out)
+    {
+        LOGFILE("Invalid parameters!");
+        return false;
+    }
+    
+    name_end += 2;
+    sprintf(stat_path, "%.*s", (int)(name_end - path), path);
+    
+    if ((ret = statvfs(stat_path, &info)) != 0)
+    {
+        LOGFILE("statvfs failed! (%d) (errno: %d).", ret, errno);
+        return false;
+    }
+    
+    *out = ((u64)info.f_bfree * (u64)info.f_frsize);
+    return true;
 }
 
 bool utilsCommitSdCardFileSystemChanges(void)
