@@ -107,7 +107,7 @@ static const SystemTitleName g_systemTitles[] = {
     { 0x0100000000000018, "ldn" },
     { 0x0100000000000019, "nvservices" },
     { 0x010000000000001A, "pcv" },
-    { 0x010000000000001B, "ppc" },
+    { 0x010000000000001B, "capmtp" },
     { 0x010000000000001C, "nvnflinger" },
     { 0x010000000000001D, "pcie" },
     { 0x010000000000001E, "account" },
@@ -341,12 +341,13 @@ static const SystemTitleName g_systemTitles[] = {
     { 0x010000000000B1BA, "ProdFwdbgPackage" },
     { 0x010000000000B22A, "scs" },
     { 0x010000000000B22B, "ControllerFirmwareDebug" },
-    { 0x010000000000B240, "htc" },
+    { 0x010000000000B240, "htc.stub" },
     { 0x010000000000C600, "BdkSample01" },
     { 0x010000000000C601, "BdkSample02" },
     { 0x010000000000C602, "BdkSample03" },
     { 0x010000000000C603, "BdkSample04" },
     { 0x010000000000D609, "dmnt.gen2" },
+    { 0x010000000000D623, "DevServer" },
     
     /* System applications. */
     { 0x01008BB00013C000, "flog" },

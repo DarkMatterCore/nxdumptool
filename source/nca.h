@@ -85,8 +85,8 @@ typedef enum {
     NcaKeyGeneration_700_801  = 8,
     NcaKeyGeneration_810_811  = 9,
     NcaKeyGeneration_900_901  = 10,
-    NcaKeyGeneration_910_1020 = 11,
-    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1020
+    NcaKeyGeneration_910_1100 = 11,
+    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1100
 } NcaKeyGeneration;
 
 typedef struct {

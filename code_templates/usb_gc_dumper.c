@@ -233,12 +233,12 @@ int main(int argc, char *argv[])
         u64 btn_down = 0, btn_held = 0;
         while(!btn_down && !btn_held)
         {
-            hidScanInput();
-            btn_down = utilsHidKeysAllDown();
-            btn_held = utilsHidKeysAllHeld();
+            utilsScanPads();
+            btn_down = utilsGetButtonsDown();
+            btn_held = utilsGetButtonsHeld();
         }
         
-        if (btn_down & KEY_A)
+        if (btn_down & HidNpadButton_A)
         {
             Menu *child_menu = (Menu*)selected_element->child_menu;
             
@@ -253,13 +253,13 @@ int main(int argc, char *argv[])
                 selected_element->task_func();
             }
         } else
-        if ((btn_down & KEY_DDOWN) || (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN)))
+        if ((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown)))
         {
             cur_menu->selected++;
             
             if (!cur_menu->elements[cur_menu->selected])
             {
-                if (btn_down & KEY_DDOWN)
+                if (btn_down & HidNpadButton_Down)
                 {
                     cur_menu->selected = 0;
                     cur_menu->scroll = 0;
@@ -272,13 +272,13 @@ int main(int argc, char *argv[])
                 cur_menu->scroll++;
             }
         } else
-        if ((btn_down & KEY_DUP) || (btn_held & (KEY_LSTICK_UP | KEY_RSTICK_UP)))
+        if ((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp)))
         {
             cur_menu->selected--;
             
             if (cur_menu->selected == UINT32_MAX)
             {
-                if (btn_down & KEY_DUP)
+                if (btn_down & HidNpadButton_Up)
                 {
                     cur_menu->selected = (element_count - 1);
                     cur_menu->scroll = (element_count > page_size ? (element_count - page_size) : 0);
@@ -291,19 +291,19 @@ int main(int argc, char *argv[])
                 cur_menu->scroll--;
             }
         } else
-        if ((btn_down & (KEY_DRIGHT | KEY_LSTICK_RIGHT | KEY_RSTICK_RIGHT)) && selected_element_options)
+        if ((btn_down & (HidNpadButton_Right | HidNpadButton_StickLRight | HidNpadButton_StickRRight)) && selected_element_options)
         {
             selected_element_options->selected++;
             if (!selected_element_options->options[selected_element_options->selected]) selected_element_options->selected--;
             if (selected_element_options->options_func) selected_element_options->options_func(selected_element_options->selected);
         } else
-        if ((btn_down & (KEY_DLEFT | KEY_LSTICK_LEFT | KEY_RSTICK_LEFT)) && selected_element_options)
+        if ((btn_down & (HidNpadButton_Left | HidNpadButton_StickLLeft | HidNpadButton_StickRLeft)) && selected_element_options)
         {
             selected_element_options->selected--;
             if (selected_element_options->selected == UINT32_MAX) selected_element_options->selected = 0;
             if (selected_element_options->options_func) selected_element_options->options_func(selected_element_options->selected);
         } else
-        if (btn_down & KEY_B)
+        if (btn_down & HidNpadButton_B)
         {
             if (!cur_menu->parent) break;
             
@@ -311,7 +311,7 @@ int main(int argc, char *argv[])
             element_count = menuGetElementCount(cur_menu);
         }
         
-        if (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN | KEY_LSTICK_UP | KEY_RSTICK_UP)) svcSleepThread(50000000); // 50 ms
+        if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
     
 out:
@@ -419,7 +419,7 @@ end:
     utilsChangeHomeButtonBlockStatus(false);
     
     consolePrint("press any button to continue");
-    utilsWaitForButtonPress(KEY_ANY);
+    utilsWaitForButtonPress(0);
     
     return success;
 }
@@ -457,7 +457,7 @@ end:
     utilsChangeHomeButtonBlockStatus(false);
     
     consolePrint("press any button to continue");
-    utilsWaitForButtonPress(KEY_ANY);
+    utilsWaitForButtonPress(0);
     
     return success;
 }
@@ -550,8 +550,8 @@ static bool sendGameCardImageViaUsb(void)
         struct tm *ts = localtime(&now);
         size_t size = shared_data.data_written;
         
-        hidScanInput();
-        btn_cancel_cur_state = (utilsHidKeysAllHeld() & KEY_B);
+        utilsScanPads();
+        btn_cancel_cur_state = (utilsGetButtonsHeld() & HidNpadButton_B);
         
         if (btn_cancel_cur_state && btn_cancel_cur_state != btn_cancel_prev_state)
         {
@@ -624,7 +624,7 @@ end:
     utilsChangeHomeButtonBlockStatus(false);
     
     consolePrint("press any button to continue");
-    utilsWaitForButtonPress(KEY_ANY);
+    utilsWaitForButtonPress(0);
     
     return success;
 }

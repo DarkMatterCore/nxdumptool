@@ -58,8 +58,6 @@
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
-#define KEY_ANY                         0
-
 
 
 
@@ -85,13 +83,14 @@ void utilsJoinThread(Thread *thread);
 /// Returns true if the application is running under a development unit.
 bool utilsIsDevelopmentUnit(void);
 
-/// Functions to retrieve down/held keys from all input controllers.
-/// hidScanInput() must be called before any of these.
-u64 utilsHidKeysAllDown(void);
-u64 utilsHidKeysAllHeld(void);
+/// Functions to retrieve down/held buttons from all input controllers.
+/// utilsScanPads() must be called before utilsGetButtonsDown() / utilsGetButtonsHeld().
+void utilsScanPads(void);
+u64 utilsGetButtonsDown(void);
+u64 utilsGetButtonsHeld(void);
 
-/// Waits until any key matching the provided input flag is pressed.
-/// If 'flag' is set to zero (KEY_ANY), any key press will count.
+/// Waits until any button matching the provided input flag is pressed.
+/// If 'flag' is set to zero, any button press will count.
 void utilsWaitForButtonPress(u64 flag);
 
 /// Formats a string and appends it to the provided buffer.

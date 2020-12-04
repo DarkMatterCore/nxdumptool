@@ -880,9 +880,9 @@ int main(int argc, char *argv[])
         
         while(true)
         {
-            hidScanInput();
-            btn_down = utilsHidKeysAllDown();
-            btn_held = utilsHidKeysAllHeld();
+            utilsScanPads();
+            btn_down = utilsGetButtonsDown();
+            btn_held = utilsGetButtonsHeld();
             if (btn_down || btn_held) break;
             
             if (titleIsGameCardInfoUpdated())
@@ -910,7 +910,7 @@ int main(int argc, char *argv[])
         
         if (gc_update) continue;
         
-        if (btn_down & KEY_A)
+        if (btn_down & HidNpadButton_A)
         {
             bool error = false;
             
@@ -964,19 +964,19 @@ int main(int argc, char *argv[])
             if (error || menu >= 3)
             {
                 consolePrint("press any button to continue\n");
-                utilsWaitForButtonPress(KEY_ANY);
+                utilsWaitForButtonPress(0);
                 menu--;
             } else {
                 selected_idx = scroll = 0;
             }
         } else
-        if ((btn_down & KEY_DDOWN) || (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN)))
+        if ((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown)))
         {
             selected_idx++;
             
             if (selected_idx >= max_val)
             {
-                if (btn_down & KEY_DDOWN)
+                if (btn_down & HidNpadButton_Down)
                 {
                     selected_idx = scroll = 0;
                 } else {
@@ -988,13 +988,13 @@ int main(int argc, char *argv[])
                 scroll++;
             }
         } else
-        if ((btn_down & KEY_DUP) || (btn_held & (KEY_LSTICK_UP | KEY_RSTICK_UP)))
+        if ((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp)))
         {
             selected_idx--;
             
             if (selected_idx == UINT32_MAX)
             {
-                if (btn_down & KEY_DUP)
+                if (btn_down & HidNpadButton_Up)
                 {
                     selected_idx = (max_val - 1);
                     scroll = (max_val >= page_size ? (max_val - page_size) : 0);
@@ -1007,7 +1007,7 @@ int main(int argc, char *argv[])
                 scroll--;
             }
         } else
-        if (btn_down & KEY_B)
+        if (btn_down & HidNpadButton_B)
         {
             menu--;
             
@@ -1019,29 +1019,29 @@ int main(int argc, char *argv[])
                 scroll = (menu == 0 ? title_scroll : type_scroll);
             }
         } else
-        if (((btn_down & KEY_DLEFT) || (btn_down & KEY_DRIGHT)) && menu == 2 && selected_idx != 0)
+        if ((btn_down & (HidNpadButton_Left | HidNpadButton_Right)) && menu == 2 && selected_idx != 0)
         {
             options[selected_idx - 1].val ^= 1;
         } else
-        if (((btn_down & KEY_L) || (btn_down & KEY_ZL)) && menu == 2 && title_info->previous)
+        if ((btn_down & (HidNpadButton_L | HidNpadButton_ZL)) && menu == 2 && title_info->previous)
         {
             title_info = title_info->previous;
             list_idx--;
         } else
-        if (((btn_down & KEY_R) || (btn_down & KEY_ZR)) && menu == 2 && title_info->next)
+        if ((btn_down & (HidNpadButton_R | HidNpadButton_ZR)) && menu == 2 && title_info->next)
         {
             title_info = title_info->next;
             list_idx++;
         }
         
-        if (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN | KEY_LSTICK_UP | KEY_RSTICK_UP)) svcSleepThread(50000000); // 50 ms
+        if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
     
 out2:
     if (menu != UINT32_MAX)
     {
         consolePrint("press any button to exit\n");
-        utilsWaitForButtonPress(KEY_ANY);
+        utilsWaitForButtonPress(0);
     }
     
     if (app_metadata) free(app_metadata);

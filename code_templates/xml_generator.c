@@ -118,9 +118,9 @@ int main(int argc, char *argv[])
         u64 btn_down = 0, btn_held = 0;
         while(true)
         {
-            hidScanInput();
-            btn_down = utilsHidKeysAllDown();
-            btn_held = utilsHidKeysAllHeld();
+            utilsScanPads();
+            btn_down = utilsGetButtonsDown();
+            btn_held = utilsGetButtonsHeld();
             if (btn_down || btn_held) break;
             
             if (titleIsGameCardInfoUpdated())
@@ -139,7 +139,7 @@ int main(int argc, char *argv[])
             }
         }
         
-        if (btn_down & KEY_A)
+        if (btn_down & HidNpadButton_A)
         {
             if (!titleGetUserApplicationData(app_metadata[selected_idx]->title_id, &user_app_data) || !user_app_data.app_info)
             {
@@ -150,13 +150,13 @@ int main(int argc, char *argv[])
             
             break;
         } else
-        if ((btn_down & KEY_DDOWN) || (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN)))
+        if ((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown)))
         {
             selected_idx++;
             
             if (selected_idx >= app_count)
             {
-                if (btn_down & KEY_DDOWN)
+                if (btn_down & HidNpadButton_Down)
                 {
                     selected_idx = scroll = 0;
                 } else {
@@ -168,13 +168,13 @@ int main(int argc, char *argv[])
                 scroll++;
             }
         } else
-        if ((btn_down & KEY_DUP) || (btn_held & (KEY_LSTICK_UP | KEY_RSTICK_UP)))
+        if ((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp)))
         {
             selected_idx--;
             
             if (selected_idx == UINT32_MAX)
             {
-                if (btn_down & KEY_DUP)
+                if (btn_down & HidNpadButton_Up)
                 {
                     selected_idx = (app_count - 1);
                     scroll = (app_count >= page_size ? (app_count - page_size) : 0);
@@ -187,13 +187,13 @@ int main(int argc, char *argv[])
                 scroll--;
             }
         } else
-        if (btn_down & KEY_B)
+        if (btn_down & HidNpadButton_B)
         {
             exit_prompt = false;
             goto out2;
         }
         
-        if (btn_held & (KEY_LSTICK_DOWN | KEY_RSTICK_DOWN | KEY_LSTICK_UP | KEY_RSTICK_UP)) svcSleepThread(50000000); // 50 ms
+        if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
     
     consoleClear();
@@ -388,7 +388,7 @@ out2:
     if (exit_prompt)
     {
         consolePrint("press any button to exit\n");
-        utilsWaitForButtonPress(KEY_ANY);
+        utilsWaitForButtonPress(0);
     }
     
     if (legal_info_ctx)

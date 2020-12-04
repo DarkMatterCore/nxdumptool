@@ -41,6 +41,8 @@
 static bool g_resourcesInitialized = false, g_isDevUnit = false;
 static Mutex g_resourcesMutex = 0;
 
+static PadState g_padState = {0};
+
 static FsFileSystem *g_sdCardFileSystem = NULL;
 
 static FsStorage g_emmcBisSystemPartitionStorage = {0};
@@ -80,6 +82,13 @@ bool utilsInitializeResources(void)
     bool ret = g_resourcesInitialized;
     if (ret) goto end;
     
+    /* Configure input. */
+    /* Up to 8 different, full controller inputs. */
+    /* Individual Joy-Cons not supported. */
+    padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
+    padInitializeWithMask(&g_padState, 0x1000000FFUL);
+    
+    /* Create logfile. */
     utilsWriteLogBufferToLogFile("________________________________________________________________\r\n");
     LOGFILE(APP_TITLE " v%u.%u.%u starting. Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
     
@@ -109,7 +118,7 @@ bool utilsInitializeResources(void)
         goto end;
     }
     
-    /* Initialize USB host FS interface. */
+    /* Initialize USB Mass Storage Host interface. */
     rc = usbHsFsInitialize(0);
     if (R_FAILED(rc))
     {
@@ -226,7 +235,7 @@ void utilsCloseResources(void)
     /* Free NCA crypto buffer. */
     ncaFreeCryptoBuffer();
     
-    /* Close USB host FS interface. */
+    /* Close USB Mass Storage Host interface. */
     usbHsFsExit();
     
     /* Close USB interface. */
@@ -326,30 +335,31 @@ bool utilsIsDevelopmentUnit(void)
     return ret;
 }
 
-u64 utilsHidKeysAllDown(void)
+void utilsScanPads(void)
 {
-    u64 keys_down = 0;
-    for(u32 i = 0; i < CONTROLLER_UNKNOWN; i++) keys_down |= hidKeysDown(i);
-    return keys_down;
+    padUpdate(&g_padState);
 }
 
-u64 utilsHidKeysAllHeld(void)
+u64 utilsGetButtonsDown(void)
 {
-    u64 keys_held = 0;
-    for(u32 i = 0; i < CONTROLLER_UNKNOWN; i++) keys_held |= hidKeysHeld(i);
-    return keys_held;
+    return padGetButtonsDown(&g_padState);
+}
+
+u64 utilsGetButtonsHeld(void)
+{
+    return padGetButtons(&g_padState);
 }
 
 void utilsWaitForButtonPress(u64 flag)
 {
-    /* Don't consider touch screen presses nor stick movement as button inputs. */
-    if (!flag) flag = ~(KEY_TOUCH | KEY_LSTICK_LEFT | KEY_LSTICK_RIGHT | KEY_LSTICK_UP | KEY_LSTICK_DOWN | KEY_RSTICK_LEFT | KEY_RSTICK_RIGHT | KEY_RSTICK_UP | KEY_RSTICK_DOWN);
+    /* Don't consider stick movement as button inputs. */
+    if (!flag) flag = (HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
+                       HidNpadButton_StickRUp | HidNpadButton_StickRDown);
     
     while(appletMainLoop())
     {
-        hidScanInput();
-        u64 keys_down = utilsHidKeysAllDown();
-        if (keys_down & flag) break;
+        utilsScanPads();
+        if (utilsGetButtonsDown() & flag) break;
     }
 }
 
