@@ -23,7 +23,7 @@ for f in ./code_templates/*.c; do
     rm -f ./source/main.c
     cp $f ./source/main.c
     
-    make BUILD_TYPE="$filename" -j12
+    make BUILD_TYPE="$filename"
     
     mkdir ./code_templates/tmp/$filename
     cp ./$filename.nro ./code_templates/tmp/$filename/nxdumptool-rewrite.nro
