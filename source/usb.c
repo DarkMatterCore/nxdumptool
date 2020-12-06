@@ -1133,9 +1133,9 @@ static bool usbInitializeDeviceInterface1x(void)
 
 NX_INLINE bool usbIsHostAvailable(void)
 {
-    u32 state = 0;
+    UsbState state = UsbState_Detached;
     Result rc = usbDsGetState(&state);
-    return (R_SUCCEEDED(rc) && state == 5);
+    return (R_SUCCEEDED(rc) && state == UsbState_Configured);
 }
 
 NX_INLINE void usbSetZltPacket(bool enable)
