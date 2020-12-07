@@ -107,7 +107,7 @@ typedef struct {
 
 static RwLock g_usbDeviceLock = {0};
 static usbDeviceInterface g_usbDeviceInterface = {0};
-static bool g_usbDeviceInterfaceInitialized = false;
+static bool g_usbDeviceInterfaceInit = false;
 
 static Event *g_usbStateChangeEvent = NULL;
 static Thread g_usbDetectionThread = {0};
@@ -250,7 +250,7 @@ bool usbSendFileProperties(u64 file_size, const char *filename, u32 nsp_header_s
     u32 status = UsbStatusType_Success;
     size_t filename_length = 0;
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !filename || \
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInit || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !filename || \
         !(filename_length = strlen(filename)) || filename_length >= FS_MAX_PATH || (!g_nspTransferMode && ((file_size && nsp_header_size >= file_size) || g_usbTransferRemainingSize)) || \
         (g_nspTransferMode && nsp_header_size))
     {
@@ -299,7 +299,7 @@ bool usbSendFileData(void *data, u64 data_size)
     UsbStatus *cmd_status = NULL;
     bool ret = false, zlt_required = false;
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize || !data || \
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInit || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize || !data || \
         !data_size || data_size > USB_TRANSFER_BUFFER_SIZE || data_size > g_usbTransferRemainingSize)
     {
         LOGFILE("Invalid parameters!");
@@ -398,7 +398,7 @@ bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size)
     u32 status = UsbStatusType_Success;
     bool ret = false, zlt_required = false;
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || \
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInit || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || \
         !g_nspTransferMode || !nsp_header || !nsp_header_size || nsp_header_size > (USB_TRANSFER_BUFFER_SIZE - sizeof(UsbCommandHeader)))
     {
         LOGFILE("Invalid parameters!");
@@ -441,7 +441,7 @@ void usbCancelFileTransfer(void)
     rwlockWriteLock(&(g_usbDeviceInterface.lock));
     rwlockWriteLock(&(g_usbDeviceInterface.lock_in));
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || (!g_usbTransferRemainingSize && \
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInit || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted || (!g_usbTransferRemainingSize && \
         !g_nspTransferMode)) goto end;
     
     /* Reset variables. */
@@ -555,7 +555,7 @@ static bool usbStartSession(void)
     size_t cmd_size = 0;
     u32 status = UsbStatusType_Success;
     
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized)
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInit || !g_usbDeviceInterface.initialized)
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -598,7 +598,7 @@ static bool usbStartSession(void)
 
 static void usbEndSession(void)
 {
-    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInitialized || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted)
+    if (!g_usbTransferBuffer || !g_usbDeviceInterfaceInit || !g_usbDeviceInterface.initialized || !g_usbHostAvailable || !g_usbSessionStarted)
     {
         LOGFILE("Invalid parameters!");
         return;
@@ -705,7 +705,7 @@ static bool usbInitializeComms(void)
 {
     Result rc = 0;
     
-    bool ret = (g_usbDeviceInterfaceInitialized && g_usbDeviceInterface.initialized);
+    bool ret = (g_usbDeviceInterfaceInit && g_usbDeviceInterface.initialized);
     if (ret) goto end;
     
     rc = usbDsInitialize();
@@ -858,7 +858,7 @@ static bool usbInitializeComms(void)
         }
     }
     
-    ret = g_usbDeviceInterfaceInitialized = true;
+    ret = g_usbDeviceInterfaceInit = true;
     
 end:
     if (!ret) usbCloseComms();
@@ -869,7 +869,7 @@ end:
 static void usbCloseComms(void)
 {
     usbDsExit();
-    g_usbDeviceInterfaceInitialized = false;
+    g_usbDeviceInterfaceInit = false;
     usbFreeDeviceInterface();
 }
 

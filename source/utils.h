@@ -37,6 +37,7 @@
 #include <sys/stat.h>
 #include <stdatomic.h>
 #include <switch.h>
+#include <usbhsfs.h>
 
 #include "common.h"
 

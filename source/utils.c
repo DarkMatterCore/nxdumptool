@@ -20,7 +20,6 @@
  */
 
 #include <sys/statvfs.h>
-#include <usbhsfs.h>
 
 #include "utils.h"
 //#include "freetype_helper.h"
@@ -30,6 +29,7 @@
 #include "services.h"
 #include "nca.h"
 #include "usb.h"
+#include "ums.h"
 #include "title.h"
 #include "bfttf.h"
 #include "fatfs/ff.h"
@@ -38,7 +38,7 @@
 
 /* Global variables. */
 
-static bool g_resourcesInitialized = false, g_isDevUnit = false;
+static bool g_resourcesInit = false, g_isDevUnit = false;
 static Mutex g_resourcesMutex = 0;
 
 static PadState g_padState = {0};
@@ -78,8 +78,7 @@ bool utilsInitializeResources(void)
 {
     mutexLock(&g_resourcesMutex);
     
-    Result rc = 0;
-    bool ret = g_resourcesInitialized;
+    bool ret = g_resourcesInit;
     if (ret) goto end;
     
     /* Configure input. */
@@ -118,13 +117,8 @@ bool utilsInitializeResources(void)
         goto end;
     }
     
-    /* Initialize USB Mass Storage Host interface. */
-    rc = usbHsFsInitialize(0);
-    if (R_FAILED(rc))
-    {
-        LOGFILE("Failed to initialize USB host FS interface! (0x%08X).", rc);
-        goto end;
-    }
+    /* Initialize USB Mass Storage interface. */
+    if (!umsInitialize()) goto end;
     
     /* Load NCA keyset. */
     if (!keysLoadNcaKeyset())
@@ -190,7 +184,7 @@ bool utilsInitializeResources(void)
     /* Initialize LVGL. */
     //if (!lvglHelperInitialize()) return false;
     
-    ret = g_resourcesInitialized = true;
+    ret = g_resourcesInit = true;
     
 end:
     mutexUnlock(&g_resourcesMutex);
@@ -235,8 +229,8 @@ void utilsCloseResources(void)
     /* Free NCA crypto buffer. */
     ncaFreeCryptoBuffer();
     
-    /* Close USB Mass Storage Host interface. */
-    usbHsFsExit();
+    /* Close USB Mass Storage interface. */
+    umsExit();
     
     /* Close USB interface. */
     usbExit();
@@ -244,7 +238,7 @@ void utilsCloseResources(void)
     /* Close initialized services. */
     servicesClose();
     
-    g_resourcesInitialized = false;
+    g_resourcesInit = false;
     
     mutexUnlock(&g_resourcesMutex);
 }
@@ -330,7 +324,7 @@ void utilsJoinThread(Thread *thread)
 bool utilsIsDevelopmentUnit(void)
 {
     mutexLock(&g_resourcesMutex);
-    bool ret = (g_resourcesInitialized && g_isDevUnit);
+    bool ret = (g_resourcesInit && g_isDevUnit);
     mutexUnlock(&g_resourcesMutex);
     return ret;
 }
