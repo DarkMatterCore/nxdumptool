@@ -42,10 +42,11 @@ typedef enum {
 } NpdmProcessAddressSpace;
 
 typedef struct {
-    u8 is_64bit_instruction       : 1;
-    u8 process_address_space      : 3;  ///< NpdmProcessAddressSpace.
-    u8 optimize_memory_allocation : 1;
-    u8 reserved                   : 3;
+    u8 is_64bit_instruction               : 1;
+    u8 process_address_space              : 3;  ///< NpdmProcessAddressSpace.
+    u8 optimize_memory_allocation         : 1;
+    u8 disable_device_address_space_merge : 1;
+    u8 reserved                           : 2;
 } NpdmMetaFlags;
 
 /// This is the start of every NPDM file.
