@@ -32,10 +32,8 @@ void umsExit(void);
 /// Returns true if USB Mass Storage device info has been updated.
 bool umsIsDeviceInfoUpdated(void);
 
-/// Returns the available USB Mass Storage device count.
-u32 umsGetDeviceCount(void);
-
-/// Saves USB Mass Storage device info to 'out_device' using the provided index.
-bool umsGetDeviceByIndex(u32 idx, UsbHsFsDevice *out_device);
+/// Returns a pointer to a dynamically allocated array of UsbHsFsDevice elements. The allocated buffer must be freed by the calling function.
+/// Returns NULL if an error occurs.
+UsbHsFsDevice *umsGetDevices(u32 *out_count);
 
 #endif /* __UMS_H__ */

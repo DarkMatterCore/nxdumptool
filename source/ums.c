@@ -113,35 +113,36 @@ bool umsIsDeviceInfoUpdated(void)
     return ret;
 }
 
-u32 umsGetDeviceCount(void)
-{
-    mutexLock(&g_umsMutex);
-    u32 count = (g_umsInterfaceInit ? g_umsDeviceCount : 0);
-    mutexUnlock(&g_umsMutex);
-    return count;
-}
-
-bool umsGetDeviceByIndex(u32 idx, UsbHsFsDevice *out_device)
+UsbHsFsDevice *umsGetDevices(u32 *out_count)
 {
     mutexLock(&g_umsMutex);
     
-    bool ret = false;
+    UsbHsFsDevice *devices = NULL;
     
-    if (!g_umsInterfaceInit || !g_umsDeviceCount || !g_umsDevices || idx >= g_umsDeviceCount || !out_device)
+    if (!g_umsInterfaceInit || !g_umsDeviceCount || !g_umsDevices || !out_count)
     {
         LOGFILE("Invalid parameters!");
         goto end;
     }
     
-    /* Copy device data. */
-    memcpy(out_device, &(g_umsDevices[idx]), sizeof(UsbHsFsDevice));
+    /* Allocate memory for the output devices. */
+    devices = calloc(g_umsDeviceCount, sizeof(UsbHsFsDevice));
+    if (!devices)
+    {
+        LOGFILE("Failed to allocate memory for %u devices!", g_umsDeviceCount);
+        goto end;
+    }
     
-    ret = true;
+    /* Copy device data. */
+    memcpy(devices, g_umsDevices, g_umsDeviceCount * sizeof(UsbHsFsDevice));
+    
+    /* Update output device count. */
+    *out_count = g_umsDeviceCount;
     
 end:
     mutexUnlock(&g_umsMutex);
     
-    return ret;
+    return devices;
 }
 
 static bool umsCreateDetectionThread(void)
