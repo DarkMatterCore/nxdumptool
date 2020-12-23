@@ -4,7 +4,7 @@
  * Based on the standard CRC32 checksum fast public domain implementation for
  * little-endian architecures by Björn Samuelsson (http://home.thep.lu.se/~bjorn/crc).
  *
- * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
