@@ -876,9 +876,9 @@ int main(int argc, char *argv[])
                         {
                             if (ums_device->product_id[0])
                             {
-                                sprintf(device_info, "%s, LUN %u, FS #%u, %s", ums_device->product_id, ums_device->lun, ums_device->fs_idx, UMS_FS_TYPE(ums_device->fs_type));
+                                sprintf(device_info, "%s, LUN %u, FS #%u, %s", ums_device->product_id, ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
                             } else {
-                                sprintf(device_info, "LUN %u, FS #%u, %s", ums_device->lun, ums_device->fs_idx, UMS_FS_TYPE(ums_device->fs_type));
+                                sprintf(device_info, "LUN %u, FS #%u, %s", ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
                             }
                             
                             device_retrieved_info = true;
