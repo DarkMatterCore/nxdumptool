@@ -37,9 +37,9 @@
 #include <sys/stat.h>
 #include <stdatomic.h>
 #include <switch.h>
-#include <usbhsfs.h>
 
 #include "common.h"
+#include "ums.h"
 
 #define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
 
@@ -117,9 +117,10 @@ void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src,
 /// Formats the provided 'size' value to a human readable size string and stores it in 'dst'.
 void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);
 
-/// Saves the free file space from the filesystem pointed to by the input path (e.g. "sdmc:/") to 'out'.
+/// Saves the total size and free space available from the filesystem pointed to by the input path (e.g. "sdmc:/") to 'out_total' and 'out_free', respectively.
+/// Either 'out_total' or 'out_free' can be set to NULL, but at least one of them must be set to a valid pointer.
 /// Returns false if there's an error.
-bool utilsGetFreeSpaceFromFileSystemByPath(const char *path, u64 *out);
+bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_free);
 
 /// Commits SD card filesystem changes.
 /// Must be used after closing a file handle from the SD card.

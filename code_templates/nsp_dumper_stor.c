@@ -29,7 +29,7 @@
 #include "usb.h"
 
 #define BLOCK_SIZE  0x800000
-#define OUTPATH     "sdmc:/nsp/"
+#define OUTPATH     "/nsp/"
 
 static const char *dump_type_strings[] = {
     "dump base application",
@@ -41,20 +41,24 @@ static const u32 dump_type_strings_count = MAX_ELEMENTS(dump_type_strings);
 
 typedef struct {
     char str[64];
-    bool val;
+    u32 val;
 } options_t;
 
 static options_t options[] = {
-    { "set download distribution type", false },
-    { "remove console specific data", false },
-    { "remove titlekey crypto (overrides previous option)", false },
-    { "change acid rsa key/sig", false },
-    { "disable linked account requirement", false },
-    { "enable screenshots", false },
-    { "enable video capture", false }
+    { "set download distribution type", 0 },
+    { "remove console specific data", 0 },
+    { "remove titlekey crypto (overrides previous option)", 0 },
+    { "change acid rsa key/sig", 0 },
+    { "disable linked account requirement", 0 },
+    { "enable screenshots", 0 },
+    { "enable video capture", 0 },
+    { "output device", 0 }
 };
 
 static const u32 options_count = MAX_ELEMENTS(options);
+
+static UsbHsFsDevice *ums_devices = NULL;
+static u32 ums_device_count = 0;
 
 static void consolePrint(const char *text, ...)
 {
@@ -65,7 +69,7 @@ static void consolePrint(const char *text, ...)
     consoleUpdate(NULL);
 }
 
-static void nspDump(TitleInfo *title_info)
+static void nspDump(TitleInfo *title_info, u64 free_space)
 {
     if (!title_info || !title_info->content_count || !title_info->content_infos) return;
     
@@ -88,14 +92,21 @@ static void nspDump(TitleInfo *title_info)
     for(u32 i = 0; i < options_count; i++) printf("%s: %s\n", options[i].str, options[i].val ? "yes" : "no");
     printf("______________________________\n\n");
     
-    bool set_download_type = options[0].val;
-    bool remove_console_data = options[1].val;
-    bool remove_titlekey_crypto = options[2].val;
-    bool change_acid_rsa = options[3].val;
-    bool patch_sua = options[4].val;
-    bool patch_screenshot = options[5].val;
-    bool patch_video_capture = options[6].val;
+    bool set_download_type = (options[0].val == 1);
+    bool remove_console_data = (options[1].val == 1);
+    bool remove_titlekey_crypto = (options[2].val == 1);
+    bool change_acid_rsa = (options[3].val == 1);
+    bool patch_sua = (options[4].val == 1);
+    bool patch_screenshot = (options[5].val == 1);
+    bool patch_video_capture = (options[6].val == 1);
+    UsbHsFsDevice *ums_device = (options[7].val == 0 ? NULL : &(ums_devices[options[7].val - 1]));
     bool success = false;
+    
+    if (ums_device && ums_device->write_protect)
+    {
+        printf("device \"%s\" has write protection enabled!\n", ums_device->name);
+        return;
+    }
     
     u8 *buf = NULL;
     char *dump_name = NULL, *path = NULL;
@@ -138,13 +149,14 @@ static void nspDump(TitleInfo *title_info)
     }
     
     /* Generate output path. */
-    if (!(dump_name = titleGenerateFileName(title_info, TitleFileNameConvention_Full, TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
+    if (!(dump_name = titleGenerateFileName(title_info, TitleFileNameConvention_Full, ums_device ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
     {
         consolePrint("title generate file name failed\n");
         goto end;
     }
     
-    if (!(path = utilsGeneratePath(OUTPATH, dump_name, ".nsp")))
+    sprintf(entry_name, "%s" OUTPATH, ums_device ? ums_device->name : "sdmc:");
+    if (!(path = utilsGeneratePath(entry_name, dump_name, ".nsp")))
     {
         consolePrint("generate path failed\n");
         goto end;
@@ -457,6 +469,18 @@ static void nspDump(TitleInfo *title_info)
     nsp_size = (nsp_header_size + pfs_file_ctx.fs_size);
     consolePrint("nsp header size: 0x%lX | nsp size: 0x%lX\n", nsp_header_size, nsp_size);
     
+    if (nsp_size >= free_space)
+    {
+        consolePrint("nsp size exceeds free space\n");
+        goto end;
+    }
+    
+    if (ums_device && ums_device->fs_type < UsbHsFsDeviceFileSystemType_exFAT && nsp_size > FAT32_FILESIZE_LIMIT)
+    {
+        consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+        goto end;
+    }
+    
     utilsCreateDirectoryTree(path, false);
     
     if (nsp_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(path))
@@ -745,6 +769,10 @@ int main(int argc, char *argv[])
     u32 type_idx = 0, type_scroll = 0;
     u32 list_count = 0, list_idx = 0;
     
+    u64 device_total_fs_size = 0, device_free_fs_size = 0;
+    char device_total_fs_size_str[36] = {0}, device_free_fs_size_str[32] = {0}, device_info[0x40] = {0};
+    bool device_retrieved_size = false, device_retrieved_info = false;
+    
     app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
     if (!app_metadata || !app_count)
     {
@@ -754,14 +782,17 @@ int main(int argc, char *argv[])
     
     consolePrint("app metadata succeeded\n");
     
+    ums_devices = umsGetDevices(&ums_device_count);
+    
     utilsSleep(1);
     
     while(true)
     {
         consoleClear();
         
-        printf("press b to %s.\n", menu == 0 ? "exit" : "go back");
-        printf("______________________________\n\n");
+        printf("press b to %s.", menu == 0 ? "exit" : "go back");
+        if (ums_device_count) printf(" press x to safely remove all ums devices.");
+        printf("\n______________________________\n\n");
         
         if (menu == 0)
         {
@@ -817,8 +848,44 @@ int main(int argc, char *argv[])
                 if (i == 0)
                 {
                     printf("start nsp dump\n");
-                } else {
+                } else
+                if (i < options_count)
+                {
                     printf("%s: < %s >\n", options[i - 1].str, options[i - 1].val ? "yes" : "no");
+                } else {
+                    u32 device_idx = options[i - 1].val;
+                    
+                    printf("%s: ", options[i - 1].str);
+                    
+                    if (!device_retrieved_size)
+                    {
+                        sprintf(device_total_fs_size_str, "%s/", device_idx == 0 ? "sdmc:" : ums_devices[device_idx - 1].name);
+                        utilsGetFileSystemStatsByPath(device_total_fs_size_str, &device_total_fs_size, &device_free_fs_size);
+                        utilsGenerateFormattedSizeString(device_total_fs_size, device_total_fs_size_str, sizeof(device_total_fs_size_str));
+                        utilsGenerateFormattedSizeString(device_free_fs_size, device_free_fs_size_str, sizeof(device_free_fs_size_str));
+                        device_retrieved_size = true;
+                    }
+                    
+                    if (device_idx == 0)
+                    {
+                        printf("< sdmc: (%s / %s) >\n", device_free_fs_size_str, device_total_fs_size_str);
+                    } else {
+                        UsbHsFsDevice *ums_device = &(ums_devices[device_idx - 1]);
+                        
+                        if (!device_retrieved_info)
+                        {
+                            if (ums_device->product_id[0])
+                            {
+                                sprintf(device_info, "%s, LUN %u, FS #%u, %s", ums_device->product_id, ums_device->lun, ums_device->fs_idx, UMS_FS_TYPE(ums_device->fs_type));
+                            } else {
+                                sprintf(device_info, "LUN %u, FS #%u, %s", ums_device->lun, ums_device->fs_idx, UMS_FS_TYPE(ums_device->fs_type));
+                            }
+                            
+                            device_retrieved_info = true;
+                        }
+                        
+                        printf("< %s (%s) (%s / %s) >", ums_device->name, device_info, device_free_fs_size_str, device_total_fs_size_str);
+                    }
                 }
             }
         }
@@ -827,7 +894,7 @@ int main(int argc, char *argv[])
         
         consoleUpdate(NULL);
         
-        bool gc_update = false;
+        bool data_update = false;
         u64 btn_down = 0, btn_held = 0;
         
         while(true)
@@ -854,13 +921,27 @@ int main(int argc, char *argv[])
                 type_idx = type_scroll = 0;
                 list_count = list_idx = 0;
                 
-                gc_update = true;
+                data_update = true;
+                
+                break;
+            }
+            
+            if (umsIsDeviceInfoUpdated())
+            {
+                free(ums_devices);
+                
+                ums_devices = umsGetDevices(&ums_device_count);
+                
+                options[options_count - 1].val = 0;
+                device_retrieved_size = device_retrieved_info = false;
+                
+                data_update = true;
                 
                 break;
             }
         }
         
-        if (gc_update) continue;
+        if (data_update) continue;
         
         if (btn_down & HidNpadButton_A)
         {
@@ -909,7 +990,7 @@ int main(int argc, char *argv[])
             {
                 consoleClear();
                 utilsChangeHomeButtonBlockStatus(true);
-                nspDump(title_info);
+                nspDump(title_info, device_free_fs_size);
                 utilsChangeHomeButtonBlockStatus(false);
             }
             
@@ -973,7 +1054,24 @@ int main(int argc, char *argv[])
         } else
         if ((btn_down & (HidNpadButton_Left | HidNpadButton_Right)) && menu == 2 && selected_idx != 0)
         {
-            options[selected_idx - 1].val ^= 1;
+            if (selected_idx < options_count)
+            {
+                options[selected_idx - 1].val ^= 1;
+            } else {
+                bool left = (btn_down & HidNpadButton_Left);
+                u32 *device_idx = &(options[selected_idx - 1].val), orig_device_idx = *device_idx;
+                
+                if (left)
+                {
+                    (*device_idx)--;
+                    if (*device_idx == UINT32_MAX) *device_idx = ums_device_count;
+                } else {
+                    (*device_idx)++;
+                    if (*device_idx > ums_device_count) *device_idx = 0;
+                }
+                
+                if (*device_idx != orig_device_idx) device_retrieved_size = device_retrieved_info = false;
+            }
         } else
         if ((btn_down & (HidNpadButton_L | HidNpadButton_ZL)) && menu == 2 && title_info->previous)
         {
@@ -984,6 +1082,17 @@ int main(int argc, char *argv[])
         {
             title_info = title_info->next;
             list_idx++;
+        } else
+        if ((btn_down & HidNpadButton_X) && ums_device_count)
+        {
+            for(u32 i = 0; i < ums_device_count; i++) usbHsFsUnmountDevice(&(ums_devices[i]), false);
+            
+            options[options_count - 1].val = 0;
+            
+            free(ums_devices);
+            ums_devices = NULL;
+            
+            ums_device_count = 0;
         }
         
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
@@ -995,6 +1104,8 @@ out2:
         consolePrint("press any button to exit\n");
         utilsWaitForButtonPress(0);
     }
+    
+    if (ums_devices) free(ums_devices);
     
     if (app_metadata) free(app_metadata);
     

@@ -119,25 +119,28 @@ UsbHsFsDevice *umsGetDevices(u32 *out_count)
     
     UsbHsFsDevice *devices = NULL;
     
-    if (!g_umsInterfaceInit || !g_umsDeviceCount || !g_umsDevices || !out_count)
+    if (!g_umsInterfaceInit || !out_count)
     {
         LOGFILE("Invalid parameters!");
         goto end;
     }
     
-    /* Allocate memory for the output devices. */
-    devices = calloc(g_umsDeviceCount, sizeof(UsbHsFsDevice));
-    if (!devices)
+    if (g_umsDeviceCount && g_umsDevices)
     {
-        LOGFILE("Failed to allocate memory for %u devices!", g_umsDeviceCount);
-        goto end;
+        /* Allocate memory for the output devices. */
+        devices = calloc(g_umsDeviceCount, sizeof(UsbHsFsDevice));
+        if (!devices)
+        {
+            LOGFILE("Failed to allocate memory for %u devices!", g_umsDeviceCount);
+            goto end;
+        }
+        
+        /* Copy device data. */
+        memcpy(devices, g_umsDevices, g_umsDeviceCount * sizeof(UsbHsFsDevice));
     }
     
-    /* Copy device data. */
-    memcpy(devices, g_umsDevices, g_umsDeviceCount * sizeof(UsbHsFsDevice));
-    
     /* Update output device count. */
-    *out_count = g_umsDeviceCount;
+    *out_count = ((g_umsDeviceCount && g_umsDevices) ? g_umsDeviceCount : 0);
     
 end:
     mutexUnlock(&g_umsMutex);
@@ -203,7 +206,8 @@ static void umsDetectionThreadFunc(void *arg)
             if (g_umsDevices)
             {
                 /* List mounted devices. */
-                if ((listed_device_count = usbHsFsListMountedDevices(g_umsDevices, g_umsDeviceCount)))
+                listed_device_count = usbHsFsListMountedDevices(g_umsDevices, g_umsDeviceCount);
+                if (listed_device_count)
                 {
                     /* Check if we got as many devices as we expected. */
                     if (listed_device_count == g_umsDeviceCount)
@@ -225,6 +229,9 @@ static void umsDetectionThreadFunc(void *arg)
             
             /* Free USB Mass Storage device data if something went wrong. */
             if (fail) umsFreeDeviceData();
+        } else {
+            /* Update USB Mass Storage device info updated flag. */
+            g_umsDeviceInfoUpdated = true;
         }
         
         mutexUnlock(&g_umsMutex);

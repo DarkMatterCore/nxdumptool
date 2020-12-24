@@ -618,13 +618,10 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
         app_metadata[app_count++] = cur_app_metadata;
     }
     
-    if (app_metadata && app_count)
-    {
-        /* Update output counter. */
-        *out_count = app_count;
-    } else {
-        LOGFILE("No content data found for %s!", is_system ? "system titles" : "user applications");
-    }
+    /* Update output counter. */
+    *out_count = app_count;
+    
+    if (!app_metadata || !app_count) LOGFILE("No content data found for %s!", is_system ? "system titles" : "user applications");
     
 end:
     mutexUnlock(&g_titleMutex);

@@ -29,7 +29,6 @@
 #include "services.h"
 #include "nca.h"
 #include "usb.h"
-#include "ums.h"
 #include "title.h"
 #include "bfttf.h"
 #include "fatfs/ff.h"
@@ -347,8 +346,8 @@ u64 utilsGetButtonsHeld(void)
 void utilsWaitForButtonPress(u64 flag)
 {
     /* Don't consider stick movement as button inputs. */
-    if (!flag) flag = (HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
-                       HidNpadButton_StickRUp | HidNpadButton_StickRDown);
+    if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
+                        HidNpadButton_StickRUp | HidNpadButton_StickRDown);
     
     while(appletMainLoop())
     {
@@ -586,13 +585,13 @@ void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size)
     }
 }
 
-bool utilsGetFreeSpaceFromFileSystemByPath(const char *path, u64 *out)
+bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_free)
 {
     char *name_end = NULL, stat_path[32] = {0};
     struct statvfs info = {0};
     int ret = -1;
     
-    if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || !out)
+    if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || (!out_total && !out_free))
     {
         LOGFILE("Invalid parameters!");
         return false;
@@ -607,7 +606,9 @@ bool utilsGetFreeSpaceFromFileSystemByPath(const char *path, u64 *out)
         return false;
     }
     
-    *out = ((u64)info.f_bfree * (u64)info.f_frsize);
+    if (out_total) *out_total = ((u64)info.f_blocks * (u64)info.f_frsize);
+    if (out_free) *out_free = ((u64)info.f_bfree * (u64)info.f_frsize);
+    
     return true;
 }
 

@@ -23,6 +23,12 @@
 #ifndef __UMS_H__
 #define __UMS_H__
 
+#include <usbhsfs.h>
+
+#define UMS_FS_TYPE(x)  ((x) == UsbHsFsDeviceFileSystemType_FAT12 ? "FAT12" : ((x) == UsbHsFsDeviceFileSystemType_FAT16 ? "FAT16" : ((x) == UsbHsFsDeviceFileSystemType_FAT32 ? "FAT32" : \
+                        ((x) == UsbHsFsDeviceFileSystemType_exFAT ? "exFAT" : ((x) == UsbHsFsDeviceFileSystemType_NTFS  ? "NTFS"  : ((x) == UsbHsFsDeviceFileSystemType_EXT2  ? "EXT2"  : \
+                        ((x) == UsbHsFsDeviceFileSystemType_EXT3  ? "EXT3"  : ((x) == UsbHsFsDeviceFileSystemType_EXT4  ? "EXT4"  : "Invalid"))))))))
+
 /// Initializes the USB Mass Storage interface.
 bool umsInitialize(void);
 
