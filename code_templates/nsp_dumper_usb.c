@@ -74,8 +74,13 @@ static void nspDump(TitleInfo *title_info)
     
     printf("%s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
                            (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : "dlc"));
-    printf("name: %s\n", app_metadata->lang_entry.name);
-    printf("publisher: %s\n", app_metadata->lang_entry.author);
+    
+    if (app_metadata)
+    {
+        printf("name: %s\n", app_metadata->lang_entry.name);
+        printf("publisher: %s\n", app_metadata->lang_entry.author);
+    }
+    
     printf("source storage: %s\n", title_info->storage_id == NcmStorageId_GameCard ? "gamecard" : (title_info->storage_id == NcmStorageId_BuiltInUser ? "emmc" : "sd card"));
     printf("title id: %016lX\n", title_info->meta_key.id);
     printf("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.major, title_info->version.minor, title_info->version.micro, title_info->version.major_relstep, \
