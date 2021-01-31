@@ -38,10 +38,9 @@
                     fprintf(title_infos_txt, "        ID Offset: 0x%02X\r\n", g_titleInfo[i].content_infos[j].id_offset);
                 }
                 
-                if ((g_titleInfo[i].meta_key.type == NcmContentMetaType_Application && g_titleInfo[i].app_metadata) || ((g_titleInfo[i].meta_key.type == NcmContentMetaType_Patch || \
-                    g_titleInfo[i].meta_key.type == NcmContentMetaType_AddOnContent) && g_titleInfo[i].parent && g_titleInfo[i].parent->app_metadata))
+                if (g_titleInfo[i].app_metadata)
                 {
-                    TitleApplicationMetadata *app_metadata = (g_titleInfo[i].meta_key.type == NcmContentMetaType_Application ? g_titleInfo[i].app_metadata : g_titleInfo[i].parent->app_metadata);
+                    TitleApplicationMetadata *app_metadata = g_titleInfo[i].app_metadata;
                     
                     if (strlen(app_metadata->lang_entry.name)) fprintf(title_infos_txt, "Name: %s\r\n", app_metadata->lang_entry.name);
                     if (strlen(app_metadata->lang_entry.author)) fprintf(title_infos_txt, "Author: %s\r\n", app_metadata->lang_entry.author);

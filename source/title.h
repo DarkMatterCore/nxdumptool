@@ -49,7 +49,7 @@ typedef struct _TitleInfo {
     NcmContentInfo *content_infos;                  ///< Content info entries from this title.
     u64 size;                                       ///< Total title size.
     char size_str[32];                              ///< Total title size string.
-    TitleApplicationMetadata *app_metadata;         ///< Only available for system titles and applications.
+    TitleApplicationMetadata *app_metadata;         ///< User application metadata.
     struct _TitleInfo *parent, *previous, *next;    ///< Used with TitleInfo entries from user applications, patches and add-on contents. The parent pointer is unused in user applications.
 } TitleInfo;
 
@@ -194,6 +194,21 @@ NX_INLINE bool titleCheckIfAddOnContentIdsAreSiblings(u64 aoc_id_1, u64 aoc_id_2
     u64 app_id_1 = titleGetApplicationIdByAddOnContentId(aoc_id_1);
     u64 app_id_2 = titleGetApplicationIdByAddOnContentId(aoc_id_2);
     return (app_id_1 == app_id_2 && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id_1, aoc_id_1) && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id_2, aoc_id_2));
+}
+
+NX_INLINE u64 titleGetDeltaIdByApplicationId(u64 app_id)
+{
+    return (app_id + TITLE_DELTA_TYPE_VALUE);
+}
+
+NX_INLINE u64 titleGetApplicationIdByDeltaId(u64 delta_id)
+{
+    return (delta_id - TITLE_DELTA_TYPE_VALUE);
+}
+
+NX_INLINE bool titleCheckIfDeltaIdBelongsToApplicationId(u64 app_id, u64 delta_id)
+{
+    return (delta_id == titleGetDeltaIdByApplicationId(app_id));
 }
 
 NX_INLINE u32 titleGetContentCountByType(TitleInfo *info, u8 content_type)

@@ -756,7 +756,6 @@ char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 
     
     char *filename = NULL;
     char title_name[0x400] = {0};
-    TitleApplicationMetadata *app_metadata = NULL;
     
     if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_Delta || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
         (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
@@ -767,17 +766,12 @@ char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 
     
     u8 type = (title_info->meta_key.type - 0x80);
     
-    /* Retrieve application metadata. */
-    /* System titles and user applications: just retrieve the app_metadata pointer from the input TitleInfo. */
-    /* Patches and add-on contents: retrieve the app_metadata pointer from the parent TitleInfo if it's available. */
-    app_metadata = (title_info->meta_key.type <= NcmContentMetaType_Application ? title_info->app_metadata : (title_info->parent ? title_info->parent->app_metadata : NULL));
-    
     /* Generate filename for this title. */
     if (name_convention == TitleFileNameConvention_Full)
     {
-        if (app_metadata && *(app_metadata->lang_entry.name))
+        if (title_info->app_metadata && *(title_info->app_metadata->lang_entry.name))
         {
-            sprintf(title_name, "%s ", app_metadata->lang_entry.name);
+            sprintf(title_name, "%s ", title_info->app_metadata->lang_entry.name);
             if (illegal_char_replace_type) utilsReplaceIllegalCharacters(title_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
         }
         
@@ -1390,7 +1384,13 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
         memcpy(&(cur_title_info->meta_key), &(meta_keys[i]), sizeof(NcmContentMetaKey));
         cur_title_info->version.value = cur_title_info->meta_key.version;
         
-        if (cur_title_info->meta_key.type <= NcmContentMetaType_Application) cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(cur_title_info->meta_key.id);
+        /* Retrieve application metadata. */
+        u64 app_id = (cur_title_info->meta_key.type <= NcmContentMetaType_Application ? cur_title_info->meta_key.id : \
+                     (cur_title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(cur_title_info->meta_key.id) : \
+                     (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(cur_title_info->meta_key.id) : \
+                     titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id))));
+        
+        cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id);
         
         /* Retrieve content infos. */
         if (titleGetContentInfosFromTitle(storage_id, &(cur_title_info->meta_key), &(cur_title_info->content_infos), &(cur_title_info->content_count)))
@@ -1677,12 +1677,16 @@ static bool titleRefreshGameCardTitleInfo(void)
     {
         TitleInfo *cur_title_info = &(g_titleInfo[i]);
         
-        /* Skip current title if it's not an application. */
-        if (cur_title_info->meta_key.type != NcmContentMetaType_Application) continue;
-        gamecard_app_count++;
+        u64 app_id = (cur_title_info->meta_key.type <= NcmContentMetaType_Application ? cur_title_info->meta_key.id : \
+                     (cur_title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(cur_title_info->meta_key.id) : \
+                     (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(cur_title_info->meta_key.id) : \
+                     titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id))));
         
-        /* Check if we already have an application metadata entry for this title ID. */
-        if ((cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(cur_title_info->meta_key.id)) != NULL)
+        /* Update gamecard application count (if needed). */
+        if (cur_title_info->meta_key.type == NcmContentMetaType_Application) gamecard_app_count++;
+        
+        /* Do not proceed if application metadata has already been retrieved, or if we can successfully retrieve it. */
+        if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id)) != NULL)
         {
             gamecard_metadata_count++;
             continue;
@@ -1705,7 +1709,7 @@ static bool titleRefreshGameCardTitleInfo(void)
         }
         
         /* Retrieve application metadata. */
-        if (!titleRetrieveApplicationMetadataByTitleId(cur_title_info->meta_key.id, &(g_appMetadata[g_appMetadataCount]))) continue;
+        if (!titleRetrieveApplicationMetadataByTitleId(app_id, &(g_appMetadata[g_appMetadataCount]))) continue;
         
         cur_title_info->app_metadata = &(g_appMetadata[g_appMetadataCount++]);
         gamecard_metadata_count++;

@@ -70,7 +70,7 @@ static void nspDump(TitleInfo *title_info)
     
     consoleClear();
     
-    TitleApplicationMetadata *app_metadata = (title_info->app_metadata ? title_info->app_metadata : ((title_info->parent && title_info->parent->app_metadata) ? title_info->parent->app_metadata : NULL));
+    TitleApplicationMetadata *app_metadata = title_info->app_metadata;
     
     printf("%s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
                            (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : "dlc"));
