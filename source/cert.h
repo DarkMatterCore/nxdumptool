@@ -167,11 +167,12 @@ bool certRetrieveCertificateByName(Certificate *dst, const char *name);
 /// Retrieves a certificate chain by a full signature issuer string (e.g. "Root-CA00000003-XS00000020").
 bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer);
 
-/// Returns a pointer to a heap allocated buffer that contains the raw contents from the certificate chain matching the input signature issuer. It must be freed by the user.
+/// Returns a pointer to a dynamically allocated buffer that contains the raw contents from the certificate chain matching the input signature issuer. It must be freed by the user.
 /// NULL is returned if an error occurs.
 u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *out_size);
 
-/// Returns a pointer to a heap allocated buffer that contains the raw contents from the certificate chain matching the input Rights ID (stored in the inserted gamecard). It must be freed by the user.
+/// Returns a pointer to a dynamically allocated buffer that contains the raw contents from the certificate chain matching the input Rights ID (stored in the inserted gamecard).
+/// It must be freed by the user.
 /// NULL is returned if an error occurs.
 u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, u64 *out_size);
 

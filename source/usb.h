@@ -34,7 +34,7 @@ bool usbInitialize(void);
 /// Closes the USB interface, input and output endpoints and frees the transfer buffer.
 void usbExit(void);
 
-/// Returns a pointer to a heap-allocated, page-aligned memory buffer that's suitable for USB transfers.
+/// Returns a pointer to a dynamically allocated, page aligned memory buffer that's suitable for USB transfers.
 void *usbAllocatePageAlignedBuffer(size_t size);
 
 /// Used to check if the console has been connected to an USB host device and if a valid USB session has been established.

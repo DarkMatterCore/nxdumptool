@@ -103,9 +103,10 @@ typedef enum {
 } GameCardSelSec;
 
 typedef enum {
-    GameCardFwVersion_ForDev       = 0,
-    GameCardFwVersion_Before400NUP = 1, ///< cup_version < 268435456 (4.0.0-0.0) in GameCardHeaderEncryptedArea.
-    GameCardFwVersion_Since400NUP  = 2  ///< cup_version >= 268435456 (4.0.0-0.0) in GameCardHeaderEncryptedArea.
+    GameCardFwVersion_ForDev              = 0,
+    GameCardFwVersion_ForProd             = BIT(0),
+    GameCardFwVersion_ForProdSince400NUP  = BIT(1), ///< cup_version >= 268435456 (4.0.0-0.0) in GameCardHeaderEncryptedArea.
+    GameCardFwVersion_ForProdSince1100NUP = BIT(2)  ///< cup_version >= 738197504 (11.0.0-0.0) in GameCardHeaderEncryptedArea.
 } GameCardFwVersion;
 
 typedef enum {
@@ -175,7 +176,7 @@ typedef enum {
     GameCardHashFileSystemPartitionType_Logo    = 2,    ///< Only available in GameCardFwVersion_Since400NUP gamecards.
     GameCardHashFileSystemPartitionType_Normal  = 3,
     GameCardHashFileSystemPartitionType_Secure  = 4,
-    GameCardHashFileSystemPartitionType_Boot    = 5,    ///< Only available in Terra (Tencent) gamecards.
+    GameCardHashFileSystemPartitionType_Boot    = 5,
     GameCardHashFileSystemPartitionType_Count   = 6     ///< Not a real value.
 } GameCardHashFileSystemPartitionType;
 
@@ -194,20 +195,34 @@ UEvent *gamecardGetStatusChangeUserEvent(void);
 /// Returns the current GameCardStatus value.
 u8 gamecardGetStatus(void);
 
-/// Used to read data from the inserted gamecard.
+/// Used to read raw data from the inserted gamecard.
 /// All required handles, changes between normal <-> secure storage areas and proper offset calculations are managed internally.
 /// 'offset' + 'read_size' must not exceed the value returned by gamecardGetTotalSize().
 bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
 
-/// Miscellaneous functions.
-
+/// Fills the provided GameCardKeyArea pointer. Only GameCardInitialData data is retrieved at this moment.
+/// This area can't be read using gamecardReadStorage().
 bool gamecardGetKeyArea(GameCardKeyArea *out);
+
+/// Fills the provided GameCardHeader pointer.
+/// This area can also be read using gamecardReadStorage(), starting at offset 0.
 bool gamecardGetHeader(GameCardHeader *out);
+
+/// Fills the provided FsGameCardCertificate pointer.
+/// This area can also be read using gamecardReadStorage(), starting at GAMECARD_CERTIFICATE_OFFSET.
 bool gamecardGetCertificate(FsGameCardCertificate *out);
+
+/// Fills the provided u64 pointer with the total gamecard size, which is the size taken by both Normal and Secure storage areas.
 bool gamecardGetTotalSize(u64 *out);
+
+/// Fills the provided u64 pointer with the trimmed gamecard size, which is the same as the size returned by gamecardGetTotalSize() but using the trimmed Secure storage area size.
 bool gamecardGetTrimmedSize(u64 *out);
-bool gamecardGetRomCapacity(u64 *out); ///< Not the same as gamecardGetTotalSize().
-bool gamecardGetBundledFirmwareUpdateVersion(u32 *out);
+
+/// Fills the provided u64 pointer with the gamecard ROM capacity, based on the GameCardRomSize value from the header. Not the same as gamecardGetTotalSize().
+bool gamecardGetRomCapacity(u64 *out);
+
+/// Fills the provided VersionType1 pointer with the bundled firmware update version in the inserted gamecard.
+bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out);
 
 /// Returns a pointer to a string holding the name of the provided hash file system partition type. Returns NULL if the provided value is invalid.
 const char *gamecardGetHashFileSystemPartitionName(u8 hfs_partition_type);

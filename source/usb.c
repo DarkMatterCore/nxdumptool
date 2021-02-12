@@ -26,10 +26,10 @@
 
 #define USB_ABI_VERSION             1
 
-#define USB_CMD_HEADER_MAGIC        0x4E584454          /* "NXDT". */
+#define USB_CMD_HEADER_MAGIC        0x4E584454  /* "NXDT". */
 
-#define USB_TRANSFER_ALIGNMENT      0x1000              /* 4 KiB. */
-#define USB_TRANSFER_TIMEOUT        5                   /* 5 seconds. */
+#define USB_TRANSFER_ALIGNMENT      0x1000      /* 4 KiB. */
+#define USB_TRANSFER_TIMEOUT        5           /* 5 seconds. */
 
 #define USB_FS_BCD_REVISION         0x0110
 #define USB_FS_EP_MAX_PACKET_SIZE   0x40
@@ -40,6 +40,10 @@
 #define USB_SS_BCD_REVISION         0x0300
 #define USB_SS_EP_MAX_PACKET_SIZE   0x400
 
+#define USB_BOS_SIZE                0x16        /* usb_bos_descriptor + usb_2_0_extension_descriptor + usb_ss_usb_device_capability_descriptor. */
+
+#define LANGID_EN_US                0x0409
+
 /* Type definitions. */
 
 typedef struct {
@@ -47,7 +51,7 @@ typedef struct {
     bool initialized;
     UsbDsInterface *interface;
     UsbDsEndpoint *endpoint_in, *endpoint_out;
-} usbDeviceInterface;
+} UsbDeviceInterface;
 
 typedef enum {
     UsbCommandType_StartSession       = 0,
@@ -103,10 +107,64 @@ typedef struct {
     u8 reserved[0x6];
 } UsbStatus;
 
+/// Imported from libusb, with some adjustments.
+enum usb_bos_type {
+    USB_BT_WIRELESS_USB_DEVICE_CAPABILITY = 1,
+    USB_BT_USB_2_0_EXTENSION              = 2,
+    USB_BT_SS_USB_DEVICE_CAPABILITY       = 3,
+    USB_BT_CONTAINER_ID                   = 4
+};
+
+/// Imported from libusb, with some adjustments.
+enum usb_2_0_extension_attributes {
+    USB_BM_LPM_SUPPORT = 2
+};
+
+/// Imported from libusb, with some adjustments.
+enum usb_ss_usb_device_capability_attributes {
+    USB_BM_LTM_SUPPORT = 2
+};
+
+/// Imported from libusb, with some adjustments.
+enum usb_supported_speed {
+    USB_LOW_SPEED_OPERATION = BIT(0),
+    USB_FULL_SPEED_OPERATION = BIT(1),
+    USB_HIGH_SPEED_OPERATION = BIT(2),
+    USB_SUPER_SPEED_OPERATION = BIT(3)
+};
+
+/// Imported from libusb, with some adjustments.
+struct usb_bos_descriptor {
+    u8 bLength;
+    u8 bDescriptorType; ///< Must match USB_DT_BOS.
+    u16 wTotalLength;   ///< Length of this descriptor and all of its sub descriptors.
+    u8 bNumDeviceCaps;  ///< The number of separate device capability descriptors in the BOS.
+} PACKED;
+
+/// Imported from libusb, with some adjustments.
+struct usb_2_0_extension_descriptor {
+    u8 bLength;
+    u8 bDescriptorType;     ///< Must match USB_DT_DEVICE_CAPABILITY.
+    u8 bDevCapabilityType;  ///< Must match USB_BT_USB_2_0_EXTENSION.
+    u32 bmAttributes;       ///< usb_2_0_extension_attributes.
+} PACKED;
+
+/// Imported from libusb, with some adjustments.
+struct usb_ss_usb_device_capability_descriptor {
+    u8 bLength;
+    u8 bDescriptorType;         ///< Must match USB_DT_DEVICE_CAPABILITY.
+    u8 bDevCapabilityType;      ///< Must match USB_BT_SS_USB_DEVICE_CAPABILITY.
+    u8 bmAttributes;            ///< usb_ss_usb_device_capability_attributes.
+    u16 wSpeedsSupported;       ///< usb_supported_speed.
+    u8 bFunctionalitySupport;   ///< The lowest speed at which all the functionality that the device supports is available to the user.
+    u8 bU1DevExitLat;           ///< U1 Device Exit Latency.
+    u16 bU2DevExitLat;          ///< U2 Device Exit Latency.
+} PACKED;
+
 /* Global variables. */
 
 static RwLock g_usbDeviceLock = {0};
-static usbDeviceInterface g_usbDeviceInterface = {0};
+static UsbDeviceInterface g_usbDeviceInterface = {0};
 static bool g_usbDeviceInterfaceInit = false;
 
 static Event *g_usbStateChangeEvent = NULL;
@@ -705,6 +763,62 @@ static bool usbInitializeComms(void)
 {
     Result rc = 0;
     
+    /* Used on HOS >= 5.0.0. */
+    struct usb_device_descriptor device_descriptor = {
+        .bLength = USB_DT_DEVICE_SIZE,
+        .bDescriptorType = USB_DT_DEVICE,
+        .bcdUSB = USB_FS_BCD_REVISION,      /* USB 1.0. Updated before setting new device descriptors for USB 2.0 and 3.0. */
+        .bDeviceClass = 0x00,               /* Defined at interface level. */
+        .bDeviceSubClass = 0x00,            /* Defined at interface level. */
+        .bDeviceProtocol = 0x00,            /* Defined at interface level. */
+        .bMaxPacketSize0 = 0x40,            /* 64 bytes. Updated before setting the USB 3.0 device descriptor. */
+        .idVendor = 0x057e,                 /* VID officially used by usb:ds. */
+        .idProduct = 0x3000,                /* PID officially used by usb:ds. */
+        .bcdDevice = 0x0100,
+        .iManufacturer = 0,                 /* Filled at a later time. */
+        .iProduct = 0,                      /* Filled at a later time. */
+        .iSerialNumber = 0,                 /* Filled at a later time. */
+        .bNumConfigurations = 1
+    };
+    
+    static const u16 supported_langs[] = { LANGID_EN_US };
+    static const u16 num_supported_langs = (u16)MAX_ELEMENTS(supported_langs);
+    
+    u8 bos[USB_BOS_SIZE] = {0};
+    
+    struct usb_bos_descriptor *bos_desc = (struct usb_bos_descriptor*)bos;
+    struct usb_2_0_extension_descriptor *usb2_ext_desc = (struct usb_2_0_extension_descriptor*)(bos + sizeof(struct usb_bos_descriptor));
+    struct usb_ss_usb_device_capability_descriptor *usb3_devcap_desc = (struct usb_ss_usb_device_capability_descriptor*)((u8*)usb2_ext_desc + sizeof(struct usb_2_0_extension_descriptor));
+    
+    bos_desc->bLength = sizeof(struct usb_bos_descriptor);
+    bos_desc->bDescriptorType = USB_DT_BOS;
+    bos_desc->wTotalLength = USB_BOS_SIZE;
+    bos_desc->bNumDeviceCaps = 2;   /* USB 2.0 + USB 3.0. No extra capabilities for USB 1.x. */
+    
+    usb2_ext_desc->bLength = sizeof(struct usb_2_0_extension_descriptor);
+    usb2_ext_desc->bDescriptorType = USB_DT_DEVICE_CAPABILITY;
+    usb2_ext_desc->bDevCapabilityType = USB_BT_USB_2_0_EXTENSION;
+    usb2_ext_desc->bmAttributes = USB_BM_LPM_SUPPORT;
+    
+    usb3_devcap_desc->bLength = sizeof(struct usb_ss_usb_device_capability_descriptor);
+    usb3_devcap_desc->bDescriptorType = USB_DT_DEVICE_CAPABILITY;
+    usb3_devcap_desc->bDevCapabilityType = USB_BT_SS_USB_DEVICE_CAPABILITY;
+    usb3_devcap_desc->bmAttributes = 0;
+    usb3_devcap_desc->wSpeedsSupported = (USB_SUPER_SPEED_OPERATION | USB_HIGH_SPEED_OPERATION | USB_FULL_SPEED_OPERATION);
+    usb3_devcap_desc->bFunctionalitySupport = 1;    /* We can fully work under USB 1.x. */
+    usb3_devcap_desc->bU1DevExitLat = 0;
+    usb3_devcap_desc->bU2DevExitLat = 0;
+    
+    /* Used on HOS < 5.0.0. */
+    static const UsbDsDeviceInfo device_info = {
+        .idVendor = 0x057e,         /* VID officially used by usb:ds. */
+        .idProduct = 0x3000,        /* PID officially used by usb:ds. */
+        .bcdDevice = 0x0100,
+        .Manufacturer = APP_AUTHOR,
+        .Product = APP_TITLE,
+        .SerialNumber = APP_VERSION
+    };
+    
     bool ret = (g_usbDeviceInterfaceInit && g_usbDeviceInterface.initialized);
     if (ret) goto end;
     
@@ -717,113 +831,65 @@ static bool usbInitializeComms(void)
     
     if (hosversionAtLeast(5, 0, 0))
     {
-        u8 manufacturer = 0, product = 0, serial_number = 0;
-        static const u16 supported_langs[1] = { 0x0409 };
-        
-        /* Set language. */
-        rc = usbDsAddUsbLanguageStringDescriptor(NULL, supported_langs, sizeof(supported_langs) / sizeof(u16));
+        /* Set language string descriptor. */
+        rc = usbDsAddUsbLanguageStringDescriptor(NULL, supported_langs, num_supported_langs);
         if (R_FAILED(rc)) LOGFILE("usbDsAddUsbLanguageStringDescriptor failed! (0x%08X).", rc);
         
-        /* Set manufacturer. */
+        /* Set manufacturer string descriptor. */
         if (R_SUCCEEDED(rc))
         {
-            rc = usbDsAddUsbStringDescriptor(&manufacturer, APP_AUTHOR);
+            rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iManufacturer), APP_AUTHOR);
             if (R_FAILED(rc)) LOGFILE("usbDsAddUsbStringDescriptor failed! (0x%08X) (manufacturer).", rc);
         }
         
-        /* Set product. */
+        /* Set product string descriptor. */
         if (R_SUCCEEDED(rc))
         {
-            rc = usbDsAddUsbStringDescriptor(&product, APP_TITLE);
+            rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iProduct), APP_TITLE);
             if (R_FAILED(rc)) LOGFILE("usbDsAddUsbStringDescriptor failed! (0x%08X) (product).", rc);
         }
         
-        /* Set serial number. */
+        /* Set serial number string descriptor. */
         if (R_SUCCEEDED(rc))
         {
-            rc = usbDsAddUsbStringDescriptor(&serial_number, APP_VERSION);
+            rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iSerialNumber), APP_VERSION);
             if (R_FAILED(rc)) LOGFILE("usbDsAddUsbStringDescriptor failed! (0x%08X) (serial number).", rc);
         }
         
         /* Set device descriptors. */
-        struct usb_device_descriptor device_descriptor = {
-            .bLength = USB_DT_DEVICE_SIZE,
-            .bDescriptorType = USB_DT_DEVICE,
-            .bcdUSB = USB_FS_BCD_REVISION,
-            .bDeviceClass = 0x00,
-            .bDeviceSubClass = 0x00,
-            .bDeviceProtocol = 0x00,
-            .bMaxPacketSize0 = 0x40,
-            .idVendor = 0x057e,
-            .idProduct = 0x3000,
-            .bcdDevice = 0x0100,
-            .iManufacturer = manufacturer,
-            .iProduct = product,
-            .iSerialNumber = serial_number,
-            .bNumConfigurations = 0x01
-        };
         
-        /* Full Speed is USB 1.1. */
         if (R_SUCCEEDED(rc))
         {
-            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Full, &device_descriptor);
+            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Full, &device_descriptor);  /* Full Speed is USB 1.1. */
             if (R_FAILED(rc)) LOGFILE("usbDsSetUsbDeviceDescriptor failed! (0x%08X) (USB 1.1).", rc);
         }
         
-        /* High Speed is USB 2.0. */
-        device_descriptor.bcdUSB = USB_HS_BCD_REVISION;
         if (R_SUCCEEDED(rc))
         {
-            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_High, &device_descriptor);
+            /* Update USB revision before proceeding. */
+            device_descriptor.bcdUSB = USB_HS_BCD_REVISION;
+            
+            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_High, &device_descriptor);  /* High Speed is USB 2.0. */
             if (R_FAILED(rc)) LOGFILE("usbDsSetUsbDeviceDescriptor failed! (0x%08X) (USB 2.0).", rc);
         }
         
-        /* Super Speed is USB 3.0. */
-        /* Upgrade packet size to 512 (1 << 9). */
-        device_descriptor.bcdUSB = USB_SS_BCD_REVISION;
-        device_descriptor.bMaxPacketSize0 = 0x09;
         if (R_SUCCEEDED(rc))
         {
-            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Super, &device_descriptor);
+            /* Update USB revision and upgrade packet size to 512 (1 << 9) before proceeding. */
+            device_descriptor.bcdUSB = USB_SS_BCD_REVISION;
+            device_descriptor.bMaxPacketSize0 = 0x09;
+            
+            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Super, &device_descriptor); /* Super Speed is USB 3.0. */
             if (R_FAILED(rc)) LOGFILE("usbDsSetUsbDeviceDescriptor failed! (0x%08X) (USB 3.0).", rc);
         }
         
-        /* Define Binary Object Store. */
-        u8 bos[0x16] = {
-            /* USB 1.1. */
-            0x05,                       /* bLength. */
-            USB_DT_BOS,                 /* bDescriptorType. */
-            0x16, 0x00,                 /* wTotalLength. */
-            0x02,                       /* bNumDeviceCaps. */
-            
-            /* USB 2.0. */
-            0x07,                       /* bLength. */
-            USB_DT_DEVICE_CAPABILITY,   /* bDescriptorType. */
-            0x02,                       /* bDevCapabilityType. */
-            0x02, 0x00, 0x00, 0x00,     /* dev_capability_data. */
-            
-            /* USB 3.0. */
-            0x0A,                       /* bLength. */
-            USB_DT_DEVICE_CAPABILITY,   /* bDescriptorType. */
-            0x03,                       /* bDevCapabilityType. */
-            0x00, 0x0E, 0x00, 0x03, 0x00, 0x00, 0x00
-        };
-        
+        /* Set Binary Object Store. */
         if (R_SUCCEEDED(rc))
         {
-            rc = usbDsSetBinaryObjectStore(bos, sizeof(bos));
+            rc = usbDsSetBinaryObjectStore(bos, USB_BOS_SIZE);
             if (R_FAILED(rc)) LOGFILE("usbDsSetBinaryObjectStore failed! (0x%08X).", rc);
         }
     } else {
-        static const UsbDsDeviceInfo device_info = {
-            .idVendor = 0x057e,
-            .idProduct = 0x3000,
-            .bcdDevice = 0x0100,
-            .Manufacturer = APP_AUTHOR,
-            .Product = APP_TITLE,
-            .SerialNumber = APP_VERSION
-        };
-        
         /* Set VID, PID and BCD. */
         rc = usbDsSetVidPidBcd(&device_info);
         if (R_FAILED(rc)) LOGFILE("usbDsSetVidPidBcd failed! (0x%08X).", rc);
@@ -909,11 +975,13 @@ static bool usbInitializeDeviceInterface5x(void)
     struct usb_interface_descriptor interface_descriptor = {
         .bLength = USB_DT_INTERFACE_SIZE,
         .bDescriptorType = USB_DT_INTERFACE,
-        .bInterfaceNumber = 4,
+        .bInterfaceNumber = USBDS_DEFAULT_InterfaceNumber,
+        .bAlternateSetting = 0,
         .bNumEndpoints = 2,
         .bInterfaceClass = USB_CLASS_VENDOR_SPEC,
         .bInterfaceSubClass = USB_CLASS_VENDOR_SPEC,
         .bInterfaceProtocol = USB_CLASS_VENDOR_SPEC,
+        .iInterface = 0
     };
     
     struct usb_endpoint_descriptor endpoint_descriptor_in = {
@@ -921,7 +989,8 @@ static bool usbInitializeDeviceInterface5x(void)
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = USB_ENDPOINT_IN,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
-        .wMaxPacketSize = USB_FS_EP_MAX_PACKET_SIZE,
+        .wMaxPacketSize = USB_FS_EP_MAX_PACKET_SIZE,    /* Updated before setting new device descriptors for USB 2.0 and 3.0. */
+        .bInterval = 0
     };
     
     struct usb_endpoint_descriptor endpoint_descriptor_out = {
@@ -929,7 +998,8 @@ static bool usbInitializeDeviceInterface5x(void)
         .bDescriptorType = USB_DT_ENDPOINT,
         .bEndpointAddress = USB_ENDPOINT_OUT,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
-        .wMaxPacketSize = USB_FS_EP_MAX_PACKET_SIZE,
+        .wMaxPacketSize = USB_FS_EP_MAX_PACKET_SIZE,    /* Updated before setting new device descriptors for USB 2.0 and 3.0. */
+        .bInterval = 0
     };
     
     struct usb_ss_endpoint_companion_descriptor endpoint_companion = {
@@ -937,7 +1007,7 @@ static bool usbInitializeDeviceInterface5x(void)
         .bDescriptorType = USB_DT_SS_ENDPOINT_COMPANION,
         .bMaxBurst = 0x0F,
         .bmAttributes = 0x00,
-        .wBytesPerInterval = 0x00,
+        .wBytesPerInterval = 0x00
     };
     
     /* Enable device interface. */
@@ -1074,9 +1144,11 @@ static bool usbInitializeDeviceInterface1x(void)
         .bLength = USB_DT_INTERFACE_SIZE,
         .bDescriptorType = USB_DT_INTERFACE,
         .bInterfaceNumber = 0,
+        .bAlternateSetting = 0,
         .bInterfaceClass = USB_CLASS_VENDOR_SPEC,
         .bInterfaceSubClass = USB_CLASS_VENDOR_SPEC,
         .bInterfaceProtocol = USB_CLASS_VENDOR_SPEC,
+        .iInterface = 0
     };
     
     struct usb_endpoint_descriptor endpoint_descriptor_in = {
@@ -1085,6 +1157,7 @@ static bool usbInitializeDeviceInterface1x(void)
         .bEndpointAddress = USB_ENDPOINT_IN,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
         .wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE,
+        .bInterval = 0
     };
     
     struct usb_endpoint_descriptor endpoint_descriptor_out = {
@@ -1093,6 +1166,7 @@ static bool usbInitializeDeviceInterface1x(void)
         .bEndpointAddress = USB_ENDPOINT_OUT,
         .bmAttributes = USB_TRANSFER_TYPE_BULK,
         .wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE,
+        .bInterval = 0
     };
     
     /* Enable device interface. */

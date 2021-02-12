@@ -310,12 +310,22 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
     bool ret = false;
     
     mutexLock(&g_gamecardMutex);
+    
     if (g_gameCardInserted && g_gameCardHandle.value && out)
     {
+        /* Read the gamecard certificate using the official IPC call. */
         rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out);
-        if (R_FAILED(rc)) LOGFILE("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%08X)", rc);
+        if (R_FAILED(rc))
+        {
+            LOGFILE("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%08X)", rc);
+            
+            /* Attempt to manually read the gamecard certificate. */
+            if (gamecardReadStorageArea(out, sizeof(FsGameCardCertificate), GAMECARD_CERTIFICATE_OFFSET, false)) rc = 0;
+        }
+        
         ret = R_SUCCEEDED(rc);
     }
+    
     mutexUnlock(&g_gamecardMutex);
     
     return ret;
@@ -348,7 +358,7 @@ bool gamecardGetRomCapacity(u64 *out)
     return ret;
 }
 
-bool gamecardGetBundledFirmwareUpdateVersion(u32 *out)
+bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out)
 {
     Result rc = 0;
     u64 update_id = 0;
@@ -356,14 +366,16 @@ bool gamecardGetBundledFirmwareUpdateVersion(u32 *out)
     bool ret = false;
     
     mutexLock(&g_gamecardMutex);
+    
     if (g_gameCardInserted && g_gameCardHandle.value && out)
     {
         rc = fsDeviceOperatorUpdatePartitionInfo(&g_deviceOperator, &g_gameCardHandle, &update_version, &update_id);
         if (R_FAILED(rc)) LOGFILE("fsDeviceOperatorUpdatePartitionInfo failed! (0x%08X)", rc);
         
         ret = (R_SUCCEEDED(rc) && update_id == GAMECARD_UPDATE_TID);
-        if (ret) *out = update_version;
+        if (ret) out->value = update_version;
     }
+    
     mutexUnlock(&g_gamecardMutex);
     
     return ret;
@@ -872,7 +884,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
 
 NX_INLINE void gamecardCloseHandle(void)
 {
-    /* I need to find a way to properly close a gamecard handle... */
+    /* TO DO: find a way to properly close a gamecard handle. */
     if (!g_gameCardHandle.value) return;
     svcCloseHandle(g_gameCardHandle.value);
     g_gameCardHandle.value = 0;

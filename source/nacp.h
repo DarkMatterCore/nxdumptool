@@ -250,7 +250,7 @@ typedef struct {
 
 typedef struct {
     u16 index        : 15;
-    u16 continue_set : 1;   ///< Called "flag" by Nintendo, which isn't really great...
+    u16 continue_set : 1;   ///< Called "flag" by Nintendo, which isn't really great.
 } NacpDescriptors;
 
 typedef struct {

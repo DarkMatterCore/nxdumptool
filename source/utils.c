@@ -62,6 +62,8 @@ static const char *g_logfileLineBreak = "\r\n";
 static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB" };
 static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
 
+static const char *g_illegalFileSystemChars = "\\/:*?\"<>|^";
+
 /* Function prototypes. */
 
 static bool _utilsGetCustomFirmwareType(void);
@@ -524,7 +526,7 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
     
     for(size_t i = 0; i < strsize; i++)
     {
-        if (memchr("?[]/\\=+<>:;\",*|^", str[i], sizeof("?[]/\\=+<>:;\",*|^") - 1) || str[i] < 0x20 || (!ascii_only && str[i] == 0x7F) || (ascii_only && str[i] >= 0x7F)) str[i] = '_';
+        if (memchr(g_illegalFileSystemChars, str[i], sizeof(g_illegalFileSystemChars) - 1) || str[i] < 0x20 || (!ascii_only && str[i] == 0x7F) || (ascii_only && str[i] >= 0x7F)) str[i] = '_';
     }
 }
 

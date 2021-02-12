@@ -587,7 +587,7 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
     u32 app_count = 0;
     TitleApplicationMetadata **app_metadata = NULL, **tmp_app_metadata = NULL;
     
-    if (!g_appMetadata || (is_system && g_appMetadataCount < g_systemTitlesCount) || (!is_system && g_appMetadataCount == g_systemTitlesCount) || !out_count)
+    if (!g_titleInterfaceInit || !g_appMetadata || (is_system && g_appMetadataCount < g_systemTitlesCount) || (!is_system && g_appMetadataCount == g_systemTitlesCount) || !out_count)
     {
         LOGFILE("Invalid parameters!");
         goto end;
@@ -640,7 +640,7 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
     
     bool success = false;
     
-    if (!out)
+    if (!g_titleInterfaceInit || !out)
     {
         LOGFILE("Invalid parameters!");
         goto end;
@@ -683,7 +683,7 @@ end:
 bool titleAreOrphanTitlesAvailable(void)
 {
     mutexLock(&g_titleMutex);
-    bool ret = (g_titleInfoOrphanCount > 0);
+    bool ret = (g_titleInterfaceInit && g_titleInfoOrphanCount > 0);
     mutexUnlock(&g_titleMutex);
     return ret;
 }
@@ -694,7 +694,7 @@ TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count)
     
     TitleInfo **orphan_info = NULL;
     
-    if (!g_titleInfo || !g_titleInfoCount || !g_titleInfoOrphanCount || !out_count)
+    if (!g_titleInterfaceInit || !g_titleInfo || !g_titleInfoCount || !g_titleInfoOrphanCount || !out_count)
     {
         LOGFILE("Invalid parameters!");
         goto end;
@@ -732,7 +732,7 @@ bool titleIsGameCardInfoUpdated(void)
     mutexLock(&g_titleMutex);
     
     /* Check if the gamecard thread detected a gamecard status change. */
-    bool ret = g_titleGameCardInfoUpdated;
+    bool ret = (g_titleInterfaceInit && g_titleGameCardInfoThreadCreated && g_titleGameCardInfoUpdated);
     if (!ret) goto end;
     
     /* Signal the gamecard update info user event. */
@@ -800,7 +800,7 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
     char *filename = NULL, *tmp_filename = NULL;
     char app_name[0x400] = {0};
     
-    if (!g_titleGameCardAvailable || !g_titleInfo || !g_titleInfoCount || !g_titleInfoGameCardCount || g_titleInfoGameCardCount > g_titleInfoCount || \
+    if (!g_titleInterfaceInit || !g_titleGameCardAvailable || !g_titleInfo || !g_titleInfoCount || !g_titleInfoGameCardCount || g_titleInfoGameCardCount > g_titleInfoCount || \
         g_titleInfoGameCardStartIndex != (g_titleInfoCount - g_titleInfoGameCardCount) || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
         (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
     {
@@ -1830,8 +1830,8 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id,
     
     TitleInfo *info = NULL;
     
-    if (!g_titleInfo || !g_titleInfoCount || storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_Any || (storage_id == NcmStorageId_GameCard && (!g_titleInfoGameCardCount || \
-        g_titleInfoGameCardCount > g_titleInfoCount || g_titleInfoGameCardStartIndex != (g_titleInfoCount - g_titleInfoGameCardCount))) || !title_id)
+    if (!g_titleInterfaceInit || !g_titleInfo || !g_titleInfoCount || storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_Any || (storage_id == NcmStorageId_GameCard && \
+        (!g_titleInfoGameCardCount || g_titleInfoGameCardCount > g_titleInfoCount || g_titleInfoGameCardStartIndex != (g_titleInfoCount - g_titleInfoGameCardCount))) || !title_id)
     {
         LOGFILE("Invalid parameters!");
         goto end;
