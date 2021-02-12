@@ -26,23 +26,30 @@
 
 #define USB_ABI_VERSION             1
 
-#define USB_CMD_HEADER_MAGIC        0x4E584454  /* "NXDT". */
+#define USB_CMD_HEADER_MAGIC        0x4E584454                  /* "NXDT". */
 
-#define USB_TRANSFER_ALIGNMENT      0x1000      /* 4 KiB. */
-#define USB_TRANSFER_TIMEOUT        5           /* 5 seconds. */
+#define USB_TRANSFER_ALIGNMENT      0x1000                      /* 4 KiB. */
+#define USB_TRANSFER_TIMEOUT        5                           /* 5 seconds. */
 
-#define USB_FS_BCD_REVISION         0x0110
-#define USB_FS_EP_MAX_PACKET_SIZE   0x40
+#define USB_DEV_VID                 0x057E                      /* VID officially used by Nintendo in usb:ds. */
+#define USB_DEV_PID                 0x3000                      /* PID officially used by Nintendo in usb:ds. */
+#define USB_DEV_BCD_REL             0x0100                      /* Device release number. Always 1.0. */
 
-#define USB_HS_BCD_REVISION         0x0200
-#define USB_HS_EP_MAX_PACKET_SIZE   0x200
+#define USB_FS_BCD_REVISION         0x0110                      /* USB 1.1. */
+#define USB_FS_EP0_MAX_PACKET_SIZE  0x40                        /* 64 bytes. */
+#define USB_FS_EP_MAX_PACKET_SIZE   0x40                        /* 64 bytes. */
 
-#define USB_SS_BCD_REVISION         0x0300
-#define USB_SS_EP_MAX_PACKET_SIZE   0x400
+#define USB_HS_BCD_REVISION         0x0200                      /* USB 2.0. */
+#define USB_HS_EP0_MAX_PACKET_SIZE  USB_FS_EP0_MAX_PACKET_SIZE  /* 64 bytes. */
+#define USB_HS_EP_MAX_PACKET_SIZE   0x200                       /* 512 bytes. */
 
-#define USB_BOS_SIZE                0x16        /* usb_bos_descriptor + usb_2_0_extension_descriptor + usb_ss_usb_device_capability_descriptor. */
+#define USB_SS_BCD_REVISION         0x0300                      /* USB 3.0. */
+#define USB_SS_EP_MAX_PACKET_SIZE   0x400                       /* 1024 bytes. */
+#define USB_SS_EP0_MAX_PACKET_SIZE  9                           /* 512 bytes (1 << 9). */
 
-#define LANGID_EN_US                0x0409
+#define USB_BOS_SIZE                0x16                        /* usb_bos_descriptor + usb_2_0_extension_descriptor + usb_ss_usb_device_capability_descriptor. */
+
+#define USB_LANGID_ENUS             0x0409
 
 /* Type definitions. */
 
@@ -767,21 +774,21 @@ static bool usbInitializeComms(void)
     struct usb_device_descriptor device_descriptor = {
         .bLength = USB_DT_DEVICE_SIZE,
         .bDescriptorType = USB_DT_DEVICE,
-        .bcdUSB = USB_FS_BCD_REVISION,      /* USB 1.0. Updated before setting new device descriptors for USB 2.0 and 3.0. */
-        .bDeviceClass = 0x00,               /* Defined at interface level. */
-        .bDeviceSubClass = 0x00,            /* Defined at interface level. */
-        .bDeviceProtocol = 0x00,            /* Defined at interface level. */
-        .bMaxPacketSize0 = 0x40,            /* 64 bytes. Updated before setting the USB 3.0 device descriptor. */
-        .idVendor = 0x057e,                 /* VID officially used by usb:ds. */
-        .idProduct = 0x3000,                /* PID officially used by usb:ds. */
-        .bcdDevice = 0x0100,
-        .iManufacturer = 0,                 /* Filled at a later time. */
-        .iProduct = 0,                      /* Filled at a later time. */
-        .iSerialNumber = 0,                 /* Filled at a later time. */
+        .bcdUSB = USB_FS_BCD_REVISION,                  /* USB 1.1. Updated before setting new device descriptors for USB 2.0 and 3.0. */
+        .bDeviceClass = 0,                              /* Defined at interface level. */
+        .bDeviceSubClass = 0,                           /* Defined at interface level. */
+        .bDeviceProtocol = 0,                           /* Defined at interface level. */
+        .bMaxPacketSize0 = USB_FS_EP0_MAX_PACKET_SIZE,  /* Updated before setting the USB 3.0 device descriptor. */
+        .idVendor = USB_DEV_VID,
+        .idProduct = USB_DEV_PID,
+        .bcdDevice = USB_DEV_BCD_REL,
+        .iManufacturer = 0,                             /* Filled at a later time. */
+        .iProduct = 0,                                  /* Filled at a later time. */
+        .iSerialNumber = 0,                             /* Filled at a later time. */
         .bNumConfigurations = 1
     };
     
-    static const u16 supported_langs[] = { LANGID_EN_US };
+    static const u16 supported_langs[] = { USB_LANGID_ENUS };
     static const u16 num_supported_langs = (u16)MAX_ELEMENTS(supported_langs);
     
     u8 bos[USB_BOS_SIZE] = {0};
@@ -811,9 +818,9 @@ static bool usbInitializeComms(void)
     
     /* Used on HOS < 5.0.0. */
     static const UsbDsDeviceInfo device_info = {
-        .idVendor = 0x057e,         /* VID officially used by usb:ds. */
-        .idProduct = 0x3000,        /* PID officially used by usb:ds. */
-        .bcdDevice = 0x0100,
+        .idVendor = USB_DEV_VID,
+        .idProduct = USB_DEV_PID,
+        .bcdDevice = USB_DEV_BCD_REL,
         .Manufacturer = APP_AUTHOR,
         .Product = APP_TITLE,
         .SerialNumber = APP_VERSION
@@ -875,9 +882,9 @@ static bool usbInitializeComms(void)
         
         if (R_SUCCEEDED(rc))
         {
-            /* Update USB revision and upgrade packet size to 512 (1 << 9) before proceeding. */
+            /* Update USB revision and upgrade control endpoint packet size before proceeding. */
             device_descriptor.bcdUSB = USB_SS_BCD_REVISION;
-            device_descriptor.bMaxPacketSize0 = 0x09;
+            device_descriptor.bMaxPacketSize0 = USB_SS_EP0_MAX_PACKET_SIZE;
             
             rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Super, &device_descriptor); /* Super Speed is USB 3.0. */
             if (R_FAILED(rc)) LOGFILE("usbDsSetUsbDeviceDescriptor failed! (0x%08X) (USB 3.0).", rc);
@@ -1006,8 +1013,8 @@ static bool usbInitializeDeviceInterface5x(void)
         .bLength = sizeof(struct usb_ss_endpoint_companion_descriptor),
         .bDescriptorType = USB_DT_SS_ENDPOINT_COMPANION,
         .bMaxBurst = 0x0F,
-        .bmAttributes = 0x00,
-        .wBytesPerInterval = 0x00
+        .bmAttributes = 0,
+        .wBytesPerInterval = 0
     };
     
     /* Enable device interface. */
