@@ -127,9 +127,9 @@ enum usb_ss_usb_device_capability_attributes {
 
 /// Imported from libusb, with some adjustments.
 enum usb_supported_speed {
-    USB_LOW_SPEED_OPERATION = BIT(0),
-    USB_FULL_SPEED_OPERATION = BIT(1),
-    USB_HIGH_SPEED_OPERATION = BIT(2),
+    USB_LOW_SPEED_OPERATION   = BIT(0),
+    USB_FULL_SPEED_OPERATION  = BIT(1),
+    USB_HIGH_SPEED_OPERATION  = BIT(2),
     USB_SUPER_SPEED_OPERATION = BIT(3)
 };
 
