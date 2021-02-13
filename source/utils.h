@@ -53,8 +53,8 @@
 
 #define BIT_LONG(n)                     (1UL << (n))
 
-#define ALIGN_UP(x, y)                  ((((y) - 1) + (x)) & ~((y) - 1))
-#define ALIGN_DOWN(x, y)                (((x) - ((y) - 1)) & ~((y) - 1))
+#define ALIGN_UP(x, y)                  (((x) + ((y) - 1)) & ~((y) - 1))
+#define ALIGN_DOWN(x, y)                ((x) > (y) ? (((x) - ((y) - 1)) & ~((y) - 1)) : 0)
 #define IS_ALIGNED(x, y)                (((x) & ((y) - 1)) == 0)
 
 #define IS_POWER_OF_TWO(x)              (((x) & ((x) - 1)) == 0)
