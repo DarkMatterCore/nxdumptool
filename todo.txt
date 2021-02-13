@@ -62,9 +62,6 @@ todo:
     nca: support for compressed fs sections?
     nca: support for sparse sections?
     
-    tik: automatically dump tickets to the SD card?
-    tik: use dumped tickets when the original ones can't be found in the ES savefile?
-    
     gamecard: functions to display filelist
     
     pfs0: functions to display filelist

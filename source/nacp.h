@@ -384,7 +384,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
 /// If the input flag/value index is invalid, "Unknown" will be returned.
 /// If dealing with a bitflag field such as NacpAttribute, NacpSupportedLanguage, etc., the provided value must be a 0-based index to the desired flag and not a bitmask from its enum.
 /// (e.g. NacpAttribute_RetailInteractiveDisplay -> Use 1 instead).
-const char *nacpGetLanguageString(u8 language); ///< Can also be used for NacpSupportedLanguage flags with values from the NacpLanguage enum.
+const char *nacpGetLanguageString(u8 language); /// Can also be used for NacpSupportedLanguage flags with values from the NacpLanguage enum.
 const char *nacpGetStartupUserAccountString(u8 startup_user_account);
 const char *nacpGetUserAccountSwitchLockString(u8 user_account_switch_lock);
 const char *nacpGetAddOnContentRegistrationTypeString(u8 add_on_content_registration_type);
