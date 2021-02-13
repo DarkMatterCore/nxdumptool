@@ -110,11 +110,19 @@ ________________________________________________________________________________
 
 Highlights:
 
-* All transfers are performed in USB bulk mode.
-* A USB status response is always expected to be issued by the USB host device right after each time a USB command is issued by nxdumptool. This includes the SendFileProperties command, right before expecting any file data to be transferred from nxdumptool.
+* Vendor ID: 0x057e.
+* Product ID: 0x3000.
+* Device descriptor strings will always match "nxdumptool" (product) and "DarkMatterCore" (manufacturer).
+* Multiple device descriptors are provided to support USB 1.1, USB 2.0 and USB 3.0, each one with slightly different properties.
+* A single configuration descriptor is provided per each possible device descriptor.
+* A single Binary Object Store (BOS) descriptor is also provided.
+* All transfers are performed in USB bulk mode, using 5-second timeouts.
+* While handling USB commands, nxdumptool first issues the USB command header (so the USB host device can parse how much data to read next), then sends the USB command block (if required by the command being handled), and finally expects the host device to send a USB status response.
+    * This includes the SendFileProperties command, which expects a USB status response from the host right before starting the file data transfer.
 * A USB status response is expected by nxdumptool right after the last file data chunk has been sent.
 * If, while transferring file data, the last data chunk is aligned to the endpoint max packet size used by the USB host, a Zero Length Termination (ZLT) packet will be issued after transferring the last chunk, in order to comply with the USB bulk transfer specs.
 * In the case of extracted RomFS transfers, the filename field from the SendFileProperties block may actually contain a filepath - this will always start with a '/'. The client application is free to decide how to handle this (e.g. create full directory tree, etc.).
+
 
 NSP transfer mode:
 
@@ -122,4 +130,4 @@ NSP transfer mode:
 * In this mode, the client should immediately create the output file, write "NSP header size" bytes of padding to it, reply with a USB status response and expect additional SendFileProperties commands. No data is transferred for this very first SendFileProperties block.
 * Each further SendFileProperties block will hold the filename and size for a NSP file entry, and the NSP header size value will always be set to zero. The data received from each one of these file entries must be written to the output file created during the first SendFileProperties command. The sum of all file entry sizes should be equal to the full NSP size minus the NSP header size received during the first SendFileProperties command.
 * Finally, the client will receive a SendNspHeader command with the NSP header data, which should be written at the start of the output file. The value from the Command Block Size in the command header from this block should match the NSP header size received in the first SendFileProperties command.
-* If the sum of the command header length (0x10) plus the NSP header size is aligned to the endpoint max packet size, the client should also expect a ZLT packet after the SendNspHeader command.
+* If the NSP header size is aligned to the endpoint max packet size, the client should also expect a ZLT packet after receiving the NSP header data from the SendNspHeader command.

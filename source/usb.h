@@ -57,7 +57,7 @@ bool usbSendFileData(void *data, u64 data_size);
 
 /// Sends NSP header data to the host device, making it rewind the NSP file pointer to write this data, essentially finishing the NSP transfer process.
 /// Must be called after the data from all NSP file entries has been transferred using both usbSendFileProperties() and usbSendFileData() calls.
-/// If the sum of the USB command header and NSP header sizes is aligned to the endpoint max packet size, the host device should expect a Zero Length Termination (ZLT) packet.
+/// If the NSP header size is aligned to the endpoint max packet size, the host device should expect a Zero Length Termination (ZLT) packet.
 bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size);
 
 /// Used to cancel an ongoing file transfer by stalling the input (write) USB endpoint.
