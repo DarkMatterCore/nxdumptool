@@ -21,10 +21,15 @@ USB command IDs:
 *--------*--------------------------------------*
 |   1    | SendFileProperties.                  |
 *--------*--------------------------------------*
-|   2    | SendNspHeader.                       |
+|   2    | CancelFileTransfer.                  |
 *--------*--------------------------------------*
-|   3    | EndSession.                          |
+|   3    | SendNspHeader.                       |
 *--------*--------------------------------------*
+|   4    | EndSession.                          |
+*--------*--------------------------------------*
+
+____________________________________________________________________________________________________________________________________
+
 
 StartSession Command Block: 0x10 byte-long, set by nxdumptool as the value for the Command Block Size field in the command header (along with its matching command ID).
 
@@ -33,16 +38,19 @@ This is the first USB command issued by nxdumptool. If it succeeds, further USB 
 *--------*--------*-----------------------------*
 | Offset |  Size  |      Description            |
 *--------*--------*-----------------------------*
-|  0x00  |  0x01  | nxdumptool version (major). |
+|  0x00  |  0x01  | nxdumptool version (major). | \
+*--------*--------*-----------------------------*  \
+|  0x01  |  0x01  | nxdumptool version (minor). | --|---> Version number, which can be displayed by the host application as: "{major}.{minor}.{micro}".
+*--------*--------*-----------------------------*  /
+|  0x02  |  0x01  | nxdumptool version (micro). | /
 *--------*--------*-----------------------------*
-|  0x01  |  0x01  | nxdumptool version (minor). |
-*--------*--------*-----------------------------*
-|  0x02  |  0x01  | nxdumptool version (micro). |
-*--------*--------*-----------------------------*
-|  0x03  |  0x01  | nxdumptool USB ABI version. | -> Currently, always v1.
+|  0x03  |  0x01  | nxdumptool USB ABI version. | ------> Currently, always v1.
 *--------*--------*-----------------------------*
 |  0x04  |  0x0C  | Reserved.                   |
 *--------*--------*-----------------------------*
+
+____________________________________________________________________________________________________________________________________
+
 
 SendFileProperties Command Block: 0x320 byte-long, set by nxdumptool as the value for the Command Block Size field in the command header (along with its matching command ID).
 
@@ -59,10 +67,29 @@ Sent right before starting a file transfer. If it succeeds, file data will be tr
 *--------*--------*-----------------------------*
 |  0x10  |  0x301 | NULL terminated filename.   | -> 0x301 is defined as FS_MAX_PATH in libnx. Always encoded using UTF-8.
 *--------*--------*-----------------------------*
-|  0x311 |  0x0F  | Reserved #2                 |
+|  0x311 |  0x0F  | Reserved.                   |
 *--------*--------*-----------------------------*
 
+____________________________________________________________________________________________________________________________________
+
+
+CancelFileTransfer: holds no command block. Expects a USB status response, just like the rest of the commands.
+
+This command can only be issued during the file transfer stage from a SendFileProperties command. It is used to gracefully cancel an ongoing file transfer while also keeping the USB session alive. It's up to the host application to decide what to do with the incomplete data.
+
+The easiest way to detect this command during a file transfer is by checking the length of the last received block and then parse it to see if it matches a CancelFileTransfer command header.
+
+____________________________________________________________________________________________________________________________________
+
+
 SendNspHeader Command Block: variable length. The Command Block Size field in the command header holds the NSP header size. The NSP header data is placed after the command header.
+
+____________________________________________________________________________________________________________________________________
+
+
+EndSession: holds no command block. Expects a USB status response, just like the rest of the commands.
+
+This command is only issued while exiting nxdumptool, as long as the console is connected to a host device and a USB session has been successfully established.
 
 ____________________________________________________________________________________________________________________________________
 
