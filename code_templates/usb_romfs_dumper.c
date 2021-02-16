@@ -181,6 +181,7 @@ static void write_thread_func(void *arg)
         
         if (shared_data->read_error || shared_data->transfer_cancelled)
         {
+            if (shared_data->transfer_cancelled) usbCancelFileTransfer();
             mutexUnlock(&g_fileMutex);
             break;
         }
@@ -585,7 +586,6 @@ int main(int argc, char *argv[])
             if ((btn_cancel_end_tmr - btn_cancel_start_tmr) >= 3)
             {
                 mutexLock(&g_fileMutex);
-                usbCancelFileTransfer();
                 shared_data.transfer_cancelled = true;
                 mutexUnlock(&g_fileMutex);
                 break;

@@ -1,33 +1,38 @@
 diff --git a/src/main/java/nsusbloader/Utilities/nxdumptool/NxdtUsbAbi1.java b/src/main/java/nsusbloader/Utilities/nxdumptool/NxdtUsbAbi1.java
-index dd2a1bc..58add89 100644
+index dd2a1bc..6c8f79e 100644
 --- a/src/main/java/nsusbloader/Utilities/nxdumptool/NxdtUsbAbi1.java
 +++ b/src/main/java/nsusbloader/Utilities/nxdumptool/NxdtUsbAbi1.java
-@@ -42,7 +42,7 @@ class NxdtUsbAbi1 {
+@@ -42,7 +42,6 @@ class NxdtUsbAbi1 {
      private final boolean isWindows;
      private boolean isWindows10;
  
 -    private static final int NXDT_MAX_DIRECTIVE_SIZE = 0x1000;
-+    private static final int NXDT_MAX_DIRECTIVE_SIZE = 0x800000;
      private static final int NXDT_FILE_CHUNK_SIZE = 0x800000;
      private static final int NXDT_FILE_PROPERTIES_MAX_NAME_LENGTH = 0x300;
  
-@@ -51,6 +51,7 @@ class NxdtUsbAbi1 {
+@@ -51,7 +50,9 @@ class NxdtUsbAbi1 {
  
      private static final int CMD_HANDSHAKE = 0;
      private static final int CMD_SEND_FILE_PROPERTIES = 1;
-+    private static final int CMD_SEND_NSP_HEADER = 2;
-     private static final int CMD_ENDSESSION = 3;
+-    private static final int CMD_ENDSESSION = 3;
++    private static final int CMD_CANCEL_FILE_TRANSFER = 2;
++    private static final int CMD_SEND_NSP_HEADER = 3;
++    private static final int CMD_ENDSESSION = 4;
  
      // Standard set of possible replies
-@@ -79,9 +80,15 @@ class NxdtUsbAbi1 {
+     private static final byte[] USBSTATUS_SUCCESS = { 0x4e, 0x58, 0x44, 0x54,
+@@ -79,9 +80,17 @@ class NxdtUsbAbi1 {
                                                      0x00, 0x00, 0x00, 0x00,
                                                      0x00, 0x00, 0x00, 0x00 };
  
 -    private short endpointMaxPacketSize;
 +    private short endpointMaxPacketSize = 0;
  
-     private static final int NXDT_USB_TIMEOUT = 5000;
-+    
+-    private static final int NXDT_USB_TIMEOUT = 5000;
++    private static final int NXDT_USB_CMD_TIMEOUT = 1000;
++    private static final int NXDT_USB_DATA_TIMEOUT = 5000;
++    private static final int USB_BUF_ALIGNMENT = 0x1000;
++
 +    private boolean nspTransferMode = false;
 +    private long nspSize = 0;
 +    private int nspHeaderSize = 0;
@@ -36,17 +41,28 @@ index dd2a1bc..58add89 100644
  
      public NxdtUsbAbi1(DeviceHandle handler,
                         ILogPrinter logPrinter,
-@@ -111,6 +118,9 @@ class NxdtUsbAbi1 {
+@@ -111,6 +120,9 @@ class NxdtUsbAbi1 {
          DeviceInformation deviceInformation = DeviceInformation.build(handlerNS);
          NsUsbEndpointDescriptor endpointInDescriptor = deviceInformation.getSimplifiedDefaultEndpointDescriptorIn();
          this.endpointMaxPacketSize = endpointInDescriptor.getwMaxPacketSize();
 +        
-+        USBSTATUS_SUCCESS[8] = (byte)(endpointMaxPacketSize & 0xFF);
-+        USBSTATUS_SUCCESS[9] = (byte)((endpointMaxPacketSize >> 8) & 0xFF);
++        USBSTATUS_SUCCESS[8] = (byte)(this.endpointMaxPacketSize & 0xFF);
++        USBSTATUS_SUCCESS[9] = (byte)((this.endpointMaxPacketSize >> 8) & 0xFF);
      }
  
      private void readLoop(){
-@@ -134,6 +144,9 @@ class NxdtUsbAbi1 {
+@@ -121,9 +133,7 @@ class NxdtUsbAbi1 {
+ 
+             while (true){
+                 directive = readUsbDirective();
+-
+-                if (isInvalidDirective(directive))
+-                    continue;
++                if (directive == null || directive.length == 0) continue;
+ 
+                 command = getLEint(directive, 4);
+ 
+@@ -134,7 +144,11 @@ class NxdtUsbAbi1 {
                      case CMD_SEND_FILE_PROPERTIES:
                          handleSendFileProperties(directive);
                          break;
@@ -54,9 +70,40 @@ index dd2a1bc..58add89 100644
 +                        handleSendNspHeader(directive);
 +                        break;
                      case CMD_ENDSESSION:
++                        writeUsb(USBSTATUS_SUCCESS);
                          logPrinter.print("Session successfully ended.", EMsgType.PASS);
                          return;
-@@ -187,30 +200,52 @@ class NxdtUsbAbi1 {
+                     default:
+@@ -153,28 +167,6 @@ class NxdtUsbAbi1 {
+         }
+     }
+ 
+-    private boolean isInvalidDirective(byte[] message) throws Exception{
+-        if (message.length < 0x10){
+-            writeUsb(USBSTATUS_MALFORMED_REQUEST);
+-            logPrinter.print("Directive is too small. Only "+message.length+" bytes received.", EMsgType.FAIL);
+-            return true;
+-        }
+-
+-        if (! Arrays.equals(Arrays.copyOfRange(message, 0,4), MAGIC_NXDT)){
+-            writeUsb(USBSTATUS_INVALID_MAGIC);
+-            logPrinter.print("Invalid 'MAGIC'", EMsgType.FAIL);
+-            return true;
+-        }
+-
+-        int payloadSize = getLEint(message, 0x8);
+-        if (payloadSize + 0x10 != message.length){
+-            writeUsb(USBSTATUS_MALFORMED_REQUEST);
+-            logPrinter.print("Invalid directive info block size. "+message.length+" bytes received while "+payloadSize+" expected.", EMsgType.FAIL);
+-            return true;
+-        }
+-        return false;
+-    }
+-
+     private void performHandshake(byte[] message) throws Exception{
+         final byte versionMajor = message[0x10];
+         final byte versionMinor = message[0x11];
+@@ -187,30 +179,52 @@ class NxdtUsbAbi1 {
              writeUsb(USBSTATUS_UNSUPPORTED_ABI);
              throw new Exception("ABI v"+versionABI+" is not supported in current version.");
          }
@@ -120,7 +167,7 @@ index dd2a1bc..58add89 100644
          // If RomFs related
          if (isRomFs(filename)) {
              if (isWindows)
-@@ -225,24 +260,48 @@ class NxdtUsbAbi1 {
+@@ -225,30 +239,105 @@ class NxdtUsbAbi1 {
              filename = saveToPath + filename;
          }
  
@@ -130,12 +177,6 @@ index dd2a1bc..58add89 100644
 -            writeUsb(USBSTATUS_HOSTIOERROR);
 -            logPrinter.print("Not enough space on selected volume. Need: "+fileSize+
 -                    " while available: "+fileToDump.getParentFile().getFreeSpace(), EMsgType.FAIL);
--            return;
--        }
--        // Check if FS is NOT read-only
--        if (! (fileToDump.canWrite() || fileToDump.createNewFile()) ){
--            writeUsb(USBSTATUS_HOSTIOERROR);
--            logPrinter.print("Unable to write into selected volume: "+fileToDump.getAbsolutePath(), EMsgType.FAIL);
 -            return;
 +        File fileToDump;
 +
@@ -175,18 +216,31 @@ index dd2a1bc..58add89 100644
 +        } else {
 +            fileToDump = this.nspFile;
          }
- 
-         writeUsb(USBSTATUS_SUCCESS);
- 
--        if (fileSize == 0)
+-        // Check if FS is NOT read-only
+-        if (! (fileToDump.canWrite() || fileToDump.createNewFile()) ){
+-            writeUsb(USBSTATUS_HOSTIOERROR);
+-            logPrinter.print("Unable to write into selected volume: "+fileToDump.getAbsolutePath(), EMsgType.FAIL);
++
++        writeUsb(USBSTATUS_SUCCESS);
++
 +        if (fileSize == 0 || (this.nspTransferMode && fileSize == this.nspSize))
              return;
++
++        if (dumpFile(fileToDump, fileSize)){
++            writeUsb(USBSTATUS_SUCCESS);
++        } else {
++            fileToDump.delete();
+         }
  
-         dumpFile(fileToDump, fileSize);
-@@ -251,6 +310,49 @@ class NxdtUsbAbi1 {
++    }
++
++    private void handleCancelFileTransfer() throws Exception{
++        resetNspInfo();
+         writeUsb(USBSTATUS_SUCCESS);
++        logPrinter.print("User cancelled ongoing file transfer.", EMsgType.FAIL);
++    }
  
-     }
- 
+-        if (fileSize == 0)
 +    private void handleSendNspHeader(byte[] message) throws Exception{
 +        final int headerSize = getLEint(message, 0x8);
 +        
@@ -194,9 +248,10 @@ index dd2a1bc..58add89 100644
 +            writeUsb(USBSTATUS_MALFORMED_REQUEST);
 +            logPrinter.print("Received NSP send header request outside of NSP transfer mode!", EMsgType.FAIL);
 +            resetNspInfo();
-+            return;
+             return;
 +        }
-+
+ 
+-        dumpFile(fileToDump, fileSize);
 +        if (this.nspRemainingSize > 0) {
 +            writeUsb(USBSTATUS_MALFORMED_REQUEST);
 +            logPrinter.print("Received NSP send header request without receiving all NSP file entry data!", EMsgType.FAIL);
@@ -218,54 +273,225 @@ index dd2a1bc..58add89 100644
 +        }
 +
 +        resetNspInfo();
-+
-+        writeUsb(USBSTATUS_SUCCESS);
+ 
+         writeUsb(USBSTATUS_SUCCESS);
 +    }
-+
+ 
 +    private void resetNspInfo(){
 +        this.nspTransferMode = false;
 +        this.nspSize = 0;
 +        this.nspHeaderSize = 0;
 +        this.nspRemainingSize = 0;
 +        this.nspFile = null;
-+    }
-+
-     private int getLEint(byte[] bytes, int fromOffset){
-         return ByteBuffer.wrap(bytes, fromOffset, 0x4).order(ByteOrder.LITTLE_ENDIAN).getInt();
      }
-@@ -279,7 +381,7 @@ class NxdtUsbAbi1 {
  
-     // @see https://bugs.openjdk.java.net/browse/JDK-8146538
-     private void dumpFile(File file, long size) throws Exception{
--        FileOutputStream fos = new FileOutputStream(file, true);
-+        FileOutputStream fos = new FileOutputStream(file, this.nspTransferMode);
+     private int getLEint(byte[] bytes, int fromOffset){
+@@ -277,9 +366,9 @@ class NxdtUsbAbi1 {
+         throw new Exception("Unable to create dir(s) for file in "+folderForTheFile);
+     }
+ 
+-    // @see https://bugs.openjdk.java.net/browse/JDK-8146538
+-    private void dumpFile(File file, long size) throws Exception{
++    private boolean dumpFile(File file, long size) throws Exception{
+         FileOutputStream fos = new FileOutputStream(file, true);
++        boolean success = true;
  
          try (BufferedOutputStream bos = new BufferedOutputStream(fos)) {
              FileDescriptor fd = fos.getFD();
-@@ -296,15 +398,21 @@ class NxdtUsbAbi1 {
+@@ -287,31 +376,44 @@ class NxdtUsbAbi1 {
+             long received = 0;
+             int bufferSize;
+ 
+-            while (received+NXDT_FILE_CHUNK_SIZE < size) {
+-                //readBuffer = readUsbFile();
+-                readBuffer = readUsbFileDebug(NXDT_FILE_CHUNK_SIZE);
++            while((received + NXDT_FILE_CHUNK_SIZE) < size) {
++                readBuffer = readUsb(NXDT_FILE_CHUNK_SIZE, NXDT_USB_DATA_TIMEOUT);
+                 bos.write(readBuffer);
+                 if (isWindows10)
+                     fd.sync();
                  bufferSize = readBuffer.length;
                  received += bufferSize;
  
 -                logPrinter.updateProgress((double)received / (double)size);
++                if (bufferSize == 0x10 && Arrays.equals(Arrays.copyOfRange(readBuffer, 0, 4), MAGIC_NXDT)) {
++                    int cmd = getLEint(readBuffer, 4);
++                    if (cmd == CMD_CANCEL_FILE_TRANSFER){
++                        handleCancelFileTransfer();
++                        success = false;
++                        break;
++                    }
++                }
++
 +                if (!this.nspTransferMode) {
 +                    logPrinter.updateProgress((double)received / (double)size);
 +                } else {
 +                    this.nspRemainingSize -= bufferSize;
 +                    logPrinter.updateProgress((double)(this.nspSize - this.nspRemainingSize) / (double)this.nspSize);
 +                }
++            }
++            if (success){
++                int lastChunkSize = (int)((size - received) + 1);
++                readBuffer = readUsb(lastChunkSize, NXDT_USB_DATA_TIMEOUT);
++                bos.write(readBuffer);
++                if (isWindows10)
++                    fd.sync();
++                this.nspRemainingSize -= lastChunkSize;
              }
-             int lastChunkSize = (int)(size - received) + 1;
-             readBuffer = readUsbFileDebug(lastChunkSize);
-             bos.write(readBuffer);
-             if (isWindows10)
-                 fd.sync();
-+            if (this.nspTransferMode) this.nspRemainingSize -= (lastChunkSize - 1);
+-            int lastChunkSize = (int)(size - received) + 1;
+-            readBuffer = readUsbFileDebug(lastChunkSize);
+-            bos.write(readBuffer);
+-            if (isWindows10)
+-                fd.sync();
          } finally {
 -            logPrinter.updateProgress(1.0);
-+            if (!this.nspTransferMode || (this.nspTransferMode && this.nspRemainingSize == 0)) logPrinter.updateProgress(1.0);
++            if (success && (!this.nspTransferMode || (this.nspTransferMode && this.nspRemainingSize == 0))) logPrinter.updateProgress(1.0);
          }
++
++        return success;
      }
-     /* Handle Zero-length terminator
+-    /* Handle Zero-length terminator
+-    private boolean isAligned(long size){
+-        return ((size & (endpointMaxPacketSize - 1)) == 0);
+-    }
+-    */
+ 
+     /** Sending any byte array to USB device **/
+     private void writeUsb(byte[] message) throws Exception{
+@@ -322,7 +424,7 @@ class NxdtUsbAbi1 {
+         if ( parent.isCancelled() )
+             throw new InterruptedException("Execution interrupted");
+ 
+-        int result = LibUsb.bulkTransfer(handlerNS, (byte) 0x01, writeBuffer, writeBufTransferred, NXDT_USB_TIMEOUT);
++        int result = LibUsb.bulkTransfer(handlerNS, (byte) 0x01, writeBuffer, writeBufTransferred, NXDT_USB_CMD_TIMEOUT);
+ 
+         if (result == LibUsb.SUCCESS) {
+             if (writeBufTransferred.get() == message.length)
+@@ -335,47 +437,61 @@ class NxdtUsbAbi1 {
+                 "\n         Returned: " + UsbErrorCodes.getErrCode(result) +
+                 "\n         (execution stopped)");
+     }
++
+     /**
+-     * Reading what USB device responded (command).
++     * Reads an USB directive.
+      * @return byte array if data read successful
+      *         'null' if read failed
+      * */
+     private byte[] readUsbDirective() throws Exception{
+-        ByteBuffer readBuffer = ByteBuffer.allocateDirect(NXDT_MAX_DIRECTIVE_SIZE);
+-        // We can limit it to 32 bytes, but there is a non-zero chance to got OVERFLOW from libusb.
+-        IntBuffer readBufTransferred = IntBuffer.allocate(1);
+-        int result;
+-        while (! parent.isCancelled()) {
+-            result = LibUsb.bulkTransfer(handlerNS, (byte) 0x81, readBuffer, readBufTransferred, 1000);  // last one is TIMEOUT. 0 stands for unlimited. Endpoint IN = 0x81
++        byte[] cmd_header = null, payload = null, directive = null;
++        int payloadSize = 0;
+ 
+-            switch (result) {
+-                case LibUsb.SUCCESS:
+-                    int trans = readBufTransferred.get();
+-                    byte[] receivedBytes = new byte[trans];
+-                    readBuffer.get(receivedBytes);
+-                    return receivedBytes;
+-                case LibUsb.ERROR_TIMEOUT:
+-                    break;
+-                default:
+-                    throw new Exception("Data transfer issue [read command]" +
+-                            "\n         Returned: " + UsbErrorCodes.getErrCode(result)+
+-                            "\n         (execution stopped)");
++        cmd_header = readUsb(0x10, NXDT_USB_CMD_TIMEOUT);
++        if (cmd_header == null || cmd_header.length == 0) return null;
++
++        if (cmd_header.length != 0x10){
++            writeUsb(USBSTATUS_MALFORMED_REQUEST);
++            logPrinter.print("Command header is too small. Only "+cmd_header.length+" bytes received.", EMsgType.FAIL);
++            return null;
++        }
++
++        if (! Arrays.equals(Arrays.copyOfRange(cmd_header, 0, 4), MAGIC_NXDT)){
++            writeUsb(USBSTATUS_INVALID_MAGIC);
++            logPrinter.print("Invalid 'MAGIC'", EMsgType.FAIL);
++            return null;
++        }
++
++        payloadSize = getLEint(cmd_header, 8);
++        if (payloadSize > 0){
++            payload = readUsb(payloadSize + 1, NXDT_USB_CMD_TIMEOUT);
++            if (payload == null || payload.length != payloadSize){
++                writeUsb(USBSTATUS_MALFORMED_REQUEST);
++                logPrinter.print("Command payload size mismatch. Received "+payload.length+" bytes.", EMsgType.FAIL);
++                return null;
+             }
+         }
+-        throw new InterruptedException();
++
++        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
++        outputStream.write(cmd_header);
++        if (payloadSize > 0) outputStream.write(payload);
++        directive = outputStream.toByteArray();
++
++        return directive;
+     }
++
+     /**
+-     * Reading what USB device responded (file).
++     * Reading what USB device responded (command).
+      * @return byte array if data read successful
+      *         'null' if read failed
+      * */
+-    private byte[] readUsbFile() throws Exception{
+-        ByteBuffer readBuffer = ByteBuffer.allocateDirect(NXDT_FILE_CHUNK_SIZE);
++    private byte[] readUsb(int length, int timeout) throws Exception{
++        ByteBuffer readBuffer = ByteBuffer.allocateDirect(alignUp(length, USB_BUF_ALIGNMENT));
+         IntBuffer readBufTransferred = IntBuffer.allocate(1);
+         int result;
+-        int countDown = 0;
+-        while (! parent.isCancelled() && countDown < 5) {
+-            result = LibUsb.bulkTransfer(handlerNS, (byte) 0x81, readBuffer, readBufTransferred, 1000);
++
++        while (! parent.isCancelled()) {
++            result = LibUsb.bulkTransfer(handlerNS, (byte)0x81, readBuffer, readBufTransferred, timeout);  // last one is TIMEOUT. 0 stands for unlimited. Endpoint IN = 0x81
+ 
+             switch (result) {
+                 case LibUsb.SUCCESS:
+@@ -384,33 +500,17 @@ class NxdtUsbAbi1 {
+                     readBuffer.get(receivedBytes);
+                     return receivedBytes;
+                 case LibUsb.ERROR_TIMEOUT:
+-                    countDown++;
+                     break;
+                 default:
+-                    throw new Exception("Data transfer issue [read file]" +
++                    throw new Exception("Data transfer issue [read]" +
+                             "\n         Returned: " + UsbErrorCodes.getErrCode(result)+
+                             "\n         (execution stopped)");
+             }
+         }
+         throw new InterruptedException();
+     }
+-    
+-    private byte[] readUsbFileDebug(int chunkSize) throws Exception {
+-        ByteBuffer readBuffer = ByteBuffer.allocateDirect(chunkSize);
+-        IntBuffer readBufTransferred = IntBuffer.allocate(1);
+-        if (parent.isCancelled())
+-            throw new InterruptedException();
+-
+-        int result = LibUsb.bulkTransfer(handlerNS, (byte) 0x81, readBuffer, readBufTransferred, NXDT_USB_TIMEOUT);
+ 
+-        if (result == LibUsb.SUCCESS) {
+-            int trans = readBufTransferred.get();
+-            byte[] receivedBytes = new byte[trans];
+-            readBuffer.get(receivedBytes);
+-            return receivedBytes;
+-        }
+-        throw new Exception("Data transfer issue [read file]" +
+-                "\n         Returned: " + UsbErrorCodes.getErrCode(result) +
+-                "\n         (execution stopped)");
++    private int alignUp(int value, int alignment){
++        return ((value + (alignment - 1)) & ~(alignment - 1));
+     }
+ }
 diff --git a/src/main/resources/NSLMain.fxml b/src/main/resources/NSLMain.fxml
 index a2d42d6..9114c3d 100644
 --- a/src/main/resources/NSLMain.fxml

@@ -30,6 +30,15 @@
 
 #define BLOCK_SIZE  0x800000
 
+typedef struct
+{
+    void *data;
+    size_t data_written;
+    size_t total_size;
+    bool error;
+    bool transfer_cancelled;
+} ThreadSharedData;
+
 static const char *dump_type_strings[] = {
     "dump base application",
     "dump update",
@@ -55,42 +64,30 @@ static options_t options[] = {
 
 static const u32 options_count = MAX_ELEMENTS(options);
 
+static Mutex g_conMutex = 0;
+
 static void consolePrint(const char *text, ...)
 {
+    mutexLock(&g_conMutex);
     va_list v;
     va_start(v, text);
     vfprintf(stdout, text, v);
     va_end(v);
-    consoleUpdate(NULL);
+    mutexUnlock(&g_conMutex);
 }
 
-static void nspDump(TitleInfo *title_info)
+static void consoleRefresh(void)
 {
-    if (!title_info || !title_info->content_count || !title_info->content_infos) return;
+    mutexLock(&g_conMutex);
+    consoleUpdate(NULL);
+    mutexUnlock(&g_conMutex);
+}
+
+static void dump_thread_func(void *arg)
+{
+    ThreadSharedData *shared_data = (ThreadSharedData*)arg;
     
-    consoleClear();
-    
-    TitleApplicationMetadata *app_metadata = title_info->app_metadata;
-    
-    printf("%s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
-                           (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : "dlc"));
-    
-    if (app_metadata)
-    {
-        printf("name: %s\n", app_metadata->lang_entry.name);
-        printf("publisher: %s\n", app_metadata->lang_entry.author);
-    }
-    
-    printf("source storage: %s\n", title_info->storage_id == NcmStorageId_GameCard ? "gamecard" : (title_info->storage_id == NcmStorageId_BuiltInUser ? "emmc" : "sd card"));
-    printf("title id: %016lX\n", title_info->meta_key.id);
-    printf("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.major, title_info->version.minor, title_info->version.micro, title_info->version.major_relstep, \
-                                             title_info->version.minor_relstep);
-    printf("content count: %u\n", title_info->content_count);
-    printf("size: %s\n", title_info->size_str);
-    printf("______________________________\n\n");
-    printf("dump options:\n\n");
-    for(u32 i = 0; i < options_count; i++) printf("%s: %s\n", options[i].str, options[i].val ? "yes" : "no");
-    printf("______________________________\n\n");
+    TitleInfo *title_info = NULL;
     
     bool set_download_type = options[0].val;
     bool remove_console_data = options[1].val;
@@ -99,7 +96,7 @@ static void nspDump(TitleInfo *title_info)
     bool patch_sua = options[4].val;
     bool patch_screenshot = options[5].val;
     bool patch_video_capture = options[6].val;
-    bool success = false, usb_conn = false;
+    bool success = false;
     
     u8 *buf = NULL;
     char *dump_name = NULL, *path = NULL;
@@ -110,13 +107,13 @@ static void nspDump(TitleInfo *title_info)
     ContentMetaContext cnmt_ctx = {0};
     
     ProgramInfoContext *program_info_ctx = NULL;
-    u32 program_idx = 0, program_count = titleGetContentCountByType(title_info, NcmContentType_Program);
+    u32 program_idx = 0, program_count = 0;
     
     NacpContext *nacp_ctx = NULL;
-    u32 control_idx = 0, control_count = titleGetContentCountByType(title_info, NcmContentType_Control);
+    u32 control_idx = 0, control_count = 0;
     
     LegalInfoContext *legal_info_ctx = NULL;
-    u32 legal_info_idx = 0, legal_info_count = titleGetContentCountByType(title_info, NcmContentType_LegalInformation);
+    u32 legal_info_idx = 0, legal_info_count = 0;
     
     Ticket tik = {0};
     TikCommonBlock *tik_common_block = NULL;
@@ -133,6 +130,12 @@ static void nspDump(TitleInfo *title_info)
     
     Sha256Context sha256_ctx = {0};
     u8 sha256_hash[SHA256_HASH_SIZE] = {0};
+    
+    if (!shared_data || !(title_info = (TitleInfo*)shared_data->data) || !title_info->content_count || !title_info->content_infos) goto end;
+    
+    program_count = titleGetContentCountByType(title_info, NcmContentType_Program);
+    control_count = titleGetContentCountByType(title_info, NcmContentType_Control);
+    legal_info_count = titleGetContentCountByType(title_info, NcmContentType_LegalInformation);
     
     /* Allocate memory for the dump process. */
     if (!(buf = usbAllocatePageAlignedBuffer(BLOCK_SIZE)))
@@ -461,31 +464,7 @@ static void nspDump(TitleInfo *title_info)
     nsp_size = (nsp_header_size + pfs_file_ctx.fs_size);
     consolePrint("nsp header size: 0x%lX | nsp size: 0x%lX\n", nsp_header_size, nsp_size);
     
-    consolePrint("waiting for usb connection... ");
-    
-    time_t start = time(NULL);
-    
-    while(true)
-    {
-        time_t now = time(NULL);
-        if ((now - start) >= 10) break;
-        consolePrint("%lu ", now - start);
-        
-        if ((usb_conn = usbIsReady())) break;
-        utilsSleep(1);
-    }
-    
-    consolePrint("\n");
-    
-    if (!usb_conn)
-    {
-        consolePrint("usb connection failed\n");
-        goto end;
-    }
-    
-    consolePrint("dump process started. please wait...\n");
-    
-    start = time(NULL);
+    consolePrint("dump process started, please wait. hold b to cancel.\n");
     
     if (!usbSendFileProperties(nsp_size, path, (u32)nsp_header_size))
     {
@@ -494,6 +473,9 @@ static void nspDump(TitleInfo *title_info)
     }
     
     nsp_offset += nsp_header_size;
+    
+    // set nsp size
+    shared_data->total_size = nsp_size;
     
     // write ncas
     for(u32 i = 0; i < title_info->content_count; i++)
@@ -519,8 +501,14 @@ static void nspDump(TitleInfo *title_info)
             goto end;
         }
         
-        for(u64 offset = 0; offset < cur_nca_ctx->content_size; offset += blksize, nsp_offset += blksize)
+        for(u64 offset = 0; offset < cur_nca_ctx->content_size; offset += blksize, nsp_offset += blksize, shared_data->data_written += blksize)
         {
+            if (shared_data->transfer_cancelled)
+            {
+                usbCancelFileTransfer();
+                goto end;
+            }
+            
             if ((cur_nca_ctx->content_size - offset) < blksize) blksize = (cur_nca_ctx->content_size - offset);
             
             // read nca chunk
@@ -606,6 +594,7 @@ static void nspDump(TitleInfo *title_info)
     }
     
     nsp_offset += cnmt_ctx.authoring_tool_xml_size;
+    shared_data->data_written += cnmt_ctx.authoring_tool_xml_size;
     
     // update cnmt xml pfs entry name
     if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx, meta_nca_ctx->content_id_str))
@@ -653,6 +642,7 @@ static void nspDump(TitleInfo *title_info)
                     }
                     
                     nsp_offset += icon_ctx->icon_size;
+                    shared_data->data_written += icon_ctx->icon_size;
                     
                     // update pfs entry name
                     if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, data_idx++, cur_nca_ctx->content_id_str))
@@ -684,6 +674,7 @@ static void nspDump(TitleInfo *title_info)
         }
         
         nsp_offset += authoring_tool_xml_size;
+        shared_data->data_written += authoring_tool_xml_size;
         
         // update pfs entry name
         if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, data_idx, cur_nca_ctx->content_id_str))
@@ -704,6 +695,7 @@ static void nspDump(TitleInfo *title_info)
         }
         
         nsp_offset += tik.size;
+        shared_data->data_written += tik.size;
         
         // write cert
         tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, pfs_file_ctx.header.entry_count - 1);
@@ -714,6 +706,7 @@ static void nspDump(TitleInfo *title_info)
         }
         
         nsp_offset += raw_cert_chain_size;
+        shared_data->data_written += raw_cert_chain_size;
     }
     
     // write new pfs0 header
@@ -729,13 +722,14 @@ static void nspDump(TitleInfo *title_info)
         goto end;
     }
     
-    start = (time(NULL) - start);
-    consolePrint("process successfully completed in %lu seconds!\n", start);
+    shared_data->data_written += nsp_header_size;
     
     success = true;
     
 end:
-    if (usb_conn && !success) usbCancelFileTransfer();
+    consoleRefresh();
+    
+    if (!success && !shared_data->transfer_cancelled) shared_data->error = true;
     
     pfsFreeFileContext(&pfs_file_ctx);
     
@@ -768,6 +762,146 @@ end:
     if (dump_name) free(dump_name);
     
     if (buf) free(buf);
+    
+    threadExit();
+}
+
+static void nspDump(TitleInfo *title_info)
+{
+    if (!title_info) return;
+    
+    TitleApplicationMetadata *app_metadata = title_info->app_metadata;
+    
+    ThreadSharedData shared_data = {0};
+    Thread dump_thread = {0};
+    
+    time_t start = 0, btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
+    bool usb_conn = false, btn_cancel_cur_state = false, btn_cancel_prev_state = false;
+    
+    u64 prev_size = 0;
+    u8 prev_time = 0, percent = 0;
+    
+    consoleClear();
+    
+    consolePrint("%s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
+                           (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : "dlc"));
+    
+    if (app_metadata)
+    {
+        consolePrint("name: %s\n", app_metadata->lang_entry.name);
+        consolePrint("publisher: %s\n", app_metadata->lang_entry.author);
+    }
+    
+    consolePrint("source storage: %s\n", title_info->storage_id == NcmStorageId_GameCard ? "gamecard" : (title_info->storage_id == NcmStorageId_BuiltInUser ? "emmc" : "sd card"));
+    consolePrint("title id: %016lX\n", title_info->meta_key.id);
+    consolePrint("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.major, title_info->version.minor, title_info->version.micro, title_info->version.major_relstep, \
+                                             title_info->version.minor_relstep);
+    consolePrint("content count: %u\n", title_info->content_count);
+    consolePrint("size: %s\n", title_info->size_str);
+    consolePrint("______________________________\n\n");
+    consolePrint("dump options:\n\n");
+    for(u32 i = 0; i < options_count; i++) consolePrint("%s: %s\n", options[i].str, options[i].val ? "yes" : "no");
+    consolePrint("______________________________\n\n");
+    
+    // make sure we have a valid usb session
+    consolePrint("waiting for usb connection... ");
+    
+    start = time(NULL);
+    
+    while(true)
+    {
+        time_t now = time(NULL);
+        if ((now - start) >= 10) break;
+        
+        consolePrint("%lu ", now - start);
+        consoleRefresh();
+        
+        if ((usb_conn = usbIsReady())) break;
+        utilsSleep(1);
+    }
+    
+    consolePrint("\n");
+    
+    if (!usb_conn)
+    {
+        consolePrint("usb connection failed\n");
+        return;
+    }
+    
+    // create dump thread
+    shared_data.data = title_info;
+    utilsCreateThread(&dump_thread, dump_thread_func, &shared_data, 2);
+    
+    while(!shared_data.total_size && !shared_data.error) svcSleepThread(10000000); // 10 ms
+    
+    if (shared_data.error)
+    {
+        utilsJoinThread(&dump_thread);
+        return;
+    }
+    
+    // start dump
+    start = time(NULL);
+    
+    while(shared_data.data_written < shared_data.total_size)
+    {
+        if (shared_data.error) break;
+        
+        time_t now = time(NULL);
+        struct tm *ts = localtime(&now);
+        size_t size = shared_data.data_written;
+        
+        utilsScanPads();
+        btn_cancel_cur_state = (utilsGetButtonsHeld() & HidNpadButton_B);
+        
+        if (btn_cancel_cur_state && btn_cancel_cur_state != btn_cancel_prev_state)
+        {
+            btn_cancel_start_tmr = now;
+        } else
+        if (btn_cancel_cur_state && btn_cancel_cur_state == btn_cancel_prev_state)
+        {
+            btn_cancel_end_tmr = now;
+            if ((btn_cancel_end_tmr - btn_cancel_start_tmr) >= 3)
+            {
+                shared_data.transfer_cancelled = true;
+                break;
+            }
+        } else {
+            btn_cancel_start_tmr = btn_cancel_end_tmr = 0;
+        }
+        
+        btn_cancel_prev_state = btn_cancel_cur_state;
+        
+        if (prev_time == ts->tm_sec || prev_size == size) continue;
+        
+        percent = (u8)((size * 100) / shared_data.total_size);
+        
+        prev_time = ts->tm_sec;
+        prev_size = size;
+        
+        consolePrint("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));
+        consoleRefresh();
+    }
+    
+    start = (time(NULL) - start);
+    
+    consolePrint("\nwaiting for thread to join\n");
+    utilsJoinThread(&dump_thread);
+    consolePrint("dump_thread done: %lu\n", time(NULL));
+    
+    if (shared_data.error)
+    {
+        consolePrint("usb transfer error\n");
+        return;
+    }
+    
+    if (shared_data.transfer_cancelled)
+    {
+        consolePrint("process cancelled\n");
+        return;
+    }
+    
+    consolePrint("process completed in %lu seconds\n", start);
 }
 
 int main(int argc, char *argv[])
@@ -780,6 +914,7 @@ int main(int argc, char *argv[])
     consoleInit(NULL);
     
     consolePrint("initializing...\n");
+    consoleRefresh();
     
     if (!utilsInitializeResources())
     {
@@ -806,6 +941,7 @@ int main(int argc, char *argv[])
     }
     
     consolePrint("app metadata succeeded\n");
+    consoleRefresh();
     
     utilsSleep(1);
     
@@ -813,72 +949,72 @@ int main(int argc, char *argv[])
     {
         consoleClear();
         
-        printf("press b to %s.\n", menu == 0 ? "exit" : "go back");
-        printf("______________________________\n\n");
+        consolePrint("press b to %s.\n", menu == 0 ? "exit" : "go back");
+        consolePrint("______________________________\n\n");
         
         if (menu == 0)
         {
-            printf("title: %u / %u\n", selected_idx + 1, app_count);
-            printf("selected title: %016lX - %s\n", app_metadata[selected_idx]->title_id, app_metadata[selected_idx]->lang_entry.name);
+            consolePrint("title: %u / %u\n", selected_idx + 1, app_count);
+            consolePrint("selected title: %016lX - %s\n", app_metadata[selected_idx]->title_id, app_metadata[selected_idx]->lang_entry.name);
         } else {
-            printf("title info:\n\n");
-            printf("name: %s\n", app_metadata[title_idx]->lang_entry.name);
-            printf("publisher: %s\n", app_metadata[title_idx]->lang_entry.author);
-            printf("title id: %016lX\n", app_metadata[title_idx]->title_id);
+            consolePrint("title info:\n\n");
+            consolePrint("name: %s\n", app_metadata[title_idx]->lang_entry.name);
+            consolePrint("publisher: %s\n", app_metadata[title_idx]->lang_entry.author);
+            consolePrint("title id: %016lX\n", app_metadata[title_idx]->title_id);
             
             if (menu == 2)
             {
-                printf("______________________________\n\n");
+                consolePrint("______________________________\n\n");
                 
                 if (title_info->previous || title_info->next)
                 {
-                    printf("press zl/l and/or zr/r to change the selected title\n");
-                    printf("title: %u / %u\n", list_idx, list_count);
-                    printf("______________________________\n\n");
+                    consolePrint("press zl/l and/or zr/r to change the selected title\n");
+                    consolePrint("title: %u / %u\n", list_idx, list_count);
+                    consolePrint("______________________________\n\n");
                 }
                 
-                printf("selected %s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
+                consolePrint("selected %s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
                                                 (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : "dlc"));
-                printf("source storage: %s\n", title_info->storage_id == NcmStorageId_GameCard ? "gamecard" : (title_info->storage_id == NcmStorageId_BuiltInUser ? "emmc" : "sd card"));
-                if (title_info->meta_key.type != NcmContentMetaType_Application) printf("title id: %016lX\n", title_info->meta_key.id);
-                printf("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.major, title_info->version.minor, title_info->version.micro, title_info->version.major_relstep, \
+                consolePrint("source storage: %s\n", title_info->storage_id == NcmStorageId_GameCard ? "gamecard" : (title_info->storage_id == NcmStorageId_BuiltInUser ? "emmc" : "sd card"));
+                if (title_info->meta_key.type != NcmContentMetaType_Application) consolePrint("title id: %016lX\n", title_info->meta_key.id);
+                consolePrint("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.major, title_info->version.minor, title_info->version.micro, title_info->version.major_relstep, \
                                                          title_info->version.minor_relstep);
-                printf("content count: %u\n", title_info->content_count);
-                printf("size: %s\n", title_info->size_str);
+                consolePrint("content count: %u\n", title_info->content_count);
+                consolePrint("size: %s\n", title_info->size_str);
             }
         }
         
-        printf("______________________________\n\n");
+        consolePrint("______________________________\n\n");
         
         u32 max_val = (menu == 0 ? app_count : (menu == 1 ? dump_type_strings_count : (1 + options_count)));
         for(u32 i = scroll; i < max_val; i++)
         {
             if (i >= (scroll + page_size)) break;
             
-            printf("%s", i == selected_idx ? " -> " : "    ");
+            consolePrint("%s", i == selected_idx ? " -> " : "    ");
             
             if (menu == 0)
             {
-                printf("%016lX - %s\n", app_metadata[i]->title_id, app_metadata[i]->lang_entry.name);
+                consolePrint("%016lX - %s\n", app_metadata[i]->title_id, app_metadata[i]->lang_entry.name);
             } else
             if (menu == 1)
             {
-                printf("%s\n", dump_type_strings[i]);
+                consolePrint("%s\n", dump_type_strings[i]);
             } else
             if (menu == 2)
             {
                 if (i == 0)
                 {
-                    printf("start nsp dump\n");
+                    consolePrint("start nsp dump\n");
                 } else {
-                    printf("%s: < %s >\n", options[i - 1].str, options[i - 1].val ? "yes" : "no");
+                    consolePrint("%s: < %s >\n", options[i - 1].str, options[i - 1].val ? "yes" : "no");
                 }
             }
         }
         
-        printf("\n");
+        consolePrint("\n");
         
-        consoleUpdate(NULL);
+        consoleRefresh();
         
         bool gc_update = false;
         u64 btn_down = 0, btn_held = 0;
@@ -960,7 +1096,6 @@ int main(int argc, char *argv[])
             } else
             if (menu == 3)
             {
-                consoleClear();
                 utilsChangeHomeButtonBlockStatus(true);
                 nspDump(title_info);
                 utilsChangeHomeButtonBlockStatus(false);
@@ -969,6 +1104,7 @@ int main(int argc, char *argv[])
             if (error || menu >= 3)
             {
                 consolePrint("press any button to continue\n");
+                consoleRefresh();
                 utilsWaitForButtonPress(0);
                 menu--;
             } else {
@@ -1043,6 +1179,8 @@ int main(int argc, char *argv[])
     }
     
 out2:
+    consoleRefresh();
+    
     if (menu != UINT32_MAX)
     {
         consolePrint("press any button to exit\n");

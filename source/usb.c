@@ -657,7 +657,7 @@ NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size)
 static bool usbSendCommand(void)
 {
     UsbCommandHeader *cmd_header = (UsbCommandHeader*)g_usbTransferBuffer;
-    size_t cmd_size = (sizeof(UsbCommandHeader) + cmd_header->cmd_block_size);
+    u32 cmd = cmd_header->cmd, cmd_block_size = cmd_header->cmd_block_size;
     
     UsbStatus *cmd_status = (UsbStatus*)g_usbTransferBuffer;
     u32 status = UsbStatusType_Success;
@@ -665,7 +665,7 @@ static bool usbSendCommand(void)
     /* Log error message only if the USB session has been started, or if thread exit flag hasn't been enabled. */
     bool ret = false, zlt_required = false, cmd_block_written = false, log_rw_errors = (g_usbSessionStarted || !g_usbDetectionThreadExitFlag);
     
-    if (cmd_size > USB_TRANSFER_BUFFER_SIZE)
+    if ((sizeof(UsbCommandHeader) + cmd_block_size) > USB_TRANSFER_BUFFER_SIZE)
     {
         LOGFILE("Invalid command size!");
         status = UsbStatusType_InvalidCommandSize;
@@ -675,26 +675,26 @@ static bool usbSendCommand(void)
     /* Write command header first. */
     if (!usbWrite(cmd_header, sizeof(UsbCommandHeader)))
     {
-        if (log_rw_errors) LOGFILE("Failed to write header for type 0x%X command!", cmd_header->cmd);
+        if (log_rw_errors) LOGFILE("Failed to write header for type 0x%X command!", cmd);
         status = UsbStatusType_WriteCommandFailed;
         goto end;
     }
     
     /* Check if we need to transfer a command block. */
-    if (cmd_header->cmd_block_size)
+    if (cmd_block_size)
     {
+        /* Move command block data within the transfer buffer to guarantee we'll work with proper alignment. */
+        memmove(g_usbTransferBuffer, g_usbTransferBuffer + sizeof(UsbCommandHeader), cmd_block_size);
+        
         /* Determine if we'll need to set a Zero Length Termination (ZLT) packet after sending the command block. */
-        zlt_required = (g_usbSessionStarted && IS_ALIGNED(cmd_header->cmd_block_size, g_usbEndpointMaxPacketSize));
+        zlt_required = IS_ALIGNED(cmd_block_size, g_usbEndpointMaxPacketSize);
         if (zlt_required) usbSetZltPacket(true);
         
-        /* Move command block data within the transfer buffer to guarantee we'll work with proper alignment. */
-        memmove(g_usbTransferBuffer, g_usbTransferBuffer + sizeof(UsbCommandHeader), cmd_header->cmd_block_size);
-        
         /* Write command block. */
-        cmd_block_written = usbWrite(g_usbTransferBuffer, cmd_header->cmd_block_size);
+        cmd_block_written = usbWrite(g_usbTransferBuffer, cmd_block_size);
         if (!cmd_block_written)
         {
-            if (log_rw_errors) LOGFILE("Failed to write command block for type 0x%X command!", cmd_header->cmd);
+            if (log_rw_errors) LOGFILE("Failed to write command block for type 0x%X command!", cmd);
             status = UsbStatusType_WriteCommandFailed;
         }
         
@@ -708,7 +708,7 @@ static bool usbSendCommand(void)
     /* Read status block. */
     if (!usbRead(cmd_status, sizeof(UsbStatus)))
     {
-        if (log_rw_errors) LOGFILE("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd_header->cmd);
+        if (log_rw_errors) LOGFILE("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd);
         status = UsbStatusType_ReadStatusFailed;
         goto end;
     }
