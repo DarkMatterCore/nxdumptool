@@ -517,7 +517,7 @@ static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count,
     }
     
     rc = (personalized ? esListPersonalizedTicket((s32*)&ids_written, rights_ids, (s32)count) : esListCommonTicket((s32*)&ids_written, rights_ids, (s32)count));
-    if (R_FAILED(rc) || ids_written != count)
+    if (R_FAILED(rc) || !ids_written)
     {
         LOGFILE("esList%c%sTicket failed! (0x%08X). Wrote %u entries, expected %u entries.", toupper(g_tikTitleKeyTypeStrings[str_idx][0]), g_tikTitleKeyTypeStrings[str_idx] + 1, rc, ids_written, count);
         free(rights_ids);
@@ -525,7 +525,7 @@ static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count,
     }
     
     *out = rights_ids;
-    *out_count = count;
+    *out_count = ids_written;
     
     return true;
 }
