@@ -21,7 +21,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-# This script depends on PyUSB and tdqm.
+# This script depends on PyUSB and tqdm.
 # You can install both with `pip install pyusb tqdm`.
 
 import os
