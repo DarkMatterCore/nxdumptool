@@ -1,5 +1,29 @@
 #!/usr/bin/env python3
 
+"""
+ * nxdt_host.py
+ *
+ * Copyright (c) 2021, sigmaboy.
+ * Copyright (c) 2021, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+# This script depends on PyUSB and tdqm.
+# You can install both with `pip install pyusb tqdm`.
+
 import os
 import usb.core
 import usb.util
@@ -490,10 +514,15 @@ def main():
         # Expand environment variables and user's home directory.
         g_outputDir = os.path.abspath(os.path.expanduser(os.path.expandvars(sys.argv[1])))
         
-        # Make sure we're dealing with an existing directory.
-        if (os.path.exists(g_outputDir) == False) or (os.path.isdir(g_outputDir) == False):
-            print('The provided path doesn\'t point to an existing directory!')
-            return
+        # Check if the provided directory exists.
+        if os.path.exists(g_outputDir) == True:
+            # Make sure it's a directory.
+            if os.path.isdir(g_outputDir) == False:
+                print('The provided path points to an existing file!')
+                return
+        else:
+            # Create directory.
+            os.mkdir(g_outputDir)
     else:
         # Create 'nxdumptool' subdirectory in the directory where the script is located.
         g_outputDir = (sys.path[0] + os.path.sep + 'nxdumptool')
