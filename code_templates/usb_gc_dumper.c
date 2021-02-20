@@ -343,11 +343,18 @@ static u32 menuGetElementCount(const Menu *menu)
 static void waitForGameCardAndUsb(void)
 {
     consoleClear();
-    consolePrint("waiting for gamecard and usb session...\n");
+    consolePrint("waiting for gamecard...\n");
     
     while(true)
     {
-        if (gamecardGetStatus() == GameCardStatus_InsertedAndInfoLoaded && usbIsReady()) break;
+        if (gamecardGetStatus() == GameCardStatus_InsertedAndInfoLoaded && !titleIsGameCardInfoUpdated()) break;
+    }
+    
+    consolePrint("waiting for usb session...\n");
+    
+    while(true)
+    {
+        if (usbIsReady()) break;
     }
 }
 

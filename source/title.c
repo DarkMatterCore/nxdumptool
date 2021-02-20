@@ -738,7 +738,7 @@ bool titleIsGameCardInfoUpdated(void)
     /* Signal the gamecard update info user event. */
     ueventSignal(&g_titleGameCardUpdateInfoUserEvent);
     
-    /* Wait for the gamecard thread to wakes us up. */
+    /* Wait for the gamecard thread to wake us up. */
     condvarWait(&g_gameCardCondVar, &g_titleMutex);
     
     /* Update output value and gamecard info updated flag (if needed). */

@@ -410,7 +410,9 @@ int main(int argc, char *argv[])
         
         consoleUpdate(NULL);
         
+        bool gc_update = false;
         u64 btn_down = 0, btn_held = 0;
+        
         while(true)
         {
             utilsScanPads();
@@ -430,9 +432,13 @@ int main(int argc, char *argv[])
                 }
                 
                 selected_idx = scroll = 0;
+                gc_update = true;
+                
                 break;
             }
         }
+        
+        if (gc_update) continue;
         
         if (btn_down & HidNpadButton_A)
         {
