@@ -24,6 +24,11 @@
 # This script depends on PyUSB and tqdm.
 # You can install both with `pip install pyusb tqdm`.
 
+# libusb needs to be installed as well. PyUSB uses it as its USB backend. Otherwise, a NoBackend exception will be raised while calling PyUSB functions.
+# Under Windows, the recommended way to do this is by installing the libusb driver with Zadig (https://zadig.akeo.ie). This is a common step in Switch modding guides.
+# Under MacOS, use `brew install libusb` to install libusb via Homebrew.
+# Under Linux, you should be good to go from the start. If not, just use the packet manager from your distro to install libusb.
+
 import os
 import usb.core
 import usb.util
