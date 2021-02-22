@@ -398,8 +398,9 @@ static bool titleOpenNcmDatabaseAndStorageFromGameCard(void);
 static void titleCloseNcmDatabaseAndStorageFromGameCard(void);
 
 static bool titleLoadPersistentStorageTitleInfo(void);
-static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id);
+static bool titleGenerateTitleInfoFromStorage(u8 storage_id);
 static bool titleGetContentInfosFromTitle(u8 storage_id, const NcmContentMetaKey *meta_key, NcmContentInfo **out_content_infos, u32 *out_content_count);
+static void titleUpdateTitleInfoLinkedLists(void);
 
 static bool titleCreateGameCardInfoThread(void);
 static void titleDestroyGameCardInfoThread(void);
@@ -712,7 +713,7 @@ TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count)
     for(u32 i = 0, j = 0; i < g_titleInfoCount && j < g_titleInfoOrphanCount; i++)
     {
         TitleInfo *title_info = &(g_titleInfo[i]);
-        if ((title_info->meta_key.type == NcmContentMetaType_Patch || title_info->meta_key.type == NcmContentMetaType_AddOnContent) && !title_info->parent) orphan_info[j++] = title_info;
+        if ((title_info->meta_key.type == NcmContentMetaType_Patch || title_info->meta_key.type == NcmContentMetaType_AddOnContent) && !title_info->app_metadata) orphan_info[j++] = title_info;
     }
     
     /* Sort orphan title info entries by title ID. */
@@ -1270,10 +1271,10 @@ static bool titleLoadPersistentStorageTitleInfo(void)
     
     for(u8 i = NcmStorageId_BuiltInSystem; i <= NcmStorageId_SdCard; i++)
     {
-        /* Retrieve content meta keys from the current storage. */
-        if (!titleRetrieveContentMetaKeysFromDatabase(i))
+        /* Generate title info from the current storage. */
+        if (!titleGenerateTitleInfoFromStorage(i))
         {
-            LOGFILE("Failed to retrieve content meta keys from storage ID %u!", i);
+            LOGFILE("Failed to generate title info from storage ID %u!", i);
             return false;
         }
     }
@@ -1281,7 +1282,7 @@ static bool titleLoadPersistentStorageTitleInfo(void)
     return true;
 }
 
-static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
+static bool titleGenerateTitleInfoFromStorage(u8 storage_id)
 {
     NcmContentMetaDatabase *ncm_db = NULL;
     
@@ -1411,62 +1412,11 @@ static bool titleRetrieveContentMetaKeysFromDatabase(u8 storage_id)
     /* Update title info count. */
     g_titleInfoCount += total;
     
-    /* Update success flag. Nothing past this point will generate errors. */
-    /* Also jump to the end of this function if we're dealing with eMMC System titles. */
-    success = true;
-    if (storage_id == NcmStorageId_BuiltInSystem) goto end;
+    /* Update linked lists for user applications, patches and add-on contents if we're not dealing with system titles. */
+    if (storage_id != NcmStorageId_BuiltInSystem) titleUpdateTitleInfoLinkedLists();
     
-    /* Update linked lists pointers for user applications, patches and add-on contents. */
-    g_titleInfoOrphanCount = 0;
-    for(u32 i = 0; i < g_titleInfoCount; i++)
-    {
-        TitleInfo *child_info = &(g_titleInfo[i]);
-        child_info->parent = child_info->previous = child_info->next = NULL;
-        
-        if (child_info->meta_key.type != NcmContentMetaType_Application && child_info->meta_key.type != NcmContentMetaType_Patch && \
-            child_info->meta_key.type != NcmContentMetaType_AddOnContent) continue;
-        
-        if (child_info->meta_key.type == NcmContentMetaType_Patch || child_info->meta_key.type == NcmContentMetaType_AddOnContent)
-        {
-            /* Retrieve pointer to parent user application entry for patches and add-on contents. */
-            /* Since gamecard title info entries are always appended to the end of the buffer, this guarantees we will first retrieve an eMMC / SD card entry (if available). */
-            for(u32 j = 0; j < g_titleInfoCount; j++)
-            {
-                TitleInfo *parent_info = &(g_titleInfo[j]);
-                
-                if (parent_info->meta_key.type == NcmContentMetaType_Application && \
-                    ((child_info->meta_key.type == NcmContentMetaType_Patch && titleCheckIfPatchIdBelongsToApplicationId(parent_info->meta_key.id, child_info->meta_key.id)) || \
-                    (child_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(parent_info->meta_key.id, child_info->meta_key.id))))
-                {
-                    child_info->parent = parent_info;
-                    break;
-                }
-            }
-            
-            /* Increase orphan title count if we couldn't find the parent user application. */
-            if (!child_info->parent)
-            {
-                g_titleInfoOrphanCount++;
-                continue;
-            }
-        }
-        
-        /* Locate previous user application, patch or add-on content entry. */
-        /* If it's found, we will update both its next pointer and the previous pointer from the current entry. */
-        for(u32 j = i; j > 0; j--)
-        {
-            TitleInfo *previous_info = &(g_titleInfo[j - 1]);
-            
-            if (previous_info->meta_key.type == child_info->meta_key.type && (((child_info->meta_key.type == NcmContentMetaType_Application || child_info->meta_key.type == NcmContentMetaType_Patch) && \
-                previous_info->meta_key.id == child_info->meta_key.id) || (child_info->meta_key.type == NcmContentMetaType_AddOnContent && \
-                titleCheckIfAddOnContentIdsAreSiblings(previous_info->meta_key.id, child_info->meta_key.id))))
-            {
-                previous_info->next = child_info;
-                child_info->previous = previous_info;
-                break;
-            }
-        }
-    }
+    /* Update flag. */
+    success = true;
     
 end:
     if (meta_keys) free(meta_keys);
@@ -1548,6 +1498,67 @@ end:
     if (!success && content_infos) free(content_infos);
     
     return success;
+}
+
+static void titleUpdateTitleInfoLinkedLists(void)
+{
+    /* Reset orphan title count. */
+    g_titleInfoOrphanCount = 0;
+    
+    /* Loop through all available titles. */
+    for(u32 i = 0; i < g_titleInfoCount; i++)
+    {
+        /* Get pointer to the current title info and reset its linked list pointers. */
+        TitleInfo *child_info = &(g_titleInfo[i]);
+        child_info->parent = child_info->previous = child_info->next = NULL;
+        
+        /* Only proceed if we're dealing with a user application, a patch or an add-on content. */
+        if (child_info->meta_key.type != NcmContentMetaType_Application && child_info->meta_key.type != NcmContentMetaType_Patch && \
+            child_info->meta_key.type != NcmContentMetaType_AddOnContent) continue;
+        
+        /* Check if we're dealing with a patch or an add-on content. */
+        if (child_info->meta_key.type == NcmContentMetaType_Patch || child_info->meta_key.type == NcmContentMetaType_AddOnContent)
+        {
+            /* Retrieve pointer to the first parent user application entry for patches and add-on contents. */
+            /* Since gamecard title info entries are always appended to the end of the buffer, this guarantees we will first retrieve an eMMC / SD card entry (if available). */
+            for(u32 j = 0; j < g_titleInfoCount; j++)
+            {
+                TitleInfo *parent_info = &(g_titleInfo[j]);
+                
+                if (parent_info->meta_key.type == NcmContentMetaType_Application && \
+                    ((child_info->meta_key.type == NcmContentMetaType_Patch && titleCheckIfPatchIdBelongsToApplicationId(parent_info->meta_key.id, child_info->meta_key.id)) || \
+                    (child_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(parent_info->meta_key.id, child_info->meta_key.id))))
+                {
+                    child_info->parent = parent_info;
+                    if (!child_info->app_metadata) child_info->app_metadata = parent_info->app_metadata;
+                    break;
+                }
+            }
+            
+            /* Increase orphan title count if we have no application metadata. */
+            if (!child_info->app_metadata)
+            {
+                g_titleInfoOrphanCount++;
+                continue;
+            }
+        }
+        
+        /* Locate previous user application, patch or add-on content entry. */
+        /* If it's found, we will update both its next pointer and the previous pointer from the current entry. */
+        for(u32 j = i; j > 0; j--)
+        {
+            TitleInfo *previous_info = &(g_titleInfo[j - 1]);
+            
+            if (previous_info->meta_key.type == child_info->meta_key.type && (((child_info->meta_key.type == NcmContentMetaType_Application || child_info->meta_key.type == NcmContentMetaType_Patch) && \
+                previous_info->meta_key.id == child_info->meta_key.id) || (child_info->meta_key.type == NcmContentMetaType_AddOnContent && \
+                titleCheckIfAddOnContentIdsAreSiblings(previous_info->meta_key.id, child_info->meta_key.id))))
+            {
+                previous_info->next = child_info;
+                child_info->previous = previous_info;
+                break;
+            }
+        }
+    }
 }
 
 static bool titleCreateGameCardInfoThread(void)
@@ -1636,7 +1647,7 @@ static void titleGameCardInfoThreadFunc(void *arg)
 static bool titleRefreshGameCardTitleInfo(void)
 {
     TitleApplicationMetadata *tmp_app_metadata = NULL;
-    u32 orig_app_count = g_appMetadataCount, cur_app_count = g_appMetadataCount, gamecard_app_count = 0, gamecard_metadata_count = 0;
+    u32 orig_app_count = g_appMetadataCount, cur_app_count = g_appMetadataCount, gamecard_metadata_count = 0;
     bool status = false, success = false, cleanup = true;
     
     /* Retrieve current gamecard status. */
@@ -1657,10 +1668,10 @@ static bool titleRefreshGameCardTitleInfo(void)
     /* Update start index for the gamecard title info entries. */
     g_titleInfoGameCardStartIndex = g_titleInfoCount;
     
-    /* Retrieve content meta keys from the gamecard ncm database. */
-    if (!titleRetrieveContentMetaKeysFromDatabase(NcmStorageId_GameCard))
+    /* Generate gamecard title info. */
+    if (!titleGenerateTitleInfoFromStorage(NcmStorageId_GameCard))
     {
-        LOGFILE("Failed to retrieve content meta keys from gamecard!");
+        LOGFILE("Failed to generate gamecard title info!");
         goto end;
     }
     
@@ -1682,15 +1693,8 @@ static bool titleRefreshGameCardTitleInfo(void)
                      (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(cur_title_info->meta_key.id) : \
                      titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id))));
         
-        /* Update gamecard application count (if needed). */
-        if (cur_title_info->meta_key.type == NcmContentMetaType_Application) gamecard_app_count++;
-        
         /* Do not proceed if application metadata has already been retrieved, or if we can successfully retrieve it. */
-        if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id)) != NULL)
-        {
-            gamecard_metadata_count++;
-            continue;
-        }
+        if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id)) != NULL) continue;
         
         /* Reallocate application metadata buffer (if needed). */
         if (cur_app_count < (g_appMetadataCount + 1))
@@ -1715,24 +1719,31 @@ static bool titleRefreshGameCardTitleInfo(void)
         gamecard_metadata_count++;
     }
     
-    /* Check gamecard application count. */
-    if (!gamecard_app_count)
+    /* Check if we retrieved new application metadata that was previously unavailable. */
+    if (gamecard_metadata_count)
     {
-        LOGFILE("Gamecard application count is zero!");
-        goto end;
+        /* Sort application metadata entries by name. */
+        qsort(g_appMetadata + g_systemTitlesCount, gamecard_metadata_count, sizeof(TitleApplicationMetadata), &titleUserApplicationMetadataEntrySortFunction);
+        
+        /* Check if the orphan title count is non-zero. */
+        if (g_titleInfoOrphanCount)
+        {
+            /* Reset orphan title count. */
+            g_titleInfoOrphanCount = 0;
+            
+            /* Try to update the application metadata pointer in orphan entries, hopefully reducing the orphan title count in the process. */
+            for(u32 i = 0; i < g_titleInfoCount; i++)
+            {
+                TitleInfo *title_info = &(g_titleInfo[i]);
+                if ((title_info->meta_key.type != NcmContentMetaType_Patch && title_info->meta_key.type != NcmContentMetaType_AddOnContent) || title_info->app_metadata) continue;
+                
+                u64 app_id = (title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(title_info->meta_key.id) : \
+                             titleGetApplicationIdByAddOnContentId(title_info->meta_key.id));
+                
+                if (!(title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id))) g_titleInfoOrphanCount++;
+            }
+        }
     }
-    
-    /* Check retrieved application metadata count. */
-    if (!gamecard_metadata_count)
-    {
-        LOGFILE("Unable to retrieve application metadata from gamecard! (%u %s).", gamecard_app_count, gamecard_app_count > 1 ? "entries" : "entry");
-        goto end;
-    }
-    
-    /* Sort application metadata entries by name. */
-    u32 new_app_count = (g_appMetadataCount - g_systemTitlesCount);
-    if (g_appMetadataCount > orig_app_count && new_app_count > 1) qsort(g_appMetadata + g_systemTitlesCount, new_app_count, sizeof(TitleApplicationMetadata), \
-                                                                        &titleUserApplicationMetadataEntrySortFunction);
     
     success = true;
     cleanup = false;
@@ -1774,19 +1785,6 @@ static void titleRemoveGameCardTitleInfoEntries(void)
         /* Free all title info entries. */
         titleFreeTitleInfo();
     } else {
-        /* Update parent, previous and next title info pointers from user application, patch and add-on content entries. */
-        for(u32 i = 0; i < g_titleInfoGameCardStartIndex; i++)
-        {
-            TitleInfo *cur_title_info = &(g_titleInfo[i]);
-            
-            if (cur_title_info->meta_key.type != NcmContentMetaType_Application && cur_title_info->meta_key.type != NcmContentMetaType_Patch && \
-                cur_title_info->meta_key.type != NcmContentMetaType_AddOnContent) continue;
-            
-            if (cur_title_info->parent && cur_title_info->parent->storage_id == NcmStorageId_GameCard) cur_title_info->parent = NULL;
-            if (cur_title_info->previous && cur_title_info->previous->storage_id == NcmStorageId_GameCard) cur_title_info->previous = NULL;
-            if (cur_title_info->next && cur_title_info->next->storage_id == NcmStorageId_GameCard) cur_title_info->next = NULL;
-        }
-        
         /* Free content infos from gamecard title info entries. */
         for(u32 i = g_titleInfoGameCardStartIndex; i < g_titleInfoCount; i++)
         {
@@ -1805,6 +1803,9 @@ static void titleRemoveGameCardTitleInfoEntries(void)
         /* Update counters. */
         g_titleInfoCount = g_titleInfoGameCardStartIndex;
         g_titleInfoGameCardStartIndex = g_titleInfoGameCardCount = 0;
+        
+        /* Update linked lists for user applications, patches and add-on contents. */
+        titleUpdateTitleInfoLinkedLists();
     }
 }
 

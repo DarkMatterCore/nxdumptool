@@ -31,7 +31,7 @@
 
 #define TITLE_DELTA_TYPE_VALUE              (u64)0xC00
 
-/// Retrieved using ns application records and/or ncm content meta keys.
+/// Generated using ns application records and/or ncm content meta keys.
 /// Used by the UI to display title lists.
 typedef struct {
     u64 title_id;                   ///< Title ID from the application / system title this data belongs to.
@@ -40,7 +40,7 @@ typedef struct {
     u8 *icon;                       ///< JPEG icon data.
 } TitleApplicationMetadata;
 
-/// Retrieved using ncm databases.
+/// Generated using ncm databases.
 typedef struct _TitleInfo {
     u8 storage_id;                                  ///< NcmStorageId.
     NcmContentMetaKey meta_key;                     ///< Used with ncm calls.
