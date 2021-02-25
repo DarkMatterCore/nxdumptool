@@ -66,7 +66,7 @@ static const char *g_illegalFileSystemChars = "\\/:*?\"<>|^";
 
 /* Function prototypes. */
 
-static bool _utilsGetCustomFirmwareType(void);
+static void _utilsGetCustomFirmwareType(void);
 
 static bool _utilsIsDevelopmentUnit(void);
 
@@ -98,7 +98,7 @@ bool utilsInitializeResources(void)
     
     /* Retrieve custom firmware type. */
     if (!_utilsGetCustomFirmwareType()) goto end;
-    LOGFILE("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphere" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
+    LOGFILE("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
     
     /* Initialize needed services. */
     if (!servicesInitialize())
@@ -751,37 +751,14 @@ void utilsOverclockSystem(bool overclock)
     servicesChangeHardwareClockRates(cpuClkRate, memClkRate);
 }
 
-static bool _utilsGetCustomFirmwareType(void)
+static void _utilsGetCustomFirmwareType(void)
 {
-    bool has_service = false, tx_srv = false, rnx_srv = false;
+    bool has_srv = false, tx_srv = false, rnx_srv = false;
     
-    /* First, check if we're running under Atmosphere or an Atmosphere-based CFW by using a SM API extension that's only provided by it. */
-    if (R_SUCCEEDED(servicesAtmosphereHasService(&has_service, "ncm")))
-    {
-        /* We're running under Atmosphere or an Atmosphere-based CFW. Time to check which one is it. */
-        tx_srv = (R_SUCCEEDED(servicesAtmosphereHasService(&has_service, "tx")) && has_service);
-        rnx_srv = (R_SUCCEEDED(servicesAtmosphereHasService(&has_service, "rnx")) && has_service);
-    } else {
-        /* Odds are we're not running under Atmosphere, or maybe we're running under an old Atmosphere version without SM API extensions. */
-        /* We'll use the smRegisterService() trick to check for running services. */
-        /* But first, we need to re-initialize SM in order to avoid 0xF601 (port remote dead) errors. */
-        smExit();
-        
-        Result rc = smInitialize();
-        if (R_FAILED(rc))
-        {
-            LOGFILE("smInitialize failed! (0x%08X).", rc);
-            return false;
-        }
-        
-        tx_srv = servicesCheckRunningServiceByName("tx");
-        rnx_srv = servicesCheckRunningServiceByName("rnx");
-    }
+    tx_srv = (R_SUCCEEDED(servicesHasService(&has_srv, "tx")) && has_srv);
+    rnx_srv = (R_SUCCEEDED(servicesHasService(&has_srv, "rnx")) && has_srv);
     
-    /* Finally, determine the CFW type. */
     g_customFirmwareType = (rnx_srv ? UtilsCustomFirmwareType_ReiNX : (tx_srv ? UtilsCustomFirmwareType_SXOS : UtilsCustomFirmwareType_Atmosphere));
-    
-    return true;
 }
 
 static bool _utilsIsDevelopmentUnit(void)

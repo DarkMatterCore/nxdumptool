@@ -45,8 +45,8 @@ bool servicesCheckInitializedServiceByName(const char *name);
 /// Changes CPU/MEM clock rates at runtime.
 void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate);
 
-/// Wrapper for the Atmosphere-only SM API "HasService" extension.
-/// Perfectly safe under development units. Not available in older Atmosphere releases.
-Result servicesAtmosphereHasService(bool *out_has_service, const char *name);
+/// Wrapper for the "AtmosphereHasService" SM API extension from Atmosphère and Atmosphère-based CFWs.
+/// Perfectly safe under development units. Not available in older Atmosphère releases.
+Result servicesHasService(bool *out, const char *name);
 
 #endif /* __SERVICES_H__ */

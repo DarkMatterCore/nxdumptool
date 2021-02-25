@@ -97,7 +97,7 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
     
     if (is_segment && location->program_id == FS_SYSMODULE_TID)
     {
-        /* If dealing with FS, locate the "real" .text segment, since Atmosphere emuMMC has two. */
+        /* If dealing with FS, locate the "real" .text segment, since Atmosphère emuMMC has two. */
         do {
             rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
             if (R_FAILED(rc))

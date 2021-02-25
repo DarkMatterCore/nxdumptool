@@ -38,7 +38,7 @@ typedef struct {
 
 /* Function prototypes. */
 
-static Result smHasService(bool *out_has_service, SmServiceName name);
+static Result smAtmosphereHasService(bool *out, SmServiceName name);
 
 static Result servicesNifmUserInitialize(void);
 static bool servicesClkGetServiceType(void *arg);
@@ -190,27 +190,30 @@ void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
     mutexUnlock(&g_servicesMutex);
 }
 
-Result servicesAtmosphereHasService(bool *out_has_service, const char *name)
+Result servicesHasService(bool *out, const char *name)
 {
-    if (!out_has_service || !name || !*name)
+    if (!out || !name || !*name)
     {
         LOGFILE("Invalid parameters!");
         return MAKERESULT(Module_Libnx, LibnxError_IoError);
     }
     
+    *out = false;
+    Result rc = 0;
     SmServiceName service_name = smEncodeName(name);
     
-    Result rc = smHasService(out_has_service, service_name);
-    if (R_FAILED(rc)) LOGFILE("smHasService failed for \"%s\"! (0x%08X).", name, rc);
+    rc = smAtmosphereHasService(out, service_name);
+    if (R_FAILED(rc)) LOGFILE("smAtmosphereHasService failed for \"%s\"! (0x%08X).", name, rc);
     
     return rc;
 }
 
-static Result smHasService(bool *out_has_service, SmServiceName name)
+/* SM API extension available in Atmosphère and Atmosphère-based CFWs. */
+static Result smAtmosphereHasService(bool *out, SmServiceName name)
 {
     u8 tmp = 0;
     Result rc = serviceDispatchInOut(smGetServiceSession(), 65100, name, tmp);
-    if (R_SUCCEEDED(rc) && out_has_service) *out_has_service = (tmp & 1);
+    if (R_SUCCEEDED(rc) && out) *out = tmp;
     return rc;
 }
 
