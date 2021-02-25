@@ -1113,21 +1113,21 @@ UIResult uiProcess()
             
             res = resultShowGameCardMenu;
             
-            hidScanInput();
-            keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
+            scanPads();
+            keysDown = getButtonsDown();
             
             // Exit
-            if (keysDown & KEY_PLUS) res = resultExit;
+            if (keysDown & HidNpadButton_Plus) res = resultExit;
             
             // Back
-            if (keysDown & KEY_B)
+            if (keysDown & HidNpadButton_B)
             {
                 res = resultShowMainMenu;
                 menuType = MENUTYPE_MAIN;
             }
             
             // Forced XCI dump
-            if ((keysDown & KEY_Y) && forcedXciDump)
+            if ((keysDown & HidNpadButton_Y) && forcedXciDump)
             {
                 uiPrintHeadline();
                 
@@ -1172,21 +1172,21 @@ UIResult uiProcess()
             
             res = resultShowSdCardEmmcMenu;
             
-            hidScanInput();
-            keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
+            scanPads();
+            keysDown = getButtonsDown();
             
             // Exit
-            if (keysDown & KEY_PLUS) res = resultExit;
+            if (keysDown & HidNpadButton_Plus) res = resultExit;
             
             // Back
-            if (keysDown & KEY_B)
+            if (keysDown & HidNpadButton_B)
             {
                 res = resultShowMainMenu;
                 menuType = MENUTYPE_MAIN;
             }
             
             // Dump installed content with missing base application
-            if ((titlePatchCount || titleAddOnCount) && (keysDown & KEY_Y))
+            if ((titlePatchCount || titleAddOnCount) && (keysDown & HidNpadButton_Y))
             {
                 res = resultShowSdCardEmmcOrphanPatchAddOnMenu;
                 orphanMode = true;
@@ -2615,16 +2615,16 @@ UIResult uiProcess()
             uiUpdateStatusMsg();
             uiRefreshDisplay();
             
-            hidScanInput();
+            scanPads();
             
-            keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
-            keysHeld = hidKeysAllHeld(CONTROLLER_P1_AUTO);
+            keysDown = getButtonsDown();
+            keysHeld = getButtonsHeld();
             
-            if ((keysDown && !(keysDown & KEY_TOUCH)) || (keysHeld && !(keysHeld & KEY_TOUCH)) || (menuType == MENUTYPE_GAMECARD && gameCardInfo.isInserted != curGcStatus)) break;
+            if (keysDown || keysHeld || (menuType == MENUTYPE_GAMECARD && gameCardInfo.isInserted != curGcStatus)) break;
         }
         
         // Exit
-        if (keysDown & KEY_PLUS) res = resultExit;
+        if (keysDown & HidNpadButton_Plus) res = resultExit;
         
         // Process key inputs only if the UI state hasn't been changed
         if (res == resultNone)
@@ -2632,7 +2632,7 @@ UIResult uiProcess()
             // Process base application info change
             if (menuType == MENUTYPE_GAMECARD && titleAppCount > 1 && uiState != stateHfs0Browser && uiState != stateExeFsSectionBrowser && uiState != stateRomFsSectionBrowser)
             {
-                if ((keysDown & KEY_L) || (keysDown & KEY_ZL))
+                if ((keysDown & HidNpadButton_L) || (keysDown & HidNpadButton_ZL))
                 {
                     if (selectedAppInfoIndex > 0)
                     {
@@ -2641,7 +2641,7 @@ UIResult uiProcess()
                     }
                 }
                 
-                if ((keysDown & KEY_R) || (keysDown & KEY_ZR))
+                if ((keysDown & HidNpadButton_R) || (keysDown & HidNpadButton_ZR))
                 {
                     if ((selectedAppInfoIndex + 1) < titleAppCount)
                     {
@@ -2654,13 +2654,13 @@ UIResult uiProcess()
             if (uiState == stateXciDumpMenu)
             {
                 // Select
-                if ((keysDown & KEY_A) && cursor == 0) res = resultDumpXci;
+                if ((keysDown & HidNpadButton_A) && cursor == 0) res = resultDumpXci;
                 
                 // Back
-                if (keysDown & KEY_B) res = resultShowGameCardMenu;
+                if (keysDown & HidNpadButton_B) res = resultShowGameCardMenu;
                 
                 // Change option to false
-                if (keysDown & KEY_LEFT)
+                if (keysDown & HidNpadButton_AnyLeft)
                 {
                     switch(cursor)
                     {
@@ -2694,7 +2694,7 @@ UIResult uiProcess()
                 }
                 
                 // Change option to true
-                if (keysDown & KEY_RIGHT)
+                if (keysDown & HidNpadButton_AnyRight)
                 {
                     switch(cursor)
                     {
@@ -2728,30 +2728,30 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                 {
                     scrollAmount = -1;
-                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                 }
                 
                 // Go down
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                 {
                     scrollAmount = 1;
-                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                 }
             } else
             if (uiState == stateNspAppDumpMenu || uiState == stateNspPatchDumpMenu || uiState == stateNspAddOnDumpMenu)
             {
                 // Select
-                if ((keysDown & KEY_A) && cursor == 0)
+                if ((keysDown & HidNpadButton_A) && cursor == 0)
                 {
                     selectedNspDumpType = (uiState == stateNspAppDumpMenu ? DUMP_APP_NSP : (uiState == stateNspPatchDumpMenu ? DUMP_PATCH_NSP : DUMP_ADDON_NSP));
                     res = resultDumpNsp;
                 }
                 
                 // Back
-                if (keysDown & KEY_B)
+                if (keysDown & HidNpadButton_B)
                 {
                     if (menuType == MENUTYPE_GAMECARD)
                     {
@@ -2779,7 +2779,7 @@ UIResult uiProcess()
                 }
                 
                 // Change option to false
-                if (keysDown & KEY_LEFT)
+                if (keysDown & HidNpadButton_AnyLeft)
                 {
                     switch(cursor)
                     {
@@ -2886,7 +2886,7 @@ UIResult uiProcess()
                 }
                 
                 // Change option to true
-                if (keysDown & KEY_RIGHT)
+                if (keysDown & HidNpadButton_AnyRight)
                 {
                     switch(cursor)
                     {
@@ -2991,29 +2991,29 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                 {
                     scrollAmount = -1;
-                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                 }
                 
                 // Go down
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                 {
                     scrollAmount = 1;
-                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                 }
             } else
             if (uiState == stateSdCardEmmcBatchModeMenu)
             {
                 // Select
-                if ((keysDown & KEY_A) && cursor == 0 && (dumpCfg.batchDumpCfg.dumpAppTitles || dumpCfg.batchDumpCfg.dumpPatchTitles || dumpCfg.batchDumpCfg.dumpAddOnTitles)) res = resultSdCardEmmcBatchDump;
+                if ((keysDown & HidNpadButton_A) && cursor == 0 && (dumpCfg.batchDumpCfg.dumpAppTitles || dumpCfg.batchDumpCfg.dumpPatchTitles || dumpCfg.batchDumpCfg.dumpAddOnTitles)) res = resultSdCardEmmcBatchDump;
                 
                 // Back
-                if (keysDown & KEY_B) res = resultShowSdCardEmmcMenu;
+                if (keysDown & HidNpadButton_B) res = resultShowSdCardEmmcMenu;
                 
                 // Change option to false
-                if (keysDown & KEY_LEFT)
+                if (keysDown & HidNpadButton_AnyLeft)
                 {
                     switch(cursor)
                     {
@@ -3087,7 +3087,7 @@ UIResult uiProcess()
                 }
                 
                 // Change option to true
-                if (keysDown & KEY_RIGHT)
+                if (keysDown & HidNpadButton_AnyRight)
                 {
                     switch(cursor)
                     {
@@ -3161,23 +3161,23 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                 {
                     scrollAmount = -1;
-                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                 }
                 
                 // Go down
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                 {
                     scrollAmount = 1;
-                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                 }
             } else
             if (uiState == stateExeFsMenu)
             {
                 // Select
-                if (keysDown & KEY_A)
+                if (keysDown & HidNpadButton_A)
                 {
                     // Reset option to its default value
                     selectedAppIndex = (menuType == MENUTYPE_GAMECARD ? 0 : selectedAppInfoIndex);
@@ -3196,7 +3196,7 @@ UIResult uiProcess()
                 }
                 
                 // Back
-                if (keysDown & KEY_B)
+                if (keysDown & HidNpadButton_B)
                 {
                     if (menuType == MENUTYPE_GAMECARD)
                     {
@@ -3208,7 +3208,7 @@ UIResult uiProcess()
                 }
                 
                 // Go left
-                if (keysDown & KEY_LEFT)
+                if (keysDown & HidNpadButton_AnyLeft)
                 {
                     switch(cursor)
                     {
@@ -3242,7 +3242,7 @@ UIResult uiProcess()
                 }
                 
                 // Go right
-                if (keysDown & KEY_RIGHT)
+                if (keysDown & HidNpadButton_AnyRight)
                 {
                     switch(cursor)
                     {
@@ -3278,29 +3278,29 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                 {
                     scrollAmount = -1;
-                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                 }
                 
                 // Go down
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                 {
                     scrollAmount = 1;
-                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                 }
             } else
             if (uiState == stateExeFsSectionDataDumpMenu || uiState == stateExeFsSectionBrowserMenu)
             {
                 // Select
-                if ((keysDown & KEY_A) && cursor == 0) res = (uiState == stateExeFsSectionDataDumpMenu ? resultDumpExeFsSectionData : resultExeFsSectionBrowserGetList);
+                if ((keysDown & HidNpadButton_A) && cursor == 0) res = (uiState == stateExeFsSectionDataDumpMenu ? resultDumpExeFsSectionData : resultExeFsSectionBrowserGetList);
                 
                 // Back
-                if (keysDown & KEY_B) res = resultShowExeFsMenu;
+                if (keysDown & HidNpadButton_B) res = resultShowExeFsMenu;
                 
                 // Change option to false
-                if (keysDown & KEY_LEFT)
+                if (keysDown & HidNpadButton_AnyLeft)
                 {
                     switch(cursor)
                     {
@@ -3337,7 +3337,7 @@ UIResult uiProcess()
                 }
                 
                 // Change option to true
-                if (keysDown & KEY_RIGHT)
+                if (keysDown & HidNpadButton_AnyRight)
                 {
                     switch(cursor)
                     {
@@ -3376,23 +3376,23 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                 {
                     scrollAmount = -1;
-                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                 }
                 
                 // Go down
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                 {
                     scrollAmount = 1;
-                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                 }
             } else
             if (uiState == stateRomFsMenu)
             {
                 // Select
-                if (keysDown & KEY_A)
+                if (keysDown & HidNpadButton_A)
                 {
                     // Reset option to its default value
                     if (!orphanMode) selectedAppIndex = (menuType == MENUTYPE_GAMECARD ? 0 : selectedAppInfoIndex);
@@ -3411,7 +3411,7 @@ UIResult uiProcess()
                 }
                 
                 // Back
-                if (keysDown & KEY_B)
+                if (keysDown & HidNpadButton_B)
                 {
                     if (menuType == MENUTYPE_GAMECARD)
                     {
@@ -3424,7 +3424,7 @@ UIResult uiProcess()
                 }
                 
                 // Go left
-                if (keysDown & KEY_LEFT)
+                if (keysDown & HidNpadButton_AnyLeft)
                 {
                     switch(cursor)
                     {
@@ -3477,7 +3477,7 @@ UIResult uiProcess()
                 }
                 
                 // Go right
-                if (keysDown & KEY_RIGHT)
+                if (keysDown & HidNpadButton_AnyRight)
                 {
                     switch(cursor)
                     {
@@ -3538,29 +3538,29 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                 {
                     scrollAmount = -1;
-                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                 }
                 
                 // Go down
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                 {
                     scrollAmount = 1;
-                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                 }
             } else
             if (uiState == stateRomFsSectionDataDumpMenu || uiState == stateRomFsSectionBrowserMenu)
             {
                 // Select
-                if ((keysDown & KEY_A) && cursor == 0) res = (uiState == stateRomFsSectionDataDumpMenu ? resultDumpRomFsSectionData : resultRomFsSectionBrowserGetEntries);
+                if ((keysDown & HidNpadButton_A) && cursor == 0) res = (uiState == stateRomFsSectionDataDumpMenu ? resultDumpRomFsSectionData : resultRomFsSectionBrowserGetEntries);
                 
                 // Back
-                if (keysDown & KEY_B) res = resultShowRomFsMenu;
+                if (keysDown & HidNpadButton_B) res = resultShowRomFsMenu;
                 
                 // Change option to false
-                if (keysDown & KEY_LEFT)
+                if (keysDown & HidNpadButton_AnyLeft)
                 {
                     switch(cursor)
                     {
@@ -3617,7 +3617,7 @@ UIResult uiProcess()
                 }
                 
                 // Change option to true
-                if (keysDown & KEY_RIGHT)
+                if (keysDown & HidNpadButton_AnyRight)
                 {
                     switch(cursor)
                     {
@@ -3681,29 +3681,29 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                 {
                     scrollAmount = -1;
-                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                 }
                 
                 // Go down
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                 {
                     scrollAmount = 1;
-                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                 }
             } else
             if (uiState == stateTicketMenu)
             {
                 // Select
-                if ((keysDown & KEY_A) && cursor == 0) res = resultDumpTicket;
+                if ((keysDown & HidNpadButton_A) && cursor == 0) res = resultDumpTicket;
                 
                 // Back
-                if (keysDown & KEY_B) res = resultShowSdCardEmmcTitleMenu;
+                if (keysDown & HidNpadButton_B) res = resultShowSdCardEmmcTitleMenu;
                 
                 // Go left
-                if (keysDown & KEY_LEFT)
+                if (keysDown & HidNpadButton_AnyLeft)
                 {
                     switch(cursor)
                     {
@@ -3754,7 +3754,7 @@ UIResult uiProcess()
                 }
                 
                 // Go right
-                if (keysDown & KEY_RIGHT)
+                if (keysDown & HidNpadButton_AnyRight)
                 {
                     switch(cursor)
                     {
@@ -3811,21 +3811,21 @@ UIResult uiProcess()
                 }
                 
                 // Go up
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                 {
                     scrollAmount = -1;
-                    scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                 }
                 
                 // Go down
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                 {
                     scrollAmount = 1;
-                    scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                    scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                 }
             } else {
                 // Select
-                if (keysDown & KEY_A)
+                if (keysDown & HidNpadButton_A)
                 {
                     if (uiState == stateMainMenu)
                     {
@@ -4108,7 +4108,7 @@ UIResult uiProcess()
                 }
                 
                 // Back
-                if (keysDown & KEY_B)
+                if (keysDown & HidNpadButton_B)
                 {
                     if (uiState == stateGameCardMenu || uiState == stateSdCardEmmcMenu || uiState == stateUpdateMenu)
                     {
@@ -4171,7 +4171,7 @@ UIResult uiProcess()
                 }
                 
                 // Special action #1
-                if (keysDown & KEY_Y)
+                if (keysDown & HidNpadButton_Y)
                 {
                     if (uiState == stateSdCardEmmcMenu && (calculateOrphanPatchOrAddOnCount(false) || calculateOrphanPatchOrAddOnCount(true)))
                     {
@@ -4187,7 +4187,7 @@ UIResult uiProcess()
                 }
                 
                 // Special action #2
-                if (keysDown & KEY_X)
+                if (keysDown & HidNpadButton_X)
                 {
                     if (uiState == stateSdCardEmmcMenu && (titleAppCount || titlePatchCount || titleAddOnCount))
                     {
@@ -4207,22 +4207,22 @@ UIResult uiProcess()
                 if (menu && menuItemsCount)
                 {
                     // Go up
-                    if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+                    if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
                     {
                         scrollAmount = -1;
-                        scrollWithKeysDown = ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP));
+                        scrollWithKeysDown = ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp));
                     }
                     
-                    if ((keysDown & KEY_DLEFT) || (keysDown & KEY_LSTICK_LEFT) || (keysHeld & KEY_RSTICK_LEFT)) scrollAmount = -5;
+                    if ((keysDown & HidNpadButton_Left) || (keysDown & HidNpadButton_StickLLeft) || (keysHeld & HidNpadButton_StickRLeft)) scrollAmount = -5;
                     
                     // Go down
-                    if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+                    if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
                     {
                         scrollAmount = 1;
-                        scrollWithKeysDown = ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN));
+                        scrollWithKeysDown = ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown));
                     }
                     
-                    if ((keysDown & KEY_DRIGHT) || (keysDown & KEY_LSTICK_RIGHT) || (keysHeld & KEY_RSTICK_RIGHT)) scrollAmount = 5;
+                    if ((keysDown & HidNpadButton_Right) || (keysDown & HidNpadButton_StickLRight) || (keysHeld & HidNpadButton_StickRRight)) scrollAmount = 5;
                 }
             }
             

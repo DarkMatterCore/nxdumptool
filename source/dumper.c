@@ -2795,16 +2795,16 @@ int dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
             uiUpdateStatusMsg();
             uiRefreshDisplay();
             
-            hidScanInput();
+            scanPads();
             
-            keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
-            keysHeld = hidKeysAllHeld(CONTROLLER_P1_AUTO);
+            keysDown = getButtonsDown();
+            keysHeld = getButtonsHeld();
             
-            if ((keysDown && !(keysDown & KEY_TOUCH)) || (keysHeld && !(keysHeld & KEY_TOUCH))) break;
+            if (keysDown || keysHeld) break;
         }
         
         // Exit
-        if (keysDown & KEY_PLUS)
+        if (keysDown & HidNpadButton_Plus)
         {
             ret = -2;
             proceed = false;
@@ -2812,7 +2812,7 @@ int dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
         }
         
         // Start batch dump process
-        if (keysDown & KEY_A)
+        if (keysDown & HidNpadButton_A)
         {
             // Check if we have at least a single enabled entry
             for(i = 0; i < totalTitleCount; i++)
@@ -2830,29 +2830,29 @@ int dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
         }
         
         // Cancel batch dump process
-        if (keysDown & KEY_B)
+        if (keysDown & HidNpadButton_B)
         {
             proceed = false;
             break;
         }
         
         // Toggle selected entry
-        if (keysDown & KEY_Y) batchEntries[selectedSummaryEntry].enabled ^= 0x01;
+        if (keysDown & HidNpadButton_Y) batchEntries[selectedSummaryEntry].enabled ^= 0x01;
         
         // Disable all entries
-        if (keysDown & KEY_L)
+        if (keysDown & HidNpadButton_L)
         {
             for(i = 0; i < totalTitleCount; i++) batchEntries[i].enabled = false;
         }
         
         // Enable all entries
-        if (keysDown & KEY_R)
+        if (keysDown & HidNpadButton_R)
         {
             for(i = 0; i < totalTitleCount; i++) batchEntries[i].enabled = true;
         }
         
         // Change page (left)
-        if ((keysDown & KEY_ZL) && totalTitleCount > maxSummaryFileCount)
+        if ((keysDown & HidNpadButton_ZL) && totalTitleCount > maxSummaryFileCount)
         {
             if (summaryPage > 0)
             {
@@ -2862,7 +2862,7 @@ int dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
         }
         
         // Change page (right)
-        if ((keysDown & KEY_ZR) && totalTitleCount > maxSummaryFileCount)
+        if ((keysDown & HidNpadButton_ZR) && totalTitleCount > maxSummaryFileCount)
         {
             if (((summaryPage + 1) * maxSummaryFileCount) < totalTitleCount)
             {
@@ -2872,13 +2872,13 @@ int dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
         }
         
         // Go up
-        if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+        if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
         {
             if (selectedSummaryEntry > (summaryPage * maxSummaryFileCount))
             {
                 selectedSummaryEntry--;
             } else {
-                if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP))
+                if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp))
                 {
                     if (((summaryPage + 1) * maxSummaryFileCount) < totalTitleCount)
                     {
@@ -2891,13 +2891,13 @@ int dumpNintendoSubmissionPackageBatch(batchOptions *batchDumpCfg)
         }
         
         // Go down
-        if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+        if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
         {
             if (((((summaryPage + 1) * maxSummaryFileCount) < totalTitleCount) && selectedSummaryEntry < (((summaryPage + 1) * maxSummaryFileCount) - 1)) || ((((summaryPage + 1) * maxSummaryFileCount) >= totalTitleCount) && selectedSummaryEntry < (totalTitleCount - 1)))
             {
                 selectedSummaryEntry++;
             } else {
-                if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN))
+                if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown))
                 {
                     selectedSummaryEntry = (summaryPage * maxSummaryFileCount);
                 }

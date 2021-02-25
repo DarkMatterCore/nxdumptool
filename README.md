@@ -73,6 +73,13 @@ Thanks to
 Changelog
 --------------
 
+**v1.1.13:**
+
+* Fixed compatibility with latest libnx release.
+* Now using the `AtmosphereHasService` SM API extension to check if a service is running. More than a year and a half has passed since this feature was introduced in Atmosphère, and it is now part of both SX OS and ReiNX, so it's a justified change. Fixes issues related to sysmodules and SM port exhaustion.
+
+This is only a bugfix release. I don't expect to release any new versions until the rewrite is finished - the only exception being fixing some kind of feature-breaking bug. Please understand.
+
 **v1.1.12:**
 
 * Fixed RomFS dumping/browsing support for games with base Program NCAs without a RomFS section (e.g. Fortnite, World of Tanks Blitz, etc.). Big thanks to [bigkahuna666](https://github.com/bigkahuna666) for reporting the issue and providing with testing.

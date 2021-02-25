@@ -43,6 +43,8 @@ extern nca_keyset_t nca_keyset;
 
 /* Statically allocated variables */
 
+static PadState g_padState = {0};
+
 static bool initNcm = false, initNs = false, initCsrng = false, initSpl = false, initPmdmnt = false, initPl = false, initNet = false;
 static bool openFsDevOp = false, openGcEvtNotifier = false, loadGcKernEvt = false, gcThreadInit = false, homeBtnBlocked = false;
 
@@ -396,20 +398,23 @@ void unmountSysEmmcPartition()
     }
 }
 
+static Result smAtmosphereHasService(bool *out, SmServiceName name)
+{
+    u8 tmp = 0;
+    Result rc = serviceDispatchInOut(smGetServiceSession(), 65100, name, tmp);
+    if (R_SUCCEEDED(rc) && out) *out = tmp;
+    return rc;
+}
+
 static bool isServiceRunning(const char *name)
 {
-    if (!name || !strlen(name)) return false;
+    if (!name || !*name) return false;
     
-    Handle handle;
-    SmServiceName serviceName = smEncodeName(name);
-    Result result = smRegisterService(&handle, serviceName, false, 1);
-    bool running = R_FAILED(result);
+    bool out = false;
+    SmServiceName service_name = smEncodeName(name);
     
-    svcCloseHandle(handle);
-    
-    if (!running) smUnregisterService(serviceName);
-    
-    return running;
+    Result rc = smAtmosphereHasService(&out, service_name);
+    return (R_SUCCEEDED(rc) && out);
 }
 
 static void retrieveRunningCfwDir()
@@ -809,24 +814,19 @@ static void freeGlobalData()
     freeFilenameBuffer();
 }
 
-u64 hidKeysAllDown()
+void scanPads(void)
 {
-    u8 controller;
-    u64 keysDown = 0;
-    
-    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keysDown |= hidKeysDown((HidControllerID)controller);
-    
-    return keysDown;
+    padUpdate(&g_padState);
 }
 
-u64 hidKeysAllHeld()
+u64 getButtonsDown(void)
 {
-    u8 controller;
-    u64 keysHeld = 0;
-    
-    for(controller = 0; controller < (u8)CONTROLLER_P1_AUTO; controller++) keysHeld |= hidKeysHeld((HidControllerID)controller);
-    
-    return keysHeld;
+    return padGetButtonsDown(&g_padState);
+}
+
+u64 getButtonsHeld(void)
+{
+    return padGetButtons(&g_padState);
 }
 
 void consoleErrorScreen(const char *fmt, ...)
@@ -839,17 +839,16 @@ void consoleErrorScreen(const char *fmt, ...)
     va_end(va);
     
     printf("\nPress any button to exit.\n");
+    consoleUpdate(NULL);
+    
+    /* Don't consider stick movement as button inputs. */
+    u64 flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
+                HidNpadButton_StickRUp | HidNpadButton_StickRDown);
     
     while(appletMainLoop())
     {
-        hidScanInput();
-        
-        u64 keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
-        
-        if (keysDown && !((keysDown & KEY_TOUCH) || (keysDown & KEY_LSTICK_LEFT) || (keysDown & KEY_LSTICK_RIGHT) || (keysDown & KEY_LSTICK_UP) || (keysDown & KEY_LSTICK_DOWN) || \
-            (keysDown & KEY_RSTICK_LEFT) || (keysDown & KEY_RSTICK_RIGHT) || (keysDown & KEY_RSTICK_UP) || (keysDown & KEY_RSTICK_DOWN))) break;
-        
-        consoleUpdate(NULL);
+        scanPads();
+        if (getButtonsDown() && flag) break;
     }
     
     consoleExit(NULL);
@@ -948,6 +947,12 @@ bool initApplicationResources(int argc, char **argv)
     Result result = 0;
     bool success = false;
     
+    /* Configure input. */
+    /* Up to 8 different, full controller inputs. */
+    /* Individual Joy-Cons not supported. */
+    padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
+    padInitializeWithMask(&g_padState, 0x1000000FFUL);
+    
     /* Copy launch path */
     if (argc > 0 && argv && !envIsNso())
     {
@@ -998,7 +1003,7 @@ bool initApplicationResources(int argc, char **argv)
     appletSetMediaPlaybackState(true);
     
     /* Enable CPU boost mode */
-    appletSetCpuBoostMode(ApmCpuBoostMode_Type1);
+    appletSetCpuBoostMode(ApmCpuBoostMode_FastLoad);
     
     /* Mount eMMC BIS System partition */
     if (!mountSysEmmcPartition()) goto out;
@@ -1123,7 +1128,7 @@ void deinitApplicationResources()
     unmountSysEmmcPartition();
     
     /* Disable CPU boost mode */
-    appletSetCpuBoostMode(ApmCpuBoostMode_Disabled);
+    appletSetCpuBoostMode(ApmCpuBoostMode_Normal);
     
     /* Enable screen dimming and auto sleep */
     appletSetMediaPlaybackState(false);
@@ -2523,31 +2528,31 @@ bool listDesiredNcaType(NcmContentInfo *titleContentInfos, u32 titleContentInfoC
             uiUpdateStatusMsg();
             uiRefreshDisplay();
             
-            hidScanInput();
+            scanPads();
             
-            keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
-            keysHeld = hidKeysAllHeld(CONTROLLER_P1_AUTO);
+            keysDown = getButtonsDown();
+            keysHeld = getButtonsHeld();
             
-            if ((keysDown && !(keysDown & KEY_TOUCH)) || (keysHeld && !(keysHeld & KEY_TOUCH))) break;
+            if (keysDown || keysHeld) break;
         }
         
-        if (keysDown & KEY_A)
+        if (keysDown & HidNpadButton_A)
         {
             idx = (int)indexes[selectedContent];
             break;
         }
         
-        if ((keysDown & KEY_DUP) || (keysDown & KEY_LSTICK_UP) || (keysHeld & KEY_RSTICK_UP))
+        if ((keysDown & HidNpadButton_Up) || (keysDown & HidNpadButton_StickLUp) || (keysHeld & HidNpadButton_StickRUp))
         {
             if (selectedContent > 0) selectedContent--;
         }
         
-        if ((keysDown & KEY_DDOWN) || (keysDown & KEY_LSTICK_DOWN) || (keysHeld & KEY_RSTICK_DOWN))
+        if ((keysDown & HidNpadButton_Down) || (keysDown & HidNpadButton_StickLDown) || (keysHeld & HidNpadButton_StickRDown))
         {
             if (selectedContent < (cnt - 1)) selectedContent++;
         }
         
-        if (keysDown & KEY_B)
+        if (keysDown & HidNpadButton_B)
         {
             breaks = initial_breaks;
             uiFill(0, 8 + (breaks * LINE_HEIGHT), FB_WIDTH, FB_HEIGHT - (8 + (breaks * LINE_HEIGHT)), BG_COLOR_RGB);
@@ -3672,17 +3677,17 @@ void waitForButtonPress()
 {
     uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_RGB, "Press any button to continue");
     
+    /* Don't consider stick movement as button inputs. */
+    u64 flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
+                HidNpadButton_StickRUp | HidNpadButton_StickRDown);
+    
     while(true)
     {
         uiUpdateStatusMsg();
         uiRefreshDisplay();
         
-        hidScanInput();
-        
-        u64 keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
-        
-        if (keysDown && !((keysDown & KEY_TOUCH) || (keysDown & KEY_LSTICK_LEFT) || (keysDown & KEY_LSTICK_RIGHT) || (keysDown & KEY_LSTICK_UP) || (keysDown & KEY_LSTICK_DOWN) || \
-            (keysDown & KEY_RSTICK_LEFT) || (keysDown & KEY_RSTICK_RIGHT) || (keysDown & KEY_RSTICK_UP) || (keysDown & KEY_RSTICK_DOWN))) break;
+        scanPads();
+        if (getButtonsDown() & flag) break;
     }
 }
 
@@ -3745,9 +3750,9 @@ bool cancelProcessCheck(progress_ctx_t *progressCtx)
 {
     if (!progressCtx) return false;
     
-    hidScanInput();
+    scanPads();
     
-    progressCtx->cancelBtnState = (hidKeysAllHeld(CONTROLLER_P1_AUTO) & KEY_B);
+    progressCtx->cancelBtnState = (getButtonsHeld() & HidNpadButton_B);
     
     if (progressCtx->cancelBtnState && progressCtx->cancelBtnState != progressCtx->cancelBtnStatePrev)
     {
@@ -3818,16 +3823,16 @@ bool yesNoPrompt(const char *message)
         uiUpdateStatusMsg();
         uiRefreshDisplay();
         
-        hidScanInput();
+        scanPads();
         
-        u64 keysDown = hidKeysAllDown(CONTROLLER_P1_AUTO);
+        u64 keysDown = getButtonsDown();
         
-        if (keysDown & KEY_A)
+        if (keysDown & HidNpadButton_A)
         {
             ret = true;
             break;
         } else
-        if (keysDown & KEY_B)
+        if (keysDown & HidNpadButton_B)
         {
             ret = false;
             break;

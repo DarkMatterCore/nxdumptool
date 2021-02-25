@@ -346,8 +346,9 @@ void freeBktrContext();
 void freeRomFsBrowserEntries();
 void freeHfs0ExeFsEntriesSizes();
 
-u64 hidKeysAllDown();
-u64 hidKeysAllHeld();
+void scanPads(void);
+u64 getButtonsDown(void);
+u64 getButtonsHeld(void);
 
 void consoleErrorScreen(const char *fmt, ...);
 bool initApplicationResources(int argc, char **argv);
