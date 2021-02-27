@@ -97,7 +97,7 @@ bool utilsInitializeResources(void)
     LOGFILE("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
     
     /* Retrieve custom firmware type. */
-    if (!_utilsGetCustomFirmwareType()) goto end;
+    _utilsGetCustomFirmwareType();
     LOGFILE("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
     
     /* Initialize needed services. */
