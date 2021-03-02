@@ -713,7 +713,7 @@ TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count)
     for(u32 i = 0, j = 0; i < g_titleInfoCount && j < g_titleInfoOrphanCount; i++)
     {
         TitleInfo *title_info = &(g_titleInfo[i]);
-        if ((title_info->meta_key.type == NcmContentMetaType_Patch || title_info->meta_key.type == NcmContentMetaType_AddOnContent) && !title_info->app_metadata) orphan_info[j++] = title_info;
+        if (title_info->meta_key.type != NcmContentMetaType_Application && !title_info->app_metadata) orphan_info[j++] = title_info;
     }
     
     /* Sort orphan title info entries by title ID. */
@@ -1412,8 +1412,9 @@ static bool titleGenerateTitleInfoFromStorage(u8 storage_id)
     /* Update title info count. */
     g_titleInfoCount += total;
     
-    /* Update linked lists for user applications, patches and add-on contents if we're not dealing with system titles. */
-    if (storage_id != NcmStorageId_BuiltInSystem) titleUpdateTitleInfoLinkedLists();
+    /* Update linked lists for user applications, patches and add-on contents. */
+    /* This will also keep track of orphan titles - titles with no available application metadata. */
+    titleUpdateTitleInfoLinkedLists();
     
     /* Update flag. */
     success = true;
@@ -1512,13 +1513,17 @@ static void titleUpdateTitleInfoLinkedLists(void)
         TitleInfo *child_info = &(g_titleInfo[i]);
         child_info->parent = child_info->previous = child_info->next = NULL;
         
-        /* Only proceed if we're dealing with a user application, a patch or an add-on content. */
-        if (child_info->meta_key.type != NcmContentMetaType_Application && child_info->meta_key.type != NcmContentMetaType_Patch && \
-            child_info->meta_key.type != NcmContentMetaType_AddOnContent) continue;
-        
-        /* Check if we're dealing with a patch or an add-on content. */
+        if (child_info->meta_key.type < NcmContentMetaType_Application)
+        {
+            /* We're dealing with a system title. */
+            /* Increase orphan title count if we have no application metadata. Immediately proceed onto the next loop iteration. */
+            /* We don't generate linked lists for orphan titles nor system titles. */
+            if (!child_info->app_metadata) g_titleInfoOrphanCount++;
+            continue;
+        } else
         if (child_info->meta_key.type == NcmContentMetaType_Patch || child_info->meta_key.type == NcmContentMetaType_AddOnContent)
         {
+            /* We're dealing with a patch or an add-on content. */
             /* Retrieve pointer to the first parent user application entry for patches and add-on contents. */
             /* Since gamecard title info entries are always appended to the end of the buffer, this guarantees we will first retrieve an eMMC / SD card entry (if available). */
             for(u32 j = 0; j < g_titleInfoCount; j++)
@@ -1535,7 +1540,8 @@ static void titleUpdateTitleInfoLinkedLists(void)
                 }
             }
             
-            /* Increase orphan title count if we have no application metadata. */
+            /* If we have no application metadata, increase orphan title count and proceed onto the next loop iteration. */
+            /* We don't generate linked lists for orphan titles. */
             if (!child_info->app_metadata)
             {
                 g_titleInfoOrphanCount++;
