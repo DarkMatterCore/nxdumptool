@@ -775,7 +775,7 @@ int main(int argc, char *argv[])
     u32 list_count = 0, list_idx = 0;
     
     u64 device_total_fs_size = 0, device_free_fs_size = 0;
-    char device_total_fs_size_str[36] = {0}, device_free_fs_size_str[32] = {0}, device_info[0x40] = {0};
+    char device_total_fs_size_str[36] = {0}, device_free_fs_size_str[32] = {0}, device_info[0x300] = {0};
     bool device_retrieved_size = false, device_retrieved_info = false;
     
     app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
@@ -879,9 +879,9 @@ int main(int argc, char *argv[])
                         
                         if (!device_retrieved_info)
                         {
-                            if (ums_device->product_id[0])
+                            if (ums_device->product_name[0])
                             {
-                                sprintf(device_info, "%s, LUN %u, FS #%u, %s", ums_device->product_id, ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
+                                sprintf(device_info, "%s, LUN %u, FS #%u, %s", ums_device->product_name, ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
                             } else {
                                 sprintf(device_info, "LUN %u, FS #%u, %s", ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
                             }
