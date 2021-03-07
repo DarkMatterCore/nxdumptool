@@ -23,33 +23,13 @@
 #ifndef __UTILS_H__
 #define __UTILS_H__
 
-#include <stdio.h>
-#include <stdint.h>
-#include <stdlib.h>
-#include <string.h>
-#include <stddef.h>
-#include <stdarg.h>
-#include <malloc.h>
-#include <errno.h>
-#include <ctype.h>
-#include <math.h>
-#include <time.h>
-#include <sys/stat.h>
-#include <stdatomic.h>
-#include <assert.h>
-#include <switch.h>
-
 #include "common.h"
-#include "ums.h"
 
 #define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
 
 #define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
-
-#define LOGFILE(fmt, ...)               utilsWriteMessageToLogFile(__func__, fmt, ##__VA_ARGS__)
-#define LOGBUF(dst, dst_size, fmt, ...) utilsWriteMessageToLogBuffer(dst, dst_size, __func__, fmt, ##__VA_ARGS__)
 
 #define BIT_LONG(n)                     (1UL << (n))
 
@@ -61,11 +41,6 @@
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
-
-
-
-
-
 /// Used to determine which CFW is the application running under.
 typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,
@@ -75,7 +50,7 @@ typedef enum {
 } UtilsCustomFirmwareType;
 
 /// Resource (de)initialization.
-/// Called at program startup.
+/// Called at program startup and exit.
 bool utilsInitializeResources(void);
 void utilsCloseResources(void);
 
@@ -100,12 +75,6 @@ void utilsWaitForButtonPress(u64 flag);
 /// If the buffer isn't big enough to hold both its current contents and the new formatted string, it will be resized.
 bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
-/// Logfile management functions.
-void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...);
-void utilsWriteMessageToLogBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...);
-void utilsWriteLogBufferToLogFile(const char *src);
-void utilsLogFileMutexControl(bool lock);
-
 /// Replaces illegal FAT characters in the provided string with underscores.
 /// If 'ascii_only' is set to true, all characters outside the (0x20,0x7E] range will also be replaced with underscores.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
@@ -116,13 +85,16 @@ void utilsTrimString(char *str);
 /// Generates a lowercase hex string representation of the binary data stored in 'src' and stores it in 'dst'.
 void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size);
 
-/// Formats the provided 'size' value to a human readable size string and stores it in 'dst'.
+/// Formats the provided 'size' value to a human-readable size string and stores it in 'dst'.
 void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);
 
 /// Saves the total size and free space available from the filesystem pointed to by the input path (e.g. "sdmc:/") to 'out_total' and 'out_free', respectively.
-/// Either 'out_total' or 'out_free' can be set to NULL, but at least one of them must be set to a valid pointer.
+/// Either 'out_total' or 'out_free' can be NULL, but at least one of them must be a valid pointer.
 /// Returns false if there's an error.
 bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_free);
+
+/// Returns a pointer to the FsFileSystem object for the SD card.
+FsFileSystem *utilsGetSdCardFileSystemObject(void);
 
 /// Commits SD card filesystem changes.
 /// Must be used after closing a file handle from the SD card.

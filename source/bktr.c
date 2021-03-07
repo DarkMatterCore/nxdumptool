@@ -47,7 +47,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         (update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.offset + update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.size) != update_nca_fs_ctx->section_size || \
         (base_nca_ctx->rights_id_available && !base_nca_ctx->titlekey_retrieved) || (update_nca_ctx->rights_id_available && !update_nca_ctx->titlekey_retrieved))
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -60,26 +60,26 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     /* Initialize base NCA RomFS context. */
     if (!out->missing_base_romfs && !romfsInitializeContext(&(out->base_romfs_ctx), base_nca_fs_ctx))
     {
-        LOGFILE("Failed to initialize base NCA RomFS context!");
+        LOG_MSG("Failed to initialize base NCA RomFS context!");
         return false;
     }
     
     /* Fill context. */
-    bool success = false;
+    bool success = false, dump_patch_romfs_header = false;
     NcaPatchInfo *patch_info = &(update_nca_fs_ctx->header.patch_info);
     
     /* Allocate space for an extra (fake) indirect storage entry, to simplify our logic. */
     out->indirect_block = calloc(1, patch_info->indirect_bucket.size + ((0x3FF0 / sizeof(u64)) * sizeof(BktrIndirectStorageEntry)));
     if (!out->indirect_block)
     {
-        LOGFILE("Unable to allocate memory for the BKTR Indirect Storage Block!");
+        LOG_MSG("Unable to allocate memory for the BKTR Indirect Storage Block!");
         goto end;
     }
     
     /* Read indirect storage block data. */
     if (!ncaReadFsSection(update_nca_fs_ctx, out->indirect_block, patch_info->indirect_bucket.size, patch_info->indirect_bucket.offset))
     {
-        LOGFILE("Failed to read BKTR Indirect Storage Block data!");
+        LOG_MSG("Failed to read BKTR Indirect Storage Block data!");
         goto end;
     }
     
@@ -87,20 +87,20 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     out->aes_ctr_ex_block = calloc(1, patch_info->aes_ctr_ex_bucket.size + (((0x3FF0 / sizeof(u64)) + 1) * sizeof(BktrAesCtrExStorageEntry)));
     if (!out->aes_ctr_ex_block)
     {
-        LOGFILE("Unable to allocate memory for the BKTR AesCtrEx Storage Block!");
+        LOG_MSG("Unable to allocate memory for the BKTR AesCtrEx Storage Block!");
         goto end;
     }
     
     /* Read AesCtrEx storage block data. */
     if (!ncaReadFsSection(update_nca_fs_ctx, out->aes_ctr_ex_block, patch_info->aes_ctr_ex_bucket.size, patch_info->aes_ctr_ex_bucket.offset))
     {
-        LOGFILE("Failed to read BKTR AesCtrEx Storage Block data!");
+        LOG_MSG("Failed to read BKTR AesCtrEx Storage Block data!");
         goto end;
     }
     
     if (out->aes_ctr_ex_block->physical_size != patch_info->aes_ctr_ex_bucket.offset)
     {
-        LOGFILE("Invalid BKTR AesCtrEx Storage Block size!");
+        LOG_DATA(out->aes_ctr_ex_block, patch_info->aes_ctr_ex_bucket.size, "Invalid BKTR AesCtrEx Storage Block size! AesCtrEx Storage Block dump:");
         goto end;
     }
     
@@ -150,13 +150,14 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     /* Read update NCA RomFS header. */
     if (!bktrPhysicalSectionRead(out, &(out->patch_romfs_ctx.header), sizeof(RomFileSystemHeader), out->patch_romfs_ctx.offset))
     {
-        LOGFILE("Failed to read update NCA RomFS header!");
+        LOG_MSG("Failed to read update NCA RomFS header!");
         goto end;
     }
     
     if (out->patch_romfs_ctx.header.cur_format.header_size != ROMFS_HEADER_SIZE)
     {
-        LOGFILE("Invalid update NCA RomFS header size!");
+        LOG_MSG("Invalid update NCA RomFS header size!");
+        dump_patch_romfs_header = true;
         goto end;
     }
     
@@ -166,20 +167,21 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     
     if (!dir_table_offset || !out->patch_romfs_ctx.dir_table_size)
     {
-        LOGFILE("Invalid update NCA RomFS directory entries table!");
+        LOG_MSG("Invalid update NCA RomFS directory entries table!");
+        dump_patch_romfs_header = true;
         goto end;
     }
     
     out->patch_romfs_ctx.dir_table = malloc(out->patch_romfs_ctx.dir_table_size);
     if (!out->patch_romfs_ctx.dir_table)
     {
-        LOGFILE("Unable to allocate memory for the update NCA RomFS directory entries table!");
+        LOG_MSG("Unable to allocate memory for the update NCA RomFS directory entries table!");
         goto end;
     }
     
     if (!bktrPhysicalSectionRead(out, out->patch_romfs_ctx.dir_table, out->patch_romfs_ctx.dir_table_size, out->patch_romfs_ctx.offset + dir_table_offset))
     {
-        LOGFILE("Failed to read update NCA RomFS directory entries table!");
+        LOG_MSG("Failed to read update NCA RomFS directory entries table!");
         goto end;
     }
     
@@ -189,20 +191,21 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     
     if (!file_table_offset || !out->patch_romfs_ctx.file_table_size)
     {
-        LOGFILE("Invalid update NCA RomFS file entries table!");
+        LOG_MSG("Invalid update NCA RomFS file entries table!");
+        dump_patch_romfs_header = true;
         goto end;
     }
     
     out->patch_romfs_ctx.file_table = malloc(out->patch_romfs_ctx.file_table_size);
     if (!out->patch_romfs_ctx.file_table)
     {
-        LOGFILE("Unable to allocate memory for the update NCA RomFS file entries table!");
+        LOG_MSG("Unable to allocate memory for the update NCA RomFS file entries table!");
         goto end;
     }
     
     if (!bktrPhysicalSectionRead(out, out->patch_romfs_ctx.file_table, out->patch_romfs_ctx.file_table_size, out->patch_romfs_ctx.offset + file_table_offset))
     {
-        LOGFILE("Failed to read update NCA RomFS file entries table!");
+        LOG_MSG("Failed to read update NCA RomFS file entries table!");
         goto end;
     }
     
@@ -212,7 +215,12 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     success = true;
     
 end:
-    if (!success) bktrFreeContext(out);
+    if (!success)
+    {
+        if (dump_patch_romfs_header) LOG_DATA(&(out->patch_romfs_ctx.header), sizeof(RomFileSystemHeader), "Update RomFS header dump:");
+        
+        bktrFreeContext(out);
+    }
     
     return success;
 }
@@ -221,14 +229,14 @@ bool bktrReadFileSystemData(BktrContext *ctx, void *out, u64 read_size, u64 offs
 {
     if (!ctx || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
     /* Read filesystem data. */
     if (!bktrPhysicalSectionRead(ctx, out, read_size, ctx->offset + offset))
     {
-        LOGFILE("Failed to read Patch RomFS data!");
+        LOG_MSG("Failed to read Patch RomFS data!");
         return false;
     }
     
@@ -239,14 +247,14 @@ bool bktrReadFileEntryData(BktrContext *ctx, RomFileSystemFileEntry *file_entry,
 {
     if (!ctx || !ctx->body_offset || !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !out || !read_size || (offset + read_size) > file_entry->size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
     /* Read entry data. */
     if (!bktrReadFileSystemData(ctx, out, read_size, ctx->body_offset + file_entry->offset + offset))
     {
-        LOGFILE("Failed to read Patch RomFS file entry data!");
+        LOG_MSG("Failed to read Patch RomFS file entry data!");
         return false;
     }
     
@@ -257,7 +265,7 @@ bool bktrIsFileEntryUpdated(BktrContext *ctx, RomFileSystemFileEntry *file_entry
 {
     if (!ctx || !ctx->body_offset || !ctx->indirect_block || !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !out)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -268,7 +276,7 @@ bool bktrIsFileEntryUpdated(BktrContext *ctx, RomFileSystemFileEntry *file_entry
     indirect_entry = bktrGetIndirectStorageEntry(ctx->indirect_block, file_offset);
     if (!indirect_entry)
     {
-        LOGFILE("Error retrieving BKTR Indirect Storage Entry at offset 0x%lX!", file_offset);
+        LOG_MSG("Error retrieving BKTR Indirect Storage Entry at offset 0x%lX!", file_offset);
         return false;
     }
     
@@ -295,7 +303,7 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
 {
     if (!ctx || (!ctx->missing_base_romfs && !ctx->base_romfs_ctx.nca_fs_ctx) || !ctx->indirect_block || !out || !read_size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -307,7 +315,7 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
     indirect_entry = bktrGetIndirectStorageEntry(ctx->indirect_block, offset);
     if (!indirect_entry)
     {
-        LOGFILE("Error retrieving BKTR Indirect Storage Entry at offset 0x%lX!", offset);
+        LOG_MSG("Error retrieving BKTR Indirect Storage Entry at offset 0x%lX!", offset);
         return false;
     }
     
@@ -323,14 +331,14 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
         if (indirect_entry->indirect_storage_index == BktrIndirectStorageIndex_Patch)
         {
             success = bktrAesCtrExStorageRead(ctx, out, read_size, offset, section_offset);
-            if (!success) LOGFILE("Failed to read 0x%lX bytes block from BKTR AesCtrEx storage at offset 0x%lX!", read_size, section_offset);
+            if (!success) LOG_MSG("Failed to read 0x%lX bytes block from BKTR AesCtrEx storage at offset 0x%lX!", read_size, section_offset);
         } else
         if (!ctx->missing_base_romfs)
         {
             success = ncaReadFsSection(ctx->base_romfs_ctx.nca_fs_ctx, out, read_size, section_offset);
-            if (!success) LOGFILE("Failed to read 0x%lX bytes block from base RomFS at offset 0x%lX!", read_size, section_offset);
+            if (!success) LOG_MSG("Failed to read 0x%lX bytes block from base RomFS at offset 0x%lX!", read_size, section_offset);
         } else {
-            LOGFILE("Attempting to read 0x%lX bytes block from non-existent base RomFS at offset 0x%lX!", read_size, section_offset);
+            LOG_MSG("Attempting to read 0x%lX bytes block from non-existent base RomFS at offset 0x%lX!", read_size, section_offset);
         }
     } else {
         /* Handle reads that span multiple indirect storage entries. */
@@ -338,7 +346,7 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
         
         success = (bktrPhysicalSectionRead(ctx, out, indirect_block_size, offset) && \
                    bktrPhysicalSectionRead(ctx, (u8*)out + indirect_block_size, read_size - indirect_block_size, offset + indirect_block_size));
-        if (!success) LOGFILE("Failed to read 0x%lX bytes block from multiple BKTR indirect storage entries at offset 0x%lX!", read_size, section_offset);
+        if (!success) LOG_MSG("Failed to read 0x%lX bytes block from multiple BKTR indirect storage entries at offset 0x%lX!", read_size, section_offset);
     }
     
     return success;
@@ -350,14 +358,14 @@ static bool bktrAesCtrExStorageRead(BktrContext *ctx, void *out, u64 read_size, 
     
     if (!ctx || !ctx->patch_romfs_ctx.nca_fs_ctx || !ctx->aes_ctr_ex_block || !out || !read_size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
     aes_ctr_ex_entry = bktrGetAesCtrExStorageEntry(ctx->aes_ctr_ex_block, section_offset);
     if (!aes_ctr_ex_entry)
     {
-        LOGFILE("Error retrieving BKTR AesCtrEx Storage Entry at offset 0x%lX!", section_offset);
+        LOG_MSG("Error retrieving BKTR AesCtrEx Storage Entry at offset 0x%lX!", section_offset);
         return false;
     }
     
@@ -390,7 +398,7 @@ static BktrIndirectStorageEntry *bktrGetIndirectStorageEntry(BktrIndirectStorage
 {
     if (!block || !block->bucket_count || offset >= block->virtual_size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return NULL;
     }
     
@@ -405,7 +413,7 @@ static BktrIndirectStorageEntry *bktrGetIndirectStorageEntry(BktrIndirectStorage
     bucket = bktrGetIndirectStorageBucket(block, bucket_num);
     if (!bucket || !bucket->entry_count)
     {
-        LOGFILE("Error retrieving BKTR indirect storage bucket #%u!", bucket_num);
+        LOG_MSG("Error retrieving BKTR indirect storage bucket #%u!", bucket_num);
         return NULL;
     }
     
@@ -429,7 +437,7 @@ static BktrIndirectStorageEntry *bktrGetIndirectStorageEntry(BktrIndirectStorage
         }
     }
     
-    LOGFILE("Failed to find offset 0x%lX in BKTR indirect storage block!", offset);
+    LOG_MSG("Failed to find offset 0x%lX in BKTR indirect storage block!", offset);
     return NULL;
 }
 
@@ -443,7 +451,7 @@ static BktrAesCtrExStorageEntry *bktrGetAesCtrExStorageEntry(BktrAesCtrExStorage
 {
     if (!block || !block->bucket_count || offset >= block->physical_size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return NULL;
     }
     
@@ -453,7 +461,7 @@ static BktrAesCtrExStorageEntry *bktrGetAesCtrExStorageEntry(BktrAesCtrExStorage
     last_bucket = bktrGetAesCtrExStorageBucket(block, block->bucket_count - 1);
     if (!last_bucket || !last_bucket->entry_count)
     {
-        LOGFILE("Error retrieving last BKTR AesCtrEx storage bucket!");
+        LOG_MSG("Error retrieving last BKTR AesCtrEx storage bucket!");
         return NULL;
     }
     
@@ -467,7 +475,7 @@ static BktrAesCtrExStorageEntry *bktrGetAesCtrExStorageEntry(BktrAesCtrExStorage
     bucket = bktrGetAesCtrExStorageBucket(block, bucket_num);
     if (!bucket || !bucket->entry_count)
     {
-        LOGFILE("Error retrieving BKTR AesCtrEx storage bucket #%u!", bucket_num);
+        LOG_MSG("Error retrieving BKTR AesCtrEx storage bucket #%u!", bucket_num);
         return NULL;
     }
     
@@ -491,6 +499,6 @@ static BktrAesCtrExStorageEntry *bktrGetAesCtrExStorageEntry(BktrAesCtrExStorage
         }
     }
     
-    LOGFILE("Failed to find offset 0x%lX in BKTR AesCtrEx storage block!", offset);
+    LOG_MSG("Failed to find offset 0x%lX in BKTR AesCtrEx storage block!", offset);
     return NULL;
 }

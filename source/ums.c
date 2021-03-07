@@ -53,7 +53,7 @@ bool umsInitialize(void)
     rc = usbHsFsInitialize(0);
     if (R_FAILED(rc))
     {
-        LOGFILE("usbHsFsInitialize failed! (0x%08X).", rc);
+        LOG_MSG("usbHsFsInitialize failed! (0x%08X).", rc);
         goto end;
     }
     
@@ -121,7 +121,7 @@ UsbHsFsDevice *umsGetDevices(u32 *out_count)
     
     if (!g_umsInterfaceInit || !out_count)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         goto end;
     }
     
@@ -131,7 +131,7 @@ UsbHsFsDevice *umsGetDevices(u32 *out_count)
         devices = calloc(g_umsDeviceCount, sizeof(UsbHsFsDevice));
         if (!devices)
         {
-            LOGFILE("Failed to allocate memory for %u devices!", g_umsDeviceCount);
+            LOG_MSG("Failed to allocate memory for %u devices!", g_umsDeviceCount);
             goto end;
         }
         
@@ -152,7 +152,7 @@ static bool umsCreateDetectionThread(void)
 {
     if (!utilsCreateThread(&g_umsDetectionThread, umsDetectionThreadFunc, NULL, 1))
     {
-        LOGFILE("Failed to create USB Mass Storage detection thread!");
+        LOG_MSG("Failed to create USB Mass Storage detection thread!");
         return false;
     }
     
@@ -195,7 +195,7 @@ static void umsDetectionThreadFunc(void *arg)
         
         /* Get mounted device count. */
         g_umsDeviceCount = usbHsFsGetMountedDeviceCount();
-        LOGFILE("USB Mass Storage status change event triggered! Mounted USB Mass Storage device count: %u.", g_umsDeviceCount);
+        LOG_MSG("USB Mass Storage status change event triggered! Mounted USB Mass Storage device count: %u.", g_umsDeviceCount);
         
         if (g_umsDeviceCount)
         {
@@ -215,15 +215,15 @@ static void umsDetectionThreadFunc(void *arg)
                         /* Update USB Mass Storage device info updated flag. */
                         g_umsDeviceInfoUpdated = true;
                     } else {
-                        LOGFILE("USB Mass Storage device count mismatch! (%u != %u).", listed_device_count, g_umsDeviceCount);
+                        LOG_MSG("USB Mass Storage device count mismatch! (%u != %u).", listed_device_count, g_umsDeviceCount);
                         fail = true;
                     }
                 } else {
-                    LOGFILE("Failed to list mounted USB Mass Storage devices!");
+                    LOG_MSG("Failed to list mounted USB Mass Storage devices!");
                     fail = true;
                 }
             } else {
-                LOGFILE("Failed to allocate memory for mounted USB Mass Storage devices buffer!");
+                LOG_MSG("Failed to allocate memory for mounted USB Mass Storage devices buffer!");
                 fail = true;
             }
             

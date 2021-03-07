@@ -33,8 +33,6 @@
 #include "bfttf.h"
 #include "fatfs/ff.h"
 
-#define LOGFILE_PATH    "./" APP_TITLE ".log"
-
 /* Global variables. */
 
 static bool g_resourcesInit = false, g_isDevUnit = false;
@@ -54,10 +52,6 @@ static Mutex g_homeButtonMutex = 0;
 static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
 static AppletHookCookie g_systemOverclockCookie = {0};
-
-static Mutex g_logfileMutex = 0;
-static const char *g_logfileTimestampFormat = "%d-%02d-%02d %02d:%02d:%02d -> %s: ";
-static const char *g_logfileLineBreak = "\r\n";
 
 static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB" };
 static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
@@ -89,32 +83,32 @@ bool utilsInitializeResources(void)
     padInitializeWithMask(&g_padState, 0x1000000FFUL);
     
     /* Create logfile. */
-    utilsWriteLogBufferToLogFile("________________________________________________________________\r\n");
-    LOGFILE(APP_TITLE " v%u.%u.%u starting. Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+    logWriteStringToLogFile("________________________________________________________________\r\n");
+    LOG_MSG(APP_TITLE " v%u.%u.%u starting. Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
     
     /* Log Horizon OS version. */
     u32 hos_version = hosversionGet();
-    LOGFILE("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
+    LOG_MSG("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
     
     /* Retrieve custom firmware type. */
     _utilsGetCustomFirmwareType();
-    LOGFILE("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
+    LOG_MSG("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
     
     /* Initialize needed services. */
     if (!servicesInitialize())
     {
-        LOGFILE("Failed to initialize needed services!");
+        LOG_MSG("Failed to initialize needed services!");
         goto end;
     }
     
     /* Check if we're not running under a development unit. */
     if (!_utilsIsDevelopmentUnit()) goto end;
-    LOGFILE("Running under %s unit.", g_isDevUnit ? "development" : "retail");
+    LOG_MSG("Running under %s unit.", g_isDevUnit ? "development" : "retail");
     
     /* Initialize USB interface. */
     if (!usbInitialize())
     {
-        LOGFILE("Failed to initialize USB interface!");
+        LOG_MSG("Failed to initialize USB interface!");
         goto end;
     }
     
@@ -124,42 +118,42 @@ bool utilsInitializeResources(void)
     /* Load NCA keyset. */
     if (!keysLoadNcaKeyset())
     {
-        LOGFILE("Failed to load NCA keyset!");
+        LOG_MSG("Failed to load NCA keyset!");
         goto end;
     }
     
     /* Allocate NCA crypto buffer. */
     if (!ncaAllocateCryptoBuffer())
     {
-        LOGFILE("Unable to allocate memory for NCA crypto buffer!");
+        LOG_MSG("Unable to allocate memory for NCA crypto buffer!");
         goto end;
     }
     
     /* Initialize gamecard interface. */
     if (!gamecardInitialize())
     {
-        LOGFILE("Failed to initialize gamecard interface!");
+        LOG_MSG("Failed to initialize gamecard interface!");
         goto end;
     }
     
     /* Initialize title interface. */
     if (!titleInitialize())
     {
-        LOGFILE("Failed to initialize the title interface!");
+        LOG_MSG("Failed to initialize the title interface!");
         goto end;
     }
     
     /* Initialize BFTTF interface. */
     if (!bfttfInitialize())
     {
-        LOGFILE("Failed to initialize BFTTF interface!");
+        LOG_MSG("Failed to initialize BFTTF interface!");
         goto end;
     }
     
     /* Retrieve pointer to the SD card FsFileSystem element. */
     if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
     {
-        LOGFILE("Failed to retrieve FsFileSystem from SD card!");
+        LOG_MSG("Failed to retrieve FsFileSystem from SD card!");
         goto end;
     }
     
@@ -168,7 +162,7 @@ bool utilsInitializeResources(void)
     
     /* Get applet type. */
     g_programAppletType = appletGetAppletType();
-    LOGFILE("Running under %s mode.", utilsAppletModeCheck() ? "applet" : "title override");
+    LOG_MSG("Running under %s mode.", utilsAppletModeCheck() ? "applet" : "title override");
     
     /* Disable screen dimming and auto sleep. */
     appletSetMediaPlaybackState(true);
@@ -239,6 +233,9 @@ void utilsCloseResources(void)
     /* Close initialized services. */
     servicesClose();
     
+    /* Close logfile. */
+    logCloseLogFile();
+    
     g_resourcesInit = false;
     
     mutexUnlock(&g_resourcesMutex);
@@ -250,7 +247,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     /* -2 can be provided to use the default process core. */
     if (!out_thread || !func || (cpu_id < 0 && cpu_id != -2) || cpu_id > 2)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -265,7 +262,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     rc = svcGetInfo(&core_mask, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0);
     if (R_FAILED(rc))
     {
-        LOGFILE("svcGetInfo failed! (0x%08X).", rc);
+        LOG_MSG("svcGetInfo failed! (0x%08X).", rc);
         goto end;
     }
     
@@ -274,7 +271,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     rc = threadCreate(out_thread, func, arg, NULL, stack_size, 0x3B, cpu_id);
     if (R_FAILED(rc))
     {
-        LOGFILE("threadCreate failed! (0x%08X).", rc);
+        LOG_MSG("threadCreate failed! (0x%08X).", rc);
         goto end;
     }
     
@@ -282,7 +279,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     rc = svcSetThreadCoreMask(out_thread->handle, cpu_id == -2 ? -1 : cpu_id, core_mask);
     if (R_FAILED(rc))
     {
-        LOGFILE("svcSetThreadCoreMask failed! (0x%08X).", rc);
+        LOG_MSG("svcSetThreadCoreMask failed! (0x%08X).", rc);
         goto end;
     }
     
@@ -290,7 +287,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     rc = threadStart(out_thread);
     if (R_FAILED(rc))
     {
-        LOGFILE("threadStart failed! (0x%08X).", rc);
+        LOG_MSG("threadStart failed! (0x%08X).", rc);
         goto end;
     }
     
@@ -306,14 +303,14 @@ void utilsJoinThread(Thread *thread)
 {
     if (!thread || thread->handle == INVALID_HANDLE)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return;
     }
     
     Result rc = threadWaitForExit(thread);
     if (R_FAILED(rc))
     {
-        LOGFILE("threadWaitForExit failed! (0x%08X).", rc);
+        LOG_MSG("threadWaitForExit failed! (0x%08X).", rc);
         return;
     }
     
@@ -360,162 +357,71 @@ void utilsWaitForButtonPress(u64 flag)
 
 bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
 {
-    if (!dst || !dst_size || !fmt || !*fmt)
+    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || !fmt || !*fmt)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
     va_list args;
-    va_start(args, fmt);
     
-    int formatted_str_len = 0;
-    size_t required_dst_size = 0, dst_str_len = (*dst ? strlen(*dst) : 0);
-    char *realloc_dst = NULL;
+    size_t formatted_str_len = 0;
+    
+    char *dst_ptr = *dst, *tmp_str = NULL;
+    size_t dst_cur_size = *dst_size, dst_str_len = (dst_ptr ? strlen(dst_ptr) : 0);
     
     bool success = false;
     
-    if (dst_str_len > *dst_size)
+    if (dst_str_len >= dst_cur_size)
     {
-        **dst = '\0';
-        dst_str_len = 0;
+        LOG_MSG("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
+        return false;
     }
     
+    va_start(args, fmt);
+    
+    /* Get formatted string length. */
     formatted_str_len = vsnprintf(NULL, 0, fmt, args);
-    if (formatted_str_len <= 0)
+    if ((int)formatted_str_len <= 0)
     {
-        LOGFILE("Failed to retrieve formatted string length!");
+        LOG_MSG("Failed to retrieve formatted string length!");
         goto end;
     }
     
-    required_dst_size = (dst_str_len + (size_t)formatted_str_len + 1);
-    if (required_dst_size > *dst_size)
+    formatted_str_len++;
+    
+    if (!dst_cur_size || formatted_str_len > (dst_cur_size - dst_str_len))
     {
-        realloc_dst = realloc(*dst, required_dst_size);
-        if (!realloc_dst)
+        /* Update buffer size. */
+        dst_cur_size = (dst_str_len + formatted_str_len);
+        
+        /* Reallocate buffer. */
+        tmp_str = realloc(dst_ptr, dst_cur_size);
+        if (!tmp_str)
         {
-            LOGFILE("Failed to reallocate destination buffer!");
+            LOG_MSG("Failed to resize buffer to 0x%lX byte(s).", dst_cur_size);
             goto end;
         }
         
-        *dst = realloc_dst;
-        realloc_dst = NULL;
+        dst_ptr = tmp_str;
+        tmp_str = NULL;
         
-        memset(*dst + dst_str_len, 0, (size_t)formatted_str_len + 1);
+        /* Clear allocated area. */
+        memset(dst_ptr + dst_str_len, 0, formatted_str_len);
         
-        *dst_size = required_dst_size;
+        /* Update pointers. */
+        *dst = dst_ptr;
+        *dst_size = dst_cur_size;
     }
     
-    vsprintf(*dst + dst_str_len, fmt, args);
+    /* Generate formatted string. */
+    vsprintf(dst_ptr + dst_str_len, fmt, args);
     success = true;
     
 end:
     va_end(args);
     
     return success;
-}
-
-void utilsWriteMessageToLogFile(const char *func_name, const char *fmt, ...)
-{
-    if (!func_name || !*func_name || !fmt || !*fmt) return;
-    
-    mutexLock(&g_logfileMutex);
-    
-    va_list args;
-    
-    FILE *logfile = fopen(LOGFILE_PATH, "a+");
-    if (!logfile) goto end;
-    
-    time_t now = time(NULL);
-    struct tm *ts = localtime(&now);
-    
-    fprintf(logfile, g_logfileTimestampFormat, ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
-    
-    va_start(args, fmt);
-    vfprintf(logfile, fmt, args);
-    va_end(args);
-    
-    fprintf(logfile, g_logfileLineBreak);
-    fclose(logfile);
-    utilsCommitSdCardFileSystemChanges();
-    
-end:
-    mutexUnlock(&g_logfileMutex);
-}
-
-void utilsWriteMessageToLogBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...)
-{
-    if (!dst || !dst_size || !func_name || !*func_name || !fmt || !*fmt) return;
-    
-    va_list args;
-    va_start(args, fmt);
-    
-    time_t now = time(NULL);
-    struct tm *ts = localtime(&now);
-    
-    int timestamp_len = 0, formatted_str_len = 0;
-    size_t required_dst_size = 0, dst_str_len = (*dst ? strlen(*dst) : 0);
-    char *realloc_dst = NULL;
-    
-    if (dst_str_len > *dst_size)
-    {
-        **dst = '\0';
-        dst_str_len = 0;
-    }
-    
-    timestamp_len = snprintf(NULL, 0, g_logfileTimestampFormat, ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
-    if (timestamp_len <= 0) goto end;
-    
-    formatted_str_len = vsnprintf(NULL, 0, fmt, args);
-    if (formatted_str_len <= 0) goto end;
-    
-    required_dst_size = (dst_str_len + (size_t)timestamp_len + (size_t)formatted_str_len + 3);
-    if (required_dst_size > *dst_size)
-    {
-        realloc_dst = realloc(*dst, required_dst_size);
-        if (!realloc_dst) goto end;
-        
-        *dst = realloc_dst;
-        realloc_dst = NULL;
-        
-        memset(*dst + dst_str_len, 0, (size_t)timestamp_len + (size_t)formatted_str_len + 3);
-        
-        *dst_size = required_dst_size;
-    }
-    
-    sprintf(*dst + dst_str_len, g_logfileTimestampFormat, ts->tm_year + 1900, ts->tm_mon + 1, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, func_name);
-    vsprintf(*dst + dst_str_len + (size_t)timestamp_len, fmt, args);
-    sprintf(*dst + dst_str_len + (size_t)timestamp_len + (size_t)formatted_str_len, g_logfileLineBreak);
-    
-end:
-    va_end(args);
-}
-
-void utilsWriteLogBufferToLogFile(const char *src)
-{
-    if (!src || !*src) return;
-    
-    mutexLock(&g_logfileMutex);
-    
-    FILE *logfile = fopen(LOGFILE_PATH, "a+");
-    if (!logfile) goto end;
-    
-    fprintf(logfile, "%s", src);
-    fclose(logfile);
-    utilsCommitSdCardFileSystemChanges();
-    
-end:
-    mutexUnlock(&g_logfileMutex);
-}
-
-void utilsLogFileMutexControl(bool lock)
-{
-    if (lock)
-    {
-        mutexLock(&g_logfileMutex);
-    } else {
-        mutexUnlock(&g_logfileMutex);
-    }
 }
 
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
@@ -595,7 +501,7 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
     
     if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || (!out_total && !out_free))
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -604,7 +510,7 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
     
     if ((ret = statvfs(stat_path, &info)) != 0)
     {
-        LOGFILE("statvfs failed! (%d) (errno: %d).", ret, errno);
+        LOG_MSG("statvfs failed! (%d) (errno: %d).", ret, errno);
         return false;
     }
     
@@ -612,6 +518,11 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
     if (out_free) *out_free = ((u64)info.f_bfree * (u64)info.f_frsize);
     
     return true;
+}
+
+FsFileSystem *utilsGetSdCardFileSystemObject(void)
+{
+    return g_sdCardFileSystem;
 }
 
 bool utilsCommitSdCardFileSystemChanges(void)
@@ -646,7 +557,7 @@ bool utilsCreateConcatenationFile(const char *path)
 {
     if (!path || !*path)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -656,7 +567,7 @@ bool utilsCreateConcatenationFile(const char *path)
     /* Create ConcatenationFile */
     /* If the call succeeds, the caller function will be able to operate on this file using stdio calls. */
     Result rc = fsdevCreateFile(path, 0, FsCreateOption_BigFile);
-    if (R_FAILED(rc)) LOGFILE("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
+    if (R_FAILED(rc)) LOG_MSG("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
     
     return R_SUCCEEDED(rc);
 }
@@ -688,7 +599,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
 {
     if (!filename || !*filename || !extension || !*extension)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return NULL;
     }
     
@@ -698,7 +609,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     
     if (!(path = calloc(path_len, sizeof(char))))
     {
-        LOGFILE("Failed to allocate 0x%lX bytes for output path!", path_len);
+        LOG_MSG("Failed to allocate 0x%lX bytes for output path!", path_len);
         return NULL;
     }
     
@@ -771,7 +682,7 @@ static bool _utilsIsDevelopmentUnit(void)
     {
         g_isDevUnit = tmp;
     } else {
-        LOGFILE("splIsDevelopment failed! (0x%08X).", rc);
+        LOG_MSG("splIsDevelopment failed! (0x%08X).", rc);
     }
     
     return R_SUCCEEDED(rc);
@@ -785,21 +696,21 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void)
     rc = fsOpenBisStorage(&g_emmcBisSystemPartitionStorage, FsBisPartitionId_System);
     if (R_FAILED(rc))
     {
-        LOGFILE("Failed to open eMMC BIS System partition storage! (0x%08X).", rc);
+        LOG_MSG("Failed to open eMMC BIS System partition storage! (0x%08X).", rc);
         return false;
     }
     
     g_emmcBisSystemPartitionFatFsObj = calloc(1, sizeof(FATFS));
     if (!g_emmcBisSystemPartitionFatFsObj)
     {
-        LOGFILE("Unable to allocate memory for FatFs element!");
+        LOG_MSG("Unable to allocate memory for FatFs element!");
         return false;
     }
     
     fr = f_mount(g_emmcBisSystemPartitionFatFsObj, BIS_SYSTEM_PARTITION_MOUNT_NAME, 1);
     if (fr != FR_OK)
     {
-        LOGFILE("Failed to mount eMMC BIS System partition! (%u).", fr);
+        LOG_MSG("Failed to mount eMMC BIS System partition! (%u).", fr);
         return false;
     }
     

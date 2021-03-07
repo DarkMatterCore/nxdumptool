@@ -201,7 +201,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         nca_ctx->header.content_type != NcaContentType_Control || nca_ctx->content_type_ctx || !out)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -218,37 +218,37 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
     /* Initialize RomFS context. */
     if (!romfsInitializeContext(&(out->romfs_ctx), &(nca_ctx->fs_ctx[0])))
     {
-        LOGFILE("Failed to initialize RomFS context!");
+        LOG_MSG("Failed to initialize RomFS context!");
         goto end;
     }
     
     /* Retrieve RomFS file entry for 'control.nacp'. */
     if (!(out->romfs_file_entry = romfsGetFileEntryByPath(&(out->romfs_ctx), "/control.nacp")))
     {
-        LOGFILE("Failed to retrieve file entry for \"control.nacp\" from RomFS!");
+        LOG_MSG("Failed to retrieve file entry for \"control.nacp\" from RomFS!");
         goto end;
     }
     
-    //LOGFILE("Found 'control.nacp' entry in Control NCA \"%s\".", nca_ctx->content_id_str);
+    //LOG_MSG("Found 'control.nacp' entry in Control NCA \"%s\".", nca_ctx->content_id_str);
     
     /* Verify NACP size. */
     if (out->romfs_file_entry->size != sizeof(_NacpStruct))
     {
-        LOGFILE("Invalid NACP size!");
+        LOG_MSG("Invalid NACP size!");
         goto end;
     }
     
     /* Allocate memory for the NACP data. */
     if (!(out->data = malloc(sizeof(_NacpStruct))))
     {
-        LOGFILE("Failed to allocate memory for the NACP data!");
+        LOG_MSG("Failed to allocate memory for the NACP data!");
         goto end;
     }
     
     /* Read NACP data into memory buffer. */
     if (!romfsReadFileEntryData(&(out->romfs_ctx), out->romfs_file_entry, out->data, sizeof(_NacpStruct), 0))
     {
-        LOGFILE("Failed to read NACP data!");
+        LOG_MSG("Failed to read NACP data!");
         goto end;
     }
     
@@ -275,14 +275,14 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         /* Check icon size. */
         if (!icon_entry->size || icon_entry->size > NACP_MAX_ICON_SIZE)
         {
-            LOGFILE("Invalid NACP icon size!");
+            LOG_MSG("Invalid NACP icon size!");
             goto end;
         }
         
         /* Reallocate icon context buffer. */
         if (!(tmp_icon_ctx = realloc(out->icon_ctx, (out->icon_count + 1) * sizeof(NacpIconContext))))
         {
-            LOGFILE("Failed to reallocate NACP icon context buffer!");
+            LOG_MSG("Failed to reallocate NACP icon context buffer!");
             goto end;
         }
         
@@ -295,14 +295,14 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         /* Allocate memory for this icon data. */
         if (!(icon_ctx->icon_data = malloc(icon_entry->size)))
         {
-            LOGFILE("Failed to allocate memory for NACP icon data!");
+            LOG_MSG("Failed to allocate memory for NACP icon data!");
             goto end;
         }
         
         /* Read icon data. */
         if (!romfsReadFileEntryData(&(out->romfs_ctx), icon_entry, icon_ctx->icon_data, icon_entry->size, 0))
         {
-            LOGFILE("Failed to read NACP icon data!");
+            LOG_MSG("Failed to read NACP icon data!");
             goto end;
         }
         
@@ -333,7 +333,7 @@ bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_scre
 {
     if (!nacpIsValidContext(nacp_ctx))
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -361,14 +361,14 @@ bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_scre
     sha256CalculateHash(nacp_hash, data, sizeof(_NacpStruct));
     if (!memcmp(nacp_hash, nacp_ctx->data_hash, sizeof(nacp_hash)))
     {
-        LOGFILE("Skipping NACP patching - no flags have changed.");
+        LOG_MSG("Skipping NACP patching - no flags have changed.");
         return true;
     }
     
     /* Generate RomFS file entry patch. */
     if (!romfsGenerateFileEntryPatch(&(nacp_ctx->romfs_ctx), nacp_ctx->romfs_file_entry, data, sizeof(_NacpStruct), 0, &(nacp_ctx->nca_patch)))
     {
-        LOGFILE("Failed to generate RomFS file entry patch!");
+        LOG_MSG("Failed to generate RomFS file entry patch!");
         return false;
     }
     
@@ -393,7 +393,7 @@ void nacpWriteNcaPatch(NacpContext *nacp_ctx, void *buf, u64 buf_size, u64 buf_o
     if (nca_patch->written)
     {
         nca_ctx->content_type_ctx_patch = false;
-        LOGFILE("NACP RomFS file entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
+        LOG_MSG("NACP RomFS file entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
     }
 }
 
@@ -401,7 +401,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
 {
     if (!nacpIsValidContext(nacp_ctx))
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -785,7 +785,7 @@ end:
     if (!success)
     {
         if (xml_buf) free(xml_buf);
-        LOGFILE("Failed to generate NACP AuthoringTool XML!");
+        LOG_MSG("Failed to generate NACP AuthoringTool XML!");
     }
     
     return success;
@@ -930,7 +930,7 @@ static bool nacpAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_si
 {
     if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name || !value)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -942,7 +942,7 @@ static bool nacpAddEnumFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size
 {
     if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name || !str_func)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -958,7 +958,7 @@ static bool nacpAddBitflagFieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_s
     if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name || !flag || !flag_width || (flag_width > 1 && !IS_POWER_OF_TWO(flag_width)) || flag_width > 0x10 || \
         (flag_bitcount = (flag_width * 8)) < max_flag_idx || !str_func)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -996,7 +996,7 @@ static bool nacpAddU16FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size,
 {
     if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -1009,7 +1009,7 @@ static bool nacpAddU32FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size,
 {
     if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -1022,7 +1022,7 @@ static bool nacpAddU64FieldToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size,
 {
     if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     

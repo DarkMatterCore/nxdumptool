@@ -89,7 +89,7 @@ bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t s
 {
     if (!dst || !src || !size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -117,7 +117,7 @@ bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t s
     ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const u8*)pers, strlen(pers));
     if (ret != 0)
     {
-        LOGFILE("mbedtls_ctr_drbg_seed failed! (%d).", ret);
+        LOG_MSG("mbedtls_ctr_drbg_seed failed! (%d).", ret);
         goto end;
     }
     
@@ -125,7 +125,7 @@ bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t s
     ret = mbedtls_pk_parse_key(&pk, (const u8*)g_rsa2048CustomPrivateKey, strlen(g_rsa2048CustomPrivateKey) + 1, NULL, 0);
     if (ret != 0)
     {
-        LOGFILE("mbedtls_pk_parse_key failed! (%d).", ret);
+        LOG_MSG("mbedtls_pk_parse_key failed! (%d).", ret);
         goto end;
     }
     
@@ -136,7 +136,7 @@ bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t s
     ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, hash, 0, buf, &olen, mbedtls_ctr_drbg_random, &ctr_drbg);
     if (ret != 0)
     {
-        LOGFILE("mbedtls_pk_sign failed! (%d).", ret);
+        LOG_MSG("mbedtls_pk_sign failed! (%d).", ret);
         goto end;
     }
     
@@ -161,7 +161,7 @@ bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signatu
 {
     if (!dst || !dst_size || !signature || !modulus || !exponent || !exponent_size || !label_hash || !out_size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -171,13 +171,13 @@ bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signatu
     rc = splUserExpMod(signature, modulus, exponent, exponent_size, m_buf);
     if (R_FAILED(rc))
     {
-        LOGFILE("splUserExpMod failed! (0x%08X).", rc);
+        LOG_MSG("splUserExpMod failed! (0x%08X).", rc);
         return false;
     }
     
     if (m_buf[0] != 0)
     {
-        LOGFILE("Invalid PSS!");
+        LOG_MSG("Invalid PSS!");
         return false;
     }
     
@@ -191,7 +191,7 @@ bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signatu
     const u8 *db = (const u8*)(m_buf + 0x21);
     if (memcmp(db, label_hash, SHA256_HASH_SIZE) != 0)
     {
-        LOGFILE("Label hash validation failed! Wrong decryption keys?");
+        LOG_MSG("Label hash validation failed! Wrong decryption keys?");
         return false;
     }
     
@@ -207,7 +207,7 @@ bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signatu
     
     if (!remaining || *data++ != 1)
     {
-        LOGFILE("Message prefix validation failed! Wrong decryption keys?");
+        LOG_MSG("Message prefix validation failed! Wrong decryption keys?");
         return false;
     }
     
@@ -224,7 +224,7 @@ static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_s
 {
     if (!data || !data_size || !h_src || !h_src_size || h_src_size > RSA2048_SIG_SIZE)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return;
     }
     

@@ -23,6 +23,25 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
+#include <stdio.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stddef.h>
+#include <stdarg.h>
+#include <malloc.h>
+#include <errno.h>
+#include <ctype.h>
+#include <math.h>
+#include <time.h>
+#include <sys/stat.h>
+#include <stdatomic.h>
+#include <assert.h>
+#include <switch.h>
+
+#include "log.h"
+#include "ums.h"
+
 #define FS_SYSMODULE_TID        (u64)0x0100000000000000
 #define BOOT_SYSMODULE_TID      (u64)0x0100000000000005
 #define SPL_SYSMODULE_TID       (u64)0x0100000000000028

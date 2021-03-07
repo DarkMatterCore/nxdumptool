@@ -24,6 +24,7 @@
 #define __GAMECARD_H__
 
 #include "fs_ext.h"
+#include "hfs.h"
 
 #define GAMECARD_HEAD_MAGIC             0x48454144              /* "HEAD". */
 
@@ -195,7 +196,7 @@ UEvent *gamecardGetStatusChangeUserEvent(void);
 /// Returns the current GameCardStatus value.
 u8 gamecardGetStatus(void);
 
-/// Used to read raw data from the inserted gamecard.
+/// Used to read raw data from the inserted gamecard. Supports unaligned reads.
 /// All required handles, changes between normal <-> secure storage areas and proper offset calculations are managed internally.
 /// 'offset' + 'read_size' must not exceed the value returned by gamecardGetTotalSize().
 bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
@@ -224,19 +225,14 @@ bool gamecardGetRomCapacity(u64 *out);
 /// Fills the provided VersionType1 pointer with the bundled firmware update version in the inserted gamecard.
 bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out);
 
-/// Returns a pointer to a string holding the name of the provided hash file system partition type. Returns NULL if the provided value is invalid.
-const char *gamecardGetHashFileSystemPartitionName(u8 hfs_partition_type);
+/// Returns a pointer to a dynamically-allocated HashFileSystemContext for the provided Hash FS partition type.
+/// Hash FS functions can be used on the retrieved HashFileSystemContext. hfsFreeContext() must be used to free the returned context.
+/// Returns NULL if an error occurs.
+HashFileSystemContext *gamecardGetHashFileSystemContext(u8 hfs_partition_type);
 
-/// Retrieves the entry count from a hash FS partition.
-bool gamecardGetEntryCountFromHashFileSystemPartition(u8 hfs_partition_type, u32 *out_count);
-
-/// Retrieves info from a hash FS partition entry using an entry index.
-/// 'out_offset', 'out_size' or 'out_name' may be set to NULL, but at least one of them must be a valid pointer.
-/// If 'out_name' != NULL and the function call succeeds, a pointer to a heap allocated buffer is returned.
-bool gamecardGetEntryInfoFromHashFileSystemPartitionByIndex(u8 hfs_partition_type, u32 idx, u64 *out_offset, u64 *out_size, char **out_name);
-
-/// Retrieves info from a hash FS partition entry using an entry name.
-/// 'out_offset' or 'out_size' may be set to NULL, but at least one of them must be a valid pointer.
-bool gamecardGetEntryInfoFromHashFileSystemPartitionByName(u8 hfs_partition_type, const char *name, u64 *out_offset, u64 *out_size);
+/// One-shot function to retrieve meaningful information from a Hash FS entry by name without using gamecardGetHashFileSystemContext() + Hash FS functions.
+/// 'out_offset' or 'out_size' may be set to NULL, but at least one of them must be a valid pointer. The returned offset is always relative to the start of the gamecard image.
+/// If you need to get entry information by index, just retrieve the Hash FS context for the target partition and use Hash FS functions on it.
+bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size);
 
 #endif /* __GAMECARD_H__ */

@@ -56,7 +56,7 @@ bool certRetrieveCertificateByName(Certificate *dst, const char *name)
     
     if (!dst || !name || !*name)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         goto end;
     }
     
@@ -77,11 +77,10 @@ bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const 
     mutexLock(&g_esCertSaveMutex);
     
     bool ret = false;
-    size_t issuer_len = 0;
     
-    if (!dst || !issuer || (issuer_len = strlen(issuer)) <= 5 || strncmp(issuer, "Root-", 5) != 0)
+    if (!dst || !issuer || strncmp(issuer, "Root-", 5) != 0)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         goto end;
     }
     
@@ -101,7 +100,7 @@ u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *ou
 {
     if (!issuer || !*issuer || !out_size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return NULL;
     }
     
@@ -111,7 +110,7 @@ u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *ou
     
     if (!certRetrieveCertificateChainBySignatureIssuer(&chain, issuer))
     {
-        LOGFILE("Error retrieving certificate chain for \"%s\"!", issuer);
+        LOG_MSG("Error retrieving certificate chain for \"%s\"!", issuer);
         return NULL;
     }
     
@@ -120,7 +119,7 @@ u8 *certGenerateRawCertificateChainBySignatureIssuer(const char *issuer, u64 *ou
     raw_chain = malloc(raw_chain_size);
     if (!raw_chain)
     {
-        LOGFILE("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", issuer, raw_chain_size);
+        LOG_MSG("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", issuer, raw_chain_size);
         goto end;
     }
     
@@ -137,7 +136,7 @@ u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, 
 {
     if (!id || !out_size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return NULL;
     }
     
@@ -149,28 +148,28 @@ u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, 
     utilsGenerateHexStringFromData(raw_chain_filename, sizeof(raw_chain_filename), id->c, 0x10);
     strcat(raw_chain_filename, ".cert");
     
-    if (!gamecardGetEntryInfoFromHashFileSystemPartitionByName(GameCardHashFileSystemPartitionType_Secure, raw_chain_filename, &raw_chain_offset, &raw_chain_size))
+    if (!gamecardGetHashFileSystemEntryInfoByName(GameCardHashFileSystemPartitionType_Secure, raw_chain_filename, &raw_chain_offset, &raw_chain_size))
     {
-        LOGFILE("Error retrieving offset and size for \"%s\" entry in secure hash FS partition!", raw_chain_filename);
+        LOG_MSG("Error retrieving offset and size for \"%s\" entry in secure hash FS partition!", raw_chain_filename);
         return NULL;
     }
     
     if (raw_chain_size < SIGNED_CERT_MIN_SIZE)
     {
-        LOGFILE("Invalid size for \"%s\"! (0x%lX).", raw_chain_filename, raw_chain_size);
+        LOG_MSG("Invalid size for \"%s\"! (0x%lX).", raw_chain_filename, raw_chain_size);
         return NULL;
     }
     
     raw_chain = malloc(raw_chain_size);
     if (!raw_chain)
     {
-        LOGFILE("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", raw_chain_size);
+        LOG_MSG("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", raw_chain_size);
         return NULL;
     }
     
     if (!gamecardReadStorage(raw_chain, raw_chain_size, raw_chain_offset))
     {
-        LOGFILE("Failed to read \"%s\" data from the inserted gamecard!", raw_chain_filename);
+        LOG_MSG("Failed to read \"%s\" data from the inserted gamecard!", raw_chain_filename);
         goto end;
     }
     
@@ -194,7 +193,7 @@ static bool certOpenEsCertSaveFile(void)
     g_esCertSaveCtx = save_open_savefile(CERT_SAVEFILE_PATH, 0);
     if (!g_esCertSaveCtx)
     {
-        LOGFILE("Failed to open ES certificate system savefile!");
+        LOG_MSG("Failed to open ES certificate system savefile!");
         return false;
     }
     
@@ -212,7 +211,7 @@ static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
 {
     if (!g_esCertSaveCtx)
     {
-        LOGFILE("ES certificate savefile not opened!");
+        LOG_MSG("ES certificate savefile not opened!");
         return false;
     }
     
@@ -224,13 +223,13 @@ static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
     
     if (!save_get_fat_storage_from_file_entry_by_path(g_esCertSaveCtx, cert_path, &fat_storage, &cert_size))
     {
-        LOGFILE("Failed to locate certificate \"%s\" in ES certificate system save!", name);
+        LOG_MSG("Failed to locate certificate \"%s\" in ES certificate system save!", name);
         return false;
     }
     
     if (cert_size < SIGNED_CERT_MIN_SIZE || cert_size > SIGNED_CERT_MAX_SIZE)
     {
-        LOGFILE("Invalid size for certificate \"%s\"! (0x%lX).", name, cert_size);
+        LOG_MSG("Invalid size for certificate \"%s\"! (0x%lX).", name, cert_size);
         return false;
     }
     
@@ -239,14 +238,14 @@ static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
     u64 br = save_allocation_table_storage_read(&fat_storage, dst->data, 0, dst->size);
     if (br != dst->size)
     {
-        LOGFILE("Failed to read 0x%lX bytes from certificate \"%s\"! Read 0x%lX bytes.", dst->size, name, br);
+        LOG_MSG("Failed to read 0x%lX bytes from certificate \"%s\"! Read 0x%lX bytes.", dst->size, name, br);
         return false;
     }
     
     dst->type = certGetCertificateType(dst->data, dst->size);
     if (dst->type == CertType_None)
     {
-        LOGFILE("Invalid certificate type for \"%s\"!", name);
+        LOG_MSG("Invalid certificate type for \"%s\"!", name);
         return false;
     }
     
@@ -262,13 +261,13 @@ static u8 certGetCertificateType(void *data, u64 data_size)
     
     if (!data || data_size < SIGNED_CERT_MIN_SIZE || data_size > SIGNED_CERT_MAX_SIZE)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return type;
     }
     
     if (!(cert_common_block = certGetCommonBlock(data)) || !(signed_cert_size = certGetSignedCertificateSize(data)) || signed_cert_size > data_size)
     {
-        LOGFILE("Input buffer doesn't hold a valid signed certificate!");
+        LOG_MSG("Input buffer doesn't hold a valid signed certificate!");
         return type;
     }
     
@@ -303,7 +302,7 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
 {
     if (!g_esCertSaveCtx)
     {
-        LOGFILE("ES certificate savefile not opened!");
+        LOG_MSG("ES certificate savefile not opened!");
         return false;
     }
     
@@ -314,14 +313,14 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
     dst->count = certGetCertificateCountInSignatureIssuer(issuer);
     if (!dst->count)
     {
-        LOGFILE("Invalid signature issuer string!");
+        LOG_MSG("Invalid signature issuer string!");
         return false;
     }
     
     dst->certs = calloc(dst->count, sizeof(Certificate));
     if (!dst->certs)
     {
-        LOGFILE("Unable to allocate memory for the certificate chain! (0x%lX).", dst->count * sizeof(Certificate));
+        LOG_MSG("Unable to allocate memory for the certificate chain! (0x%lX).", dst->count * sizeof(Certificate));
         return false;
     }
     
@@ -334,7 +333,7 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
     {
         if (!_certRetrieveCertificateByName(&(dst->certs[i]), pch))
         {
-            LOGFILE("Unable to retrieve certificate \"%s\"!", pch);
+            LOG_MSG("Unable to retrieve certificate \"%s\"!", pch);
             success = false;
             break;
         }

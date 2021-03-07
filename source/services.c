@@ -93,7 +93,7 @@ bool servicesInitialize(void)
         rc = service_info->init_func();
         if (R_FAILED(rc))
         {
-            LOGFILE("Failed to initialize %s service! (0x%08X).", service_info->name, rc);
+            LOG_MSG("Failed to initialize %s service! (0x%08X).", service_info->name, rc);
             ret = false;
             break;
         }
@@ -138,7 +138,7 @@ bool servicesCheckRunningServiceByName(const char *name)
     bool running = false;
     
     rc = smRegisterService(&handle, service_name, false, 1);
-    if (R_FAILED(rc)) LOGFILE("smRegisterService failed for \"%s\"! (0x%08X).", name, rc);
+    if (R_FAILED(rc)) LOG_MSG("smRegisterService failed for \"%s\"! (0x%08X).", name, rc);
     running = R_FAILED(rc);
     
     if (handle != INVALID_HANDLE) svcCloseHandle(handle);
@@ -155,13 +155,11 @@ bool servicesCheckInitializedServiceByName(const char *name)
     
     if (!name || !*name) goto end;
     
-    size_t name_len = strlen(name);
-    
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
         ServiceInfo *service_info = &(g_serviceInfo[i]);
         
-        if (strlen(service_info->name) == name_len && !strcmp(service_info->name, name))
+        if (!strcmp(service_info->name, name))
         {
             ret = service_info->initialized;
             break;
@@ -194,7 +192,7 @@ Result servicesHasService(bool *out, const char *name)
 {
     if (!out || !name || !*name)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return MAKERESULT(Module_Libnx, LibnxError_IoError);
     }
     
@@ -203,7 +201,7 @@ Result servicesHasService(bool *out, const char *name)
     SmServiceName service_name = smEncodeName(name);
     
     rc = smAtmosphereHasService(out, service_name);
-    if (R_FAILED(rc)) LOGFILE("smAtmosphereHasService failed for \"%s\"! (0x%08X).", name, rc);
+    if (R_FAILED(rc)) LOG_MSG("smAtmosphereHasService failed for \"%s\"! (0x%08X).", name, rc);
     
     return rc;
 }
@@ -266,7 +264,7 @@ static bool servicesClkGetServiceType(void *arg)
     if (!arg) return false;
     
     ServiceInfo *info = (ServiceInfo*)arg;
-    if (strlen(info->name) != 3 || strcmp(info->name, "clk") != 0 || info->init_func != NULL || info->close_func != NULL) return false;
+    if (strcmp(info->name, "clk") != 0 || info->init_func != NULL || info->close_func != NULL) return false;
     
     /* Determine which service needs to be used to control hardware clock rates, depending on the system version. */
     /* This may either be pcv (sysver lower than 8.0.0) or clkrst (sysver equal to or greater than 8.0.0). */
@@ -285,7 +283,7 @@ static bool servicesSplCryptoCheckAvailability(void *arg)
     if (!arg) return false;
     
     ServiceInfo *info = (ServiceInfo*)arg;
-    if (strlen(info->name) != 7 || strcmp(info->name, "spl:mig") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
+    if (strcmp(info->name, "spl:mig") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
     /* Check if spl:mig is available (sysver equal to or greater than 4.0.0). */
     return !hosversionBefore(4, 0, 0);

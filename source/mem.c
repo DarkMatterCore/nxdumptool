@@ -22,13 +22,14 @@
 #include "utils.h"
 #include "mem.h"
 
-#define MEMLOG(fmt, ...)    LOGBUF(&g_memLogBuf, &g_memLogBufSize, fmt, ##__VA_ARGS__)
+#define MEMLOG(fmt, ...)    LOG_MSG_BUF(&g_memLogBuf, &g_memLogBufSize, fmt, ##__VA_ARGS__)
 
 /* Global variables. */
 
+static Mutex g_memMutex = 0;
+
 static char *g_memLogBuf = NULL;
 static size_t g_memLogBufSize = 0;
-static Mutex g_memMutex = 0;
 
 /* Function prototypes. */
 
@@ -39,7 +40,7 @@ bool memRetrieveProgramMemorySegment(MemoryLocation *location)
 {
     if (!location || !location->program_id || !location->mask || location->mask >= BIT(3))
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -54,7 +55,7 @@ bool memRetrieveFullProgramMemory(MemoryLocation *location)
 {
     if (!location || !location->program_id)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -82,11 +83,11 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
     /* Clear output MemoryLocation element. */
     memFreeMemoryLocation(location);
     
-    /* LOGFILE() will be useless if the target program is the FS sysmodule. */
+    /* LOG_MSG() will be useless if the target program is the FS sysmodule. */
     /* This is because any FS I/O operation *will* lock up the console while FS itself is being debugged. */
-    /* So we'll just temporarily log data to a char array using LOGBUF(), then write it all out after calling svcCloseHandle(). */
+    /* So we'll just temporarily log data to a char array using LOG_MSG_BUF(), then write it all out after calling svcCloseHandle(). */
     /* However, we must prevent other threads from logging data as well in order to avoid a lock up, so we'll temporarily lock the logfile mutex. */
-    utilsLogFileMutexControl(true);
+    logControlMutex(true);
     
     /* Retrieve debug handle by program ID. */
     if (!memRetrieveDebugHandleFromProgramById(&debug_handle, location->program_id))
@@ -163,7 +164,7 @@ end:
     if (debug_handle != INVALID_HANDLE) svcCloseHandle(debug_handle);
     
     /* Unlock logfile mutex. */
-    utilsLogFileMutexControl(false);
+    logControlMutex(false);
     
     if (success && (!location->data || !location->data_size))
     {
@@ -174,7 +175,7 @@ end:
     if (!success) memFreeMemoryLocation(location);
     
     /* Write log buffer data. This will do nothing if the log buffer length is zero. */
-    utilsWriteLogBufferToLogFile(g_memLogBuf);
+    logWriteStringToLogFile(g_memLogBuf);
     
     /* Free memory log buffer. */
     if (g_memLogBuf)

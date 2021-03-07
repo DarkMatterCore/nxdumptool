@@ -150,25 +150,25 @@ bool keysLoadNcaKeyset(void)
           envIsSyscallHinted(0x69) &&   /* svcQueryDebugProcessMemory. */
           envIsSyscallHinted(0x6A)))    /* svcReadDebugProcessMemory. */
     {
-        LOGFILE("Debug SVC permissions not available!");
+        LOG_MSG("Debug SVC permissions not available!");
         goto end;
     }
     
     if (!keysRetrieveKeysFromProgramMemory(&g_fsRodataMemoryInfo))
     {
-        LOGFILE("Unable to retrieve keys from FS .rodata segment!");
+        LOG_MSG("Unable to retrieve keys from FS .rodata segment!");
         goto end;
     }
     
     if (!keysRetrieveKeysFromProgramMemory(&g_fsDataMemoryInfo))
     {
-        LOGFILE("Unable to retrieve keys from FS .data segment!");
+        LOG_MSG("Unable to retrieve keys from FS .data segment!");
         goto end;
     }
     
     if (!keysDeriveNcaHeaderKey())
     {
-        LOGFILE("Unable to derive NCA header key!");
+        LOG_MSG("Unable to derive NCA header key!");
         goto end;
     }
     
@@ -203,7 +203,7 @@ const u8 *keysGetKeyAreaEncryptionKeySource(u8 kaek_index)
             ptr = (const u8*)(g_ncaKeyset.key_area_key_system_source);
             break;
         default:
-            LOGFILE("Invalid KAEK index! (0x%02X).", kaek_index);
+            LOG_MSG("Invalid KAEK index! (0x%02X).", kaek_index);
             break;
     }
     
@@ -219,7 +219,7 @@ const u8 *keysGetTitlekek(u8 key_generation)
 {
     if (key_generation > 0x20)
     {
-        LOGFILE("Invalid key generation value! (0x%02X).", key_generation);
+        LOG_MSG("Invalid key generation value! (0x%02X).", key_generation);
         return NULL;
     }
     
@@ -232,13 +232,13 @@ const u8 *keysGetKeyAreaEncryptionKey(u8 key_generation, u8 kaek_index)
 {
     if (key_generation > 0x20)
     {
-        LOGFILE("Invalid key generation value! (0x%02X).", key_generation);
+        LOG_MSG("Invalid key generation value! (0x%02X).", key_generation);
         return NULL;
     }
     
     if (kaek_index > NcaKeyAreaEncryptionKeyIndex_System)
     {
-        LOGFILE("Invalid KAEK index! (0x%02X).", kaek_index);
+        LOG_MSG("Invalid KAEK index! (0x%02X).", kaek_index);
         return NULL;
     }
     
@@ -251,7 +251,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
 {
     if (!info || !info->key_count)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
@@ -269,7 +269,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
         
         if (!key->dst)
         {
-            LOGFILE("Invalid destination pointer for key \"%s\" in program %016lX!", key->name, info->location.program_id);
+            LOG_MSG("Invalid destination pointer for key \"%s\" in program %016lX!", key->name, info->location.program_id);
             goto end;
         }
         
@@ -291,7 +291,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
         
         if (!found)
         {
-            LOGFILE("Unable to locate key \"%s\" in process memory from program %016lX!", key->name, info->location.program_id);
+            LOG_MSG("Unable to locate key \"%s\" in process memory from program %016lX!", key->name, info->location.program_id);
             goto end;
         }
     }
@@ -311,21 +311,21 @@ static bool keysDeriveNcaHeaderKey(void)
     rc = splCryptoGenerateAesKek(g_ncaKeyset.header_kek_source, 0, 0, g_ncaKeyset.header_kek);
     if (R_FAILED(rc))
     {
-        LOGFILE("splCryptoGenerateAesKek(header_kek_source) failed! (0x%08X).", rc);
+        LOG_MSG("splCryptoGenerateAesKek(header_kek_source) failed! (0x%08X).", rc);
         return false;
     }
     
     rc = splCryptoGenerateAesKey(g_ncaKeyset.header_kek, g_ncaKeyset.header_key_source + 0x00, g_ncaKeyset.header_key + 0x00);
     if (R_FAILED(rc))
     {
-        LOGFILE("splCryptoGenerateAesKey(header_key_source + 0x00) failed! (0x%08X).", rc);
+        LOG_MSG("splCryptoGenerateAesKey(header_key_source + 0x00) failed! (0x%08X).", rc);
         return false;
     }
     
     rc = splCryptoGenerateAesKey(g_ncaKeyset.header_kek, g_ncaKeyset.header_key_source + 0x10, g_ncaKeyset.header_key + 0x10);
     if (R_FAILED(rc))
     {
-        LOGFILE("splCryptoGenerateAesKey(header_key_source + 0x10) failed! (0x%08X).", rc);
+        LOG_MSG("splCryptoGenerateAesKey(header_key_source + 0x10) failed! (0x%08X).", rc);
         return false;
     }
     
@@ -374,7 +374,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **key, char **value)
 {
     if (!f || !key || !value)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return -2;
     }
     
@@ -483,13 +483,13 @@ static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 siz
     
     if (!out || !key || !*key || !value || !(value_len = strlen(value)) || !size)
     {
-        LOGFILE("Invalid parameters!");
+        LOG_MSG("Invalid parameters!");
         return false;
     }
     
     if (value_len != hex_str_len)
     {
-        LOGFILE("Key \"%s\" must be %u hex digits long!", key, hex_str_len);
+        LOG_MSG("Key \"%s\" must be %u hex digits long!", key, hex_str_len);
         return false;
     }
     
@@ -500,7 +500,7 @@ static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 siz
         char val = keysConvertHexCharToBinary(value[i]);
         if (val == 'z')
         {
-            LOGFILE("Invalid hex character in key \"%s\" at position %u!", key, i);
+            LOG_MSG("Invalid hex character in key \"%s\" at position %u!", key, i);
             return false;
         }
         
@@ -523,7 +523,7 @@ static bool keysReadKeysFromFile(void)
     keys_file = fopen(KEYS_FILE_PATH, "rb");
     if (!keys_file)
     {
-        LOGFILE("Unable to open \"%s\" to retrieve keys!", KEYS_FILE_PATH);
+        LOG_MSG("Unable to open \"%s\" to retrieve keys!", KEYS_FILE_PATH);
         return false;
     }
     
@@ -591,13 +591,13 @@ static bool keysReadKeysFromFile(void)
     
     if (parse_fail || !key_count)
     {
-        if (!key_count) LOGFILE("Unable to parse necessary keys from \"%s\"! (keys file empty?).", KEYS_FILE_PATH);
+        if (!key_count) LOG_MSG("Unable to parse necessary keys from \"%s\"! (keys file empty?).", KEYS_FILE_PATH);
         return false;
     }
     
     if (!eticket_rsa_kek_available)
     {
-        LOGFILE("\"eticket_rsa_kek\" unavailable in \"%s\"!", KEYS_FILE_PATH);
+        LOG_MSG("\"eticket_rsa_kek\" unavailable in \"%s\"!", KEYS_FILE_PATH);
         return false;
     }
     
