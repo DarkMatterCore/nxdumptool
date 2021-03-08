@@ -57,15 +57,13 @@ int main(int argc, char *argv[])
     
     int ret = 0;
     
-    consoleInit(NULL);
-    
-    consolePrint("initializing...\n");
-    
     if (!utilsInitializeResources())
     {
         ret = -1;
         goto out;
     }
+    
+    consoleInit(NULL);
     
     u32 app_count = 0;
     TitleApplicationMetadata **app_metadata = NULL;

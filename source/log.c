@@ -21,12 +21,14 @@
 #include "utils.h"
 
 #define LOG_FILE_NAME   APP_TITLE ".log"
-#define LOG_BUF_SIZE    0x400000                /* 4 MiB. */
-#define LOG_FORCE_FLUSH 0                       /* Forces a log buffer flush each time the logfile is written to. */
+#define LOG_BUF_SIZE    0x400000            /* 4 MiB. */
+#define LOG_FORCE_FLUSH 0                   /* Forces a log buffer flush each time the logfile is written to. */
 
 /* Global variables. */
 
 static Mutex g_logMutex = 0;
+
+static char g_lastLogMsg[0x100] = {0};
 
 static FsFile g_logFile = {0};
 static s64 g_logFileOffset = 0;
@@ -41,7 +43,7 @@ static const char *g_logLineBreak = "\r\n";
 /* Function prototypes. */
 
 static void _logWriteStringToLogFile(const char *src, bool lock);
-static void _logWriteFormattedStringToLogFile(const char *func_name, const char *fmt, va_list args, bool lock);
+static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, const char *fmt, va_list args, bool lock);
 
 static void _logFlushLogFile(bool lock);
 
@@ -57,7 +59,7 @@ void logWriteFormattedStringToLogFile(const char *func_name, const char *fmt, ..
 {
     va_list args;
     va_start(args, fmt);
-    _logWriteFormattedStringToLogFile(func_name, fmt, args, true);
+    _logWriteFormattedStringToLogFile(true, func_name, fmt, args, true);
     va_end(args);
 }
 
@@ -144,7 +146,7 @@ void logWriteBinaryDataToLogFile(const void *data, size_t data_size, const char 
     
     /* Write formatted string. */
     va_start(args, fmt);
-    _logWriteFormattedStringToLogFile(func_name, fmt, args, false);
+    _logWriteFormattedStringToLogFile(false, func_name, fmt, args, false);
     va_end(args);
     
     /* Write hex string representation. */
@@ -187,6 +189,13 @@ void logCloseLogFile(void)
     
     g_logFileOffset = 0;
     
+    mutexUnlock(&g_logMutex);
+}
+
+void logGetLastMessage(char *dst, size_t dst_size)
+{
+    mutexLock(&g_logMutex);
+    if (dst && dst_size > 1 && *g_lastLogMsg) snprintf(dst, dst_size, "%s", g_lastLogMsg);
     mutexUnlock(&g_logMutex);
 }
 
@@ -258,7 +267,7 @@ end:
     if (lock) mutexUnlock(&g_logMutex);
 }
 
-static void _logWriteFormattedStringToLogFile(const char *func_name, const char *fmt, va_list args, bool lock)
+static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, const char *fmt, va_list args, bool lock)
 {
     if (!func_name || !*func_name || !fmt || !*fmt) return;
     
@@ -281,9 +290,6 @@ static void _logWriteFormattedStringToLogFile(const char *func_name, const char 
     ts->tm_year += 1900;
     ts->tm_mon++;
     
-    /* Make sure we have allocated memory for the log buffer and opened the logfile. */
-    if (!logAllocateLogBuffer() || !logOpenLogFile()) goto end;
-    
     /* Get formatted string length. */
     str1_len = snprintf(NULL, 0, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
     if (str1_len <= 0) goto end;
@@ -292,6 +298,22 @@ static void _logWriteFormattedStringToLogFile(const char *func_name, const char 
     if (str2_len <= 0) goto end;
     
     log_str_len = (size_t)(str1_len + str2_len + 2);
+    
+    /* Save log message to our global stack buffer (if needed). */
+    if (save)
+    {
+        tmp_len = (strlen(func_name) + 2);
+        if ((tmp_len + (size_t)str2_len) < sizeof(g_lastLogMsg))
+        {
+            sprintf(g_lastLogMsg, "%s: ", func_name);
+            vsprintf(g_lastLogMsg + tmp_len, fmt, args);
+        }
+        
+        tmp_len = 0;
+    }
+    
+    /* Make sure we have allocated memory for the log buffer and opened the logfile. */
+    if (!logAllocateLogBuffer() || !logOpenLogFile()) goto end;
     
     /* Check if the formatted string length is less than the log buffer size. */
     if (log_str_len < LOG_BUF_SIZE)

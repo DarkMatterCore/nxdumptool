@@ -192,15 +192,13 @@ int main(int argc, char *argv[])
     Menu *cur_menu = &g_rootMenu;
     u32 element_count = menuGetElementCount(cur_menu), page_size = 30;
     
-    consoleInit(NULL);
-    
-    consolePrint("initializing...\n");
-    
     if (!utilsInitializeResources())
     {
         ret = -1;
         goto out;
     }
+    
+    consoleInit(NULL);
     
     while(appletMainLoop())
     {

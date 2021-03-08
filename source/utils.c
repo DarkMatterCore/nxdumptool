@@ -69,6 +69,8 @@ static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
+static void utilsPrintConsoleError(void);
+
 bool utilsInitializeResources(void)
 {
     mutexLock(&g_resourcesMutex);
@@ -193,6 +195,8 @@ bool utilsInitializeResources(void)
     
 end:
     mutexUnlock(&g_resourcesMutex);
+    
+    if (!ret) utilsPrintConsoleError();
     
     return ret;
 }
@@ -750,6 +754,24 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
     
     if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
     
-    /* To do: read config here to actually know the value to use with utilsOverclockSystem. */
+    /* TO DO: read config here to actually know the value to use with utilsOverclockSystem. */
     utilsOverclockSystem(false);
+}
+
+static void utilsPrintConsoleError(void)
+{
+    char msg[0x100] = {0};
+    logGetLastMessage(msg, sizeof(msg));
+    
+    consoleInit(NULL);
+    
+    printf("An error occurred while initializing resources.\n\n");
+    if (*msg) printf("%s\n\n", msg);
+    printf("For more information, please check the logfile. Press any button to exit.");
+    
+    consoleUpdate(NULL);
+    
+    utilsWaitForButtonPress(0);
+    
+    consoleExit(NULL);
 }

@@ -47,6 +47,9 @@ void logFlushLogFile(void);
 /// Closes the logfile.
 void logCloseLogFile(void);
 
+/// Stores the last log message in the provided buffer.
+void logGetLastMessage(char *dst, size_t dst_size);
+
 /// (Un)locks the log mutex. Can be used to block other threads and prevent them from writing data to the logfile.
 /// Use with caution.
 void logControlMutex(bool lock);
