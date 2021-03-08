@@ -1,15 +1,15 @@
 build
-/*.elf
-/*.nacp
-/*.nro
-/*.nso
-/*.map
-/*.pfs0
-/*.lst
-/*.tar.bz2
+*.elf
+*.nacp
+*.nro
+*.nso
+*.map
+*.pfs0
+*.lst
+*.tar.bz2
 /code_templates/tmp/*
 /source/main.c
-/*.log
+*.log
 
 # Clion files
 .idea

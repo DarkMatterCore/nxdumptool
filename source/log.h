@@ -47,7 +47,8 @@ void logFlushLogFile(void);
 /// Closes the logfile.
 void logCloseLogFile(void);
 
-/// (Un)locks the log mutex. Use with caution.
+/// (Un)locks the log mutex. Can be used to block other threads and prevent them from writing data to the logfile.
+/// Use with caution.
 void logControlMutex(bool lock);
 
 #endif /* __LOG_H__ */

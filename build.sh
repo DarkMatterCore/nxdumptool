@@ -29,7 +29,7 @@ for f in ./code_templates/*.c; do
     cp ./$filename.nro ./code_templates/tmp/$filename/nxdumptool-rewrite.nro
     #cp ./$filename.elf ./code_templates/tmp/$filename/nxdumptool-rewrite.elf
     
-    rm -f ./build/main.o ./build/main.d ./build/utils.o ./build/utils.d ./build/usb.o ./build/usb.d ./$filename.*
+    rm -f ./build/main.o ./build/main.d ./build/utils.o ./build/utils.d ./build/usb.o ./build/usb.d ./build/log.o ./build/log.d ./$filename.*
 done
 
 make clean

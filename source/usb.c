@@ -662,8 +662,7 @@ static bool usbSendCommand(void)
     UsbStatus *cmd_status = (UsbStatus*)g_usbTransferBuffer;
     u32 status = UsbStatusType_Success;
     
-    /* Log error message only if the USB session has been started, or if thread exit flag hasn't been enabled. */
-    bool ret = false, zlt_required = false, cmd_block_written = false, log_rw_errors = (g_usbSessionStarted || !g_usbDetectionThreadExitFlag);
+    bool ret = false, zlt_required = false, cmd_block_written = false;
     
     if ((sizeof(UsbCommandHeader) + cmd_block_size) > USB_TRANSFER_BUFFER_SIZE)
     {
@@ -675,7 +674,7 @@ static bool usbSendCommand(void)
     /* Write command header first. */
     if (!usbWrite(cmd_header, sizeof(UsbCommandHeader)))
     {
-        if (log_rw_errors) LOG_MSG("Failed to write header for type 0x%X command!", cmd);
+        LOG_MSG("Failed to write header for type 0x%X command!", cmd);
         status = UsbStatusType_WriteCommandFailed;
         goto end;
     }
@@ -694,7 +693,7 @@ static bool usbSendCommand(void)
         cmd_block_written = usbWrite(g_usbTransferBuffer, cmd_block_size);
         if (!cmd_block_written)
         {
-            if (log_rw_errors) LOG_MSG("Failed to write command block for type 0x%X command!", cmd);
+            LOG_MSG("Failed to write command block for type 0x%X command!", cmd);
             status = UsbStatusType_WriteCommandFailed;
         }
         
@@ -708,7 +707,7 @@ static bool usbSendCommand(void)
     /* Read status block. */
     if (!usbRead(cmd_status, sizeof(UsbStatus)))
     {
-        if (log_rw_errors) LOG_MSG("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd);
+        LOG_MSG("Failed to read 0x%lX bytes long status block for type 0x%X command!", sizeof(UsbStatus), cmd);
         status = UsbStatusType_ReadStatusFailed;
         goto end;
     }

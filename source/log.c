@@ -20,7 +20,7 @@
 
 #include "utils.h"
 
-#define LOG_FILE_PATH   "./" APP_TITLE ".log"
+#define LOG_FILE_NAME   APP_TITLE ".log"
 #define LOG_BUF_SIZE    0x400000                /* 4 MiB. */
 #define LOG_FORCE_FLUSH 0                       /* Forces a log buffer flush each time the logfile is written to. */
 
@@ -34,18 +34,19 @@ static s64 g_logFileOffset = 0;
 static char *g_logBuffer = NULL;
 static size_t g_logBufferLength = 0;
 
+static const char *g_utf8Bom = "\xEF\xBB\xBF";
 static const char *g_logStrFormat = "[%d-%02d-%02d %02d:%02d:%02d.%lu] %s -> ";
 static const char *g_logLineBreak = "\r\n";
 
 /* Function prototypes. */
 
-static bool logAllocateLogBuffer(void);
-
-static bool logOpenLogFile(void);
-static void _logFlushLogFile(bool lock);
-
 static void _logWriteStringToLogFile(const char *src, bool lock);
 static void _logWriteFormattedStringToLogFile(const char *func_name, const char *fmt, va_list args, bool lock);
+
+static void _logFlushLogFile(bool lock);
+
+static bool logAllocateLogBuffer(void);
+static bool logOpenLogFile(void);
 
 void logWriteStringToLogFile(const char *src)
 {
@@ -66,7 +67,8 @@ void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, const char *f
     
     va_list args;
     
-    size_t str1_len = 0, str2_len = 0, log_str_len = 0;
+    int str1_len = 0, str2_len = 0;
+    size_t log_str_len = 0;
     
     char *dst_ptr = *dst, *tmp_str = NULL;
     size_t dst_cur_size = *dst_size, dst_str_len = (dst_ptr ? strlen(dst_ptr) : 0);
@@ -86,12 +88,12 @@ void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, const char *f
     
     /* Get formatted string length. */
     str1_len = snprintf(NULL, 0, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
-    if ((int)str1_len <= 0) goto end;
+    if (str1_len <= 0) goto end;
     
     str2_len = vsnprintf(NULL, 0, fmt, args);
-    if ((int)str2_len <= 0) goto end;
+    if (str2_len <= 0) goto end;
     
-    log_str_len = (str1_len + str2_len + 3);
+    log_str_len = (size_t)(str1_len + str2_len + 3);
     
     if (!dst_cur_size || log_str_len > (dst_cur_size - dst_str_len))
     {
@@ -115,7 +117,7 @@ void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, const char *f
     
     /* Generate formatted string. */
     sprintf(dst_ptr + dst_str_len, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
-    vsprintf(dst_ptr + dst_str_len + str1_len, fmt, args);
+    vsprintf(dst_ptr + dst_str_len + (size_t)str1_len, fmt, args);
     strcat(dst_ptr, g_logLineBreak);
     
 end:
@@ -198,58 +200,6 @@ void logControlMutex(bool lock)
     }
 }
 
-static bool logAllocateLogBuffer(void)
-{
-    if (g_logBuffer) return true;
-    g_logBuffer = memalign(LOG_BUF_SIZE, LOG_BUF_SIZE);
-    return (g_logBuffer != NULL);
-}
-
-static bool logOpenLogFile(void)
-{
-    if (serviceIsActive(&(g_logFile.s))) return true;
-    
-    Result rc = 0;
-    
-    /* Get SD card FsFileSystem object. */
-    FsFileSystem *sdmc_fs = utilsGetSdCardFileSystemObject();
-    if (!sdmc_fs) return false;
-    
-    /* Create file. This will fail if the logfile exists, so we don't check its return value. */
-    fsFsCreateFile(sdmc_fs, LOG_FILE_PATH, 0, 0);
-    
-    /* Open file. */
-    rc = fsFsOpenFile(sdmc_fs, LOG_FILE_PATH, FsOpenMode_Write | FsOpenMode_Append, &g_logFile);
-    if (R_SUCCEEDED(rc))
-    {
-        /* Get file size. */
-        rc = fsFileGetSize(&g_logFile, &g_logFileOffset);
-        if (R_FAILED(rc)) fsFileClose(&g_logFile);
-    }
-    
-    return R_SUCCEEDED(rc);
-}
-
-static void _logFlushLogFile(bool lock)
-{
-    if (lock) mutexLock(&g_logMutex);
-    
-    if (!serviceIsActive(&(g_logFile.s)) || !g_logBuffer || !g_logBufferLength) goto end;
-    
-    /* Write log buffer contents and flush the written data right away. */
-    Result rc = fsFileWrite(&g_logFile, g_logFileOffset, g_logBuffer, g_logBufferLength, FsWriteOption_Flush);
-    if (R_SUCCEEDED(rc))
-    {
-        /* Update global variables. */
-        g_logFileOffset += (s64)g_logBufferLength;
-        *g_logBuffer = '\0';
-        g_logBufferLength = 0;
-    }
-    
-end:
-    if (lock) mutexUnlock(&g_logMutex);
-}
-
 static void _logWriteStringToLogFile(const char *src, bool lock)
 {
     if (!src || !*src) return;
@@ -315,7 +265,9 @@ static void _logWriteFormattedStringToLogFile(const char *func_name, const char 
     if (lock) mutexLock(&g_logMutex);
     
     Result rc = 0;
-    size_t str1_len = 0, str2_len = 0, log_str_len = 0;
+    
+    int str1_len = 0, str2_len = 0;
+    size_t log_str_len = 0;
     
     char *tmp_str = NULL;
     size_t tmp_len = 0;
@@ -334,12 +286,12 @@ static void _logWriteFormattedStringToLogFile(const char *func_name, const char 
     
     /* Get formatted string length. */
     str1_len = snprintf(NULL, 0, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
-    if ((int)str1_len <= 0) goto end;
+    if (str1_len <= 0) goto end;
     
     str2_len = vsnprintf(NULL, 0, fmt, args);
-    if ((int)str2_len <= 0) goto end;
+    if (str2_len <= 0) goto end;
     
-    log_str_len = (str1_len + str2_len + 2);
+    log_str_len = (size_t)(str1_len + str2_len + 2);
     
     /* Check if the formatted string length is less than the log buffer size. */
     if (log_str_len < LOG_BUF_SIZE)
@@ -353,7 +305,7 @@ static void _logWriteFormattedStringToLogFile(const char *func_name, const char 
         
         /* Nice and easy string formatting using the log buffer. */
         sprintf(g_logBuffer + g_logBufferLength, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
-        vsprintf(g_logBuffer + g_logBufferLength + str1_len, fmt, args);
+        vsprintf(g_logBuffer + g_logBufferLength + (size_t)str1_len, fmt, args);
         strcat(g_logBuffer, g_logLineBreak);
         g_logBufferLength += log_str_len;
     } else {
@@ -367,7 +319,7 @@ static void _logWriteFormattedStringToLogFile(const char *func_name, const char 
         
         /* Generate formatted string. */
         sprintf(tmp_str, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
-        vsprintf(tmp_str + str1_len, fmt, args);
+        vsprintf(tmp_str + (size_t)str1_len, fmt, args);
         strcat(tmp_str, g_logLineBreak);
         
         /* Write formatted string data until it no longer exceeds the log buffer size. */
@@ -398,4 +350,90 @@ end:
     if (tmp_str) free(tmp_str);
     
     if (lock) mutexUnlock(&g_logMutex);
+}
+
+static void _logFlushLogFile(bool lock)
+{
+    if (lock) mutexLock(&g_logMutex);
+    
+    if (!serviceIsActive(&(g_logFile.s)) || !g_logBuffer || !g_logBufferLength) goto end;
+    
+    /* Write log buffer contents and flush the written data right away. */
+    Result rc = fsFileWrite(&g_logFile, g_logFileOffset, g_logBuffer, g_logBufferLength, FsWriteOption_Flush);
+    if (R_SUCCEEDED(rc))
+    {
+        /* Update global variables. */
+        g_logFileOffset += (s64)g_logBufferLength;
+        *g_logBuffer = '\0';
+        g_logBufferLength = 0;
+    }
+    
+end:
+    if (lock) mutexUnlock(&g_logMutex);
+}
+
+static bool logAllocateLogBuffer(void)
+{
+    if (g_logBuffer) return true;
+    g_logBuffer = memalign(LOG_BUF_SIZE, LOG_BUF_SIZE);
+    return (g_logBuffer != NULL);
+}
+
+static bool logOpenLogFile(void)
+{
+    if (serviceIsActive(&(g_logFile.s))) return true;
+    
+    Result rc = 0;
+    char path[FS_MAX_PATH] = {0}, *ptr1 = NULL, *ptr2 = NULL;
+    
+    /* Get SD card FsFileSystem object. */
+    FsFileSystem *sdmc_fs = utilsGetSdCardFileSystemObject();
+    if (!sdmc_fs) return false;
+    
+    /* Generate logfile path. */
+    if (g_appLaunchPath)
+    {
+        ptr1 = strchr(g_appLaunchPath, '/');
+        ptr2 = strrchr(g_appLaunchPath, '/');
+        
+        if (ptr1 != ptr2)
+        {
+            /* Create logfile in the current working directory. */
+            snprintf(path, sizeof(path), "%.*s", (int)((ptr2 - ptr1) + 1), ptr1);
+            
+            size_t path_len = strlen(path);
+            snprintf(path + path_len, sizeof(path) - path_len, LOG_FILE_NAME);
+        } else {
+            /* Create logfile in the SD card root directory. */
+            sprintf(path, "/" LOG_FILE_NAME);
+        }
+    } else {
+        /* Create logfile in the SD card root directory. */
+        sprintf(path, "/" LOG_FILE_NAME);
+    }
+    
+    /* Create file. This will fail if the logfile exists, so we don't check its return value. */
+    fsFsCreateFile(sdmc_fs, path, 0, 0);
+    
+    /* Open file. */
+    rc = fsFsOpenFile(sdmc_fs, path, FsOpenMode_Write | FsOpenMode_Append, &g_logFile);
+    if (R_SUCCEEDED(rc))
+    {
+        /* Get file size. */
+        rc = fsFileGetSize(&g_logFile, &g_logFileOffset);
+        if (R_SUCCEEDED(rc))
+        {
+            /* Write UTF-8 BOM right away (if needed). */
+            if (!g_logFileOffset)
+            {
+                size_t utf8_bom_len = strlen(g_utf8Bom);
+                fsFileWrite(&g_logFile, g_logFileOffset, g_utf8Bom, utf8_bom_len, FsWriteOption_Flush);
+                g_logFileOffset += (s64)utf8_bom_len;
+            }
+        } else {
+            fsFileClose(&g_logFile);
+        }
+    }
+    
+    return R_SUCCEEDED(rc);
 }

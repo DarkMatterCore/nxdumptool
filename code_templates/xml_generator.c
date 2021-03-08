@@ -26,6 +26,10 @@
 #include "nacp.h"
 #include "legal_info.h"
 
+int g_argc = 0;
+char **g_argv = NULL;
+const char *g_appLaunchPath = NULL;
+
 static void consolePrint(const char *text, ...)
 {
     va_list v;
@@ -48,8 +52,8 @@ static void writeFile(void *buf, size_t buf_size, const char *path)
 
 int main(int argc, char *argv[])
 {
-    (void)argc;
-    (void)argv;
+    g_argc = argc;
+    g_argv = argv;
     
     int ret = 0;
     

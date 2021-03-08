@@ -26,6 +26,10 @@
 
 #define BLOCK_SIZE  USB_TRANSFER_BUFFER_SIZE
 
+int g_argc = 0;
+char **g_argv = NULL;
+const char *g_appLaunchPath = NULL;
+
 /* Type definitions. */
 
 typedef void (*MenuElementOptionFunction)(u32 idx);
@@ -180,8 +184,8 @@ static char path[FS_MAX_PATH] = {0};
 
 int main(int argc, char *argv[])
 {
-    (void)argc;
-    (void)argv;
+    g_argc = argc;
+    g_argv = argv;
     
     int ret = 0;
     

@@ -79,4 +79,11 @@ typedef struct {
     };
 } VersionType2;
 
+/// These are set in main().
+extern int g_argc;
+extern char **g_argv;
+
+/// This is set in utilsInitializeResources().
+extern const char *g_appLaunchPath;
+
 #endif /* __COMMON_H__ */

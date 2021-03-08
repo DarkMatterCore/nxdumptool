@@ -26,6 +26,10 @@
 
 #define BLOCK_SIZE  USB_TRANSFER_BUFFER_SIZE
 
+int g_argc = 0;
+char **g_argv = NULL;
+const char *g_appLaunchPath = NULL;
+
 static Mutex g_fileMutex = 0;
 static CondVar g_readCondvar = 0, g_writeCondvar = 0;
 
@@ -302,8 +306,8 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
 
 int main(int argc, char *argv[])
 {
-    (void)argc;
-    (void)argv;
+    g_argc = argc;
+    g_argv = argv;
     
     int ret = 0;
     

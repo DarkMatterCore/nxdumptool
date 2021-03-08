@@ -82,9 +82,26 @@ bool utilsInitializeResources(void)
     padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
     padInitializeWithMask(&g_padState, 0x1000000FFUL);
     
+    /* Retrieve pointer to the application launch path. */
+    if (g_argc && g_argv)
+    {
+        for(int i = 0; i < g_argc; i++)
+        {
+            if (g_argv[i] && !strncmp(g_argv[i], "sdmc:/", 6))
+            {
+                g_appLaunchPath = (const char*)g_argv[i];
+                break;
+            }
+        }
+    }
+    
+    /* Retrieve pointer to the SD card FsFileSystem element. */
+    if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:"))) goto end;
+    
     /* Create logfile. */
     logWriteStringToLogFile("________________________________________________________________\r\n");
     LOG_MSG(APP_TITLE " v%u.%u.%u starting. Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+    if (g_appLaunchPath) LOG_MSG("Launch path: \"%s\".", g_appLaunchPath);
     
     /* Log Horizon OS version. */
     u32 hos_version = hosversionGet();
@@ -147,13 +164,6 @@ bool utilsInitializeResources(void)
     if (!bfttfInitialize())
     {
         LOG_MSG("Failed to initialize BFTTF interface!");
-        goto end;
-    }
-    
-    /* Retrieve pointer to the SD card FsFileSystem element. */
-    if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
-    {
-        LOG_MSG("Failed to retrieve FsFileSystem from SD card!");
         goto end;
     }
     
@@ -365,14 +375,15 @@ bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char
     
     va_list args;
     
-    size_t formatted_str_len = 0;
+    int formatted_str_len = 0;
+    size_t formatted_str_len_cast = 0;
     
     char *dst_ptr = *dst, *tmp_str = NULL;
     size_t dst_cur_size = *dst_size, dst_str_len = (dst_ptr ? strlen(dst_ptr) : 0);
     
     bool success = false;
     
-    if (dst_str_len >= dst_cur_size)
+    if (dst_cur_size && dst_str_len >= dst_cur_size)
     {
         LOG_MSG("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
         return false;
@@ -382,18 +393,18 @@ bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char
     
     /* Get formatted string length. */
     formatted_str_len = vsnprintf(NULL, 0, fmt, args);
-    if ((int)formatted_str_len <= 0)
+    if (formatted_str_len <= 0)
     {
         LOG_MSG("Failed to retrieve formatted string length!");
         goto end;
     }
     
-    formatted_str_len++;
+    formatted_str_len_cast = (size_t)(formatted_str_len + 1);
     
-    if (!dst_cur_size || formatted_str_len > (dst_cur_size - dst_str_len))
+    if (!dst_cur_size || formatted_str_len_cast > (dst_cur_size - dst_str_len))
     {
         /* Update buffer size. */
-        dst_cur_size = (dst_str_len + formatted_str_len);
+        dst_cur_size = (dst_str_len + formatted_str_len_cast);
         
         /* Reallocate buffer. */
         tmp_str = realloc(dst_ptr, dst_cur_size);
@@ -407,7 +418,7 @@ bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char
         tmp_str = NULL;
         
         /* Clear allocated area. */
-        memset(dst_ptr + dst_str_len, 0, formatted_str_len);
+        memset(dst_ptr + dst_str_len, 0, formatted_str_len_cast);
         
         /* Update pointers. */
         *dst = dst_ptr;

@@ -31,6 +31,10 @@
 #define BLOCK_SIZE  0x800000
 #define OUTPATH     "/nsp/"
 
+int g_argc = 0;
+char **g_argv = NULL;
+const char *g_appLaunchPath = NULL;
+
 static const char *dump_type_strings[] = {
     "dump base application",
     "dump update",
@@ -748,8 +752,8 @@ end:
 
 int main(int argc, char *argv[])
 {
-    (void)argc;
-    (void)argv;
+    g_argc = argc;
+    g_argv = argv;
     
     int ret = 0;
     

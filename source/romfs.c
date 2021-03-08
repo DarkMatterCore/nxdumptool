@@ -547,12 +547,24 @@ static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSys
     size_t name_len = 0;
     RomFileSystemDirectoryEntry *child_dir_entry = NULL;
     
-    if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !dir_entry || (dir_offset = dir_entry->directory_offset) == ROMFS_VOID_ENTRY || !name || !(name_len = strlen(name))) return NULL;
+    if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !dir_entry || (dir_offset = dir_entry->directory_offset) == ROMFS_VOID_ENTRY || !name || !(name_len = strlen(name)))
+    {
+        LOG_MSG("Invalid parameters!");
+        return NULL;
+    }
     
     while(dir_offset != ROMFS_VOID_ENTRY)
     {
-        if (!(child_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset))) return NULL;
-        if (!strcmp(child_dir_entry->name, name)) return child_dir_entry;
+        if (!(child_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset)))
+        {
+            LOG_MSG("Failed to retrieve directory entry at offset 0x%lX!", dir_offset);
+            break;
+        }
+        
+        /* strncmp() is used here instead of strcmp() because names stored in RomFS sections are not always NULL terminated. */
+        /* If the name ends at a 4-byte boundary, the next entry starts immediately. */
+        if (child_dir_entry->name_length == name_len && !strncmp(child_dir_entry->name, name, name_len)) return child_dir_entry;
+        
         dir_offset = child_dir_entry->next_offset;
     }
     
@@ -565,13 +577,25 @@ static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext
     size_t name_len = 0;
     RomFileSystemFileEntry *child_file_entry = NULL;
     
-    if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !ctx->file_table || !ctx->file_table_size || !dir_entry || (file_offset = dir_entry->file_offset) == ROMFS_VOID_ENTRY || !name || \
-        !(name_len = strlen(name))) return NULL;
+    if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !ctx->file_table || !ctx->file_table_size || !dir_entry || (file_offset = dir_entry->file_offset) == ROMFS_VOID_ENTRY || \
+        !name || !(name_len = strlen(name)))
+    {
+        LOG_MSG("Invalid parameters!");
+        return NULL;
+    }
     
     while(file_offset != ROMFS_VOID_ENTRY)
     {
-        if (!(child_file_entry = romfsGetFileEntryByOffset(ctx, file_offset))) return NULL;
-        if (!strcmp(child_file_entry->name, name)) return child_file_entry;
+        if (!(child_file_entry = romfsGetFileEntryByOffset(ctx, file_offset)))
+        {
+            LOG_MSG("Failed to retrieve file entry at offset 0x%lX!", file_offset);
+            break;
+        }
+        
+        /* strncmp() is used here instead of strcmp() because names stored in RomFS sections are not always NULL terminated. */
+        /* If the name ends at a 4-byte boundary, the next entry starts immediately. */
+        if (child_file_entry->name_length == name_len && !strncmp(child_file_entry->name, name, name_len)) return child_file_entry;
+        
         file_offset = child_file_entry->next_offset;
     }
     

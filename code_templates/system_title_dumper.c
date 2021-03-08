@@ -27,6 +27,10 @@
 #define BLOCK_SIZE  0x800000
 #define OUTPATH     "sdmc:/systitle_dumps"
 
+int g_argc = 0;
+char **g_argv = NULL;
+const char *g_appLaunchPath = NULL;
+
 static u8 *buf = NULL;
 static FILE *filefd = NULL;
 static char path[FS_MAX_PATH * 2] = {0};
@@ -220,8 +224,8 @@ static void dumpFsSection(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
 
 int main(int argc, char *argv[])
 {
-    (void)argc;
-    (void)argv;
+    g_argc = argc;
+    g_argv = argv;
     
     int ret = 0;
     
