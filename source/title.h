@@ -88,7 +88,7 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 
 /// Returns a pointer to a dynamically allocated array of pointers to TitleApplicationMetadata entries, as well as their count. The allocated buffer must be freed by the calling function.
 /// If 'is_system' is true, TitleApplicationMetadata entries from available system titles (NcmStorageId_BuiltInSystem) will be returned.
-/// Otherwise, TitleApplicationMetadata entries from user applications with available content data (NcmStorageId_Any) will be returned.
+/// Otherwise, TitleApplicationMetadata entries from user applications with available content data (NcmStorageId_BuiltInUser, NcmStorageId_SdCard, NcmStorageId_GameCard) will be returned.
 /// Returns NULL if an error occurs.
 TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count);
 
@@ -110,7 +110,9 @@ TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count);
 
 /// Checks if a gamecard status update has been detected by the background gamecard title info thread (e.g. after a new gamecard has been inserted, of after the current one has been taken out).
 /// If so, gamecard title info entries will be updated or freed during this call, depending on the current gamecard status.
-/// If this function returns true and titleGetApplicationMetadataEntries() has been previously called, its returned buffer should be freed and it should be called again.
+/// If this function returns true and titleGetApplicationMetadataEntries() or titleGetInfoFromOrphanTitles() have been previously called:
+///     1. Their returned buffers should be freed.
+///     2. They must be called again.
 bool titleIsGameCardInfoUpdated(void);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps.

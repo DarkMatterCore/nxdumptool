@@ -124,6 +124,10 @@ bool utilsInitializeResources(void)
     if (!_utilsIsDevelopmentUnit()) goto end;
     LOG_MSG("Running under %s unit.", g_isDevUnit ? "development" : "retail");
     
+    /* Get applet type. */
+    g_programAppletType = appletGetAppletType();
+    LOG_MSG("Running under %s mode.", utilsAppletModeCheck() ? "applet" : "title override");
+    
     /* Initialize USB interface. */
     if (!usbInitialize())
     {
@@ -171,10 +175,6 @@ bool utilsInitializeResources(void)
     
     /* Mount eMMC BIS System partition. */
     if (!utilsMountEmmcBisSystemPartitionStorage()) goto end;
-    
-    /* Get applet type. */
-    g_programAppletType = appletGetAppletType();
-    LOG_MSG("Running under %s mode.", utilsAppletModeCheck() ? "applet" : "title override");
     
     /* Disable screen dimming and auto sleep. */
     appletSetMediaPlaybackState(true);
