@@ -139,9 +139,7 @@ NX_INLINE void titleConvertNcmContentSizeToU64(const u8 *size, u64 *out)
 
 NX_INLINE void titleConvertU64ToNcmContentSize(const u64 *size, u8 *out)
 {
-    if (!size || !out) return;
-    memcpy(out, size, 6);
-    out[6] = out[7] = 0;
+    if (size && out) memcpy(out, size, 6);
 }
 
 NX_INLINE u64 titleGetPatchIdByApplicationId(u64 app_id)
