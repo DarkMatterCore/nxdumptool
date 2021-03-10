@@ -356,55 +356,57 @@ bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out)
     return ret;
 }
 
-HashFileSystemContext *gamecardGetHashFileSystemContext(u8 hfs_partition_type)
+bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemContext *out)
 {
-    HashFileSystemContext *fs_ctx = NULL, *fs_ctx_copy = NULL;
+    if (hfs_partition_type >= GameCardHashFileSystemPartitionType_Count || !out)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    HashFileSystemContext *fs_ctx = NULL;
     bool success = false;
     
     mutexLock(&g_gameCardMutex);
+    
+    /* Free Hash FS context. */
+    hfsFreeContext(out);
     
     /* Get pointer to the Hash FS context for the requested partition. */
     fs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
     if (!fs_ctx) goto end;
     
-    /* Create a copy of the retrieved Hash FS context. */
-    /* We won't return a pointer to any of our internal Hash FS contexts (for concurrency reasons). */
-    fs_ctx_copy = calloc(1, sizeof(HashFileSystemContext));
-    if (!fs_ctx_copy)
-    {
-        LOG_MSG("Unable to allocate memory for Hash FS context! (%s).", fs_ctx->name);
-        goto end;
-    }
-    
-    fs_ctx_copy->name = strdup(fs_ctx->name);
-    if (!fs_ctx_copy->name)
+    /* Fill Hash FS context. */
+    out->name = strdup(fs_ctx->name);
+    if (!out->name)
     {
         LOG_MSG("Failed to duplicate Hash FS partition name! (%s).", fs_ctx->name);
         goto end;
     }
     
-    fs_ctx_copy->offset = fs_ctx->offset;
-    fs_ctx_copy->size = fs_ctx->size;
-    fs_ctx_copy->header_size = fs_ctx->header_size;
+    out->type = fs_ctx->type;
+    out->offset = fs_ctx->offset;
+    out->size = fs_ctx->size;
+    out->header_size = fs_ctx->header_size;
     
-    fs_ctx_copy->header = calloc(fs_ctx->header_size, sizeof(u8));
-    if (!fs_ctx_copy->header)
+    out->header = calloc(fs_ctx->header_size, sizeof(u8));
+    if (!out->header)
     {
         LOG_MSG("Failed to duplicate Hash FS partition header! (%s).", fs_ctx->name);
         goto end;
     }
     
-    memcpy(fs_ctx_copy->header, fs_ctx->header, fs_ctx->header_size);
+    memcpy(out->header, fs_ctx->header, fs_ctx->header_size);
     
     /* Update flag. */
     success = true;
     
 end:
-    if (!success) hfsFreeContext(&fs_ctx_copy);
+    if (!success) hfsFreeContext(out);
     
     mutexUnlock(&g_gameCardMutex);
     
-    return fs_ctx_copy;
+    return success;
 }
 
 bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size)
@@ -622,7 +624,11 @@ end:
     {
         if (dump_gamecard_header) LOG_DATA(&g_gameCardHeader, sizeof(GameCardHeader), "Gamecard header dump:");
         
-        if (!g_gameCardHfsCtx) hfsFreeContext(&root_fs_ctx);
+        if (!g_gameCardHfsCtx && root_fs_ctx)
+        {
+            hfsFreeContext(root_fs_ctx);
+            free(root_fs_ctx);
+        }
         
         gamecardFreeInfo();
     }
@@ -638,7 +644,15 @@ static void gamecardFreeInfo(void)
     
     if (g_gameCardHfsCtx)
     {
-        for(u32 i = 0; i < g_gameCardHfsCount; i++) hfsFreeContext(&(g_gameCardHfsCtx[i]));
+        for(u32 i = 0; i < g_gameCardHfsCount; i++)
+        {
+            HashFileSystemContext *cur_fs_ctx = g_gameCardHfsCtx[i];
+            if (cur_fs_ctx)
+            {
+                hfsFreeContext(cur_fs_ctx);
+                free(cur_fs_ctx);
+            }
+        }
         
         free(g_gameCardHfsCtx);
         g_gameCardHfsCtx = NULL;
@@ -952,7 +966,7 @@ NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
 
 static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size)
 {
-    u32 magic = 0;
+    u32 i = 0, magic = 0;
     HashFileSystemContext *fs_ctx = NULL;
     HashFileSystemHeader fs_header = {0};
     u8 fs_header_hash[SHA256_HASH_SIZE] = {0};
@@ -981,6 +995,20 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
         LOG_MSG("Failed to duplicate Hash FS partition name! (offset 0x%lX).", offset);
         goto end;
     }
+    
+    /* Determine Hash FS partition type. */
+    for(i = GameCardHashFileSystemPartitionType_Root; i < GameCardHashFileSystemPartitionType_Count; i++)
+    {
+        if (!strcmp(g_gameCardHfsPartitionNames[i], fs_ctx->name)) break;
+    }
+    
+    if (i >= GameCardHashFileSystemPartitionType_Count)
+    {
+        LOG_MSG("Failed to find a matching Hash FS partition type for \"%s\"! (offset 0x%lX).", fs_ctx->name, offset);
+        goto end;
+    }
+    
+    fs_ctx->type = i;
     
     /* Read partial Hash FS header. */
     if (!gamecardReadStorageArea(&fs_header, sizeof(HashFileSystemHeader), offset, false))

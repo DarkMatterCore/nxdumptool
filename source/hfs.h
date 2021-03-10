@@ -44,6 +44,7 @@ typedef struct {
 /// Internally used by gamecard functions.
 /// Use gamecardGetHashFileSystemContext() to retrieve a Hash FS context.
 typedef struct {
+    u8 type;            ///< GameCardHashFileSystemPartitionType.
     char *name;         ///< Dynamically allocated partition name.
     u64 offset;         ///< Partition offset (relative to the start of gamecard image).
     u64 size;           ///< Partition size.
@@ -67,15 +68,12 @@ bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size);
 
 /// Miscellaneous functions.
 
-NX_INLINE void hfsFreeContext(HashFileSystemContext **ctx)
+NX_INLINE void hfsFreeContext(HashFileSystemContext *ctx)
 {
-    if (!ctx || !*ctx) return;
-    
-    if ((*ctx)->name) free((*ctx)->name);
-    if ((*ctx)->header) free((*ctx)->header);
-    
-    free(*ctx);
-    *ctx = NULL;
+    if (!ctx) return;
+    if (ctx->name) free(ctx->name);
+    if (ctx->header) free(ctx->header);
+    memset(ctx, 0, sizeof(HashFileSystemContext));
 }
 
 NX_INLINE u32 hfsGetEntryCount(HashFileSystemContext *ctx)

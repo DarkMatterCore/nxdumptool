@@ -225,10 +225,9 @@ bool gamecardGetRomCapacity(u64 *out);
 /// Fills the provided VersionType1 pointer with the bundled firmware update version in the inserted gamecard.
 bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out);
 
-/// Returns a pointer to a dynamically-allocated HashFileSystemContext for the provided Hash FS partition type.
-/// Hash FS functions can be used on the retrieved HashFileSystemContext. hfsFreeContext() must be used to free the returned context.
-/// Returns NULL if an error occurs.
-HashFileSystemContext *gamecardGetHashFileSystemContext(u8 hfs_partition_type);
+/// Fills the provided HashFileSystemContext pointer using information from the requested Hash FS partition.
+/// Hash FS functions can be used on the retrieved HashFileSystemContext. hfsFreeContext() must be used to free the underlying data from the filled context.
+bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemContext *out);
 
 /// One-shot function to retrieve meaningful information from a Hash FS entry by name without using gamecardGetHashFileSystemContext() + Hash FS functions.
 /// 'out_offset' or 'out_size' may be set to NULL, but at least one of them must be a valid pointer. The returned offset is always relative to the start of the gamecard image.

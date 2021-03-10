@@ -133,7 +133,7 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
             mem_type != MemType_Io && mem_type != MemType_ThreadLocal && mem_type != MemType_Reserved))) || (is_segment && (mem_type == MemType_CodeStatic || mem_type == MemType_CodeMutable) && \
             (((segment <<= 1) >> 1) & location->mask))))
         {
-            /* If location->data == NULL, realloc() will essentially act as a malloc(). */
+            /* Reallocate data buffer. */
             tmp = realloc(location->data, location->data_size + mem_info.size);
             if (!tmp)
             {
