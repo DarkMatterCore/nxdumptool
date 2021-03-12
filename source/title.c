@@ -2092,7 +2092,7 @@ end:
 
 static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *b)
 {
-	const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
+    const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
     const TitleApplicationMetadata *app_metadata_2 = *((const TitleApplicationMetadata**)b);
     
     if (app_metadata_1->title_id < app_metadata_2->title_id)
@@ -2109,7 +2109,7 @@ static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *
 
 static int titleUserApplicationMetadataEntrySortFunction(const void *a, const void *b)
 {
-	const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
+    const TitleApplicationMetadata *app_metadata_1 = *((const TitleApplicationMetadata**)a);
     const TitleApplicationMetadata *app_metadata_2 = *((const TitleApplicationMetadata**)b);
     
     return strcasecmp(app_metadata_1->lang_entry.name, app_metadata_2->lang_entry.name);
@@ -2117,7 +2117,7 @@ static int titleUserApplicationMetadataEntrySortFunction(const void *a, const vo
 
 static int titleOrphanTitleInfoSortFunction(const void *a, const void *b)
 {
-	const TitleInfo *title_info_1 = *((const TitleInfo**)a);
+    const TitleInfo *title_info_1 = *((const TitleInfo**)a);
     const TitleInfo *title_info_2 = *((const TitleInfo**)b);
     
     if (title_info_1->meta_key.id < title_info_2->meta_key.id)
