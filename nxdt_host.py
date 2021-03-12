@@ -530,7 +530,7 @@ def main():
             os.mkdir(g_outputDir)
     else:
         # Create 'nxdumptool' subdirectory in the directory where the script is located.
-        g_outputDir = (sys.path[0] + os.path.sep + 'nxdumptool')
+        g_outputDir = (os.path.abspath(os.path.dirname(__file__)) + os.path.sep + 'nxdumptool')
         if os.path.exists(g_outputDir) == False:
             os.mkdir(g_outputDir)
     
