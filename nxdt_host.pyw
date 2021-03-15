@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
- * nxdt_host.py
+ * nxdt_host.pyw
  *
  * Copyright (c) 2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
