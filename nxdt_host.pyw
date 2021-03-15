@@ -1,0 +1,887 @@
+#!/usr/bin/env python3
+
+"""
+ * nxdt_host.py
+ *
+ * Copyright (c) 2021, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
+ *
+ * nxdumptool is free software; you can redistribute it and/or modify it
+ * under the terms and conditions of the GNU General Public License,
+ * version 2, as published by the Free Software Foundation.
+ *
+ * nxdumptool is distributed in the hope it will be useful, but WITHOUT
+ * ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+ * FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+ * more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+"""
+
+# This script depends on Pillow, PyUSB and tqdm.
+# You can install them with `pip install Pillow pyusb tqdm`.
+
+# libusb needs to be installed as well. PyUSB uses it as its USB backend. Otherwise, a NoBackend exception will be raised while calling PyUSB functions.
+# Under Windows, the recommended way to do this is by installing the libusb driver with Zadig (https://zadig.akeo.ie). This is a common step in Switch modding guides.
+# Under MacOS, use `brew install libusb` to install libusb via Homebrew.
+# Under Linux, you should be good to go from the start. If not, just use the packet manager from your distro to install libusb.
+
+import os
+import platform
+import threading
+import traceback
+import ctypes
+import logging
+import queue
+import shutil
+import time
+import struct
+import usb.core
+import usb.util
+
+import tkinter as tk
+from tkinter import filedialog, messagebox, font, scrolledtext
+
+from tqdm.tk import trange, tqdm_tk
+
+import base64
+import io
+from PIL import Image, ImageTk
+
+# Scaling factors.
+WINDOWS_SCALING_FACTOR = 96.0
+SCALE = 1.0
+
+# Window size.
+WINDOW_WIDTH  = 500
+WINDOW_HEIGHT = 470
+
+# Application version.
+APP_VERSION = '0.2'
+
+# Copyright year.
+COPYRIGHT_YEAR = '2021'
+
+# Messages displayed as labels.
+SERVER_START_MSG = 'Please connect a Nintendo Switch console running nxdumptool.'
+SERVER_STOP_MSG = 'Exit nxdumptool on your console or disconnect it at any time to stop the server.'
+
+# USB VID/PID pair.
+USB_DEV_VID = 0x057E
+USB_DEV_PID = 0x3000
+
+# USB manufacturer and product strings.
+USB_DEV_MANUFACTURER = 'DarkMatterCore'
+USB_DEV_PRODUCT = 'nxdumptool'
+
+# USB timeout (milliseconds).
+USB_TRANSFER_TIMEOUT = 5000
+
+# USB transfer block size.
+USB_TRANSFER_BLOCK_SIZE = 0x800000
+
+# USB command header/status magic word.
+USB_MAGIC_WORD = b'NXDT'
+
+# Supported USB ABI version.
+USB_ABI_VERSION = 1
+
+# USB command header size.
+USB_CMD_HEADER_SIZE = 0x10
+
+# USB command IDs.
+USB_CMD_START_SESSION        = 0
+USB_CMD_SEND_FILE_PROPERTIES = 1
+USB_CMD_CANCEL_FILE_TRANSFER = 2
+USB_CMD_SEND_NSP_HEADER      = 3
+USB_CMD_END_SESSION          = 4
+
+# USB command block sizes.
+USB_CMD_BLOCK_SIZE_START_SESSION        = 0x10
+USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES = 0x320
+
+# Max filename length (file properties).
+USB_FILE_PROPERTIES_MAX_NAME_LENGTH = 0x300
+
+# USB status codes.
+USB_STATUS_SUCCESS                 = 0
+USB_STATUS_INVALID_MAGIC_WORD      = 4
+USB_STATUS_UNSUPPORTED_CMD         = 5
+USB_STATUS_UNSUPPORTED_ABI_VERSION = 6
+USB_STATUS_MALFORMED_CMD           = 7
+USB_STATUS_HOST_IO_ERROR           = 8
+
+# Default directory paths.
+INITIAL_DIR = os.path.abspath(os.path.dirname(__file__))
+DEFAULT_DIR = (INITIAL_DIR + os.path.sep + USB_DEV_PRODUCT)
+
+# Application icon.
+APP_ICON = b'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAEnQAABJ0Ad5mH3gAABfVelRYdFJhdyBw' + \
+           b'cm9maWxlIHR5cGUgZXhpZgAAeNrNmll23TiWRf8xihoC+mY4uGjWqhnU8GsfPjV2SJGpcuRHWbYoU3wkcJvTAHTnf/77uv/iT83Ru1xar6NWz5888oiTH7p//RnP9+Dz' + \
+           b'8/39T3j7/tt59/Fj5Jg4ptcv2nz71OR8+fzA+zOC/X7e9bffxP52o/cnx9ch6cn6ef06SM7H1/mQ32403i6oo7dfh2pvH1jHfw7l7V/9fZLP/92vJ3IjSrvwoBTjSSF5' + \
+           b'vnc9PTGyNNLkWPkeUos6E54zTd9dqm/TUJS/C2r6m/Pe/xq04H6Skb9LSMrvD9ONfg1w/TiG786H8pfz6eMx8bcRpfnx5Pjr+Z1C+zKdt3/37n7vUbCZxcyVMNe3Sb1P' + \
+           b'5fmJC0lgTs/HKl+Nf4Wf2/M1+Op++uWog02NGF8rjBBJ1Q057DDDDec5rrAYYo4nkqsY44rpOdfJ3YjryWh2Kaccbmwkd6dOohcpT5yNH2MJz3PH87gVOg/egStj4GaB' + \
+           b'Tzxf7v2Hf/r17Y3uVbmH4PtHrBhXfKotKIpJ37mKhIT7XkflCfD711//qJ8SGSxPmDsTnN5et7ASPmsruSfRiQsLx1cDhrbfbkCIeHZhMLRDDr6GVEINvsXYQiCOnfxM' + \
+           b'Rh6Ty9FIQSglbkYZc0qV5PSoZ/OZFp5rY4mv0+AViSh0XCM1dB+5yrnk6mjUTg3NkkoupdTSSi+jzJpqrqXW2qqAb7bUciutttZ6G2321HMvvfbWex99uhFHAhjLqKON' + \
+           b'PsaYk4dO7jz59OyTExYtWbZi1Zp1GzYX5bPyKquutvoaa7odd9pgx6677b7HniccSunkU0497fQzzryU2k0333LrbbffcedH1p6sut9y9jVz/zpr4S1rJMw9Octc9J41' + \
+           b'Trf2fosgOCnKGRmLOZDxpgxQ0FE58z3kHJU5p5z5EemKEhllUXJ2UMbIYD4hlhs+cveZuS95c/T9n+Yt/po5p9T9JzLnlLpvMvc1b99kbc+HpoQPAJvaUEH1ifa7+czY' + \
+           b'+ev9x3H1G/ztva67kjHDsvayWhbBy9nftc4+3aW76o+u1IW2opW567ypnJ3LYZxU2GqdYIfbitqUKJc4WzzdGhNdZvGMGrkfM4/ReNiu3MbWbpRQs23ExkDRQrqyK5fq' + \
+           b'GNw9ELW9b0nH1M8rEm+qIfdnijODD4GrKLVfjzBMBct3dORT/xlhmPkz7jq91rPSbDdNgs9wZ1p2bmagJ9+U1tqcPmuOthJRFwrO6HicTfD+7cFSEz873vn2kbUqc3J0' + \
+           b'aND0x+2t5VOpkFGXjRNj7+GOsW17Er7/zYXu80pCr2Buisf27LYpo3RKvx7wOZTFndTCnIX62oECm2O0WnakKm04qhfRxtOmctLGvJWP0AIUXYWbmLZx19Op7Kk49G12' + \
+           b'5rrz9IxK6bOvUgaU/RTeAJHzKwu/HX0Y0LjRPrvr5/yZiM/sDCt707SdqjJqZd1BRkhLK/tanOX6e9q9Lz2n51GVq/ovpf8cnf+bX3wc05k/aRP3Xv3/tE2c+uSzTbhB' + \
+           b'nmPZ1EwL/cKPBWBpKVvuE4hNP+i1pii3YK3tMm7ZvucK44UOGL3lgpr5tkABf+RbqiOSAY8G6ZR/b5kgw5Sg86YHdqpGBVCR5bZZbKBdxjjkz+zWku2Eu65DbL26kBG0' + \
+           b'vr4tgp8c3dsPdf5a1UlVvegBlfVUWQN5/r0k16znMrApfRS6CDtOoPYNFpjvdwUAlm5UJAB+ln6On1P2n3HY0/G0lOmIDYqdtpg7AbB57h7wU6eGVZL9bQ4th5O+BSb3' + \
+           b'1xM/Od5nyLYGdFC+r+yfTuTrPNyfTeTr0f2TCcENVsdEd08U2+phk7qn8vK8hj4Y9LiBGWf1Lp7dZ52DuB4yRGE37ibwLPmBfku75+lmjiWcCs/2fxmU/VtQrP41uRDk' + \
+           b'/ZOQfDm6/1toApNl1IiMvgwj4dVZuwtqQR1wdJ0oz7LvyAfd0wDGdK7EDdzFdOvtGIuoqgAAim9gRWX46epfAOgdYukEwlnH1e/iruf4QVMD0fthcaReSUAwxWIQyJi9' + \
+           b'nGCWIBSQcKV8Q53DVfgDzoGnz9oM/sbUBelBLJ9glDNigFPnFnLkrolw435yOwUABUl72ee4dOoGtxaCaujBt4uRMvS3dkX77aSB2NiIwFysIysqQqs1/Pqeq0UY+5wc' + \
+           b'HMKjA8fINcEnVTGZy9DFgHUHGAnOOAHXjnXAZa3rsWQL/XhOAwtxZ7Bm2q6dm2Lp6NJSEl1T850r7F0e+bLvRNj1xfnhqzIycJFhj14zBDwQZgD6yODRoS7psMmnSGXr' + \
+           b'zONSuIVRoDlDH6HXgOC5dq34sZ+qGz7XFjP3mQe9AgOag/lHhkAzGmk1oRF6B0Q/+0bIiRhtOzXcWVAM6CViGFaJi3FssDQfwDJRDO6SROgv1dY3pUJPVLQW/BHFxDFT' + \
+           b'FCSU6OeabCSKg8YhZYHMCimWZMk800liU5GIll0mVUOg8uGz+41vZkr/joufo/t3F/xyDIQEVbN7RIGAErDZhsnmJjj4tVAHoAKy3DjlCONaje6n1FCgy/qizcmHwbKl' + \
+           b'9u017IFkbTO2FTdKQy4HT9u2SWkiF6Xi4evmUST+pEtFp9uVz+bJDtU+JPn8IbeT6hkDYbWl/zdCi4SQBGuw56EzubB6qUqgJlNp5IEoIijwAbgd4nxoLPR/v7PVSRmj' + \
+           b'NAa07IA80rV6aj7QbSiDsrzwC90ASF7o3zMVWrv2ZAwz0QRtoblb4IqIfWmI3OloR7R5u63FgK67OW1GoaSOG7Kwr/Br8xLoBCoTNkqBwttIQL+mH3CIvxfwj0sq8xaP' + \
+           b'FqLb8GfoklFvjNJKt1KafHpg1blvkqq+fL5fBHp+KolQxIZd9yrIPPuhIciunPlmVlDXuWAyGZFgz9YJ+k7x1DvAfpQYTMCH8RuNoJA18QGKxi4Sad5JyxSjaSe4nipR' + \
+           b'1lO5e0HagJ6cw/oh0XuPz5MbFyLiXNmEftWG76BZCCMG8cI9eINwOwYjQEu4wYk63ATDgE84iA4qjJiaKwfrkoaLFBtJQNEpw2Oh5TKmwx8qEWRBbKsIJqXSTEonebSv' + \
+           b'R5XndajiMlKmEK27cG88F30UPEzBM+pTKRUYD4DexZM3Ve65FX0W8buUptWMNNpd+OaZKNDnPBVtOHDw5+4GHOOCLOxAY92GgaVUDl71FLKHuGAuC7wMydoITBnVT+3h' + \
+           b'bTHH6PguRgU2SHCaK+HfIoS+xWsgSIJUguQr1WUZsKVVAbZkYHfBOFPCqboAThIgsMSgGTh+xAabkLXUAfDrFwOqeKCQt6cIKI57wKyCOgX1ib4NLQ65FZj+TuS9gNZG' + \
+           b'Z6GSMT8L1ouHpEfoKI+OaKcMQDk6JE+D+0B244Ncl3NojsqYTdOcUESlxZCk0B74OpIWBJDdJAuvDiWiST2EunuooD7lAAJM0o+5Ks4qiFLMQ1no45xwrzZHb6hbUBx5' + \
+           b'E0icdYGY9ItWO0BemNQglVXglKSlCPTRpOguHExiNfjUrnAdnXQaDo5fbH4/PbSCfircm3DVI9eMmmYqF4dAhTvanYDSFIQZuEM5FNrbqH+jFcLssNKsfU2g1XhWGL7h' + \
+           b'LyYTpf6CFTzhRp041NauBDjqRKHsaQmKESINEXdxMPHU7emeQpThJzKcITYwHALsosC0CD4dfQ77+cJjgbPr8fmRokXZ0M0t91tTMcRCYjB0SMbwRICQukI0IHciaNdW' + \
+           b'XQ50YIq5IjbgYUxqU/P4HQEoPpPxtlCvp50MRUdpGp4KvTglGrw/EfNp8IJ7QALmpUymske1IbDAFEudWq/6fWPMOmatUaEcICN8GdkxmpZJ0kfmEAGkkKobsDTgnivm' + \
+           b'F672xwt36RoyV7GXi67ONF1H+EG0j/ajRMA4arVEB1YcCjVolbkibUGfTW2UYyPuyCAL0gHaS5uETV1Jrsamnce0chfOv6ZUusMyQHONhxJciLK1oSUlGgFWobmQOSiI' + \
+           b'Z0YL2YaKo53KAS/3Isf0/MjEgRuRSsAR78iATWtSjAFlbWQ7JxwJvNVoVJqdXjmRHxNaYx30REoEGl23kIH0mjGFxs8vddgRLDuiqORcDr0P2oFFpNBqLEV+k6Az84Iw' + \
+           b'qrTODVRUVR35i+gKQQKNauPBsGOIeF2ESUAeqiAgzRthKi8hO1A1XJgDgIXvwGpjI9zwozDG9YJoxi3FhQwe4BETooZMGoNjB6wj14FWjIl0zE1+LkXYpt+uS2DDzyCp' + \
+           b'BHQ2CLNTgGvtsJKnTWk2OKzS5bEJ4yRYOy5FEtuXkqX7wSNkMLqRukJwYr6to1smZZWIIVlLgBXOgZyhFCit8vi5LEwE5PHrdBz22LwbmAuLmCF0Bd2HGhLNwa1oOzPA' + \
+           b'AL3AkAvsOFpEADFuFLryfFLsRJc6rdRRm91nHFWbyFkEn0Q/WSSihZ5c9HeEZS5qOlBHNPRRELRUbwiPvQ/FXevMDkoryGPGVVKBlMh3BZsq6ECv7v4wJEAIHcJMRV1h' + \
+           b'whdkXX4rUwxDHA52JiCBQkO0T1NRe3wdIsc3gKNoHVInrjZdKD2IePbmVz/Q0FAyyR/SzdkFWp51WuopwYAbpa2soM8zKHuwQQP48khC5BHyo05MD7/zOJUXROI+DE+L' + \
+           b'GUC1bGq70fkBLV5F9VRXw+JBRwjPY8eeqgxDNIxCpxi9bjFrEQVPBz1pYbnhNbBwkEWmRWbW8jNXaChwFyo9KbIkNns0eQN8vNrMoGywm7Q7f7XsTFLhnXQAXijswVKo' + \
+           b'OqCdRa8dK07DD7nIXbX4hrCF5R+Jh5hRQzioGXEskYZI9MpLRCBSjjycWsInimvTQ4hYr4HfxI3sdmgowhE6HUK8vYvLNr8Js6JYFWnpraA9MooUNaYOSowaxTk2+HIj' + \
+           b'ovQsu3sa3H8GrThxAu6Su5Oz1kw9jIdYKXL2iDcgI+AX0ddJ0g0fhI1AHgHWonuwQ1IoyNkSEEdjw5fVZvWIniNYikPVcX30yOZF3zbgH6NxshbwRfUTgsNCkBtbFf8E' + \
+           b'qjvicvSfBXUzFqwqg45APc2O9MWN02SdSyYNh97a5Rw8AyYDp4l41lJFKLc7KH1p0bOZkjC1NCyPTiljSxDQuC64E8YlMnnD9xC874unEGIEAlJMmxUbMUr90EY0iRoV' + \
+           b'54lJApPQeBIxSAhYFgFidN+QfB705aEe0C+oKDwWmqqm4Dq2OXuECxI/ILIT2hiA0pC1SntUj/Ghydx3RnEZyj/SnfdZrQhoaa+iBEYO6BCyVP14VNmcWr0xUrsgfGAv' + \
+           b'qWG3dpI6bg4MwBcDLhQHMKkpJ7yG5PE5D+5RHUSSaMp3UPekMi9jeFvrHFE6Q1wfI7XlzRaqGRmHPo1cPxxsg+KaA/latI1UaT0ZWbhsUvxRq6EobCRI6xQ4JRAI05Uf' + \
+           b'fcwF2g3fMreEFj0LUiBYcEWlJG1Oz0oP+TXSM9khT07ORsDDwADXJOaWdib2QzyYaSe3HWgROgxOpOfAJxIOAUMh+Hy+QT7IEmRNP9qho0iWCF4r11zP7eGr6yDRABcB' + \
+           b'wQXkRyox1wGPAuxaadH+QEJndoppyrwXif5UZPu0IE0zVEvMHYTsFDx5B5NuQKtHesF8x2t5OC5qlw25VWlumahrxG/no94zqU1MlKdXugPpE/EN+OawZEqwIQEhPUSA' + \
+           b'EVKh1XAQoA7YjLzARWGAeLQWl5ggN7zy2s5j0agphBRlov13v6SdUZGhaLOJUWpdGXu+pX33kjcNezEJiAUBSZ1V+sEF2mYtVAXSAJdVkp8IgSM0RqZy540SJInae57i' + \
+           b'TPJpSHGpDa5BtWGCKUwXEbMVPh0JhYzhN2RtG+gSxAP+GhMCfUl20iJ005otjPOst8EOSDp69aFUNKRJEjf4BYGCZpYW0j4pKgJMXEGbbSAaMS4H2GuPP1jcfenFgaa9' + \
+           b'V/omOd+11IdsGP0pPuxDHjiybmpzWqXJ6SNdNbtIjSWU8VLbo2hIqKmX/GyqI5TFJYpwlRZOcceQe4Nj5ChE4ScxQ7UOpUuNxFioDRgZNVPhcvoWXHJKTEe70+jP6iIg' + \
+           b'21Bqviw18KKUpJuRFquQVKFu5M6UbaJ4gwAfwwKAO6l0uAtOBLqIUp8FxdSaXq/IWh0iGRQAiIizFqbyQKkbSATugLHuBfnA7EY6MHQHll9UbkQxou40ZqgVG6y4FRSx' + \
+           b'jqhVuvcBOTwpNHG1OoSEDjStTptvewF1oDCJb5Q6g1gx4rYORifQu2BWk/1RiC1ECIDMhag1fWzAqtFhFxAhSytCdEUFGmA0LEWHgZ8lOgPBtQ8dCQlKh8pZXpvOOd6L' + \
+           b'Yyf/0Em77lJS2E65gOcXSS6Ypq0zYXO0pa1Wlrs2wAfLNPCbOOkQNwSBK26+T/pZLzI1D4ZqbVrbWaiUIKB5xC+dtkA4mK61OPDRMslgEPmTlOtawQcYlEMnytQDKqSE' + \
+           b'SIGFE22svSQi+9appmXluiTlPK4Wa6i3UagwkDktWRaPF0GBEUF6flBy2Lbt4VRtr09k/fTIjw2yUlkIaGCSvuszArCI9Ug4CBKYKxGxKInHw/Mx7dHDUWAGwD2f0KoM' + \
+           b'B8UfB+bHgLSkRTrUXAEHAWDRGU0XyJp02GsVFz0SI1aip0PrE7dx2ypPTU2PipiNppt30T5oF0pXy0j1VCJSgRGAyHetNLe5qBaMDJHHb1+i3xHS0lX75Rtk3g0EEypj' + \
+           b'wLTnTr9rZXS5Sq7nAFOBfWTWOgQFQfKsNaSL8sS7R62SNWhMIhqqQ260pReiaFPGxCgBNngBcQwc0Wp6wUpmXHI9CW0QjIZbozLG0JYxrA6nlO4PGIor5bkUpMJRHMar' + \
+           b'UM21avkLHwPiZE5UZDPWf+NHSQK1GJ4WQFNsyXLUyx4YDENi6lWQVR2+qWgLH76EQIEphBMoCjpA82BBGD3Za+EMFXfQrkQE7/KAICC8NkhFC1GQfDBhxOhJ7bTAfk2M' + \
+           b'AkWngULHJwKdNUDxwM9M4CT2JUlaAzviFWw/Bt9BcohF2PhEkBJ4hNVkZJFqGJeolRjQtjBOocbAZuFui/5uVBzapqjZ4nEVB4jjLDjDo+0H7CmOg6AHDWde6cW26MCI' + \
+           b'5IroeOygBBcy/NrQsqw2Vey45dPUFLRGz3MDtmODKuA/kgEhDv3R21o26ZjvHEEuvfSFuiooOMRGQJchwt0Vl/WREQC54fz6JX5p0ktau9lEJWp3bdF6cDTF25t28SqQ' + \
+           b'gZ/V4maU99muDS1mapntWZmOaraVaxQ1HoBlPIU3uCGwcwXzExm9MVEY6axlHJXgCDTtQrDlV2sapD+W5vpsnT0LgBnLBlPlCDY8eyjkFYkADBdGBsC3560lB4cXxOXB' + \
+           b'ljKiBLH70YuW6+D1bWDmlJdGGhJrICRBHAD1xJ17YQO+RcuI5pAKBhQSjCz+lNOAmpIQZAXCUGuGBBlyZZ79WQwJqDJkEc2ADpVz9Xh31zFVoCoEQGFi9lAJIF/TksIi' + \
+           b'LsEip8Jr9xbN1bTvFTTMRg4x1nD2I1od8HXAeAl9ujLPbTXr7UcsbIN2NTKtPaeNvQcJDQGpFT1llda+IT3r+H08vDbpouGxCbTxiYhO2FLqFv+2ABB0GXqj4GwpKTyj' + \
+           b'gKGhtWjHpQjI8yQXtapWtcun3QK9B1YfXkdLzqyl0qM3hgJPuZTT1ittvWoPsNJRG0UlRqHaXYg0d3kWGTFa3tLTFtB51hweFYrZR76T3KLqQmoExEgfWptCLAwyyQBp' + \
+           b'kUApgQ9ksrSAsX+92tJ/vuOLTMb3FwTA1hp1pN6itj95KualQwlYZIlIvaVIg1AKciOGw2CCeHomerchLvVejMP7+gymoGGR7ttXvVBT8vzLxlhTkl+O2SPK1332uOfz' + \
+           b'+pAq/zgwRFt56LIyAGRtc+OR37b+uzRPfb1XEwCzIHwZH5Nar93pLSPmfnmlghsdHkOD4LRFjA1jnNPP3vpwP309hGzwlNcLQyj58XphSDtmTasT2y2sIi0BpC9L4hWI' + \
+           b'twAYn68MQfr7eUMFMbwrk6MrvuwqjtcLKHBsY1J//BoLR/dnE/k6D/cnE/mc0Od83D+b0OfR/dlEvs7D/Xwi303ocz7uzyf0+zzcn03k6zzcjzeyx7+uuP9vLeK1Tf9P' + \
+           b'JvQfaZEp644NXCjW1tzRe3Ifr2xGre9rCH7cAuDCAD98ddN98w4nYpgC+19UQVjzl9u7BwAAAAZiS0dEAP8A/wD/oL2nkwAAAAd0SU1FB+MGEQkHB+UVPj0AAAWTSURB' + \
+           b'VGhD1Zh9TFVlHMe/59yLgPLS5XW4XqymTV5EU9NSg96Qywi3RGyz2VYbm5XSVZcUQcwREzYCTWwrcEIIoq4/1EFaBhIQsLzg5WU1K6EXKrtCEArChdvzPPccOAoX773n' + \
+           b'XBif7e55uy/f3+98z+957uH0er0Z1uB5qP19YYjejKFWA3hunrBgO7x5DC6kPRL8GHpVaqgs04rBC+1kiHiVjwb6p6Iw2Pq9w+LV4PBRWAiMahfFxVOmDoBm3s8HLRui' + \
+           b'MdL1A1Sch7BgO5bME/HLgjHAcZhntn6h5TA5AEG8/snnMdz1IxHvKSzYDss8EZ1DxN8kQThLPOXOAETbrNuIkd9+cjjz1Da5oc4XT5kIYA7ZRoolgDlmGyn8XLSNFJ7W' + \
+           b'+blmGym8Qbt5ztlGClcAN7Mjm5RIbuhSoTc78I7usJTZFk/hjnJedl130TZZ5IaltDRVw3z7NobIUcFdxWPs5k2ofX1RVVWNpKRkVJ49iQB3N6g1GoSv3MA+Q7ly+VuY' + \
+           b'entxfWgI2tgEYdZ+pj5KWEFabUT+O38Bf2seRJ9nEP6aH4jr/o+gm/dGyJkzqKg4DahVML4Ujz9d/dBEgqU0NlaxMZ2HSt4JyeYARPFitZkKv1/bETR8A+4FeTAdLIT/' + \
+           b'6Ci0pEgE1daw9cGCAqSlvYPBY0VsTOfpuhxsCkC0DRVvrdosHOvDqph4hD++Hn3PPsPmbl38hrWJiW/A50odBnelIG7Nagy9uQ8aQx2bl8s9A5DaZrpSWV//ndADLl6s' + \
+           b'Yu1YXx9rGxr0uEaspEqIgfGhUNZ2EuvQeblMGwAVb+smZTQahR7Q399v6YxZqhVlYGAAnK8f63P+/mysBFYDEG2jxCa1ZMnDWObnD9MnxdA018CUX8TGdF4uUwZAxas4' + \
+           b'XpGzzfLlISjJ+AA3Hg1HgPEantuhQ8CNTjYuyUhn63KYFIBom9ywpYqcbYqLC9ETvAau2WmorKsn1rmFyto6uB14n8w/wdYdZZS87gjAEdt4b4pjFehu6Jzvnt3jfY+d' + \
+           b'O5GSksHGtPV4O2nKz9nKMNGpIWV6fCdm4lnmlTlVsk2MEENKq9JQ8R5E3+7WDssVEG2j5JE4MDAQX1VbNjBKS0s9snIsV0AOVPwCmKFr68AIaXlHbOMoPb3/Cj3HEMXv' + \
+           b'MXTARHSOkULDsxvWyf+kDIYGkinL7Ub74ssexm1DxNPMU/EUbn3wKvM/arXD4lVkR9Xra1Hf2ITGy83w0dyHF6Oj4OXpiZLyU8jNPoRLNV/iSOEx4RMWdrz2KiIjtMJo' + \
+           b'esTMU8+LmRfhe4gAOZk/e+4U8j87irWrV2GE7K6aBfPh7eWF7EP54ISsRzwdjXd1u7DogftRXnSCvewVL7WNFF7OYTY9PRlFJ07ircTXsWLFOhw/fhqpqZnYuvUVxG2M' + \
+           b'Et7lONZsI2XyjB0sXBjE2oqKStaKXL3aidAQef/WxMzTamOyIp4iKwARjvyYktzLNlJkBdDd3c1arTaatSKLFy+Coa1dGE1gJmJcXenDduuIttFNYxspsgJIT8/C9pe3' + \
+           b'4PCnhWhursO2bfHYv/89lJeX4NyFr4V3WRgeHkbX73+g+tJ5VkIzM1OFlQmkthm1QTxFVgCUbiJq7eqVOJD3MUykHLf//AuyDh5mVYdmXKS0tAzbt25B4eel+DAnD5GR' + \
+           b'EcKKBXtsI4ULC1sje/eKjX0Be/fq4ElqP6W1tQ1hYaGsv1LyJIJC942EhE2sX1b2BWsp9OGOjtZ5GzMvokgASrCPVhs7Mi8i20JyoLZxIQUseYod1lZmLQCx2ky3SdnC' + \
+           b'rAQgrTb2ev5uZjwAR6uNNWY0AKVsI2XGAlDSNlJmJAClbSPF6QE4wzZSnBqAs2wjxWkBONM2Upzyrc62jRTFv5k+7vMzjZA/4O1Os80EwP/vHLXv3BH8dQAAAABJRU5E' + \
+           b'rkJggg=='
+
+g_Logger = logging.getLogger()
+
+g_stopEvent = threading.Event()
+
+# Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
+class LogQueueHandler(logging.Handler):
+    def __init__(self, log_queue):
+        super().__init__()
+        self.log_queue = log_queue
+    
+    def emit(self, record):
+        self.log_queue.put(record)
+
+# Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
+class LogConsole:
+    def __init__(self, scrolled_text):
+        self.scrolled_text = scrolled_text
+        self.frame = self.scrolled_text.winfo_toplevel()
+        
+        # Create a logging handler using a queue.
+        self.log_queue = queue.Queue()
+        self.queue_handler = LogQueueHandler(self.log_queue)
+        #formatter = logging.Formatter('[%(asctime)s] -> %(message)s')
+        formatter = logging.Formatter('%(message)s')
+        self.queue_handler.setFormatter(formatter)
+        g_Logger.addHandler(self.queue_handler)
+        
+        # Start polling messages from the queue.
+        self.frame.after(100, self.poll_log_queue)
+    
+    def display(self, record):
+        msg = self.queue_handler.format(record)
+        self.scrolled_text.configure(state='normal')
+        self.scrolled_text.insert(tk.END, msg + '\n', record.levelname)
+        self.scrolled_text.configure(state='disabled')
+        self.scrolled_text.yview(tk.END)
+    
+    def poll_log_queue(self):
+        # Check every 100 ms if there is a new message in the queue to display.
+        while True:
+            try:
+                record = self.log_queue.get(block=False)
+            except queue.Empty:
+                break
+            else:
+                self.display(record)
+        
+        self.frame.after(100, self.poll_log_queue)
+
+def utilsIsValueAlignedToEndpointPacketSize(value):
+    return bool((value & (g_usbEpMaxPacketSize - 1)) == 0)
+
+def utilsResetNspInfo():
+    global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
+    
+    # Reset NSP transfer mode info.
+    g_nspTransferMode = False
+    g_nspSize = 0
+    g_nspHeaderSize = 0
+    g_nspRemainingSize = 0
+    g_nspFile = None
+    g_nspFilePath = None
+
+def utilsGetSizeUnitAndDivisor(size):
+    size_suffixes = [ 'B', 'KiB', 'MiB', 'GiB' ]
+    size_suffixes_count = len(size_suffixes)
+    
+    float_size = float(size)
+    ret = None
+    
+    for i in range(size_suffixes_count):
+        if (float_size < pow(1024, i + 1)) or ((i + 1) >= size_suffixes_count):
+            ret = (size_suffixes[i], pow(1024, i))
+            break
+    
+    return ret
+
+def usbGetDeviceEndpoints():
+    global g_usbEpIn, g_usbEpOut, g_usbEpMaxPacketSize
+    
+    prev_dev = cur_dev = None
+    usb_ep_in_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_IN
+    usb_ep_out_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_OUT
+    usb_version = None
+    
+    while True:
+        # Check if the user decided to stop the server.
+        if g_stopEvent.is_set():
+            g_stopEvent.clear()
+            return False
+        
+        # Find a connected USB device with a matching VID/PID pair.
+        cur_dev = usb.core.find(idVendor=USB_DEV_VID, idProduct=USB_DEV_PID)
+        if (cur_dev is None) or ((prev_dev is not None) and (cur_dev.bus == prev_dev.bus) and (cur_dev.address == prev_dev.address)): # Using == here would also compare the backend.
+            time.sleep(0.1)
+            continue
+        
+        # Update previous device.
+        prev_dev = cur_dev
+        
+        # Check if the product and manufacturer strings match the ones used by nxdumptool.
+        #if (cur_dev.manufacturer != USB_DEV_MANUFACTURER) or (cur_dev.product != USB_DEV_PRODUCT):
+        if cur_dev.manufacturer != USB_DEV_MANUFACTURER:
+            g_Logger.error('Invalid manufacturer/product strings! (bus %u, address %u).' % (cur_dev.bus, cur_dev.address))
+            time.sleep(0.1)
+            continue
+        
+        # Reset device.
+        cur_dev.reset()
+        
+        # Set default device configuration, then get the active configuration descriptor.
+        cur_dev.set_configuration()
+        cfg = cur_dev.get_active_configuration()
+        
+        # Get default interface descriptor.
+        intf = cfg[(0,0)]
+        
+        # Retrieve endpoints.
+        g_usbEpIn = usb.util.find_descriptor(intf, custom_match=usb_ep_in_lambda)
+        g_usbEpOut = usb.util.find_descriptor(intf, custom_match=usb_ep_out_lambda)
+        
+        if (g_usbEpIn is None) or (g_usbEpOut is None):
+            g_Logger.error('Invalid endpoint addresses! (bus %u, address %u).' % (cur_dev.bus, cur_dev.address))
+            time.sleep(0.1)
+            continue
+        
+        # Save endpoint max packet size and USB version.
+        g_usbEpMaxPacketSize = g_usbEpIn.wMaxPacketSize
+        usb_version = cur_dev.bcdUSB
+        
+        break
+    
+    g_tkCanvas.itemconfigure(g_tkTipMessage, state='normal', text=SERVER_STOP_MSG)
+    
+    g_Logger.debug('Successfully retrieved USB endpoints! (bus %u, address %u).' % (cur_dev.bus, cur_dev.address))
+    g_Logger.debug('Max packet size: 0x%X (USB %u.%u).\n' % (g_usbEpMaxPacketSize, usb_version >> 8, (usb_version & 0xFF) >> 4))
+    
+    return True
+
+def usbRead(size, timeout=-1):
+    rd = None
+    
+    try:
+        # Convert read data to a bytes object for easier handling.
+        rd = bytes(g_usbEpIn.read(size, timeout))
+    except:
+        traceback.print_exc()
+        g_Logger.error('\nUSB timeout triggered or console disconnected.')
+    
+    return rd
+
+def usbWrite(data, timeout=-1):
+    wr = 0
+    
+    try:
+        wr = g_usbEpOut.write(data, timeout)
+    except:
+        traceback.print_exc()
+        g_Logger.error('\nUSB timeout triggered or console disconnected.')
+    
+    return wr
+
+def usbSendStatus(code):
+    status = struct.pack('<4sIH6p', USB_MAGIC_WORD, code, g_usbEpMaxPacketSize, b'')
+    return usbWrite(status, USB_TRANSFER_TIMEOUT) == len(status)
+
+def usbHandleStartSession(cmd_block):
+    global g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion
+    
+    g_Logger.debug('Received StartSession (%02X) command.' % (USB_CMD_START_SESSION))
+    
+    # Parse command block.
+    (g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion) = struct.unpack_from('<BBBB', cmd_block, 0)
+    
+    # Print client info.
+    g_Logger.info('Client info: nxdumptool v%u.%u.%u - ABI v%u.\n' % (g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion))
+    
+    # Check if we support this ABI version.
+    if g_nxdtAbiVersion != USB_ABI_VERSION:
+        g_Logger.error('Unsupported ABI version!')
+        return USB_STATUS_UNSUPPORTED_ABI_VERSION
+    
+    # Return status code
+    return USB_STATUS_SUCCESS
+
+def usbHandleSendFileProperties(cmd_block):
+    global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath, g_outputDir, g_tkRoot
+    
+    g_Logger.debug('Received SendFileProperties (%02X) command.' % (USB_CMD_SEND_FILE_PROPERTIES))
+    
+    # Parse command block.
+    (file_size, filename_length, nsp_header_size, raw_filename) = struct.unpack_from('<QII{}s'.format(USB_FILE_PROPERTIES_MAX_NAME_LENGTH), cmd_block, 0)
+    filename = raw_filename.decode('utf-8').strip('\x00')
+    
+    # Print info.
+    info_str = ('File size: 0x%X | Filename length: 0x%X' % (file_size, filename_length))
+    if nsp_header_size > 0:
+        info_str += (' | NSP header size: 0x%X' % (nsp_header_size))
+    info_str += '.'
+    
+    g_Logger.info(info_str)
+    g_Logger.info('Filename: "%s".' % (filename))
+    
+    # Perform integrity checks
+    if (g_nspTransferMode == False) and (file_size > 0) and (nsp_header_size >= file_size):
+        g_Logger.error('NSP header size must be smaller than the full NSP size!')
+        return USB_STATUS_MALFORMED_CMD
+    
+    if (g_nspTransferMode == True) and (nsp_header_size > 0):
+        g_Logger.error('Received non-zero NSP header size during NSP transfer mode!')
+        return USB_STATUS_MALFORMED_CMD
+    
+    if (filename_length <= 0) or (filename_length > USB_FILE_PROPERTIES_MAX_NAME_LENGTH):
+        g_Logger.error('Invalid filename length!')
+        return USB_STATUS_MALFORMED_CMD
+    
+    # Enable NSP transfer mode (if needed).
+    if (g_nspTransferMode == False) and (file_size > 0) and (nsp_header_size > 0):
+        g_nspTransferMode = True
+        g_nspSize = file_size
+        g_nspRemainingSize = (file_size - nsp_header_size)
+        g_nspHeaderSize = nsp_header_size
+        g_nspFile = None
+        g_nspFilePath = None
+        g_Logger.debug('NSP transfer mode enabled!\n')
+    
+    # Perform additional integrity checks and get a file object to work with.
+    if (g_nspTransferMode == False) or ((g_nspTransferMode == True) and (g_nspFile is None)):
+        # Check if we're dealing with an absolute path.
+        if filename[0] == '/':
+            filename = filename[1:]
+            
+            # Replace all slashes with backslashes if we're running under Windows.
+            if os.name == 'nt':
+                filename = filename.replace('/', '\\')
+        
+        # Generate full, absolute path to the destination file.
+        fullpath = os.path.abspath(g_outputDir + os.path.sep + filename)
+        
+        # Get parent directory path.
+        dirpath = os.path.dirname(fullpath)
+        
+        # Create full directory tree.
+        os.makedirs(dirpath, exist_ok=True)
+        
+        # Make sure the output filepath doesn't point to an existing directory.
+        if (os.path.exists(fullpath) == True) and (os.path.isfile(fullpath) == False):
+            utilsResetNspInfo()
+            g_Logger.error('Output filepath points to an existing directory! ("%s").' % (fullpath))
+            return USB_STATUS_HOST_IO_ERROR
+        
+        # Make sure we have enough free space.
+        (total_space, used_space, free_space) = shutil.disk_usage(dirpath)
+        if free_space <= file_size:
+            utilsResetNspInfo()
+            g_Logger.error('Not enough free space available in output volume!')
+            return USB_STATUS_HOST_IO_ERROR
+        
+        # Get file object.
+        file = open(fullpath, "wb")
+        
+        if g_nspTransferMode == True:
+            # Update NSP file object.
+            g_nspFile = file
+            
+            # Update NSP file path.
+            g_nspFilePath = fullpath
+            
+            # Write NSP header padding right away.
+            file.write(b'\0' * g_nspHeaderSize)
+    else:
+        # Retrieve what we need using global variables.
+        file = g_nspFile
+        fullpath = g_nspFilePath
+        dirpath = os.path.dirname(fullpath)
+    
+    # Check if we're dealing with an empty file or with the first SendFileProperties command from a NSP.
+    if (file_size == 0) or ((g_nspTransferMode == True) and (file_size == g_nspSize)):
+        # Close file (if needed).
+        if g_nspTransferMode == False:
+            file.close()
+        
+        # Let the command handler take care of sending the status response for us.
+        return USB_STATUS_SUCCESS
+    
+    # Send status response before entering the data transfer stage.
+    usbSendStatus(USB_STATUS_SUCCESS)
+    
+    # Start data transfer stage.
+    g_Logger.info('Data transfer started. Saving %s to: "%s".' % (('file' if (g_nspTransferMode == False) else 'NSP file entry'), fullpath))
+    
+    offset = 0
+    blksize = USB_TRANSFER_BLOCK_SIZE
+    
+    # Initialize progress bar.
+    (unit, unit_divisor) = utilsGetSizeUnitAndDivisor(file_size)
+    
+    idx = filename.rfind(os.path.sep)
+    bar_format_filename = (filename[idx+1:] if (idx >= 0) else filename)
+    
+    bar_format = ('Current file: "%s".\n' % (bar_format_filename))
+    bar_format += 'Use your console to cancel the file transfer if you wish to do so.\n\n'
+    bar_format += '{percentage:.2f}% - {n:.2f} / {total:.2f} {unit}\nElapsed time: {elapsed}. Remaining time: {remaining}.\nSpeed: {rate_fmt}.'
+    
+    pbar = tqdm_tk(total=(float(file_size) / unit_divisor), unit=unit, bar_format=bar_format, grab=False, tk_parent=g_tkRoot)
+    pbar._tk_window.title('File transfer')
+    pbar._tk_window.resizable(False, False)
+    pbar._tk_window.protocol('WM_DELETE_WINDOW', uiHandleExitProtocolStub)
+    
+    start_time = time.time()
+    
+    def cancelTransfer():
+        # Cancel file transfer.
+        file.close()
+        os.remove(fullpath)
+        utilsResetNspInfo()
+        pbar.close()
+        pbar._tk_window.destroy()
+    
+    while offset < file_size:
+        # Update block size (if needed).
+        diff = (file_size - offset)
+        if blksize > diff:
+            blksize = diff
+        
+        # Handle Zero-Length Termination packet (if needed).
+        if ((offset + blksize) >= file_size) and (utilsIsValueAlignedToEndpointPacketSize(blksize) == True):
+            rd_size = (blksize + 1)
+        else:
+            rd_size = blksize
+        
+        # Read current chunk.
+        chunk = usbRead(rd_size, USB_TRANSFER_TIMEOUT)
+        if chunk == None:
+            g_Logger.error('Failed to read 0x%X byte(s) long data chunk!' % (rd_size))
+            
+            # Cancel file transfer.
+            cancelTransfer()
+            
+            # Returning None will make the command handler exit right away.
+            return None
+        
+        chunk_size = len(chunk)
+        
+        # Check if we're dealing with a CancelFileTransfer command.
+        if chunk_size == USB_CMD_HEADER_SIZE:
+            (magic, cmd_id, cmd_block_size) = struct.unpack_from('<4sII', chunk, 0)
+            if (magic == USB_MAGIC_WORD) and (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER):
+                g_Logger.debug('Received CancelFileTransfer (%02X) command.' % (USB_CMD_CANCEL_FILE_TRANSFER))
+                
+                # Cancel file transfer.
+                cancelTransfer()
+                
+                # Let the command handler take care of sending the status response for us.
+                return USB_STATUS_SUCCESS
+        
+        # Write current chunk.
+        file.write(chunk)
+        file.flush()
+        
+        # Update current offset.
+        offset = (offset + chunk_size)
+        
+        # Update remaining NSP data size.
+        if g_nspTransferMode == True:
+            g_nspRemainingSize = (g_nspRemainingSize - chunk_size)
+        
+        # Update progress bar once per second.
+        pbar.update(float(chunk_size) / unit_divisor)
+        pbar.refresh()
+    
+    # Close progress bar
+    pbar.close()
+    pbar._tk_window.destroy()
+    
+    # Close file handle (if needed).
+    if g_nspTransferMode == False:
+        file.close()
+    
+    # I'd like to get this info from tqdm but it's not possible.
+    elapsed_time = round(time.time() - start_time)
+    g_Logger.info('File transfer successfully completed in %us!\n' % (elapsed_time))
+    
+    return USB_STATUS_SUCCESS
+
+def usbHandleSendNspHeader(cmd_block):
+    global g_nspTransferMode, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
+    
+    nsp_header_size = len(cmd_block)
+    
+    g_Logger.debug('Received SendNspHeader (%02X) command.' % (USB_CMD_SEND_NSP_HEADER))
+    
+    # Integrity checks.
+    if g_nspTransferMode == False:
+        g_Logger.error('Received NSP header out of NSP transfer mode!')
+        return USB_STATUS_MALFORMED_CMD
+    
+    if g_nspRemainingSize > 0:
+        g_Logger.error('Received NSP header before receiving all NSP data! (missing 0x%X byte[s]).' % (g_nspRemainingSize))
+        return USB_STATUS_MALFORMED_CMD
+    
+    if nsp_header_size != g_nspHeaderSize:
+        g_Logger.error('NSP header size mismatch! (0x%X != 0x%X).' % (nsp_header_size, g_nspHeaderSize))
+        return USB_STATUS_MALFORMED_CMD
+    
+    # Write NSP header.
+    g_nspFile.seek(0)
+    g_nspFile.write(cmd_block)
+    g_nspFile.close()
+    
+    g_Logger.debug('Successfully wrote 0x%X byte-long NSP header to "%s".' % (nsp_header_size, g_nspFilePath))
+    
+    # Disable NSP transfer mode.
+    utilsResetNspInfo()
+    
+    return USB_STATUS_SUCCESS
+
+def usbHandleEndSession(cmd_block):
+    g_Logger.debug('Received EndSession (%02X) command.' % (USB_CMD_END_SESSION))
+    return USB_STATUS_SUCCESS
+
+def usbCommandHandler():
+    # CancelFileTransfer is handled in usbHandleSendFileProperties().
+    cmd_dict = {
+        USB_CMD_START_SESSION:        usbHandleStartSession,
+        USB_CMD_SEND_FILE_PROPERTIES: usbHandleSendFileProperties,
+        USB_CMD_SEND_NSP_HEADER:      usbHandleSendNspHeader,
+        USB_CMD_END_SESSION:          usbHandleEndSession
+    }
+    
+    # Get device endpoints.
+    if usbGetDeviceEndpoints() == False:
+        # Update UI and return.
+        uiToggleElements(True)
+        return
+    
+    # Disable server button.
+    g_tkServerButton.configure(state='disabled')
+    
+    # Reset NSP info.
+    utilsResetNspInfo()
+    
+    while True:
+        # Read command header.
+        cmd_header = usbRead(USB_CMD_HEADER_SIZE)
+        if (cmd_header is None) or (len(cmd_header) != USB_CMD_HEADER_SIZE):
+            g_Logger.error('Failed to read 0x%X byte(s) long command header!' % (USB_CMD_HEADER_SIZE))
+            break
+        
+        # Parse command header.
+        (magic, cmd_id, cmd_block_size) = struct.unpack_from('<4sII', cmd_header, 0)
+        
+        # Read command block right away (if needed).
+        # nxdumptool expects us to read it right after sending the command header.
+        cmd_block = None
+        if cmd_block_size > 0:
+            # Handle Zero-Length Termination packet (if needed).
+            if utilsIsValueAlignedToEndpointPacketSize(cmd_block_size) == True:
+                rd_size = (cmd_block_size + 1)
+            else:
+                rd_size = cmd_block_size
+            
+            cmd_block = usbRead(rd_size, USB_TRANSFER_TIMEOUT)
+            if (cmd_block is None) or (len(cmd_block) != cmd_block_size):
+                g_Logger.error('Failed to read 0x%X byte(s) long command block for command ID %02X!' % (cmd_block_size, cmd_id))
+                break
+        
+        # Verify magic word.
+        if magic != USB_MAGIC_WORD:
+            g_Logger.error('Received command header with invalid magic word!')
+            usbSendStatus(USB_STATUS_INVALID_MAGIC_WORD)
+            continue
+        
+        # Get command handler function.
+        cmd_func = cmd_dict.get(cmd_id, None)
+        if cmd_func is None:
+            g_Logger.error('Received command header with unsupported ID %02X.' % (cmd_id))
+            usbSendStatus(USB_STATUS_UNSUPPORTED_CMD)
+            continue
+        
+        # Verify command block size.
+        if ((cmd_id == USB_CMD_START_SESSION) and (cmd_block_size != USB_CMD_BLOCK_SIZE_START_SESSION)) or \
+           ((cmd_id == USB_CMD_SEND_FILE_PROPERTIES) and (cmd_block_size != USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES)) or \
+           ((cmd_id == USB_CMD_SEND_NSP_HEADER) and (cmd_block_size == 0)):
+            g_Logger.error('Invalid command block size for command ID %02X! (0x%X).' % (cmd_id, cmd_block_size))
+            usbSendStatus(USB_STATUS_MALFORMED_COMMAND)
+            continue
+        
+        # Run command handler function.
+        # Send status response afterwards. Bail out if requested.
+        status = cmd_func(cmd_block)
+        if (status == None) or (not usbSendStatus(status)) or (cmd_id == USB_CMD_END_SESSION) or (status == USB_STATUS_UNSUPPORTED_ABI_VERSION):
+            break
+    
+    g_Logger.info('Stopping server.')
+    
+    # Update UI.
+    uiToggleElements(True)
+
+def uiStopServer():
+    # Signal the shared stop event.
+    g_stopEvent.set()
+
+def uiStartServer():
+    global g_outputDir
+    
+    g_outputDir = g_tkDirText.get('1.0', tk.END).strip()
+    if not g_outputDir:
+        # We should never reach this, honestly.
+        messagebox.showerror('Error', 'You must provide an output directory!', parent=g_tkRoot)
+        return
+    
+    # Make sure the full directory tree exists.
+    try:
+        os.makedirs(g_outputDir, exist_ok=True)
+    except:
+        traceback.print_exc()
+        messagebox.showerror('Error', 'Unable to create full output directory tree!', parent=g_tkRoot)
+        return
+    
+    # Update UI.
+    uiToggleElements(False)
+    
+    # Create background server thread.
+    server_thread = threading.Thread(target=usbCommandHandler, daemon=True)
+    server_thread.start()
+
+def uiToggleElements(enable):
+    if enable == True:
+        g_tkRoot.protocol('WM_DELETE_WINDOW', uiHandleExitProtocol)
+        
+        g_tkChooseDirButton.configure(state='normal')
+        g_tkServerButton.configure(text='Start server', command=uiStartServer, state='normal')
+        g_tkCanvas.itemconfigure(g_tkTipMessage, state='hidden', text='')
+    else:
+        g_tkRoot.protocol('WM_DELETE_WINDOW', uiHandleExitProtocolStub)
+        
+        g_tkChooseDirButton.configure(state='disabled')
+        g_tkServerButton.configure(text='Stop server', command=uiStopServer, state='normal')
+        g_tkCanvas.itemconfigure(g_tkTipMessage, state='normal', text=SERVER_START_MSG)
+        
+        g_tkScrolledTextLog.configure(state='normal')
+        g_tkScrolledTextLog.delete('1.0', tk.END)
+        g_tkScrolledTextLog.configure(state='disabled')
+
+def uiChooseDirectory():
+    dir = filedialog.askdirectory(parent=g_tkRoot, title='Select an output directory', initialdir=INITIAL_DIR, mustexist=True)
+    if dir:
+        dir = os.path.abspath(dir)
+        uiUpdateDirectoryField(dir)
+
+def uiUpdateDirectoryField(dir):
+    g_tkDirText.configure(state='normal')
+    g_tkDirText.delete('1.0', tk.END)
+    g_tkDirText.insert('1.0', dir)
+    g_tkDirText.configure(state='disabled')
+
+def uiHandleExitProtocol():
+    if messagebox.askokcancel('Message', 'Are you sure you want to exit?', parent=g_tkRoot):
+        g_tkRoot.destroy()
+
+def uiHandleExitProtocolStub():
+    pass
+
+def uiHandleTabInput(event):
+    event.widget.tk_focusNext().focus()
+    return 'break'
+
+def uiHandleShiftTabInput(event):
+    event.widget.tk_focusPrev().focus()
+    return 'break'
+
+def uiScaleMeasure(measure):
+    return round(float(measure) * SCALE)
+
+def main():
+    global SCALE, g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog
+    
+    # Configure logging mechanism.
+    logging.basicConfig(level=logging.DEBUG)
+    """if len(g_Logger.handlers) > 0:
+        log_stderr = g_Logger.handlers[0]
+        g_Logger.removeHandler(log_stderr)"""
+    
+    # Get OS information.
+    os_type = platform.system()
+    os_version = platform.version()
+    
+    # Check if we're running under Windows Vista or later.
+    dpi_aware = False
+    win_vista = ((os_type == 'Windows') and (int(os_version[:os_version.find('.')]) >= 6))
+    if win_vista == True:
+        try:
+            # Enable high DPI scaling.
+            dpi_aware = (ctypes.windll.user32.SetProcessDPIAware() == 1)
+            if dpi_aware == False:
+                dpi_aware = (ctypes.windll.shcore.SetProcessDpiAwareness(1) == 0)
+        except:
+            traceback.print_exc()
+    
+    # Create root Tkinter object.
+    g_tkRoot = tk.Tk()
+    
+    # Get screen resolution.
+    screen_width_px = g_tkRoot.winfo_screenwidth()
+    screen_height_px = g_tkRoot.winfo_screenheight()
+    
+    # Get pixel density (DPI).
+    screen_dpi = round(g_tkRoot.winfo_fpixels('1i'))
+    
+    # Update scaling factor (if needed).
+    if (win_vista == True) and (dpi_aware == True):
+        SCALE = (float(screen_dpi) / WINDOWS_SCALING_FACTOR)
+    
+    # Decode embedded icon and set it.
+    try:
+        icon_fp = io.BytesIO(base64.b64decode(APP_ICON))
+        icon_image = Image.open(fp=icon_fp, formats=['PNG'])
+        icon_photo = ImageTk.PhotoImage(icon_image)
+        
+        g_tkRoot.wm_iconphoto(True, icon_photo)
+        
+        icon_image.close()
+        icon_fp.close()
+    except:
+        traceback.print_exc()
+        g_tkRoot.withdraw()
+        messagebox.showerror('Error', 'Unable to decode embedded application icon!')
+        g_tkRoot.destroy()
+        return
+    
+    # Set window properties.
+    g_tkRoot.resizable(False, False)
+    g_tkRoot.title("{} host app v{}".format(USB_DEV_PRODUCT, APP_VERSION))
+    g_tkRoot.protocol('WM_DELETE_WINDOW', uiHandleExitProtocol)
+    
+    # Determine window size.
+    window_width_px = uiScaleMeasure(WINDOW_WIDTH)
+    window_height_px = uiScaleMeasure(WINDOW_HEIGHT)
+    
+    # Center window.
+    pos_hor = int((screen_width_px / 2) - (window_width_px / 2))
+    pos_ver = int((screen_height_px / 2) - (window_height_px / 2))
+    g_tkRoot.geometry("+{}+{}".format(pos_hor, pos_ver))
+    
+    # Create canvas and fill it with window elements.
+    g_tkCanvas = tk.Canvas(g_tkRoot, width=window_width_px, height=window_height_px)
+    g_tkCanvas.pack()
+    
+    g_tkCanvas.create_text(uiScaleMeasure(60), uiScaleMeasure(30), text='Output directory:', anchor=tk.CENTER)
+    
+    g_tkDirText = tk.Text(g_tkRoot, height=1, width=45, font=font.nametofont('TkDefaultFont'), wrap='none', state='disabled', bg='#F0F0F0')
+    uiUpdateDirectoryField(DEFAULT_DIR)
+    g_tkCanvas.create_window(uiScaleMeasure(260), uiScaleMeasure(30), window=g_tkDirText, anchor=tk.CENTER)
+    
+    g_tkChooseDirButton = tk.Button(g_tkRoot, text='Choose', width=10, command=uiChooseDirectory)
+    g_tkCanvas.create_window(uiScaleMeasure(450), uiScaleMeasure(30), window=g_tkChooseDirButton, anchor=tk.CENTER)
+    
+    g_tkServerButton = tk.Button(g_tkRoot, text='Start server', width=15, command=uiStartServer)
+    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH / 2), uiScaleMeasure(70), window=g_tkServerButton, anchor=tk.CENTER)
+    
+    g_tkTipMessage = g_tkCanvas.create_text(uiScaleMeasure(WINDOW_WIDTH / 2), uiScaleMeasure(100), anchor=tk.CENTER)
+    g_tkCanvas.itemconfigure(g_tkTipMessage, state='hidden', text='')
+    
+    g_tkScrolledTextLog = scrolledtext.ScrolledText(g_tkRoot, height=20, width=65, font=font.nametofont('TkDefaultFont'), wrap=tk.WORD, state='disabled')
+    g_tkScrolledTextLog.tag_config('INFO', foreground='black')
+    g_tkScrolledTextLog.tag_config('DEBUG', foreground='gray')
+    g_tkScrolledTextLog.tag_config('WARNING', foreground='orange')
+    g_tkScrolledTextLog.tag_config('ERROR', foreground='red')
+    g_tkScrolledTextLog.tag_config('CRITICAL', foreground='red', underline=1)
+    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH / 2), uiScaleMeasure(280), window=g_tkScrolledTextLog, anchor=tk.CENTER)
+    
+    g_tkCanvas.create_text(uiScaleMeasure(5), uiScaleMeasure(WINDOW_HEIGHT - 10), text="Copyright (c) {}, {}".format(COPYRIGHT_YEAR, USB_DEV_MANUFACTURER), anchor=tk.W)
+    
+    # Initialize console g_Logger.
+    console = LogConsole(g_tkScrolledTextLog)
+    
+    # Enter Tkinter main loop.
+    g_tkRoot.mainloop()
+
+if __name__ == "__main__":
+    try:
+        main()
+    except KeyboardInterrupt:
+        pass
