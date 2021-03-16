@@ -640,7 +640,7 @@ def usbHandleSendFileProperties(cmd_block):
         # Read current chunk.
         chunk = usbRead(rd_size, USB_TRANSFER_TIMEOUT)
         if chunk == None:
-            g_Logger.error('Failed to read 0x%X byte(s) long data chunk!' % (rd_size))
+            g_Logger.error('Failed to read 0x%X-byte long data chunk!' % (rd_size))
             
             # Cancel file transfer.
             cancelTransfer()
@@ -714,7 +714,7 @@ def usbHandleSendNspHeader(cmd_block):
     g_nspFile.write(cmd_block)
     g_nspFile.close()
     
-    g_Logger.debug('Successfully wrote 0x%X byte-long NSP header to "%s".\n' % (nsp_header_size, g_nspFilePath))
+    g_Logger.debug('Successfully wrote 0x%X-byte long NSP header to "%s".\n' % (nsp_header_size, g_nspFilePath))
     
     # Disable NSP transfer mode.
     utilsResetNspInfo()
@@ -750,7 +750,7 @@ def usbCommandHandler():
         # Read command header.
         cmd_header = usbRead(USB_CMD_HEADER_SIZE)
         if (cmd_header is None) or (len(cmd_header) != USB_CMD_HEADER_SIZE):
-            g_Logger.error('Failed to read 0x%X byte(s) long command header!' % (USB_CMD_HEADER_SIZE))
+            g_Logger.error('Failed to read 0x%X-byte long command header!' % (USB_CMD_HEADER_SIZE))
             break
         
         # Parse command header.
@@ -768,7 +768,7 @@ def usbCommandHandler():
             
             cmd_block = usbRead(rd_size, USB_TRANSFER_TIMEOUT)
             if (cmd_block is None) or (len(cmd_block) != cmd_block_size):
-                g_Logger.error('Failed to read 0x%X byte(s) long command block for command ID %02X!' % (cmd_block_size, cmd_id))
+                g_Logger.error('Failed to read 0x%X-byte long command block for command ID %02X!' % (cmd_block_size, cmd_id))
                 break
         
         # Verify magic word.
