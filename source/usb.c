@@ -80,7 +80,8 @@ typedef struct {
     u8 app_ver_minor;
     u8 app_ver_micro;
     u8 abi_version;
-    u8 reserved[0xC];
+    char git_commit[8];
+    u8 reserved[0x4];
 } UsbCommandStartSession;
 
 typedef struct {
@@ -606,6 +607,7 @@ static bool usbStartSession(void)
     cmd_block->app_ver_minor = VERSION_MINOR;
     cmd_block->app_ver_micro = VERSION_MICRO;
     cmd_block->abi_version = USB_ABI_VERSION;
+    snprintf(cmd_block->git_commit, sizeof(cmd_block->git_commit), GIT_COMMIT);
     
     ret = usbSendCommand();
     if (ret)

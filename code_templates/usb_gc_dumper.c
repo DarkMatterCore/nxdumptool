@@ -349,8 +349,10 @@ static void waitForGameCardAndUsb(void)
     
     while(true)
     {
-        if (gamecardGetStatus() == GameCardStatus_InsertedAndInfoLoaded && titleIsGameCardInfoUpdated()) break;
+        if (gamecardGetStatus() == GameCardStatus_InsertedAndInfoLoaded) break;
     }
+    
+    titleIsGameCardInfoUpdated();
     
     consolePrint("waiting for usb session...\n");
     

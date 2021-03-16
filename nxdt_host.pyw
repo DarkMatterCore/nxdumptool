@@ -26,7 +26,7 @@
 # libusb needs to be installed as well. PyUSB uses it as its USB backend. Otherwise, a NoBackend exception will be raised while calling PyUSB functions.
 # Under Windows, the recommended way to do this is by installing the libusb driver with Zadig (https://zadig.akeo.ie). This is a common step in Switch modding guides.
 # Under MacOS, use `brew install libusb` to install libusb via Homebrew.
-# Under Linux, you should be good to go from the start. If not, just use the packet manager from your distro to install libusb.
+# Under Linux, you should be good to go from the start. If not, just use the package manager from your distro to install libusb.
 
 import os
 import platform
@@ -439,15 +439,16 @@ def usbSendStatus(code):
     return usbWrite(status, USB_TRANSFER_TIMEOUT) == len(status)
 
 def usbHandleStartSession(cmd_block):
-    global g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion
+    global g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion, g_nxdtGitCommit
     
     g_Logger.debug('Received StartSession (%02X) command.' % (USB_CMD_START_SESSION))
     
     # Parse command block.
-    (g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion) = struct.unpack_from('<BBBB', cmd_block, 0)
+    (g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion, g_nxdtGitCommit) = struct.unpack_from('<BBBB8s', cmd_block, 0)
+    g_nxdtGitCommit = g_nxdtGitCommit.decode('utf-8').strip('\x00')
     
     # Print client info.
-    g_Logger.info('Client info: nxdumptool v%u.%u.%u - ABI v%u.\n' % (g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion))
+    g_Logger.info('Client info: nxdumptool v%u.%u.%u, ABI v%u (commit %s).\n' % (g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersion, g_nxdtGitCommit))
     
     # Check if we support this ABI version.
     if g_nxdtAbiVersion != USB_ABI_VERSION:

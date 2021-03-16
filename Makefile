@@ -31,6 +31,9 @@ include $(DEVKITPRO)/libnx/switch_rules
 #     - <libnx folder>/default_icon.jpg
 #---------------------------------------------------------------------------------
 
+GIT_BRANCH	:=	$(shell git rev-parse --abbrev-ref HEAD)
+GIT_COMMIT	:=	$(shell git rev-parse --short HEAD)
+
 VERSION_MAJOR := 2
 VERSION_MINOR := 0
 VERSION_MICRO := 0
@@ -58,6 +61,7 @@ ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
 CFLAGS	:=	-g -Wall -Wextra -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
 CFLAGS	+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO} -DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
+CFLAGS	+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\"
 CFLAGS  +=  `freetype-config --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config zlib --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config libxml-2.0 --cflags`
