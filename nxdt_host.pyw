@@ -862,8 +862,7 @@ def uiUpdateDirectoryField(dir):
     g_tkDirText.configure(state='disabled')
 
 def uiHandleExitProtocol():
-    if messagebox.askokcancel('Message', 'Are you sure you want to exit?', parent=g_tkRoot):
-        g_tkRoot.destroy()
+    g_tkRoot.destroy()
 
 def uiHandleExitProtocolStub():
     pass
@@ -928,7 +927,7 @@ def main():
     except:
         traceback.print_exc()
         g_tkRoot.withdraw()
-        messagebox.showerror('Error', 'Unable to decode embedded application icon!')
+        messagebox.showerror('Error', 'Unable to decode embedded application icon!', parent=g_tkRoot)
         g_tkRoot.destroy()
         return
     
