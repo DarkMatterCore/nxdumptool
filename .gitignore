@@ -1,6 +1,7 @@
 build
 __pycache__
 dist
+nxdumptool
 *.elf
 *.nacp
 *.nro

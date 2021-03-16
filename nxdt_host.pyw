@@ -567,8 +567,8 @@ def usbHandleSendFileProperties(cmd_block):
     blksize = USB_TRANSFER_BLOCK_SIZE
     
     # Initialize progress bar.
-    (unit, unit_divisor) = utilsGetSizeUnitAndDivisor(file_size)
-    total = (float(file_size) / unit_divisor)
+    (unit, unit_divider) = utilsGetSizeUnitAndDivisor(file_size)
+    total = (float(file_size) / unit_divider)
     
     idx = filename.rfind(os.path.sep)
     prefix_filename = (filename[idx+1:] if (idx >= 0) else filename)
@@ -616,7 +616,7 @@ def usbHandleSendFileProperties(cmd_block):
         if chunk_size == USB_CMD_HEADER_SIZE:
             (magic, cmd_id, cmd_block_size) = struct.unpack_from('<4sII', chunk, 0)
             if (magic == USB_MAGIC_WORD) and (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER):
-                g_Logger.debug('Received CancelFileTransfer (%02X) command.' % (USB_CMD_CANCEL_FILE_TRANSFER))
+                g_Logger.debug('\nReceived CancelFileTransfer (%02X) command.' % (USB_CMD_CANCEL_FILE_TRANSFER))
                 
                 # Cancel file transfer.
                 cancelTransfer()
@@ -636,8 +636,7 @@ def usbHandleSendFileProperties(cmd_block):
             g_nspRemainingSize = (g_nspRemainingSize - chunk_size)
         
         # Update progress bar once per second.
-        pbar.update(float(chunk_size) / unit_divisor)
-        #pbar.refresh()
+        pbar.update(float(chunk_size) / unit_divider)
     
     elapsed_time = round(time.time() - pbar.start)
     g_Logger.info('File transfer successfully completed in %s!\n' % (tqdm.format_interval(elapsed_time)))
