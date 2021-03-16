@@ -1,4 +1,6 @@
 build
+__pycache__
+dist
 *.elf
 *.nacp
 *.nro
@@ -7,11 +9,7 @@ build
 *.pfs0
 *.lst
 *.tar.bz2
+*.log
+*.spec
 /code_templates/tmp/*
 /source/main.c
-*.log
-
-# Clion files
-.idea
-cmake-build-debug
-CMakeLists.txt
