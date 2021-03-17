@@ -20,13 +20,14 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-# This script depends on Pillow, PyUSB and tqdm.
-# You can install them with `pip install Pillow pyusb tqdm`.
+# This script depends on Pillow, PyUSB and tqdm. You can install them with `pip install Pillow pyusb tqdm`.
 
 # libusb needs to be installed as well. PyUSB uses it as its USB backend. Otherwise, a NoBackend exception will be raised while calling PyUSB functions.
 # Under Windows, the recommended way to do this is by installing the libusb driver with Zadig (https://zadig.akeo.ie). This is a common step in Switch modding guides.
 # Under MacOS, use `brew install libusb` to install libusb via Homebrew.
 # Under Linux, you should be good to go from the start. If not, just use the package manager from your distro to install libusb.
+
+# Optionally, comtypes may also be installed under Windows to provide taskbar progress functionality. You can install it with `pip install comtypes`.
 
 import os
 import platform
@@ -205,9 +206,107 @@ APP_ICON = b'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAAAR
            b'rAQgrTb2ev5uZjwAR6uNNWY0AKVsI2XGAlDSNlJmJAClbSPF6QE4wzZSnBqAs2wjxWkBONM2Upzyrc62jRTFv5k+7vMzjZA/4O1Os80EwP/vHLXv3BH8dQAAAABJRU5E' + \
            b'rkJggg=='
 
+# Taskbar Type Library (TLB) object.
+TASKBAR_TLB_NAME = 'taskbar.tlb'
+
+TASKBAR_TLB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAATgAAADMDAAAAAAAA/////xgAAAAgAAAAgAAAAP////8AAAAAAAAAAGQAAADIAAAA' + \
+              b'LAEAAJABAAD0AQAAWAIAALwCAAAgAwAAhAMAAOgDAABMBAAAsAQAABQFAAB8AQAAeAUAAP////8PAAAA/////wAAAAD/////DwAAAP////8AAAAA/////w8AAABMCAAA' + \
+              b'EAAAAP////8PAAAA9AYAAIAAAAD/////DwAAAHQHAADYAAAA/////w8AAABcCAAAAAIAAP////8PAAAAXAoAAEQHAAD/////DwAAAP////8AAAAA/////w8AAACgEQAA' + \
+              b'iAAAAP////8PAAAAKBIAACAAAAD/////DwAAAEgSAABUAAAA/////w8AAACcEgAAJAAAAP////8PAAAA/////wAAAAD/////DwAAAP////8AAAAA/////w8AAAAjIgAA' + \
+              b'wBIAAAAAAAAAAAAAAwAAAAAAAAAFAAAAAAAAAAAAAAAAAAAAAAAAAGAAAAAAAAAAGAAAAAAAAAD/////AAAAAAAAAAD/////AQAgAAQAAABkAAAAAQADAAAAAAD/////' + \
+              b'IyIBAKgTAAAAAAAAAAAAAAMAAAAAAAAAAwAAAAAAAAAAAAAAAAAAAAAAAAB4AAAAAAAAADAAAAAAAAAA/////wAAAAAAAAAA/////wAADAAEAAAA/////wAAAAAAAAAA' + \
+              b'/////yYhAgAwFAAAAAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/////wAAAABEAAAAAAAAAP////8AAAAAAAAAAP////8AAAAAEAAAAAgAAAAAAAAA' + \
+              b'AAAAAP////8hIQMAMBQAAAAAAAAAAAAAAwAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAP////8AAAAAVAAAAAAAAAD/////AAAAAAAAAAD/////AAAAABAAAAD/////' + \
+              b'AAAAAAAAAAD/////IyIEALQUAAAAAAAAAAAAAAMAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAACQAAAAAAAAAMwBAAAAAAAA/////wAAAAAAAAAA/////wEAJAAEAAAA' + \
+              b'AAAAAAIACAAAAAAA/////yEhBQD0FAAAAAAAAAAAAAADAAAAAAAAAAAABgAAAAAAAAAAAAAAAAAAAAAA/////wAAAAAgAgAAAAAAAP////8AAAAAAAAAAP////8AAAAA' + \
+              b'HAIAAP////8AAAAAAAAAAP////8jIgYAuBUAAAAAAAAAAAAAAwAAAAAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAKgAAAAAAAAAsAIAAAAAAAD/////AAAAAAAAAAD/////' + \
+              b'AQBUAAQAAACQAQAAAwAJAAAAAAD/////ICEHALwYAAAAAAAAAAAAAAMAAAAAAAAAAAAFAAAAAAAAAAAAAAAAAAAAAAD/////AAAAABQDAAAAAAAA/////wAAAAAAAAAA' + \
+              b'/////wAAAAAEAAAA/////wAAAAAAAAAA/////yYhCABgGQAAAAAAAAAAAAADAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA/////wAAAADcAwAAAAAAAP////8AAAAA' + \
+              b'AAAAAP////8AAAAABAAAAFAAAAAIAAAAAAAAAP////8hIQkAYBkAAAAAAAAAAAAAAwAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAP////8AAAAA8AMAAAAAAAD/////' + \
+              b'AAAAAAAAAAD/////AAAAAAgAAAD/////AAAAAAAAAAD/////JyEKAKQZAAAAAAAAAAAAAAMAAAAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAD/////AAAAACAEAAAAAAAA' + \
+              b'/////wAAAAAAAAAA/////wAAAAAEAAAA/////wAAAAAAAAAA/////yAhCwDoGQAAAAAAAAAAAAADAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAA/////wAAAAAMBQAA' + \
+              b'AAAAAP////8AAAAAAAAAAP////8AAAAABAAAAP////8AAAAAAAAAAP////8hIQwALBoAAAAAAAAAAAAAAwAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAP////8AAAAA' + \
+              b'oAYAAAAAAAD/////AAAAAAAAAAD/////AAAAABAAAAD/////AAAAAAAAAAD/////JSINALAaAAAAAAAAAAAAAAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAADAAAAA' + \
+              b'AgAAACwHAAAAAAAA/////wAAAAAAAAAA/////wEAAAAEAAAAAAAAAAAAAAAAAAAA/////3gAAACQAAAA/////////////////////8AAAAD/////////////////////' + \
+              b'////////////////qAAAAP////////////////////8AAAAA/////////////////////0gAAAAYAAAA//////////////////////////8wAAAAQvY7aMrpJEG+Q2cG' + \
+              b'Wy+mU/7/////////Zbp33nxR0RGi2gAA+Hc86f//////////Y7p33nxR0RGi2gAA+Hc86f//////////ZLp33nxR0RGi2gAA+Hc86f//////////QvP9Vm390BGVigBg' + \
+              b'l8mgkAAAAAD/////AAAAAAAAAADAAAAAAAAARmQAAABgAAAAlUktYDqxm0Kmbhk15E9DF5ABAAD/////kfsa6iiehkuQ6Z6fil7vr1gCAAD/////RPP9Vm390BGVigBg' + \
+              b'l8mgkBQFAAD/////WAIAAAEAAAD/////////////////////6AIAAP/////////////////////////////////////////////////////UBgAA4AUAAP//////////' + \
+              b'//////////8sBwAAIAQAAP/////YBAAARAQAAP/////oAQAAoAYAAPgAAAC8BAAA/////3wEAAAMBAAA////////////////qAQAAP///////////////1AGAACsAwAA' + \
+              b'KAMAAP/////wBAAA3AMAAP//////////nAIAAP///////////////5gFAAC4BQAAxAYAAP///////////////0QFAAD///////////////8YAAAA3AAAAP////+MAAAA' + \
+              b'SAEAAAADAAAYBwAA/////8wBAACwAgAADAUAAOgGAAD//////////4wGAAD/////CAIAAP////9cAQAA//////////+YAQAAAAAAALABAAD/////////////////////' + \
+              b'/////1gEAAD8BgAA////////////////////////////////////////////////tAYAAP////////////////////+ABQAA/////2wEAACUAwAA/////zQBAAAgAgAA' + \
+              b'//////////////////////////8IAQAA/////1ACAAA8AgAAaAUAAIgCAAD/////FAMAAMgDAABEAAAA//////////8KANOVVGFza2JhckxpYldXAAAAAP////8MOD29' + \
+              b'SVRhc2tiYXJMaXN0ZAAAAP////8IOFuISVVua25vd27IAAAA/////wQ4f/VHVUlELAEAAP////8rOALfX19NSURMX19fTUlETF9pdGZfVGFza2JhckxpYl8wMDA3XzAw' + \
+              b'MDFfMDAwMVcsAQAA/////wUQQDFEYXRhMVdXVywBAAD/////BRBBMURhdGEyV1dXLAEAAP////8FEEIxRGF0YTNXV1csAQAA/////wUQQzFEYXRhNFdXV2QAAAD/////' + \
+              b'DgC+jlF1ZXJ5SW50ZXJmYWNlV1f//////////wQAmzNyaWlk//////////8JAPb2cHB2T2JqZWN0V1dXZAAAAP////8GALW4QWRkUmVmV1dkAAAA/////wcAb2FSZWxl' + \
+              b'YXNlVwAAAACgAAAABgDBGUhySW5pdFdXAAAAAP////8GAM/CQWRkVGFiV1f//////////wQAL8Fod25kAAAAAP////8JAEcJRGVsZXRlVGFiV1dXAAAAAP////8LANKD' + \
+              b'QWN0aXZhdGVUYWJXAAAAAP////8OANQ5U2V0QWN0aXZhdGVBbHRXV5ABAAD/////DThF70lUYXNrYmFyTGlzdDJXV1eQAQAA/////xQAmQVNYXJrRnVsbHNjcmVlbldp' + \
+              b'bmRvd///////////CwBN92ZGdWxsc2NyZWVuV/QBAAD/////Djhw9nRhZ1RIVU1CQlVUVE9OV1f0AQAA/////wYQedlkd01hc2tXV/QBAAD/////AxB4nmlJZFf0AQAA' + \
+              b'/////wcQqxNpQml0bWFwV/QBAAD/////BRCeTWhJY29uV1dX9AEAAP////8FEPsMc3pUaXBXV1f0AQAAcAEAAAcQL4Bkd0ZsYWdzV1gCAAD/////DThG70lUYXNrYmFy' + \
+              b'TGlzdDNXV1dYAgAA/////xAAk5hTZXRQcm9ncmVzc1ZhbHVl/////1QAAAAMAAJpdWxsQ29tcGxldGVk/////7QAAAAIAMIbdWxsVG90YWy8AgAA/////wc4feJUQlBG' + \
+              b'TEFHV7wCAAD/////DzCpRlRCUEZfTk9QUk9HUkVTU1e8AgAA/////xIwqDxUQlBGX0lOREVURVJNSU5BVEVXV7wCAADIAAAACzDDqVRCUEZfTk9STUFMV7wCAAD/////' + \
+              b'CjCnMVRCUEZfRVJST1JXV7wCAAD/////CzDtTVRCUEZfUEFVU0VEV1gCAABEAwAAEACoU1NldFByb2dyZXNzU3RhdGX//////////wgAfld0YnBGbGFncyADAAD/////' + \
+              b'CDgsBXdpcmVIV05EhAMAAGQDAAAQOMPUX1JlbW90YWJsZUhhbmRsZYQDAAD/////CBAfY2ZDb250ZXh06AMAAP////8VOJRaX19NSURMX0lXaW5UeXBlc18wMDA5V1dX' + \
+              b'6AMAAP////8HEJdKaElucHJvY1foAwAA/////wcQWpVoUmVtb3RlV4QDAAD/////ARBsEHVXV1dYAgAAdAIAAAsAHgFSZWdpc3RlclRhYlf//////////wcAHDZod25k' + \
+              b'VGFiV///////////BwAjEWh3bmRNRElXWAIAAJQEAAANABymVW5yZWdpc3RlclRhYldXV1gCAAD/////CwAWi1NldFRhYk9yZGVyV/////9gAgAAEACrAmh3bmRJbnNl' + \
+              b'cnRCZWZvcmVMBAAAgAEAAAg4x5VUQkFURkxBR0wEAAD/////FTDLIlRCQVRGX1VTRU1ESVRIVU1CTkFJTFdXV0wEAAD/////FzC5uFRCQVRGX1VTRU1ESUxJVkVQUkVW' + \
+              b'SUVXV1gCAAD/////DAB661NldFRhYkFjdGl2Zf//////////CQBqkXRiYXRGbGFnc1dXV1gCAAD/////EgAzhVRodW1iQmFyQWRkQnV0dG9uc1dX//////////8IALRQ' + \
+              b'Y0J1dHRvbnP/////IAEAAAcAtchwQnV0dG9uV1gCAAD/////FQAObVRodW1iQmFyVXBkYXRlQnV0dG9uc1dXV1gCAAAgBQAAFADLRVRodW1iQmFyU2V0SW1hZ2VMaXN0' + \
+              b'//////////8EAI17aGltbFgCAAD/////DgBloFNldE92ZXJsYXlJY29uV1f/////fAMAAA4AJ6twc3pEZXNjcmlwdGlvbldXWAIAAP////8TAJr4U2V0VGh1bWJuYWls' + \
+              b'VG9vbHRpcFf/////BAYAAAYAy6Fwc3pUaXBXV7AEAABsBgAABziayXRhZ1JFQ1RXsAQAADQGAAAEEOV7bGVmdLAEAADMBQAAAxA12nRvcFewBAAAJAYAAAUQDRVyaWdo' + \
+              b'dFdXV7AEAAD/////BhBIe2JvdHRvbVdXWAIAADAAAAAQANtfU2V0VGh1bWJuYWlsQ2xpcP/////wAwAABwDDlXByY0NsaXBXFAUAAMwCAAALOBMKVGFza2Jhckxpc3RX' + \
+              b'HAD+fwAAAAAdAP9/LAEAAB0A/3/IAAAAGgD/fxAAAAAaAABAGAAAgBoA/n8gAAAAHAD+fxAAAAAdAAMAvAIAAB0A/3/oAwAAHQD/f4QDAAAaAP9/SAAAAB0A/38gAwAA' + \
+              b'HQADAEwEAAAdAP9/9AEAABoA/39oAAAAHQD/f7AEAAAaAP9/eAAAABEAEYABAAgACAAAAAAAAAASABKAAQAIAAQBAAAAAAAACAA+AAAAQ3JlYXRlZCBieSBNSURMIHZl' + \
+              b'cnNpb24gOC4wMS4wNjIyIGF0IE1vbiBKYW4gMTggMTk6MTQ6MDcgMjAzOAoTAP///39XVxMAbgIBCFdXGAAAAAAAAAD/////MAAAAEQAAAAAAAAASAAAAEwAAAAMAAAA' + \
+              b'qAAAABgAAAAZABmAAAAAAAwANAAJBAAAAAAAACQAAQAZABmAAAAAABAARAAJBAEAAQAAAAMAA4BwAQAAAQAAACQAAgAZABmAAAAAABQARAAJBAIAAQAAAAMAA4BwAQAA' + \
+              b'AQAAACQAAwAZABmAAAAAABgARAAJBAMAAQAAAAMAA4BwAQAAAQAAACQABAAZABmAAAAAABwARAAJBAQAAQAAAAMAA4BwAQAAAQAAAAAAAWABAAFgAgABYAMAAWAEAAFg' + \
+              b'SAEAAFwBAACAAQAAmAEAALABAAAAAAAAGAAAADwAAABgAAAAhAAAAGAAAAAwAAAAGQAZgAAAAAAAAGwACQQAAAIAAAAYAAAA+AAAAAEAAAAoAAAACAEAAAIAAAAYAAEA' + \
+              b'EwATgAAAAAAEADQACQQBAAAAAAAYAAIAEwATgAAAAAAIADQACQQCAAAAAAAAAABgAQAAYAIAAGDcAAAAIAEAADQBAAAAAAAAMAAAAEgAAABQAAAAFAAAABMAE4AAAAAA' + \
+              b'AAAkAAAAAAAUAAEAEgASgAAAAAAAACQABAAAABQAAgASABKAAAAAAAAAJAAGAAAAFAADAAAAAAAAAAAAAAA4AAgAAAAAAABAAQAAQAIAAEADAABAjAAAAKAAAAC0AAAA' + \
+              b'yAAAAAAAAAAUAAAAKAAAADwAAAAwAAAAMAAAABkAGYAAAAAAIABUAAkEAAACAAAAAwADgHABAAABAAAAAwADgAgCAAABAAAAAAACYOgBAAAAAAAAeAAAABQAAAATABOA' + \
+              b'AAAAAAAAJAAAAAAAFAABABcAE4AAAAAAAAAkAAQAAAAUAAIAFwATgAAAAAAAACQACAAAABQAAwANAA2AAAAAAAAAJAAMAAAAFAAEADAAAAAAAAAAAAA4ABAAAAAUAAUA' + \
+              b'EwATgAAAAAAAACQAGAIAAAAAAEABAABAAgAAQAMAAEAEAABABQAAQDwCAABQAgAAYAIAAHQCAACIAgAAnAIAAAAAAAAUAAAAKAAAADwAAABQAAAAZAAAAHACAAA8AAAA' + \
+              b'GQAZgAAAAAAkAGQACQQAAAMAAAADAAOAcAEAAAEAAAAVABWA6AIAAAEAAAAVABWAAAMAAAEAAAAwAAEAGQAZgAAAAAAoAFQACQQBAAIAAAADAAOAcAEAAAEAAAA4AAAA' + \
+              b'yAMAAAEAAAAwAAIAGQAZgAAAAAAsAFQACQQCAAIAAAADAAOAlAQAAAEAAABYAAAAqAQAAAEAAAAkAAMAGQAZgAAAAAAwAEQACQQDAAEAAAADAAOAlAQAAAEAAAAwAAQA' + \
+              b'GQAZgAAAAAA0AFQACQQEAAIAAAADAAOAlAQAAAEAAAADAAOA8AQAAAEAAAA8AAUAGQAZgAAAAAA4AGQACQQFAAMAAAADAAOAlAQAAAEAAAADAAOAqAQAAAEAAABgAAAA' + \
+              b'gAUAAAEAAAA8AAYAGQAZgAAAAAA8AGwACQQGAAMAAAADAAOAcAEAAAEAAAAXABOAuAUAAAEAAABwAAAAzAUAAAEAAAA8AAcAGQAZgAAAAABAAGwACQQHAAMAAAADAAOA' + \
+              b'cAEAAAEAAAAXABOAuAUAAAEAAABwAAAAzAUAAAEAAAAwAAgAGQAZgAAAAABEAFQACQQIAAIAAAADAAOAcAEAAAEAAAANAA2AJAYAAAEAAAA8AAkAGQAZgAAAAABIAGQA' + \
+              b'CQQJAAMAAAADAAOAcAEAAAEAAAANAA2AdAIAAAEAAAAfAP7/UAYAAAEAAAAwAAoAGQAZgAAAAABMAFQACQQKAAIAAAADAAOAcAEAAAEAAAAfAP7/jAYAAAEAAAAwAAsA' + \
+              b'GQAZgAAAAABQAFwACQQLAAIAAAADAAOAcAEAAAEAAACAAAAAGAcAAAEAAAAAAANgAQADYAIAA2ADAANgBAADYAUAA2AGAANgBwADYAgAA2AJAANgCgADYAsAA2DMAgAA' + \
+              b'rAMAAHwEAAC8BAAA2AQAAGgFAACYBQAA4AUAAAQGAAA0BgAAbAYAAPwGAAAAAAAAPAAAAGwAAACcAAAAwAAAAPAAAAAsAQAAaAEAAKQBAADUAQAAEAIAAEACAABkAAAA' + \
+              b'FAAAABYAA4AAAAAAAgA0AAAAAIwUAAEAFgADgAAAAAACADQAAQAAjBQAAgAWAAOAAAAAAAIANAACAACMFAADABYAA4AAAAAAAgA0AAQAAIwUAAQAFgADgAAAAAACADQA' + \
+              b'CAAAjAAAAEABAABAAgAAQAMAAEAEAABAKAMAAEQDAABkAwAAfAMAAJQDAAAAAAAAFAAAACgAAAA8AAAAUAAAACgAAAAUAAAAAwADgAAAAAAAACQAAAAAABQAAQBAAAAA' + \
+              b'AAAAAAAAJAAEAAAAAAAAQAEAAEAMBAAAbAQAAAAAAAAUAAAAKAAAABQAAAADAAOAAAAAAAAAJAAAAAAAFAABAAMAA4AAAAAAAAAkAAAAAAAAAABAAQAAQEQEAABYBAAA' + \
+              b'AAAAABQAAAAoAAAAFAAAABYAA4AAAAAAAgA0AAEAAIwUAAEAFgADgAAAAAACADQAAgAAjAAAAEABAABAIAUAAEQFAAAAAAAAFAAAAFAAAAAUAAAAAwADgAAAAAAAACQA' + \
+              b'AAAAABQAAQADAAOAAAAAAAAAJAAEAAAAFAACAAMAA4AAAAAAAAAkAAgAAAAUAAMAAwADgAAAAAAAACQADAAAAAAAAEABAABAAgAAQAMAAEC0BgAAxAYAANQGAADoBgAA' + \
+              b'AAAAABQAAAAoAAAAPAAAAA=='
+
+# Setup logger object.
 g_Logger = logging.getLogger()
 
+# Setup thread event.
 g_stopEvent = threading.Event()
+
+# Setup Windows taskbar object (if needed).
+g_tlb = g_taskbar = None
+if os.name == 'nt':
+    g_tlb = open(TASKBAR_TLB_NAME, 'wb')
+    g_tlb.write(base64.b64decode(TASKBAR_TLB))
+    g_tlb.close()
+    g_tlb = None
+    
+    try:
+        import comtypes.client as cc
+        
+        g_tlb = cc.GetModule(TASKBAR_TLB_NAME)
+        
+        g_taskbar = cc.CreateObject('{56FDF344-FD6D-11D0-958A-006097C9A090}', interface=g_tlb.ITaskbarList3)
+        g_taskbar.HrInit()
+    except:
+        traceback.print_exc()
+    
+    os.remove(TASKBAR_TLB_NAME)
 
 # Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
 class LogQueueHandler(logging.Handler):
@@ -255,17 +354,22 @@ class LogConsole:
         self.frame.after(100, self.poll_log_queue)
 
 # Loosely based on tk.py from tqdm.
-class ProgressBar:
+class ProgressBarWindow:
+    global g_tlb, g_taskbar
+    
     def __init__(self, bar_format=None, tk_parent=None, window_title='', window_resize=False, window_protocol=None):
         if tk_parent is None: raise Exception('`tk_parent` must be provided!')
         
         self.n = 0
         self.total = 0
+        self.divider = 1
+        self.total_div = 0
         self.prefix = ''
         self.unit = 'B'
         self.bar_format = bar_format
         self.start_time = 0
         self.elapsed_time = 0
+        self.hwnd = 0
         
         self.tk_parent = tk_parent
         
@@ -295,14 +399,17 @@ class ProgressBar:
     def __del__(self):
         self.tk_parent.after(0, self.tk_window.destroy)
     
-    def start(self, n, total, prefix='', unit='B'):
-        if (n < 0) or (total <= 0): raise Exception('Invalid arguments!')
+    def start(self, total, n=0, divider=1, prefix='', unit='B'):
+        if (total <= 0) or (n < 0) or (divider <= 0): raise Exception('Invalid arguments!')
         
+        self.n = n
         self.total = total
+        self.divider = float(divider)
+        self.total_div = (float(self.total) / self.divider)
         self.prefix = prefix
         self.unit = unit
         
-        self.tk_pbar.configure(maximum=self.total, mode='determinate')
+        self.tk_pbar.configure(maximum=self.total_div, mode='determinate')
         
         self.start_time = time.time()
     
@@ -310,28 +417,38 @@ class ProgressBar:
         cur_n = (self.n + n)
         if cur_n > self.total: return
         
+        cur_n_div = (float(cur_n) / self.divider)
         self.elapsed_time = (time.time() - self.start_time)
         
-        msg = tqdm.format_meter(n=cur_n, total=self.total, elapsed=self.elapsed_time, prefix=self.prefix, unit=self.unit, bar_format=self.bar_format)
+        msg = tqdm.format_meter(n=cur_n_div, total=self.total_div, elapsed=self.elapsed_time, prefix=self.prefix, unit=self.unit, bar_format=self.bar_format)
         
         self.tk_text_var.set(msg)
-        self.tk_n_var.set(cur_n)
+        self.tk_n_var.set(cur_n_div)
         
         self.n = cur_n
         
         if self.withdrawn:
             self.tk_window.deiconify()
+            self.setup_taskbar()
             self.tk_window.attributes('-topmost', True)
             self.tk_window.after(0, lambda: self.tk_window.attributes('-topmost', False))
             self.withdrawn = False
+        
+        if g_taskbar: g_taskbar.SetProgressValue(self.hwnd, cur_n, self.total)
     
     def end(self):
         self.n = 0
         self.total = 0
+        self.divider = 1
+        self.total_div = 0
         self.prefix = ''
         self.unit = 'B'
         self.start_time = 0
         self.elapsed_time = 0
+        
+        if g_taskbar:
+            g_taskbar.SetProgressState(self.hwnd, g_tlb.TBPF_NOPROGRESS)
+            g_taskbar.UnregisterTab(self.hwnd)
         
         self.tk_window.withdraw()
         self.withdrawn = True
@@ -340,19 +457,26 @@ class ProgressBar:
     
     def set_prefix(self, prefix):
         self.prefix = prefix
+    
+    def setup_taskbar(self):
+        if not g_taskbar: return
+        
+        self.hwnd = int(self.tk_window.wm_frame(), 16)
+        
+        g_taskbar.ActivateTab(self.hwnd)
+        g_taskbar.SetProgressState(self.hwnd, g_tlb.TBPF_NORMAL)
 
 def utilsIsValueAlignedToEndpointPacketSize(value):
     return bool((value & (g_usbEpMaxPacketSize - 1)) == 0)
 
 def utilsResetNspInfo():
-    global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspSizeUnitDivider, g_nspFile, g_nspFilePath
+    global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
     
     # Reset NSP transfer mode info.
     g_nspTransferMode = False
     g_nspSize = 0
     g_nspHeaderSize = 0
     g_nspRemainingSize = 0
-    g_nspSizeUnitDivider = 0
     g_nspFile = None
     g_nspFilePath = None
 
@@ -480,7 +604,7 @@ def usbHandleStartSession(cmd_block):
     return USB_STATUS_SUCCESS
 
 def usbHandleSendFileProperties(cmd_block):
-    global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspSizeUnitDivider, g_nspFile, g_nspFilePath, g_outputDir, g_tkRoot, g_progressBar
+    global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath, g_outputDir, g_tkRoot, g_progressBarWindow
     
     g_Logger.debug('Received SendFileProperties (%02X) command.' % (USB_CMD_SEND_FILE_PROPERTIES))
     
@@ -586,7 +710,7 @@ def usbHandleSendFileProperties(cmd_block):
     offset = 0
     blksize = USB_TRANSFER_BLOCK_SIZE
     
-    # Initialize progress bar.
+    # Check if we should use the progress bar window.
     use_pbar = (((not g_nspTransferMode) and (file_size > USB_TRANSFER_THRESHOLD)) or (g_nspTransferMode and (g_nspSize > USB_TRANSFER_THRESHOLD)))
     if use_pbar:
         idx = filename.rfind(os.path.sep)
@@ -607,24 +731,19 @@ def usbHandleSendFileProperties(cmd_block):
             
             # Get progress bar unit and unit divider. These will be used to display and calculate size values using a specific size unit (B, KiB, MiB, GiB).
             (unit, unit_divider) = utilsGetSizeUnitAndDivisor(pbar_file_size)
-            total = (float(pbar_file_size) / unit_divider)
             
-            # Start the progress bar.
-            g_progressBar.start(pbar_n, total, prefix, unit)
-            
-            # Update the NSP unit divider (if needed).
-            if g_nspTransferMode: g_nspSizeUnitDivider = unit_divider
+            # Initialize progress bar.
+            g_progressBarWindow.start(pbar_file_size, pbar_n, unit_divider, prefix, unit)
         else:
-            # Set unit divider for the whole NSP size and the current prefix (which holds the filename for the current NSP file entry).
-            unit_divider = g_nspSizeUnitDivider
-            g_progressBar.set_prefix(prefix)
+            # Set current prefix (holds the filename for the current NSP file entry).
+            g_progressBarWindow.set_prefix(prefix)
     
     def cancelTransfer():
         # Cancel file transfer.
         file.close()
         os.remove(fullpath)
         utilsResetNspInfo()
-        if use_pbar: g_progressBar.end()
+        if use_pbar: g_progressBarWindow.end()
     
     # Start transfer process.
     start_time = time.time()
@@ -673,8 +792,8 @@ def usbHandleSendFileProperties(cmd_block):
         # Update remaining NSP data size.
         if g_nspTransferMode: g_nspRemainingSize -= chunk_size
         
-        # Update progress bar (if needed).
-        if use_pbar: g_progressBar.update(float(chunk_size) / unit_divider)
+        # Update progress bar window (if needed).
+        if use_pbar: g_progressBarWindow.update(chunk_size)
     
     elapsed_time = round(time.time() - start_time)
     g_Logger.info('File transfer successfully completed in %s!\n' % (tqdm.format_interval(elapsed_time)))
@@ -682,8 +801,8 @@ def usbHandleSendFileProperties(cmd_block):
     # Close file handle (if needed).
     if not g_nspTransferMode: file.close()
     
-    # Hide progress bar (if needed).
-    if use_pbar and ((not g_nspTransferMode) or (not g_nspRemainingSize)): g_progressBar.end()
+    # Hide progress bar window (if needed).
+    if use_pbar and ((not g_nspTransferMode) or (not g_nspRemainingSize)): g_progressBarWindow.end()
     
     return USB_STATUS_SUCCESS
 
@@ -867,7 +986,7 @@ def uiScaleMeasure(measure):
     return round(float(measure) * SCALE)
 
 def main():
-    global SCALE, g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog, g_progressBar
+    global SCALE, g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog, g_progressBarWindow
     
     # Disable warnings.
     warnings.filterwarnings("ignore")
@@ -951,8 +1070,8 @@ def main():
     g_tkCanvas.itemconfigure(g_tkTipMessage, state='hidden', text='')
     
     g_tkScrolledTextLog = scrolledtext.ScrolledText(g_tkRoot, height=20, width=65, font=font.nametofont('TkDefaultFont'), wrap=tk.WORD, state='disabled')
-    g_tkScrolledTextLog.tag_config('INFO', foreground='black')
     g_tkScrolledTextLog.tag_config('DEBUG', foreground='gray')
+    g_tkScrolledTextLog.tag_config('INFO', foreground='black')
     g_tkScrolledTextLog.tag_config('WARNING', foreground='orange')
     g_tkScrolledTextLog.tag_config('ERROR', foreground='red')
     g_tkScrolledTextLog.tag_config('CRITICAL', foreground='red', underline=1)
@@ -970,9 +1089,9 @@ def main():
     # Initialize console logger.
     console = LogConsole(g_tkScrolledTextLog)
     
-    # Create hidden progress bar child window.
+    # Create hidden progress bar window.
     bar_format = '{desc}{percentage:.2f}% - {n:.2f} / {total:.2f} {unit}\nElapsed time: {elapsed}. Remaining time: {remaining}.\nSpeed: {rate_fmt}.'
-    g_progressBar = ProgressBar(bar_format, g_tkRoot, 'File transfer', False, uiHandleExitProtocolStub)
+    g_progressBarWindow = ProgressBarWindow(bar_format, g_tkRoot, 'File transfer', False, uiHandleExitProtocolStub)
     
     # Enter Tkinter main loop.
     g_tkRoot.mainloop()
