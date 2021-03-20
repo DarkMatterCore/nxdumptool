@@ -189,23 +189,22 @@ APP_ICON = b'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAAAR
            b'kUApgQ9ksrSAsX+92tJ/vuOLTMb3FwTA1hp1pN6itj95KualQwlYZIlIvaVIg1AKciOGw2CCeHomerchLvVejMP7+gymoGGR7ttXvVBT8vzLxlhTkl+O2SPK1332uOfz' + \
            b'+pAq/zgwRFt56LIyAGRtc+OR37b+uzRPfb1XEwCzIHwZH5Nar93pLSPmfnmlghsdHkOD4LRFjA1jnNPP3vpwP309hGzwlNcLQyj58XphSDtmTasT2y2sIi0BpC9L4hWI' + \
            b'twAYn68MQfr7eUMFMbwrk6MrvuwqjtcLKHBsY1J//BoLR/dnE/k6D/cnE/mc0Od83D+b0OfR/dlEvs7D/Xwi303ocz7uzyf0+zzcn03k6zzcjzeyx7+uuP9vLeK1Tf9P' + \
-           b'JvQfaZEp644NXCjW1tzRe3Ifr2xGre9rCH7cAuDCAD98ddN98w4nYpgC+19UQVjzl9u7BwAAAAZiS0dEAP8A/wD/oL2nkwAAAAd0SU1FB+MGEQkHB+UVPj0AAAWTSURB' + \
-           b'VGhD1Zh9TFVlHMe/59yLgPLS5XW4XqymTV5EU9NSg96Qywi3RGyz2VYbm5XSVZcUQcwREzYCTWwrcEIIoq4/1EFaBhIQsLzg5WU1K6EXKrtCEArChdvzPPccOAoX773n' + \
-           b'XBif7e55uy/f3+98z+957uH0er0Z1uB5qP19YYjejKFWA3hunrBgO7x5DC6kPRL8GHpVaqgs04rBC+1kiHiVjwb6p6Iw2Pq9w+LV4PBRWAiMahfFxVOmDoBm3s8HLRui' + \
-           b'MdL1A1Sch7BgO5bME/HLgjHAcZhntn6h5TA5AEG8/snnMdz1IxHvKSzYDss8EZ1DxN8kQThLPOXOAETbrNuIkd9+cjjz1Da5oc4XT5kIYA7ZRoolgDlmGyn8XLSNFJ7W' + \
-           b'+blmGym8Qbt5ztlGClcAN7Mjm5RIbuhSoTc78I7usJTZFk/hjnJedl130TZZ5IaltDRVw3z7NobIUcFdxWPs5k2ofX1RVVWNpKRkVJ49iQB3N6g1GoSv3MA+Q7ly+VuY' + \
-           b'entxfWgI2tgEYdZ+pj5KWEFabUT+O38Bf2seRJ9nEP6aH4jr/o+gm/dGyJkzqKg4DahVML4Ujz9d/dBEgqU0NlaxMZ2HSt4JyeYARPFitZkKv1/bETR8A+4FeTAdLIT/' + \
-           b'6Ci0pEgE1daw9cGCAqSlvYPBY0VsTOfpuhxsCkC0DRVvrdosHOvDqph4hD++Hn3PPsPmbl38hrWJiW/A50odBnelIG7Nagy9uQ8aQx2bl8s9A5DaZrpSWV//ndADLl6s' + \
-           b'Yu1YXx9rGxr0uEaspEqIgfGhUNZ2EuvQeblMGwAVb+smZTQahR7Q399v6YxZqhVlYGAAnK8f63P+/mysBFYDEG2jxCa1ZMnDWObnD9MnxdA018CUX8TGdF4uUwZAxas4' + \
-           b'XpGzzfLlISjJ+AA3Hg1HgPEantuhQ8CNTjYuyUhn63KYFIBom9ywpYqcbYqLC9ETvAau2WmorKsn1rmFyto6uB14n8w/wdYdZZS87gjAEdt4b4pjFehu6Jzvnt3jfY+d' + \
-           b'O5GSksHGtPV4O2nKz9nKMNGpIWV6fCdm4lnmlTlVsk2MEENKq9JQ8R5E3+7WDssVEG2j5JE4MDAQX1VbNjBKS0s9snIsV0AOVPwCmKFr68AIaXlHbOMoPb3/Cj3HEMXv' + \
-           b'MXTARHSOkULDsxvWyf+kDIYGkinL7Ub74ssexm1DxNPMU/EUbn3wKvM/arXD4lVkR9Xra1Hf2ITGy83w0dyHF6Oj4OXpiZLyU8jNPoRLNV/iSOEx4RMWdrz2KiIjtMJo' + \
-           b'esTMU8+LmRfhe4gAOZk/e+4U8j87irWrV2GE7K6aBfPh7eWF7EP54ISsRzwdjXd1u7DogftRXnSCvewVL7WNFF7OYTY9PRlFJ07ircTXsWLFOhw/fhqpqZnYuvUVxG2M' + \
-           b'Et7lONZsI2XyjB0sXBjE2oqKStaKXL3aidAQef/WxMzTamOyIp4iKwARjvyYktzLNlJkBdDd3c1arTaatSKLFy+Coa1dGE1gJmJcXenDduuIttFNYxspsgJIT8/C9pe3' + \
-           b'4PCnhWhursO2bfHYv/89lJeX4NyFr4V3WRgeHkbX73+g+tJ5VkIzM1OFlQmkthm1QTxFVgCUbiJq7eqVOJD3MUykHLf//AuyDh5mVYdmXKS0tAzbt25B4eel+DAnD5GR' + \
-           b'EcKKBXtsI4ULC1sje/eKjX0Be/fq4ElqP6W1tQ1hYaGsv1LyJIJC942EhE2sX1b2BWsp9OGOjtZ5GzMvokgASrCPVhs7Mi8i20JyoLZxIQUseYod1lZmLQCx2ky3SdnC' + \
-           b'rAQgrTb2ev5uZjwAR6uNNWY0AKVsI2XGAlDSNlJmJAClbSPF6QE4wzZSnBqAs2wjxWkBONM2Upzyrc62jRTFv5k+7vMzjZA/4O1Os80EwP/vHLXv3BH8dQAAAABJRU5E' + \
-           b'rkJggg=='
+           b'JvQfaZEp644NXCjW1tzRe3Ifr2xGre9rCH7cAuDCAD98ddN98w4nYpgC+19UQVjzl9u7BwAAAAZiS0dEAP8A/wD/oL2nkwAAAAd0SU1FB+MGEQkHB+UVPj0AAAVvSURB' + \
+           b'VGhD1ZltTFtVHMafe1sGbDBSXgMffM22jNdFNpnoPqgbAiEzcbiYLDH7YEbUbLwtDkURF1xgkQE6JJmwOEJiposm24RsiuAcjC2uQAuomQq4ibqU18FgpbSec+69cAct' + \
+           b'a3tvIfyS5px7Tlue5/Tp/5xeOL1eb4MjeB7akCAYkndhymgAz60SJ5yHt1nhRdpPIzdgWKOFRhhWDV5sF0LEawJ10CcmYdL4s9viteBwLCYKJq2X6uIp9g3QlQ8ORMe2' + \
+           b'ZEz3/woN5ydOOI+w8kR8bCTGOQ6rbI4/aCUsNCCK1z+1Heb+34h4f3HCedjKE9GlRPwEMeEp8ZT7DUixefoFTN/83e2Vp7Epi/a8eMqcgRUUGzmCgRUWGzn8SoyNHJ7W' + \
+           b'+ZUWGzm8IWXXiouNHK4aPjZ3NimJsuiNYm954N3dYSnLLZ7CneTWuvS5S7EpIV9YSse1Ztju3cMUOSr4anhYJyagDQpCU1MzMjPz0HDuS4T6+kCr0yEufht7DaXz+k+w' + \
+           b'DA/j9tQUUtJ2i6OuY/8o4QB5tZG4c+Ei/tM9hFH/cPy7Ogy3Qx7DAB+AqLNnUV9/BtBqYHopHf94B+MaMUu5erWJXdNxaJSdkJw2IImXqo09gv/qRrh5EL7V5bBU1CBk' + \
+           b'ZgYppEiEX77E5ierq1FQ8BYmPz/Fruk4nVeCUwak2FDxjqpNhHUUm1PTEffEMxh97lk2drfxB9bu2/cGAjtbMHkgHzsTtmDqzUPQGVrYuFIeaEAem8VKZWvrFbEHNDY2' + \
+           b'sdY6OsratjY9ekmUNLtTYXo4mrV9JDp0XCmLGqDind2kTCaT2APGxsaEjlWoVpTx8XFwQcGsz4WEsGs1cGhAio0am9T69Y8iNjgElqpa6NovwVJ5il3TcaXYNUDFazhe' + \
+           b'lbPNpk1RqCt6H4OPxyHU1IvnX89G6GAfu64rKmTzSlhgQIpNWcxGVc42tbU1GIpMgPfRAjS0tJLo3EXD5Rb4FL9Lxp9k8+4yQx73GXAnNgEv7mQVaD50LCg3Z7bvt38/' + \
+           b'8vOL2DVt/bIy7b7OWcxEp46U6dmdmIlnK6/OqZJtYoRUUlrVhor3I/pyjD3CJyDFRs0jcVhYGL5rFjYwNaHi18CG7K4eTJOWdyc27tDR0YqSUiFC7iKJzzX0wEJ0Wkmh' + \
+           b'4dkXdol+SQ0Nj4g915mNDRFPV56Kp/BVkRsUxUZDdtTOziuoOlGBvRl7kZOXhabmenFWwGBoIx+18AdpX3o4izw2Fpl4Cj9EBChZ+XPnv0LlZyexdctmTJPdVbdmNQLW' + \
+           b'rsXRjyvBiaKHR0bwYWk5+m7eYi19DJGjtDPYi40cLiYmwW31hYV5+KW3D/m5WYiN3SqOAuvWPYLCDwpw3WDAseJyNka/A1+c+RolRR+xa2eQYpNNqs38lZdYOOICERHh' + \
+           b'rK2vb2CtxI0bfYiOUvZrbbHYyFFkQIIjf0xNHhQbOYoMDAwMsDYlJZm1EjRChq5u8co1ZmMzr9o4QpGBwsISvPrKyzh+ogbt7S3Ysycdhw+/g9On63D+4vfis+awEWHe' + \
+           b'3vS/BfaRx2bGCfEURQYoA7f+JhUoHsXln8Ci1aL7jz9RUnEcb2cfYIIlzGYz+slzm3+8wErokSPviTMCrsRGjqIqJJGWtgMHD2bD31+4OWY0diEmJpr148U7EVlZGdiR' + \
+           b'lIRvvm3AHVJuMzNeQ2LidjZHoTd3Fqs2jlDFgBocotXGhZWXUBwhJdDYeJEClkdX3g3xlGUzIFWb+WcbV1kWA/Jq42rm57PkBtytNo5YUgNqxUbOkhlQMzZylsSA2rGR' + \
+           b'43EDnoiNHI8a8FRs5HjMgCdjI8cj7+rp2MhR/Z3p7b5gyzRyjN0ei80cwP+bQrjkWSh1LgAAAABJRU5ErkJggg=='
 
 # Taskbar Type Library (TLB). Used under Windows 7 or greater.
 TASKBAR_LIB_NAME = 'TaskbarLib.tlb'
