@@ -1,10 +1,8 @@
-rmdir /s /q nxdt_host
-mkdir nxdt_host
+pyinstaller -y --clean --log-level WARN -F --add-binary "C:\Windows\System32\libusb0.dll;." -w -i nxdt.ico nxdt_host.py
 
-cxfreeze nxdt_host.py -s --base-name=Win32GUI --target-dir=nxdt_host --icon=nxdt.ico
+move dist\nxdt_host.exe nxdt_host.exe
 
-copy ..\README.md nxdt_host
-copy ..\LICENSE.md nxdt_host
-
-python -m zipfile -c nxdt_host.zip nxdt_host
-
+rmdir /s /q __pycache__
+rmdir /s /q build
+rmdir /s /q dist
+del nxdt_host.spec
