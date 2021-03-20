@@ -1,7 +1,6 @@
 build
-__pycache__
-dist
-nxdumptool
+host/nxdt_host
+host/nxdumptool
 *.elf
 *.nacp
 *.nro
@@ -11,6 +10,6 @@ nxdumptool
 *.lst
 *.tar.bz2
 *.log
-*.spec
+*.zip
 /code_templates/tmp/*
 /source/main.c

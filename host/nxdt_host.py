@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 """
- * nxdt_host.pyw
+ * nxdt_host.py
  *
  * Copyright (c) 2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -20,20 +20,21 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
 """
 
-# This script depends on Pillow, PyUSB and tqdm. You can install them with `pip install Pillow pyusb tqdm`.
+# This script depends on PyUSB and tqdm.
+# Optionally, comtypes may also be installed under Windows to provide taskbar progress functionality.
+
+# Use `pip -r requirements.txt` under Linux or MacOS to install these dependencies.
+# Windows users may just double-click `windows_install_deps.py` to achieve the same result.
 
 # libusb needs to be installed as well. PyUSB uses it as its USB backend. Otherwise, a NoBackend exception will be raised while calling PyUSB functions.
 # Under Windows, the recommended way to do this is by installing the libusb driver with Zadig (https://zadig.akeo.ie). This is a common step in Switch modding guides.
 # Under MacOS, use `brew install libusb` to install libusb via Homebrew.
 # Under Linux, you should be good to go from the start. If not, just use the package manager from your distro to install libusb.
 
-# Optionally, comtypes may also be installed under Windows to provide taskbar progress functionality. You can install it with `pip install comtypes`.
-
 import os
 import platform
 import threading
 import traceback
-import ctypes
 import logging
 import queue
 import shutil
@@ -50,8 +51,6 @@ from tkinter import filedialog, messagebox, font, scrolledtext
 from tqdm import tqdm
 
 import base64
-import io
-from PIL import Image, ImageTk
 
 # Scaling factors.
 WINDOWS_SCALING_FACTOR = 96.0
@@ -66,10 +65,6 @@ APP_VERSION = '0.2'
 
 # Copyright year.
 COPYRIGHT_YEAR = '2021'
-
-# Messages displayed as labels.
-SERVER_START_MSG = 'Please connect a Nintendo Switch console running nxdumptool.'
-SERVER_STOP_MSG = 'Exit nxdumptool on your console or disconnect it at any time to stop the server.'
 
 # USB VID/PID pair.
 USB_DEV_VID = 0x057E
@@ -86,7 +81,7 @@ USB_TRANSFER_TIMEOUT = 5000
 USB_TRANSFER_BLOCK_SIZE = 0x800000
 
 # USB transfer threshold. Used to determine whether a progress bar should be displayed or not.
-USB_TRANSFER_THRESHOLD = round(float(USB_TRANSFER_BLOCK_SIZE) * 2.5)
+USB_TRANSFER_THRESHOLD = (USB_TRANSFER_BLOCK_SIZE * 4)
 
 # USB command header/status magic word.
 USB_MAGIC_WORD = b'NXDT'
@@ -119,11 +114,17 @@ USB_STATUS_UNSUPPORTED_ABI_VERSION = 6
 USB_STATUS_MALFORMED_CMD           = 7
 USB_STATUS_HOST_IO_ERROR           = 8
 
+# Messages displayed as labels.
+SERVER_START_MSG = 'Please connect a Nintendo Switch console running {}.'.format(USB_DEV_PRODUCT)
+SERVER_STOP_MSG = 'Exit {} on your console or disconnect it at any time to stop the server.'.format(USB_DEV_PRODUCT)
+
 # Default directory paths.
 INITIAL_DIR = os.path.abspath(os.path.dirname(__file__))
 DEFAULT_DIR = (INITIAL_DIR + os.path.sep + USB_DEV_PRODUCT)
 
-# Application icon.
+# Application icon (PNG).
+# Embedded to load it as the icon for all windows using PhotoImage (which doesn't support ICO files) + wm_iconphoto.
+# iconbitmap supports external ICO files, but it's not capable of setting the icon to all child windows.
 APP_ICON = b'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAAEnQAABJ0Ad5mH3gAABfVelRYdFJhdyBw' + \
            b'cm9maWxlIHR5cGUgZXhpZgAAeNrNmll23TiWRf8xihoC+mY4uGjWqhnU8GsfPjV2SJGpcuRHWbYoU3wkcJvTAHTnf/77uv/iT83Ru1xar6NWz5888oiTH7p//RnP9+Dz' + \
            b'8/39T3j7/tt59/Fj5Jg4ptcv2nz71OR8+fzA+zOC/X7e9bffxP52o/cnx9ch6cn6ef06SM7H1/mQ32403i6oo7dfh2pvH1jHfw7l7V/9fZLP/92vJ3IjSrvwoBTjSSF5' + \
@@ -206,10 +207,10 @@ APP_ICON = b'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAAAR
            b'rAQgrTb2ev5uZjwAR6uNNWY0AKVsI2XGAlDSNlJmJAClbSPF6QE4wzZSnBqAs2wjxWkBONM2Upzyrc62jRTFv5k+7vMzjZA/4O1Os80EwP/vHLXv3BH8dQAAAABJRU5E' + \
            b'rkJggg=='
 
-# Taskbar Type Library (TLB) object.
-TASKBAR_TLB_NAME = 'taskbar.tlb'
+# Taskbar Type Library (TLB). Used under Windows 7 or greater.
+TASKBAR_LIB_NAME = 'TaskbarLib.tlb'
 
-TASKBAR_TLB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAATgAAADMDAAAAAAAA/////xgAAAAgAAAAgAAAAP////8AAAAAAAAAAGQAAADIAAAA' + \
+TASKBAR_LIB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAATgAAADMDAAAAAAAA/////xgAAAAgAAAAgAAAAP////8AAAAAAAAAAGQAAADIAAAA' + \
               b'LAEAAJABAAD0AQAAWAIAALwCAAAgAwAAhAMAAOgDAABMBAAAsAQAABQFAAB8AQAAeAUAAP////8PAAAA/////wAAAAD/////DwAAAP////8AAAAA/////w8AAABMCAAA' + \
               b'EAAAAP////8PAAAA9AYAAIAAAAD/////DwAAAHQHAADYAAAA/////w8AAABcCAAAAAIAAP////8PAAAAXAoAAEQHAAD/////DwAAAP////8AAAAA/////w8AAACgEQAA' + \
               b'iAAAAP////8PAAAAKBIAACAAAAD/////DwAAAEgSAABUAAAA/////w8AAACcEgAAJAAAAP////8PAAAA/////wAAAAD/////DwAAAP////8AAAAA/////w8AAAAjIgAA' + \
@@ -282,32 +283,6 @@ TASKBAR_TLB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAA
               b'AAAAABQAAQADAAOAAAAAAAAAJAAEAAAAFAACAAMAA4AAAAAAAAAkAAgAAAAUAAMAAwADgAAAAAAAACQADAAAAAAAAEABAABAAgAAQAMAAEC0BgAAxAYAANQGAADoBgAA' + \
               b'AAAAABQAAAAoAAAAPAAAAA=='
 
-# Setup logger object.
-g_Logger = logging.getLogger()
-
-# Setup thread event.
-g_stopEvent = threading.Event()
-
-# Setup Windows taskbar object (if needed).
-g_tlb = g_taskbar = None
-if os.name == 'nt':
-    g_tlb = open(TASKBAR_TLB_NAME, 'wb')
-    g_tlb.write(base64.b64decode(TASKBAR_TLB))
-    g_tlb.close()
-    g_tlb = None
-    
-    try:
-        import comtypes.client as cc
-        
-        g_tlb = cc.GetModule(TASKBAR_TLB_NAME)
-        
-        g_taskbar = cc.CreateObject('{56FDF344-FD6D-11D0-958A-006097C9A090}', interface=g_tlb.ITaskbarList3)
-        g_taskbar.HrInit()
-    except:
-        traceback.print_exc()
-    
-    os.remove(TASKBAR_TLB_NAME)
-
 # Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
 class LogQueueHandler(logging.Handler):
     def __init__(self, log_queue):
@@ -379,9 +354,7 @@ class ProgressBarWindow:
         self.withdrawn = True
         
         if window_title: self.tk_window.title(window_title)
-        
         self.tk_window.resizable(window_resize, window_resize)
-        
         if window_protocol: self.tk_window.protocol('WM_DELETE_WINDOW', window_protocol)
         
         pbar_frame = ttk.Frame(self.tk_window, padding=5)
@@ -400,7 +373,7 @@ class ProgressBarWindow:
         self.tk_parent.after(0, self.tk_window.destroy)
     
     def start(self, total, n=0, divider=1, prefix='', unit='B'):
-        if (total <= 0) or (n < 0) or (divider <= 0): raise Exception('Invalid arguments!')
+        if (total <= 0) or (n < 0) or (divider < 1): raise Exception('Invalid arguments!')
         
         self.n = n
         self.total = total
@@ -425,16 +398,21 @@ class ProgressBarWindow:
         self.tk_text_var.set(msg)
         self.tk_n_var.set(cur_n_div)
         
-        self.n = cur_n
-        
         if self.withdrawn:
+            self.tk_window.geometry("+{}+{}".format(self.tk_parent.winfo_x(), self.tk_parent.winfo_y()))
             self.tk_window.deiconify()
-            self.setup_taskbar()
-            self.tk_window.attributes('-topmost', True)
-            self.tk_window.after(0, lambda: self.tk_window.attributes('-topmost', False))
+            self.tk_window.grab_set()
+            
+            if g_taskbar:
+                self.hwnd = int(self.tk_window.wm_frame(), 16)
+                g_taskbar.ActivateTab(self.hwnd)
+                g_taskbar.SetProgressState(self.hwnd, g_tlb.TBPF_NORMAL)
+            
             self.withdrawn = False
         
         if g_taskbar: g_taskbar.SetProgressValue(self.hwnd, cur_n, self.total)
+        
+        self.n = cur_n
     
     def end(self):
         self.n = 0
@@ -450,6 +428,8 @@ class ProgressBarWindow:
             g_taskbar.SetProgressState(self.hwnd, g_tlb.TBPF_NOPROGRESS)
             g_taskbar.UnregisterTab(self.hwnd)
         
+        self.tk_window.grab_release()
+        
         self.tk_window.withdraw()
         self.withdrawn = True
         
@@ -457,14 +437,6 @@ class ProgressBarWindow:
     
     def set_prefix(self, prefix):
         self.prefix = prefix
-    
-    def setup_taskbar(self):
-        if not g_taskbar: return
-        
-        self.hwnd = int(self.tk_window.wm_frame(), 16)
-        
-        g_taskbar.ActivateTab(self.hwnd)
-        g_taskbar.SetProgressState(self.hwnd, g_tlb.TBPF_NORMAL)
 
 def utilsIsValueAlignedToEndpointPacketSize(value):
     return bool((value & (g_usbEpMaxPacketSize - 1)) == 0)
@@ -500,7 +472,7 @@ def usbGetDeviceEndpoints():
     prev_dev = cur_dev = None
     usb_ep_in_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_IN
     usb_ep_out_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_OUT
-    usb_version = None
+    usb_version = 0
     
     while True:
         # Check if the user decided to stop the server.
@@ -548,8 +520,6 @@ def usbGetDeviceEndpoints():
         usb_version = cur_dev.bcdUSB
         
         break
-    
-    g_tkCanvas.itemconfigure(g_tkTipMessage, state='normal', text=SERVER_STOP_MSG)
     
     g_Logger.debug('Successfully retrieved USB endpoints! (bus %u, address %u).' % (cur_dev.bus, cur_dev.address))
     g_Logger.debug('Max packet size: 0x%X (USB %u.%u).\n' % (g_usbEpMaxPacketSize, usb_version >> 8, (usb_version & 0xFF) >> 4))
@@ -613,12 +583,13 @@ def usbHandleSendFileProperties(cmd_block):
     filename = raw_filename.decode('utf-8').strip('\x00')
     
     # Print info.
-    info_str = ('File size: 0x%X | Filename length: 0x%X' % (file_size, filename_length))
-    if nsp_header_size > 0: info_str += (' | NSP header size: 0x%X' % (nsp_header_size))
-    info_str += '.'
+    dbg_str = ('File size: 0x%X | Filename length: 0x%X' % (file_size, filename_length))
+    if nsp_header_size > 0: dbg_str += (' | NSP header size: 0x%X' % (nsp_header_size))
+    dbg_str += '.'
+    g_Logger.debug(dbg_str)
     
-    g_Logger.info(info_str)
-    g_Logger.info('Filename: "%s".' % (filename))
+    file_type_str = ('file' if (not g_nspTransferMode) else 'NSP file entry')
+    g_Logger.info('Receiving %s: "%s".' % (file_type_str, filename))
     
     # Perform integrity checks
     if (not g_nspTransferMode) and file_size and (nsp_header_size >= file_size):
@@ -645,13 +616,6 @@ def usbHandleSendFileProperties(cmd_block):
     
     # Perform additional integrity checks and get a file object to work with.
     if (not g_nspTransferMode) or (g_nspFile is None):
-        # Check if we're dealing with an absolute path.
-        if filename[0] == '/':
-            filename = filename[1:]
-            
-            # Replace all slashes with backslashes if we're running under Windows.
-            if os.name == 'nt': filename = filename.replace('/', '\\')
-        
         # Generate full, absolute path to the destination file.
         fullpath = os.path.abspath(g_outputDir + os.path.sep + filename)
         
@@ -704,8 +668,7 @@ def usbHandleSendFileProperties(cmd_block):
     usbSendStatus(USB_STATUS_SUCCESS)
     
     # Start data transfer stage.
-    file_type_str = ('file' if (not g_nspTransferMode) else 'NSP file entry')
-    g_Logger.info('Data transfer started. Saving %s to: "%s".' % (file_type_str, fullpath))
+    g_Logger.debug('Data transfer started. Saving %s to: "%s".' % (file_type_str, fullpath))
     
     offset = 0
     blksize = USB_TRANSFER_BLOCK_SIZE
@@ -717,7 +680,7 @@ def usbHandleSendFileProperties(cmd_block):
         prefix_filename = (filename[idx+1:] if (idx >= 0) else filename)
         
         prefix = ('Current %s: "%s".\n' % (file_type_str, prefix_filename))
-        prefix += 'Use your console to cancel the file transfer if you wish to do so.\n\n'
+        prefix += 'Use your console to cancel the file transfer if you wish to do so.'
         
         if (not g_nspTransferMode) or g_nspRemainingSize == (g_nspSize - g_nspHeaderSize):
             if not g_nspTransferMode:
@@ -732,7 +695,7 @@ def usbHandleSendFileProperties(cmd_block):
             # Get progress bar unit and unit divider. These will be used to display and calculate size values using a specific size unit (B, KiB, MiB, GiB).
             (unit, unit_divider) = utilsGetSizeUnitAndDivisor(pbar_file_size)
             
-            # Initialize progress bar.
+            # Display progress bar window.
             g_progressBarWindow.start(pbar_file_size, pbar_n, unit_divider, prefix, unit)
         else:
             # Set current prefix (holds the filename for the current NSP file entry).
@@ -774,7 +737,8 @@ def usbHandleSendFileProperties(cmd_block):
         if chunk_size == USB_CMD_HEADER_SIZE:
             (magic, cmd_id, cmd_block_size) = struct.unpack_from('<4sII', chunk, 0)
             if (magic == USB_MAGIC_WORD) and (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER):
-                g_Logger.debug('\nReceived CancelFileTransfer (%02X) command.\n' % (USB_CMD_CANCEL_FILE_TRANSFER))
+                g_Logger.debug('\nReceived CancelFileTransfer (%02X) command.' % (USB_CMD_CANCEL_FILE_TRANSFER))
+                g_Logger.warning('Transfer cancelled.')
                 
                 # Cancel file transfer.
                 cancelTransfer()
@@ -796,7 +760,7 @@ def usbHandleSendFileProperties(cmd_block):
         if use_pbar: g_progressBarWindow.update(chunk_size)
     
     elapsed_time = round(time.time() - start_time)
-    g_Logger.info('File transfer successfully completed in %s!\n' % (tqdm.format_interval(elapsed_time)))
+    g_Logger.debug('File transfer successfully completed in %s!\n' % (tqdm.format_interval(elapsed_time)))
     
     # Close file handle (if needed).
     if not g_nspTransferMode: file.close()
@@ -857,7 +821,8 @@ def usbCommandHandler():
         uiToggleElements(True)
         return
     
-    # Disable server button.
+    # Update UI.
+    g_tkCanvas.itemconfigure(g_tkTipMessage, state='normal', text=SERVER_STOP_MSG)
     g_tkServerButton.configure(state='disabled')
     
     # Reset NSP info.
@@ -915,7 +880,7 @@ def usbCommandHandler():
         if (status is None) or (not usbSendStatus(status)) or (cmd_id == USB_CMD_END_SESSION) or (status == USB_STATUS_UNSUPPORTED_ABI_VERSION):
             break
     
-    g_Logger.info('Stopping server.')
+    g_Logger.info('\nStopping server.')
     
     # Update UI.
     uiToggleElements(True)
@@ -985,29 +950,56 @@ def uiHandleExitProtocolStub():
 def uiScaleMeasure(measure):
     return round(float(measure) * SCALE)
 
-def main():
-    global SCALE, g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog, g_progressBarWindow
+def uiInitialize():
+    global SCALE
+    global g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog
+    global g_tlb, g_taskbar, g_progressBarWindow
     
-    # Disable warnings.
-    warnings.filterwarnings("ignore")
-    
-    # Get OS information.
-    os_type = platform.system()
-    os_version = platform.version()
-    
-    # Check if we're running under Windows Vista or later.
+    # Enable high DPI scaling under Windows (if possible).
     dpi_aware = False
-    win_vista = ((os_type == 'Windows') and (int(os_version[:os_version.find('.')]) >= 6))
-    if win_vista:
+    if g_isWindowsVista:
         try:
-            # Enable high DPI scaling.
+            import ctypes
+            
             dpi_aware = (ctypes.windll.user32.SetProcessDPIAware() == 1)
             if not dpi_aware: dpi_aware = (ctypes.windll.shcore.SetProcessDpiAwareness(1) == 0)
         except:
             traceback.print_exc()
     
+    # Enable taskbar features under Windows (if possible).
+    g_tlb = g_taskbar = None
+    del_tlb = False
+    
+    if g_isWindows7:
+        try:
+            import comtypes.client as cc
+            
+            tlb_fp = open(TASKBAR_LIB_NAME, 'wb')
+            tlb_fp.write(base64.b64decode(TASKBAR_LIB))
+            tlb_fp.close()
+            del_tlb = True
+            
+            g_tlb = cc.GetModule(TASKBAR_LIB_NAME)
+            
+            g_taskbar = cc.CreateObject('{56FDF344-FD6D-11D0-958A-006097C9A090}', interface=g_tlb.ITaskbarList3)
+            g_taskbar.HrInit()
+        except:
+            traceback.print_exc()
+        
+        if del_tlb: os.remove(TASKBAR_LIB_NAME)
+    
     # Create root Tkinter object.
     g_tkRoot = tk.Tk()
+    g_tkRoot.title("{} host app v{}".format(USB_DEV_PRODUCT, APP_VERSION))
+    g_tkRoot.protocol('WM_DELETE_WINDOW', uiHandleExitProtocol)
+    g_tkRoot.resizable(False, False)
+    
+    # Set window icon.
+    try:
+        icon_image = tk.PhotoImage(data=APP_ICON)
+        g_tkRoot.wm_iconphoto(True, icon_image)
+    except:
+        traceback.print_exc()
     
     # Get screen resolution.
     screen_width_px = g_tkRoot.winfo_screenwidth()
@@ -1017,29 +1009,7 @@ def main():
     screen_dpi = round(g_tkRoot.winfo_fpixels('1i'))
     
     # Update scaling factor (if needed).
-    if win_vista and dpi_aware: SCALE = (float(screen_dpi) / WINDOWS_SCALING_FACTOR)
-    
-    # Decode embedded icon and set it.
-    try:
-        icon_fp = io.BytesIO(base64.b64decode(APP_ICON))
-        icon_image = Image.open(fp=icon_fp, formats=['PNG'])
-        icon_photo = ImageTk.PhotoImage(icon_image)
-        
-        g_tkRoot.wm_iconphoto(True, icon_photo)
-        
-        icon_image.close()
-        icon_fp.close()
-    except:
-        traceback.print_exc()
-        g_tkRoot.withdraw()
-        messagebox.showerror('Error', 'Unable to decode embedded application icon!', parent=g_tkRoot)
-        g_tkRoot.destroy()
-        return
-    
-    # Set window properties.
-    g_tkRoot.resizable(False, False)
-    g_tkRoot.title("{} host app v{}".format(USB_DEV_PRODUCT, APP_VERSION))
-    g_tkRoot.protocol('WM_DELETE_WINDOW', uiHandleExitProtocol)
+    if g_isWindowsVista and dpi_aware: SCALE = (float(screen_dpi) / WINDOWS_SCALING_FACTOR)
     
     # Determine window size.
     window_width_px = uiScaleMeasure(WINDOW_WIDTH)
@@ -1048,7 +1018,7 @@ def main():
     # Center window.
     pos_hor = int((screen_width_px / 2) - (window_width_px / 2))
     pos_ver = int((screen_height_px / 2) - (window_height_px / 2))
-    g_tkRoot.geometry("+{}+{}".format(pos_hor, pos_ver))
+    g_tkRoot.geometry("{}x{}+{}+{}".format(window_width_px, window_height_px, pos_hor, pos_ver))
     
     # Create canvas and fill it with window elements.
     g_tkCanvas = tk.Canvas(g_tkRoot, width=window_width_px, height=window_height_px)
@@ -1079,22 +1049,51 @@ def main():
     
     g_tkCanvas.create_text(uiScaleMeasure(5), uiScaleMeasure(WINDOW_HEIGHT - 10), text="Copyright (c) {}, {}".format(COPYRIGHT_YEAR, USB_DEV_MANUFACTURER), anchor=tk.W)
     
-    # Configure logging mechanism.
-    logging.basicConfig(level=logging.DEBUG)
+    # Initialize console logger.
+    console = LogConsole(g_tkScrolledTextLog)
+    
+    # Initialize progress bar window object.
+    bar_format = '{desc}\n\n{percentage:.2f}% - {n:.2f} / {total:.2f} {unit}\nElapsed time: {elapsed}. Remaining time: {remaining}.\nSpeed: {rate_fmt}.'
+    g_progressBarWindow = ProgressBarWindow(bar_format, g_tkRoot, 'File transfer', False, uiHandleExitProtocolStub)
+    
+    # Enter Tkinter main loop.
+    g_tkRoot.lift()
+    g_tkRoot.mainloop()
+
+def main():
+    global g_Logger, g_stopEvent, g_osType, g_osVersion, g_isWindows, g_isWindowsVista, g_isWindows7
+    
+    # Disable warnings.
+    warnings.filterwarnings("ignore")
+    
+    # Setup logging mechanism.
+    logging.basicConfig(level=logging.INFO)
+    g_Logger = logging.getLogger()
     if len(g_Logger.handlers):
         # Remove stderr output handler from logger.
         log_stderr = g_Logger.handlers[0]
         g_Logger.removeHandler(log_stderr)
     
-    # Initialize console logger.
-    console = LogConsole(g_tkScrolledTextLog)
+    # Setup thread event.
+    g_stopEvent = threading.Event()
     
-    # Create hidden progress bar window.
-    bar_format = '{desc}{percentage:.2f}% - {n:.2f} / {total:.2f} {unit}\nElapsed time: {elapsed}. Remaining time: {remaining}.\nSpeed: {rate_fmt}.'
-    g_progressBarWindow = ProgressBarWindow(bar_format, g_tkRoot, 'File transfer', False, uiHandleExitProtocolStub)
+    # Get OS information.
+    g_osType = platform.system()
+    g_osVersion = platform.version()
     
-    # Enter Tkinter main loop.
-    g_tkRoot.mainloop()
+    # Get Windows information.
+    g_isWindows = (g_osType == 'Windows')
+    g_isWindowsVista = g_isWindows7 = False
+    if g_isWindows:
+        win_ver = g_osVersion.split('.')
+        win_ver_major = int(win_ver[0])
+        win_ver_minor = int(win_ver[1])
+        
+        g_isWindowsVista = (win_ver_major >= 6)
+        g_isWindows7 = (True if (win_ver_major > 6) else (win_ver_major == 6 and win_ver_minor > 0))
+    
+    # Initialize UI.
+    uiInitialize()
 
 if __name__ == "__main__":
     try:
