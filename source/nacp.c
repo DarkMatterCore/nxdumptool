@@ -260,17 +260,25 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
     {
         NacpIconContext *icon_ctx = NULL;
         
-        /* Check if the current language is supported. */
-        if (!nacpCheckBitflagField(&(out->data->supported_language), sizeof(out->data->supported_language) * 8, i)) continue;
-        
         /* Get language string. */
         language_str = nacpGetLanguageString(i);
+        
+        /* Check if the current language is supported. */
+        if (!nacpCheckBitflagField(&(out->data->supported_language), sizeof(out->data->supported_language) * 8, i))
+        {
+            //LOG_MSG("\"%s\" language not supported (flag 0x%08X, index %u).", language_str, out->data->supported_language, i);
+            continue;
+        }
         
         /* Generate icon path. */
         sprintf(icon_path, "/icon_%s.dat", language_str);
         
         /* Retrieve RomFS file entry for this icon. */
-        if (!(icon_entry = romfsGetFileEntryByPath(&(out->romfs_ctx), icon_path))) continue;
+        if (!(icon_entry = romfsGetFileEntryByPath(&(out->romfs_ctx), icon_path)))
+        {
+            //LOG_MSG("\"%s\" file entry not found (flag 0x%08X, index %u).", icon_path, out->data->supported_language, i);
+            continue;
+        }
         
         /* Check icon size. */
         if (!icon_entry->size || icon_entry->size > NACP_MAX_ICON_SIZE)

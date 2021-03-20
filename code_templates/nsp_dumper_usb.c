@@ -419,7 +419,7 @@ static void dump_thread_func(void *arg)
                 }
                 
                 sprintf(entry_name, "%s.nacp.xml", cur_nca_ctx->content_id_str);
-                ret = pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cur_nacp_ctx->authoring_tool_xml_size, NULL);
+                ret = pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cur_nacp_ctx->authoring_tool_xml_size, !cur_nacp_ctx->icon_count ? &(cur_nca_ctx->content_type_ctx_data_idx) : NULL);
                 break;
             }
             case NcmContentType_LegalInformation:
