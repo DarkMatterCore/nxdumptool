@@ -23,6 +23,13 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
+#ifndef __cplusplus
+# include <stdatomic.h>
+#else
+# include <atomic>
+# define _Atomic(X) std::atomic< X >
+#endif
+
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -35,7 +42,6 @@
 #include <math.h>
 #include <time.h>
 #include <sys/stat.h>
-#include <stdatomic.h>
 #include <assert.h>
 #include <switch.h>
 
