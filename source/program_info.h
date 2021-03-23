@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __PROGRAM_INFO_H__
 #define __PROGRAM_INFO_H__
 
@@ -81,3 +85,7 @@ NX_INLINE void programInfoWriteNcaPatch(ProgramInfoContext *program_info_ctx, vo
 }
 
 #endif /* __PROGRAM_INFO_H__ */
+
+#ifdef __cplusplus
+}
+#endif

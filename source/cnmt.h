@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __CNMT_H__
 #define __CNMT_H__
 
@@ -290,3 +294,7 @@ NX_INLINE u32 cnmtGetRequiredTitleVersion(ContentMetaContext *cnmt_ctx)
 }
 
 #endif /* __CNMT_H__ */
+
+#ifdef __cplusplus
+}
+#endif

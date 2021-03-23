@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __LEGAL_INFO_H__
 #define __LEGAL_INFO_H__
 
@@ -44,3 +48,7 @@ NX_INLINE void legalInfoFreeContext(LegalInfoContext *legal_info_ctx)
 }
 
 #endif /* __LEGAL_INFO_H__ */
+
+#ifdef __cplusplus
+}
+#endif

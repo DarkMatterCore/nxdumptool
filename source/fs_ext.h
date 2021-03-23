@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __FS_EXT_H__
 #define __FS_EXT_H__
 
@@ -46,3 +50,7 @@ Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCard
 Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const FsGameCardHandle *handle, FsGameCardCertificate *out);
 
 #endif /* __FS_EXT_H__ */
+
+#ifdef __cplusplus
+}
+#endif

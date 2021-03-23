@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __HFS_H__
 #define __HFS_H__
 
@@ -118,3 +122,7 @@ NX_INLINE HashFileSystemEntry *hfsGetEntryByName(HashFileSystemContext *ctx, con
 }
 
 #endif /* __HFS_H__ */
+
+#ifdef __cplusplus
+}
+#endif

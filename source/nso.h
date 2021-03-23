@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __NSO_H__
 #define __NSO_H__
 
@@ -142,3 +146,7 @@ NX_INLINE void nsoFreeContext(NsoContext *nso_ctx)
 }
 
 #endif /* __NSO_H__ */
+
+#ifdef __cplusplus
+}
+#endif

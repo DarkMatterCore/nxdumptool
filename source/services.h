@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __SERVICES_H__
 #define __SERVICES_H__
 
@@ -50,3 +54,7 @@ void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate);
 Result servicesHasService(bool *out, const char *name);
 
 #endif /* __SERVICES_H__ */
+
+#ifdef __cplusplus
+}
+#endif

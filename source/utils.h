@@ -25,6 +25,10 @@
 
 #include "common.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
 
 #define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
@@ -136,5 +140,9 @@ NX_INLINE void utilsSleep(u64 seconds)
 {
     if (seconds) svcSleepThread(seconds * (u64)1000000000);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __UTILS_H__ */

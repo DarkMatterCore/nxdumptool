@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __TIK_H__
 #define __TIK_H__
 
@@ -225,3 +229,7 @@ NX_INLINE bool tikIsPersonalizedTicket(Ticket *tik)
 }
 
 #endif /* __TIK_H__ */
+
+#ifdef __cplusplus
+}
+#endif

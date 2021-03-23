@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __CERT_H__
 #define __CERT_H__
 
@@ -241,3 +245,7 @@ NX_INLINE u64 certGetSignedCertificateHashAreaSize(void *buf)
 }
 
 #endif /* __CERT_H__ */
+
+#ifdef __cplusplus
+}
+#endif

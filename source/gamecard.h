@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __GAMECARD_H__
 #define __GAMECARD_H__
 
@@ -235,3 +239,7 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
 bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size);
 
 #endif /* __GAMECARD_H__ */
+
+#ifdef __cplusplus
+}
+#endif

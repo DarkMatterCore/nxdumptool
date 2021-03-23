@@ -21,6 +21,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __BFTTF_H__
 #define __BFTTF_H__
 
@@ -53,3 +57,7 @@ void bfttfExit(void);
 bool bfttfGetFontByType(BfttfFontData *font, u8 font_type);
 
 #endif /* __BFTTF_H__ */
+
+#ifdef __cplusplus
+}
+#endif

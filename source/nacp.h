@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __NACP_H__
 #define __NACP_H__
 
@@ -452,3 +456,7 @@ NX_INLINE bool nacpIsValidContext(NacpContext *nacp_ctx)
 }
 
 #endif /* __NACP_H__ */
+
+#ifdef __cplusplus
+}
+#endif

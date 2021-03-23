@@ -21,6 +21,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __BKTR_H__
 #define __BKTR_H__
 
@@ -154,3 +158,7 @@ NX_INLINE bool bktrGeneratePathFromFileEntry(BktrContext *ctx, RomFileSystemFile
 }
 
 #endif /* __BKTR_H__ */
+
+#ifdef __cplusplus
+}
+#endif

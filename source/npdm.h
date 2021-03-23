@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __NPDM_H__
 #define __NPDM_H__
 
@@ -589,3 +593,7 @@ NX_INLINE u32 npdmGetKernelCapabilityDescriptorEntryValue(NpdmKernelCapabilityDe
 }
 
 #endif /* __NPDM_H__ */
+
+#ifdef __cplusplus
+}
+#endif

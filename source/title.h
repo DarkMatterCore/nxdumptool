@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __TITLE_H__
 #define __TITLE_H__
 
@@ -265,3 +269,7 @@ NX_INLINE u32 titleGetCountFromInfoBlock(TitleInfo *title_info)
 }
 
 #endif /* __TITLE_H__ */
+
+#ifdef __cplusplus
+}
+#endif

@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __AES_H__
 #define __AES_H__
 
@@ -81,3 +85,7 @@ NX_INLINE void aes128CtrUpdatePartialCtrEx(u8 *ctr, u32 ctr_val, u64 offset)
 }
 
 #endif /* __AES_H__ */
+
+#ifdef __cplusplus
+}
+#endif

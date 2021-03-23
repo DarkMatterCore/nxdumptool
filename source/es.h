@@ -21,6 +21,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __ES_H__
 #define __ES_H__
 
@@ -33,3 +37,7 @@ Result esListCommonTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 cou
 Result esListPersonalizedTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count);
 
 #endif /* __ES_H__ */
+
+#ifdef __cplusplus
+}
+#endif

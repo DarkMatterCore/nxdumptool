@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __UMS_H__
 #define __UMS_H__
 
@@ -39,3 +43,7 @@ bool umsIsDeviceInfoUpdated(void);
 UsbHsFsDevice *umsGetDevices(u32 *out_count);
 
 #endif /* __UMS_H__ */
+
+#ifdef __cplusplus
+}
+#endif

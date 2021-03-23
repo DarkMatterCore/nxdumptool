@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __PFS_H__
 #define __PFS_H__
 
@@ -187,3 +191,7 @@ NX_INLINE char *pfsGetEntryNameByIndexFromFileContext(PartitionFileSystemFileCon
 }
 
 #endif /* __PFS_H__ */
+
+#ifdef __cplusplus
+}
+#endif
