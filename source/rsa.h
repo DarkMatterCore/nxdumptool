@@ -22,6 +22,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __RSA_H__
 #define __RSA_H__
 
@@ -41,3 +45,7 @@ const u8 *rsa2048GetCustomPublicKey(void);
 bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signature, const void *modulus, const void *exponent, size_t exponent_size, const void *label_hash, size_t *out_size);
 
 #endif /* __RSA_H__ */
+
+#ifdef __cplusplus
+}
+#endif

@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __NCA_H__
 #define __NCA_H__
 
@@ -494,3 +498,7 @@ NX_INLINE void ncaFreeHierarchicalIntegrityPatch(NcaHierarchicalIntegrityPatch *
 }
 
 #endif /* __NCA_H__ */
+
+#ifdef __cplusplus
+}
+#endif

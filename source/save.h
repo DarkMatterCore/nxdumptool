@@ -21,6 +21,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __SAVE_H__
 #define __SAVE_H__
 
@@ -514,3 +518,7 @@ void save_close_savefile(save_ctx_t *ctx);
 bool save_get_fat_storage_from_file_entry_by_path(save_ctx_t *ctx, const char *path, allocation_table_storage_ctx_t *out_fat_storage, u64 *out_file_entry_size);
 
 #endif /* __SAVE_H__ */
+
+#ifdef __cplusplus
+}
+#endif

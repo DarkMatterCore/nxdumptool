@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __ROMFS_H__
 #define __ROMFS_H__
 
@@ -200,3 +204,7 @@ NX_INLINE void romfsFreeFileEntryPatch(RomFileSystemFileEntryPatch *patch)
 }
 
 #endif /* __ROMFS_H__ */
+
+#ifdef __cplusplus
+}
+#endif

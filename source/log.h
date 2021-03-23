@@ -20,6 +20,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __LOG_H__
 #define __LOG_H__
 
@@ -55,3 +59,7 @@ void logGetLastMessage(char *dst, size_t dst_size);
 void logControlMutex(bool lock);
 
 #endif /* __LOG_H__ */
+
+#ifdef __cplusplus
+}
+#endif

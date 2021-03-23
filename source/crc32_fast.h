@@ -23,6 +23,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __CRC32_FAST_H__
 #define __CRC32_FAST_H__
 
@@ -31,3 +35,7 @@
 void crc32FastCalculate(const void *data, u64 n_bytes, u32 *crc);
 
 #endif /* __CRC32_FAST_H__ */
+
+#ifdef __cplusplus
+}
+#endif

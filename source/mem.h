@@ -21,6 +21,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __MEM_H__
 #define __MEM_H__
 
@@ -56,3 +60,7 @@ NX_INLINE void memFreeMemoryLocation(MemoryLocation *location)
 }
 
 #endif /* __MEM_H__ */
+
+#ifdef __cplusplus
+}
+#endif

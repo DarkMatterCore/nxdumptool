@@ -23,6 +23,10 @@
 
 #pragma once
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #ifndef __USB_H__
 #define __USB_H__
 
@@ -70,3 +74,7 @@ NX_INLINE bool usbSendFilePropertiesCommon(u64 file_size, const char *filename)
 }
 
 #endif /* __USB_H__ */
+
+#ifdef __cplusplus
+}
+#endif
