@@ -23,13 +23,6 @@
 #ifndef __COMMON_H__
 #define __COMMON_H__
 
-#ifndef __cplusplus
-# include <stdatomic.h>
-#else
-# include <atomic>
-# define _Atomic(X) std::atomic< X >
-#endif
-
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -45,6 +38,13 @@
 #include <assert.h>
 #include <switch.h>
 
+#ifndef __cplusplus
+#include <stdatomic.h>
+#else
+#include <atomic>
+#define _Atomic(X) std::atomic< X >
+#endif
+
 #include "log.h"
 #include "ums.h"
 
@@ -55,6 +55,8 @@
 #define SYSTEM_UPDATE_TID       (u64)0x0100000000000816
 
 #define FAT32_FILESIZE_LIMIT    (u64)0xFFFFFFFF         /* 4 GiB - 1 (4294967295 bytes). */
+
+#define NXDT_ASSERT(name, size) static_assert(sizeof(name) == (size), "Bad size for " #name "! Expected " #size ".")
 
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
 /// Referenced by multiple header files.
@@ -71,6 +73,8 @@ typedef struct {
     };
 } VersionType1;
 
+NXDT_ASSERT(VersionType1, 0x4);
+
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{relstep}".
 /// Only used by GameCardFwMode and NcaSdkAddOnVersion.
 typedef struct {
@@ -84,6 +88,8 @@ typedef struct {
         u32 value;
     };
 } VersionType2;
+
+NXDT_ASSERT(VersionType2, 0x4);
 
 /// These are set in main().
 extern int g_argc;

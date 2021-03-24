@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __UMS_H__
 #define __UMS_H__
 
 #include <usbhsfs.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /// Initializes the USB Mass Storage interface.
 bool umsInitialize(void);
@@ -42,8 +42,8 @@ bool umsIsDeviceInfoUpdated(void);
 /// Returns NULL if an error occurs.
 UsbHsFsDevice *umsGetDevices(u32 *out_count);
 
-#endif /* __UMS_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __UMS_H__ */

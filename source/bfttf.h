@@ -21,12 +21,12 @@
 
 #pragma once
 
+#ifndef __BFTTF_H__
+#define __BFTTF_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __BFTTF_H__
-#define __BFTTF_H__
 
 /// Loosely based on PlSharedFontType.
 typedef enum {
@@ -56,8 +56,8 @@ void bfttfExit(void);
 /// Returns a specific BFTTF font using the provided BfttfFontType.
 bool bfttfGetFontByType(BfttfFontData *font, u8 font_type);
 
-#endif /* __BFTTF_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __BFTTF_H__ */

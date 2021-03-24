@@ -21,14 +21,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __SAVE_H__
 #define __SAVE_H__
 
 #include "fatfs/ff.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define IVFC_MAX_LEVEL                  6
 
@@ -106,6 +106,8 @@ typedef struct {
     u8 _0x190[0x70];
 } fs_layout_t;
 
+NXDT_ASSERT(fs_layout_t, 0x200);
+
 #pragma pack(push, 1)
 typedef struct {
     u64 offset;
@@ -114,11 +116,15 @@ typedef struct {
 } duplex_info_t;
 #pragma pack(pop)
 
+NXDT_ASSERT(duplex_info_t, 0x14);
+
 typedef struct {
     u32 magic; /* "DPFS". */
     u32 version;
     duplex_info_t layers[3];
 } duplex_header_t;
+
+NXDT_ASSERT(duplex_header_t, 0x44);
 
 typedef struct {
     u32 version;
@@ -126,6 +132,8 @@ typedef struct {
     u32 journal_block_count;
     u32 _0x0C;
 } journal_map_header_t;
+
+NXDT_ASSERT(journal_map_header_t, 0x10);
 
 typedef struct {
     u32 magic; /* "JNGL". */
@@ -135,12 +143,16 @@ typedef struct {
     u64 block_size;
 } journal_header_t;
 
+NXDT_ASSERT(journal_header_t, 0x20);
+
 typedef struct {
     u32 magic; /* "SAVE". */
     u32 version;
     u64 block_count;
     u64 block_size;
 } save_fs_header_t;
+
+NXDT_ASSERT(save_fs_header_t, 0x18);
 
 typedef struct {
     u64 block_size;
@@ -154,6 +166,8 @@ typedef struct {
     u32 file_table_block;
 } fat_header_t;
 
+NXDT_ASSERT(fat_header_t, 0x30);
+
 typedef struct {
     u32 magic; /* "RMAP". */
     u32 version;
@@ -162,6 +176,8 @@ typedef struct {
     u32 segment_bits;
     u8 _0x14[0x2C];
 } remap_header_t;
+
+NXDT_ASSERT(remap_header_t, 0x40);
 
 typedef struct remap_segment_ctx_t remap_segment_ctx_t;
 typedef struct remap_entry_ctx_t remap_entry_ctx_t;
@@ -232,12 +248,16 @@ typedef struct {
     u64 commit_id;
 } extra_data_t;
 
+NXDT_ASSERT(extra_data_t, 0x70);
+
 typedef struct {
     u64 logical_offset;
     u64 hash_data_size;
     u32 block_size;
     u32 reserved;
 } ivfc_level_hdr_t;
+
+NXDT_ASSERT(ivfc_level_hdr_t, 0x18);
 
 typedef struct {
     u32 magic;
@@ -247,6 +267,8 @@ typedef struct {
     ivfc_level_hdr_t level_headers[IVFC_MAX_LEVEL];
     u8 salt_source[0x20];
 } ivfc_save_hdr_t;
+
+NXDT_ASSERT(ivfc_save_hdr_t, 0xC0);
 
 #pragma pack(push, 1)
 typedef struct {
@@ -269,6 +291,8 @@ typedef struct {
     u8 _0xB98[0x3468];
 } save_header_t;
 #pragma pack(pop)
+
+NXDT_ASSERT(save_header_t, 0x4000);
 
 typedef struct {
     duplex_storage_ctx_t layers[2];
@@ -293,6 +317,8 @@ typedef struct {
     u32 physical_index;
     u32 virtual_index;
 } journal_map_entry_t;
+
+NXDT_ASSERT(journal_map_entry_t, 0x8);
 
 typedef struct {
     journal_map_header_t *header;
@@ -387,6 +413,8 @@ typedef struct {
 } save_file_info_t;
 #pragma pack(pop)
 
+NXDT_ASSERT(save_file_info_t, 0x14);
+
 #pragma pack(push, 1)
 typedef struct {
     u32 next_directory;
@@ -394,6 +422,8 @@ typedef struct {
     u32 _0x8[3];
 } save_find_position_t;
 #pragma pack(pop)
+
+NXDT_ASSERT(save_find_position_t, 0x14);
 
 #pragma pack(push, 1)
 typedef struct {
@@ -405,6 +435,8 @@ typedef struct {
 } save_table_entry_t;
 #pragma pack(pop)
 
+NXDT_ASSERT(save_table_entry_t, 0x18);
+
 #pragma pack(push, 1)
 typedef struct {
     u32 parent;
@@ -413,6 +445,8 @@ typedef struct {
     u32 next;
 } save_fs_list_entry_t;
 #pragma pack(pop)
+
+NXDT_ASSERT(save_fs_list_entry_t, 0x60);
 
 typedef struct {
     u32 free_list_head_index;
@@ -517,8 +551,8 @@ save_ctx_t *save_open_savefile(const char *path, u32 action);
 void save_close_savefile(save_ctx_t *ctx);
 bool save_get_fat_storage_from_file_entry_by_path(save_ctx_t *ctx, const char *path, allocation_table_storage_ctx_t *out_fat_storage, u64 *out_file_entry_size);
 
-#endif /* __SAVE_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __SAVE_H__ */

@@ -20,15 +20,15 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __PROGRAM_INFO_H__
 #define __PROGRAM_INFO_H__
 
 #include "npdm.h"
 #include "nso.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
     NcaContext *nca_ctx;                ///< Pointer to the NCA context for the Program NCA from which program data (NPDM / NSO) is retrieved.
@@ -84,8 +84,8 @@ NX_INLINE void programInfoWriteNcaPatch(ProgramInfoContext *program_info_ctx, vo
     if (program_info_ctx) npdmWriteNcaPatch(&(program_info_ctx->npdm_ctx), buf, buf_size, buf_offset);
 }
 
-#endif /* __PROGRAM_INFO_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __PROGRAM_INFO_H__ */

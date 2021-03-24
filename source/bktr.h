@@ -21,14 +21,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __BKTR_H__
 #define __BKTR_H__
 
 #include "romfs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef enum {
     BktrIndirectStorageIndex_Original = 0,
@@ -43,6 +43,8 @@ typedef struct {
 } BktrIndirectStorageEntry;
 #pragma pack(pop)
 
+NXDT_ASSERT(BktrIndirectStorageEntry, 0x14);
+
 typedef struct {
     u32 index;
     u32 entry_count;
@@ -50,6 +52,8 @@ typedef struct {
     BktrIndirectStorageEntry indirect_storage_entries[0x3FF0 / sizeof(BktrIndirectStorageEntry)];
     u8 reserved[0x3FF0 % sizeof(BktrIndirectStorageEntry)];
 } BktrIndirectStorageBucket;
+
+NXDT_ASSERT(BktrIndirectStorageBucket, 0x4000);
 
 typedef struct {
     u32 index;
@@ -59,11 +63,15 @@ typedef struct {
     BktrIndirectStorageBucket indirect_storage_buckets[];
 } BktrIndirectStorageBlock;
 
+NXDT_ASSERT(BktrIndirectStorageBlock, 0x4000);
+
 typedef struct {
     u64 offset;
     u32 size;
     u32 generation;
 } BktrAesCtrExStorageEntry;
+
+NXDT_ASSERT(BktrAesCtrExStorageEntry, 0x10);
 
 typedef struct {
     u32 index;
@@ -72,6 +80,8 @@ typedef struct {
     BktrAesCtrExStorageEntry aes_ctr_ex_storage_entries[0x3FF];
 } BktrAesCtrExStorageBucket;
 
+NXDT_ASSERT(BktrAesCtrExStorageBucket, 0x4000);
+
 typedef struct {
     u32 index;
     u32 bucket_count;
@@ -79,6 +89,8 @@ typedef struct {
     u64 physical_offsets[0x3FF0 / sizeof(u64)];
     BktrAesCtrExStorageBucket aes_ctr_ex_storage_buckets[];
 } BktrAesCtrExStorageBlock;
+
+NXDT_ASSERT(BktrAesCtrExStorageBlock, 0x4000);
 
 typedef struct {
     RomFileSystemContext base_romfs_ctx;        ///< Base NCA RomFS context.
@@ -157,8 +169,8 @@ NX_INLINE bool bktrGeneratePathFromFileEntry(BktrContext *ctx, RomFileSystemFile
     return (ctx ? romfsGeneratePathFromFileEntry(&(ctx->patch_romfs_ctx), file_entry, out_path, out_path_size, illegal_char_replace_type) : false);
 }
 
-#endif /* __BKTR_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __BKTR_H__ */

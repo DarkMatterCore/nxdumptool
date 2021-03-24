@@ -22,12 +22,12 @@
 
 #pragma once
 
+#ifndef __KEYS_H__
+#define __KEYS_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __KEYS_H__
-#define __KEYS_H__
 
 bool keysLoadNcaKeyset(void);
 
@@ -37,8 +37,8 @@ const u8 *keysGetEticketRsaKek(bool personalized);
 const u8 *keysGetTitlekek(u8 key_generation);
 const u8 *keysGetKeyAreaEncryptionKey(u8 key_generation, u8 kaek_index);
 
-#endif /* __KEYS_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __KEYS_H__ */

@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __NCA_H__
 #define __NCA_H__
 
 #include "tik.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define NCA_FS_HEADER_COUNT                         4
 #define NCA_FULL_HEADER_LENGTH                      (sizeof(NcaHeader) + (sizeof(NcaFsHeader) * NCA_FS_HEADER_COUNT))
@@ -100,9 +100,13 @@ typedef struct {
     u8 reserved[0x4];
 } NcaFsInfo;
 
+NXDT_ASSERT(NcaFsInfo, 0x10);
+
 typedef struct {
     u8 hash[SHA256_HASH_SIZE];
 } NcaFsHeaderHash;
+
+NXDT_ASSERT(NcaFsHeaderHash, 0x20);
 
 /// Encrypted NCA key area used to hold NCA FS section encryption keys. Zeroed out if the NCA uses titlekey crypto.
 /// Only the first 4 key entries are encrypted.
@@ -115,6 +119,8 @@ typedef struct {
     u8 aes_ctr_hw[AES_128_KEY_SIZE];    ///< Unused AES-128-CTR key.
     u8 reserved[0xB0];
 } NcaEncryptedKeyArea;
+
+NXDT_ASSERT(NcaEncryptedKeyArea, 0x100);
 
 /// First 0x400 bytes from every NCA.
 typedef struct {
@@ -137,6 +143,8 @@ typedef struct {
     NcaFsHeaderHash fs_header_hash[NCA_FS_HEADER_COUNT];    ///< SHA-256 hashes calculated over each NCA FS section header.
     NcaEncryptedKeyArea encrypted_key_area;
 } NcaHeader;
+
+NXDT_ASSERT(NcaHeader, 0x400);
 
 typedef enum {
     NcaFsType_RomFs       = 0,
@@ -163,6 +171,8 @@ typedef struct {
     u64 size;
 } NcaRegion;
 
+NXDT_ASSERT(NcaRegion, 0x10);
+
 /// Used by NcaFsType_PartitionFs and NCA0 NcaFsType_RomFs.
 typedef struct {
     u8 master_hash[SHA256_HASH_SIZE];
@@ -171,6 +181,8 @@ typedef struct {
     NcaRegion hash_region[NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT];
 } NcaHierarchicalSha256Data;
 
+NXDT_ASSERT(NcaHierarchicalSha256Data, 0x78);
+
 typedef struct {
     u64 offset;
     u64 size;
@@ -178,9 +190,13 @@ typedef struct {
     u8 reserved[0x4];
 } NcaHierarchicalIntegrityVerificationLevelInformation;
 
+NXDT_ASSERT(NcaHierarchicalIntegrityVerificationLevelInformation, 0x18);
+
 typedef struct {
     u8 value[0x20];
 } NcaSignatureSalt;
+
+NXDT_ASSERT(NcaSignatureSalt, 0x20);
 
 #pragma pack(push, 1)
 typedef struct {
@@ -190,6 +206,8 @@ typedef struct {
 } NcaInfoLevelHash;
 #pragma pack(pop)
 
+NXDT_ASSERT(NcaInfoLevelHash, 0xB4);
+
 /// Used by NcaFsType_RomFs.
 typedef struct {
     u32 magic;                          ///< "IVFC".
@@ -198,6 +216,8 @@ typedef struct {
     NcaInfoLevelHash info_level_hash;
     u8 master_hash[SHA256_HASH_SIZE];
 } NcaIntegrityMetaInfo;
+
+NXDT_ASSERT(NcaIntegrityMetaInfo, 0xE0);
 
 typedef struct {
     union {
@@ -214,6 +234,8 @@ typedef struct {
     };
 } NcaHashData;
 
+NXDT_ASSERT(NcaHashData, 0xF8);
+
 typedef struct {
     u32 magic;          ///< "BKTR".
     u32 version;        ///< offset_count / node_count ?
@@ -221,17 +243,23 @@ typedef struct {
     u8 reserved[0x4];
 } NcaBucketTreeHeader;
 
+NXDT_ASSERT(NcaBucketTreeHeader, 0x10);
+
 typedef struct {
     u64 offset;
     u64 size;
     NcaBucketTreeHeader header;
 } NcaBucketInfo;
 
+NXDT_ASSERT(NcaBucketInfo, 0x20);
+
 /// Only used for NcaEncryptionType_AesCtrEx (PatchRomFs).
 typedef struct {
     NcaBucketInfo indirect_bucket;
     NcaBucketInfo aes_ctr_ex_bucket;
 } NcaPatchInfo;
+
+NXDT_ASSERT(NcaPatchInfo, 0x40);
 
 typedef struct {
     union {
@@ -243,6 +271,8 @@ typedef struct {
     };
 } NcaAesCtrUpperIv;
 
+NXDT_ASSERT(NcaAesCtrUpperIv, 0x8);
+
 /// Used in NCAs with sparse storage.
 typedef struct {
     NcaBucketInfo sparse_bucket;
@@ -250,6 +280,8 @@ typedef struct {
     u16 generation;
     u8 reserved[0x6];
 } NcaSparseInfo;
+
+NXDT_ASSERT(NcaSparseInfo, 0x30);
 
 /// Four NCA FS headers are placed right after the 0x400 byte long NCA header in NCA2 and NCA3.
 /// NCA0 place the FS headers at the start sector from the NcaFsInfo entries.
@@ -265,6 +297,8 @@ typedef struct {
     NcaSparseInfo sparse_info;
     u8 reserved_2[0x88];
 } NcaFsHeader;
+
+NXDT_ASSERT(NcaFsHeader, 0x200);
 
 typedef enum {
     NcaFsSectionType_PartitionFs = 0,   ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256.
@@ -306,6 +340,8 @@ typedef struct {
     u8 aes_ctr[AES_128_KEY_SIZE];       ///< AES-128-CTR key used for NCA FS sections with NcaEncryptionType_AesCtr crypto.
     u8 aes_ctr_ex[AES_128_KEY_SIZE];    ///< AES-128-CTR key used for NCA FS sections with NcaEncryptionType_AesCtrEx crypto.
 } NcaDecryptedKeyArea;
+
+NXDT_ASSERT(NcaDecryptedKeyArea, 0x40);
 
 typedef struct {
     u8 storage_id;                                      ///< NcmStorageId.
@@ -497,8 +533,8 @@ NX_INLINE void ncaFreeHierarchicalIntegrityPatch(NcaHierarchicalIntegrityPatch *
     memset(patch, 0, sizeof(NcaHierarchicalIntegrityPatch));
 }
 
-#endif /* __NCA_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __NCA_H__ */

@@ -20,18 +20,93 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __CERT_H__
 #define __CERT_H__
 
 #include "signature.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SIGNED_CERT_MAX_SIZE    sizeof(CertSigRsa4096PubKeyRsa4096)
 #define SIGNED_CERT_MIN_SIZE    sizeof(CertSigHmac160PubKeyEcc480)
 
+#define GENERATE_CERT_STRUCT(sigtype, pubkeytype, certsize) \
+\
+typedef struct { \
+    SignatureBlock##sigtype sig_block; \
+    CertCommonBlock cert_common_block; \
+    CertPublicKeyBlock##pubkeytype pub_key_block; \
+} CertSig##sigtype##PubKey##pubkeytype; \
+\
+NXDT_ASSERT(CertSig##sigtype##PubKey##pubkeytype, certsize);
+
+typedef enum {
+    CertPubKeyType_Rsa4096 = 0,
+    CertPubKeyType_Rsa2048 = 1,
+    CertPubKeyType_Ecc480  = 2
+} CertPubKeyType;
+
+/// Placed after the certificate signature block.
+typedef struct {
+    char issuer[0x40];
+    u32 pub_key_type;   ///< CertPubKeyType. Always stored using big endian byte order.
+    char name[0x40];
+    u32 date;           ///< Stored using big endian byte order.
+} CertCommonBlock;
+
+NXDT_ASSERT(CertCommonBlock, 0x88);
+
+/// RSA-4096 public key block. Placed after the certificate common block.
+typedef struct {
+    u8 public_key[0x200];
+    u32 public_exponent;
+    u8 padding[0x34];
+} CertPublicKeyBlockRsa4096;
+
+NXDT_ASSERT(CertPublicKeyBlockRsa4096, 0x238);
+
+/// RSA-2048 public key block. Placed after the certificate common block.
+typedef struct {
+    u8 public_key[0x100];
+    u32 public_exponent;
+    u8 padding[0x34];
+} CertPublicKeyBlockRsa2048;
+
+NXDT_ASSERT(CertPublicKeyBlockRsa2048, 0x138);
+
+/// ECC public key block. Placed after the certificate common block.
+typedef struct {
+    u8 public_key[0x3C];
+    u8 padding[0x3C];
+} CertPublicKeyBlockEcc480;
+
+NXDT_ASSERT(CertPublicKeyBlockEcc480, 0x78);
+
+/// All certificates generated below use a big endian sig_type field.
+
+/// Certificates with RSA-4096 signatures.
+GENERATE_CERT_STRUCT(Rsa4096, Rsa4096, 0x500);  /// pub_key_type field must be CertPubKeyType_Rsa4096.
+GENERATE_CERT_STRUCT(Rsa4096, Rsa2048, 0x400);  /// pub_key_type field must be CertPubKeyType_Rsa2048.
+GENERATE_CERT_STRUCT(Rsa4096, Ecc480, 0x340);   /// pub_key_type field must be CertPubKeyType_Ecc480.
+
+/// Certificates with RSA-2048 signatures.
+GENERATE_CERT_STRUCT(Rsa2048, Rsa4096, 0x400);  /// pub_key_type field must be CertPubKeyType_Rsa4096.
+GENERATE_CERT_STRUCT(Rsa2048, Rsa2048, 0x300);  /// pub_key_type field must be CertPubKeyType_Rsa2048.
+GENERATE_CERT_STRUCT(Rsa2048, Ecc480, 0x240);   /// pub_key_type field must be CertPubKeyType_Ecc480.
+
+/// Certificates with ECC signatures.
+GENERATE_CERT_STRUCT(Ecc480, Rsa4096, 0x340);   /// pub_key_type field must be CertPubKeyType_Rsa4096.
+GENERATE_CERT_STRUCT(Ecc480, Rsa2048, 0x240);   /// pub_key_type field must be CertPubKeyType_Rsa2048.
+GENERATE_CERT_STRUCT(Ecc480, Ecc480, 0x180);    /// pub_key_type field must be CertPubKeyType_Ecc480.
+
+/// Certificates with HMAC signatures.
+GENERATE_CERT_STRUCT(Hmac160, Rsa4096, 0x300);  /// pub_key_type field must be CertPubKeyType_Rsa4096.
+GENERATE_CERT_STRUCT(Hmac160, Rsa2048, 0x200);  /// pub_key_type field must be CertPubKeyType_Rsa2048.
+GENERATE_CERT_STRUCT(Hmac160, Ecc480, 0x140);   /// pub_key_type field must be CertPubKeyType_Ecc480.
+
+/// Certificate type.
 typedef enum {
     CertType_None                     = 0,
     CertType_SigRsa4096_PubKeyRsa4096 = 1,
@@ -47,110 +122,6 @@ typedef enum {
     CertType_SigHmac160_PubKeyRsa2048 = 11,
     CertType_SigHmac160_PubKeyEcc480  = 12
 } CertType;
-
-/// Always stored using big endian byte order.
-typedef enum {
-    CertPubKeyType_Rsa4096 = 0,
-    CertPubKeyType_Rsa2048 = 1,
-    CertPubKeyType_Ecc480  = 2
-} CertPubKeyType;
-
-/// Placed after the certificate signature block.
-typedef struct {
-    char issuer[0x40];
-    u32 pub_key_type;   ///< CertPubKeyType. Stored using big endian byte order.
-    char name[0x40];
-    u32 date;           ///< Stored using big endian byte order.
-} CertCommonBlock;
-
-typedef struct {
-    u8 public_key[0x200];
-    u32 public_exponent;
-    u8 padding[0x34];
-} CertPublicKeyBlockRsa4096;
-
-typedef struct {
-    u8 public_key[0x100];
-    u32 public_exponent;
-    u8 padding[0x34];
-} CertPublicKeyBlockRsa2048;
-
-typedef struct {
-    u8 public_key[0x3C];
-    u8 padding[0x3C];
-} CertPublicKeyBlockEcc480;
-
-typedef struct {
-    SignatureBlockRsa4096 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Rsa4096.
-    CertPublicKeyBlockRsa4096 pub_key_block;
-} CertSigRsa4096PubKeyRsa4096;
-
-typedef struct {
-    SignatureBlockRsa4096 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Rsa2048.
-    CertPublicKeyBlockRsa2048 pub_key_block;
-} CertSigRsa4096PubKeyRsa2048;
-
-typedef struct {
-    SignatureBlockRsa4096 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Ecc480.
-    CertPublicKeyBlockEcc480 pub_key_block;
-} CertSigRsa4096PubKeyEcc480;
-
-typedef struct {
-    SignatureBlockRsa2048 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Rsa4096.
-    CertPublicKeyBlockRsa4096 pub_key_block;
-} CertSigRsa2048PubKeyRsa4096;
-
-typedef struct {
-    SignatureBlockRsa2048 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Rsa2048.
-    CertPublicKeyBlockRsa2048 pub_key_block;
-} CertSigRsa2048PubKeyRsa2048;
-
-typedef struct {
-    SignatureBlockRsa2048 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Ecc480.
-    CertPublicKeyBlockEcc480 pub_key_block;
-} CertSigRsa2048PubKeyEcc480;
-
-typedef struct {
-    SignatureBlockEcc480 sig_block;             ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Rsa4096.
-    CertPublicKeyBlockRsa4096 pub_key_block;
-} CertSigEcc480PubKeyRsa4096;
-
-typedef struct {
-    SignatureBlockEcc480 sig_block;             ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Rsa2048.
-    CertPublicKeyBlockRsa2048 pub_key_block;
-} CertSigEcc480PubKeyRsa2048;
-
-typedef struct {
-    SignatureBlockEcc480 sig_block;             ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Ecc480.
-    CertPublicKeyBlockEcc480 pub_key_block;
-} CertSigEcc480PubKeyEcc480;
-
-typedef struct {
-    SignatureBlockHmac160 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Rsa4096.
-    CertPublicKeyBlockRsa4096 pub_key_block;
-} CertSigHmac160PubKeyRsa4096;
-
-typedef struct {
-    SignatureBlockHmac160 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Rsa2048.
-    CertPublicKeyBlockRsa2048 pub_key_block;
-} CertSigHmac160PubKeyRsa2048;
-
-typedef struct {
-    SignatureBlockHmac160 sig_block;            ///< sig_type field is stored using big endian byte order.
-    CertCommonBlock cert_common_block;          ///< pub_key_type field must be CertPubKeyType_Ecc480.
-    CertPublicKeyBlockEcc480 pub_key_block;
-} CertSigHmac160PubKeyEcc480;
 
 /// Used to store certificate type, size and raw data.
 typedef struct {
@@ -244,8 +215,8 @@ NX_INLINE u64 certGetSignedCertificateHashAreaSize(void *buf)
     return ((u64)sizeof(CertCommonBlock) + certGetPublicKeyBlockSize(__builtin_bswap32(cert_common_block->pub_key_type)));
 }
 
-#endif /* __CERT_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __CERT_H__ */

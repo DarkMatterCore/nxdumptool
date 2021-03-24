@@ -20,25 +20,27 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __TIK_H__
 #define __TIK_H__
 
 #include "signature.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define SIGNED_TIK_MAX_SIZE         0x400                   /* Max ticket entry size in the ES ticket system savedata file. */
 #define SIGNED_TIK_MIN_SIZE         sizeof(TikSigHmac160)   /* Assuming no ESV1/ESV2 records are available. */
 
-typedef enum {
-    TikType_None        = 0,
-    TikType_SigRsa4096  = 1,
-    TikType_SigRsa2048  = 2,
-    TikType_SigEcc480   = 3,
-    TikType_SigHmac160  = 4
-} TikType;
+#define GENERATE_TIK_STRUCT(sigtype, tiksize) \
+\
+typedef struct { \
+    SignatureBlock##sigtype sig_block; \
+    TikCommonBlock tik_common_block; \
+    u8 es_section_record_data[]; \
+} TikSig##sigtype; \
+\
+NXDT_ASSERT(TikSig##sigtype, tiksize);
 
 typedef enum {
     TikTitleKeyType_Common       = 0,
@@ -84,25 +86,7 @@ typedef struct {
     u16 sect_hdr_entry_size;
 } TikCommonBlock;
 
-typedef struct {
-    SignatureBlockRsa4096 sig_block;    ///< sig_type field is stored using little endian byte order.
-    TikCommonBlock tik_common_block;
-} TikSigRsa4096;
-
-typedef struct {
-    SignatureBlockRsa2048 sig_block;    ///< sig_type field is stored using little endian byte order.
-    TikCommonBlock tik_common_block;
-} TikSigRsa2048;
-
-typedef struct {
-    SignatureBlockEcc480 sig_block;     ///< sig_type field is stored using little endian byte order.
-    TikCommonBlock tik_common_block;
-} TikSigEcc480;
-
-typedef struct {
-    SignatureBlockHmac160 sig_block;    ///< sig_type field is stored using little endian byte order.
-    TikCommonBlock tik_common_block;
-} TikSigHmac160;
+NXDT_ASSERT(TikCommonBlock, 0x180);
 
 /// ESV1/ESV2 section records are placed right after the ticket data. These aren't available in TikTitleKeyType_Common tickets.
 /// These are only used if the sect_* fields from the common block are non-zero (other than 'sect_hdr_offset').
@@ -163,6 +147,21 @@ typedef struct {
     u8 ref_id[0x10];
     u32 ref_id_attr;
 } TikESV1LimitedResourceRecord;
+
+/// All tickets generated below use a little endian sig_type field.
+GENERATE_TIK_STRUCT(Rsa4096, 0x3C0);    /// RSA-4096 signature.
+GENERATE_TIK_STRUCT(Rsa2048, 0x2C0);    /// RSA-2048 signature.
+GENERATE_TIK_STRUCT(Ecc480, 0x200);     /// ECC signature.
+GENERATE_TIK_STRUCT(Hmac160, 0x1C0);    /// HMAC signature.
+
+/// Ticket type.
+typedef enum {
+    TikType_None        = 0,
+    TikType_SigRsa4096  = 1,
+    TikType_SigRsa2048  = 2,
+    TikType_SigEcc480   = 3,
+    TikType_SigHmac160  = 4
+} TikType;
 
 /// Used to store ticket type, size and raw data, as well as titlekey data.
 typedef struct {
@@ -228,8 +227,8 @@ NX_INLINE bool tikIsPersonalizedTicket(Ticket *tik)
     return (tik_common_block != NULL && tik_common_block->titlekey_type == TikTitleKeyType_Personalized);
 }
 
-#endif /* __TIK_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __TIK_H__ */

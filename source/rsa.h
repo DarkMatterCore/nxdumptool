@@ -22,12 +22,12 @@
 
 #pragma once
 
+#ifndef __RSA_H__
+#define __RSA_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __RSA_H__
-#define __RSA_H__
 
 #define RSA2048_SIG_SIZE    0x100
 #define RSA2048_PUBKEY_SIZE RSA2048_SIG_SIZE
@@ -44,8 +44,8 @@ const u8 *rsa2048GetCustomPublicKey(void);
 /// Performs RSA-2048-OAEP decryption and verification. Used to decrypt the titlekey block from tickets with personalized crypto.
 bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signature, const void *modulus, const void *exponent, size_t exponent_size, const void *label_hash, size_t *out_size);
 
-#endif /* __RSA_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __RSA_H__ */

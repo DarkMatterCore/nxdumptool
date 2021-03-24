@@ -23,19 +23,19 @@
 
 #pragma once
 
+#ifndef __CRC32_FAST_H__
+#define __CRC32_FAST_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __CRC32_FAST_H__
-#define __CRC32_FAST_H__
 
 /// Calculates a CRC32 checksum over the provided input buffer. Checksum calculation in chunks is supported.
 /// CRC32 calculation state is both read from and saved to 'crc', which should be zero during the first call to this function.
 void crc32FastCalculate(const void *data, u64 n_bytes, u32 *crc);
 
-#endif /* __CRC32_FAST_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __CRC32_FAST_H__ */

@@ -20,12 +20,12 @@
 
 #pragma once
 
+#ifndef __TITLE_H__
+#define __TITLE_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __TITLE_H__
-#define __TITLE_H__
 
 #define TITLE_PATCH_TYPE_VALUE              (u64)0x800
 
@@ -268,8 +268,8 @@ NX_INLINE u32 titleGetCountFromInfoBlock(TitleInfo *title_info)
     return count;
 }
 
-#endif /* __TITLE_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __TITLE_H__ */

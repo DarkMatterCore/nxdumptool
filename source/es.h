@@ -21,12 +21,12 @@
 
 #pragma once
 
+#ifndef __ES_H__
+#define __ES_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __ES_H__
-#define __ES_H__
 
 Result esInitialize(void);
 void esExit(void);
@@ -36,8 +36,8 @@ Result esCountPersonalizedTicket(s32 *out_count);
 Result esListCommonTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count);
 Result esListPersonalizedTicket(s32 *out_entries_written, FsRightsId *out_ids, s32 count);
 
-#endif /* __ES_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __ES_H__ */

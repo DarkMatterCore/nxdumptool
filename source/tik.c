@@ -50,6 +50,8 @@ typedef struct {
     u8 reserved[0x04];
 } TikListEntry;
 
+NXDT_ASSERT(TikListEntry, 0x20);
+
 /// 9.x+ CTR key entry in ES .data segment. Used to store CTR key/IV data for encrypted volatile tickets in ticket.bin and/or encrypted entries in ticket_list.bin.
 /// This is always stored in pairs. The first entry holds the key/IV for the encrypted volatile ticket, while the second entry holds the key/IV for the encrypted entry in ticket_list.bin.
 /// First index in this list is always 0, and it's aligned to ES_CTRKEY_ENTRY_ALIGNMENT.
@@ -59,12 +61,16 @@ typedef struct {
     u8 ctr[AES_BLOCK_SIZE]; ///< AES-128-CTR counter/IV. Always zeroed out.
 } TikEsCtrKeyEntry9x;
 
+NXDT_ASSERT(TikEsCtrKeyEntry9x, 0x24);
+
 /// Lookup pattern for TikEsCtrKeyEntry9x.
 typedef struct {
     u32 idx1;                       ///< Always set to 0 (first entry).
     u8 ctrdata[AES_BLOCK_SIZE * 2];
     u32 idx2;                       ///< Always set to 1 (second entry).
 } TikEsCtrKeyPattern9x;
+
+NXDT_ASSERT(TikEsCtrKeyPattern9x, 0x28);
 
 /// Used to parse the eTicket device key retrieved from PRODINFO via setcalGetEticketDeviceKey().
 /// Everything after the AES CTR is encrypted.
@@ -77,6 +83,8 @@ typedef struct {
     u64 device_id;
     u8 ghash[0x10];
 } TikEticketDeviceKeyData;
+
+NXDT_ASSERT(TikEticketDeviceKeyData, 0x240);
 
 /* Global variables. */
 
@@ -380,7 +388,7 @@ static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
     switch(tik_common_block->titlekey_type)
     {
         case TikTitleKeyType_Common:
-            /* No titlekek crypto used. */
+            /* No console-specific crypto used. Copy titlekek-encrypted titlekey right away. */
             memcpy(tik->enc_titlekey, tik_common_block->titlekey_block, 0x10);
             break;
         case TikTitleKeyType_Personalized:
@@ -393,7 +401,7 @@ static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
             
             eticket_devkey = (TikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
             
-            /* Perform a RSA-OAEP decrypt operation to get the titlekey. */
+            /* Perform a RSA-OAEP decrypt operation to get the titlekek-encrypted titlekey. */
             if (!rsa2048OaepDecryptAndVerify(out_keydata, 0x100, tik_common_block->titlekey_block, eticket_devkey->modulus, eticket_devkey->exponent, 0x100, g_nullHash, &out_keydata_size) || \
                 out_keydata_size < 0x10)
             {
@@ -401,7 +409,7 @@ static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
                 return false;
             }
             
-            /* Copy decrypted titlekey. */
+            /* Copy titlekek-encrypted titlekey. */
             memcpy(tik->enc_titlekey, out_keydata, 0x10);
             
             break;
@@ -589,7 +597,7 @@ static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf,
             if (!memcmp(entry->rights_id.c, id->c, sizeof(id->c)))
             {
                 /* Jackpot. */
-                *out_offset = (entry_offset << 5); /* (entry_offset / 0x20) * 0x400 */
+                *out_offset = (entry_offset << 5); /* (entry_offset / sizeof(TikListEntry)) * SIGNED_TIK_MAX_SIZE */
                 success = true;
                 break;
             }

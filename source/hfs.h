@@ -20,12 +20,12 @@
 
 #pragma once
 
+#ifndef __HFS_H__
+#define __HFS_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __HFS_H__
-#define __HFS_H__
 
 #define HFS0_MAGIC  0x48465330  /* "HFS0". */
 
@@ -36,6 +36,8 @@ typedef struct {
     u8 reserved[0x4];
 } HashFileSystemHeader;
 
+NXDT_ASSERT(HashFileSystemHeader, 0x10);
+
 typedef struct {
     u64 offset;
     u64 size;
@@ -44,6 +46,8 @@ typedef struct {
     u64 hash_target_offset;
     u8 hash[SHA256_HASH_SIZE];
 } HashFileSystemEntry;
+
+NXDT_ASSERT(HashFileSystemEntry, 0x40);
 
 /// Internally used by gamecard functions.
 /// Use gamecardGetHashFileSystemContext() to retrieve a Hash FS context.
@@ -121,8 +125,8 @@ NX_INLINE HashFileSystemEntry *hfsGetEntryByName(HashFileSystemContext *ctx, con
     return hfsGetEntryByIndex(ctx, idx);
 }
 
-#endif /* __HFS_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __HFS_H__ */

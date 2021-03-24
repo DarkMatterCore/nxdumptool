@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __CNMT_H__
 #define __CNMT_H__
 
 #include "pfs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define CNMT_DIGEST_SIZE    SHA256_HASH_SIZE
 
@@ -64,11 +64,15 @@ typedef struct {
     u8 reserved_2[0x4];
 } ContentMetaPackagedContentMetaHeader;
 
+NXDT_ASSERT(ContentMetaPackagedContentMetaHeader, 0x20);
+
 /// Extended header for the SystemUpdate title.
 /// Equivalent to NcmSystemUpdateMetaExtendedHeader.
 typedef struct {
     u32 extended_data_size;
 } ContentMetaSystemUpdateMetaExtendedHeader;
+
+NXDT_ASSERT(ContentMetaSystemUpdateMetaExtendedHeader, 0x4);
 
 /// Extended header for Application titles.
 /// Equivalent to NcmApplicationMetaExtendedHeader, but using VersionType1 structs.
@@ -77,6 +81,8 @@ typedef struct {
     VersionType1 required_system_version;
     VersionType1 required_application_version;
 } ContentMetaApplicationMetaExtendedHeader;
+
+NXDT_ASSERT(ContentMetaApplicationMetaExtendedHeader, 0x10);
 
 /// Extended header for Patch titles.
 /// Equivalent to NcmPatchMetaExtendedHeader, but using a VersionType1 struct.
@@ -87,6 +93,8 @@ typedef struct {
     u8 reserved[0x8];
 } ContentMetaPatchMetaExtendedHeader;
 
+NXDT_ASSERT(ContentMetaPatchMetaExtendedHeader, 0x18);
+
 /// Extended header for AddOnContent titles.
 /// Equivalent to NcmAddOnContentMetaExtendedHeader, but using a VersionType1 struct.
 typedef struct {
@@ -95,12 +103,16 @@ typedef struct {
     u8 reserved[0x4];
 } ContentMetaAddOnContentMetaExtendedHeader;
 
+NXDT_ASSERT(ContentMetaAddOnContentMetaExtendedHeader, 0x10);
+
 /// Extended header for Delta titles.
 typedef struct {
     u64 application_id;
     u32 extended_data_size;
     u8 reserved[0x4];
 } ContentMetaDeltaMetaExtendedHeader;
+
+NXDT_ASSERT(ContentMetaDeltaMetaExtendedHeader, 0x10);
 
 typedef enum {
     ContentMetaFirmwareVariationVersion_Invalid = 0,
@@ -120,11 +132,15 @@ typedef struct {
     u32 variation_count;    ///< Determines how many firmware variation entries are available after this header.
 } ContentMetaSystemUpdateMetaExtendedDataHeader;
 
+NXDT_ASSERT(ContentMetaSystemUpdateMetaExtendedDataHeader, 0x8);
+
 /// Used if the firmware variation version matches ContentMetaFirmwareVariationVersion_V1.
 typedef struct {
     u32 firmware_variation_id;
     u8 reserved[0x1C];
 } ContentMetaFirmwareVariationInfoV1;
+
+NXDT_ASSERT(ContentMetaFirmwareVariationInfoV1, 0x20);
 
 /// Used if the firmware variation version matches ContentMetaFirmwareVariationVersion_V2.
 typedef struct {
@@ -133,6 +149,8 @@ typedef struct {
     u32 meta_count;
     u8 reserved_2[0x18];
 } ContentMetaFirmwareVariationInfoV2;
+
+NXDT_ASSERT(ContentMetaFirmwareVariationInfoV2, 0x20);
 
 /// Header for the extended data region in Patch titles, pointed to by the extended header.
 /// This is followed by:
@@ -153,12 +171,16 @@ typedef struct {
     u8 reserved[0x4];
 } ContentMetaPatchMetaExtendedDataHeader;
 
+NXDT_ASSERT(ContentMetaPatchMetaExtendedDataHeader, 0x1C);
+
 typedef struct {
     NcmContentMetaKey content_meta_key;
     u8 digest[CNMT_DIGEST_SIZE];
     u16 content_info_count;
     u8 reserved[0x6];
 } ContentMetaPatchHistoryHeader;
+
+NXDT_ASSERT(ContentMetaPatchHistoryHeader, 0x38);
 
 typedef struct {
     u64 source_patch_id;
@@ -168,6 +190,8 @@ typedef struct {
     u64 download_size;
     u8 reserved[0x8];
 } ContentMetaPatchDeltaHistory;
+
+NXDT_ASSERT(ContentMetaPatchDeltaHistory, 0x28);
 
 typedef struct {
     u64 source_patch_id;
@@ -179,6 +203,8 @@ typedef struct {
     u16 content_info_count;
     u8 reserved_2[0x6];
 } ContentMetaPatchDeltaHeader;
+
+NXDT_ASSERT(ContentMetaPatchDeltaHeader, 0x28);
 
 typedef enum {
     ContentMetaUpdateType_ApplyAsDelta = 0,
@@ -201,10 +227,14 @@ typedef struct {
 } ContentMetaFragmentSet;
 #pragma pack(pop)
 
+NXDT_ASSERT(ContentMetaFragmentSet, 0x34);
+
 typedef struct {
     u16 content_info_index;
     u16 fragment_index;
 } ContentMetaFragmentIndicator;
+
+NXDT_ASSERT(ContentMetaFragmentIndicator, 0x4);
 
 /// Header for the extended data region in Delta titles, pointed to by the extended header.
 /// This is followed by:
@@ -218,6 +248,8 @@ typedef struct {
     u16 fragment_set_count;
     u8 reserved[0x6];
 } ContentMetaDeltaMetaExtendedDataHeader;
+
+NXDT_ASSERT(ContentMetaDeltaMetaExtendedDataHeader, 0x20);
 
 typedef struct {
     NcaContext *nca_ctx;                                    ///< Pointer to the NCA context for the Meta NCA from which CNMT data is retrieved.
@@ -293,8 +325,8 @@ NX_INLINE u32 cnmtGetRequiredTitleVersion(ContentMetaContext *cnmt_ctx)
             ((VersionType1*)(cnmt_ctx->extended_header + sizeof(u64)))->value : 0);
 }
 
-#endif /* __CNMT_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __CNMT_H__ */

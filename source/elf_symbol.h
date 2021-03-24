@@ -79,6 +79,8 @@ typedef struct {
     u16 st_shndx;   ///< Holds the relevant section header table index.
 } Elf32Symbol;
 
+NXDT_ASSERT(Elf32Symbol, 0x10);
+
 typedef struct {
     u32 st_name;    ///< Symbol name offset within dynamic string table.
     u8 st_info;     ///< Symbol type (lower nibble) and binding attributes (upper nibble).
@@ -87,5 +89,7 @@ typedef struct {
     u64 st_value;   ///< Symbol value.
     u64 st_size;    ///< Symbol size.
 } Elf64Symbol;
+
+NXDT_ASSERT(Elf64Symbol, 0x18);
 
 #endif /* __ELF_SYMBOL_H__ */

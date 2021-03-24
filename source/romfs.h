@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __ROMFS_H__
 #define __ROMFS_H__
 
 #include "nca.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define ROMFS_OLD_HEADER_SIZE   0x28
 #define ROMFS_HEADER_SIZE       0x50
@@ -48,6 +48,8 @@ typedef struct {
     u32 body_offset;                ///< File data body offset.
 } RomFileSystemInformationOld;
 
+NXDT_ASSERT(RomFileSystemInformationOld, ROMFS_OLD_HEADER_SIZE);
+
 /// Header used by NCA2/NCA3 RomFS sections.
 typedef struct {
     u64 header_size;                ///< Header size. Must be equal to ROMFS_HEADER_SIZE.
@@ -62,6 +64,8 @@ typedef struct {
     u64 body_offset;                ///< File data body offset.
 } RomFileSystemInformation;
 
+NXDT_ASSERT(RomFileSystemInformation, ROMFS_HEADER_SIZE);
+
 /// Header union.
 typedef struct {
     union {
@@ -72,6 +76,8 @@ typedef struct {
         RomFileSystemInformation cur_format;
     };
 } RomFileSystemHeader;
+
+NXDT_ASSERT(RomFileSystemHeader, ROMFS_HEADER_SIZE);
 
 /// Directory entry. Always aligned to a 4-byte boundary past the directory name.
 typedef struct {
@@ -84,6 +90,8 @@ typedef struct {
     char name[];            ///< Name (UTF-8).
 } RomFileSystemDirectoryEntry;
 
+NXDT_ASSERT(RomFileSystemDirectoryEntry, 0x18);
+
 /// Directory entry. Always aligned to a 4-byte boundary past the file name.
 typedef struct {
     u32 parent_offset;      ///< Parent directory offset.
@@ -94,6 +102,8 @@ typedef struct {
     u32 name_length;        ///< Name length.
     char name[];            ///< Name (UTF-8).
 } RomFileSystemFileEntry;
+
+NXDT_ASSERT(RomFileSystemFileEntry, 0x20);
 
 typedef struct {
     NcaFsSectionContext *nca_fs_ctx;                ///< Used to read NCA FS section data.
@@ -203,8 +213,8 @@ NX_INLINE void romfsFreeFileEntryPatch(RomFileSystemFileEntryPatch *patch)
     memset(patch, 0, sizeof(RomFileSystemFileEntryPatch));
 }
 
-#endif /* __ROMFS_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __ROMFS_H__ */

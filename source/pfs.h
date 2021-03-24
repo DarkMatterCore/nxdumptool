@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __PFS_H__
 #define __PFS_H__
 
 #include "nca.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define PFS0_MAGIC  0x50465330  /* "PFS0". */
 
@@ -38,12 +38,16 @@ typedef struct {
     u8 reserved[0x4];
 } PartitionFileSystemHeader;
 
+NXDT_ASSERT(PartitionFileSystemHeader, 0x10);
+
 typedef struct {
     u64 offset;
     u64 size;
     u32 name_offset;
     u8 reserved[0x4];
 } PartitionFileSystemEntry;
+
+NXDT_ASSERT(PartitionFileSystemEntry, 0x18);
 
 /// Used with Partition FS sections from NCAs.
 typedef struct {
@@ -190,8 +194,8 @@ NX_INLINE char *pfsGetEntryNameByIndexFromFileContext(PartitionFileSystemFileCon
     return (ctx->name_table + fs_entry->name_offset);
 }
 
-#endif /* __PFS_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __PFS_H__ */

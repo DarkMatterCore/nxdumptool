@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __NACP_H__
 #define __NACP_H__
 
 #include "romfs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define NACP_MAX_ICON_SIZE  0x20000 /* 128 KiB. */
 
@@ -35,6 +35,8 @@ typedef struct {
     char name[0x200];
     char publisher[0x100];
 } NacpTitle;
+
+NXDT_ASSERT(NacpTitle, 0x300);
 
 typedef enum {
     NacpStartupUserAccount_None                                       = 0,
@@ -180,6 +182,8 @@ typedef struct {
     s8 reserved[0x13];
 } NacpRatingAge;
 
+NXDT_ASSERT(NacpRatingAge, 0x20);
+
 typedef enum {
     NacpLogoType_LicensedByNintendo    = 0,
     NacpLogoType_DistributedByNintendo = 1, ///< Removed.
@@ -252,14 +256,20 @@ typedef struct {
     u64 memory_size;
 } NacpJitConfiguration;
 
+NXDT_ASSERT(NacpJitConfiguration, 0x10);
+
 typedef struct {
     u16 index        : 15;
     u16 continue_set : 1;   ///< Called "flag" by Nintendo, which isn't really great.
 } NacpDescriptors;
 
+NXDT_ASSERT(NacpDescriptors, 0x2);
+
 typedef struct {
     NacpDescriptors descriptors[0x20];
 } NacpRequiredAddOnContentsSetBinaryDescriptor;
+
+NXDT_ASSERT(NacpRequiredAddOnContentsSetBinaryDescriptor, 0x40);
 
 typedef enum {
     NacpPlayReportPermission_None            = 0,
@@ -282,6 +292,8 @@ typedef enum {
 typedef struct {
     u64 application_id[8];
 } NacpAccessibleLaunchRequiredVersion;
+
+NXDT_ASSERT(NacpAccessibleLaunchRequiredVersion, 0x40);
 
 typedef struct {
     NacpTitle title[0x10];
@@ -345,6 +357,8 @@ typedef struct {
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
     u8 reserved_6[0xBB8];
 } _NacpStruct;
+
+NXDT_ASSERT(_NacpStruct, 0x4000);
 
 typedef struct {
     u8 language;    ///< NacpLanguage.
@@ -455,8 +469,8 @@ NX_INLINE bool nacpIsValidContext(NacpContext *nacp_ctx)
     return true;
 }
 
-#endif /* __NACP_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __NACP_H__ */

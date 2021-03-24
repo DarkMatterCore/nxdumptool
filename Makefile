@@ -158,7 +158,7 @@ ifneq ($(ROMFS),)
 	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: $(BUILD) clean all
+.PHONY: $(BUILD) clean clean_all all
 
 #---------------------------------------------------------------------------------
 all: $(BUILD)
@@ -173,9 +173,10 @@ $(BUILD): usbhsfs
 #---------------------------------------------------------------------------------
 clean:
 	@echo clean ...
-	@$(MAKE) --no-print-directory -C libusbhsfs clean
 	@rm -fr $(BUILD) *.pfs0 *.nso *.nro *.nacp *.elf
 
+clean_all: clean
+	@$(MAKE) --no-print-directory -C libusbhsfs clean
 
 #---------------------------------------------------------------------------------
 else

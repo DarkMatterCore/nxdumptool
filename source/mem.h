@@ -21,12 +21,12 @@
 
 #pragma once
 
+#ifndef __MEM_H__
+#define __MEM_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __MEM_H__
-#define __MEM_H__
 
 typedef enum {
     MemoryProgramSegmentType_Text   = BIT(0),
@@ -59,8 +59,8 @@ NX_INLINE void memFreeMemoryLocation(MemoryLocation *location)
     location->data_size = 0;
 }
 
-#endif /* __MEM_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __MEM_H__ */

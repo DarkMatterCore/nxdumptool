@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __LEGAL_INFO_H__
 #define __LEGAL_INFO_H__
 
 #include "nca.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 typedef struct {
     NcaContext *nca_ctx;            ///< Pointer to the NCA context for the LegalInformation NCA from which XML data is retrieved.
@@ -47,8 +47,8 @@ NX_INLINE void legalInfoFreeContext(LegalInfoContext *legal_info_ctx)
     memset(legal_info_ctx, 0, sizeof(LegalInfoContext));
 }
 
-#endif /* __LEGAL_INFO_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __LEGAL_INFO_H__ */

@@ -23,6 +23,10 @@
 #ifndef __SIGNATURE_H__
 #define __SIGNATURE_H__
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 typedef enum {
     SignatureType_Rsa4096Sha1   = 0x10000,
     SignatureType_Rsa2048Sha1   = 0x10001,
@@ -39,11 +43,15 @@ typedef struct {
     u8 padding[0x3C];
 } SignatureBlockRsa4096;
 
+NXDT_ASSERT(SignatureBlockRsa4096, 0x240);
+
 typedef struct {
     u32 sig_type;           ///< SignatureType_Rsa2048Sha1, SignatureType_Rsa2048Sha256.
     u8 signature[0x100];
     u8 padding[0x3C];
 } SignatureBlockRsa2048;
+
+NXDT_ASSERT(SignatureBlockRsa2048, 0x140);
 
 typedef struct {
     u32 sig_type;           ///< SignatureType_Ecc480Sha1, SignatureType_Ecc480Sha256.
@@ -51,11 +59,15 @@ typedef struct {
     u8 padding[0x40];
 } SignatureBlockEcc480;
 
+NXDT_ASSERT(SignatureBlockEcc480, 0x80);
+
 typedef struct {
     u32 sig_type;           ///< SignatureType_Hmac160Sha1.
     u8 signature[0x14];
     u8 padding[0x28];
 } SignatureBlockHmac160;
+
+NXDT_ASSERT(SignatureBlockHmac160, 0x40);
 
 /// Helper inline functions.
 
@@ -99,5 +111,9 @@ NX_INLINE void *signatureGetPayload(void *buf, bool big_endian_sig_type)
     u32 sig_type = signatureGetSigType(buf, big_endian_sig_type);
     return (signatureIsValidSigType(sig_type) ? (void*)((u8*)buf + signatureGetBlockSize(sig_type)) : NULL);
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* __SIGNATURE_H__ */

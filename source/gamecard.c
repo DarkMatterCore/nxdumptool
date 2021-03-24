@@ -61,6 +61,8 @@ typedef struct {
     GameCardInitialData initial_data;
 } GameCardSecurityInformation;
 
+NXDT_ASSERT(GameCardSecurityInformation, 0x600);
+
 /* Global variables. */
 
 static Mutex g_gameCardMutex = 0;

@@ -20,12 +20,12 @@
 
 #pragma once
 
+#ifndef __AES_H__
+#define __AES_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __AES_H__
-#define __AES_H__
 
 /// Performs an AES-128-XTS crypto operation using the non-standard Nintendo XTS tweak.
 /// The Aes128XtsContext element should have been previously initialized with aes128XtsContextCreate(). 'encrypt' should match the value of 'is_encryptor' used with that call.
@@ -84,8 +84,8 @@ NX_INLINE void aes128CtrUpdatePartialCtrEx(u8 *ctr, u32 ctr_val, u64 offset)
     }
 }
 
-#endif /* __AES_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __AES_H__ */

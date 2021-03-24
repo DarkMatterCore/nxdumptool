@@ -75,6 +75,8 @@ typedef struct {
     u8 reserved[0x4];
 } UsbCommandHeader;
 
+NXDT_ASSERT(UsbCommandHeader, 0x10);
+
 typedef struct {
     u8 app_ver_major;
     u8 app_ver_minor;
@@ -84,6 +86,8 @@ typedef struct {
     u8 reserved[0x4];
 } UsbCommandStartSession;
 
+NXDT_ASSERT(UsbCommandStartSession, 0x10);
+
 typedef struct {
     u64 file_size;
     u32 filename_length;
@@ -91,6 +95,8 @@ typedef struct {
     char filename[FS_MAX_PATH];
     u8 reserved_2[0xF];
 } UsbCommandSendFileProperties;
+
+NXDT_ASSERT(UsbCommandSendFileProperties, 0x320);
 
 typedef enum {
     ///< Expected response code.
@@ -115,6 +121,8 @@ typedef struct {
     u16 max_packet_size;    ///< USB host endpoint max packet size.
     u8 reserved[0x6];
 } UsbStatus;
+
+NXDT_ASSERT(UsbStatus, 0x10);
 
 /// Imported from libusb, with some adjustments.
 enum usb_bos_type {
@@ -150,6 +158,8 @@ struct usb_bos_descriptor {
     u8 bNumDeviceCaps;  ///< The number of separate device capability descriptors in the BOS.
 } PACKED;
 
+NXDT_ASSERT(struct usb_bos_descriptor, 0x5);
+
 /// Imported from libusb, with some adjustments.
 struct usb_2_0_extension_descriptor {
     u8 bLength;
@@ -157,6 +167,8 @@ struct usb_2_0_extension_descriptor {
     u8 bDevCapabilityType;  ///< Must match USB_BT_USB_2_0_EXTENSION.
     u32 bmAttributes;       ///< usb_2_0_extension_attributes.
 } PACKED;
+
+NXDT_ASSERT(struct usb_2_0_extension_descriptor, 0x7);
 
 /// Imported from libusb, with some adjustments.
 struct usb_ss_usb_device_capability_descriptor {
@@ -169,6 +181,8 @@ struct usb_ss_usb_device_capability_descriptor {
     u8 bU1DevExitLat;           ///< U1 Device Exit Latency.
     u16 bU2DevExitLat;          ///< U2 Device Exit Latency.
 } PACKED;
+
+NXDT_ASSERT(struct usb_ss_usb_device_capability_descriptor, 0xA);
 
 /* Global variables. */
 

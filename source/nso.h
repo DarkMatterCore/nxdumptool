@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __NSO_H__
 #define __NSO_H__
 
 #include "pfs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define NSO_HEADER_MAGIC    0x4E534F30  /* "NSO0". */
 #define NSO_MOD_MAGIC       0x4D4F4430  /* "MOD0". */
@@ -47,10 +47,14 @@ typedef struct {
     u32 size;           ///< Decompressed segment size.
 } NsoSegmentInfo;
 
+NXDT_ASSERT(NsoSegmentInfo, 0xC);
+
 typedef struct {
     u32 offset; ///< Relative to the .rodata segment start.
     u32 size;
 } NsoSectionInfo;
+
+NXDT_ASSERT(NsoSectionInfo, 0x8);
 
 /// This is the start of every NSO.
 /// This is always followed by a NsoModuleName block.
@@ -73,10 +77,12 @@ typedef struct {
     NsoSectionInfo api_info_section_info;
     NsoSectionInfo dynstr_section_info;
     NsoSectionInfo dynsym_section_info;
-    u8 text_segment_hash[0x20];                 ///< Decompressed .text segment SHA-256 checksum.
-    u8 rodata_segment_hash[0x20];               ///< Decompressed .rodata segment SHA-256 checksum.
-    u8 data_segment_hash[0x20];                 ///< Decompressed .data segment SHA-256 checksum.
+    u8 text_segment_hash[SHA256_HASH_SIZE];     ///< Decompressed .text segment SHA-256 checksum.
+    u8 rodata_segment_hash[SHA256_HASH_SIZE];   ///< Decompressed .rodata segment SHA-256 checksum.
+    u8 data_segment_hash[SHA256_HASH_SIZE];     ///< Decompressed .data segment SHA-256 checksum.
 } NsoHeader;
+
+NXDT_ASSERT(NsoHeader, 0x100);
 
 /// Usually placed right after NsoHeader, but it's actual offset may vary.
 /// If the 'module_name_size' member from NsoHeader is greater than 1 and the 'name_length' element from NsoModuleName is greater than 0, 'name' will hold the module name.
@@ -85,11 +91,15 @@ typedef struct {
     char name[];
 } NsoModuleName;
 
+NXDT_ASSERT(NsoModuleName, 0x1);
+
 /// Placed at the very start of the decompressed .text segment.
 typedef struct {
     u32 entry_point;
     u32 mod_offset;     ///< NsoModHeader block offset (relative to the start of this header). Almost always set to 0x8 (the size of this struct).
 } NsoModStart;
+
+NXDT_ASSERT(NsoModStart, 0x8);
 
 /// This is essentially a replacement for the PT_DYNAMIC program header available in ELF binaries.
 /// All offsets are signed 32-bit values relative to the start of this header.
@@ -106,12 +116,16 @@ typedef struct  {
     s32 module_object_offset;       ///< Typically equal to bss_start_offset.
 } NsoModHeader;
 
+NXDT_ASSERT(NsoModHeader, 0x1C);
+
 /// Placed at the start of the decompressed .rodata segment + 0x4.
 /// If the 'name_length' element is greater than 0, 'name' will hold the module name.
 typedef struct {
     u32 name_length;
     char name[];
 } NsoModuleInfo;
+
+NXDT_ASSERT(NsoModuleInfo, 0x4);
 
 typedef struct {
     PartitionFileSystemContext *pfs_ctx;    ///< PartitionFileSystemContext for the Program NCA FS section #0, which is where this NSO is stored.
@@ -145,8 +159,8 @@ NX_INLINE void nsoFreeContext(NsoContext *nso_ctx)
     memset(nso_ctx, 0, sizeof(NsoContext));
 }
 
-#endif /* __NSO_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __NSO_H__ */

@@ -23,12 +23,12 @@
 
 #pragma once
 
+#ifndef __USB_H__
+#define __USB_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __USB_H__
-#define __USB_H__
 
 #define USB_TRANSFER_BUFFER_SIZE    0x800000    /* 8 MiB. */
 
@@ -73,8 +73,8 @@ NX_INLINE bool usbSendFilePropertiesCommon(u64 file_size, const char *filename)
     return usbSendFileProperties(file_size, filename, 0);
 }
 
-#endif /* __USB_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __USB_H__ */

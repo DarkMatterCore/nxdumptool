@@ -20,12 +20,12 @@
 
 #pragma once
 
+#ifndef __SERVICES_H__
+#define __SERVICES_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __SERVICES_H__
-#define __SERVICES_H__
 
 /* Hardware clocks expressed in MHz. */
 #define CPU_CLKRT_NORMAL        1020
@@ -53,8 +53,8 @@ void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate);
 /// Perfectly safe under development units. Not available in older Atmosphère releases.
 Result servicesHasService(bool *out, const char *name);
 
-#endif /* __SERVICES_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __SERVICES_H__ */

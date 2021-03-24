@@ -20,12 +20,12 @@
 
 #pragma once
 
+#ifndef __LOG_H__
+#define __LOG_H__
+
 #ifdef __cplusplus
 extern "C" {
 #endif
-
-#ifndef __LOG_H__
-#define __LOG_H__
 
 /// Helper macros.
 #define LOG_MSG(fmt, ...)                       logWriteFormattedStringToLogFile(__func__, fmt, ##__VA_ARGS__)
@@ -58,8 +58,8 @@ void logGetLastMessage(char *dst, size_t dst_size);
 /// Use with caution.
 void logControlMutex(bool lock);
 
-#endif /* __LOG_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __LOG_H__ */

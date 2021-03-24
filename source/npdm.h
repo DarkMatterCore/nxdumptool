@@ -20,14 +20,14 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __NPDM_H__
 #define __NPDM_H__
 
 #include "pfs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define NPDM_META_MAGIC                         0x4D455441  /* "META". */
 #define NPDM_ACID_MAGIC                         0x41434944  /* "ACID". */
@@ -53,6 +53,8 @@ typedef struct {
     u8 reserved                           : 2;
 } NpdmMetaFlags;
 
+NXDT_ASSERT(NpdmMetaFlags, 0x1);
+
 /// This is the start of every NPDM file.
 /// This is followed by ACID and ACI0 sections, both with variable offsets and sizes.
 typedef struct {
@@ -76,6 +78,8 @@ typedef struct {
     u32 acid_size;
 } NpdmMetaHeader;
 
+NXDT_ASSERT(NpdmMetaHeader, 0x80);
+
 typedef enum {
     NpdmMemoryRegion_Application     = 0,
     NpdmMemoryRegion_Applet          = 1,
@@ -93,6 +97,8 @@ typedef struct {
     u32 memory_region        : 2;   ///< NpdmMemoryRegion.
     u32 reserved             : 28;
 } NpdmAcidFlags;
+
+NXDT_ASSERT(NpdmAcidFlags, 0x4);
 
 /// This is the start of an ACID section.
 /// This is followed by FsAccessControl, SrvAccessControl and KernelCapability descriptors, each one aligned to a 0x10 byte boundary using zero padding (if needed).
@@ -114,6 +120,8 @@ typedef struct {
     u8 reserved_2[0x8];
 } NpdmAcidHeader;
 
+NXDT_ASSERT(NpdmAcidHeader, 0x240);
+
 /// This is the start of an ACI0 section.
 /// This is followed by a FsAccessControl data block, as well as SrvAccessControl and KernelCapability descriptors, each one aligned to a 0x10 byte boundary using zero padding (if needed).
 typedef struct {
@@ -129,6 +137,8 @@ typedef struct {
     u32 kernel_capability_size;
     u8 reserved_3[0x8];
 } NpdmAciHeader;
+
+NXDT_ASSERT(NpdmAciHeader, 0x40);
 
 typedef enum {
     NpdmFsAccessControlFlags_ApplicationInfo             = BIT_LONG(0),
@@ -190,6 +200,8 @@ typedef struct {
 } NpdmFsAccessControlDescriptor;
 #pragma pack(pop)
 
+NXDT_ASSERT(NpdmFsAccessControlDescriptor, 0x2C);
+
 /// FsAccessControl data. Part of the ACI0 section body.
 /// This is followed by:
 ///     * A NpdmFsAccessControlDataContentOwnerBlock if 'content_owner_info_size' is greater than zero.
@@ -207,11 +219,17 @@ typedef struct {
 } NpdmFsAccessControlData;
 #pragma pack(pop)
 
+NXDT_ASSERT(NpdmFsAccessControlData, 0x1C);
+
 /// Placed after NpdmFsAccessControlData if its 'content_owner_info_size' member is greater than zero.
+#pragma pack(push, 1)
 typedef struct {
     u32 content_owner_id_count;
     u64 content_owner_id[];     ///< 'content_owner_id_count' content owned IDs.
 } NpdmFsAccessControlDataContentOwnerBlock;
+#pragma pack(pop)
+
+NXDT_ASSERT(NpdmFsAccessControlDataContentOwnerBlock, 0x4);
 
 typedef enum {
     NpdmAccessibility_Read  = BIT(0),
@@ -225,6 +243,8 @@ typedef struct {
     u8 accessibility[];             ///< 'save_data_owner_id_count' NpdmAccessibility fields.
 } NpdmFsAccessControlDataSaveDataOwnerBlock;
 
+NXDT_ASSERT(NpdmFsAccessControlDataSaveDataOwnerBlock, 0x4);
+
 /// SrvAccessControl descriptor. Part of the ACID and ACI0 section bodies.
 /// This descriptor is composed of a variable number of NpdmSrvAccessControlDescriptorEntry elements, each one with a variable size.
 /// Since the total number of services isn't stored anywhere, this descriptor must be parsed until its total size is reached.
@@ -234,6 +254,8 @@ typedef struct {
     u8 is_server   : 1; ///< Indicates if the service is allowed to be registered.
     char name[];        ///< Service name, stored without a NULL terminator. Supports the "*" wildcard character.
 } NpdmSrvAccessControlDescriptorEntry;
+
+NXDT_ASSERT(NpdmSrvAccessControlDescriptorEntry, 0x1);
 
 typedef enum {
     NpdmKernelCapabilityEntryNumber_ThreadInfo        = 3,
@@ -270,6 +292,8 @@ typedef struct {
     u32 min_core_number  : 8;
     u32 max_core_number  : 8;
 } NpdmThreadInfo;
+
+NXDT_ASSERT(NpdmThreadInfo, 0x4);
 
 /// System call table.
 typedef enum {
@@ -423,6 +447,8 @@ typedef struct {
     u32 index           : 3;                                                    ///< System calls index.
 } NpdmEnableSystemCalls;
 
+NXDT_ASSERT(NpdmEnableSystemCalls, 0x4);
+
 typedef enum {
     NpdmPermissionType_RW = 0,
     NpdmPermissionType_RO = 1
@@ -440,6 +466,8 @@ typedef struct {
     u32 permission_type : 1;                                            ///< NpdmPermissionType.
 } NpdmMemoryMapType1;
 
+NXDT_ASSERT(NpdmMemoryMapType1, 0x4);
+
 typedef struct {
     u32 entry_value  : NpdmKernelCapabilityEntryNumber_MemoryMap;   ///< Always set to NpdmKernelCapabilityEntryValue_MemoryMap.
     u32 padding      : 1;                                           ///< Always set to zero.
@@ -447,6 +475,8 @@ typedef struct {
     u32 reserved     : 4;
     u32 mapping_type : 1;                                           ///< NpdmMappingType.
 } NpdmMemoryMapType2;
+
+NXDT_ASSERT(NpdmMemoryMapType2, 0x4);
 
 /// MemoryMap entry for the KernelCapability descriptor.
 /// These are always stored in pairs of MemoryMapType1 + MemoryMapType2 entries.
@@ -457,12 +487,16 @@ typedef struct {
     };
 } NpdmMemoryMap;
 
+NXDT_ASSERT(NpdmMemoryMap, 0x4);
+
 /// IoMemoryMap entry for the KernelCapability descriptor.
 typedef struct {
     u32 entry_value   : NpdmKernelCapabilityEntryNumber_IoMemoryMap;    ///< Always set to NpdmKernelCapabilityEntryValue_IoMemoryMap.
     u32 padding       : 1;                                              ///< Always set to zero.
     u32 begin_address : 24;                                             ///< begin_address << 12.
 } NpdmIoMemoryMap;
+
+NXDT_ASSERT(NpdmIoMemoryMap, 0x4);
 
 typedef enum {
     NpdmRegionType_NoMapping         = 0,
@@ -483,6 +517,8 @@ typedef struct {
     u32 permission_type_3 : 1;                                                  ///< NpdmPermissionType.
 } NpdmMemoryRegionMap;
 
+NXDT_ASSERT(NpdmMemoryRegionMap, 0x4);
+
 /// EnableInterrupts entry for the KernelCapability descriptor.
 typedef struct {
     u32 entry_value        : NpdmKernelCapabilityEntryNumber_EnableInterrupts;  ///< Always set to NpdmKernelCapabilityEntryValue_EnableInterrupts.
@@ -490,6 +526,8 @@ typedef struct {
     u32 interrupt_number_1 : 10;                                                ///< 0x3FF means empty.
     u32 interrupt_number_2 : 10;                                                ///< 0x3FF means empty.
 } NpdmEnableInterrupts;
+
+NXDT_ASSERT(NpdmEnableInterrupts, 0x4);
 
 typedef enum {
     NpdmProgramType_System      = 0,
@@ -506,6 +544,8 @@ typedef struct {
     u32 reserved     : 15;
 } NpdmMiscParams;
 
+NXDT_ASSERT(NpdmMiscParams, 0x4);
+
 /// KernelVersion entry for the KernelCapability descriptor.
 typedef struct {
     u32 entry_value   : NpdmKernelCapabilityEntryNumber_KernelVersion;  ///< Always set to NpdmKernelCapabilityEntryValue_KernelVersion.
@@ -514,6 +554,8 @@ typedef struct {
     u32 major_version : 13;
 } NpdmKernelVersion;
 
+NXDT_ASSERT(NpdmKernelVersion, 0x4);
+
 /// HandleTableSize entry for the KernelCapability descriptor.
 typedef struct {
     u32 entry_value       : NpdmKernelCapabilityEntryNumber_HandleTableSize;    ///< Always set to NpdmKernelCapabilityEntryValue_HandleTableSize.
@@ -521,6 +563,8 @@ typedef struct {
     u32 handle_table_size : 10;
     u32 reserved          : 6;
 } NpdmHandleTableSize;
+
+NXDT_ASSERT(NpdmHandleTableSize, 0x4);
 
 /// MiscFlags entry for the KernelCapability descriptor.
 typedef struct {
@@ -531,12 +575,16 @@ typedef struct {
     u32 reserved     : 13;
 } NpdmMiscFlags;
 
+NXDT_ASSERT(NpdmMiscFlags, 0x4);
+
 /// KernelCapability descriptor. Part of the ACID and ACI0 section bodies.
 /// This descriptor is composed of a variable number of u32 entries. Thus, the entry count can be calculated by dividing the KernelCapability descriptor size by 4.
 /// The entry type is identified by a pattern of "01...11" (zero followed by ones) in the low u16, counting from the LSB. The variable number of ones must never exceed 16 (entirety of the low u16).
 typedef struct {
     u32 value;
 } NpdmKernelCapabilityDescriptorEntry;
+
+NXDT_ASSERT(NpdmKernelCapabilityDescriptorEntry, 0x4);
 
 typedef struct {
     NcaContext *nca_ctx;                                        ///< Pointer to the NCA context for the Program NCA from which NPDM data is retrieved.
@@ -592,8 +640,8 @@ NX_INLINE u32 npdmGetKernelCapabilityDescriptorEntryValue(NpdmKernelCapabilityDe
     return (entry ? (((entry->value + 1) & ~entry->value) - 1) : 0);
 }
 
-#endif /* __NPDM_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __NPDM_H__ */

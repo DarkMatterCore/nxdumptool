@@ -20,15 +20,15 @@
 
 #pragma once
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 #ifndef __GAMECARD_H__
 #define __GAMECARD_H__
 
 #include "fs_ext.h"
 #include "hfs.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 #define GAMECARD_HEAD_MAGIC             0x48454144              /* "HEAD". */
 
@@ -45,6 +45,8 @@ typedef struct {
     u8 reserved[0x8];       ///< Just zeroes.
 } GameCardKeySource;
 
+NXDT_ASSERT(GameCardKeySource, 0x10);
+
 /// Plaintext area. Dumped from FS program memory.
 typedef struct {
     GameCardKeySource key_source;
@@ -54,11 +56,15 @@ typedef struct {
     u8 reserved[0x1C4];
 } GameCardInitialData;
 
+NXDT_ASSERT(GameCardInitialData, 0x200);
+
 /// Encrypted using AES-128-CTR with the key and IV/counter from the `GameCardTitleKeyEncryption` section. Assumed to be all zeroes in retail gamecards.
 typedef struct {
     u8 titlekey[0x10];  ///< Decrypted titlekey from the `GameCardInitialData` section.
     u8 reserved[0xCF0];
 } GameCardTitleKey;
+
+NXDT_ASSERT(GameCardTitleKey, 0xD00);
 
 /// Encrypted using RSA-2048-OAEP and a private OAEP key from AuthoringTool. Assumed to be all zeroes in retail gamecards.
 typedef struct {
@@ -67,6 +73,8 @@ typedef struct {
     u8 reserved[0xE0];
 } GameCardTitleKeyEncryption;
 
+NXDT_ASSERT(GameCardTitleKeyEncryption, 0x100);
+
 /// Used to secure communications between the Lotus and the inserted gamecard.
 /// Precedes the gamecard header.
 typedef struct {
@@ -74,6 +82,8 @@ typedef struct {
     GameCardTitleKey titlekey_block;
     GameCardTitleKeyEncryption titlekey_encryption;
 } GameCardKeyArea;
+
+NXDT_ASSERT(GameCardKeyArea, 0x1000);
 
 typedef enum {
     GameCardKekIndex_Version0      = 0,
@@ -84,6 +94,8 @@ typedef struct {
     u8 kek_index          : 4;  ///< GameCardKekIndex.
     u8 titlekey_dec_index : 4;
 } GameCardKeyIndex;
+
+NXDT_ASSERT(GameCardKeyIndex, 0x1);
 
 typedef enum {
     GameCardRomSize_1GiB  = 0xFA,
@@ -144,6 +156,8 @@ typedef struct {
     u8 reserved_2[0x38];
 } GameCardHeaderEncryptedArea;
 
+NXDT_ASSERT(GameCardHeaderEncryptedArea, 0x70);
+
 /// Placed after the `GameCardKeyArea` section.
 typedef struct {
     u8 signature[0x100];                            ///< RSA-2048-PSS with SHA-256 signature over the rest of the header.
@@ -168,6 +182,8 @@ typedef struct {
     u32 normal_area_end_address;                    ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
     GameCardHeaderEncryptedArea encrypted_area;
 } GameCardHeader;
+
+NXDT_ASSERT(GameCardHeader, 0x200);
 
 typedef enum {
     GameCardStatus_NotInserted              = 0,
@@ -238,8 +254,8 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
 /// If you need to get entry information by index, just retrieve the Hash FS context for the target partition and use Hash FS functions on it.
 bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size);
 
-#endif /* __GAMECARD_H__ */
-
 #ifdef __cplusplus
 }
 #endif
+
+#endif /* __GAMECARD_H__ */
