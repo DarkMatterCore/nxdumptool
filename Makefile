@@ -54,6 +54,8 @@ INCLUDES	:=	include
 EXEFS_SRC	:=	exefs_src
 ROMFS       :=	romfs
 
+ICON		:=	$(ROMFS)/icon.jpg
+
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
@@ -68,7 +70,7 @@ CFLAGS  +=  `aarch64-none-elf-pkg-config libxml-2.0 --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config json-c --cflags`
 CFLAGS  +=  `aarch64-none-elf-pkg-config libturbojpeg --cflags`
 
-CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions
+CXXFLAGS	:= $(CFLAGS) -fno-rtti -fno-exceptions -std=c++1z -O2 -Wno-volatile
 
 ASFLAGS	:=	-g $(ARCH)
 LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
