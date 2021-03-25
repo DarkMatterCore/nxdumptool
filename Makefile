@@ -48,9 +48,9 @@ endif
 
 TARGET		:=	${APP_TITLE}
 BUILD		:=	build
-SOURCES		:=	source source/fatfs
+SOURCES		:=	source source/core source/fatfs
 DATA		:=	data
-INCLUDES	:=	include
+INCLUDES	:=	include include/core include/fatfs
 EXEFS_SRC	:=	exefs_src
 ROMFS       :=	romfs
 
