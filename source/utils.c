@@ -1,7 +1,6 @@
 /*
  * utils.c
  *
- * Copyright (c) 2018-2020, WerWolv.
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
@@ -22,8 +21,6 @@
 #include <sys/statvfs.h>
 
 #include "utils.h"
-//#include "freetype_helper.h"
-//#include "lvgl_helper.h"
 #include "keys.h"
 #include "gamecard.h"
 #include "services.h"
@@ -185,12 +182,6 @@ bool utilsInitializeResources(void)
     /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked). */
     appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
     
-    /* Initialize FreeType. */
-    //if (!freeTypeHelperInitialize()) return false;
-    
-    /* Initialize LVGL. */
-    //if (!lvglHelperInitialize()) return false;
-    
     ret = g_resourcesInit = true;
     
 end:
@@ -204,12 +195,6 @@ end:
 void utilsCloseResources(void)
 {
     mutexLock(&g_resourcesMutex);
-    
-    /* Free LVGL resources. */
-    //lvglHelperExit();
-    
-    /* Free FreeType resources. */
-    //freeTypeHelperExit();
     
     /* Unset our overclock applet hook. */
     appletUnhook(&g_systemOverclockCookie);
