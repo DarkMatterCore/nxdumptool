@@ -76,11 +76,13 @@ LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*
 
 LIBS	:= -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lusbhsfs -lntfs-3g -llwext4 -lnx -ljson-c -lm -lturbojpeg
 
+LIBUSBHSFS_DIR	:= $(CURDIR)/libs/libusbhsfs
+
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(PORTLIBS) $(LIBNX) $(CURDIR)/libusbhsfs
+LIBDIRS	:= $(PORTLIBS) $(LIBNX) $(LIBUSBHSFS_DIR)
 
 
 #---------------------------------------------------------------------------------
@@ -165,7 +167,7 @@ endif
 all: $(BUILD)
 
 usbhsfs:
-	@$(MAKE) --no-print-directory -C libusbhsfs BUILD_TYPE=GPL release
+	@$(MAKE) --no-print-directory -C $(LIBUSBHSFS_DIR) BUILD_TYPE=GPL release
 
 $(BUILD): usbhsfs
 	@[ -d $@ ] || mkdir -p $@
@@ -177,7 +179,7 @@ clean:
 	@rm -fr $(BUILD) *.pfs0 *.nso *.nro *.nacp *.elf
 
 clean_all: clean
-	@$(MAKE) --no-print-directory -C libusbhsfs clean
+	@$(MAKE) --no-print-directory -C $(LIBUSBHSFS_DIR) clean
 
 #---------------------------------------------------------------------------------
 else
