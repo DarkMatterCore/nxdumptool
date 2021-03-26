@@ -1,5 +1,5 @@
 /*
- * log.h
+ * nxdt_log.h
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,8 +21,8 @@
 
 #pragma once
 
-#ifndef __LOG_H__
-#define __LOG_H__
+#ifndef __NXDT_LOG_H__
+#define __NXDT_LOG_H__
 
 #ifdef __cplusplus
 extern "C" {
@@ -63,4 +63,4 @@ void logControlMutex(bool lock);
 }
 #endif
 
-#endif /* __LOG_H__ */
+#endif /* __NXDT_LOG_H__ */

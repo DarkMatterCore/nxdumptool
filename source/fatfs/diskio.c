@@ -12,7 +12,7 @@
 
 #include <switch.h>
 
-#include "utils.h"
+#include "nxdt_utils.h"
 
 /*-----------------------------------------------------------------------*/
 /* Get Drive Status                                                      */

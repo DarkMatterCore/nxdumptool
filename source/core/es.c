@@ -20,7 +20,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "utils.h"
+#include "nxdt_utils.h"
 #include "es.h"
 #include "service_guard.h"
 

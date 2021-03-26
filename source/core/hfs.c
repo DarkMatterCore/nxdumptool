@@ -19,7 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "utils.h"
+#include "nxdt_utils.h"
 #include "gamecard.h"
 
 bool hfsReadPartitionData(HashFileSystemContext *ctx, void *out, u64 read_size, u64 offset)

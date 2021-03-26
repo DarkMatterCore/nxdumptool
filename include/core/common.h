@@ -46,7 +46,7 @@
 #define _Atomic(X) std::atomic< X >
 #endif
 
-#include "log.h"
+#include "nxdt_log.h"
 #include "ums.h"
 
 #define FS_SYSMODULE_TID        (u64)0x0100000000000000

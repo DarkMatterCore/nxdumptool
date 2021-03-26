@@ -1,5 +1,5 @@
 /*
- * utils.c
+ * nxdt_utils.c
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,7 +21,7 @@
 
 #include <sys/statvfs.h>
 
-#include "utils.h"
+#include "nxdt_utils.h"
 #include "keys.h"
 #include "gamecard.h"
 #include "services.h"

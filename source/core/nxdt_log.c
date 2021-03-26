@@ -1,5 +1,5 @@
 /*
- * log.c
+ * nxdt_log.c
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -19,7 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "utils.h"
+#include "nxdt_utils.h"
 
 #define LOG_FILE_NAME   APP_TITLE ".log"
 #define LOG_BUF_SIZE    0x400000            /* 4 MiB. */

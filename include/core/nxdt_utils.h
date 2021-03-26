@@ -1,5 +1,5 @@
 /*
- * utils.h
+ * nxdt_utils.h
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,8 +21,8 @@
 
 #pragma once
 
-#ifndef __UTILS_H__
-#define __UTILS_H__
+#ifndef __NXDT_UTILS_H__
+#define __NXDT_UTILS_H__
 
 #include "common.h"
 
@@ -146,4 +146,4 @@ NX_INLINE void utilsSleep(u64 seconds)
 }
 #endif
 
-#endif /* __UTILS_H__ */
+#endif /* __NXDT_UTILS_H__ */

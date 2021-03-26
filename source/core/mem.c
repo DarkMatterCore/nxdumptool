@@ -20,7 +20,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "utils.h"
+#include "nxdt_utils.h"
 #include "mem.h"
 
 #define MEMLOG(fmt, ...)    LOG_MSG_BUF(&g_memLogBuf, &g_memLogBufSize, fmt, ##__VA_ARGS__)

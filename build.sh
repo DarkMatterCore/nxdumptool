@@ -8,7 +8,7 @@ rm -f ./*.tar.bz2
 rm -rf ./code_templates/tmp
 mkdir ./code_templates/tmp
 
-make clean
+make clean_all
 
 for f in ./code_templates/*.c; do
     basename="$(basename "$f")"
@@ -23,16 +23,16 @@ for f in ./code_templates/*.c; do
     rm -f ./source/main.c
     cp $f ./source/main.c
     
-    make BUILD_TYPE="$filename" -j$(nproc)
+    make -j$(nproc)
     
     mkdir ./code_templates/tmp/$filename
-    cp ./$filename.nro ./code_templates/tmp/$filename/nxdumptool-rewrite.nro
-    #cp ./$filename.elf ./code_templates/tmp/$filename/nxdumptool-rewrite.elf
+    cp ./nxdumptool.nro ./code_templates/tmp/$filename/nxdumptool.nro
+    #cp ./nxdumptool.elf ./code_templates/tmp/$filename/nxdumptool.elf
     
-    rm -f ./build/main.o ./build/main.d ./build/utils.o ./build/utils.d ./build/usb.o ./build/usb.d ./build/log.o ./build/log.d ./$filename.*
+    rm -f ./build/main.o ./build/main.d ./build/nxdt_utils.o ./build/nxdt_utils.d ./build/usb.o ./build/usb.d ./build/nxdt_log.o ./build/nxdt_log.d ./nxdumptool.*
 done
 
-make clean
+make clean_all
 
 cd ./code_templates/tmp
 tar -cjf ../../$tar_filename *

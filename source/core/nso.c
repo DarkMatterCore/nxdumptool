@@ -21,7 +21,7 @@
 
 #define LZ4_STATIC_LINKING_ONLY /* Required by LZ4 to enable in-place decompression. */
 
-#include "utils.h"
+#include "nxdt_utils.h"
 #include "nso.h"
 #include "lz4.h"
 
