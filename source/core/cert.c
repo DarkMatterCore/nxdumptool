@@ -164,7 +164,7 @@ u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, 
     raw_chain = malloc(raw_chain_size);
     if (!raw_chain)
     {
-        LOG_MSG("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", raw_chain_size);
+        LOG_MSG("Unable to allocate memory for raw \"%s\" certificate chain! (0x%lX).", raw_chain_filename, raw_chain_size);
         return NULL;
     }
     

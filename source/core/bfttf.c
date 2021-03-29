@@ -41,8 +41,7 @@ static bool g_bfttfInterfaceInit = false;
 
 static BfttfFontInfo g_fontInfo[] = {
     { 0x0100000000000811, "/nintendo_udsg-r_std_003.bfttf", 0, NULL },          /* FontStandard. */
-    { 0x0100000000000810, "/nintendo_ext_003.bfttf", 0, NULL },                 /* FontNintendoExtension (1).*/
-    { 0x0100000000000810, "/nintendo_ext2_003.bfttf", 0, NULL },                /* FontNintendoExtension (2).*/
+    { 0x0100000000000810, "/nintendo_ext_003.bfttf", 0, NULL },                 /* FontNintendoExtension. There's a secondary entry at "/nintendo_ext2_003.bfttf", but it's identical to this one. */
     { 0x0100000000000812, "/nintendo_udsg-r_ko_003.bfttf", 0, NULL },           /* FontKorean. */
     { 0x0100000000000814, "/nintendo_udsg-r_org_zh-cn_003.bfttf", 0, NULL },    /* FontChineseSimplified (1). */
     { 0x0100000000000814, "/nintendo_udsg-r_ext_zh-cn_003.bfttf", 0, NULL },    /* FontChineseSimplified (2). */

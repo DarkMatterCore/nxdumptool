@@ -78,7 +78,7 @@ void utilsWaitForButtonPress(u64 flag);
 
 /// Formats a string and appends it to the provided buffer.
 /// If the buffer isn't big enough to hold both its current contents and the new formatted string, it will be resized.
-bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
+__attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
 /// Replaces illegal FAT characters in the provided string with underscores.
 /// If 'ascii_only' is set to true, all characters outside the (0x20,0x7E] range will also be replaced with underscores.

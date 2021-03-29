@@ -355,7 +355,7 @@ void utilsWaitForButtonPress(u64 flag)
     }
 }
 
-bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
+__attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
 {
     if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || !fmt || !*fmt)
     {

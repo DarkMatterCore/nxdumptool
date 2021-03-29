@@ -508,7 +508,7 @@ static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count,
     rc = (personalized ? esCountPersonalizedTicket((s32*)&count) : esCountCommonTicket((s32*)&count));
     if (R_FAILED(rc))
     {
-        LOG_MSG("esCount%c%sTicket failed! (0x%08X).", toupper(g_tikTitleKeyTypeStrings[str_idx][0]), g_tikTitleKeyTypeStrings[str_idx] + 1);
+        LOG_MSG("esCount%c%sTicket failed! (0x%08X).", toupper(g_tikTitleKeyTypeStrings[str_idx][0]), g_tikTitleKeyTypeStrings[str_idx] + 1, rc);
         return false;
     }
     
@@ -647,7 +647,7 @@ static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u
     /* Read ticket data. */
     if ((br = save_allocation_table_storage_read(&fat_storage, buf, ticket_offset, SIGNED_TIK_MAX_SIZE)) != SIGNED_TIK_MAX_SIZE)
     {
-        LOG_MSG("Failed to read 0x%lX bytes long ticket at offset 0x%lX from \"%s\" in ES %s ticket system save!", SIGNED_TIK_MAX_SIZE, ticket_offset, TIK_DB_STORAGE_PATH, \
+        LOG_MSG("Failed to read 0x%X-byte long ticket at offset 0x%lX from \"%s\" in ES %s ticket system save!", SIGNED_TIK_MAX_SIZE, ticket_offset, TIK_DB_STORAGE_PATH, \
                 g_tikTitleKeyTypeStrings[titlekey_type]);
         return false;
     }

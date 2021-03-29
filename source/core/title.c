@@ -1269,7 +1269,7 @@ static bool titleRetrieveApplicationMetadataByTitleId(u64 title_id, TitleApplica
     rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, title_id, g_nsAppControlData, sizeof(NsApplicationControlData), &write_size);
     if (R_FAILED(rc))
     {
-        LOG_MSG("nsGetApplicationControlData failed for title ID \"%016lX\"! (0x%08X).", rc, title_id);
+        LOG_MSG("nsGetApplicationControlData failed for title ID \"%016lX\"! (0x%08X).", title_id, rc);
         return false;
     }
     
@@ -1688,7 +1688,7 @@ static bool titleGetContentInfosFromTitle(u8 storage_id, const NcmContentMetaKey
     
     if (content_meta_header_read_size != sizeof(NcmContentMetaHeader))
     {
-        LOG_MSG("Content meta header size mismatch! (0x%lX != 0x%lX).", rc, content_meta_header_read_size, sizeof(NcmContentMetaHeader));
+        LOG_MSG("Content meta header size mismatch! (0x%lX != 0x%lX).", content_meta_header_read_size, sizeof(NcmContentMetaHeader));
         goto end;
     }
     

@@ -236,7 +236,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     /* Read .rodata segment data. */
     if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, rodata_read_ptr, rodata_read_size, nso_ctx->nso_header.rodata_segment_info.file_offset))
     {
-        LOG_MSG("Failed to read %s .rodata segment in NRO \"%s\"!", nso_ctx->nso_filename);
+        LOG_MSG("Failed to read .rodata segment in NRO \"%s\"!", nso_ctx->nso_filename);
         goto end;
     }
     

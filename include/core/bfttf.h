@@ -31,14 +31,13 @@ extern "C" {
 
 /// Loosely based on PlSharedFontType.
 typedef enum {
-    BfttfFontType_Standard             = 0, ///< Japan, US and Europe
-    BfttfFontType_NintendoExt1         = 1, ///< Nintendo Extended (1). This font only has the special Nintendo-specific characters, which aren't available with the other fonts.
-    BfttfFontType_NintendoExt2         = 2, ///< Nintendo Extended (2). This font only has the special Nintendo-specific characters, which aren't available with the other fonts.
-    BfttfFontType_Korean               = 3, ///< Korean (Hangul).
-    BfttfFontType_ChineseSimplified    = 4, ///< Chinese Simplified.
-    BfttfFontType_ExtChineseSimplified = 5, ///< Extended Chinese Simplified.
-    BfttfFontType_ChineseTraditional   = 6, ///< Chinese Traditional.
-    BfttfFontType_Total                = 7  ///< Total fonts supported by this enum.
+    BfttfFontType_Standard             = 0, ///< Japan, US and Europe.
+    BfttfFontType_NintendoExt          = 1, ///< Extended Nintendo. This font contains special, Nintendo-specific characters, which aren't available in the other fonts.
+    BfttfFontType_Korean               = 2, ///< Korean (Hangul).
+    BfttfFontType_ChineseSimplified    = 3, ///< Simplified Chinese.
+    BfttfFontType_ExtChineseSimplified = 4, ///< Extended Simplified Chinese.
+    BfttfFontType_ChineseTraditional   = 5, ///< Traditional Chinese.
+    BfttfFontType_Total                = 6  ///< Total fonts supported by this enum.
 } BfttfFontType;
 
 /// Loosely based on PlFontData.

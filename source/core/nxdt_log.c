@@ -56,7 +56,7 @@ void logWriteStringToLogFile(const char *src)
     _logWriteStringToLogFile(src, true);
 }
 
-void logWriteFormattedStringToLogFile(const char *func_name, const char *fmt, ...)
+__attribute__((format(printf, 2, 3))) void logWriteFormattedStringToLogFile(const char *func_name, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
@@ -64,7 +64,7 @@ void logWriteFormattedStringToLogFile(const char *func_name, const char *fmt, ..
     va_end(args);
 }
 
-void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...)
+__attribute__((format(printf, 4, 5))) void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...)
 {
     if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || !func_name || !*func_name || !fmt || !*fmt) return;
     
@@ -127,7 +127,7 @@ end:
     va_end(args);
 }
 
-void logWriteBinaryDataToLogFile(const void *data, size_t data_size, const char *func_name, const char *fmt, ...)
+__attribute__((format(printf, 4, 5))) void logWriteBinaryDataToLogFile(const void *data, size_t data_size, const char *func_name, const char *fmt, ...)
 {
     if (!data || !data_size || !func_name || !*func_name || !fmt || !*fmt) return;
     
