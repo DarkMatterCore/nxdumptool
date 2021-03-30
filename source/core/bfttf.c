@@ -207,7 +207,7 @@ bool bfttfGetFontByType(BfttfFontData *font_data, u8 font_type)
     
     font_data->type = font_type;
     font_data->size = (font_info->size - 8);
-    font_data->ptr = (font_info->data + 8);
+    font_data->address = (font_info->data + 8);
     
     return true;
 }

@@ -37,6 +37,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include <unistd.h>
 #include <switch.h>
 
 #ifndef __cplusplus

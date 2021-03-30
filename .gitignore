@@ -3,7 +3,6 @@ host/__pycache__
 host/build
 host/dist
 host/nxdumptool
-romfs/shaders
 *.elf
 *.nacp
 *.nro
@@ -16,4 +15,4 @@ romfs/shaders
 *.spec
 *.exe
 /code_templates/tmp/*
-/source/main.c
+

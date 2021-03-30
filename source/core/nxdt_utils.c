@@ -36,8 +36,6 @@
 static bool g_resourcesInit = false, g_isDevUnit = false;
 static Mutex g_resourcesMutex = 0;
 
-static PadState g_padState = {0};
-
 static FsFileSystem *g_sdCardFileSystem = NULL;
 
 static FsStorage g_emmcBisSystemPartitionStorage = {0};
@@ -50,6 +48,8 @@ static Mutex g_homeButtonMutex = 0;
 static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
 static AppletHookCookie g_systemOverclockCookie = {0};
+
+static int g_nxLinkSocketFd = -1;
 
 static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB" };
 static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
@@ -73,14 +73,10 @@ bool utilsInitializeResources(void)
 {
     mutexLock(&g_resourcesMutex);
     
+    Result rc = 0;
+    
     bool ret = g_resourcesInit;
     if (ret) goto end;
-    
-    /* Configure input. */
-    /* Up to 8 different, full controller inputs. */
-    /* Individual Joy-Cons not supported. */
-    padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
-    padInitializeWithMask(&g_padState, 0x1000000FFUL);
     
     /* Retrieve pointer to the application launch path. */
     if (g_argc && g_argv)
@@ -183,6 +179,14 @@ bool utilsInitializeResources(void)
     /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked). */
     appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
     
+    /* Mount application RomFS. */
+    romfsInit();
+    
+    /* Redirect stdout and stderr over network to nxlink. */
+    rc = socketInitializeDefault();
+    if (R_SUCCEEDED(rc)) g_nxLinkSocketFd = nxlinkConnectToHost(true, true);
+    
+    /* Update flags. */
     ret = g_resourcesInit = true;
     
 end:
@@ -196,6 +200,18 @@ end:
 void utilsCloseResources(void)
 {
     mutexLock(&g_resourcesMutex);
+    
+    /* Close nxlink socket. */
+    if (g_nxLinkSocketFd >= 0)
+    {
+        close(g_nxLinkSocketFd);
+        g_nxLinkSocketFd = -1;
+    }
+    
+    socketExit();
+    
+    /* Unmount application RomFS. */
+    romfsExit();
     
     /* Unset our overclock applet hook. */
     appletUnhook(&g_systemOverclockCookie);
@@ -325,34 +341,6 @@ bool utilsIsDevelopmentUnit(void)
     bool ret = (g_resourcesInit && g_isDevUnit);
     mutexUnlock(&g_resourcesMutex);
     return ret;
-}
-
-void utilsScanPads(void)
-{
-    padUpdate(&g_padState);
-}
-
-u64 utilsGetButtonsDown(void)
-{
-    return padGetButtonsDown(&g_padState);
-}
-
-u64 utilsGetButtonsHeld(void)
-{
-    return padGetButtons(&g_padState);
-}
-
-void utilsWaitForButtonPress(u64 flag)
-{
-    /* Don't consider stick movement as button inputs. */
-    if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
-                        HidNpadButton_StickRUp | HidNpadButton_StickRDown);
-    
-    while(appletMainLoop())
-    {
-        utilsScanPads();
-        if (utilsGetButtonsDown() & flag) break;
-    }
 }
 
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
@@ -746,7 +734,20 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
 
 static void utilsPrintConsoleError(void)
 {
+    PadState pad = {0};
     char msg[0x100] = {0};
+    
+    /* Don't consider stick movement as button inputs. */
+    u64 flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
+                 HidNpadButton_StickRUp | HidNpadButton_StickRDown);
+    
+    /* Configure input. */
+    /* Up to 8 different, full controller inputs. */
+    /* Individual Joy-Cons not supported. */
+    padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
+    padInitializeWithMask(&pad, 0x1000000FFUL);
+    
+    /* Get last log message. */
     logGetLastMessage(msg, sizeof(msg));
     
     consoleInit(NULL);
@@ -757,7 +758,11 @@ static void utilsPrintConsoleError(void)
     
     consoleUpdate(NULL);
     
-    utilsWaitForButtonPress(0);
+    while(appletMainLoop())
+    {
+        padUpdate(&pad);
+        if (padGetButtonsDown(&pad) & flag) break;
+    }
     
     consoleExit(NULL);
 }

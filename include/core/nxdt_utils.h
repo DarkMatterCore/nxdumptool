@@ -66,16 +66,6 @@ void utilsJoinThread(Thread *thread);
 /// Returns true if the application is running under a development unit.
 bool utilsIsDevelopmentUnit(void);
 
-/// Functions to retrieve down/held buttons from all input controllers.
-/// utilsScanPads() must be called before utilsGetButtonsDown() / utilsGetButtonsHeld().
-void utilsScanPads(void);
-u64 utilsGetButtonsDown(void);
-u64 utilsGetButtonsHeld(void);
-
-/// Waits until any button matching the provided input flag is pressed.
-/// If 'flag' is set to zero, any button press will count.
-void utilsWaitForButtonPress(u64 flag);
-
 /// Formats a string and appends it to the provided buffer.
 /// If the buffer isn't big enough to hold both its current contents and the new formatted string, it will be resized.
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);

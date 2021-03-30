@@ -58,6 +58,8 @@ static ServiceInfo g_serviceInfo[] = {
     { false, "nifm:u", NULL, &servicesNifmUserInitialize, &nifmExit },
     { false, "clk", &servicesClkGetServiceType, NULL, NULL },                                           /* Placeholder for pcv / clkrst. */
     { false, "es", NULL, &esInitialize, &esExit },
+    { false, "set", NULL, &setInitialize, &setExit },
+    { false, "set:sys", NULL, &setsysInitialize, &setsysExit },
     { false, "set:cal", NULL, &setcalInitialize, &setcalExit }
 };
 

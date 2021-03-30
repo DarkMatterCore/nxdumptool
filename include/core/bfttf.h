@@ -42,9 +42,9 @@ typedef enum {
 
 /// Loosely based on PlFontData.
 typedef struct {
-    u8 type;    ///< BfttfFontType.
-    u32 size;   ///< Decoded BFTFF font size.
-    void *ptr;  ///< Pointer to font data.
+    u8 type;        ///< BfttfFontType.
+    u32 size;       ///< Decoded BFTFF font size.
+    void *address;  ///< Font data address.
 } BfttfFontData;
 
 /// Initializes the BFTTF interface.
