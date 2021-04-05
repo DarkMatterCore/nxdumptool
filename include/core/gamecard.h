@@ -59,29 +59,29 @@ typedef struct {
 
 NXDT_ASSERT(GameCardInitialData, 0x200);
 
-/// Encrypted using AES-128-CTR with the key and IV/counter from the `GameCardTitleKeyEncryption` section. Assumed to be all zeroes in retail gamecards.
+/// Encrypted using AES-128-CTR with the key and IV/counter from the `GameCardTitleKeyAreaEncryption` section. Assumed to be all zeroes in retail gamecards.
 typedef struct {
     u8 titlekey[0x10];  ///< Decrypted titlekey from the `GameCardInitialData` section.
     u8 reserved[0xCF0];
-} GameCardTitleKey;
+} GameCardTitleKeyArea;
 
-NXDT_ASSERT(GameCardTitleKey, 0xD00);
+NXDT_ASSERT(GameCardTitleKeyArea, 0xD00);
 
 /// Encrypted using RSA-2048-OAEP and a private OAEP key from AuthoringTool. Assumed to be all zeroes in retail gamecards.
 typedef struct {
-    u8 titlekey_encryption_key[0x10];   ///< Used as the AES-128-CTR key for the `GameCardTitleKey` section. Randomly generated during XCI creation by AuthoringTool.
-    u8 titlekey_encryption_iv[0x10];    ///< Used as the AES-128-CTR IV/counter for the `GameCardTitleKey` section. Randomly generated during XCI creation by AuthoringTool.
+    u8 titlekey_encryption_key[0x10];   ///< Used as the AES-128-CTR key for the `GameCardTitleKeyArea` section. Randomly generated during XCI creation by AuthoringTool.
+    u8 titlekey_encryption_iv[0x10];    ///< Used as the AES-128-CTR IV/counter for the `GameCardTitleKeyArea` section. Randomly generated during XCI creation by AuthoringTool.
     u8 reserved[0xE0];
-} GameCardTitleKeyEncryption;
+} GameCardTitleKeyAreaEncryption;
 
-NXDT_ASSERT(GameCardTitleKeyEncryption, 0x100);
+NXDT_ASSERT(GameCardTitleKeyAreaEncryption, 0x100);
 
 /// Used to secure communications between the Lotus and the inserted gamecard.
 /// Precedes the gamecard header.
 typedef struct {
     GameCardInitialData initial_data;
-    GameCardTitleKey titlekey_block;
-    GameCardTitleKeyEncryption titlekey_encryption;
+    GameCardTitleKeyArea titlekey_area;
+    GameCardTitleKeyAreaEncryption titlekey_area_encryption;
 } GameCardKeyArea;
 
 NXDT_ASSERT(GameCardKeyArea, 0x1000);
