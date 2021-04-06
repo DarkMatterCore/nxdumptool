@@ -31,14 +31,14 @@
 extern "C" {
 #endif
 
-#define GAMECARD_HEAD_MAGIC             0x48454144              /* "HEAD". */
+#define GAMECARD_HEAD_MAGIC         0x48454144                      /* "HEAD". */
 
-#define GAMECARD_MEDIA_UNIT_SIZE        0x200
-#define GAMECARD_MEDIA_UNIT_OFFSET(x)   ((u64)(x) * GAMECARD_MEDIA_UNIT_SIZE)
+#define GAMECARD_PAGE_SIZE          0x200
+#define GAMECARD_PAGE_OFFSET(x)     ((u64)(x) * GAMECARD_PAGE_SIZE)
 
-#define GAMECARD_UPDATE_TID             SYSTEM_UPDATE_TID
+#define GAMECARD_UPDATE_TID         SYSTEM_UPDATE_TID
 
-#define GAMECARD_CERTIFICATE_OFFSET     0x7000
+#define GAMECARD_CERTIFICATE_OFFSET 0x7000
 
 /// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
 typedef struct {
@@ -123,8 +123,8 @@ typedef enum {
 typedef enum {
     GameCardFwVersion_ForDev              = 0,
     GameCardFwVersion_ForProd             = BIT(0),
-    GameCardFwVersion_ForProdSince400NUP  = BIT(1), ///< cup_version >= 268435456 (4.0.0-0.0) in GameCardHeaderEncryptedArea.
-    GameCardFwVersion_ForProdSince1100NUP = BIT(2)  ///< cup_version >= 738197504 (11.0.0-0.0) in GameCardHeaderEncryptedArea.
+    GameCardFwVersion_ForProdSince400NUP  = BIT(1), ///< upp_version >= 268435456 (4.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_ForProdSince1100NUP = BIT(2)  ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
 } GameCardFwVersion;
 
 typedef enum {
@@ -148,40 +148,40 @@ typedef struct {
     u32 wait_2_time_read;           ///< Always 0.
     u32 wait_1_time_write;          ///< Always 0.
     u32 wait_2_time_write;          ///< Always 0.
-    VersionType2 fw_mode;
-    VersionType1 cup_version;
+    VersionType2 fw_mode;           ///< Current SdkAddonVersion.
+    VersionType1 upp_version;       ///< Bundled system update version.
     u8 compatibility_type;          ///< GameCardCompatibilityType.
     u8 reserved_1[0x3];
-    u64 cup_hash;
-    u64 cup_id;                     ///< Must match GAMECARD_UPDATE_TID.
+    u64 upp_hash;                   ///< SHA-256 checksum for the update partition.
+    u64 upp_id;                     ///< Must match GAMECARD_UPDATE_TID.
     u8 reserved_2[0x38];
-} GameCardHeaderEncryptedArea;
+} GameCardInfo;
 
-NXDT_ASSERT(GameCardHeaderEncryptedArea, 0x70);
+NXDT_ASSERT(GameCardInfo, 0x70);
 
 /// Placed after the `GameCardKeyArea` section.
 typedef struct {
     u8 signature[0x100];                            ///< RSA-2048-PSS with SHA-256 signature over the rest of the header.
     u32 magic;                                      ///< "HEAD".
-    u32 secure_area_start_address;                  ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
-    u32 backup_area_start_address;                  ///< Always 0xFFFFFFFF.
+    u32 rom_area_start_page_address;                ///< Expressed in GAMECARD_PAGE_SIZE units.
+    u32 backup_area_start_page_address;             ///< Always 0xFFFFFFFF.
     GameCardKeyIndex key_index;
     u8 rom_size;                                    ///< GameCardRomSize.
     u8 header_version;                              ///< Always 0.
     u8 flags;                                       ///< GameCardFlags.
-    u64 package_id;
-    u32 valid_data_end_address;                     ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
+    u64 package_id;                                 ///< Used for challenge–response authentication.
+    u32 valid_data_end_address;                     ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 reserved[0x4];
     u8 iv[0x10];
-    u64 partition_fs_header_address;                ///< Root HFS0 header offset.
-    u64 partition_fs_header_size;                   ///< Root HFS0 header size.
+    u64 partition_fs_header_address;                ///< Root Hash File System header offset.
+    u64 partition_fs_header_size;                   ///< Root Hash File System header size.
     u8 partition_fs_header_hash[SHA256_HASH_SIZE];
     u8 initial_data_hash[SHA256_HASH_SIZE];
     u32 sel_sec;                                    ///< GameCardSelSec.
     u32 sel_t1_key;                                 ///< Always 2.
     u32 sel_key;                                    ///> Always 0.
-    u32 normal_area_end_address;                    ///< Expressed in GAMECARD_MEDIA_UNIT_SIZE blocks.
-    GameCardHeaderEncryptedArea encrypted_area;
+    u32 lim_area;                                   ///< Expressed in GAMECARD_PAGE_SIZE units.
+    GameCardInfo card_info;
 } GameCardHeader;
 
 NXDT_ASSERT(GameCardHeader, 0x200);

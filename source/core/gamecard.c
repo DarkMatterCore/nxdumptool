@@ -30,7 +30,7 @@
 #define GAMECARD_ACCESS_WAIT_TIME               3                       /* Seconds. */
 
 #define GAMECARD_UNUSED_AREA_BLOCK_SIZE         0x24
-#define GAMECARD_UNUSED_AREA_SIZE(x)            (((x) / GAMECARD_MEDIA_UNIT_SIZE) * GAMECARD_UNUSED_AREA_BLOCK_SIZE)
+#define GAMECARD_UNUSED_AREA_SIZE(x)            (((x) / GAMECARD_PAGE_SIZE) * GAMECARD_UNUSED_AREA_BLOCK_SIZE)
 
 #define GAMECARD_STORAGE_AREA_NAME(x)           ((x) == GameCardStorageArea_Normal ? "normal" : ((x) == GameCardStorageArea_Secure ? "secure" : "none"))
 
@@ -322,7 +322,7 @@ bool gamecardGetTrimmedSize(u64 *out)
 {
     mutexLock(&g_gameCardMutex);
     bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_MEDIA_UNIT_OFFSET(g_gameCardHeader.valid_data_end_address));
+    if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_PAGE_OFFSET(g_gameCardHeader.valid_data_end_address));
     mutexUnlock(&g_gameCardMutex);
     return ret;
 }
@@ -840,9 +840,9 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
     /* Calculate appropiate storage area offset and retrieve the right storage area pointer. */
     u64 base_offset = (area == GameCardStorageArea_Normal ? offset : (offset - g_gameCardStorageNormalAreaSize));
     
-    if (!(base_offset % GAMECARD_MEDIA_UNIT_SIZE) && !(read_size % GAMECARD_MEDIA_UNIT_SIZE))
+    if (!(base_offset % GAMECARD_PAGE_SIZE) && !(read_size % GAMECARD_PAGE_SIZE))
     {
-        /* Optimization for reads that are already aligned to a GAMECARD_MEDIA_UNIT_SIZE boundary. */
+        /* Optimization for reads that are already aligned to a GAMECARD_PAGE_SIZE boundary. */
         rc = fsStorageRead(&g_gameCardStorage, base_offset, out_u8, read_size);
         if (R_FAILED(rc))
         {
@@ -853,8 +853,8 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         success = true;
     } else {
         /* Fix offset and/or size to avoid unaligned reads. */
-        u64 block_start_offset = ALIGN_DOWN(base_offset, GAMECARD_MEDIA_UNIT_SIZE);
-        u64 block_end_offset = ALIGN_UP(base_offset + read_size, GAMECARD_MEDIA_UNIT_SIZE);
+        u64 block_start_offset = ALIGN_DOWN(base_offset, GAMECARD_PAGE_SIZE);
+        u64 block_end_offset = ALIGN_UP(base_offset + read_size, GAMECARD_PAGE_SIZE);
         u64 block_size = (block_end_offset - block_start_offset);
         
         u64 data_start_offset = (base_offset - block_start_offset);
@@ -976,8 +976,8 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     
     bool success = false, dump_fs_header = false;
     
-    if ((name && !*name) || offset < (GAMECARD_CERTIFICATE_OFFSET + sizeof(FsGameCardCertificate)) || !IS_ALIGNED(offset, GAMECARD_MEDIA_UNIT_SIZE) || \
-        (size && (!IS_ALIGNED(size, GAMECARD_MEDIA_UNIT_SIZE) || (offset + size) > g_gameCardStorageTotalSize)))
+    if ((name && !*name) || offset < (GAMECARD_CERTIFICATE_OFFSET + sizeof(FsGameCardCertificate)) || !IS_ALIGNED(offset, GAMECARD_PAGE_SIZE) || \
+        (size && (!IS_ALIGNED(size, GAMECARD_PAGE_SIZE) || (offset + size) > g_gameCardStorageTotalSize)))
     {
         LOG_MSG("Invalid parameters!");
         goto end;
@@ -1039,7 +1039,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     
     /* Calculate full Hash FS header size. */
     fs_ctx->header_size = (sizeof(HashFileSystemHeader) + (fs_header.entry_count * sizeof(HashFileSystemEntry)) + fs_header.name_table_size);
-    fs_ctx->header_size = ALIGN_UP(fs_ctx->header_size, GAMECARD_MEDIA_UNIT_SIZE);
+    fs_ctx->header_size = ALIGN_UP(fs_ctx->header_size, GAMECARD_PAGE_SIZE);
     
     /* Allocate memory for the full Hash FS header. */
     fs_ctx->header = calloc(fs_ctx->header_size, sizeof(u8));
