@@ -34,12 +34,12 @@ extern "C" {
 typedef struct {
     u8 signature[0x100];        ///< RSA-2048-PSS with SHA-256 signature over the rest of the data.
     u32 magic;                  ///< "CERT".
-    u8 reserved_1[0x4];
+    u32 version;
     u8 kek_index;
-    u8 reserved_2[0x7];
+    u8 reserved[0x7];
     u8 device_id[0x10];
-    u8 reserved_3[0x10];
-    u8 encrypted_data[0xD0];
+    u8 iv[0x10];
+    u8 data[0xD0];              ///< Encrypted using the IV from this struct and an unknown key.
 } FsGameCardCertificate;
 
 NXDT_ASSERT(FsGameCardCertificate, 0x200);
