@@ -40,19 +40,16 @@ bool servicesInitialize();
 /// Closes services previously initialized by servicesInitialize().
 void servicesClose();
 
-/// Checks if a service is running by its name.
-/// Uses the smRegisterService() call, which may crash under development units.
+/// Checks if a service is running using its name.
+/// Wrapper for the "AtmosphereHasService" SM API extension from Atmosphère and Atmosphère-based CFWs.
+/// Perfectly safe to use under development units. Not available in older Atmosphère releases.
 bool servicesCheckRunningServiceByName(const char *name);
 
-/// Check if a service has been initialized by its name.
+/// Check if a service has been initialized using its name.
 bool servicesCheckInitializedServiceByName(const char *name);
 
 /// Changes CPU/MEM clock rates at runtime.
 void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate);
-
-/// Wrapper for the "AtmosphereHasService" SM API extension from Atmosphère and Atmosphère-based CFWs.
-/// Perfectly safe under development units. Not available in older Atmosphère releases.
-Result servicesHasService(bool *out, const char *name);
 
 #ifdef __cplusplus
 }

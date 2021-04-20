@@ -39,7 +39,8 @@ typedef struct {
 
 /* Function prototypes. */
 
-static Result smAtmosphereHasService(bool *out, SmServiceName name);
+static Result servicesAtmosphereHasService(bool *out, SmServiceName name);
+static bool servicesGetExosphereApiVersion(u32 *out);
 
 static Result servicesNifmUserInitialize(void);
 static bool servicesClkGetServiceType(void *arg);
@@ -69,6 +70,11 @@ static bool g_clkSvcUsePcv = false;
 static ClkrstSession g_clkrstCpuSession = {0}, g_clkrstMemSession = {0};
 
 static Mutex g_servicesMutex = 0;
+
+/* Atmosphère-related constants. */
+static const u32 g_smAtmosphereHasService = 65100;
+static const SplConfigItem SplConfigItem_ExosphereApiVersion = (SplConfigItem)65000;
+static const u32 g_atmosphereTipcVersion = MAKEHOSVERSION(0, 19, 0);
 
 bool servicesInitialize(void)
 {
@@ -133,21 +139,20 @@ void servicesClose(void)
 
 bool servicesCheckRunningServiceByName(const char *name)
 {
-    if (!name || !*name) return false;
+    if (!name || !*name)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
     
     Result rc = 0;
-    Handle handle = INVALID_HANDLE;
+    bool out = false;
     SmServiceName service_name = smEncodeName(name);
-    bool running = false;
     
-    rc = smRegisterService(&handle, service_name, false, 1);
-    if (R_FAILED(rc)) LOG_MSG("smRegisterService failed for \"%s\"! (0x%08X).", name, rc);
-    running = R_FAILED(rc);
+    rc = servicesAtmosphereHasService(&out, service_name);
+    if (R_FAILED(rc)) LOG_MSG("servicesAtmosphereHasService failed for \"%s\"! (0x%08X).", name, rc);
     
-    if (handle != INVALID_HANDLE) svcCloseHandle(handle);
-    if (!running) smUnregisterService(service_name);
-    
-    return running;
+    return out;
 }
 
 bool servicesCheckInitializedServiceByName(const char *name)
@@ -191,31 +196,49 @@ void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
     mutexUnlock(&g_servicesMutex);
 }
 
-Result servicesHasService(bool *out, const char *name)
+/* SM API extension available in Atmosphère and Atmosphère-based CFWs. */
+static Result servicesAtmosphereHasService(bool *out, SmServiceName name)
 {
-    if (!out || !name || !*name)
+    u8 tmp = 0;
+    Result rc = 0;
+    u32 version = 0;
+    
+    /* Check if service is running. */
+    /* Dispatch IPC request using CMIF or TIPC serialization depending on our current environment. */
+    if (hosversionAtLeast(12, 0, 0) || (servicesGetExosphereApiVersion(&version) && version >= g_atmosphereTipcVersion))
     {
-        LOG_MSG("Invalid parameters!");
-        return MAKERESULT(Module_Libnx, LibnxError_IoError);
+        rc = tipcDispatchInOut(smGetServiceSessionTipc(), g_smAtmosphereHasService, name, tmp);
+    } else {
+        rc = serviceDispatchInOut(smGetServiceSession(), g_smAtmosphereHasService, name, tmp);
     }
     
-    *out = false;
-    Result rc = 0;
-    SmServiceName service_name = smEncodeName(name);
-    
-    rc = smAtmosphereHasService(out, service_name);
-    if (R_FAILED(rc)) LOG_MSG("smAtmosphereHasService failed for \"%s\"! (0x%08X).", name, rc);
+    if (R_SUCCEEDED(rc) && out) *out = tmp;
     
     return rc;
 }
 
-/* SM API extension available in Atmosphère and Atmosphère-based CFWs. */
-static Result smAtmosphereHasService(bool *out, SmServiceName name)
+/* SMC API extension available in Atmosphère and Atmosphère-based CFWs. */
+static bool servicesGetExosphereApiVersion(u32 *out)
 {
-    u8 tmp = 0;
-    Result rc = serviceDispatchInOut(smGetServiceSession(), 65100, name, tmp);
-    if (R_SUCCEEDED(rc) && out) *out = tmp;
-    return rc;
+    if (!out)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    Result rc = 0;
+    u64 version = 0;
+    
+    rc = splGetConfig(SplConfigItem_ExosphereApiVersion, &version);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG("splGetConfig failed! (0x%08X).", rc);
+        return false;
+    }
+    
+    *out = (u32)((version >> 40) & 0xFFFFFF);
+    
+    return true;
 }
 
 static Result servicesNifmUserInitialize(void)

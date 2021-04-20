@@ -122,9 +122,11 @@ typedef enum {
 
 typedef enum {
     GameCardFwVersion_ForDev              = 0,
-    GameCardFwVersion_ForProd             = BIT(0),
-    GameCardFwVersion_ForProdSince400NUP  = BIT(1), ///< upp_version >= 268435456 (4.0.0-0.0) in GameCardInfo.
-    GameCardFwVersion_ForProdSince1100NUP = BIT(2)  ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_ForProd             = 1,
+    GameCardFwVersion_ForProdSince400NUP  = 2,  ///< upp_version >= 268435456 (4.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_ForDevSince1100NUP  = 3,  ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_ForProdSince1100NUP = 4,  ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_ForProdSince1200NUP = 5   ///< upp_version >= 805306368 (12.0.0-0.0) in GameCardInfo.
 } GameCardFwVersion;
 
 typedef enum {

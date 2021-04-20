@@ -653,10 +653,8 @@ void utilsOverclockSystem(bool overclock)
 
 static void _utilsGetCustomFirmwareType(void)
 {
-    bool has_srv = false, tx_srv = false, rnx_srv = false;
-    
-    tx_srv = (R_SUCCEEDED(servicesHasService(&has_srv, "tx")) && has_srv);
-    rnx_srv = (R_SUCCEEDED(servicesHasService(&has_srv, "rnx")) && has_srv);
+    bool tx_srv = servicesCheckRunningServiceByName("tx");
+    bool rnx_srv = servicesCheckRunningServiceByName("rnx");
     
     g_customFirmwareType = (rnx_srv ? UtilsCustomFirmwareType_ReiNX : (tx_srv ? UtilsCustomFirmwareType_SXOS : UtilsCustomFirmwareType_Atmosphere));
 }

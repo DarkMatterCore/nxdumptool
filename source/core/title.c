@@ -30,7 +30,7 @@
 typedef struct {
     u64 title_id;
     char name[32];
-} SystemTitleName;
+} TitleSystemEntry;
 
 /* Global variables. */
 
@@ -92,7 +92,7 @@ static const char *g_filenameTypeStrings[] = {
 
 /* Info retrieved from https://switchbrew.org/wiki/Title_list. */
 /* Titles bundled with the kernel are excluded. */
-static const SystemTitleName g_systemTitles[] = {
+static const TitleSystemEntry g_systemTitles[] = {
     /* System modules. */
     /* Meta + Program NCAs. */
     { 0x0100000000000006, "usb" },
@@ -198,7 +198,10 @@ static const SystemTitleName g_systemTitles[] = {
     { 0x0100000000000826, "RebootlessSystemUpdateVersion" },
     { 0x0100000000000827, "ContentActionTable" },
     { 0x0100000000000828, "FunctionBlackList" },
+    { 0x0100000000000829, "PlatformConfigCalcio" },
     { 0x0100000000000830, "NgWordT" },
+    { 0x0100000000000831, "PlatformConfigAula" },
+    { 0x0100000000000832, "CradleFirmwareAula" },   ///< Placeholder.
     
     /* System applets. */
     /* Meta + Program NCAs. */
@@ -1132,7 +1135,7 @@ static bool titleGenerateMetadataEntriesFromSystemTitles(void)
         }
         
         /* Fill information. */
-        const SystemTitleName *system_title = &(g_systemTitles[extra_app_count]);
+        const TitleSystemEntry *system_title = &(g_systemTitles[extra_app_count]);
         cur_app_metadata->title_id = system_title->title_id;
         sprintf(cur_app_metadata->lang_entry.name, system_title->name);
         
