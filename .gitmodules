@@ -1,7 +1,7 @@
 [submodule "libusbhsfs"]
 	path = libs/libusbhsfs
 	url = https://github.com/DarkMatterCore/libusbhsfs
-	branch = dev
+	branch = main
 [submodule "borealis"]
 	path = libs/borealis
 	url = https://github.com/DarkMatterCore/borealis
