@@ -73,6 +73,12 @@ Thanks to
 Changelog
 --------------
 
+**v1.1.14:**
+
+* Fixed support for HOS 12.0.x / AMS 0.19.x. If needed, TIPC serialization is now used to dispatch the `AtmosphereHasService` IPC request.
+
+This is only a bugfix release. I don't expect to release any new versions until the rewrite is finished - the only exception being fixing some kind of feature-breaking bug. Please understand.
+
 **v1.1.13:**
 
 * Fixed compatibility with latest libnx release.

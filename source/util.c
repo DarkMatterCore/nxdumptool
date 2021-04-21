@@ -106,6 +106,10 @@ char freeSpaceStr[32] = {'\0'};
 
 browser_entry_size_info *hfs0ExeFsEntriesSizes = NULL;
 
+static const u32 g_smAtmosphereHasService = 65100;
+static const SplConfigItem SplConfigItem_ExosphereApiVersion = (SplConfigItem)65000;
+static const u32 g_atmosphereTipcVersion = MAKEHOSVERSION(0, 19, 0);
+
 void loadConfig()
 {
     // Set default configuration values
@@ -398,11 +402,36 @@ void unmountSysEmmcPartition()
     }
 }
 
+static bool getExosphereApiVersion(u32 *out)
+{
+    if (!out) return false;
+    
+    Result rc = 0;
+    u64 version = 0;
+    
+    rc = splGetConfig(SplConfigItem_ExosphereApiVersion, &version);
+    if (R_FAILED(rc)) return false;
+    
+    *out = (u32)((version >> 40) & 0xFFFFFF);
+    
+    return true;
+}
+
 static Result smAtmosphereHasService(bool *out, SmServiceName name)
 {
     u8 tmp = 0;
-    Result rc = serviceDispatchInOut(smGetServiceSession(), 65100, name, tmp);
+    Result rc = 0;
+    u32 version = 0;
+    
+    if (hosversionAtLeast(12, 0, 0) || (getExosphereApiVersion(&version) && version >= g_atmosphereTipcVersion))
+    {
+        rc = tipcDispatchInOut(smGetServiceSessionTipc(), g_smAtmosphereHasService, name, tmp);
+    } else {
+        rc = serviceDispatchInOut(smGetServiceSession(), g_smAtmosphereHasService, name, tmp);
+    }
+    
     if (R_SUCCEEDED(rc) && out) *out = tmp;
+    
     return rc;
 }
 
@@ -411,9 +440,9 @@ static bool isServiceRunning(const char *name)
     if (!name || !*name) return false;
     
     bool out = false;
-    SmServiceName service_name = smEncodeName(name);
+    SmServiceName srv_name = smEncodeName(name);
     
-    Result rc = smAtmosphereHasService(&out, service_name);
+    Result rc = smAtmosphereHasService(&out, srv_name);
     return (R_SUCCEEDED(rc) && out);
 }
 
