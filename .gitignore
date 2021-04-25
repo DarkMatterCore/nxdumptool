@@ -14,5 +14,5 @@ host/nxdumptool
 *.log
 *.spec
 *.exe
+main.cpp
 /code_templates/tmp/*
-

@@ -31,6 +31,8 @@ int g_argc = 0;
 char **g_argv = NULL;
 const char *g_appLaunchPath = NULL;
 
+static PadState g_padState = {0};
+
 static Mutex g_fileMutex = 0;
 static CondVar g_readCondvar = 0, g_writeCondvar = 0;
 
@@ -47,6 +49,34 @@ typedef struct
     bool write_error;
     bool transfer_cancelled;
 } ThreadSharedData;
+
+static void utilsScanPads(void)
+{
+    padUpdate(&g_padState);
+}
+
+static u64 utilsGetButtonsDown(void)
+{
+    return padGetButtonsDown(&g_padState);
+}
+
+static u64 utilsGetButtonsHeld(void)
+{
+    return padGetButtons(&g_padState);
+}
+
+static void utilsWaitForButtonPress(u64 flag)
+{
+    /* Don't consider stick movement as button inputs. */
+    if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
+                        HidNpadButton_StickRUp | HidNpadButton_StickRDown);
+    
+    while(appletMainLoop())
+    {
+        utilsScanPads();
+        if (utilsGetButtonsDown() & flag) break;
+    }
+}
 
 static void consolePrint(const char *text, ...)
 {
@@ -317,6 +347,12 @@ int main(int argc, char *argv[])
         ret = -1;
         goto out;
     }
+    
+    /* Configure input. */
+    /* Up to 8 different, full controller inputs. */
+    /* Individual Joy-Cons not supported. */
+    padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
+    padInitializeWithMask(&g_padState, 0x1000000FFUL);
     
     consoleInit(NULL);
     

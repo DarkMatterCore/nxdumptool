@@ -34,7 +34,7 @@ extern "C" {
 size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src, size_t size, u64 sector, size_t sector_size, bool encrypt);
 
 /// Initializes an output AES partial counter using an initial CTR value and an offset.
-/// The size for both 'out' and 'ctr' should be at least AES_BLOCK_SIZE.
+/// The sizes for 'out' and 'ctr' should be at least AES_BLOCK_SIZE and 8 bytes, respectively.
 NX_INLINE void aes128CtrInitializePartialCtr(u8 *out, const u8 *ctr, u64 offset)
 {
     if (!out || !ctr) return;
@@ -50,7 +50,7 @@ NX_INLINE void aes128CtrInitializePartialCtr(u8 *out, const u8 *ctr, u64 offset)
 }
 
 /// Updates the provided AES partial counter using an offset.
-/// 'out' size should be at least AES_BLOCK_SIZE.
+/// Size for 'out' should be at least AES_BLOCK_SIZE.
 NX_INLINE void aes128CtrUpdatePartialCtr(u8 *ctr, u64 offset)
 {
     if (!ctr) return;
@@ -65,7 +65,7 @@ NX_INLINE void aes128CtrUpdatePartialCtr(u8 *ctr, u64 offset)
 }
 
 /// Updates the provided AES partial counter using an offset and a 32-bit CTR value.
-/// 'out' size should be at least AES_BLOCK_SIZE.
+/// Size for 'out' should be at least AES_BLOCK_SIZE.
 NX_INLINE void aes128CtrUpdatePartialCtrEx(u8 *ctr, u32 ctr_val, u64 offset)
 {
     if (!ctr) return;

@@ -115,10 +115,11 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     
     if (out->storage_id == NcmStorageId_GameCard)
     {
-        /* Retrieve gamecard NCA offset. */
+        /* Generate gamecard NCA filename. */
         char nca_filename[0x30] = {0};
         sprintf(nca_filename, "%s.%s", out->content_id_str, out->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
         
+        /* Retrieve gamecard NCA offset. */
         if (!gamecardGetHashFileSystemEntryInfoByName(hfs_partition_type, nca_filename, &(out->gamecard_offset), NULL))
         {
             LOG_MSG("Error retrieving offset for \"%s\" entry in secure hash FS partition!", nca_filename);
@@ -225,14 +226,21 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
             } else {
                 if (fs_ctx->encryption_type == NcaEncryptionType_AesXts)
                 {
-                    /* We need to create two different contexts: one for decryption and another one for encryption. */
+                    /* We need to create two different contexts with AES-128-XTS: one for decryption and another one for encryption. */
                     aes128XtsContextCreate(&(fs_ctx->xts_decrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, false);
                     aes128XtsContextCreate(&(fs_ctx->xts_encrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, true);
                 } else
                 if (fs_ctx->encryption_type == NcaEncryptionType_AesCtr || fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx)
                 {
+                    /* Patch RomFS sections also use the AES-128-CTR key from the decrypted NCA key area, for some reason. */
                     aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->decrypted_key_area.aes_ctr, fs_ctx->ctr);
-                }
+                } /***else
+                if (fs_ctx->encryption_type == NcaEncryptionType_AesCtr)
+                {
+                    aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->decrypted_key_area.aes_ctr, fs_ctx->ctr);
+                } else {
+                    aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->decrypted_key_area.aes_ctr_ex, fs_ctx->ctr);
+                }***/
             }
         }
         
@@ -350,17 +358,19 @@ bool ncaRemoveTitlekeyCrypto(NcaContext *ctx)
     /* Don't proceed if we're not dealing with a NCA with a populated rights ID field, or if we couldn't retrieve the titlekey for it. */
     if (!ctx->rights_id_available || !ctx->titlekey_retrieved) return true;
     
-    /* Copy decrypted titlekey to the decrypted NCA key area. */
-    /* This will be reencrypted at a later stage. */
-    for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
+    /* Copy decrypted titlekey to the decrypted NCA key area. This will be reencrypted at a later stage. */
+    /* AES-128-XTS is not used in FS sections from NCAs with titlekey crypto. */
+    /* Patch RomFS sections also use the AES-128-CTR key from the decrypted NCA key area, for some reason. */
+    memcpy(ctx->decrypted_key_area.aes_ctr, ctx->titlekey, AES_128_KEY_SIZE);
+    
+    /***for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
-        /* AES-128-XTS is not used in FS sections from NCAs with titlekey crypto. */
         NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
         if (!fs_ctx->enabled || (fs_ctx->encryption_type != NcaEncryptionType_AesCtr && fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx)) continue;
         
         u8 *key_ptr = (fs_ctx->encryption_type == NcaEncryptionType_AesCtr ? ctx->decrypted_key_area.aes_ctr : ctx->decrypted_key_area.aes_ctr_ex);
         memcpy(key_ptr, ctx->titlekey, AES_128_KEY_SIZE);
-    }
+    }***/
     
     /* Encrypt NCA key area. */
     if (!ncaEncryptKeyArea(ctx))
@@ -467,9 +477,11 @@ void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE])
 {
     if (!ctx) return;
     
+    /* Update content ID. */
     memcpy(ctx->content_id.c, hash, sizeof(ctx->content_id.c));
     utilsGenerateHexStringFromData(ctx->content_id_str, sizeof(ctx->content_id_str), ctx->content_id.c, sizeof(ctx->content_id.c));
     
+    /* Update content hash. */
     memcpy(ctx->hash, hash, sizeof(ctx->hash));
     utilsGenerateHexStringFromData(ctx->hash_str, sizeof(ctx->hash_str), ctx->hash, sizeof(ctx->hash));
 }
@@ -602,35 +614,46 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
     }
     
     Result rc = 0;
-    const u8 *kek_src = NULL;
-    u8 key_count = 0, tmp_kek[AES_128_KEY_SIZE] = {0};
+    const u8 *kaek_src = NULL, null_key[AES_128_KEY_SIZE] = {0};
+    u8 key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4), aes_kek[AES_128_KEY_SIZE] = {0};
     
-    /* Check if we're dealing with a NCA0 with a plain text key area. */
+    /* Check if we're dealing with a NCA0 with a plaintext key area. */
     if (ncaIsVersion0KeyAreaEncrypted(ctx))
     {
         memcpy(&(ctx->decrypted_key_area), &(ctx->header.encrypted_key_area), NCA_USED_KEY_AREA_SIZE);
         return true;
     }
     
-    kek_src = keysGetKeyAreaEncryptionKeySource(ctx->header.kaek_index);
-    if (!kek_src)
+    /* Get KAEK source for this KAEK index. */
+    kaek_src = keysGetKeyAreaEncryptionKeySource(ctx->header.kaek_index);
+    if (!kaek_src)
     {
         LOG_MSG("Unable to retrieve KAEK source for index 0x%02X!", ctx->header.kaek_index);
         return false;
     }
     
-    rc = splCryptoGenerateAesKek(kek_src, ctx->key_generation, 0, tmp_kek);
+    /* Generate AES key encryption key. */
+    rc = splCryptoGenerateAesKek(kaek_src, ctx->key_generation, 0, aes_kek);
     if (R_FAILED(rc))
     {
         LOG_MSG("splCryptoGenerateAesKek failed! (0x%08X).", rc);
         return false;
     }
     
-    key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4);
+    /* Clear decrypted key area. */
+    memset(&(ctx->decrypted_key_area), 0, NCA_USED_KEY_AREA_SIZE);
     
+    /* Process key area. */
     for(u8 i = 0; i < key_count; i++)
     {
-        rc = splCryptoGenerateAesKey(tmp_kek, (u8*)&(ctx->header.encrypted_key_area) + (i * AES_128_KEY_SIZE), (u8*)&(ctx->decrypted_key_area) + (i * AES_128_KEY_SIZE));
+        const u8 *src_key = ((u8*)&(ctx->header.encrypted_key_area) + (i * AES_128_KEY_SIZE));
+        u8 *dst_key = ((u8*)&(ctx->decrypted_key_area) + (i * AES_128_KEY_SIZE));
+        
+        /* Don't proceed if we're dealing with a null key. */
+        if (!memcmp(src_key, null_key, AES_128_KEY_SIZE)) continue;
+        
+        /* Decrypt current key area entry. */
+        rc = splCryptoGenerateAesKey(aes_kek, src_key, dst_key);
         if (R_FAILED(rc))
         {
             LOG_MSG("splCryptoGenerateAesKey failed to decrypt NCA key area entry #%u! (0x%08X).", i, rc);
@@ -649,8 +672,8 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
         return false;
     }
     
-    u8 key_count = 0;
-    const u8 *kaek = NULL;
+    u8 key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4);
+    const u8 *kaek = NULL, null_key[AES_128_KEY_SIZE] = {0};
     Aes128Context key_area_ctx = {0};
     
     /* Check if we're dealing with a NCA0 with a plaintext key area. */
@@ -660,6 +683,7 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
         return true;
     }
     
+    /* Get KAEK for these key generation and KAEK index values. */
     kaek = keysGetKeyAreaEncryptionKey(ctx->key_generation, ctx->header.kaek_index);
     if (!kaek)
     {
@@ -667,10 +691,24 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
         return false;
     }
     
-    key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4);
+    /* Clear encrypted key area. */
+    memset(&(ctx->header.encrypted_key_area), 0, NCA_USED_KEY_AREA_SIZE);
     
+    /* Initialize AES-128-ECB encryption context using the retrieved KAEK. */
     aes128ContextCreate(&key_area_ctx, kaek, true);
-    for(u8 i = 0; i < key_count; i++) aes128EncryptBlock(&key_area_ctx, (u8*)&(ctx->header.encrypted_key_area) + (i * AES_128_KEY_SIZE), (u8*)&(ctx->decrypted_key_area) + (i * AES_128_KEY_SIZE));
+    
+    /* Process key area. */
+    for(u8 i = 0; i < key_count; i++)
+    {
+        const u8 *src_key = ((u8*)&(ctx->decrypted_key_area) + (i * AES_128_KEY_SIZE));
+        u8 *dst_key = ((u8*)&(ctx->header.encrypted_key_area) + (i * AES_128_KEY_SIZE));
+        
+        /* Don't proceed if we're dealing with a null key. */
+        if (!memcmp(src_key, null_key, AES_128_KEY_SIZE)) continue;
+        
+        /* Encrypt current key area entry. */
+        aes128EncryptBlock(&key_area_ctx, dst_key, src_key);
+    }
     
     return true;
 }
@@ -681,9 +719,7 @@ NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx)
     
     u8 nca0_key_area_hash[SHA256_HASH_SIZE] = {0};
     sha256CalculateHash(nca0_key_area_hash, &(ctx->header.encrypted_key_area), NCA_USED_KEY_AREA_SIZE);
-    if (!memcmp(nca0_key_area_hash, g_nca0KeyAreaHash, SHA256_HASH_SIZE)) return false;
-    
-    return true;
+    return (memcmp(nca0_key_area_hash, g_nca0KeyAreaHash, SHA256_HASH_SIZE) != 0);
 }
 
 NX_INLINE u8 ncaGetKeyGenerationValue(NcaContext *ctx)
@@ -696,18 +732,12 @@ NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx)
 {
     if (!ctx) return false;
     
-    bool rights_id_available = false;
-    
     for(u8 i = 0; i < 0x10; i++)
     {
-        if (ctx->header.rights_id.c[i] != 0)
-        {
-            rights_id_available = true;
-            break;
-        }
+        if (ctx->header.rights_id.c[i]) return true;
     }
     
-    return rights_id_available;
+    return false;
 }
 
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, bool lock)
