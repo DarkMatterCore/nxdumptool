@@ -83,6 +83,8 @@ void ncaFreeCryptoBuffer(void)
 bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik)
 {
     NcmContentStorage *ncm_storage = NULL;
+    u8 fs_header_hash_calc[SHA256_HASH_SIZE] = {0};
+    u8 valid_fs_section_cnt = 0;
     
     if (!out || (storage_id != NcmStorageId_GameCard && !(ncm_storage = titleGetNcmStorageByStorageId(storage_id))) || \
         (storage_id == NcmStorageId_GameCard && hfs_partition_type >= GameCardHashFileSystemPartitionType_Count) || !content_info || content_info->content_type > NcmContentType_DeltaFragment)
@@ -151,11 +153,12 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         }
     }
     
-    /* Parse sections. */
+    /* Parse NCA FS sections. */
     for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
         NcaFsInfo *fs_info = &(out->header.fs_info[i]);
         NcaFsSectionContext *fs_ctx = &(out->fs_ctx[i]);
+        u8 *fs_header_hash = out->header.fs_header_hash[i].hash;
         
         /* Fill section context. */
         fs_ctx->nca_ctx = out;
@@ -164,6 +167,12 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         
         /* Don't proceed if this NCA FS section isn't populated. */
         if (!ncaIsFsInfoEntryValid(fs_info)) continue;
+        
+        /* Calculate NCA FS section header hash. */
+        sha256CalculateHash(fs_header_hash_calc, &(fs_ctx->header), sizeof(NcaFsHeader));
+        
+        /* Don't proceed if there's a checksum mismatch. */
+        if (memcmp(fs_header_hash_calc, fs_header_hash, SHA256_HASH_SIZE) != 0) continue;
         
         /* Calculate section offset and size. */
         fs_ctx->section_offset = NCA_FS_SECTOR_OFFSET(fs_info->start_sector);
@@ -246,9 +255,14 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         
         /* Enable FS context if we got up to this point. */
         fs_ctx->enabled = true;
+        
+        /* Increase valid NCA FS section count. */
+        valid_fs_section_cnt++;
     }
     
-    return true;
+    if (!valid_fs_section_cnt) LOG_MSG("Unable to identify any valid FS sections in NCA \"%s\"!", out->content_id_str);
+    
+    return (valid_fs_section_cnt > 0);
 }
 
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
@@ -425,7 +439,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
         NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
         
         /* Don't proceed if this NCA FS section isn't populated. */
-        if (ctx->format_version != NcaVersion_Nca3 && !ncaIsFsInfoEntryValid(fs_info)) continue;
+        if (!ncaIsFsInfoEntryValid(fs_info)) continue;
         
         /* The AES-XTS sector number for each NCA FS header varies depending on the NCA format version. */
         /* NCA3 uses sector number 0 for the NCA header, then increases it with each new sector (e.g. making the first NCA FS section header use sector number 2, and so on). */
@@ -577,7 +591,7 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
         NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
         
         /* Don't proceed if this NCA FS section isn't populated. */
-        if (ctx->format_version != NcaVersion_Nca3 && !ncaIsFsInfoEntryValid(fs_info)) continue;
+        if (!ncaIsFsInfoEntryValid(fs_info)) continue;
         
         /* Read NCA FS section header. */
         u64 fs_header_offset = (ctx->format_version != NcaVersion_Nca0 ? (sizeof(NcaHeader) + (i * sizeof(NcaFsHeader))) : NCA_FS_SECTOR_OFFSET(fs_info->start_sector));
