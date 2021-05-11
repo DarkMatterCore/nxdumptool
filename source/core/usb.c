@@ -45,8 +45,8 @@
 #define USB_HS_EP_MAX_PACKET_SIZE   0x200                       /* 512 bytes. */
 
 #define USB_SS_BCD_REVISION         0x0300                      /* USB 3.0. */
-#define USB_SS_EP_MAX_PACKET_SIZE   0x400                       /* 1024 bytes. */
 #define USB_SS_EP0_MAX_PACKET_SIZE  9                           /* 512 bytes (1 << 9). */
+#define USB_SS_EP_MAX_PACKET_SIZE   0x400                       /* 1024 bytes. */
 
 #define USB_BOS_SIZE                0x16                        /* usb_bos_descriptor + usb_2_0_extension_descriptor + usb_ss_usb_device_capability_descriptor. */
 
@@ -1329,6 +1329,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         if (g_usbSessionStarted) ueventSignal(&g_usbTimeoutEvent);
         
         if (!thread_exit) LOG_MSG("eventWait failed! (0x%08X) (URB ID %u).", rc, urb_id);
+        
         return false;
     }
     

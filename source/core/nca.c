@@ -361,7 +361,7 @@ void ncaSetDownloadDistributionType(NcaContext *ctx)
     LOG_MSG("Set download distribution type to %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
 }
 
-bool ncaRemoveTitlekeyCrypto(NcaContext *ctx)
+bool ncaRemoveTitleKeyCrypto(NcaContext *ctx)
 {
     if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !*(ctx->content_id_str) || ctx->content_type > NcmContentType_DeltaFragment)
     {
@@ -418,6 +418,12 @@ bool ncaEncryptHeader(NcaContext *ctx)
     size_t crypt_res = 0;
     const u8 *header_key = keysGetNcaHeaderKey();
     Aes128XtsContext hdr_aes_ctx = {0}, nca0_fs_header_ctx = {0};
+    
+    if (!header_key)
+    {
+        LOG_MSG("Failed to retrieve NCA header key!");
+        return false;
+    }
     
     /* Prepare AES-128-XTS contexts. */
     aes128XtsContextCreate(&hdr_aes_ctx, header_key, header_key + AES_128_KEY_SIZE, true);
@@ -547,6 +553,12 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
     const u8 *header_key = keysGetNcaHeaderKey();
     Aes128XtsContext hdr_aes_ctx = {0}, nca0_fs_header_ctx = {0};
     
+    if (!header_key)
+    {
+        LOG_MSG("Failed to retrieve NCA header key!");
+        return false;
+    }
+    
     /* Read NCA header. */
     if (!ncaReadContentFile(ctx, &(ctx->encrypted_header), sizeof(NcaHeader), 0))
     {
@@ -627,31 +639,14 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
         return false;
     }
     
-    Result rc = 0;
-    const u8 *kaek_src = NULL, null_key[AES_128_KEY_SIZE] = {0};
-    u8 key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4), aes_kek[AES_128_KEY_SIZE] = {0};
+    const u8 null_key[AES_128_KEY_SIZE] = {0};
+    u8 key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4);
     
     /* Check if we're dealing with a NCA0 with a plaintext key area. */
     if (ncaIsVersion0KeyAreaEncrypted(ctx))
     {
         memcpy(&(ctx->decrypted_key_area), &(ctx->header.encrypted_key_area), NCA_USED_KEY_AREA_SIZE);
         return true;
-    }
-    
-    /* Get KAEK source for this KAEK index. */
-    kaek_src = keysGetKeyAreaEncryptionKeySource(ctx->header.kaek_index);
-    if (!kaek_src)
-    {
-        LOG_MSG("Unable to retrieve KAEK source for index 0x%02X!", ctx->header.kaek_index);
-        return false;
-    }
-    
-    /* Generate AES key encryption key. */
-    rc = splCryptoGenerateAesKek(kaek_src, ctx->key_generation, 0, aes_kek);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG("splCryptoGenerateAesKek failed! (0x%08X).", rc);
-        return false;
     }
     
     /* Clear decrypted key area. */
@@ -667,10 +662,9 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
         if (!memcmp(src_key, null_key, AES_128_KEY_SIZE)) continue;
         
         /* Decrypt current key area entry. */
-        rc = splCryptoGenerateAesKey(aes_kek, src_key, dst_key);
-        if (R_FAILED(rc))
+        if (!keysDecryptNcaKeyAreaEntry(ctx->header.kaek_index, ctx->key_generation, dst_key, src_key))
         {
-            LOG_MSG("splCryptoGenerateAesKey failed to decrypt NCA key area entry #%u! (0x%08X).", i, rc);
+            LOG_MSG("Failed to decrypt NCA key area entry #%u!", i);
             return false;
         }
     }
@@ -698,10 +692,10 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
     }
     
     /* Get KAEK for these key generation and KAEK index values. */
-    kaek = keysGetKeyAreaEncryptionKey(ctx->key_generation, ctx->header.kaek_index);
+    kaek = keysGetNcaKeyAreaEncryptionKey(ctx->header.kaek_index, ctx->key_generation);
     if (!kaek)
     {
-        LOG_MSG("Unable to retrieve KAEK for key generation 0x%02X and KAEK index 0x%02X!", ctx->key_generation, ctx->header.kaek_index);
+        LOG_MSG("Unable to retrieve KAEK for KAEK index 0x%02X and key generation 0x%02X!", ctx->header.kaek_index, ctx->key_generation);
         return false;
     }
     

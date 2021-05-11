@@ -77,7 +77,8 @@ typedef enum {
 typedef enum {
     NcaKeyAreaEncryptionKeyIndex_Application = 0,
     NcaKeyAreaEncryptionKeyIndex_Ocean       = 1,
-    NcaKeyAreaEncryptionKeyIndex_System      = 2
+    NcaKeyAreaEncryptionKeyIndex_System      = 2,
+    NcaKeyAreaEncryptionKeyIndex_Count       = 3
 } NcaKeyAreaEncryptionKeyIndex;
 
 /// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
@@ -91,7 +92,8 @@ typedef enum {
     NcaKeyGeneration_810_811  = 9,
     NcaKeyGeneration_900_901  = 10,
     NcaKeyGeneration_910_1201 = 11,
-    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1201
+    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1201,
+    NcaKeyGeneration_Max      = 32
 } NcaKeyGeneration;
 
 typedef struct {
@@ -453,7 +455,7 @@ void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierar
 void ncaSetDownloadDistributionType(NcaContext *ctx);
 
 /// Removes titlekey crypto dependency from a NCA context by wiping the Rights ID from the underlying NCA header and copying the decrypted titlekey to the NCA key area.
-bool ncaRemoveTitlekeyCrypto(NcaContext *ctx);
+bool ncaRemoveTitleKeyCrypto(NcaContext *ctx);
 
 /// Encrypts NCA header and NCA FS headers.
 /// The 'encrypted_header' member from the NCA context and its underlying NCA FS section contexts is updated by this function.

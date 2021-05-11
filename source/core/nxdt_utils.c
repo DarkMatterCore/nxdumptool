@@ -54,7 +54,8 @@ static int g_nxLinkSocketFd = -1;
 static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB" };
 static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
 
-static const char *g_illegalFileSystemChars = "\\/:*?\"<>|^";
+static const char g_illegalFileSystemChars[] = "\\/:*?\"<>|";
+static const size_t g_illegalFileSystemCharsLength = (MAX_ELEMENTS(g_illegalFileSystemChars) - 1);
 
 /* Function prototypes. */
 
@@ -103,16 +104,16 @@ bool utilsInitializeResources(void)
     u32 hos_version = hosversionGet();
     LOG_MSG("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
     
-    /* Retrieve custom firmware type. */
-    _utilsGetCustomFirmwareType();
-    LOG_MSG("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
-    
     /* Initialize needed services. */
     if (!servicesInitialize())
     {
         LOG_MSG("Failed to initialize needed services!");
         goto end;
     }
+    
+    /* Retrieve custom firmware type. */
+    _utilsGetCustomFirmwareType();
+    LOG_MSG("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
     
     /* Check if we're not running under a development unit. */
     if (!_utilsIsDevelopmentUnit()) goto end;
@@ -421,7 +422,7 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
     
     for(size_t i = 0; i < strsize; i++)
     {
-        if (memchr(g_illegalFileSystemChars, str[i], sizeof(g_illegalFileSystemChars) - 1) || str[i] < 0x20 || (!ascii_only && str[i] == 0x7F) || (ascii_only && str[i] >= 0x7F)) str[i] = '_';
+        if (memchr(g_illegalFileSystemChars, str[i], g_illegalFileSystemCharsLength) || str[i] < 0x20 || (!ascii_only && str[i] == 0x7F) || (ascii_only && str[i] >= 0x7F)) str[i] = '_';
     }
 }
 
@@ -646,9 +647,9 @@ FsStorage *utilsGetEmmcBisSystemPartitionStorage(void)
 
 void utilsOverclockSystem(bool overclock)
 {
-    u32 cpuClkRate = ((overclock ? CPU_CLKRT_OVERCLOCKED : CPU_CLKRT_NORMAL) * 1000000);
-    u32 memClkRate = ((overclock ? MEM_CLKRT_OVERCLOCKED : MEM_CLKRT_NORMAL) * 1000000);
-    servicesChangeHardwareClockRates(cpuClkRate, memClkRate);
+    u32 cpu_rate = ((overclock ? CPU_CLKRT_OVERCLOCKED : CPU_CLKRT_NORMAL) * 1000000);
+    u32 mem_rate = ((overclock ? MEM_CLKRT_OVERCLOCKED : MEM_CLKRT_NORMAL) * 1000000);
+    servicesChangeHardwareClockRates(cpu_rate, mem_rate);
 }
 
 static void _utilsGetCustomFirmwareType(void)
@@ -727,7 +728,7 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
     if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
     
     /* TO DO: read config here to actually know the value to use with utilsOverclockSystem. */
-    utilsOverclockSystem(false);
+    utilsOverclockSystem(true);
 }
 
 static void utilsPrintConsoleError(void)

@@ -26,7 +26,6 @@
 #include "save.h"
 #include "es.h"
 #include "keys.h"
-#include "rsa.h"
 #include "gamecard.h"
 #include "mem.h"
 #include "aes.h"
@@ -36,8 +35,6 @@
 
 #define TIK_LIST_STORAGE_PATH           "/ticket_list.bin"
 #define TIK_DB_STORAGE_PATH             "/ticket.bin"
-
-#define ETICKET_DEVKEY_PUBLIC_EXPONENT  0x10001
 
 #define ES_CTRKEY_ENTRY_ALIGNMENT       0x8
 
@@ -57,47 +54,23 @@ NXDT_ASSERT(TikListEntry, 0x20);
 /// This is always stored in pairs. The first entry holds the key/IV for the encrypted volatile ticket, while the second entry holds the key/IV for the encrypted entry in ticket_list.bin.
 /// First index in this list is always 0, and it's aligned to ES_CTRKEY_ENTRY_ALIGNMENT.
 typedef struct {
-    u32 idx;                ///< Entry index.
-    u8 key[AES_BLOCK_SIZE]; ///< AES-128-CTR key.
-    u8 ctr[AES_BLOCK_SIZE]; ///< AES-128-CTR counter/IV. Always zeroed out.
+    u32 idx;                    ///< Entry index.
+    u8 key[AES_128_KEY_SIZE];   ///< AES-128-CTR key.
+    u8 ctr[AES_128_KEY_SIZE];   ///< AES-128-CTR counter/IV. Always zeroed out.
 } TikEsCtrKeyEntry9x;
 
 NXDT_ASSERT(TikEsCtrKeyEntry9x, 0x24);
 
 /// Lookup pattern for TikEsCtrKeyEntry9x.
 typedef struct {
-    u32 idx1;                       ///< Always set to 0 (first entry).
-    u8 ctrdata[AES_BLOCK_SIZE * 2];
-    u32 idx2;                       ///< Always set to 1 (second entry).
+    u32 idx1;                           ///< Always set to 0 (first entry).
+    u8 ctrdata[AES_128_KEY_SIZE * 2];
+    u32 idx2;                           ///< Always set to 1 (second entry).
 } TikEsCtrKeyPattern9x;
 
 NXDT_ASSERT(TikEsCtrKeyPattern9x, 0x28);
 
-/// Used to parse the eTicket device key retrieved from PRODINFO via setcalGetEticketDeviceKey().
-/// Everything after the AES CTR is encrypted.
-typedef struct {
-    u8 ctr[0x10];
-    u8 exponent[0x100];
-    u8 modulus[0x100];
-    u32 public_exponent;    ///< Must match ETICKET_DEVKEY_PUBLIC_EXPONENT. Stored using big endian byte order.
-    u8 padding[0x14];
-    u64 device_id;
-    u8 ghash[0x10];
-} TikEticketDeviceKeyData;
-
-NXDT_ASSERT(TikEticketDeviceKeyData, 0x240);
-
 /* Global variables. */
-
-static SetCalRsa2048DeviceKey g_eTicketDeviceKey = {0};
-static bool g_eTicketDeviceKeyRetrieved = false;
-static Mutex g_eTicketDeviceKeyMutex = 0;
-
-/// Used during the RSA-OAEP titlekey decryption stage.
-static const u8 g_nullHash[0x20] = {
-    0xE3, 0xB0, 0xC4, 0x42, 0x98, 0xFC, 0x1C, 0x14, 0x9A, 0xFB, 0xF4, 0xC8, 0x99, 0x6F, 0xB9, 0x24,
-    0x27, 0xAE, 0x41, 0xE4, 0x64, 0x9B, 0x93, 0x4C, 0xA4, 0x95, 0x99, 0x1B, 0x78, 0x52, 0xB8, 0x55
-};
 
 static const char *g_tikTitleKeyTypeStrings[] = {
     [TikTitleKeyType_Common] = "common",
@@ -116,8 +89,8 @@ static MemoryLocation g_esMemoryLocation = {
 static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsId *id);
 static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRightsId *id);
 
-static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik);
-static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generation);
+static bool tikGetEncryptedTitleKeyFromTicket(Ticket *tik);
+static bool tikGetDecryptedTitleKey(void *dst, const void *src, u8 key_generation);
 
 static bool tikGetTitleKeyTypeFromRightsId(const FsRightsId *id, u8 *out);
 static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized);
@@ -126,9 +99,6 @@ static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf,
 static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u64 ticket_offset, u8 titlekey_type);
 
 static bool tikGetTicketTypeAndSize(void *data, u64 data_size, u8 *out_type, u64 *out_size);
-
-static bool tikRetrieveEticketDeviceKey(void);
-static bool tikTestKeyPairFromEticketDeviceKey(const void *e, const void *d, const void *n);
 
 bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gamecard)
 {
@@ -150,6 +120,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
     /* Clear output ticket. */
     memset(dst, 0, sizeof(Ticket));
     
+    /* Retrieve ticket data. */
     bool tik_retrieved = (use_gamecard ? tikRetrieveTicketFromGameCardByRightsId(dst, id) : tikRetrieveTicketFromEsSaveDataByRightsId(dst, id));
     if (!tik_retrieved)
     {
@@ -157,21 +128,18 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
         return false;
     }
     
-    mutexLock(&g_eTicketDeviceKeyMutex);
-    bool titlekey_retrieved = tikGetTitleKekEncryptedTitleKeyFromTicket(dst);
-    mutexUnlock(&g_eTicketDeviceKeyMutex);
-    
-    if (!titlekey_retrieved)
+    /* Get encrypted titlekey from ticket. */
+    if (!tikGetEncryptedTitleKeyFromTicket(dst))
     {
-        LOG_MSG("Unable to retrieve titlekey from ticket!");
+        LOG_MSG("Unable to retrieve encrypted titlekey from ticket!");
         return false;
     }
     
     /* Even though tickets do have a proper key_generation field, we'll just retrieve it from the rights_id field. */
     /* Old custom tools used to wipe the key_generation field or save its value to a different offset. */
-    if (!tikGetTitleKekDecryptedTitleKey(dst->dec_titlekey, dst->enc_titlekey, id->c[0xF]))
+    if (!tikGetDecryptedTitleKey(dst->dec_titlekey, dst->enc_titlekey, id->c[0xF]))
     {
-        LOG_MSG("Unable to perform titlekek decryption!");
+        LOG_MSG("Unable to decrypt titlekey!");
         return false;
     }
     
@@ -230,7 +198,7 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
     memset(tik_common_block->issuer, 0, sizeof(tik_common_block->issuer));
     sprintf(tik_common_block->issuer, "%s", cert_chain_issuer);
     
-    /* Wipe the titlekey block and copy the titlekek-encrypted titlekey to it. */
+    /* Wipe the titlekey block and copy the encrypted titlekey to it. */
     memset(tik_common_block->titlekey_block, 0, sizeof(tik_common_block->titlekey_block));
     memcpy(tik_common_block->titlekey_block, tik->enc_titlekey, 0x10);
     
@@ -371,7 +339,7 @@ end:
     return success;
 }
 
-static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
+static bool tikGetEncryptedTitleKeyFromTicket(Ticket *tik)
 {
     TikCommonBlock *tik_common_block = NULL;
     
@@ -381,38 +349,16 @@ static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
         return false;
     }
     
-    size_t out_keydata_size = 0;
-    u8 out_keydata[0x100] = {0};
-    
-    TikEticketDeviceKeyData *eticket_devkey = NULL;
-    
     switch(tik_common_block->titlekey_type)
     {
         case TikTitleKeyType_Common:
-            /* No console-specific crypto used. Copy titlekek-encrypted titlekey right away. */
+            /* No console-specific crypto used. Copy encrypted titlekey right away. */
             memcpy(tik->enc_titlekey, tik_common_block->titlekey_block, 0x10);
             break;
         case TikTitleKeyType_Personalized:
-            /* Retrieve eTicket device key. */
-            if (!tikRetrieveEticketDeviceKey())
-            {
-                LOG_MSG("Unable to retrieve eTicket device key!");
-                return false;
-            }
-            
-            eticket_devkey = (TikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
-            
-            /* Perform a RSA-OAEP decrypt operation to get the titlekek-encrypted titlekey. */
-            if (!rsa2048OaepDecryptAndVerify(out_keydata, 0x100, tik_common_block->titlekey_block, eticket_devkey->modulus, eticket_devkey->exponent, 0x100, g_nullHash, &out_keydata_size) || \
-                out_keydata_size < 0x10)
-            {
-                LOG_MSG("RSA-OAEP titlekey decryption failed!");
-                return false;
-            }
-            
-            /* Copy titlekek-encrypted titlekey. */
-            memcpy(tik->enc_titlekey, out_keydata, 0x10);
-            
+            /* The titlekey block is encrypted using RSA-OAEP with a console-specific RSA key. */
+            /* We have to perform a RSA-OAEP unwrap operation to get the encrypted titlekey. */
+            if (!keysDecryptRsaOaepWrappedTitleKey(tik_common_block->titlekey_block, tik->enc_titlekey)) return false;
             break;
         default:
             LOG_MSG("Invalid titlekey type value! (0x%02X).", tik_common_block->titlekey_type);
@@ -422,7 +368,7 @@ static bool tikGetTitleKekEncryptedTitleKeyFromTicket(Ticket *tik)
     return true;
 }
 
-static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_generation)
+static bool tikGetDecryptedTitleKey(void *dst, const void *src, u8 key_generation)
 {
     if (!dst || !src)
     {
@@ -430,17 +376,17 @@ static bool tikGetTitleKekDecryptedTitleKey(void *dst, const void *src, u8 key_g
         return false;
     }
     
-    const u8 *titlekek = NULL;
+    const u8 *ticket_common_key = NULL;
     Aes128Context titlekey_aes_ctx = {0};
     
-    titlekek = keysGetTitlekek(key_generation);
-    if (!titlekek)
+    ticket_common_key = keysGetTicketCommonKey(key_generation);
+    if (!ticket_common_key)
     {
-        LOG_MSG("Unable to retrieve titlekek for key generation 0x%02X!", key_generation);
+        LOG_MSG("Unable to retrieve ticket common key for key generation 0x%02X!", key_generation);
         return false;
     }
     
-    aes128ContextCreate(&titlekey_aes_ctx, titlekek, false);
+    aes128ContextCreate(&titlekey_aes_ctx, ticket_common_key, false);
     aes128DecryptBlock(&titlekey_aes_ctx, dst, src);
     
     return true;
@@ -626,7 +572,7 @@ static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u
     TikCommonBlock *tik_common_block = NULL;
     
     Aes128CtrContext ctr_ctx = {0};
-    u8 null_ctr[AES_BLOCK_SIZE] = {0}, ctr[AES_BLOCK_SIZE] = {0}, dec_tik[SIGNED_TIK_MAX_SIZE] = {0};
+    u8 null_ctr[AES_128_KEY_SIZE] = {0}, ctr[AES_128_KEY_SIZE] = {0}, dec_tik[SIGNED_TIK_MAX_SIZE] = {0};
     
     bool is_volatile = false, success = false;
     
@@ -762,88 +708,6 @@ static bool tikGetTicketTypeAndSize(void *data, u64 data_size, u8 *out_type, u64
     
     *out_type = type;
     *out_size = signed_ticket_size;
-    
-    return true;
-}
-
-static bool tikRetrieveEticketDeviceKey(void)
-{
-    if (g_eTicketDeviceKeyRetrieved) return true;
-    
-    Result rc = 0;
-    u32 public_exponent = 0;
-    TikEticketDeviceKeyData *eticket_devkey = NULL;
-    Aes128CtrContext eticket_aes_ctx = {0};
-    
-    rc = setcalGetEticketDeviceKey(&g_eTicketDeviceKey);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG("setcalGetEticketDeviceKey failed! (0x%08X).", rc);
-        return false;
-    }
-    
-    /* Decrypt eTicket RSA key. */
-    eticket_devkey = (TikEticketDeviceKeyData*)g_eTicketDeviceKey.key;
-    aes128CtrContextCreate(&eticket_aes_ctx, keysGetEticketRsaKek(g_eTicketDeviceKey.generation > 0), eticket_devkey->ctr);
-    aes128CtrCrypt(&eticket_aes_ctx, &(eticket_devkey->exponent), &(eticket_devkey->exponent), sizeof(TikEticketDeviceKeyData) - 0x10);
-    
-    /* Public exponent value must be 0x10001. */
-    /* It is stored using big endian byte order. */
-    public_exponent = __builtin_bswap32(eticket_devkey->public_exponent);
-    if (public_exponent != ETICKET_DEVKEY_PUBLIC_EXPONENT)
-    {
-        LOG_MSG("Invalid public RSA exponent for eTicket device key! Wrong keys? (0x%08X).", public_exponent);
-        return false;
-    }
-    
-    /* Test RSA key pair. */
-    if (!tikTestKeyPairFromEticketDeviceKey(&(eticket_devkey->public_exponent), eticket_devkey->exponent, eticket_devkey->modulus))
-    {
-        LOG_MSG("RSA key pair test failed! Wrong keys?");
-        return false;
-    }
-    
-    g_eTicketDeviceKeyRetrieved = true;
-    
-    return true;
-}
-
-static bool tikTestKeyPairFromEticketDeviceKey(const void *e, const void *d, const void *n)
-{
-    if (!e || !d || !n)
-    {
-        LOG_MSG("Invalid parameters!");
-        return false;
-    }
-    
-    Result rc = 0;
-    u8 x[0x100] = {0}, y[0x100] = {0}, z[0x100] = {0};
-    
-    /* 0xCAFEBABE. */
-    x[0xFC] = 0xCA;
-    x[0xFD] = 0xFE;
-    x[0xFE] = 0xBA;
-    x[0xFF] = 0xBE;
-    
-    rc = splUserExpMod(x, n, d, 0x100, y);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG("splUserExpMod failed! (#1) (0x%08X).", rc);
-        return false;
-    }
-    
-    rc = splUserExpMod(y, n, e, 4, z);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG("splUserExpMod failed! (#2) (0x%08X).", rc);
-        return false;
-    }
-    
-    if (memcmp(x, z, 0x100) != 0)
-    {
-        LOG_MSG("Invalid RSA key pair!");
-        return false;
-    }
     
     return true;
 }

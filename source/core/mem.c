@@ -81,6 +81,17 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
     
     bool success = true;
     
+    /* Make sure we have access to debug SVC calls. */
+    if (!(envIsSyscallHinted(0x60) &&   /* svcDebugActiveProcess. */
+          envIsSyscallHinted(0x63) &&   /* svcGetDebugEvent. */
+          envIsSyscallHinted(0x65) &&   /* svcGetProcessList. */
+          envIsSyscallHinted(0x69) &&   /* svcQueryDebugProcessMemory. */
+          envIsSyscallHinted(0x6A)))    /* svcReadDebugProcessMemory. */
+    {
+        LOG_MSG("Debug SVC permissions not available!");
+        return false;
+    }
+    
     /* Clear output MemoryLocation element. */
     memFreeMemoryLocation(location);
     

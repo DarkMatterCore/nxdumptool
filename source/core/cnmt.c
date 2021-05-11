@@ -79,7 +79,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     for(i = 0; i < pfs_entry_count; i++)
     {
         if ((out->cnmt_filename = pfsGetEntryNameByIndex(&(out->pfs_ctx), i)) && (cnmt_filename_len = strlen(out->cnmt_filename)) >= CNMT_MINIMUM_FILENAME_LENGTH && \
-            !strncasecmp(out->cnmt_filename + cnmt_filename_len - 5, ".cnmt", 5)) break;
+            !strcasecmp(out->cnmt_filename + cnmt_filename_len - 5, ".cnmt")) break;
     }
     
     if (i >= pfs_entry_count)

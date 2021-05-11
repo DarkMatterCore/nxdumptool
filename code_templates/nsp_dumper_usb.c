@@ -269,7 +269,7 @@ static void dump_thread_func(void *arg)
         
         // remove titlekey crypto
         // has no effect if this nca doesn't use titlekey crypto
-        if (remove_titlekey_crypto && !ncaRemoveTitlekeyCrypto(cur_nca_ctx))
+        if (remove_titlekey_crypto && !ncaRemoveTitleKeyCrypto(cur_nca_ctx))
         {
             consolePrint("nca remove titlekey crypto failed\n");
             goto end;

@@ -39,8 +39,10 @@ typedef struct {
 
 /* Function prototypes. */
 
+static bool _servicesCheckInitializedServiceByName(const char *name, bool lock);
+
 static Result servicesAtmosphereHasService(bool *out, SmServiceName name);
-static bool servicesGetExosphereApiVersion(u32 *out);
+static Result servicesGetExosphereApiVersion(u32 *out);
 
 static Result servicesNifmUserInitialize(void);
 static bool servicesClkGetServiceType(void *arg);
@@ -71,6 +73,8 @@ static ClkrstSession g_clkrstCpuSession = {0}, g_clkrstMemSession = {0};
 
 static Mutex g_servicesMutex = 0;
 
+static u32 g_atmosphereVersion = 0;
+
 /* Atmosphère-related constants. */
 static const u32 g_smAtmosphereHasService = 65100;
 static const SplConfigItem SplConfigItem_ExosphereApiVersion = (SplConfigItem)65000;
@@ -87,8 +91,8 @@ bool servicesInitialize(void)
     {
         ServiceInfo *service_info = &(g_serviceInfo[i]);
         
-        /* Check if this service has been already initialized or if it actually has a valid initialize function. */
-        if (service_info->initialized || service_info->init_func == NULL) continue;
+        /* Check if this service has been already initialized. */
+        if (service_info->initialized) continue;
         
         /* Check if this service depends on a condition function. */
         if (service_info->cond_func != NULL)
@@ -98,16 +102,19 @@ bool servicesInitialize(void)
             if (!service_info->cond_func(service_info)) continue;
         }
         
+        /* Check if this service actually has a valid initialization function. */
+        if (service_info->init_func == NULL) continue;
+        
         /* Initialize service. */
         rc = service_info->init_func();
         if (R_FAILED(rc))
         {
-            LOG_MSG("Failed to initialize %s service! (0x%08X).", service_info->name, rc);
+            LOG_MSG("Failed to initialize \"%s\" service! (0x%08X).", service_info->name, rc);
             ret = false;
             break;
         }
         
-        /* Update initialized flag. */
+        /* Update flag. */
         service_info->initialized = true;
     }
     
@@ -130,36 +137,76 @@ void servicesClose(void)
         /* Close service. */
         service_info->close_func();
         
-        /* Update initialized flag. */
+        /* Update flag. */
         service_info->initialized = false;
     }
     
     mutexUnlock(&g_servicesMutex);
 }
 
+bool servicesCheckInitializedServiceByName(const char *name)
+{
+    return _servicesCheckInitializedServiceByName(name, true);
+}
+
 bool servicesCheckRunningServiceByName(const char *name)
 {
-    if (!name || !*name)
-    {
-        LOG_MSG("Invalid parameters!");
-        return false;
-    }
-    
     Result rc = 0;
     bool out = false;
-    SmServiceName service_name = smEncodeName(name);
+    SmServiceName service_name = {0};
+    
+    mutexLock(&g_servicesMutex);
+    
+    if (!name || !*name || !_servicesCheckInitializedServiceByName("spl:", false))
+    {
+        LOG_MSG("Invalid parameters!");
+        goto end;
+    }
+    
+    service_name = smEncodeName(name);
     
     rc = servicesAtmosphereHasService(&out, service_name);
     if (R_FAILED(rc)) LOG_MSG("servicesAtmosphereHasService failed for \"%s\"! (0x%08X).", name, rc);
     
+end:
+    mutexUnlock(&g_servicesMutex);
+    
     return out;
 }
 
-bool servicesCheckInitializedServiceByName(const char *name)
+void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
 {
+    Result rc1 = 0, rc2 = 0;
+    
     mutexLock(&g_servicesMutex);
     
+    if ((g_clkSvcUsePcv && !_servicesCheckInitializedServiceByName("pcv", false)) || (!g_clkSvcUsePcv && !_servicesCheckInitializedServiceByName("clkrst", false)))
+    {
+        LOG_MSG("Error: clock service uninitialized.");
+        goto end;
+    }
+    
+    if (g_clkSvcUsePcv)
+    {
+        rc1 = pcvSetClockRate(PcvModule_CpuBus, cpu_rate);
+        rc2 = pcvSetClockRate(PcvModule_EMC, mem_rate);
+    } else {
+        rc1 = clkrstSetClockRate(&g_clkrstCpuSession, cpu_rate);
+        rc2 = clkrstSetClockRate(&g_clkrstMemSession, mem_rate);
+    }
+    
+    if (R_FAILED(rc1)) LOG_MSG("%sSetClockRate failed! (0x%08X) (CPU).", (g_clkSvcUsePcv ? "pcv" : "clkrst"), rc1);
+    if (R_FAILED(rc2)) LOG_MSG("%sSetClockRate failed! (0x%08X) (MEM).", (g_clkSvcUsePcv ? "pcv" : "clkrst"), rc2);
+    
+end:
+    mutexUnlock(&g_servicesMutex);
+}
+
+static bool _servicesCheckInitializedServiceByName(const char *name, bool lock)
+{
     bool ret = false;
+    
+    if (lock) mutexLock(&g_servicesMutex);
     
     if (!name || !*name) goto end;
     
@@ -175,70 +222,57 @@ bool servicesCheckInitializedServiceByName(const char *name)
     }
     
 end:
-    mutexUnlock(&g_servicesMutex);
+    if (lock) mutexUnlock(&g_servicesMutex);
     
     return ret;
-}
-
-void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
-{
-    mutexLock(&g_servicesMutex);
-    
-    if (g_clkSvcUsePcv)
-    {
-        pcvSetClockRate(PcvModule_CpuBus, cpu_rate);
-        pcvSetClockRate(PcvModule_EMC, mem_rate);
-    } else {
-        clkrstSetClockRate(&g_clkrstCpuSession, cpu_rate);
-        clkrstSetClockRate(&g_clkrstMemSession, mem_rate);
-    }
-    
-    mutexUnlock(&g_servicesMutex);
 }
 
 /* SM API extension available in Atmosphère and Atmosphère-based CFWs. */
 static Result servicesAtmosphereHasService(bool *out, SmServiceName name)
 {
+    if (!out || !name.name[0]) return MAKERESULT(Module_Libnx, LibnxError_BadInput);
+    
     u8 tmp = 0;
     Result rc = 0;
-    u32 version = 0;
+    
+    /* Get Exosphère API version. */
+    if (!g_atmosphereVersion)
+    {
+        rc = servicesGetExosphereApiVersion(&g_atmosphereVersion);
+        if (R_FAILED(rc)) LOG_MSG("servicesGetExosphereApiVersion failed! (0x%08X).", rc);
+    }
     
     /* Check if service is running. */
     /* Dispatch IPC request using CMIF or TIPC serialization depending on our current environment. */
-    if (hosversionAtLeast(12, 0, 0) || (servicesGetExosphereApiVersion(&version) && version >= g_atmosphereTipcVersion))
+    if (hosversionAtLeast(12, 0, 0) || g_atmosphereVersion >= g_atmosphereTipcVersion)
     {
         rc = tipcDispatchInOut(smGetServiceSessionTipc(), g_smAtmosphereHasService, name, tmp);
     } else {
         rc = serviceDispatchInOut(smGetServiceSession(), g_smAtmosphereHasService, name, tmp);
     }
     
-    if (R_SUCCEEDED(rc) && out) *out = tmp;
+    if (R_SUCCEEDED(rc)) *out = (tmp != 0);
     
     return rc;
 }
 
-/* SMC API extension available in Atmosphère and Atmosphère-based CFWs. */
-static bool servicesGetExosphereApiVersion(u32 *out)
+/* SMC config item available in Atmosphère and Atmosphère-based CFWs. */
+static Result servicesGetExosphereApiVersion(u32 *out)
 {
-    if (!out)
-    {
-        LOG_MSG("Invalid parameters!");
-        return false;
-    }
+    if (!out) return MAKERESULT(Module_Libnx, LibnxError_BadInput);
     
     Result rc = 0;
-    u64 version = 0;
+    u64 cfg = 0;
+    u32 version = 0;
     
-    rc = splGetConfig(SplConfigItem_ExosphereApiVersion, &version);
-    if (R_FAILED(rc))
+    rc = splGetConfig(SplConfigItem_ExosphereApiVersion, &cfg);
+    if (R_SUCCEEDED(rc))
     {
-        LOG_MSG("splGetConfig failed! (0x%08X).", rc);
-        return false;
+        *out = version = (u32)((cfg >> 40) & 0xFFFFFF);
+        LOG_MSG("Exosphère API version: %u.%u.%u.", HOSVER_MAJOR(version), HOSVER_MINOR(version), HOSVER_MICRO(version));
     }
     
-    *out = (u32)((version >> 40) & 0xFFFFFF);
-    
-    return true;
+    return rc;
 }
 
 static Result servicesNifmUserInitialize(void)
@@ -252,7 +286,11 @@ static Result servicesClkrstInitialize(void)
     
     /* Open clkrst service handle. */
     rc = clkrstInitialize();
-    if (R_FAILED(rc)) return rc;
+    if (R_FAILED(rc))
+    {
+        LOG_MSG("clkrstInitialize failed! (0x%08X).", rc);
+        return rc;
+    }
     
     /* Initialize CPU and MEM clkrst sessions. */
     memset(&g_clkrstCpuSession, 0, sizeof(ClkrstSession));
@@ -261,6 +299,7 @@ static Result servicesClkrstInitialize(void)
     rc = clkrstOpenSession(&g_clkrstCpuSession, PcvModuleId_CpuBus, 3);
     if (R_FAILED(rc))
     {
+        LOG_MSG("clkrstOpenSession failed! (0x%08X) (CPU).", rc);
         clkrstExit();
         return rc;
     }
@@ -268,6 +307,7 @@ static Result servicesClkrstInitialize(void)
     rc = clkrstOpenSession(&g_clkrstMemSession, PcvModuleId_EMC, 3);
     if (R_FAILED(rc))
     {
+        LOG_MSG("clkrstOpenSession failed! (0x%08X) (MEM).", rc);
         clkrstCloseSession(&g_clkrstCpuSession);
         clkrstExit();
     }
@@ -298,6 +338,7 @@ static bool servicesClkGetServiceType(void *arg)
     
     /* Fill service info. */
     sprintf(info->name, "%s", (g_clkSvcUsePcv ? "pcv" : "clkrst"));
+    info->cond_func = NULL;
     info->init_func = (g_clkSvcUsePcv ? &pcvInitialize : &servicesClkrstInitialize);
     info->close_func = (g_clkSvcUsePcv ? &pcvExit : &servicesClkrstExit);
     
@@ -312,5 +353,5 @@ static bool servicesSplCryptoCheckAvailability(void *arg)
     if (strcmp(info->name, "spl:mig") != 0 || info->init_func == NULL || info->close_func == NULL) return false;
     
     /* Check if spl:mig is available (sysver equal to or greater than 4.0.0). */
-    return !hosversionBefore(4, 0, 0);
+    return hosversionAtLeast(4, 0, 0);
 }
