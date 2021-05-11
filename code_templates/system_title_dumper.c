@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
             } else
             if (menu == 1)
             {
-                utilsGenerateHexStringFromData(nca_id_str, sizeof(nca_id_str), cur_title_info->content_infos[i].content_id.c, SHA256_HASH_SIZE / 2);
+                utilsGenerateHexStringFromData(nca_id_str, sizeof(nca_id_str), cur_title_info->content_infos[i].content_id.c, sizeof(cur_title_info->content_infos[i].content_id.c), false);
                 printf("%s (%s)\n", nca_id_str, titleGetNcmContentTypeName(cur_title_info->content_infos[i].content_type));
             } else
             if (menu == 2)
@@ -376,7 +376,7 @@ int main(int argc, char *argv[])
             if (menu == 1)
             {
                 nca_idx = selected_idx;
-                utilsGenerateHexStringFromData(nca_id_str, sizeof(nca_id_str), cur_title_info->content_infos[nca_idx].content_id.c, SHA256_HASH_SIZE / 2);
+                utilsGenerateHexStringFromData(nca_id_str, sizeof(nca_id_str), cur_title_info->content_infos[nca_idx].content_id.c, sizeof(cur_title_info->content_infos[nca_idx].content_id.c), false);
             }
             
             menu++;

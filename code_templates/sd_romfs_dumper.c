@@ -288,7 +288,7 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
         for(u32 i = scroll; i < program_count; i++)
         {
             if (i >= (scroll + page_size)) break;
-            utilsGenerateHexStringFromData(nca_id_str, sizeof(nca_id_str), content_infos[i]->content_id.c, SHA256_HASH_SIZE / 2);
+            utilsGenerateHexStringFromData(nca_id_str, sizeof(nca_id_str), content_infos[i]->content_id.c, sizeof(content_infos[i]->content_id.c), false);
             printf("%s%s.nca (ID offset #%u)\n", i == selected_idx ? " -> " : "    ", nca_id_str, content_infos[i]->id_offset);
         }
         

@@ -77,8 +77,9 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 /// Trims whitespace characters from the provided string.
 void utilsTrimString(char *str);
 
-/// Generates a lowercase hex string representation of the binary data stored in 'src' and stores it in 'dst'.
-void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size);
+/// Generates a hex string representation of the binary data stored in 'src' and stores it in 'dst'.
+/// If 'uppercase' is true, uppercase characters will be used to generate the hex string. Otherwise, lowercase characters will be used.
+void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase);
 
 /// Formats the provided 'size' value to a human-readable size string and stores it in 'dst'.
 void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);

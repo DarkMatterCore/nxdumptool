@@ -142,7 +142,7 @@ __attribute__((format(printf, 4, 5))) void logWriteBinaryDataToLogFile(const voi
     if (!data_str) goto end;
     
     /* Generate hex string representation. */
-    utilsGenerateHexStringFromData(data_str, data_str_size, data, data_size);
+    utilsGenerateHexStringFromData(data_str, data_str_size, data, data_size, true);
     strcat(data_str, g_logLineBreak);
     
     /* Write formatted string. */

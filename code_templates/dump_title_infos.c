@@ -23,7 +23,7 @@
                 for(u32 j = 0; j < g_titleInfo[i].content_count; j++)
                 {
                     char content_id_str[SHA256_HASH_SIZE + 1] = {0};
-                    utilsGenerateHexStringFromData(content_id_str, sizeof(content_id_str), g_titleInfo[i].content_infos[j].content_id.c, SHA256_HASH_SIZE / 2);
+                    utilsGenerateHexStringFromData(content_id_str, sizeof(content_id_str), g_titleInfo[i].content_infos[j].content_id.c, sizeof(g_titleInfo[i].content_infos[j].content_id.c), false);
                     
                     u64 content_size = 0;
                     titleConvertNcmContentSizeToU64(g_titleInfo[i].content_infos[j].size, &content_size);

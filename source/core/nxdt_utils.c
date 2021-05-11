@@ -448,7 +448,7 @@ void utilsTrimString(char *str)
     if (start != str) memmove(str, start, end - start + 1);
 }
 
-void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size)
+void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase)
 {
     if (!src || !src_size || !dst || dst_size < ((src_size * 2) + 1)) return;
     
@@ -460,8 +460,8 @@ void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src,
         char h_nib = ((src_u8[i] >> 4) & 0xF);
         char l_nib = (src_u8[i] & 0xF);
         
-        dst[j++] = (h_nib + (h_nib < 0xA ? 0x30 : 0x57));
-        dst[j++] = (l_nib + (l_nib < 0xA ? 0x30 : 0x57));
+        dst[j++] = (h_nib + (h_nib < 0xA ? 0x30 : (uppercase ? 0x37 : 0x57)));
+        dst[j++] = (l_nib + (l_nib < 0xA ? 0x30 : (uppercase ? 0x37 : 0x57)));
     }
     
     dst[j] = '\0';

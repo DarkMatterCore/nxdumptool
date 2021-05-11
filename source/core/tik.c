@@ -145,7 +145,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
     
     /* Generate rights ID string. */
     tik_common_block = tikGetCommonBlock(dst->data);
-    utilsGenerateHexStringFromData(dst->rights_id_str, sizeof(dst->rights_id_str), tik_common_block->rights_id.c, sizeof(tik_common_block->rights_id.c));
+    utilsGenerateHexStringFromData(dst->rights_id_str, sizeof(dst->rights_id_str), tik_common_block->rights_id.c, sizeof(tik_common_block->rights_id.c), false);
     
     return true;
 }
@@ -237,7 +237,7 @@ static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsI
     char tik_filename[0x30] = {0};
     u64 tik_offset = 0, tik_size = 0;
     
-    utilsGenerateHexStringFromData(tik_filename, sizeof(tik_filename), id->c, 0x10);
+    utilsGenerateHexStringFromData(tik_filename, sizeof(tik_filename), id->c, sizeof(id->c), false);
     strcat(tik_filename, ".tik");
     
     if (!gamecardGetHashFileSystemEntryInfoByName(GameCardHashFileSystemPartitionType_Secure, tik_filename, &tik_offset, &tik_size))

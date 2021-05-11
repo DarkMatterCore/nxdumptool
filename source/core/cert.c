@@ -146,7 +146,7 @@ u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, 
     u8 *raw_chain = NULL;
     bool success = false;
     
-    utilsGenerateHexStringFromData(raw_chain_filename, sizeof(raw_chain_filename), id->c, 0x10);
+    utilsGenerateHexStringFromData(raw_chain_filename, sizeof(raw_chain_filename), id->c, sizeof(id->c), false);
     strcat(raw_chain_filename, ".cert");
     
     if (!gamecardGetHashFileSystemEntryInfoByName(GameCardHashFileSystemPartitionType_Secure, raw_chain_filename, &raw_chain_offset, &raw_chain_size))
