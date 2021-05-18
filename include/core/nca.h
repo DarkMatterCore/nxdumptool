@@ -91,10 +91,18 @@ typedef enum {
     NcaKeyGeneration_700_801  = 8,
     NcaKeyGeneration_810_811  = 9,
     NcaKeyGeneration_900_901  = 10,
-    NcaKeyGeneration_910_1201 = 11,
-    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1201,
+    NcaKeyGeneration_910_1202 = 11,
+    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1202,
     NcaKeyGeneration_Max      = 32
 } NcaKeyGeneration;
+
+/// 'NcaMainSignatureKeyGeneration_Current' will always point to the last known key generation value.
+typedef enum {
+    NcaMainSignatureKeyGeneration_100_811  = 0,
+    NcaMainSignatureKeyGeneration_900_1202 = 1,
+    NcaMainSignatureKeyGeneration_Current  = NcaMainSignatureKeyGeneration_900_1202,
+    NcaMainSignatureKeyGeneration_Max      = (NcaMainSignatureKeyGeneration_Current + 1)
+} NcaMainSignatureKeyGeneration;
 
 typedef struct {
     u32 start_sector;   ///< Expressed in NCA_FS_SECTOR_SIZE sectors.
@@ -139,7 +147,7 @@ typedef struct {
     u32 content_index;
     VersionType2 sdk_addon_version;
     u8 key_generation;                                      ///< NcaKeyGeneration.
-    u8 main_signature_key_generation;
+    u8 main_signature_key_generation;                       ///< NcaMainSignatureKeyGeneration.
     u8 reserved[0xE];
     FsRightsId rights_id;                                   ///< Used for titlekey crypto.
     NcaFsInfo fs_info[NCA_FS_HEADER_COUNT];                 ///< Start and end sectors for each NCA FS section.

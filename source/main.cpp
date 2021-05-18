@@ -28,10 +28,6 @@
 #include "sample_installer_page.hpp"
 #include "sample_loading_page.hpp"
 
-int g_argc = 0;
-char **g_argv = NULL;
-const char *g_appLaunchPath = NULL;
-
 namespace i18n = brls::i18n; // for loadTranslations() and getStr()
 using namespace i18n::literals; // for _i18n
 
@@ -48,10 +44,7 @@ std::vector<std::string> NOTIFICATIONS = {
 
 int main(int argc, char* argv[])
 {
-    g_argc = argc;
-    g_argv = argv;
-    
-    if (!utilsInitializeResources())
+    if (!utilsInitializeResources(argc, (const char**)argv))
     {
         utilsCloseResources();
         return EXIT_FAILURE;

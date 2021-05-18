@@ -27,10 +27,6 @@
 
 #define BLOCK_SIZE  USB_TRANSFER_BUFFER_SIZE
 
-int g_argc = 0;
-char **g_argv = NULL;
-const char *g_appLaunchPath = NULL;
-
 static PadState g_padState = {0};
 
 /* Type definitions. */
@@ -153,7 +149,7 @@ static Menu g_xciMenu = {
 
 static MenuElement *g_rootMenuElements[] = {
     &(MenuElement){
-        .str = "dump key area",
+        .str = "dump key area (initial data)",
         .child_menu = NULL,
         .task_func = &sendGameCardKeyAreaViaUsb,
         .element_options = NULL
@@ -215,15 +211,12 @@ static void utilsWaitForButtonPress(u64 flag)
 
 int main(int argc, char *argv[])
 {
-    g_argc = argc;
-    g_argv = argv;
-    
     int ret = 0;
     
     Menu *cur_menu = &g_rootMenu;
     u32 element_count = menuGetElementCount(cur_menu), page_size = 30;
     
-    if (!utilsInitializeResources())
+    if (!utilsInitializeResources(argc, (const char**)argv))
     {
         ret = -1;
         goto out;
@@ -453,10 +446,10 @@ static bool sendGameCardKeyAreaViaUsb(void)
     
     if (!dumpGameCardKeyArea(&gc_key_area) || !filename) goto end;
     
-    crc32FastCalculate(&gc_key_area, sizeof(GameCardKeyArea), &crc);
-    snprintf(path, MAX_ELEMENTS(path), "%s (Key Area) (%08X).bin", filename, crc);
+    crc32FastCalculate(&(gc_key_area.initial_data), sizeof(GameCardInitialData), &crc);
+    snprintf(path, MAX_ELEMENTS(path), "%s (Initial Data) (%08X).bin", filename, crc);
     
-    if (!sendFileData(path, &gc_key_area, sizeof(GameCardKeyArea))) goto end;
+    if (!sendFileData(path, &(gc_key_area.initial_data), sizeof(GameCardInitialData))) goto end;
     
     printf("successfully sent key area as \"%s\"\n", path);
     success = true;

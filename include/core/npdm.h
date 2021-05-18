@@ -437,7 +437,8 @@ typedef enum {
     NpdmSystemCallId_CreateResourceLimit            = BIT(5),
     NpdmSystemCallId_SetResourceLimitLimitValue     = BIT(6),
     NpdmSystemCallId_CallSecureMonitor              = BIT(7),
-    NpdmSystemCallId_Count                          = 0x80     ///< Total values supported by this enum.
+    
+    NpdmSystemCallId_Count                          = 0xC0     ///< Total values supported by this enum.
 } NpdmSystemCallId;
 
 /// EnableSystemCalls entry for the KernelCapability descriptor.

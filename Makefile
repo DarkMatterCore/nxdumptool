@@ -47,7 +47,11 @@ VERSION_MICRO		:=	0
 
 APP_TITLE			:=	nxdumptool
 APP_AUTHOR			:=	DarkMatterCore
-APP_VERSION			:=  ${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_MICRO}
+APP_VERSION			:=	${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_MICRO}
+
+ifneq ($(origin BUILD_TYPE),undefined)
+APP_TITLE			:=	${BUILD_TYPE}
+endif
 
 TARGET				:=	${APP_TITLE}
 BUILD				:=	build
@@ -65,24 +69,24 @@ BOREALIS_RESOURCES	:=	romfs:/
 #---------------------------------------------------------------------------------
 # options for code generation
 #---------------------------------------------------------------------------------
-ARCH	:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
+ARCH		:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS	:=	-g -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
-CFLAGS	+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
-CFLAGS	+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
-CFLAGS	+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\"
-CFLAGS	+=	-DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\""
-CFLAGS  +=  `aarch64-none-elf-pkg-config zlib --cflags`
-CFLAGS  +=  `aarch64-none-elf-pkg-config libxml-2.0 --cflags`
-CFLAGS  +=  `aarch64-none-elf-pkg-config json-c --cflags`
-CFLAGS  +=  `aarch64-none-elf-pkg-config libturbojpeg --cflags`
+CFLAGS		:=	-g -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
+CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
+CFLAGS		+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
+CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\"
+CFLAGS		+=	-DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\""
+CFLAGS  	+=	`aarch64-none-elf-pkg-config zlib --cflags`
+CFLAGS  	+=	`aarch64-none-elf-pkg-config libxml-2.0 --cflags`
+CFLAGS  	+=	`aarch64-none-elf-pkg-config json-c --cflags`
+CFLAGS  	+=	`aarch64-none-elf-pkg-config libturbojpeg --cflags`
 
-CXXFLAGS	:= $(CFLAGS) -std=c++1z -O2 -Wno-volatile -Wno-unused-parameter
+CXXFLAGS	:=	$(CFLAGS) -std=c++1z -O2 -Wno-volatile -Wno-unused-parameter
 
-ASFLAGS	:=	-g $(ARCH)
-LDFLAGS	=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+ASFLAGS		:=	-g $(ARCH)
+LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS	:= -lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lusbhsfs -lntfs-3g -llwext4 -lnx -ljson-c -lturbojpeg
+LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lusbhsfs -lntfs-3g -llwext4 -lnx -ljson-c -lturbojpeg
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

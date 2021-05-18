@@ -42,10 +42,10 @@ void usbExit(void);
 /// Returns a pointer to a dynamically allocated, page aligned memory buffer that's suitable for USB transfers.
 void *usbAllocatePageAlignedBuffer(size_t size);
 
-/// Used to check if the console has been connected to an USB host device and if a valid USB session has been established.
-/// Bear in mind this call will block the calling thread if the console is connected to an USB host device but no USB session has been established.
+/// Used to check if the console has been connected to a USB host device and if a valid USB session has been established.
+/// Bear in mind this call will block the calling thread if the console is connected to a USB host device but no USB session has been established.
 /// If the console is disconnected during this block, the function will return false.
-/// If the console isn't connected to an USB host device when this function is called, false will be returned right away.
+/// If the console isn't connected to a USB host device when this function is called, false will be returned right away.
 bool usbIsReady(void);
 
 /// Sends file properties to the host device before starting a file data transfer. Must be called before usbSendFileData().

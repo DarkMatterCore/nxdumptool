@@ -45,10 +45,8 @@ bool memRetrieveProgramMemorySegment(MemoryLocation *location)
         return false;
     }
     
-    mutexLock(&g_memMutex);
-    bool ret = memRetrieveProgramMemory(location, true);
-    mutexUnlock(&g_memMutex);
-    
+    bool ret = false;
+    SCOPED_LOCK(&g_memMutex) ret = memRetrieveProgramMemory(location, true);
     return ret;
 }
 
@@ -60,10 +58,8 @@ bool memRetrieveFullProgramMemory(MemoryLocation *location)
         return false;
     }
     
-    mutexLock(&g_memMutex);
-    bool ret = memRetrieveProgramMemory(location, false);
-    mutexUnlock(&g_memMutex);
-    
+    bool ret = false;
+    SCOPED_LOCK(&g_memMutex) ret = memRetrieveProgramMemory(location, false);
     return ret;
 }
 

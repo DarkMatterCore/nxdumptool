@@ -51,48 +51,40 @@ static void certCopyCertificateChainDataToMemoryBuffer(void *dst, const Certific
 
 bool certRetrieveCertificateByName(Certificate *dst, const char *name)
 {
-    mutexLock(&g_esCertSaveMutex);
-    
-    bool ret = false;
-    
     if (!dst || !name || !*name)
     {
         LOG_MSG("Invalid parameters!");
-        goto end;
+        return false;
     }
     
-    if (!certOpenEsCertSaveFile()) goto end;
+    bool ret = false;
     
-    ret = _certRetrieveCertificateByName(dst, name);
-    
-    certCloseEsCertSaveFile();
-    
-end:
-    mutexUnlock(&g_esCertSaveMutex);
+    SCOPED_LOCK(&g_esCertSaveMutex)
+    {
+        if (!certOpenEsCertSaveFile()) break;
+        ret = _certRetrieveCertificateByName(dst, name);
+        certCloseEsCertSaveFile();
+    }
     
     return ret;
 }
 
 bool certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer)
 {
-    mutexLock(&g_esCertSaveMutex);
-    
-    bool ret = false;
-    
     if (!dst || !issuer || strncmp(issuer, "Root-", 5) != 0)
     {
         LOG_MSG("Invalid parameters!");
-        goto end;
+        return false;
     }
     
-    if (!certOpenEsCertSaveFile()) goto end;
+    bool ret = false;
     
-    ret = _certRetrieveCertificateChainBySignatureIssuer(dst, issuer);
-    
-    certCloseEsCertSaveFile();
-    
-end:
-    mutexUnlock(&g_esCertSaveMutex);
+    SCOPED_LOCK(&g_esCertSaveMutex)
+    {
+        if (!certOpenEsCertSaveFile()) break;
+        ret = _certRetrieveCertificateChainBySignatureIssuer(dst, issuer);
+        certCloseEsCertSaveFile();
+    }
     
     return ret;
 }

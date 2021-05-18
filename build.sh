@@ -25,12 +25,17 @@ for f in ./code_templates/*.c; do
     rm -f ./source/main.c
     cp $f ./source/main.c
     
-    make clean
-    make -j$(nproc)
+    cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$filename.jpg
+    
+    make BUILD_TYPE="$filename" -j$(nproc)
+    
+    rm -f ./romfs/icon/$filename.jpg
     
     mkdir ./code_templates/tmp/$filename
-    cp ./nxdumptool.nro ./code_templates/tmp/$filename/nxdumptool.nro
-    #cp ./nxdumptool.elf ./code_templates/tmp/$filename/nxdumptool.elf
+    cp ./$filename.nro ./code_templates/tmp/$filename/$filename.nro
+    #cp ./$filename.elf ./code_templates/tmp/$filename/$filename.elf
+    
+    make BUILD_TYPE="$filename" clean
 done
 
 make clean_all

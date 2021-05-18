@@ -1,5 +1,5 @@
 /*-----------------------------------------------------------------------*/
-/* Low level disk I/O module skeleton for FatFs     (C)ChaN, 2019        */
+/* Low level disk I/O module SKELETON for FatFs     (C)ChaN, 2019        */
 /*-----------------------------------------------------------------------*/
 /* If a working storage control module is available, it should be        */
 /* attached to the FatFs via a glue function rather than modifying it.   */
@@ -23,11 +23,8 @@ DSTATUS disk_status (
 )
 {
     (void)pdrv;
-    
     return 0;
 }
-
-
 
 /*-----------------------------------------------------------------------*/
 /* Inidialize a Drive                                                    */
@@ -38,11 +35,8 @@ DSTATUS disk_initialize (
 )
 {
     (void)pdrv;
-    
     return 0;
 }
-
-
 
 /*-----------------------------------------------------------------------*/
 /* Read Sector(s)                                                        */
@@ -66,8 +60,6 @@ DRESULT disk_read (
     return (R_SUCCEEDED(rc) ? RES_OK : RES_ERROR);
 }
 
-
-
 /*-----------------------------------------------------------------------*/
 /* Write Sector(s)                                                       */
 /*-----------------------------------------------------------------------*/
@@ -85,12 +77,10 @@ DRESULT disk_write (
     (void)buff;
     (void)sector;
     (void)count;
-    
     return RES_OK;
 }
 
 #endif
-
 
 /*-----------------------------------------------------------------------*/
 /* Miscellaneous Functions                                               */
@@ -105,6 +95,5 @@ DRESULT disk_ioctl (
     (void)pdrv;
     (void)cmd;
     (void)buff;
-    
     return RES_OK;
 }

@@ -33,21 +33,25 @@
 
 /* Global variables. */
 
-static bool g_resourcesInit = false, g_isDevUnit = false;
+static bool g_resourcesInit = false;
 static Mutex g_resourcesMutex = 0;
 
 static FsFileSystem *g_sdCardFileSystem = NULL;
 
-static FsStorage g_emmcBisSystemPartitionStorage = {0};
-static FATFS *g_emmcBisSystemPartitionFatFsObj = NULL;
-
-static AppletType g_programAppletType = 0;
-static bool g_homeButtonBlocked = false;
-static Mutex g_homeButtonMutex = 0;
+static const char *g_appLaunchPath = NULL;
 
 static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
+static bool g_isDevUnit = false;
+
+static AppletType g_programAppletType = AppletType_None;
+
+static FsStorage g_emmcBisSystemPartitionStorage = {0};
+static FATFS *g_emmcBisSystemPartitionFatFsObj = NULL;
+
 static AppletHookCookie g_systemOverclockCookie = {0};
+
+static bool g_homeButtonBlocked = false;
 
 static int g_nxLinkSocketFd = -1;
 
@@ -59,9 +63,13 @@ static const size_t g_illegalFileSystemCharsLength = (MAX_ELEMENTS(g_illegalFile
 
 /* Function prototypes. */
 
+static void _utilsGetLaunchPath(int program_argc, const char **program_argv);
+
 static void _utilsGetCustomFirmwareType(void);
 
 static bool _utilsIsDevelopmentUnit(void);
+
+static bool _utilsAppletModeCheck(void);
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
@@ -70,128 +78,98 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
 static void utilsPrintConsoleError(void);
 
-bool utilsInitializeResources(void)
+bool utilsInitializeResources(const int program_argc, const char **program_argv)
 {
-    mutexLock(&g_resourcesMutex);
-    
     Result rc = 0;
+    bool ret = false;
     
-    bool ret = g_resourcesInit;
-    if (ret) goto end;
-    
-    /* Retrieve pointer to the application launch path. */
-    if (g_argc && g_argv)
+    SCOPED_LOCK(&g_resourcesMutex)
     {
-        for(int i = 0; i < g_argc; i++)
+        ret = g_resourcesInit;
+        if (ret) break;
+        
+        /* Retrieve pointer to the application launch path. */
+        _utilsGetLaunchPath(program_argc, program_argv);
+        
+        /* Retrieve pointer to the SD card FsFileSystem element. */
+        if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
         {
-            if (g_argv[i] && !strncmp(g_argv[i], "sdmc:/", 6))
-            {
-                g_appLaunchPath = (const char*)g_argv[i];
-                break;
-            }
+            LOG_MSG("Failed to retrieve FsFileSystem object for the SD card!");
+            break;
         }
+        
+        /* Create logfile. */
+        logWriteStringToLogFile("________________________________________________________________\r\n");
+        LOG_MSG(APP_TITLE " v%u.%u.%u starting. Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+        if (g_appLaunchPath) LOG_MSG("Launch path: \"%s\".", g_appLaunchPath);
+        
+        /* Log Horizon OS version. */
+        u32 hos_version = hosversionGet();
+        LOG_MSG("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
+        
+        /* Initialize needed services. */
+        if (!servicesInitialize()) break;
+        
+        /* Retrieve custom firmware type. */
+        _utilsGetCustomFirmwareType();
+        if (g_customFirmwareType != UtilsCustomFirmwareType_Unknown) LOG_MSG("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : \
+                                                                                                 (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
+        
+        /* Check if we're not running under a development unit. */
+        if (!_utilsIsDevelopmentUnit()) break;
+        LOG_MSG("Running under %s unit.", g_isDevUnit ? "development" : "retail");
+        
+        /* Get applet type. */
+        g_programAppletType = appletGetAppletType();
+        LOG_MSG("Running under %s mode.", _utilsAppletModeCheck() ? "applet" : "title override");
+        
+        /* Initialize USB interface. */
+        if (!usbInitialize()) break;
+        
+        /* Initialize USB Mass Storage interface. */
+        if (!umsInitialize()) break;
+        
+        /* Load NCA keyset. */
+        if (!keysLoadNcaKeyset()) break;
+        
+        /* Allocate NCA crypto buffer. */
+        if (!ncaAllocateCryptoBuffer())
+        {
+            LOG_MSG("Unable to allocate memory for NCA crypto buffer!");
+            break;
+        }
+        
+        /* Initialize gamecard interface. */
+        if (!gamecardInitialize()) break;
+        
+        /* Initialize title interface. */
+        if (!titleInitialize()) break;
+        
+        /* Initialize BFTTF interface. */
+        if (!bfttfInitialize()) break;
+        
+        /* Mount eMMC BIS System partition. */
+        if (!utilsMountEmmcBisSystemPartitionStorage()) break;
+        
+        /* Disable screen dimming and auto sleep. */
+        appletSetMediaPlaybackState(true);
+        
+        /* Overclock system. */
+        utilsOverclockSystem(true);
+        
+        /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked). */
+        appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
+        
+        /* Mount application RomFS. */
+        romfsInit();
+        
+        /* Redirect stdout and stderr over network to nxlink. */
+        rc = socketInitializeDefault();
+        if (R_SUCCEEDED(rc)) g_nxLinkSocketFd = nxlinkConnectToHost(true, true);
+        
+        /* Update flags. */
+        ret = g_resourcesInit = true;
     }
-    
-    /* Retrieve pointer to the SD card FsFileSystem element. */
-    if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:"))) goto end;
-    
-    /* Create logfile. */
-    logWriteStringToLogFile("________________________________________________________________\r\n");
-    LOG_MSG(APP_TITLE " v%u.%u.%u starting. Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
-    if (g_appLaunchPath) LOG_MSG("Launch path: \"%s\".", g_appLaunchPath);
-    
-    /* Log Horizon OS version. */
-    u32 hos_version = hosversionGet();
-    LOG_MSG("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
-    
-    /* Initialize needed services. */
-    if (!servicesInitialize())
-    {
-        LOG_MSG("Failed to initialize needed services!");
-        goto end;
-    }
-    
-    /* Retrieve custom firmware type. */
-    _utilsGetCustomFirmwareType();
-    LOG_MSG("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
-    
-    /* Check if we're not running under a development unit. */
-    if (!_utilsIsDevelopmentUnit()) goto end;
-    LOG_MSG("Running under %s unit.", g_isDevUnit ? "development" : "retail");
-    
-    /* Get applet type. */
-    g_programAppletType = appletGetAppletType();
-    LOG_MSG("Running under %s mode.", utilsAppletModeCheck() ? "applet" : "title override");
-    
-    /* Initialize USB interface. */
-    if (!usbInitialize())
-    {
-        LOG_MSG("Failed to initialize USB interface!");
-        goto end;
-    }
-    
-    /* Initialize USB Mass Storage interface. */
-    if (!umsInitialize()) goto end;
-    
-    /* Load NCA keyset. */
-    if (!keysLoadNcaKeyset())
-    {
-        LOG_MSG("Failed to load NCA keyset!");
-        goto end;
-    }
-    
-    /* Allocate NCA crypto buffer. */
-    if (!ncaAllocateCryptoBuffer())
-    {
-        LOG_MSG("Unable to allocate memory for NCA crypto buffer!");
-        goto end;
-    }
-    
-    /* Initialize gamecard interface. */
-    if (!gamecardInitialize())
-    {
-        LOG_MSG("Failed to initialize gamecard interface!");
-        goto end;
-    }
-    
-    /* Initialize title interface. */
-    if (!titleInitialize())
-    {
-        LOG_MSG("Failed to initialize the title interface!");
-        goto end;
-    }
-    
-    /* Initialize BFTTF interface. */
-    if (!bfttfInitialize())
-    {
-        LOG_MSG("Failed to initialize BFTTF interface!");
-        goto end;
-    }
-    
-    /* Mount eMMC BIS System partition. */
-    if (!utilsMountEmmcBisSystemPartitionStorage()) goto end;
-    
-    /* Disable screen dimming and auto sleep. */
-    appletSetMediaPlaybackState(true);
-    
-    /* Overclock system. */
-    utilsOverclockSystem(true);
-    
-    /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked). */
-    appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
-    
-    /* Mount application RomFS. */
-    romfsInit();
-    
-    /* Redirect stdout and stderr over network to nxlink. */
-    rc = socketInitializeDefault();
-    if (R_SUCCEEDED(rc)) g_nxLinkSocketFd = nxlinkConnectToHost(true, true);
-    
-    /* Update flags. */
-    ret = g_resourcesInit = true;
-    
-end:
-    mutexUnlock(&g_resourcesMutex);
     
     if (!ret) utilsPrintConsoleError();
     
@@ -200,62 +178,121 @@ end:
 
 void utilsCloseResources(void)
 {
-    mutexLock(&g_resourcesMutex);
-    
-    /* Close nxlink socket. */
-    if (g_nxLinkSocketFd >= 0)
+    SCOPED_LOCK(&g_resourcesMutex)
     {
-        close(g_nxLinkSocketFd);
-        g_nxLinkSocketFd = -1;
+        /* Close nxlink socket. */
+        if (g_nxLinkSocketFd >= 0)
+        {
+            close(g_nxLinkSocketFd);
+            g_nxLinkSocketFd = -1;
+        }
+        
+        socketExit();
+        
+        /* Unmount application RomFS. */
+        romfsExit();
+        
+        /* Unset our overclock applet hook. */
+        appletUnhook(&g_systemOverclockCookie);
+        
+        /* Restore hardware clocks. */
+        utilsOverclockSystem(false);
+        
+        /* Enable screen dimming and auto sleep. */
+        appletSetMediaPlaybackState(false);
+        
+        /* Unblock HOME button presses. */
+        utilsChangeHomeButtonBlockStatus(false);
+        
+        /* Unmount eMMC BIS System partition. */
+        utilsUnmountEmmcBisSystemPartitionStorage();
+        
+        /* Deinitialize BFTTF interface. */
+        bfttfExit();
+        
+        /* Deinitialize title interface. */
+        titleExit();
+        
+        /* Deinitialize gamecard interface. */
+        gamecardExit();
+        
+        /* Free NCA crypto buffer. */
+        ncaFreeCryptoBuffer();
+        
+        /* Close USB Mass Storage interface. */
+        umsExit();
+        
+        /* Close USB interface. */
+        usbExit();
+        
+        /* Close initialized services. */
+        servicesClose();
+        
+        /* Close logfile. */
+        logCloseLogFile();
+        
+        g_resourcesInit = false;
     }
-    
-    socketExit();
-    
-    /* Unmount application RomFS. */
-    romfsExit();
-    
-    /* Unset our overclock applet hook. */
-    appletUnhook(&g_systemOverclockCookie);
-    
-    /* Restore hardware clocks. */
-    utilsOverclockSystem(false);
-    
-    /* Enable screen dimming and auto sleep. */
-    appletSetMediaPlaybackState(false);
-    
-    /* Unblock HOME button presses. */
-    utilsChangeHomeButtonBlockStatus(false);
-    
-    /* Unmount eMMC BIS System partition. */
-    utilsUnmountEmmcBisSystemPartitionStorage();
-    
-    /* Deinitialize BFTTF interface. */
-    bfttfExit();
-    
-    /* Deinitialize title interface. */
-    titleExit();
-    
-    /* Deinitialize gamecard interface. */
-    gamecardExit();
-    
-    /* Free NCA crypto buffer. */
-    ncaFreeCryptoBuffer();
-    
-    /* Close USB Mass Storage interface. */
-    umsExit();
-    
-    /* Close USB interface. */
-    usbExit();
-    
-    /* Close initialized services. */
-    servicesClose();
-    
-    /* Close logfile. */
-    logCloseLogFile();
-    
-    g_resourcesInit = false;
-    
-    mutexUnlock(&g_resourcesMutex);
+}
+
+const char *utilsGetLaunchPath(void)
+{
+    return g_appLaunchPath;
+}
+
+FsFileSystem *utilsGetSdCardFileSystemObject(void)
+{
+    return g_sdCardFileSystem;
+}
+
+bool utilsCommitSdCardFileSystemChanges(void)
+{
+    return (g_sdCardFileSystem ? R_SUCCEEDED(fsFsCommit(g_sdCardFileSystem)) : false);
+}
+
+u8 utilsGetCustomFirmwareType(void)
+{
+    return g_customFirmwareType;
+}
+
+bool utilsIsDevelopmentUnit(void)
+{
+    return g_isDevUnit;
+}
+
+bool utilsAppletModeCheck(void)
+{
+    return _utilsAppletModeCheck();
+}
+
+FsStorage *utilsGetEmmcBisSystemPartitionStorage(void)
+{
+    return &g_emmcBisSystemPartitionStorage;
+}
+
+void utilsOverclockSystem(bool overclock)
+{
+    u32 cpu_rate = ((overclock ? CPU_CLKRT_OVERCLOCKED : CPU_CLKRT_NORMAL) * 1000000);
+    u32 mem_rate = ((overclock ? MEM_CLKRT_OVERCLOCKED : MEM_CLKRT_NORMAL) * 1000000);
+    servicesChangeHardwareClockRates(cpu_rate, mem_rate);
+}
+
+void utilsChangeHomeButtonBlockStatus(bool block)
+{
+    SCOPED_LOCK(&g_resourcesMutex)
+    {
+        /* Only change HOME button blocking status if we're running as a regular application or a system application, and if its current blocking status is different than the requested one. */
+        if (_utilsAppletModeCheck() || block == g_homeButtonBlocked) break;
+        
+        if (block)
+        {
+            appletBeginBlockingHomeButtonShortAndLongPressed(0);
+        } else {
+            appletEndBlockingHomeButtonShortAndLongPressed();
+        }
+        
+        g_homeButtonBlocked = block;
+    }
 }
 
 bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_id)
@@ -334,14 +371,6 @@ void utilsJoinThread(Thread *thread)
     threadClose(thread);
     
     memset(thread, 0, sizeof(Thread));
-}
-
-bool utilsIsDevelopmentUnit(void)
-{
-    mutexLock(&g_resourcesMutex);
-    bool ret = (g_resourcesInit && g_isDevUnit);
-    mutexUnlock(&g_resourcesMutex);
-    return ret;
 }
 
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
@@ -510,18 +539,6 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
     return true;
 }
 
-FsFileSystem *utilsGetSdCardFileSystemObject(void)
-{
-    return g_sdCardFileSystem;
-}
-
-bool utilsCommitSdCardFileSystemChanges(void)
-{
-    if (!g_sdCardFileSystem) return false;
-    Result rc = fsFsCommit(g_sdCardFileSystem);
-    return R_SUCCEEDED(rc);
-}
-
 bool utilsCheckIfFileExists(const char *path)
 {
     if (!path || !*path) return false;
@@ -610,46 +627,18 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     return path;
 }
 
-bool utilsAppletModeCheck(void)
+static void _utilsGetLaunchPath(int program_argc, const char **program_argv)
 {
-    return (g_programAppletType != AppletType_Application && g_programAppletType != AppletType_SystemApplication);
-}
-
-void utilsChangeHomeButtonBlockStatus(bool block)
-{
-    mutexLock(&g_homeButtonMutex);
+    if (program_argc <= 0 || !program_argv) return;
     
-    /* Only change HOME button blocking status if we're running as a regular application or a system application, and if it's current blocking status is different than the requested one. */
-    if (!utilsAppletModeCheck() && block != g_homeButtonBlocked)
+    for(int i = 0; i < program_argc; i++)
     {
-        if (block)
+        if (program_argv[i] && !strncmp(program_argv[i], "sdmc:/", 6))
         {
-            appletBeginBlockingHomeButtonShortAndLongPressed(0);
-        } else {
-            appletEndBlockingHomeButtonShortAndLongPressed();
+            g_appLaunchPath = program_argv[i];
+            break;
         }
-        
-        g_homeButtonBlocked = block;
     }
-    
-    mutexUnlock(&g_homeButtonMutex);
-}
-
-u8 utilsGetCustomFirmwareType(void)
-{
-    return g_customFirmwareType;
-}
-
-FsStorage *utilsGetEmmcBisSystemPartitionStorage(void)
-{
-    return &g_emmcBisSystemPartitionStorage;
-}
-
-void utilsOverclockSystem(bool overclock)
-{
-    u32 cpu_rate = ((overclock ? CPU_CLKRT_OVERCLOCKED : CPU_CLKRT_NORMAL) * 1000000);
-    u32 mem_rate = ((overclock ? MEM_CLKRT_OVERCLOCKED : MEM_CLKRT_NORMAL) * 1000000);
-    servicesChangeHardwareClockRates(cpu_rate, mem_rate);
 }
 
 static void _utilsGetCustomFirmwareType(void)
@@ -674,6 +663,11 @@ static bool _utilsIsDevelopmentUnit(void)
     }
     
     return R_SUCCEEDED(rc);
+}
+
+static bool _utilsAppletModeCheck(void)
+{
+    return (g_programAppletType > AppletType_Application && g_programAppletType < AppletType_SystemApplication);
 }
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void)

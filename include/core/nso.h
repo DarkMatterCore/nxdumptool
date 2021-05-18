@@ -85,7 +85,7 @@ typedef struct {
 
 NXDT_ASSERT(NsoHeader, 0x100);
 
-/// Usually placed right after NsoHeader, but it's actual offset may vary.
+/// Usually placed right after NsoHeader, but its actual offset may vary.
 /// If the 'module_name_size' member from NsoHeader is greater than 1 and the 'name_length' element from NsoModuleName is greater than 0, 'name' will hold the module name.
 typedef struct {
     u8 name_length;

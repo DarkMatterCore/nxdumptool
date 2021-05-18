@@ -32,6 +32,8 @@ extern "C" {
 
 #define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
 
+#define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
+
 #define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
@@ -44,7 +46,14 @@ extern "C" {
 
 #define IS_POWER_OF_TWO(x)              (((x) & ((x) - 1)) == 0)
 
-#define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
+#define SCOPED_LOCK(mtx)                for(UtilsScopedLock scoped_lock __attribute__((__cleanup__(utilsUnlockScope))) = utilsLockScope(mtx); scoped_lock.cond; scoped_lock.cond = 0)
+
+/// Used by scoped locks.
+typedef struct {
+    Mutex *mtx;
+    bool lock;
+    int cond;
+} UtilsScopedLock;
 
 /// Used to determine which CFW is the application running under.
 typedef enum {
@@ -54,17 +63,45 @@ typedef enum {
     UtilsCustomFirmwareType_ReiNX      = 3
 } UtilsCustomFirmwareType;
 
-/// Resource (de)initialization.
-/// Called at program startup and exit.
-bool utilsInitializeResources(void);
+/// Resource initialization.
+/// Called at program startup.
+bool utilsInitializeResources(const int program_argc, const char **program_argv);
+
+/// Resource deinitialization.
+/// Called at program exit.
 void utilsCloseResources(void);
+
+/// Returns a pointer to the application launch path.
+const char *utilsGetLaunchPath(void);
+
+/// Returns a pointer to the FsFileSystem object for the SD card.
+FsFileSystem *utilsGetSdCardFileSystemObject(void);
+
+/// Commits SD card filesystem changes.
+/// Must be used after closing a file handle from the SD card.
+bool utilsCommitSdCardFileSystemChanges(void);
+
+/// Returns a UtilsCustomFirmwareType value.
+u8 utilsGetCustomFirmwareType(void);
+
+/// Returns true if the application is running under a development unit.
+bool utilsIsDevelopmentUnit(void);
+
+/// Returns true if the application is running under applet mode.
+bool utilsAppletModeCheck(void);
+
+/// Returns a pointer to the FsStorage object for the eMMC BIS System partition.
+FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
+
+/// Enables/disables CPU/MEM overclocking.
+void utilsOverclockSystem(bool overclock);
+
+/// (Un)blocks HOME button presses.
+void utilsChangeHomeButtonBlockStatus(bool block);
 
 /// Thread management functions.
 bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_id);
 void utilsJoinThread(Thread *thread);
-
-/// Returns true if the application is running under a development unit.
-bool utilsIsDevelopmentUnit(void);
 
 /// Formats a string and appends it to the provided buffer.
 /// If the buffer isn't big enough to hold both its current contents and the new formatted string, it will be resized.
@@ -89,13 +126,6 @@ void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);
 /// Returns false if there's an error.
 bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_free);
 
-/// Returns a pointer to the FsFileSystem object for the SD card.
-FsFileSystem *utilsGetSdCardFileSystemObject(void);
-
-/// Commits SD card filesystem changes.
-/// Must be used after closing a file handle from the SD card.
-bool utilsCommitSdCardFileSystemChanges(void);
-
 /// Returns true if a file exists.
 bool utilsCheckIfFileExists(const char *path);
 
@@ -112,25 +142,23 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 /// Returns a pointer to a dynamically allocated string that holds the full path formed by the provided arguments.
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
 
-/// Returns true if the application is running under Applet Mode.
-bool utilsAppletModeCheck(void);
-
-/// (Un)blocks HOME button presses.
-void utilsChangeHomeButtonBlockStatus(bool block);
-
-/// Returns a UtilsCustomFirmwareType value.
-u8 utilsGetCustomFirmwareType(void);
-
-/// Returns a pointer to the FsStorage object for the eMMC BIS System partition.
-FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
-
-/// Enables/disables CPU/MEM overclocking.
-void utilsOverclockSystem(bool overclock);
-
 /// Simple wrapper to sleep the current thread for a specific number of full seconds.
 NX_INLINE void utilsSleep(u64 seconds)
 {
     if (seconds) svcSleepThread(seconds * (u64)1000000000);
+}
+
+/// Wrappers used in scoped locks.
+NX_INLINE UtilsScopedLock utilsLockScope(Mutex *mtx)
+{
+    UtilsScopedLock scoped_lock = { mtx, !mutexIsLockedByCurrentThread(mtx), 1 };
+    if (scoped_lock.lock) mutexLock(scoped_lock.mtx);
+    return scoped_lock;
+}
+
+NX_INLINE void utilsUnlockScope(UtilsScopedLock *scoped_lock)
+{
+    if (scoped_lock->lock) mutexUnlock(scoped_lock->mtx);
 }
 
 #ifdef __cplusplus

@@ -39,7 +39,7 @@ typedef struct {
 
 /* Function prototypes. */
 
-static bool _servicesCheckInitializedServiceByName(const char *name, bool lock);
+static bool _servicesCheckInitializedServiceByName(const char *name);
 
 static Result servicesAtmosphereHasService(bool *out, SmServiceName name);
 static Result servicesGetExosphereApiVersion(u32 *out);
@@ -82,133 +82,122 @@ static const u32 g_atmosphereTipcVersion = MAKEHOSVERSION(0, 19, 0);
 
 bool servicesInitialize(void)
 {
-    mutexLock(&g_servicesMutex);
-    
-    Result rc = 0;
     bool ret = true;
     
-    for(u32 i = 0; i < g_serviceInfoCount; i++)
+    SCOPED_LOCK(&g_servicesMutex)
     {
-        ServiceInfo *service_info = &(g_serviceInfo[i]);
-        
-        /* Check if this service has been already initialized. */
-        if (service_info->initialized) continue;
-        
-        /* Check if this service depends on a condition function. */
-        if (service_info->cond_func != NULL)
+        for(u32 i = 0; i < g_serviceInfoCount; i++)
         {
-            /* Run the condition function - it will update the current service member. */
-            /* Skip this service if the required conditions aren't met. */
-            if (!service_info->cond_func(service_info)) continue;
+            ServiceInfo *service_info = &(g_serviceInfo[i]);
+            
+            /* Check if this service has been already initialized. */
+            if (service_info->initialized) continue;
+            
+            /* Check if this service depends on a condition function. */
+            if (service_info->cond_func != NULL)
+            {
+                /* Run the condition function - it will update the current service member. */
+                /* Skip this service if the required conditions aren't met. */
+                if (!service_info->cond_func(service_info)) continue;
+            }
+            
+            /* Check if this service actually has a valid initialization function. */
+            if (service_info->init_func == NULL) continue;
+            
+            /* Initialize service. */
+            Result rc = service_info->init_func();
+            if (R_FAILED(rc))
+            {
+                LOG_MSG("Failed to initialize \"%s\" service! (0x%08X).", service_info->name, rc);
+                ret = false;
+                break;
+            }
+            
+            /* Update flag. */
+            service_info->initialized = true;
         }
-        
-        /* Check if this service actually has a valid initialization function. */
-        if (service_info->init_func == NULL) continue;
-        
-        /* Initialize service. */
-        rc = service_info->init_func();
-        if (R_FAILED(rc))
-        {
-            LOG_MSG("Failed to initialize \"%s\" service! (0x%08X).", service_info->name, rc);
-            ret = false;
-            break;
-        }
-        
-        /* Update flag. */
-        service_info->initialized = true;
     }
-    
-    mutexUnlock(&g_servicesMutex);
     
     return ret;
 }
 
 void servicesClose(void)
 {
-    mutexLock(&g_servicesMutex);
-    
-    for(u32 i = 0; i < g_serviceInfoCount; i++)
+    SCOPED_LOCK(&g_servicesMutex)
     {
-        ServiceInfo *service_info = &(g_serviceInfo[i]);
-        
-        /* Check if this service has not been initialized, or if it doesn't have a valid close function. */
-        if (!service_info->initialized || service_info->close_func == NULL) continue;
-        
-        /* Close service. */
-        service_info->close_func();
-        
-        /* Update flag. */
-        service_info->initialized = false;
+        for(u32 i = 0; i < g_serviceInfoCount; i++)
+        {
+            ServiceInfo *service_info = &(g_serviceInfo[i]);
+            
+            /* Check if this service has not been initialized, or if it doesn't have a valid close function. */
+            if (!service_info->initialized || service_info->close_func == NULL) continue;
+            
+            /* Close service. */
+            service_info->close_func();
+            
+            /* Update flag. */
+            service_info->initialized = false;
+        }
     }
-    
-    mutexUnlock(&g_servicesMutex);
 }
 
 bool servicesCheckInitializedServiceByName(const char *name)
 {
-    return _servicesCheckInitializedServiceByName(name, true);
+    bool ret = false;
+    SCOPED_LOCK(&g_servicesMutex) ret = _servicesCheckInitializedServiceByName(name);
+    return ret;
 }
 
 bool servicesCheckRunningServiceByName(const char *name)
 {
-    Result rc = 0;
-    bool out = false;
-    SmServiceName service_name = {0};
+    bool ret = false;
     
-    mutexLock(&g_servicesMutex);
-    
-    if (!name || !*name || !_servicesCheckInitializedServiceByName("spl:", false))
+    SCOPED_LOCK(&g_servicesMutex)
     {
-        LOG_MSG("Invalid parameters!");
-        goto end;
+        if (!name || !*name || !_servicesCheckInitializedServiceByName("spl:"))
+        {
+            LOG_MSG("Invalid parameters!");
+            break;
+        }
+        
+        Result rc = servicesAtmosphereHasService(&ret, smEncodeName(name));
+        if (R_FAILED(rc)) LOG_MSG("servicesAtmosphereHasService failed for \"%s\"! (0x%08X).", name, rc);
     }
     
-    service_name = smEncodeName(name);
-    
-    rc = servicesAtmosphereHasService(&out, service_name);
-    if (R_FAILED(rc)) LOG_MSG("servicesAtmosphereHasService failed for \"%s\"! (0x%08X).", name, rc);
-    
-end:
-    mutexUnlock(&g_servicesMutex);
-    
-    return out;
+    return ret;
 }
 
 void servicesChangeHardwareClockRates(u32 cpu_rate, u32 mem_rate)
 {
-    Result rc1 = 0, rc2 = 0;
-    
-    mutexLock(&g_servicesMutex);
-    
-    if ((g_clkSvcUsePcv && !_servicesCheckInitializedServiceByName("pcv", false)) || (!g_clkSvcUsePcv && !_servicesCheckInitializedServiceByName("clkrst", false)))
+    SCOPED_LOCK(&g_servicesMutex)
     {
-        LOG_MSG("Error: clock service uninitialized.");
-        goto end;
+        if ((g_clkSvcUsePcv && !_servicesCheckInitializedServiceByName("pcv")) || (!g_clkSvcUsePcv && !_servicesCheckInitializedServiceByName("clkrst")))
+        {
+            LOG_MSG("Error: clock service uninitialized.");
+            break;
+        }
+        
+        Result rc1 = 0, rc2 = 0;
+        
+        if (g_clkSvcUsePcv)
+        {
+            rc1 = pcvSetClockRate(PcvModule_CpuBus, cpu_rate);
+            rc2 = pcvSetClockRate(PcvModule_EMC, mem_rate);
+        } else {
+            rc1 = clkrstSetClockRate(&g_clkrstCpuSession, cpu_rate);
+            rc2 = clkrstSetClockRate(&g_clkrstMemSession, mem_rate);
+        }
+        
+        if (R_FAILED(rc1)) LOG_MSG("%sSetClockRate failed! (0x%08X) (CPU).", (g_clkSvcUsePcv ? "pcv" : "clkrst"), rc1);
+        if (R_FAILED(rc2)) LOG_MSG("%sSetClockRate failed! (0x%08X) (MEM).", (g_clkSvcUsePcv ? "pcv" : "clkrst"), rc2);
     }
-    
-    if (g_clkSvcUsePcv)
-    {
-        rc1 = pcvSetClockRate(PcvModule_CpuBus, cpu_rate);
-        rc2 = pcvSetClockRate(PcvModule_EMC, mem_rate);
-    } else {
-        rc1 = clkrstSetClockRate(&g_clkrstCpuSession, cpu_rate);
-        rc2 = clkrstSetClockRate(&g_clkrstMemSession, mem_rate);
-    }
-    
-    if (R_FAILED(rc1)) LOG_MSG("%sSetClockRate failed! (0x%08X) (CPU).", (g_clkSvcUsePcv ? "pcv" : "clkrst"), rc1);
-    if (R_FAILED(rc2)) LOG_MSG("%sSetClockRate failed! (0x%08X) (MEM).", (g_clkSvcUsePcv ? "pcv" : "clkrst"), rc2);
-    
-end:
-    mutexUnlock(&g_servicesMutex);
 }
 
-static bool _servicesCheckInitializedServiceByName(const char *name, bool lock)
+static bool _servicesCheckInitializedServiceByName(const char *name)
 {
+    if (!name || !*name) return false;
+    
     bool ret = false;
-    
-    if (lock) mutexLock(&g_servicesMutex);
-    
-    if (!name || !*name) goto end;
     
     for(u32 i = 0; i < g_serviceInfoCount; i++)
     {
@@ -220,9 +209,6 @@ static bool _servicesCheckInitializedServiceByName(const char *name, bool lock)
             break;
         }
     }
-    
-end:
-    if (lock) mutexUnlock(&g_servicesMutex);
     
     return ret;
 }

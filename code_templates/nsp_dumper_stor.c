@@ -32,10 +32,6 @@
 #define BLOCK_SIZE  0x800000
 #define OUTPATH     "/nsp/"
 
-int g_argc = 0;
-char **g_argv = NULL;
-const char *g_appLaunchPath = NULL;
-
 static PadState g_padState = {0};
 
 static const char *dump_type_strings[] = {
@@ -783,12 +779,9 @@ end:
 
 int main(int argc, char *argv[])
 {
-    g_argc = argc;
-    g_argv = argv;
-    
     int ret = 0;
     
-    if (!utilsInitializeResources())
+    if (!utilsInitializeResources(argc, (const char**)argv))
     {
         ret = -1;
         goto out;

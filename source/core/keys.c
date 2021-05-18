@@ -33,11 +33,14 @@
 
 /* Type definitions. */
 
+typedef bool (*KeysIsKeyMandatoryFunction)(void);   /* Used to determine if a key is mandatory or not at runtime. */
+
 typedef struct {
     char name[64];
     u8 hash[SHA256_HASH_SIZE];
     u64 size;
     void *dst;
+    KeysIsKeyMandatoryFunction mandatory_func;  ///< If NULL, key is mandatory.
 } KeysMemoryKey;
 
 typedef struct {
@@ -52,6 +55,10 @@ typedef struct {
     u8 nca_header_key_source[AES_128_KEY_SIZE * 2];                                                 ///< Retrieved from the .data segment in the FS sysmodule.
     u8 nca_header_kek_sealed[AES_128_KEY_SIZE];                                                     ///< Generated from nca_header_kek_source. Sealed by the SMC AES engine.
     u8 nca_header_key[AES_128_KEY_SIZE * 2];                                                        ///< Generated from nca_header_kek_sealed and nca_header_key_source.
+    
+    ///< RSA-2048-PSS moduli used to verify the main signature from NCA headers.
+    u8 nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];      ///< Moduli used in retail units. Retrieved from the .rodata segment in the FS sysmodule.
+    u8 nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];       ///< Moduli used in development units. Retrieved from the .rodata segment in the FS sysmodule.
     
     ///< AES-128-ECB keys needed to handle key area crypto from NCA headers.
     u8 nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Count][AES_128_KEY_SIZE];                      ///< Retrieved from the .rodata segment in the FS sysmodule.
@@ -80,6 +87,27 @@ typedef struct {
 
 NXDT_ASSERT(EticketRsaDeviceKey, 0x240);
 
+/* Function prototypes. */
+
+static bool keysIsProductionModulus1xMandatory(void);
+static bool keysIsProductionModulus9xMandatory(void);
+
+static bool keysIsDevelopmentModulus1xMandatory(void);
+static bool keysIsDevelopmentModulus9xMandatory(void);
+
+static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info);
+
+static bool keysDeriveNcaHeaderKey(void);
+static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void);
+
+static int keysGetKeyAndValueFromFile(FILE *f, char **key, char **value);
+static char keysConvertHexCharToBinary(char c);
+static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 size);
+static bool keysReadKeysFromFile(void);
+
+static bool keysGetDecryptedEticketRsaDeviceKey(void);
+static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void *n);
+
 /* Global variables. */
 
 static KeysNcaKeyset g_ncaKeyset = {0};
@@ -101,7 +129,7 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
         .data = NULL,
         .data_size = 0
     },
-    .key_count = 4,
+    .key_count = 8,
     .keys = {
         {
             .name = "nca_header_kek_source",
@@ -109,8 +137,49 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
                 0x18, 0x88, 0xCA, 0xED, 0x55, 0x51, 0xB3, 0xED, 0xE0, 0x14, 0x99, 0xE8, 0x7C, 0xE0, 0xD8, 0x68,
                 0x27, 0xF8, 0x08, 0x20, 0xEF, 0xB2, 0x75, 0x92, 0x10, 0x55, 0xAA, 0x4E, 0x2A, 0xBD, 0xFF, 0xC2
             },
-            .size = AES_128_KEY_SIZE,
-            .dst = g_ncaKeyset.nca_header_kek_source
+            .size = sizeof(g_ncaKeyset.nca_header_kek_source),
+            .dst = g_ncaKeyset.nca_header_kek_source,
+            .mandatory_func = NULL
+        },
+        {
+            .name = "nca_main_signature_modulus_prod_00",
+            .hash = {
+                0xF9, 0x2E, 0x84, 0x98, 0x17, 0x2C, 0xAF, 0x9C, 0x20, 0xE3, 0xF1, 0xF7, 0xD3, 0xE7, 0x2C, 0x62,
+                0x50, 0xA9, 0x40, 0x7A, 0xE7, 0x84, 0xE0, 0x03, 0x58, 0x07, 0x85, 0xA5, 0x68, 0x0B, 0x80, 0x33
+            },
+            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_100_811]),
+            .dst = g_ncaKeyset.nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_100_811],
+            .mandatory_func = &keysIsProductionModulus1xMandatory
+        },
+        {
+            .name = "nca_main_signature_modulus_prod_01",
+            .hash = {
+                0x5F, 0x6B, 0xE3, 0x1C, 0x31, 0x6E, 0x7C, 0xB2, 0x1C, 0xA7, 0xB9, 0xA1, 0x70, 0x6A, 0x9D, 0x58,
+                0x04, 0xEB, 0x90, 0x53, 0x72, 0xEF, 0xCB, 0x56, 0xD1, 0x93, 0xF2, 0xAF, 0x9E, 0x8A, 0xD1, 0xFA
+            },
+            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_900_1202]),
+            .dst = g_ncaKeyset.nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_900_1202],
+            .mandatory_func = &keysIsProductionModulus9xMandatory
+        },
+        {
+            .name = "nca_main_signature_modulus_dev_00",
+            .hash = {
+                0x50, 0xF8, 0x26, 0xBB, 0x13, 0xFE, 0xB2, 0x6D, 0x83, 0xCF, 0xFF, 0xD8, 0x38, 0x45, 0xC3, 0x51,
+                0x4D, 0xCB, 0x06, 0x91, 0x83, 0x52, 0x06, 0x35, 0x7A, 0xC1, 0xDA, 0x6B, 0xF1, 0x60, 0x9F, 0x18
+            },
+            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_100_811]),
+            .dst = g_ncaKeyset.nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_100_811],
+            .mandatory_func = &keysIsDevelopmentModulus1xMandatory
+        },
+        {
+            .name = "nca_main_signature_modulus_dev_01",
+            .hash = {
+                0x56, 0xF5, 0x06, 0xEF, 0x8E, 0xCA, 0x2A, 0x29, 0x6F, 0x65, 0x45, 0xE1, 0x87, 0x60, 0x01, 0x11,
+                0xBC, 0xC7, 0x38, 0x56, 0x99, 0x16, 0xAD, 0xA5, 0xDD, 0x89, 0xF2, 0xE9, 0xAB, 0x28, 0x5B, 0x18
+            },
+            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_900_1202]),
+            .dst = g_ncaKeyset.nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_900_1202],
+            .mandatory_func = &keysIsDevelopmentModulus9xMandatory
         },
         {
             .name = "nca_kaek_application_source",
@@ -118,8 +187,9 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
                 0x04, 0xAD, 0x66, 0x14, 0x3C, 0x72, 0x6B, 0x2A, 0x13, 0x9F, 0xB6, 0xB2, 0x11, 0x28, 0xB4, 0x6F,
                 0x56, 0xC5, 0x53, 0xB2, 0xB3, 0x88, 0x71, 0x10, 0x30, 0x42, 0x98, 0xD8, 0xD0, 0x09, 0x2D, 0x9E
             },
-            .size = AES_128_KEY_SIZE,
-            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Application]
+            .size = sizeof(g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Application]),
+            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Application],
+            .mandatory_func = NULL
         },
         {
             .name = "nca_kaek_ocean_source",
@@ -127,8 +197,9 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
                 0xFD, 0x43, 0x40, 0x00, 0xC8, 0xFF, 0x2B, 0x26, 0xF8, 0xE9, 0xA9, 0xD2, 0xD2, 0xC1, 0x2F, 0x6B,
                 0xE5, 0x77, 0x3C, 0xBB, 0x9D, 0xC8, 0x63, 0x00, 0xE1, 0xBD, 0x99, 0xF8, 0xEA, 0x33, 0xA4, 0x17
             },
-            .size = AES_128_KEY_SIZE,
-            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Ocean]
+            .size = sizeof(g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Ocean]),
+            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Ocean],
+            .mandatory_func = NULL
         },
         {
             .name = "nca_kaek_system_source",
@@ -136,8 +207,9 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
                 0x1F, 0x17, 0xB1, 0xFD, 0x51, 0xAD, 0x1C, 0x23, 0x79, 0xB5, 0x8F, 0x15, 0x2C, 0xA4, 0x91, 0x2E,
                 0xC2, 0x10, 0x64, 0x41, 0xE5, 0x17, 0x22, 0xF3, 0x87, 0x00, 0xD5, 0x93, 0x7A, 0x11, 0x62, 0xF7
             },
-            .size = AES_128_KEY_SIZE,
-            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_System]
+            .size = sizeof(g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_System]),
+            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_System],
+            .mandatory_func = NULL
         }
     }
 };
@@ -157,94 +229,84 @@ static KeysMemoryInfo g_fsDataMemoryInfo = {
                 0x8F, 0x78, 0x3E, 0x46, 0x85, 0x2D, 0xF6, 0xBE, 0x0B, 0xA4, 0xE1, 0x92, 0x73, 0xC4, 0xAD, 0xBA,
                 0xEE, 0x16, 0x38, 0x00, 0x43, 0xE1, 0xB8, 0xC4, 0x18, 0xC4, 0x08, 0x9A, 0x8B, 0xD6, 0x4A, 0xA6
             },
-            .size = (AES_128_KEY_SIZE * 2),
-            .dst = g_ncaKeyset.nca_header_key_source
+            .size = sizeof(g_ncaKeyset.nca_header_key_source),
+            .dst = g_ncaKeyset.nca_header_key_source,
+            .mandatory_func = NULL
         }
     }
 };
 
-/* Function prototypes. */
-
-static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info);
-
-static bool keysDeriveNcaHeaderKey(void);
-static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void);
-
-static int keysGetKeyAndValueFromFile(FILE *f, char **key, char **value);
-static char keysConvertHexCharToBinary(char c);
-static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 size);
-static bool keysReadKeysFromFile(void);
-
-static bool keysGetDecryptedEticketRsaDeviceKey(void);
-static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void *n);
-
 bool keysLoadNcaKeyset(void)
 {
-    mutexLock(&g_ncaKeysetMutex);
+    bool ret = false;
     
-    bool ret = g_ncaKeysetLoaded;
-    if (ret) goto end;
-    
-    /* Retrieve FS .rodata keys. */
-    if (!keysRetrieveKeysFromProgramMemory(&g_fsRodataMemoryInfo))
+    SCOPED_LOCK(&g_ncaKeysetMutex)
     {
-        LOG_MSG("Unable to retrieve keys from FS .rodata segment!");
-        goto end;
+        ret = g_ncaKeysetLoaded;
+        if (ret) break;
+        
+        /* Retrieve FS .rodata keys. */
+        if (!keysRetrieveKeysFromProgramMemory(&g_fsRodataMemoryInfo))
+        {
+            LOG_MSG("Unable to retrieve keys from FS .rodata segment!");
+            break;
+        }
+        
+        /* Retrieve FS .data keys. */
+        if (!keysRetrieveKeysFromProgramMemory(&g_fsDataMemoryInfo))
+        {
+            LOG_MSG("Unable to retrieve keys from FS .data segment!");
+            break;
+        }
+        
+        /* Derive NCA header key. */
+        if (!keysDeriveNcaHeaderKey())
+        {
+            LOG_MSG("Unable to derive NCA header key!");
+            break;
+        }
+        
+        /* Derive sealed NCA KAEKs. */
+        if (!keysDeriveSealedNcaKeyAreaEncryptionKeys())
+        {
+            LOG_MSG("Unable to derive sealed NCA KAEKs!");
+            break;
+        }
+        
+        /* Read additional keys from the keys file. */
+        if (!keysReadKeysFromFile()) break;
+        
+        /* Get decrypted eTicket RSA device key. */
+        if (!keysGetDecryptedEticketRsaDeviceKey()) break;
+        
+        /* Update flags. */
+        ret = g_ncaKeysetLoaded = true;
     }
     
-    /* Retrieve FS .data keys. */
-    if (!keysRetrieveKeysFromProgramMemory(&g_fsDataMemoryInfo))
-    {
-        LOG_MSG("Unable to retrieve keys from FS .data segment!");
-        goto end;
-    }
-    
-    /* Derive NCA header key. */
-    if (!keysDeriveNcaHeaderKey())
-    {
-        LOG_MSG("Unable to derive NCA header key!");
-        goto end;
-    }
-    
-    /* Derive sealed NCA KAEKs. */
-    if (!keysDeriveSealedNcaKeyAreaEncryptionKeys())
-    {
-        LOG_MSG("Unable to derive sealed NCA KAEKs!");
-        goto end;
-    }
-    
-    /* Read additional keys from the keys file. */
-    if (!keysReadKeysFromFile()) goto end;
-    
-    /* Get decrypted eTicket RSA device key. */
-    if (!keysGetDecryptedEticketRsaDeviceKey()) goto end;
-    
-    ret = g_ncaKeysetLoaded = true;
-    
-end:
     /*if (ret)
     {
         LOG_DATA(&g_ncaKeyset, sizeof(KeysNcaKeyset), "NCA keyset dump:");
         LOG_DATA(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
     }*/
     
-    mutexUnlock(&g_ncaKeysetMutex);
-    
     return ret;
 }
 
 const u8 *keysGetNcaHeaderKey(void)
 {
-    mutexLock(&g_ncaKeysetMutex);
-    const u8 *ptr = (g_ncaKeysetLoaded ? (const u8*)(g_ncaKeyset.nca_header_key) : NULL);
-    mutexUnlock(&g_ncaKeysetMutex);
-    return ptr;
+    const u8 *ret = NULL;
+    
+    SCOPED_LOCK(&g_ncaKeysetMutex)
+    {
+        if (g_ncaKeysetLoaded) ret = (const u8*)(g_ncaKeyset.nca_header_key);
+    }
+    
+    return ret;
 }
 
 bool keysDecryptNcaKeyAreaEntry(u8 kaek_index, u8 key_generation, void *dst, const void *src)
 {
-    Result rc = 0;
-    bool success = false;
+    bool ret = false;
     u8 key_gen_val = (key_generation ? (key_generation - 1) : key_generation);
     
     if (kaek_index >= NcaKeyAreaEncryptionKeyIndex_Count)
@@ -265,23 +327,20 @@ bool keysDecryptNcaKeyAreaEntry(u8 kaek_index, u8 key_generation, void *dst, con
         goto end;
     }
     
-    mutexLock(&g_ncaKeysetMutex);
-    
-    if (g_ncaKeysetLoaded)
+    SCOPED_LOCK(&g_ncaKeysetMutex)
     {
-        rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_kaek_sealed[kaek_index][key_gen_val], src, dst);
-        if (!(success = R_SUCCEEDED(rc))) LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X).", rc);
+        if (!g_ncaKeysetLoaded) break;
+        Result rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_kaek_sealed[kaek_index][key_gen_val], src, dst);
+        if (!(ret = R_SUCCEEDED(rc))) LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X).", rc);
     }
     
-    mutexUnlock(&g_ncaKeysetMutex);
-    
 end:
-    return success;
+    return ret;
 }
 
 const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
 {
-    const u8 *ptr = NULL;
+    const u8 *ret = NULL;
     u8 key_gen_val = (key_generation ? (key_generation - 1) : key_generation);
     
     if (kaek_index >= NcaKeyAreaEncryptionKeyIndex_Count)
@@ -296,14 +355,13 @@ const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
         goto end;
     }
     
-    mutexLock(&g_ncaKeysetMutex);
-    
-    if (g_ncaKeysetLoaded) ptr = (const u8*)(g_ncaKeyset.nca_kaek[kaek_index][key_gen_val]);
-    
-    mutexUnlock(&g_ncaKeysetMutex);
+    SCOPED_LOCK(&g_ncaKeysetMutex)
+    {
+        if (g_ncaKeysetLoaded) ret = (const u8*)(g_ncaKeyset.nca_kaek[kaek_index][key_gen_val]);
+    }
     
 end:
-    return ptr;
+    return ret;
 }
 
 bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *out_titlekey)
@@ -314,22 +372,22 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
         return false;
     }
     
-    size_t out_keydata_size = 0;
-    u8 out_keydata[0x100] = {0};
-    EticketRsaDeviceKey *eticket_rsa_key = NULL;
-    bool success = false;
+    bool ret = false;
     
-    mutexLock(&g_ncaKeysetMutex);
-    
-    if (g_ncaKeysetLoaded)
+    SCOPED_LOCK(&g_ncaKeysetMutex)
     {
+        if (!g_ncaKeysetLoaded) break;
+        
+        size_t out_keydata_size = 0;
+        u8 out_keydata[0x100] = {0};
+        
         /* Get eTicket RSA device key. */
-        eticket_rsa_key = (EticketRsaDeviceKey*)g_eTicketRsaDeviceKey.key;
+        EticketRsaDeviceKey *eticket_rsa_key = (EticketRsaDeviceKey*)g_eTicketRsaDeviceKey.key;
         
         /* Perform a RSA-OAEP unwrap operation to get the encrypted titlekey. */
-        success = (rsa2048OaepDecryptAndVerify(out_keydata, sizeof(out_keydata), rsa_wrapped_titlekey, eticket_rsa_key->modulus, eticket_rsa_key->exponent, sizeof(eticket_rsa_key->exponent), \
+        ret = (rsa2048OaepDecryptAndVerify(out_keydata, sizeof(out_keydata), rsa_wrapped_titlekey, eticket_rsa_key->modulus, eticket_rsa_key->exponent, sizeof(eticket_rsa_key->exponent), \
                    g_nullHash, &out_keydata_size) && out_keydata_size >= AES_128_KEY_SIZE);
-        if (success)
+        if (ret)
         {
             /* Copy RSA-OAEP unwrapped titlekey. */
             memcpy(out_titlekey, out_keydata, AES_128_KEY_SIZE);
@@ -338,14 +396,12 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
         }
     }
     
-    mutexUnlock(&g_ncaKeysetMutex);
-    
-    return success;
+    return ret;
 }
 
 const u8 *keysGetTicketCommonKey(u8 key_generation)
 {
-    const u8 *ptr = NULL;
+    const u8 *ret = NULL;
     u8 key_gen_val = (key_generation ? (key_generation - 1) : key_generation);
     
     if (key_gen_val >= NcaKeyGeneration_Max)
@@ -354,14 +410,33 @@ const u8 *keysGetTicketCommonKey(u8 key_generation)
         goto end;
     }
     
-    mutexLock(&g_ncaKeysetMutex);
-    
-    if (g_ncaKeysetLoaded) ptr = (const u8*)(g_ncaKeyset.ticket_common_keys[key_gen_val]);
-    
-    mutexUnlock(&g_ncaKeysetMutex);
+    SCOPED_LOCK(&g_ncaKeysetMutex)
+    {
+        if (g_ncaKeysetLoaded) ret = (const u8*)(g_ncaKeyset.ticket_common_keys[key_gen_val]);
+    }
     
 end:
-    return ptr;
+    return ret;
+}
+
+static bool keysIsProductionModulus1xMandatory(void)
+{
+    return !utilsIsDevelopmentUnit();
+}
+
+static bool keysIsProductionModulus9xMandatory(void)
+{
+    return (!utilsIsDevelopmentUnit() && hosversionAtLeast(9, 0, 0));
+}
+
+static bool keysIsDevelopmentModulus1xMandatory(void)
+{
+    return utilsIsDevelopmentUnit();
+}
+
+static bool keysIsDevelopmentModulus9xMandatory(void)
+{
+    return (utilsIsDevelopmentUnit() && hosversionAtLeast(9, 0, 0));
 }
 
 static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
@@ -372,7 +447,6 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
         return false;
     }
     
-    bool found;
     u8 tmp_hash[SHA256_HASH_SIZE];
     bool success = false;
     
@@ -380,14 +454,13 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
     
     for(u32 i = 0; i < info->key_count; i++)
     {
-        found = false;
-        
         KeysMemoryKey *key = &(info->keys[i]);
+        bool found = false, mandatory = (key->mandatory_func != NULL ? key->mandatory_func() : true);
         
         if (!key->dst)
         {
             LOG_MSG("Invalid destination pointer for key \"%s\" in program %016lX!", key->name, info->location.program_id);
-            goto end;
+            if (mandatory) goto end;
         }
         
         /* Hash every key length-sized byte chunk in the process memory buffer until a match is found. */
@@ -409,7 +482,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
         if (!found)
         {
             LOG_MSG("Unable to locate key \"%s\" in process memory from program %016lX!", key->name, info->location.program_id);
-            goto end;
+            if (mandatory) goto end;
         }
     }
     

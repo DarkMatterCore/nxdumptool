@@ -1,3 +1,33 @@
+todo:
+    
+    log: verbosity levels
+    log: nxlink output for advanced users
+    
+    nca: signature verification
+    nca: support for compressed fs sections?
+    nca: support for sparse sections?
+    
+    usb: improve usbIsReady
+    
+    title: orphan system titles
+    title: come up with a better way to handle gamecard titles
+    title: more functions for title lookup? (filters, patches / aoc, etc.)
+    title: more functions for content lookup? (based on id)
+    title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
+    
+    gamecard: functions to display filelist
+    
+    pfs0: functions to display filelist
+    
+    romfs: functions to display filelist
+    
+    bktr: functions to display filelist (wrappers for romfs functions tbh)
+    
+    others: config load/save using json
+    others: dump verification via nswdb / no-intro
+    others: update application feature
+    others: fatfs browser for emmc partitions
+
 reminder:
 
 list of top level functions designed to alter nca data in order of (possible) usage:
@@ -48,34 +78,3 @@ minor steps to take into account:
     
     * check if rights_id_available == true and titlekey_retrieved == false (preload handling)
         * actually, just inform the user about it - this is being handled
-
-
-
-
-
-
-
-
-
-todo:
-    
-    nca: support for compressed fs sections?
-    nca: support for sparse sections?
-    
-    gamecard: functions to display filelist
-    
-    pfs0: functions to display filelist
-    
-    romfs: functions to display filelist
-    
-    bktr: functions to display filelist (wrappers for romfs functions tbh)
-    
-    title: more functions for title lookup? (filters, patches / aoc, etc.)
-    title: more functions for content lookup? (based on id)
-    title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
-    
-    others: config load/save using json
-    others: dump verification via nswdb / no-intro
-    others: update application feature
-    others: fatfs browser for emmc partitions
-    

@@ -123,7 +123,7 @@ static bool gamecardGetHandleAndStorage(u32 partition);
 NX_INLINE void gamecardCloseHandle(void);
 
 static bool gamecardOpenStorageArea(u8 area);
-static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool lock);
+static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset);
 static void gamecardCloseStorageArea(void);
 
 static bool gamecardGetStorageAreasSizes(void);
@@ -134,227 +134,246 @@ static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition
 
 bool gamecardInitialize(void)
 {
-    mutexLock(&g_gameCardMutex);
-    
     Result rc = 0;
+    bool ret = false;
     
-    bool ret = g_gameCardInterfaceInit;
-    if (ret) goto end;
-    
-    /* Allocate memory for the gamecard read buffer. */
-    g_gameCardReadBuf = malloc(GAMECARD_READ_BUFFER_SIZE);
-    if (!g_gameCardReadBuf)
+    SCOPED_LOCK(&g_gameCardMutex)
     {
-        LOG_MSG("Unable to allocate memory for the gamecard read buffer!");
-        goto end;
+        ret = g_gameCardInterfaceInit;
+        if (ret) break;
+        
+        /* Allocate memory for the gamecard read buffer. */
+        g_gameCardReadBuf = malloc(GAMECARD_READ_BUFFER_SIZE);
+        if (!g_gameCardReadBuf)
+        {
+            LOG_MSG("Unable to allocate memory for the gamecard read buffer!");
+            break;
+        }
+        
+        /* Open device operator. */
+        rc = fsOpenDeviceOperator(&g_deviceOperator);
+        if (R_FAILED(rc))
+        {
+            LOG_MSG("fsOpenDeviceOperator failed! (0x%08X).", rc);
+            break;
+        }
+        
+        g_openDeviceOperator = true;
+        
+        /* Open gamecard detection event notifier. */
+        rc = fsOpenGameCardDetectionEventNotifier(&g_gameCardEventNotifier);
+        if (R_FAILED(rc))
+        {
+            LOG_MSG("fsOpenGameCardDetectionEventNotifier failed! (0x%08X)", rc);
+            break;
+        }
+        
+        g_openEventNotifier = true;
+        
+        /* Retrieve gamecard detection kernel event. */
+        rc = fsEventNotifierGetEventHandle(&g_gameCardEventNotifier, &g_gameCardKernelEvent, true);
+        if (R_FAILED(rc))
+        {
+            LOG_MSG("fsEventNotifierGetEventHandle failed! (0x%08X)", rc);
+            break;
+        }
+        
+        g_loadKernelEvent = true;
+        
+        /* Create user-mode exit event. */
+        ueventCreate(&g_gameCardDetectionThreadExitEvent, true);
+        
+        /* Create user-mode gamecard status change event. */
+        ueventCreate(&g_gameCardStatusChangeEvent, true);
+        
+        /* Create gamecard detection thread. */
+        if (!(g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread())) break;
+        
+        /* Update flags. */
+        ret = g_gameCardInterfaceInit = true;
     }
-    
-    /* Open device operator. */
-    rc = fsOpenDeviceOperator(&g_deviceOperator);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG("fsOpenDeviceOperator failed! (0x%08X).", rc);
-        goto end;
-    }
-    
-    g_openDeviceOperator = true;
-    
-    /* Open gamecard detection event notifier. */
-    rc = fsOpenGameCardDetectionEventNotifier(&g_gameCardEventNotifier);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG("fsOpenGameCardDetectionEventNotifier failed! (0x%08X)", rc);
-        goto end;
-    }
-    
-    g_openEventNotifier = true;
-    
-    /* Retrieve gamecard detection kernel event. */
-    rc = fsEventNotifierGetEventHandle(&g_gameCardEventNotifier, &g_gameCardKernelEvent, true);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG("fsEventNotifierGetEventHandle failed! (0x%08X)", rc);
-        goto end;
-    }
-    
-    g_loadKernelEvent = true;
-    
-    /* Create user-mode exit event. */
-    ueventCreate(&g_gameCardDetectionThreadExitEvent, true);
-    
-    /* Create user-mode gamecard status change event. */
-    ueventCreate(&g_gameCardStatusChangeEvent, true);
-    
-    /* Create gamecard detection thread. */
-    if (!(g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread())) goto end;
-    
-    ret = g_gameCardInterfaceInit = true;
-    
-end:
-    mutexUnlock(&g_gameCardMutex);
     
     return ret;
 }
 
 void gamecardExit(void)
 {
-    mutexLock(&g_gameCardMutex);
-    
-    /* Destroy gamecard detection thread. */
-    if (g_gameCardDetectionThreadCreated)
+    SCOPED_LOCK(&g_gameCardMutex)
     {
-        gamecardDestroyDetectionThread();
-        g_gameCardDetectionThreadCreated = false;
+        /* Destroy gamecard detection thread. */
+        if (g_gameCardDetectionThreadCreated)
+        {
+            gamecardDestroyDetectionThread();
+            g_gameCardDetectionThreadCreated = false;
+        }
+        
+        /* Close gamecard detection kernel event. */
+        if (g_loadKernelEvent)
+        {
+            eventClose(&g_gameCardKernelEvent);
+            g_loadKernelEvent = false;
+        }
+        
+        /* Close gamecard detection event notifier. */
+        if (g_openEventNotifier)
+        {
+            fsEventNotifierClose(&g_gameCardEventNotifier);
+            g_openEventNotifier = false;
+        }
+        
+        /* Close device operator. */
+        if (g_openDeviceOperator)
+        {
+            fsDeviceOperatorClose(&g_deviceOperator);
+            g_openDeviceOperator = false;
+        }
+        
+        /* Free gamecard read buffer. */
+        if (g_gameCardReadBuf)
+        {
+            free(g_gameCardReadBuf);
+            g_gameCardReadBuf = NULL;
+        }
+        
+        g_gameCardInterfaceInit = false;
     }
-    
-    /* Close gamecard detection kernel event. */
-    if (g_loadKernelEvent)
-    {
-        eventClose(&g_gameCardKernelEvent);
-        g_loadKernelEvent = false;
-    }
-    
-    /* Close gamecard detection event notifier. */
-    if (g_openEventNotifier)
-    {
-        fsEventNotifierClose(&g_gameCardEventNotifier);
-        g_openEventNotifier = false;
-    }
-    
-    /* Close device operator. */
-    if (g_openDeviceOperator)
-    {
-        fsDeviceOperatorClose(&g_deviceOperator);
-        g_openDeviceOperator = false;
-    }
-    
-    /* Free gamecard read buffer. */
-    if (g_gameCardReadBuf)
-    {
-        free(g_gameCardReadBuf);
-        g_gameCardReadBuf = NULL;
-    }
-    
-    g_gameCardInterfaceInit = false;
-    
-    mutexUnlock(&g_gameCardMutex);
 }
 
 UEvent *gamecardGetStatusChangeUserEvent(void)
 {
-    mutexLock(&g_gameCardMutex);
-    UEvent *event = (g_gameCardInterfaceInit ? &g_gameCardStatusChangeEvent : NULL);
-    mutexUnlock(&g_gameCardMutex);
+    UEvent *event = NULL;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        if (g_gameCardInterfaceInit) event = &g_gameCardStatusChangeEvent;
+    }
+    
     return event;
 }
 
 u8 gamecardGetStatus(void)
 {
-    mutexLock(&g_gameCardMutex);
-    u8 status = (g_gameCardInserted ? (g_gameCardInfoLoaded ? GameCardStatus_InsertedAndInfoLoaded : GameCardStatus_InsertedAndInfoNotLoaded) : GameCardStatus_NotInserted);
-    mutexUnlock(&g_gameCardMutex);
+    u8 status = GameCardStatus_NotInserted;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        if (g_gameCardInserted) status = (g_gameCardInfoLoaded ? GameCardStatus_InsertedAndInfoLoaded : GameCardStatus_InsertedAndInfoNotLoaded);
+    }
+    
     return status;
 }
 
 bool gamecardReadStorage(void *out, u64 read_size, u64 offset)
 {
-    return gamecardReadStorageArea(out, read_size, offset, true);
+    bool ret = false;
+    SCOPED_LOCK(&g_gameCardMutex) ret = gamecardReadStorageArea(out, read_size, offset);
+    return ret;
 }
 
+/* Read full FS program memory to retrieve the GameCardInitialData block, which is part of the GameCardKeyArea block. */
+/* In FS program memory, this is stored as part of the GameCardSecurityInformation struct, which is returned by Lotus command "ChangeToSecureMode" (0xF). */
+/* This means it is only available *after* the gamecard secure area has been mounted, which is taken care of in gamecardReadInitialData(). */
+/* The GameCardSecurityInformation struct is only kept for documentation purposes. It isn't used at all to retrieve the GameCardInitialData block. */
 bool gamecardGetKeyArea(GameCardKeyArea *out)
 {
-    /* Read full FS program memory to retrieve the GameCardInitialData block, which is part of the GameCardKeyArea block. */
-    /* In FS program memory, this is stored as part of the GameCardSecurityInformation struct, which is returned by Lotus command "ChangeToSecureMode" (0xF). */
-    /* This means it is only available *after* the gamecard secure area has been mounted, which is taken care of in gamecardReadInitialData(). */
-    /* The GameCardSecurityInformation struct is only kept for documentation purposes. It isn't used at all to retrieve the GameCardInitialData block. */
-    mutexLock(&g_gameCardMutex);
-    bool ret = gamecardReadInitialData(out);
-    mutexUnlock(&g_gameCardMutex);
+    bool ret = false;
+    SCOPED_LOCK(&g_gameCardMutex) ret = gamecardReadInitialData(out);
     return ret;
 }
 
 bool gamecardGetHeader(GameCardHeader *out)
 {
-    mutexLock(&g_gameCardMutex);
-    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) memcpy(out, &g_gameCardHeader, sizeof(GameCardHeader));
-    mutexUnlock(&g_gameCardMutex);
+    bool ret = false;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+        if (ret) memcpy(out, &g_gameCardHeader, sizeof(GameCardHeader));
+    }
+    
     return ret;
 }
 
 bool gamecardGetCertificate(FsGameCardCertificate *out)
 {
-    Result rc = 0;
     bool ret = false;
     
-    mutexLock(&g_gameCardMutex);
-    
-    if (g_gameCardInserted && g_gameCardHandle.value && out)
+    SCOPED_LOCK(&g_gameCardMutex)
     {
+        if (!g_gameCardInserted || !g_gameCardHandle.value || !out) break;
+        
         /* Read the gamecard certificate using the official IPC call. */
-        rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out);
+        Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out);
         if (R_FAILED(rc))
         {
             LOG_MSG("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%08X)", rc);
             
             /* Attempt to manually read the gamecard certificate. */
-            if (gamecardReadStorageArea(out, sizeof(FsGameCardCertificate), GAMECARD_CERTIFICATE_OFFSET, false)) rc = 0;
+            if (gamecardReadStorageArea(out, sizeof(FsGameCardCertificate), GAMECARD_CERTIFICATE_OFFSET)) rc = 0;
         }
         
         ret = R_SUCCEEDED(rc);
     }
-    
-    mutexUnlock(&g_gameCardMutex);
     
     return ret;
 }
 
 bool gamecardGetTotalSize(u64 *out)
 {
-    mutexLock(&g_gameCardMutex);
-    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) *out = g_gameCardStorageTotalSize;
-    mutexUnlock(&g_gameCardMutex);
+    bool ret = false;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+        if (ret) *out = g_gameCardStorageTotalSize;
+    }
+    
     return ret;
 }
 
 bool gamecardGetTrimmedSize(u64 *out)
 {
-    mutexLock(&g_gameCardMutex);
-    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_PAGE_OFFSET(g_gameCardHeader.valid_data_end_address));
-    mutexUnlock(&g_gameCardMutex);
+    bool ret = false;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+        if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_PAGE_OFFSET(g_gameCardHeader.valid_data_end_address));
+    }
+    
     return ret;
 }
 
 bool gamecardGetRomCapacity(u64 *out)
 {
-    mutexLock(&g_gameCardMutex);
-    bool ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-    if (ret) *out = g_gameCardCapacity;
-    mutexUnlock(&g_gameCardMutex);
+    bool ret = false;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+        if (ret) *out = g_gameCardCapacity;
+    }
+    
     return ret;
 }
 
 bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out)
 {
-    Result rc = 0;
-    u64 update_id = 0;
-    u32 update_version = 0;
     bool ret = false;
     
-    mutexLock(&g_gameCardMutex);
-    
-    if (g_gameCardInserted && g_gameCardHandle.value && out)
+    SCOPED_LOCK(&g_gameCardMutex)
     {
-        rc = fsDeviceOperatorUpdatePartitionInfo(&g_deviceOperator, &g_gameCardHandle, &update_version, &update_id);
+        if (!g_gameCardInserted || !g_gameCardHandle.value || !out) break;
+        
+        u64 update_id = 0;
+        u32 update_version = 0;
+        
+        Result rc = fsDeviceOperatorUpdatePartitionInfo(&g_deviceOperator, &g_gameCardHandle, &update_version, &update_id);
         if (R_FAILED(rc)) LOG_MSG("fsDeviceOperatorUpdatePartitionInfo failed! (0x%08X)", rc);
         
         ret = (R_SUCCEEDED(rc) && update_id == GAMECARD_UPDATE_TID);
         if (ret) out->value = update_version;
     }
-    
-    mutexUnlock(&g_gameCardMutex);
     
     return ret;
 }
@@ -367,49 +386,46 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
         return false;
     }
     
-    HashFileSystemContext *fs_ctx = NULL;
-    bool success = false;
-    
-    mutexLock(&g_gameCardMutex);
+    bool ret = false;
     
     /* Free Hash FS context. */
     hfsFreeContext(out);
     
-    /* Get pointer to the Hash FS context for the requested partition. */
-    fs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
-    if (!fs_ctx) goto end;
-    
-    /* Fill Hash FS context. */
-    out->name = strdup(fs_ctx->name);
-    if (!out->name)
+    SCOPED_LOCK(&g_gameCardMutex)
     {
-        LOG_MSG("Failed to duplicate Hash FS partition name! (%s).", fs_ctx->name);
-        goto end;
+        /* Get pointer to the Hash FS context for the requested partition. */
+        HashFileSystemContext *fs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
+        if (!fs_ctx) break;
+        
+        /* Fill Hash FS context. */
+        out->name = strdup(fs_ctx->name);
+        if (!out->name)
+        {
+            LOG_MSG("Failed to duplicate Hash FS partition name! (%s).", fs_ctx->name);
+            break;
+        }
+        
+        out->type = fs_ctx->type;
+        out->offset = fs_ctx->offset;
+        out->size = fs_ctx->size;
+        out->header_size = fs_ctx->header_size;
+        
+        out->header = calloc(fs_ctx->header_size, sizeof(u8));
+        if (!out->header)
+        {
+            LOG_MSG("Failed to duplicate Hash FS partition header! (%s).", fs_ctx->name);
+            break;
+        }
+        
+        memcpy(out->header, fs_ctx->header, fs_ctx->header_size);
+        
+        /* Update flag. */
+        ret = true;
     }
     
-    out->type = fs_ctx->type;
-    out->offset = fs_ctx->offset;
-    out->size = fs_ctx->size;
-    out->header_size = fs_ctx->header_size;
+    if (!ret) hfsFreeContext(out);
     
-    out->header = calloc(fs_ctx->header_size, sizeof(u8));
-    if (!out->header)
-    {
-        LOG_MSG("Failed to duplicate Hash FS partition header! (%s).", fs_ctx->name);
-        goto end;
-    }
-    
-    memcpy(out->header, fs_ctx->header, fs_ctx->header_size);
-    
-    /* Update flag. */
-    success = true;
-    
-end:
-    if (!success) hfsFreeContext(out);
-    
-    mutexUnlock(&g_gameCardMutex);
-    
-    return success;
+    return ret;
 }
 
 bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size)
@@ -420,31 +436,27 @@ bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char 
         return false;
     }
     
-    HashFileSystemContext *fs_ctx = NULL;
-    HashFileSystemEntry *fs_entry = NULL;
-    bool success = false;
+    bool ret = false;
     
-    mutexLock(&g_gameCardMutex);
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        /* Get pointer to the Hash FS context for the requested partition. */
+        HashFileSystemContext *fs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
+        if (!fs_ctx) break;
+        
+        /* Get Hash FS entry by name. */
+        HashFileSystemEntry *fs_entry = hfsGetEntryByName(fs_ctx, entry_name);
+        if (!fs_entry) break;
+        
+        /* Update output variables. */
+        if (out_offset) *out_offset = (fs_ctx->offset + fs_ctx->header_size + fs_entry->offset);
+        if (out_size) *out_size = fs_entry->size;
+        
+        /* Update flag. */
+        ret = true;
+    }
     
-    /* Get pointer to the Hash FS context for the requested partition. */
-    fs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
-    if (!fs_ctx) goto end;
-    
-    /* Get Hash FS entry by name. */
-    fs_entry = hfsGetEntryByName(fs_ctx, entry_name);
-    if (!fs_entry) goto end;
-    
-    /* Update output variables. */
-    if (out_offset) *out_offset = (fs_ctx->offset + fs_ctx->header_size + fs_entry->offset);
-    if (out_size) *out_size = fs_entry->size;
-    
-    /* Update flag. */
-    success = true;
-    
-end:
-    mutexUnlock(&g_gameCardMutex);
-    
-    return success;
+    return ret;
 }
 
 static bool gamecardCreateDetectionThread(void)
@@ -479,10 +491,11 @@ static void gamecardDetectionThreadFunc(void *arg)
     
     /* Retrieve initial gamecard insertion status. */
     /* Load gamecard info right away if a gamecard is inserted, then signal the user mode gamecard status change event. */
-    mutexLock(&g_gameCardMutex);
-    g_gameCardInserted = gamecardIsInserted();
-    if (g_gameCardInserted) gamecardLoadInfo();
-    mutexUnlock(&g_gameCardMutex);
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        g_gameCardInserted = gamecardIsInserted();
+        if (g_gameCardInserted) gamecardLoadInfo();
+    }
     
     ueventSignal(&g_gameCardStatusChangeEvent);
     
@@ -495,23 +508,23 @@ static void gamecardDetectionThreadFunc(void *arg)
         /* Exit event triggered. */
         if (idx == 1) break;
         
-        mutexLock(&g_gameCardMutex);
-        
-        /* Retrieve current gamecard insertion status. */
-        /* Only proceed if we're dealing with a status change. */
-        g_gameCardInserted = gamecardIsInserted();
-        gamecardFreeInfo();
-        
-        if (g_gameCardInserted)
+        SCOPED_LOCK(&g_gameCardMutex)
         {
-            /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules. */
-            utilsSleep(GAMECARD_ACCESS_WAIT_TIME);
+            /* Free gamecard info before proceeding. */
+            gamecardFreeInfo();
             
-            /* Load gamecard info. */
-            gamecardLoadInfo();
+            /* Retrieve current gamecard insertion status. */
+            /* Only proceed if we're dealing with a status change. */
+            g_gameCardInserted = gamecardIsInserted();
+            if (g_gameCardInserted)
+            {
+                /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules. */
+                utilsSleep(GAMECARD_ACCESS_WAIT_TIME);
+                
+                /* Load gamecard info. */
+                gamecardLoadInfo();
+            }
         }
-        
-        mutexUnlock(&g_gameCardMutex);
         
         /* Signal user mode gamecard status change event. */
         ueventSignal(&g_gameCardStatusChangeEvent);
@@ -550,7 +563,7 @@ static void gamecardLoadInfo(void)
     }
     
     /* Read gamecard header. */
-    if (!gamecardReadStorageArea(&g_gameCardHeader, sizeof(GameCardHeader), 0, false))
+    if (!gamecardReadStorageArea(&g_gameCardHeader, sizeof(GameCardHeader), 0))
     {
         LOG_MSG("Failed to read gamecard header!");
         goto end;
@@ -798,21 +811,18 @@ static bool gamecardOpenStorageArea(u8 area)
     return true;
 }
 
-static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool lock)
+static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
 {
-    if (lock) mutexLock(&g_gameCardMutex);
-    
-    bool success = false;
-    
     if (!g_gameCardInserted || !g_gameCardStorageNormalAreaSize || !g_gameCardStorageSecureAreaSize || !out || !read_size || (offset + read_size) > g_gameCardStorageTotalSize)
     {
         LOG_MSG("Invalid parameters!");
-        goto end;
+        return false;
     }
     
     Result rc = 0;
     u8 *out_u8 = (u8*)out;
     u8 area = (offset < g_gameCardStorageNormalAreaSize ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
+    bool success = false;
     
     /* Handle reads that span both the normal and secure gamecard storage areas. */
     if (area == GameCardStorageArea_Normal && (offset + read_size) > g_gameCardStorageNormalAreaSize)
@@ -820,7 +830,8 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         /* Calculate normal storage area size difference. */
         u64 diff_size = (g_gameCardStorageNormalAreaSize - offset);
         
-        if (!gamecardReadStorageArea(out_u8, diff_size, offset, false)) goto end;
+        /* Read normal storage area data. */
+        if (!gamecardReadStorageArea(out_u8, diff_size, offset)) goto end;
         
         /* Adjust variables to read right from the start of the secure storage area. */
         read_size -= diff_size;
@@ -870,12 +881,10 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset, bool l
         
         memcpy(out_u8, g_gameCardReadBuf + data_start_offset, out_chunk_size);
         
-        success = (block_size > GAMECARD_READ_BUFFER_SIZE ? gamecardReadStorageArea(out_u8 + out_chunk_size, read_size - out_chunk_size, offset + out_chunk_size, false) : true);
+        success = (block_size > GAMECARD_READ_BUFFER_SIZE ? gamecardReadStorageArea(out_u8 + out_chunk_size, read_size - out_chunk_size, offset + out_chunk_size) : true);
     }
     
 end:
-    if (lock) mutexUnlock(&g_gameCardMutex);
-    
     return success;
 }
 
@@ -1014,7 +1023,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     fs_ctx->type = i;
     
     /* Read partial Hash FS header. */
-    if (!gamecardReadStorageArea(&fs_header, sizeof(HashFileSystemHeader), offset, false))
+    if (!gamecardReadStorageArea(&fs_header, sizeof(HashFileSystemHeader), offset))
     {
         LOG_MSG("Failed to read partial Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
         goto end;
@@ -1050,7 +1059,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     }
     
     /* Read full Hash FS header. */
-    if (!gamecardReadStorageArea(fs_ctx->header, fs_ctx->header_size, offset, false))
+    if (!gamecardReadStorageArea(fs_ctx->header, fs_ctx->header_size, offset))
     {
         LOG_MSG("Failed to read full Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
         goto end;
