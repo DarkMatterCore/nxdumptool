@@ -5,4 +5,4 @@
 [submodule "borealis"]
 	path = libs/borealis
 	url = https://github.com/DarkMatterCore/borealis
-	branch = legacy
+	branch = nxdumptool
