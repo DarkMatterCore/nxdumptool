@@ -24,11 +24,10 @@
 #include "nxdt_utils.h"
 #include "rsa.h"
 
+#include <mbedtls/rsa.h>
 #include <mbedtls/entropy.h>
 #include <mbedtls/ctr_drbg.h>
-#include <mbedtls/md.h>
-#include <mbedtls/rsa.h>
-#include <mbedtls/x509.h>
+#include <mbedtls/pk.h>
 
 /* Global variables. */
 
@@ -84,7 +83,53 @@ static const u8 g_rsa2048CustomPublicKey[] = {
 
 /* Function prototypes. */
 
-static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_src, size_t h_src_size);
+const u8 *rsa2048GetCustomPublicKey(void)
+{
+    return g_rsa2048CustomPublicKey;
+}
+
+bool rsa2048VerifySha256BasedPssSignature(const void *data, size_t data_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size)
+{
+    if (!data || !data_size || !signature || !modulus || !public_exponent || !public_exponent_size)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    int mbedtls_ret = 0;
+    mbedtls_rsa_context rsa;
+    u8 hash[SHA256_HASH_SIZE] = {0};
+    bool ret = false;
+    
+    /* Initialize RSA context. */
+    mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
+    
+    /* Import RSA parameters. */
+    mbedtls_ret = mbedtls_rsa_import_raw(&rsa, (const u8*)modulus, RSA2048_BYTES, NULL, 0, NULL, 0, NULL, 0, (const u8*)public_exponent, public_exponent_size);
+    if (mbedtls_ret != 0)
+    {
+        LOG_MSG("mbedtls_rsa_import_raw failed! (%d).", mbedtls_ret);
+        goto end;
+    }
+    
+    /* Calculate SHA-256 checksum for the input data. */
+    sha256CalculateHash(hash, data, data_size);
+    
+    /* Verify signature. */
+    mbedtls_ret = mbedtls_rsa_rsassa_pss_verify(&rsa, NULL, NULL, MBEDTLS_RSA_PUBLIC, MBEDTLS_MD_SHA256, SHA256_HASH_SIZE, hash, (const u8*)signature);
+    if (mbedtls_ret != 0)
+    {
+        LOG_MSG("mbedtls_rsa_rsassa_pss_verify failed! (%d).", mbedtls_ret);
+        goto end;
+    }
+    
+    ret = true;
+    
+end:
+    mbedtls_rsa_free(&rsa);
+    
+    return ret;
+}
 
 bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t size)
 {
@@ -94,39 +139,38 @@ bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t s
         return false;
     }
     
-    u8 hash[SHA256_HASH_SIZE] = {0};
-    u8 buf[MBEDTLS_MPI_MAX_SIZE] = {0};
-    const char *pers = "rsa_sign_pss";
-    size_t olen = 0;
-    
-    int ret;
-    bool success = false;
-    
-    mbedtls_ctr_drbg_context ctr_drbg;
-    mbedtls_ctr_drbg_init(&ctr_drbg);
-    
     mbedtls_entropy_context entropy;
-    mbedtls_entropy_init(&entropy);
-    
+    mbedtls_ctr_drbg_context ctr_drbg;
     mbedtls_pk_context pk;
+    
+    size_t olen = 0;
+    int mbedtls_ret = 0;
+    const char *pers = __func__;
+    u8 hash[SHA256_HASH_SIZE] = {0}, buf[MBEDTLS_MPI_MAX_SIZE] = {0};
+    
+    bool ret = false;
+    
+    /* Initialize contexts. */
+    mbedtls_entropy_init(&entropy);
+    mbedtls_ctr_drbg_init(&ctr_drbg);
     mbedtls_pk_init(&pk);
     
     /* Calculate SHA-256 checksum for the input data. */
     sha256CalculateHash(hash, src, size);
     
     /* Seed the random number generator. */
-    ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const u8*)pers, strlen(pers));
-    if (ret != 0)
+    mbedtls_ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const u8*)pers, strlen(pers));
+    if (mbedtls_ret != 0)
     {
-        LOG_MSG("mbedtls_ctr_drbg_seed failed! (%d).", ret);
+        LOG_MSG("mbedtls_ctr_drbg_seed failed! (%d).", mbedtls_ret);
         goto end;
     }
     
     /* Parse private key. */
-    ret = mbedtls_pk_parse_key(&pk, (const u8*)g_rsa2048CustomPrivateKey, strlen(g_rsa2048CustomPrivateKey) + 1, NULL, 0);
-    if (ret != 0)
+    mbedtls_ret = mbedtls_pk_parse_key(&pk, (const u8*)g_rsa2048CustomPrivateKey, strlen(g_rsa2048CustomPrivateKey) + 1, NULL, 0);
+    if (mbedtls_ret != 0)
     {
-        LOG_MSG("mbedtls_pk_parse_key failed! (%d).", ret);
+        LOG_MSG("mbedtls_pk_parse_key failed! (%d).", mbedtls_ret);
         goto end;
     }
     
@@ -134,119 +178,86 @@ bool rsa2048GenerateSha256BasedPssSignature(void *dst, const void *src, size_t s
     mbedtls_rsa_set_padding(mbedtls_pk_rsa(pk), MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
     
     /* Calculate hash signature. */
-    ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, hash, 0, buf, &olen, mbedtls_ctr_drbg_random, &ctr_drbg);
-    if (ret != 0)
+    mbedtls_ret = mbedtls_pk_sign(&pk, MBEDTLS_MD_SHA256, hash, 0, buf, &olen, mbedtls_ctr_drbg_random, &ctr_drbg);
+    if (mbedtls_ret != 0 || olen < RSA2048_SIG_SIZE)
     {
-        LOG_MSG("mbedtls_pk_sign failed! (%d).", ret);
+        LOG_MSG("mbedtls_pk_sign failed! (%d, %lu).", mbedtls_ret, olen);
         goto end;
     }
     
     /* Copy signature to output buffer. */
     memcpy(dst, buf, RSA2048_SIG_SIZE);
-    success = true;
+    ret = true;
     
 end:
     mbedtls_pk_free(&pk);
-    mbedtls_entropy_free(&entropy);
     mbedtls_ctr_drbg_free(&ctr_drbg);
+    mbedtls_entropy_free(&entropy);
     
-    return success;
+    return ret;
 }
 
-const u8 *rsa2048GetCustomPublicKey(void)
+bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size, const void *private_exponent, \
+                        size_t private_exponent_size, const void *label, size_t label_size, size_t *out_size)
 {
-    return g_rsa2048CustomPublicKey;
-}
-
-bool rsa2048OaepDecryptAndVerify(void *dst, size_t dst_size, const void *signature, const void *modulus, const void *exponent, size_t exponent_size, const void *label_hash, size_t *out_size)
-{
-    if (!dst || !dst_size || !signature || !modulus || !exponent || !exponent_size || !label_hash || !out_size)
+    if (!dst || !dst_size || !signature || !modulus || !public_exponent || !public_exponent_size || !private_exponent || !private_exponent_size || (!label && label_size) || (label && !label_size) || \
+        !out_size)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
-    Result rc = 0;
-    u8 m_buf[RSA2048_SIG_SIZE] = {0};
+    mbedtls_entropy_context entropy;
+    mbedtls_ctr_drbg_context ctr_drbg;
+    mbedtls_rsa_context rsa;
     
-    rc = splUserExpMod(signature, modulus, exponent, exponent_size, m_buf);
-    if (R_FAILED(rc))
+    const char *pers = __func__;
+    int mbedtls_ret = 0;
+    bool ret = false;
+    
+    /* Initialize contexts. */
+    mbedtls_entropy_init(&entropy);
+    mbedtls_ctr_drbg_init(&ctr_drbg);
+    mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
+    
+    /* Seed the random number generator. */
+    mbedtls_ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const u8*)pers, strlen(pers));
+    if (mbedtls_ret != 0)
     {
-        LOG_MSG("splUserExpMod failed! (0x%08X).", rc);
-        return false;
+        LOG_MSG("mbedtls_ctr_drbg_seed failed! (%d).", mbedtls_ret);
+        goto end;
     }
     
-    if (m_buf[0] != 0)
+    /* Import RSA parameters. */
+    mbedtls_ret = mbedtls_rsa_import_raw(&rsa, (const u8*)modulus, RSA2048_BYTES, NULL, 0, NULL, 0, (const u8*)private_exponent, private_exponent_size, (const u8*)public_exponent, public_exponent_size);
+    if (mbedtls_ret != 0)
     {
-        LOG_MSG("Invalid PSS!");
-        return false;
+        LOG_MSG("mbedtls_rsa_import_raw failed! (%d).", mbedtls_ret);
+        goto end;
     }
     
-    /* Unmask salt. */
-    rsaCalculateMgf1AndXor(m_buf + 1, 0x20, m_buf + 0x21, RSA2048_SIG_SIZE - 0x21);
-    
-    /* Unmask DB. */
-    rsaCalculateMgf1AndXor(m_buf + 0x21, RSA2048_SIG_SIZE - 0x21, m_buf + 1, 0x20);
-    
-    /* Validate label hash. */
-    const u8 *db = (const u8*)(m_buf + 0x21);
-    if (memcmp(db, label_hash, SHA256_HASH_SIZE) != 0)
+    /* Derive RSA prime factors. */
+    mbedtls_ret = mbedtls_rsa_complete(&rsa);
+    if (mbedtls_ret != 0)
     {
-        LOG_MSG("Label hash validation failed! Wrong decryption keys?");
-        return false;
+        LOG_MSG("mbedtls_rsa_complete failed! (%d).", mbedtls_ret);
+        goto end;
     }
     
-    /* Validate message prefix. */
-    const u8 *data = (const u8*)(db + 0x20);
-    size_t remaining = (RSA2048_SIG_SIZE - 0x41);
-    
-    while(!*data && remaining)
+    /* Perform RSA-OAEP decryption. */
+    mbedtls_ret = mbedtls_rsa_rsaes_oaep_decrypt(&rsa, mbedtls_ctr_drbg_random, &ctr_drbg, MBEDTLS_RSA_PRIVATE, (const u8*)label, label_size, out_size, (const u8*)signature, (u8*)dst, dst_size);
+    if (mbedtls_ret != 0)
     {
-        data++;
-        remaining--;
+        LOG_MSG("mbedtls_rsa_rsaes_oaep_decrypt failed! (%d).", mbedtls_ret);
+        goto end;
     }
     
-    if (!remaining || *data++ != 1)
-    {
-        LOG_MSG("Message prefix validation failed! Wrong decryption keys?");
-        return false;
-    }
+    ret = true;
     
-    remaining--;
-    *out_size = remaining;
+end:
+    mbedtls_rsa_free(&rsa);
+    mbedtls_ctr_drbg_free(&ctr_drbg);
+    mbedtls_entropy_free(&entropy);
     
-    if (remaining > dst_size) remaining = dst_size;
-    memcpy(dst, data, remaining);
-    
-    return true;
-}
-
-static void rsaCalculateMgf1AndXor(void *data, size_t data_size, const void *h_src, size_t h_src_size)
-{
-    if (!data || !data_size || !h_src || !h_src_size || h_src_size > RSA2048_SIG_SIZE)
-    {
-        LOG_MSG("Invalid parameters!");
-        return;
-    }
-    
-    u32 seed = 0;
-    size_t i, offset = 0;
-    u8 *data_u8 = (u8*)data;
-    
-    u8 mgf1_buf[SHA256_HASH_SIZE] = {0};
-    u8 h_buf[RSA2048_SIG_SIZE] = {0};
-    
-    memcpy(h_buf, h_src, h_src_size);
-    
-    while(offset < data_size)
-    {
-        for(i = 0; i < 4; i++) h_buf[h_src_size + 3 - i] = ((seed >> (8 * i)) & 0xFF);
-        
-        sha256CalculateHash(mgf1_buf, h_buf, h_src_size + 4);
-        
-        for(i = offset; i < data_size && i < (offset + 0x20); i++) data_u8[i] ^= mgf1_buf[i - offset];
-        
-        seed++;
-        offset += 0x20;
-    }
+    return ret;
 }

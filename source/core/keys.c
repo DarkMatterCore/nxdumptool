@@ -76,10 +76,10 @@ typedef struct {
 /// Used to parse the eTicket RSA device key retrieved from PRODINFO via setcalGetEticketDeviceKey().
 /// Everything after the AES CTR is encrypted using the eTicket RSA device key encryption key.
 typedef struct {
-    u8 ctr[0x10];
-    u8 exponent[0x100];
-    u8 modulus[0x100];
-    u32 public_exponent;    ///< Must match ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT. Stored using big endian byte order.
+    u8 ctr[AES_128_KEY_SIZE];
+    u8 private_exponent[RSA2048_BYTES];
+    u8 modulus[RSA2048_BYTES];
+    u32 public_exponent;                ///< Must match ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT. Stored using big endian byte order.
     u8 padding[0x14];
     u64 device_id;
     u8 ghash[0x10];
@@ -115,12 +115,6 @@ static bool g_ncaKeysetLoaded = false;
 static Mutex g_ncaKeysetMutex = 0;
 
 static SetCalRsa2048DeviceKey g_eTicketRsaDeviceKey = {0};
-
-/// Used during the RSA-OAEP titlekey decryption steps.
-static const u8 g_nullHash[0x20] = {
-    0xE3, 0xB0, 0xC4, 0x42, 0x98, 0xFC, 0x1C, 0x14, 0x9A, 0xFB, 0xF4, 0xC8, 0x99, 0x6F, 0xB9, 0x24,
-    0x27, 0xAE, 0x41, 0xE4, 0x64, 0x9B, 0x93, 0x4C, 0xA4, 0x95, 0x99, 0x1B, 0x78, 0x52, 0xB8, 0x55
-};
 
 static KeysMemoryInfo g_fsRodataMemoryInfo = {
     .location = {
@@ -304,6 +298,33 @@ const u8 *keysGetNcaHeaderKey(void)
     return ret;
 }
 
+const u8 *keysGetNcaMainSignatureModulus(u8 key_generation)
+{
+    if (key_generation > NcaMainSignatureKeyGeneration_Current)
+    {
+        LOG_MSG("Invalid key generation value! (0x%02X).", key_generation);
+        return NULL;
+    }
+    
+    bool dev_unit = utilsIsDevelopmentUnit();
+    const u8 *ret = NULL, null_modulus[RSA2048_PUBKEY_SIZE] = {0};
+    
+    SCOPED_LOCK(&g_ncaKeysetMutex)
+    {
+        if (!g_ncaKeysetLoaded) break;
+        
+        ret = (const u8*)(dev_unit ? g_ncaKeyset.nca_main_signature_moduli_dev[key_generation] : g_ncaKeyset.nca_main_signature_moduli_prod[key_generation]);
+        
+        if (!memcmp(ret, null_modulus, RSA2048_PUBKEY_SIZE))
+        {
+            LOG_MSG("%s NCA header main signature modulus 0x%02X unavailable.", dev_unit ? "Development" : "Retail", key_generation);
+            ret = NULL;
+        }
+    }
+    
+    return ret;
+}
+
 bool keysDecryptNcaKeyAreaEntry(u8 kaek_index, u8 key_generation, void *dst, const void *src)
 {
     bool ret = false;
@@ -379,14 +400,15 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
         if (!g_ncaKeysetLoaded) break;
         
         size_t out_keydata_size = 0;
-        u8 out_keydata[0x100] = {0};
+        u8 out_keydata[RSA2048_BYTES] = {0};
         
         /* Get eTicket RSA device key. */
         EticketRsaDeviceKey *eticket_rsa_key = (EticketRsaDeviceKey*)g_eTicketRsaDeviceKey.key;
         
         /* Perform a RSA-OAEP unwrap operation to get the encrypted titlekey. */
-        ret = (rsa2048OaepDecryptAndVerify(out_keydata, sizeof(out_keydata), rsa_wrapped_titlekey, eticket_rsa_key->modulus, eticket_rsa_key->exponent, sizeof(eticket_rsa_key->exponent), \
-                   g_nullHash, &out_keydata_size) && out_keydata_size >= AES_128_KEY_SIZE);
+        /* ES uses a NULL string as the label. */
+        ret = (rsa2048OaepDecrypt(out_keydata, sizeof(out_keydata), rsa_wrapped_titlekey, eticket_rsa_key->modulus, &(eticket_rsa_key->public_exponent), sizeof(eticket_rsa_key->public_exponent), \
+                                  eticket_rsa_key->private_exponent, sizeof(eticket_rsa_key->private_exponent), NULL, 0, &out_keydata_size) && out_keydata_size >= AES_128_KEY_SIZE);
         if (ret)
         {
             /* Copy RSA-OAEP unwrapped titlekey. */
@@ -859,7 +881,7 @@ static bool keysGetDecryptedEticketRsaDeviceKey(void)
     /* Decrypt eTicket RSA device key. */
     eticket_rsa_key = (EticketRsaDeviceKey*)g_eTicketRsaDeviceKey.key;
     aes128CtrContextCreate(&eticket_aes_ctx, eticket_rsa_kek, eticket_rsa_key->ctr);
-    aes128CtrCrypt(&eticket_aes_ctx, &(eticket_rsa_key->exponent), &(eticket_rsa_key->exponent), sizeof(EticketRsaDeviceKey) - sizeof(eticket_rsa_key->ctr));
+    aes128CtrCrypt(&eticket_aes_ctx, &(eticket_rsa_key->private_exponent), &(eticket_rsa_key->private_exponent), sizeof(EticketRsaDeviceKey) - sizeof(eticket_rsa_key->ctr));
     
     /* Public exponent value must be 0x10001. */
     /* It is stored using big endian byte order. */
@@ -871,7 +893,7 @@ static bool keysGetDecryptedEticketRsaDeviceKey(void)
     }
     
     /* Test RSA key pair. */
-    if (!keysTestEticketRsaDeviceKey(&(eticket_rsa_key->public_exponent), eticket_rsa_key->exponent, eticket_rsa_key->modulus))
+    if (!keysTestEticketRsaDeviceKey(&(eticket_rsa_key->public_exponent), eticket_rsa_key->private_exponent, eticket_rsa_key->modulus))
     {
         LOG_MSG("eTicket RSA device key test failed! Wrong keys?");
         return false;
@@ -889,7 +911,7 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
     }
     
     Result rc = 0;
-    u8 x[0x100] = {0}, y[0x100] = {0}, z[0x100] = {0};
+    u8 x[RSA2048_BYTES] = {0}, y[RSA2048_BYTES] = {0}, z[RSA2048_BYTES] = {0};
     
     /* 0xCAFEBABE. */
     x[0xFC] = 0xCA;
@@ -897,7 +919,7 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
     x[0xFE] = 0xBA;
     x[0xFF] = 0xBE;
     
-    rc = splUserExpMod(x, n, d, 0x100, y);
+    rc = splUserExpMod(x, n, d, RSA2048_BYTES, y);
     if (R_FAILED(rc))
     {
         LOG_MSG("splUserExpMod failed! (#1) (0x%08X).", rc);
@@ -911,7 +933,7 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
         return false;
     }
     
-    if (memcmp(x, z, 0x100) != 0)
+    if (memcmp(x, z, RSA2048_BYTES) != 0)
     {
         LOG_MSG("Invalid RSA key pair!");
         return false;

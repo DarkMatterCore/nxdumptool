@@ -37,6 +37,9 @@ bool keysLoadNcaKeyset(void);
 /// Returns a pointer to the AES-128-XTS NCA header key, or NULL if keydata hasn't been loaded.
 const u8 *keysGetNcaHeaderKey(void);
 
+/// Returns a pointer to the RSA-2048-PSS modulus for the NCA header main signature, using the provided key generation value.
+const u8 *keysGetNcaMainSignatureModulus(u8 key_generation);
+
 /// Decrypts 'src' into 'dst' using the provided key area encryption key index and key generation values. Runtime sealed keydata from the SMC AES engine is used to achieve this.
 /// Both 'dst' and 'src' buffers must have a size of at least AES_128_KEY_SIZE.
 /// Returns false if an error occurs or if keydata hasn't been loaded.

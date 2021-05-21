@@ -23,7 +23,6 @@
 #include "gamecard.h"
 #include "usb.h"
 #include "title.h"
-#include "crc32_fast.h"
 
 #define BLOCK_SIZE  USB_TRANSFER_BUFFER_SIZE
 
@@ -446,7 +445,7 @@ static bool sendGameCardKeyAreaViaUsb(void)
     
     if (!dumpGameCardKeyArea(&gc_key_area) || !filename) goto end;
     
-    crc32FastCalculate(&(gc_key_area.initial_data), sizeof(GameCardInitialData), &crc);
+    crc = crc32Calculate(&(gc_key_area.initial_data), sizeof(GameCardInitialData));
     snprintf(path, MAX_ELEMENTS(path), "%s (Initial Data) (%08X).bin", filename, crc);
     
     if (!sendFileData(path, &(gc_key_area.initial_data), sizeof(GameCardInitialData))) goto end;
@@ -484,7 +483,7 @@ static bool sendGameCardCertificateViaUsb(void)
     
     consolePrint("get gamecard certificate ok\n");
     
-    crc32FastCalculate(&gc_cert, sizeof(FsGameCardCertificate), &crc);
+    crc = crc32Calculate(&gc_cert, sizeof(FsGameCardCertificate));
     snprintf(path, MAX_ELEMENTS(path), "%s (Certificate) (%08X).bin", filename, crc);
     
     if (!sendFileData(path, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
@@ -549,9 +548,15 @@ static bool sendGameCardImageViaUsb(void)
     if (g_appendKeyArea)
     {
         gc_size += sizeof(GameCardKeyArea);
+        
         if (!dumpGameCardKeyArea(&gc_key_area)) goto end;
-        if (g_calcCrc) crc32FastCalculate(&gc_key_area, sizeof(GameCardKeyArea), &key_area_crc);
-        shared_data.full_xci_crc = key_area_crc;
+        
+        if (g_calcCrc)
+        {
+            key_area_crc = crc32Calculate(&gc_key_area, sizeof(GameCardKeyArea));
+            if (g_appendKeyArea) shared_data.full_xci_crc = key_area_crc;
+        }
+        
         consolePrint("gamecard size (with key area): 0x%lX\n", gc_size);
     }
     
@@ -730,8 +735,8 @@ static void read_thread_func(void *arg)
         /* Update checksum */
         if (g_calcCrc)
         {
-            crc32FastCalculate(buf, blksize, &(shared_data->xci_crc));
-            if (g_appendKeyArea) crc32FastCalculate(buf, blksize, &(shared_data->full_xci_crc));
+            shared_data->xci_crc = crc32CalculateWithSeed(shared_data->xci_crc, buf, blksize);
+            if (g_appendKeyArea) shared_data->full_xci_crc = crc32CalculateWithSeed(shared_data->full_xci_crc, buf, blksize);
         }
         
         /* Wait until the previous data chunk has been written */

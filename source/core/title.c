@@ -2076,7 +2076,7 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
         }
     }
     
-    if (!info) LOG_MSG("Unable to find title info entry with ID \"%016lX\"! (storage ID %u).", title_id, storage_id);
+    //if (!info) LOG_MSG("Unable to find title info entry with ID \"%016lX\"! (storage ID %u).", title_id, storage_id);
     
 end:
     return info;

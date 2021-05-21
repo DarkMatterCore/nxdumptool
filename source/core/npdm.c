@@ -316,7 +316,7 @@ bool npdmGenerateNcaPatch(NpdmContext *npdm_ctx)
     }
     
     /* Update NCA ACID signature. */
-    if (!rsa2048GenerateSha256BasedPssSignature(nca_ctx->header.acid_signature, &(nca_ctx->header.magic), NCA_ACID_SIGNATURE_AREA_SIZE))
+    if (!rsa2048GenerateSha256BasedPssSignature(nca_ctx->header.acid_signature, &(nca_ctx->header.magic), NCA_SIGNATURE_AREA_SIZE))
     {
         LOG_MSG("Failed to generate RSA-2048-PSS NCA ACID signature!");
         return false;

@@ -3,7 +3,6 @@ todo:
     log: verbosity levels
     log: nxlink output for advanced users
     
-    nca: signature verification
     nca: support for compressed fs sections?
     nca: support for sparse sections?
     
@@ -16,6 +15,7 @@ todo:
     title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
     
     gamecard: functions to display filelist
+    gamecard: check cardinfo's lafw version
     
     pfs0: functions to display filelist
     

@@ -34,10 +34,14 @@
 static u8 *g_ncaCryptoBuffer = NULL;
 static Mutex g_ncaCryptoBufferMutex = 0;
 
+/// Used to verify if the key area from a NCA0 is encrypted.
 static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
     0x9A, 0xBB, 0xD2, 0x11, 0x86, 0x00, 0x21, 0x9D, 0x7A, 0xDC, 0x5B, 0x43, 0x95, 0xF8, 0x4E, 0xFD,
     0xFF, 0x6B, 0x25, 0xEF, 0x9F, 0x96, 0x85, 0x28, 0x18, 0x9E, 0x76, 0xB0, 0x92, 0xF0, 0x6A, 0xCB
 };
+
+/// Used to verify the NCA header main signature.
+static const u8 g_ncaHeaderMainSignaturePublicExponent[3] = { 0x01, 0x00, 0x01 };
 
 /* Function prototypes. */
 
@@ -45,8 +49,9 @@ NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info);
 
 static bool ncaReadDecryptedHeader(NcaContext *ctx);
 static bool ncaDecryptKeyArea(NcaContext *ctx);
-
 static bool ncaEncryptKeyArea(NcaContext *ctx);
+
+static bool ncaVerifyMainSignature(NcaContext *ctx);
 
 NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx);
 NX_INLINE u8 ncaGetKeyGenerationValue(NcaContext *ctx);
@@ -597,6 +602,7 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
     ctx->key_generation = ncaGetKeyGenerationValue(ctx);
     ctx->rights_id_available = ncaCheckRightsIdAvailability(ctx);
     sha256CalculateHash(ctx->header_hash, &(ctx->header), sizeof(NcaHeader));
+    ctx->valid_main_signature = ncaVerifyMainSignature(ctx);
     
     /* Decrypt NCA key area (if needed). */
     if (!ctx->rights_id_available && !ncaDecryptKeyArea(ctx))
@@ -732,6 +738,23 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
     }
     
     return true;
+}
+
+static bool ncaVerifyMainSignature(NcaContext *ctx)
+{
+    if (!ctx)
+    {
+        LOG_MSG("Invalid NCA context!");
+        return false;
+    }
+    
+    /* Retrieve modulus for the NCA main signature. */
+    const u8 *modulus = keysGetNcaMainSignatureModulus(ctx->header.main_signature_key_generation);
+    if (!modulus) return false;
+    
+    /* Verify NCA signature. */
+    return rsa2048VerifySha256BasedPssSignature(&(ctx->header.magic), NCA_SIGNATURE_AREA_SIZE, ctx->header.main_signature, modulus, g_ncaHeaderMainSignaturePublicExponent, \
+                                                sizeof(g_ncaHeaderMainSignaturePublicExponent));
 }
 
 NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx)
