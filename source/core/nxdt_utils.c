@@ -129,8 +129,8 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Initialize USB Mass Storage interface. */
         if (!umsInitialize()) break;
         
-        /* Load NCA keyset. */
-        if (!keysLoadNcaKeyset()) break;
+        /* Load keyset. */
+        if (!keysLoadKeyset()) break;
         
         /* Allocate NCA crypto buffer. */
         if (!ncaAllocateCryptoBuffer())

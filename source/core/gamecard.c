@@ -22,6 +22,7 @@
 #include "nxdt_utils.h"
 #include "mem.h"
 #include "gamecard.h"
+#include "keys.h"
 
 #define GAMECARD_HFS0_MAGIC                     0x48465330              /* "HFS0". */
 
@@ -33,6 +34,8 @@
 #define GAMECARD_UNUSED_AREA_SIZE(x)            (((x) / GAMECARD_PAGE_SIZE) * GAMECARD_UNUSED_AREA_BLOCK_SIZE)
 
 #define GAMECARD_STORAGE_AREA_NAME(x)           ((x) == GameCardStorageArea_Normal ? "normal" : ((x) == GameCardStorageArea_Secure ? "secure" : "none"))
+
+#define LAFW_MAGIC                              0x4C414657              /* "LAFW". */
 
 /* Type definitions. */
 
@@ -64,6 +67,39 @@ typedef struct {
 
 NXDT_ASSERT(GameCardSecurityInformation, 0x600);
 
+typedef enum {
+    LotusAsicFirmwareType_ReadFw    = 0xFF,
+    LotusAsicFirmwareType_ReadDevFw = 0xFFFF,
+    LotusAsicFirmwareType_WriterFw  = 0xFFFFFF,
+    LotusAsicFirmwareType_RmaFw     = 0xFFFFFFFF
+} LotusAsicFirmwareType;
+
+typedef enum {
+    LotusAsicDeviceType_Test     = 0,
+    LotusAsicDeviceType_Dev      = 1,
+    LotusAsicDeviceType_Prod     = 2,
+    LotusAsicDeviceType_Prod2Dev = 3
+} LotusAsicDeviceType;
+
+typedef struct {
+    u8 signature[0x100];
+    u32 magic;                      ///< "LAFW".
+    u32 fw_type;                    ///< LotusAsicFirmwareType.
+    u8 reserved_1[0x8];
+    struct {
+        u64 fw_version  : 62;       ///< Stored using a bitmask.
+        u64 device_type : 2;        ///< LotusAsicDeviceType.
+    };
+    u32 data_size;
+    u8 reserved_2[0x4];
+    u8 data_iv[AES_128_KEY_SIZE];
+    char placeholder_str[0x10];     ///< "IDIDIDIDIDIDIDID".
+    u8 reserved_3[0x40];
+    u8 data[0x7680];
+} LotusAsicFirmwareBlob;
+
+NXDT_ASSERT(LotusAsicFirmwareBlob, 0x7800);
+
 /* Global variables. */
 
 static Mutex g_gameCardMutex = 0;
@@ -73,6 +109,8 @@ static FsDeviceOperator g_deviceOperator = {0};
 static FsEventNotifier g_gameCardEventNotifier = {0};
 static Event g_gameCardKernelEvent = {0};
 static bool g_openDeviceOperator = false, g_openEventNotifier = false, g_loadKernelEvent = false;
+
+static u64 g_lafwVersion = 0;
 
 static Thread g_gameCardDetectionThread = {0};
 static UEvent g_gameCardDetectionThreadExitEvent = {0}, g_gameCardStatusChangeEvent = {0};
@@ -84,6 +122,7 @@ static u8 g_gameCardStorageCurrentArea = GameCardStorageArea_None;
 static u8 *g_gameCardReadBuf = NULL;
 
 static GameCardHeader g_gameCardHeader = {0};
+static GameCardInfo g_gameCardInfoArea = {0};
 static u64 g_gameCardStorageNormalAreaSize = 0, g_gameCardStorageSecureAreaSize = 0, g_gameCardStorageTotalSize = 0;
 static u64 g_gameCardCapacity = 0;
 
@@ -108,6 +147,8 @@ static const char *g_gameCardHfsPartitionNames[] = {
 
 /* Function prototypes. */
 
+static bool gamecardGetLotusAsicFirmwareVersion(void);
+
 static bool gamecardCreateDetectionThread(void);
 static void gamecardDestroyDetectionThread(void);
 static void gamecardDetectionThreadFunc(void *arg);
@@ -128,6 +169,8 @@ static void gamecardCloseStorageArea(void);
 
 static bool gamecardGetStorageAreasSizes(void);
 NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
+
+static bool gamecardGetDecryptedCardInfoArea(void);
 
 static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size);
 static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition_type);
@@ -185,6 +228,9 @@ bool gamecardInitialize(void)
         
         /* Create user-mode gamecard status change event. */
         ueventCreate(&g_gameCardStatusChangeEvent, true);
+        
+        /* Retrieve LAFW version. */
+        if (!gamecardGetLotusAsicFirmwareVersion()) break;
         
         /* Create gamecard detection thread. */
         if (!(g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread())) break;
@@ -459,6 +505,69 @@ bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char 
     return ret;
 }
 
+static bool gamecardGetLotusAsicFirmwareVersion(void)
+{
+    u64 fw_version = 0;
+    bool ret = false, found = false, dev_unit = utilsIsDevelopmentUnit();
+    
+    /* Temporarily set the segment mask to .data. */
+    g_fsProgramMemory.mask = MemoryProgramSegmentType_Data;
+    
+    /* Retrieve full FS program memory dump. */
+    ret = memRetrieveProgramMemorySegment(&g_fsProgramMemory);
+    
+    /* Clear segment mask. */
+    g_fsProgramMemory.mask = 0;
+    
+    if (!ret)
+    {
+        LOG_MSG("Failed to retrieve FS .data segment dump!");
+        goto end;
+    }
+    
+    /* Look for the LAFW ReadFw blob in the FS .data memory dump. */
+    for(u64 offset = 0; offset < g_fsProgramMemory.data_size; offset++)
+    {
+        if ((g_fsProgramMemory.data_size - offset) < sizeof(LotusAsicFirmwareBlob)) break;
+        
+        LotusAsicFirmwareBlob *lafw_blob = (LotusAsicFirmwareBlob*)(g_fsProgramMemory.data + offset);
+        u32 magic = __builtin_bswap32(lafw_blob->magic), fw_type = lafw_blob->fw_type;
+        
+        if (magic == LAFW_MAGIC && ((!dev_unit && fw_type == LotusAsicFirmwareType_ReadFw) || (dev_unit && fw_type == LotusAsicFirmwareType_ReadDevFw)))
+        {
+            /* Jackpot. */
+            fw_version = lafw_blob->fw_version;
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found)
+    {
+        LOG_MSG("Unable to locate Lotus ReadFw blob in FS .data segment!");
+        goto end;
+    }
+    
+    /* Convert LAFW version bitmask to an integer. */
+    g_lafwVersion = 0;
+    
+    while(fw_version)
+    {
+        g_lafwVersion += (fw_version & 1);
+        fw_version >>= 1;
+    }
+    
+    LOG_MSG("LAFW version: %lu.", g_lafwVersion);
+    
+    /* Update flag. */
+    ret = true;
+    
+end:
+    memFreeMemoryLocation(&g_fsProgramMemory);
+    
+    return ret;
+}
+
 static bool gamecardCreateDetectionThread(void)
 {
     if (!utilsCreateThread(&g_gameCardDetectionThread, gamecardDetectionThreadFunc, NULL, 1))
@@ -577,6 +686,51 @@ static void gamecardLoadInfo(void)
         goto end;
     }
     
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    /* Get decrypted CardInfo area. */
+    if (!gamecardGetDecryptedCardInfoArea()) goto end;
+    
+    LOG_DATA(&g_gameCardInfoArea, sizeof(GameCardInfo), "Gamecard CardInfo area dump:");
+    
+    /* Check if we meet the Lotus ASIC firmware (LAFW) version requirement. */
+    /* Lotus treats the GameCardFwVersion field as the maximum unsupported LAFW version, instead of treating it as the minimum supported version. */
+    /* TODO: move this check somewhere else. We're supposed to do it only if things go south while reading gamecard data. */
+    if (g_lafwVersion <= g_gameCardInfoArea.fw_version)
+    {
+        LOG_MSG("LAFW version not supported by the inserted gamecard (%lu <= %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
+        goto end;
+    }
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     /* Get gamecard capacity. */
     g_gameCardCapacity = gamecardGetCapacityFromRomSizeValue(g_gameCardHeader.rom_size);
     if (!g_gameCardCapacity)
@@ -653,6 +807,8 @@ end:
 static void gamecardFreeInfo(void)
 {
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
+    
+    memset(&g_gameCardInfoArea, 0, sizeof(GameCardInfo));
     
     g_gameCardStorageNormalAreaSize = g_gameCardStorageSecureAreaSize = g_gameCardStorageTotalSize = 0;
     
@@ -974,6 +1130,39 @@ NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
     }
     
     return capacity;
+}
+
+static bool gamecardGetDecryptedCardInfoArea(void)
+{
+    const u8 *card_info_key = NULL;
+    u8 card_info_iv[AES_128_KEY_SIZE] = {0};
+    Aes128CbcContext aes_ctx = {0};
+    
+    /* Retrieve CardInfo area key. */
+    card_info_key = keysGetGameCardInfoKey();
+    if (!card_info_key)
+    {
+        LOG_MSG("Failed to retrieve CardInfo area key!");
+        return false;
+    }
+    
+    /* Reverse CardInfo IV. */
+    for(u8 i = 0; i < AES_128_KEY_SIZE; i++) card_info_iv[i] = g_gameCardHeader.card_info_iv[AES_128_KEY_SIZE - i - 1];
+    
+    /* Initialize AES-128-CBC context. */
+    aes128CbcContextCreate(&aes_ctx, card_info_key, card_info_iv, false);
+    
+    /* Decrypt CardInfo area. */
+    aes128CbcDecrypt(&aes_ctx, &g_gameCardInfoArea, &(g_gameCardHeader.card_info), sizeof(GameCardInfo));
+    
+    /* Verify update ID. */
+    if (utilsGetCustomFirmwareType() != UtilsCustomFirmwareType_SXOS && g_gameCardInfoArea.upp_id != GAMECARD_UPDATE_TID)
+    {
+        LOG_MSG("Failed to decrypt CardInfo area!");
+        return false;
+    }
+    
+    return true;
 }
 
 static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size)

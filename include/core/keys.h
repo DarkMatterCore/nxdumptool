@@ -30,9 +30,9 @@
 extern "C" {
 #endif
 
-/// Loads (and derives) NCA keydata from sysmodule program memory and the Lockpick_RCM keys file.
+/// Loads (and derives) keydata from sysmodule program memory, the Lockpick_RCM keys file and hardcoded/obfuscated information.
 /// Must be called (and succeed) before calling any of the functions below.
-bool keysLoadNcaKeyset(void);
+bool keysLoadKeyset(void);
 
 /// Returns a pointer to the AES-128-XTS NCA header key, or NULL if keydata hasn't been loaded.
 const u8 *keysGetNcaHeaderKey(void);
@@ -56,6 +56,9 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
 
 /// Returns a pointer to an AES-128-ECB ticket common key using the provided key generation value, or NULL if keydata hasn't been loaded.
 const u8 *keysGetTicketCommonKey(u8 key_generation);
+
+/// Returns a pointer to the AES-128-CBC CardInfo area key for gamecard headers, or NULL if keydata hasn't been loaded.
+const u8 *keysGetGameCardInfoKey(void);
 
 #ifdef __cplusplus
 }

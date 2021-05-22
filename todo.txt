@@ -15,7 +15,7 @@ todo:
     title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
     
     gamecard: functions to display filelist
-    gamecard: check cardinfo's lafw version
+    gamecard: move around code to perform the lafw version check at the places we need
     
     pfs0: functions to display filelist
     

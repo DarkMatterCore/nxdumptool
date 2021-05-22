@@ -73,13 +73,24 @@ typedef struct {
     u8 ticket_common_keys[NcaKeyGeneration_Max][AES_128_KEY_SIZE];                                  ///< Retrieved from the Lockpick_RCM keys file.
 } KeysNcaKeyset;
 
+typedef struct {
+    /// AES-128-CBC keys needed to decrypt the CardInfo area from gamecard headers.
+    const u8 gc_cardinfo_kek_source[AES_128_KEY_SIZE];      ///< Randomly generated KEK source to decrypt official CardInfo area keys.
+    const u8 gc_cardinfo_key_prod_source[AES_128_KEY_SIZE]; ///< CardInfo area key used in retail units. Obfuscated using the above KEK source and SMC AES engine keydata.
+    const u8 gc_cardinfo_key_dev_source[AES_128_KEY_SIZE];  ///< CardInfo area key used in development units. Obfuscated using the above KEK source and SMC AES engine keydata.
+    
+    u8 gc_cardinfo_kek_sealed[AES_128_KEY_SIZE];            ///< Generated from gc_cardinfo_kek_source. Sealed by the SMC AES engine.
+    u8 gc_cardinfo_key_prod[AES_128_KEY_SIZE];              ///< Generated from gc_cardinfo_kek_sealed and gc_cardinfo_key_prod_source.
+    u8 gc_cardinfo_key_dev[AES_128_KEY_SIZE];               ///< Generated from gc_cardinfo_kek_sealed and gc_cardinfo_key_dev_source.
+} KeysGameCardKeyset;
+
 /// Used to parse the eTicket RSA device key retrieved from PRODINFO via setcalGetEticketDeviceKey().
 /// Everything after the AES CTR is encrypted using the eTicket RSA device key encryption key.
 typedef struct {
     u8 ctr[AES_128_KEY_SIZE];
     u8 private_exponent[RSA2048_BYTES];
     u8 modulus[RSA2048_BYTES];
-    u32 public_exponent;                ///< Must match ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT. Stored using big endian byte order.
+    u32 public_exponent;                ///< Stored using big endian byte order. Must match ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT.
     u8 padding[0x14];
     u64 device_id;
     u8 ghash[0x10];
@@ -108,11 +119,23 @@ static bool keysReadKeysFromFile(void);
 static bool keysGetDecryptedEticketRsaDeviceKey(void);
 static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void *n);
 
+static bool keysDeriveGameCardKeys(void);
+
 /* Global variables. */
 
 static KeysNcaKeyset g_ncaKeyset = {0};
-static bool g_ncaKeysetLoaded = false;
-static Mutex g_ncaKeysetMutex = 0;
+
+static KeysGameCardKeyset g_gameCardKeyset = {
+    .gc_cardinfo_kek_source      = { 0xDE, 0xC6, 0x3F, 0x6A, 0xBF, 0x37, 0x72, 0x0B, 0x7E, 0x54, 0x67, 0x6A, 0x2D, 0xEF, 0xDD, 0x97 },
+    .gc_cardinfo_key_prod_source = { 0xF4, 0x92, 0x06, 0x52, 0xD6, 0x37, 0x70, 0xAF, 0xB1, 0x9C, 0x6F, 0x63, 0x09, 0x01, 0xF6, 0x29 },
+    .gc_cardinfo_key_dev_source  = { 0x0B, 0x7D, 0xBB, 0x2C, 0xCF, 0x64, 0x1A, 0xF4, 0xD7, 0x38, 0x81, 0x3F, 0x0C, 0x33, 0xF4, 0x1C },
+    .gc_cardinfo_kek_sealed      = {0},
+    .gc_cardinfo_key_prod        = {0},
+    .gc_cardinfo_key_dev         = {0}
+};
+
+static bool g_keysetLoaded = false;
+static Mutex g_keysetMutex = 0;
 
 static SetCalRsa2048DeviceKey g_eTicketRsaDeviceKey = {0};
 
@@ -230,13 +253,13 @@ static KeysMemoryInfo g_fsDataMemoryInfo = {
     }
 };
 
-bool keysLoadNcaKeyset(void)
+bool keysLoadKeyset(void)
 {
     bool ret = false;
     
-    SCOPED_LOCK(&g_ncaKeysetMutex)
+    SCOPED_LOCK(&g_keysetMutex)
     {
-        ret = g_ncaKeysetLoaded;
+        ret = g_keysetLoaded;
         if (ret) break;
         
         /* Retrieve FS .rodata keys. */
@@ -273,14 +296,18 @@ bool keysLoadNcaKeyset(void)
         /* Get decrypted eTicket RSA device key. */
         if (!keysGetDecryptedEticketRsaDeviceKey()) break;
         
+        /* Derive gamecard keys. */
+        if (!keysDeriveGameCardKeys()) break;
+        
         /* Update flags. */
-        ret = g_ncaKeysetLoaded = true;
+        ret = g_keysetLoaded = true;
     }
     
     /*if (ret)
     {
         LOG_DATA(&g_ncaKeyset, sizeof(KeysNcaKeyset), "NCA keyset dump:");
         LOG_DATA(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
+        LOG_DATA(&g_gameCardKeyset, sizeof(KeysGameCardKeyset), "Gamecard keyset dump:");
     }*/
     
     return ret;
@@ -290,9 +317,9 @@ const u8 *keysGetNcaHeaderKey(void)
 {
     const u8 *ret = NULL;
     
-    SCOPED_LOCK(&g_ncaKeysetMutex)
+    SCOPED_LOCK(&g_keysetMutex)
     {
-        if (g_ncaKeysetLoaded) ret = (const u8*)(g_ncaKeyset.nca_header_key);
+        if (g_keysetLoaded) ret = (const u8*)(g_ncaKeyset.nca_header_key);
     }
     
     return ret;
@@ -309,9 +336,9 @@ const u8 *keysGetNcaMainSignatureModulus(u8 key_generation)
     bool dev_unit = utilsIsDevelopmentUnit();
     const u8 *ret = NULL, null_modulus[RSA2048_PUBKEY_SIZE] = {0};
     
-    SCOPED_LOCK(&g_ncaKeysetMutex)
+    SCOPED_LOCK(&g_keysetMutex)
     {
-        if (!g_ncaKeysetLoaded) break;
+        if (!g_keysetLoaded) break;
         
         ret = (const u8*)(dev_unit ? g_ncaKeyset.nca_main_signature_moduli_dev[key_generation] : g_ncaKeyset.nca_main_signature_moduli_prod[key_generation]);
         
@@ -348,9 +375,9 @@ bool keysDecryptNcaKeyAreaEntry(u8 kaek_index, u8 key_generation, void *dst, con
         goto end;
     }
     
-    SCOPED_LOCK(&g_ncaKeysetMutex)
+    SCOPED_LOCK(&g_keysetMutex)
     {
-        if (!g_ncaKeysetLoaded) break;
+        if (!g_keysetLoaded) break;
         Result rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_kaek_sealed[kaek_index][key_gen_val], src, dst);
         if (!(ret = R_SUCCEEDED(rc))) LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X).", rc);
     }
@@ -376,9 +403,9 @@ const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
         goto end;
     }
     
-    SCOPED_LOCK(&g_ncaKeysetMutex)
+    SCOPED_LOCK(&g_keysetMutex)
     {
-        if (g_ncaKeysetLoaded) ret = (const u8*)(g_ncaKeyset.nca_kaek[kaek_index][key_gen_val]);
+        if (g_keysetLoaded) ret = (const u8*)(g_ncaKeyset.nca_kaek[kaek_index][key_gen_val]);
     }
     
 end:
@@ -395,9 +422,9 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
     
     bool ret = false;
     
-    SCOPED_LOCK(&g_ncaKeysetMutex)
+    SCOPED_LOCK(&g_keysetMutex)
     {
-        if (!g_ncaKeysetLoaded) break;
+        if (!g_keysetLoaded) break;
         
         size_t out_keydata_size = 0;
         u8 out_keydata[RSA2048_BYTES] = {0};
@@ -432,12 +459,24 @@ const u8 *keysGetTicketCommonKey(u8 key_generation)
         goto end;
     }
     
-    SCOPED_LOCK(&g_ncaKeysetMutex)
+    SCOPED_LOCK(&g_keysetMutex)
     {
-        if (g_ncaKeysetLoaded) ret = (const u8*)(g_ncaKeyset.ticket_common_keys[key_gen_val]);
+        if (g_keysetLoaded) ret = (const u8*)(g_ncaKeyset.ticket_common_keys[key_gen_val]);
     }
     
 end:
+    return ret;
+}
+
+const u8 *keysGetGameCardInfoKey(void)
+{
+    const u8 *ret = NULL;
+    
+    SCOPED_LOCK(&g_keysetMutex)
+    {
+        if (g_keysetLoaded) ret = (const u8*)(utilsIsDevelopmentUnit() ? g_gameCardKeyset.gc_cardinfo_key_dev : g_gameCardKeyset.gc_cardinfo_key_prod);
+    }
+    
     return ret;
 }
 
@@ -936,6 +975,37 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
     if (memcmp(x, z, RSA2048_BYTES) != 0)
     {
         LOG_MSG("Invalid RSA key pair!");
+        return false;
+    }
+    
+    return true;
+}
+
+static bool keysDeriveGameCardKeys(void)
+{
+    Result rc = 0;
+    
+    /* Derive gc_cardinfo_kek_sealed from gc_cardinfo_kek_source. */
+    rc = splCryptoGenerateAesKek(g_gameCardKeyset.gc_cardinfo_kek_source, 0, 0, g_gameCardKeyset.gc_cardinfo_kek_sealed);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG("splCryptoGenerateAesKek failed! (0x%08X) (gc_cardinfo_kek_sealed).", rc);
+        return false;
+    }
+    
+    /* Derive gc_cardinfo_key_prod from gc_cardinfo_kek_sealed and gc_cardinfo_key_prod_source. */
+    rc = splCryptoGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_sealed, g_gameCardKeyset.gc_cardinfo_key_prod_source, g_gameCardKeyset.gc_cardinfo_key_prod);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (gc_cardinfo_key_prod).", rc);
+        return false;
+    }
+    
+    /* Derive gc_cardinfo_key_dev from gc_cardinfo_kek_sealed and gc_cardinfo_key_dev_source. */
+    rc = splCryptoGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_sealed, g_gameCardKeyset.gc_cardinfo_key_dev_source, g_gameCardKeyset.gc_cardinfo_key_dev);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (gc_cardinfo_key_dev).", rc);
         return false;
     }
     

@@ -126,7 +126,8 @@ typedef enum {
     GameCardFwVersion_ForProdSince400NUP  = 2,  ///< upp_version >= 268435456 (4.0.0-0.0) in GameCardInfo.
     GameCardFwVersion_ForDevSince1100NUP  = 3,  ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
     GameCardFwVersion_ForProdSince1100NUP = 4,  ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
-    GameCardFwVersion_ForProdSince1200NUP = 5   ///< upp_version >= 805306368 (12.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_ForProdSince1200NUP = 5,  ///< upp_version >= 805306368 (12.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_Count               = 6
 } GameCardFwVersion;
 
 typedef enum {
@@ -139,7 +140,7 @@ typedef enum {
     GameCardCompatibilityType_Terra  = 1
 } GameCardCompatibilityType;
 
-/// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under newer versions of HOS) and the IV from `GameCardHeader`.
+/// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under HOS 9.0.0+) and the IV from `GameCardHeader`.
 /// Key hashes for documentation purposes:
 /// Production XCI header key hash:  2E36CC55157A351090A73E7AE77CF581F69B0B6E48FB066C984879A6ED7D2E96
 /// Development XCI header key hash: 61D5C02244188810E2E3DE69341AC0F3C7653D370C6D3F77CA82B0B7E59F39AD
@@ -174,7 +175,7 @@ typedef struct {
     u64 package_id;                                 ///< Used for challenge–response authentication.
     u32 valid_data_end_address;                     ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 reserved[0x4];
-    u8 iv[0x10];
+    u8 card_info_iv[AES_128_KEY_SIZE];              ///< AES-128-CBC IV for the CardInfo area (reversed).
     u64 partition_fs_header_address;                ///< Root Hash File System header offset.
     u64 partition_fs_header_size;                   ///< Root Hash File System header size.
     u8 partition_fs_header_hash[SHA256_HASH_SIZE];
