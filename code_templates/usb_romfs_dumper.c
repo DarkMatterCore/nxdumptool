@@ -451,6 +451,7 @@ int main(int argc, char *argv[])
             {
                 consolePrint("\nthe selected title doesn't have available base content.\n");
                 utilsSleep(3);
+                titleFreeUserApplicationData(&user_app_data);
                 continue;
             }
             
@@ -676,6 +677,8 @@ out2:
     if (update_nca_ctx) free(update_nca_ctx);
     
     if (base_nca_ctx) free(base_nca_ctx);
+    
+    titleFreeUserApplicationData(&user_app_data);
     
     if (buf) free(buf);
     

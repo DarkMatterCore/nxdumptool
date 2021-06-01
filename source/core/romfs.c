@@ -459,9 +459,13 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
         strncat(out_path, (*cur_dir_entry)->name, (*cur_dir_entry)->name_length);
         path_len++;
         
-        if (illegal_char_replace_type) utilsReplaceIllegalCharacters(out_path + path_len, illegal_char_replace_type == RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly);
-        
-        path_len += (*cur_dir_entry)->name_length;
+        if (illegal_char_replace_type)
+        {
+            utilsReplaceIllegalCharacters(out_path + path_len, illegal_char_replace_type == RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly);
+            path_len += strlen(out_path + path_len);
+        } else {
+            path_len += (*cur_dir_entry)->name_length;
+        }
     }
     
     success = true;

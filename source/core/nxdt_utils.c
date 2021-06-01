@@ -31,6 +31,9 @@
 #include "bfttf.h"
 #include "fatfs/ff.h"
 
+/* Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits. */
+#define NT_MAX_FILENAME_LENGTH  255
+
 /* Global variables. */
 
 static bool g_resourcesInit = false;
@@ -77,6 +80,8 @@ static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
 static void utilsPrintConsoleError(void);
+
+static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos);
 
 bool utilsInitializeResources(const int program_argc, const char **program_argv)
 {
@@ -445,14 +450,32 @@ end:
 
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
 {
-    size_t strsize = 0;
+    size_t str_size = 0, cur_pos = 0;
     
-    if (!str || !(strsize = strlen(str))) return;
+    if (!str || !(str_size = strlen(str))) return;
     
-    for(size_t i = 0; i < strsize; i++)
+    u8 *ptr1 = (u8*)str, *ptr2 = ptr1;
+    ssize_t units = 0;
+    u32 code = 0;
+    
+    while(cur_pos < str_size)
     {
-        if (memchr(g_illegalFileSystemChars, str[i], g_illegalFileSystemCharsLength) || str[i] < 0x20 || (!ascii_only && str[i] == 0x7F) || (ascii_only && str[i] >= 0x7F)) str[i] = '_';
+        units = decode_utf8(&code, ptr1);
+        if (units < 0) break;
+        
+        if (memchr(g_illegalFileSystemChars, (int)code, g_illegalFileSystemCharsLength) || code < 0x20 || (!ascii_only && code == 0x7F) || (ascii_only && code >= 0x7F))
+        {
+            *ptr2++ = '_';
+        } else {
+            if (ptr2 != ptr1) memmove(ptr2, ptr1, (size_t)units);
+            ptr2 += units;
+        }
+        
+        ptr1 += units;
+        cur_pos += (size_t)units;
     }
+    
+    *ptr2 = '\0';
 }
 
 void utilsTrimString(char *str)
@@ -568,10 +591,10 @@ bool utilsCreateConcatenationFile(const char *path)
         return false;
     }
     
-    /* Safety check: remove any existant file/directory at the destination path. */
+    /* Safety measure: remove any existant file/directory at the destination path. */
     utilsRemoveConcatenationFile(path);
     
-    /* Create ConcatenationFile */
+    /* Create ConcatenationFile. */
     /* If the call succeeds, the caller function will be able to operate on this file using stdio calls. */
     Result rc = fsdevCreateFile(path, 0, FsCreateOption_BigFile);
     if (R_FAILED(rc)) LOG_MSG("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
@@ -604,25 +627,113 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element)
 
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension)
 {
-    if (!filename || !*filename || !extension || !*extension)
+    if (!filename || !*filename)
     {
         LOG_MSG("Invalid parameters!");
         return NULL;
     }
     
-    char *path = NULL;
-    size_t path_len = (strlen(filename) + strlen(extension) + 1);
-    if (prefix && *prefix) path_len += strlen(prefix);
+    bool use_prefix = (prefix && *prefix);
+    size_t prefix_len = (use_prefix ? strlen(prefix) : 0);
+    bool append_path_sep = (use_prefix && prefix[prefix_len - 1] != '/');
     
-    if (!(path = calloc(path_len, sizeof(char))))
+    bool use_extension = (extension && *extension);
+    size_t extension_len = (use_extension ? strlen(extension) : 0);
+    bool append_dot = (use_extension && *extension != '.');
+    
+    size_t path_len = (prefix_len + strlen(filename) + extension_len);
+    if (append_path_sep) path_len++;
+    if (append_dot) path_len++;
+    
+    char *path = NULL, *ptr1 = NULL, *ptr2 = NULL;
+    bool filename_only = false, success = false;
+    
+    /* Allocate memory for the output path. */
+    if (!(path = calloc(path_len + 1, sizeof(char))))
     {
         LOG_MSG("Failed to allocate 0x%lX bytes for output path!", path_len);
-        return NULL;
+        goto end;
     }
     
-    if (prefix && *prefix) strcat(path, prefix);
+    /* Generate output path. */
+    if (use_prefix) strcat(path, prefix);
+    if (append_path_sep) strcat(path, "/");
     strcat(path, filename);
-    strcat(path, extension);
+    if (append_dot) strcat(path, ".");
+    if (use_extension) strcat(path, extension);
+    
+    /* Retrieve pointer to the first path separator. */
+    ptr1 = strchr(path, '/');
+    if (!ptr1)
+    {
+        filename_only = true;
+        ptr1 = path;
+    }
+    
+    /* Make sure each path element doesn't exceed NT_MAX_FILENAME_LENGTH. */
+    while(ptr1)
+    {
+        /* End loop if we find a NULL terminator. */
+        if (!filename_only && !*ptr1++) break;
+        
+        /* Get pointer to next path separator. */
+        ptr2 = strchr(ptr1, '/');
+        
+        /* Get current path element size. */
+        size_t element_size = (ptr2 ? (size_t)(ptr2 - ptr1) : (path_len - (size_t)(ptr1 - path)));
+        
+        /* Get UTF-8 codepoint count. */
+        /* Use NT_MAX_FILENAME_LENGTH as the codepoint count limit. */
+        size_t last_cp_pos = 0;
+        size_t cp_count = utilsGetUtf8CodepointCount(ptr1, element_size, NT_MAX_FILENAME_LENGTH, &last_cp_pos);
+        if (cp_count > NT_MAX_FILENAME_LENGTH)
+        {
+            if (ptr2)
+            {
+                /* Truncate current element by moving the rest of the path to the current position. */
+                memmove(ptr1 + last_cp_pos, ptr2, path_len - (size_t)(ptr2 - path));
+                
+                /* Update pointer. */
+                ptr2 -= (element_size - last_cp_pos);
+            } else
+            if (use_extension)
+            {
+                /* Truncate last element. Make sure to preserve the provided file extension. */
+                size_t diff = extension_len;
+                if (append_dot) diff++;
+                
+                if (diff >= last_cp_pos)
+                {
+                    LOG_MSG("File extension length is >= truncated filename length! (0x%lX >= 0x%lX) (#1).", diff, last_cp_pos);
+                    goto end;
+                }
+                
+                memmove(ptr1 + last_cp_pos - diff, ptr1 + element_size - diff, diff);
+            }
+            
+            path_len -= (element_size - last_cp_pos);
+            path[path_len] = '\0';
+        }
+        
+        ptr1 = ptr2;
+    }
+    
+    /* Check if the full length for the generated path is >= FS_MAX_PATH. */
+    if (path_len >= FS_MAX_PATH)
+    {
+        LOG_MSG("Generated path length is >= FS_MAX_PATH! (0x%lX).", path_len);
+        goto end;
+    }
+    
+    /* Update flag. */
+    success = true;
+    
+end:
+    if (!success && path)
+    {
+        free(path);
+        path = NULL;
+    }
     
     return path;
 }
@@ -758,4 +869,27 @@ static void utilsPrintConsoleError(void)
     }
     
     consoleExit(NULL);
+}
+
+static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos)
+{
+    if (!str || !*str || !str_size || (!cp_limit && last_cp_pos) || (cp_limit && !last_cp_pos)) return 0;
+    
+    u32 code = 0;
+    ssize_t units = 0;
+    size_t cur_pos = 0, cp_count = 0;
+    const u8 *str_u8 = (const u8*)str;
+    
+    while(cur_pos < str_size)
+    {
+        units = decode_utf8(&code, str_u8 + cur_pos);
+        size_t new_pos = (cur_pos + (size_t)units);
+        if (units < 0 || !code || new_pos > str_size) break;
+        
+        cp_count++;
+        cur_pos = new_pos;
+        if (cp_limit && last_cp_pos && cp_count < cp_limit) *last_cp_pos = cur_pos;
+    }
+    
+    return cp_count;
 }

@@ -103,10 +103,14 @@ typedef enum {
     NacpSupportedLanguage_Portuguese           = BIT(10),
     NacpSupportedLanguage_Russian              = BIT(11),
     NacpSupportedLanguage_Korean               = BIT(12),
-    NacpSupportedLanguage_TraditionalChinese   = BIT(13),   ///< Old: NacpSupportedLanguage_Taiwanese.
-    NacpSupportedLanguage_SimplifiedChinese    = BIT(14),   ///< Old: NacpSupportedLanguage_Chinese.
+    NacpSupportedLanguage_TraditionalChinese   = BIT(13),
+    NacpSupportedLanguage_SimplifiedChinese    = BIT(14),
     NacpSupportedLanguage_BrazilianPortuguese  = BIT(15),
-    NacpSupportedLanguage_Count                = 16         ///< Total values supported by this enum. Should always match NacpLanguage_Count.
+    NacpSupportedLanguage_Count                = 16,        ///< Total values supported by this enum. Should always match NacpLanguage_Count.
+    
+    ///< Old.
+    NacpSupportedLanguage_Taiwanese            = NacpSupportedLanguage_TraditionalChinese,
+    NacpSupportedLanguage_Chinese              = NacpSupportedLanguage_SimplifiedChinese
 } NacpSupportedLanguage;
 
 typedef enum {
@@ -390,7 +394,8 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx);
 /// If 'patch_sua' is true, StartupUserAccount is set to None, the IsOptional bit in StartupUserAccountOption is cleared and UserAccountSwitchLock is set to Disable.
 /// If 'patch_screenshot' is true, Screenshot is set to Allow.
 /// If 'patch_video_capture' is true, VideoCapture is set to Enable.
-bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_screenshot, bool patch_video_capture);
+/// If 'patch_hdcp' is true, Hdcp is set to None.
+bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_screenshot, bool patch_video_capture, bool patch_hdcp);
 
 /// Writes data from the RomFS file entry patch in the input NacpContext to the provided buffer.
 void nacpWriteNcaPatch(NacpContext *nacp_ctx, void *buf, u64 buf_size, u64 buf_offset);

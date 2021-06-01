@@ -371,17 +371,39 @@ static u32 menuGetElementCount(const Menu *menu)
     return cnt;
 }
 
-static void waitForGameCardAndUsb(void)
+static bool waitForGameCardAndUsb(void)
 {
     consoleClear();
     consolePrint("waiting for gamecard...\n");
     
+    u8 status = GameCardStatus_NotInserted;
+    
     while(true)
     {
-        if (gamecardGetStatus() == GameCardStatus_InsertedAndInfoLoaded) break;
+        status = gamecardGetStatus();
+        if (status > GameCardStatus_NotInserted) break;
     }
     
-    titleIsGameCardInfoUpdated();
+    switch(status)
+    {
+        case GameCardStatus_NoGameCardPatchEnabled:
+            consolePrint("\"nogc\" patch enabled, please disable it and reboot your console\n");
+            break;
+        case GameCardStatus_LotusAsicFirmwareUpdateRequired:
+            consolePrint("gamecard controller firmware update required, please update your console\n");
+            break;
+        case GameCardStatus_InsertedAndInfoNotLoaded:
+            consolePrint("unexpected I/O error occurred, please check the logfile\n");
+            break;
+        default:
+            break;
+    }
+    
+    if (status != GameCardStatus_InsertedAndInfoLoaded)
+    {
+        utilsWaitForButtonPress(0);
+        return false;
+    }
     
     consolePrint("waiting for usb session...\n");
     
@@ -389,6 +411,8 @@ static void waitForGameCardAndUsb(void)
     {
         if (usbIsReady()) break;
     }
+    
+    return true;
 }
 
 static bool sendFileData(const char *path, void *data, size_t data_size)
@@ -434,7 +458,7 @@ static bool dumpGameCardKeyArea(GameCardKeyArea *out)
 
 static bool sendGameCardKeyAreaViaUsb(void)
 {
-    waitForGameCardAndUsb();
+    if (!waitForGameCardAndUsb()) return false;
     
     utilsChangeHomeButtonBlockStatus(false);
     
@@ -466,7 +490,7 @@ end:
 
 static bool sendGameCardCertificateViaUsb(void)
 {
-    waitForGameCardAndUsb();
+    if (!waitForGameCardAndUsb()) return false;
     
     utilsChangeHomeButtonBlockStatus(true);
     
@@ -504,7 +528,7 @@ end:
 
 static bool sendGameCardImageViaUsb(void)
 {
-    waitForGameCardAndUsb();
+    if (!waitForGameCardAndUsb()) return false;
     
     utilsChangeHomeButtonBlockStatus(true);
     

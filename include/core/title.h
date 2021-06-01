@@ -45,7 +45,7 @@ typedef struct {
     u8 *icon;                       ///< JPEG icon data.
 } TitleApplicationMetadata;
 
-/// Generated using ncm databases.
+/// Generated using ncm calls.
 typedef struct _TitleInfo {
     u8 storage_id;                                  ///< NcmStorageId.
     NcmContentMetaKey meta_key;                     ///< Used with ncm calls.
@@ -91,42 +91,49 @@ NcmContentMetaDatabase *titleGetNcmDatabaseByStorageId(u8 storage_id);
 /// Returns a pointer to a ncm storage handle using a NcmStorageId value.
 NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 
-/// Returns a pointer to a dynamically allocated array of pointers to TitleApplicationMetadata entries, as well as their count. The allocated buffer must be freed by the calling function.
+/// Returns a pointer to a dynamically allocated array of pointers to TitleApplicationMetadata entries, as well as their count. Returns NULL if an error occurs.
 /// If 'is_system' is true, TitleApplicationMetadata entries from available system titles (NcmStorageId_BuiltInSystem) will be returned.
 /// Otherwise, TitleApplicationMetadata entries from user applications with available content data (NcmStorageId_BuiltInUser, NcmStorageId_SdCard, NcmStorageId_GameCard) will be returned.
-/// Returns NULL if an error occurs.
+/// The allocated buffer must be freed by the calling function using free().
 TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count);
 
-/// Returns a pointer to a TitleInfo entry with a matching storage ID and title ID.
+/// Returns a pointer to a dynamically allocated TitleInfo element with a matching storage ID and title ID. Returns NULL if an error occurs.
 /// If NcmStorageId_Any is used, the first entry with a matching title ID is returned.
-/// Returns NULL if an error occurs.
+/// Use titleFreeTitleInfo() to free the returned data.
 TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
 
-/// Populates a TitleUserApplicationData element using a user application ID.
+/// Frees a dynamically allocated TitleInfo element.
+void titleFreeTitleInfo(TitleInfo **info);
+
+/// Populates a TitleUserApplicationData element with dynamically allocated data using a user application ID.
+/// Use titleFreeUserApplicationData() to free the populated data.
 bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
+
+/// Frees data populated by titleGetUserApplicationData().
+void titleFreeUserApplicationData(TitleUserApplicationData *user_app_data);
 
 /// Returns true if orphan titles are available.
 /// Orphan titles are patches or add-on contents with no NsApplicationControlData available for their parent user application ID.
 bool titleAreOrphanTitlesAvailable(void);
 
-/// Returns a pointer to a dynamically allocated array of pointers to TitleInfo entries from orphan titles, as well as their count. The allocated buffer must be freed by the calling function.
-/// Returns NULL if an error occurs.
-TitleInfo **titleGetInfoFromOrphanTitles(u32 *out_count);
+/// Returns a pointer to a dynamically allocated array of orphan TitleInfo entries, as well as their count. Returns NULL if an error occurs.
+/// Use titleFreeOrphanTitles() to free the returned data.
+TitleInfo **titleGetOrphanTitles(u32 *out_count);
+
+/// Frees orphan title info data returned by titleGetInfoFromOrphanTitles().
+void titleFreeOrphanTitles(TitleInfo ***orphan_info);
 
 /// Checks if a gamecard status update has been detected by the background gamecard title info thread (e.g. after a new gamecard has been inserted, of after the current one has been taken out).
-/// If so, gamecard title info entries will be updated or freed during this call, depending on the current gamecard status.
-/// If this function returns true and titleGetApplicationMetadataEntries() or titleGetInfoFromOrphanTitles() have been previously called:
-///     1. Their returned buffers should be freed.
+/// If this function returns true and functions such as titleGetInfoFromStorageByTitleId(), titleGetUserApplicationData() or titleGetInfoFromOrphanTitles() have been previously called:
+///     1. Their returned data must be freed.
 ///     2. They must be called again.
 bool titleIsGameCardInfoUpdated(void);
 
-/// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps.
-/// Returns NULL if an error occurs.
+/// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps. Returns NULL if an error occurs.
 char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type);
 
-/// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output gamecard dumps.
+/// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output gamecard dumps. Returns NULL if an error occurs.
 /// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.
-/// Returns NULL if an error occurs.
 char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_type);
 
 /// Returns a pointer to a string holding the name of the provided NcmContentType value. Returns NULL if the provided value is invalid.

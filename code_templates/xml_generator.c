@@ -177,6 +177,7 @@ int main(int argc, char *argv[])
             {
                 consolePrint("\nthe selected title doesn't have available base content.\n");
                 utilsSleep(3);
+                titleFreeUserApplicationData(&user_app_data);
                 continue;
             }
             
@@ -444,6 +445,8 @@ out2:
     cnmtFreeContext(&cnmt_ctx);
     
     if (nca_ctx) free(nca_ctx);
+    
+    titleFreeUserApplicationData(&user_app_data);
     
     if (app_metadata) free(app_metadata);
     

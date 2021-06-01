@@ -107,8 +107,9 @@ void utilsJoinThread(Thread *thread);
 /// If the buffer isn't big enough to hold both its current contents and the new formatted string, it will be resized.
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
-/// Replaces illegal FAT characters in the provided string with underscores.
-/// If 'ascii_only' is set to true, all characters outside the (0x20,0x7E] range will also be replaced with underscores.
+/// Replaces illegal FAT characters in the provided UTF-8 string with underscores.
+/// If 'ascii_only' is set to true, all codepoints outside the (0x20,0x7E] range will also be replaced with underscores.
+/// Replacements are performed on a per-codepoint basis, which means the string length can be reduced by this function.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 
 /// Trims whitespace characters from the provided string.
@@ -139,7 +140,10 @@ bool utilsCreateConcatenationFile(const char *path);
 /// If 'create_last_element' is true, the last element from the provided path will be created as well.
 void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 
-/// Returns a pointer to a dynamically allocated string that holds the full path formed by the provided arguments.
+/// Returns a pointer to a dynamically allocated string that holds the full path formed by the provided arguments. Both path prefix and file extension are optional.
+/// If any elements from the generated path exceed safe filesystem limits, each exceeding element will be truncated. Truncations, if needed, are performed on a per-codepoint basis (UTF-8).
+/// If an extension is provided, it will always be preserved, regardless of any possible truncations being carried out.
+/// Furthermore, if the full length for the generated path is >= FS_MAX_PATH, NULL will be returned.
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
 
 /// Simple wrapper to sleep the current thread for a specific number of full seconds.

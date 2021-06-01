@@ -55,7 +55,7 @@ typedef enum {
 } GameCardCapacity;
 
 /// Only kept for documentation purposes, not really used.
-/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardHeaderEncryptedArea precedes this struct in FS program memory.
+/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardInfo precedes this struct in FS program memory.
 typedef struct {
     u32 memory_interface_mode;
     u32 asic_status;
@@ -114,16 +114,18 @@ static u64 g_lafwVersion = 0;
 
 static Thread g_gameCardDetectionThread = {0};
 static UEvent g_gameCardDetectionThreadExitEvent = {0}, g_gameCardStatusChangeEvent = {0};
-static bool g_gameCardDetectionThreadCreated = false, g_gameCardInserted = false, g_gameCardInfoLoaded = false;
+static bool g_gameCardDetectionThreadCreated = false;
+
+static GameCardStatus g_gameCardStatus = GameCardStatus_NotInserted;
 
 static FsGameCardHandle g_gameCardHandle = {0};
 static FsStorage g_gameCardStorage = {0};
-static u8 g_gameCardStorageCurrentArea = GameCardStorageArea_None;
+static u8 g_gameCardCurrentStorageArea = GameCardStorageArea_None;
 static u8 *g_gameCardReadBuf = NULL;
 
 static GameCardHeader g_gameCardHeader = {0};
 static GameCardInfo g_gameCardInfoArea = {0};
-static u64 g_gameCardStorageNormalAreaSize = 0, g_gameCardStorageSecureAreaSize = 0, g_gameCardStorageTotalSize = 0;
+static u64 g_gameCardNormalAreaSize = 0, g_gameCardSecureAreaSize = 0, g_gameCardTotalSize = 0;
 static u64 g_gameCardCapacity = 0;
 
 static u32 g_gameCardHfsCount = 0;
@@ -156,7 +158,11 @@ static void gamecardDetectionThreadFunc(void *arg);
 NX_INLINE bool gamecardIsInserted(void);
 
 static void gamecardLoadInfo(void);
-static void gamecardFreeInfo(void);
+static void gamecardFreeInfo(bool clear_status);
+
+static bool gamecardReadHeader(void);
+
+static bool gamecardGetDecryptedCardInfoArea(void);
 
 static bool gamecardReadInitialData(GameCardKeyArea *out);
 
@@ -169,8 +175,6 @@ static void gamecardCloseStorageArea(void);
 
 static bool gamecardGetStorageAreasSizes(void);
 NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
-
-static bool gamecardGetDecryptedCardInfoArea(void);
 
 static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size);
 static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition_type);
@@ -303,7 +307,7 @@ u8 gamecardGetStatus(void)
     
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        if (g_gameCardInserted) status = (g_gameCardInfoLoaded ? GameCardStatus_InsertedAndInfoLoaded : GameCardStatus_InsertedAndInfoNotLoaded);
+        if (g_gameCardInterfaceInit) status = g_gameCardStatus;
     }
     
     return status;
@@ -333,7 +337,7 @@ bool gamecardGetHeader(GameCardHeader *out)
     
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) memcpy(out, &g_gameCardHeader, sizeof(GameCardHeader));
     }
     
@@ -346,17 +350,11 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
     
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        if (!g_gameCardInserted || !g_gameCardHandle.value || !out) break;
+        if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
         
         /* Read the gamecard certificate using the official IPC call. */
         Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out);
-        if (R_FAILED(rc))
-        {
-            LOG_MSG("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%08X)", rc);
-            
-            /* Attempt to manually read the gamecard certificate. */
-            if (gamecardReadStorageArea(out, sizeof(FsGameCardCertificate), GAMECARD_CERTIFICATE_OFFSET)) rc = 0;
-        }
+        if (R_FAILED(rc)) LOG_MSG("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%08X)", rc);
         
         ret = R_SUCCEEDED(rc);
     }
@@ -370,8 +368,8 @@ bool gamecardGetTotalSize(u64 *out)
     
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
-        if (ret) *out = g_gameCardStorageTotalSize;
+        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
+        if (ret) *out = g_gameCardTotalSize;
     }
     
     return ret;
@@ -383,7 +381,7 @@ bool gamecardGetTrimmedSize(u64 *out)
     
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_PAGE_OFFSET(g_gameCardHeader.valid_data_end_address));
     }
     
@@ -396,7 +394,7 @@ bool gamecardGetRomCapacity(u64 *out)
     
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInserted && g_gameCardInfoLoaded && out);
+        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) *out = g_gameCardCapacity;
     }
     
@@ -409,7 +407,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out)
     
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        if (!g_gameCardInserted || !g_gameCardHandle.value || !out) break;
+        if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
         
         u64 update_id = 0;
         u32 update_version = 0;
@@ -544,7 +542,7 @@ static bool gamecardGetLotusAsicFirmwareVersion(void)
     
     if (!found)
     {
-        LOG_MSG("Unable to locate Lotus ReadFw blob in FS .data segment!");
+        LOG_MSG("Unable to locate Lotus %s blob in FS .data segment!", dev_unit ? "ReadDevFw" : "ReadFw");
         goto end;
     }
     
@@ -602,11 +600,9 @@ static void gamecardDetectionThreadFunc(void *arg)
     /* Load gamecard info right away if a gamecard is inserted, then signal the user mode gamecard status change event. */
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        g_gameCardInserted = gamecardIsInserted();
-        if (g_gameCardInserted) gamecardLoadInfo();
+        if (gamecardIsInserted()) gamecardLoadInfo();
+        ueventSignal(&g_gameCardStatusChangeEvent);
     }
-    
-    ueventSignal(&g_gameCardStatusChangeEvent);
     
     while(true)
     {
@@ -620,12 +616,11 @@ static void gamecardDetectionThreadFunc(void *arg)
         SCOPED_LOCK(&g_gameCardMutex)
         {
             /* Free gamecard info before proceeding. */
-            gamecardFreeInfo();
+            gamecardFreeInfo(true);
             
             /* Retrieve current gamecard insertion status. */
             /* Only proceed if we're dealing with a status change. */
-            g_gameCardInserted = gamecardIsInserted();
-            if (g_gameCardInserted)
+            if (gamecardIsInserted())
             {
                 /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules. */
                 utilsSleep(GAMECARD_ACCESS_WAIT_TIME);
@@ -633,15 +628,14 @@ static void gamecardDetectionThreadFunc(void *arg)
                 /* Load gamecard info. */
                 gamecardLoadInfo();
             }
+            
+            /* Signal user mode gamecard status change event. */
+            ueventSignal(&g_gameCardStatusChangeEvent);
         }
-        
-        /* Signal user mode gamecard status change event. */
-        ueventSignal(&g_gameCardStatusChangeEvent);
     }
     
     /* Free gamecard info and close gamecard handle. */
-    gamecardFreeInfo();
-    g_gameCardInserted = false;
+    gamecardFreeInfo(true);
     
     threadExit();
 }
@@ -656,87 +650,45 @@ NX_INLINE bool gamecardIsInserted(void)
 
 static void gamecardLoadInfo(void)
 {
-    if (g_gameCardInfoLoaded) return;
+    if (g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded) return;
     
     HashFileSystemContext *root_fs_ctx = NULL;
     u32 root_fs_entry_count = 0, root_fs_name_table_size = 0;
     char *root_fs_name_table = NULL;
-    bool dump_gamecard_header = false;
+    
+    /* Set initial gamecard status. */
+    g_gameCardStatus = GameCardStatus_InsertedAndInfoNotLoaded;
+    
+    /* Read gamecard header. */
+    /* This step *will* fail if the running CFW enabled the "nogc" patch. */
+    /* gamecardGetHandleAndStorage() takes care of updating the gamecard status accordingly if this happens. */
+    if (!gamecardReadHeader()) goto end;
+    
+    /* Get decrypted CardInfo area from header. */
+    if (!gamecardGetDecryptedCardInfoArea()) goto end;
+    
+    /* Check if we meet the Lotus ASIC firmware (LAFW) version requirement. */
+    /* Lotus treats the GameCardFwVersion field as the maximum unsupported LAFW version, instead of treating it as the minimum supported version. */
+    if (g_lafwVersion <= g_gameCardInfoArea.fw_version)
+    {
+        LOG_MSG("LAFW version doesn't meet gamecard requirement! (%lu <= %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
+        g_gameCardStatus = GameCardStatus_LotusAsicFirmwareUpdateRequired;
+        goto end;
+    }
     
     /* Retrieve gamecard storage area sizes. */
-    /* gamecardReadStorageArea() actually checks if the storage area sizes are greater than zero, so we must first perform this step. */
+    /* gamecardReadStorageArea() actually checks if the storage area sizes are greater than zero, so we must perform this step. */
     if (!gamecardGetStorageAreasSizes())
     {
         LOG_MSG("Failed to retrieve gamecard storage area sizes!");
         goto end;
     }
     
-    /* Read gamecard header. */
-    if (!gamecardReadStorageArea(&g_gameCardHeader, sizeof(GameCardHeader), 0))
-    {
-        LOG_MSG("Failed to read gamecard header!");
-        goto end;
-    }
-    
-    /* Check magic word from gamecard header. */
-    if (__builtin_bswap32(g_gameCardHeader.magic) != GAMECARD_HEAD_MAGIC)
-    {
-        LOG_MSG("Invalid gamecard header magic word! (0x%08X).", __builtin_bswap32(g_gameCardHeader.magic));
-        dump_gamecard_header = true;
-        goto end;
-    }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    /* Get decrypted CardInfo area. */
-    if (!gamecardGetDecryptedCardInfoArea()) goto end;
-    
-    LOG_DATA(&g_gameCardInfoArea, sizeof(GameCardInfo), "Gamecard CardInfo area dump:");
-    
-    /* Check if we meet the Lotus ASIC firmware (LAFW) version requirement. */
-    /* Lotus treats the GameCardFwVersion field as the maximum unsupported LAFW version, instead of treating it as the minimum supported version. */
-    /* TODO: move this check somewhere else. We're supposed to do it only if things go south while reading gamecard data. */
-    if (g_lafwVersion <= g_gameCardInfoArea.fw_version)
-    {
-        LOG_MSG("LAFW version not supported by the inserted gamecard (%lu <= %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
-        goto end;
-    }
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
     /* Get gamecard capacity. */
     g_gameCardCapacity = gamecardGetCapacityFromRomSizeValue(g_gameCardHeader.rom_size);
     if (!g_gameCardCapacity)
     {
         LOG_MSG("Invalid gamecard capacity value! (0x%02X).", g_gameCardHeader.rom_size);
-        dump_gamecard_header = true;
         goto end;
     }
     
@@ -744,7 +696,7 @@ static void gamecardLoadInfo(void)
     {
         /* The total size for the secure storage area is maxed out under SX OS. */
         /* Let's try to calculate it manually. */
-        g_gameCardStorageSecureAreaSize = (g_gameCardCapacity - (g_gameCardStorageNormalAreaSize + GAMECARD_UNUSED_AREA_SIZE(g_gameCardCapacity)));
+        g_gameCardSecureAreaSize = (g_gameCardCapacity - (g_gameCardNormalAreaSize + GAMECARD_UNUSED_AREA_SIZE(g_gameCardCapacity)));
     }
     
     /* Initialize Hash FS context for the root partition. */
@@ -787,30 +739,29 @@ static void gamecardLoadInfo(void)
         if (!g_gameCardHfsCtx[i + 1]) goto end;
     }
     
-    g_gameCardInfoLoaded = true;
+    /* Update gamecard status. */
+    g_gameCardStatus = GameCardStatus_InsertedAndInfoLoaded;
     
 end:
-    if (!g_gameCardInfoLoaded)
+    if (g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded)
     {
-        if (dump_gamecard_header) LOG_DATA(&g_gameCardHeader, sizeof(GameCardHeader), "Gamecard header dump:");
-        
         if (!g_gameCardHfsCtx && root_fs_ctx)
         {
             hfsFreeContext(root_fs_ctx);
             free(root_fs_ctx);
         }
         
-        gamecardFreeInfo();
+        gamecardFreeInfo(false);
     }
 }
 
-static void gamecardFreeInfo(void)
+static void gamecardFreeInfo(bool clear_status)
 {
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
     
     memset(&g_gameCardInfoArea, 0, sizeof(GameCardInfo));
     
-    g_gameCardStorageNormalAreaSize = g_gameCardStorageSecureAreaSize = g_gameCardStorageTotalSize = 0;
+    g_gameCardNormalAreaSize = g_gameCardSecureAreaSize = g_gameCardTotalSize = 0;
     
     g_gameCardCapacity = 0;
     
@@ -834,12 +785,70 @@ static void gamecardFreeInfo(void)
     
     gamecardCloseStorageArea();
     
-    g_gameCardInfoLoaded = false;
+    if (clear_status) g_gameCardStatus = GameCardStatus_NotInserted;
+}
+
+static bool gamecardReadHeader(void)
+{
+    /* Open normal storage area. */
+    if (!gamecardOpenStorageArea(GameCardStorageArea_Normal))
+    {
+        LOG_MSG("Failed to open normal storage area!");
+        return false;
+    }
+    
+    /* Read gamecard header. */
+    /* This step doesn't rely on gamecardReadStorageArea() because of its dependence on storage area sizes (which we haven't retrieved). */
+    Result rc = fsStorageRead(&g_gameCardStorage, 0, &g_gameCardHeader, sizeof(GameCardHeader));
+    if (R_FAILED(rc))
+    {
+        LOG_MSG("fsStorageRead failed to read gamecard header! (0x%08X).", rc);
+        return false;
+    }
+    
+    //LOG_DATA(&g_gameCardHeader, sizeof(GameCardHeader), "Gamecard header dump:");
+    
+    /* Check magic word from gamecard header. */
+    if (__builtin_bswap32(g_gameCardHeader.magic) != GAMECARD_HEAD_MAGIC)
+    {
+        LOG_MSG("Invalid gamecard header magic word! (0x%08X).", __builtin_bswap32(g_gameCardHeader.magic));
+        return false;
+    }
+    
+    return true;
+}
+
+static bool gamecardGetDecryptedCardInfoArea(void)
+{
+    const u8 *card_info_key = NULL;
+    u8 card_info_iv[AES_128_KEY_SIZE] = {0};
+    Aes128CbcContext aes_ctx = {0};
+    
+    /* Retrieve CardInfo area key. */
+    card_info_key = keysGetGameCardInfoKey();
+    if (!card_info_key)
+    {
+        LOG_MSG("Failed to retrieve CardInfo area key!");
+        return false;
+    }
+    
+    /* Reverse CardInfo IV. */
+    for(u8 i = 0; i < AES_128_KEY_SIZE; i++) card_info_iv[i] = g_gameCardHeader.card_info_iv[AES_128_KEY_SIZE - i - 1];
+    
+    /* Initialize AES-128-CBC context. */
+    aes128CbcContextCreate(&aes_ctx, card_info_key, card_info_iv, false);
+    
+    /* Decrypt CardInfo area. */
+    aes128CbcDecrypt(&aes_ctx, &g_gameCardInfoArea, &(g_gameCardHeader.card_info), sizeof(GameCardInfo));
+    
+    //LOG_DATA(&g_gameCardInfoArea, sizeof(GameCardInfo), "Gamecard CardInfo area dump:");
+    
+    return true;
 }
 
 static bool gamecardReadInitialData(GameCardKeyArea *out)
 {
-    if (!g_gameCardInserted || !g_gameCardInfoLoaded || !out)
+    if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !out)
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -891,7 +900,7 @@ static bool gamecardReadInitialData(GameCardKeyArea *out)
 
 static bool gamecardGetHandleAndStorage(u32 partition)
 {
-    if (!g_gameCardInserted || partition > 1)
+    if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || partition > 1)
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -906,7 +915,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         if (R_FAILED(rc)) svcSleepThread(100000000);
         
         /* First, let's try to retrieve a gamecard handle. */
-        /* This can return 0x140A02 if the "nogc" patch is enabled by the running CFW. */
+        /* This can return an error if the "nogc" patch is enabled by the running CFW (most commonly 0x140A02). */
         rc = fsDeviceOperatorGetGameCardHandle(&g_deviceOperator, &g_gameCardHandle);
         if (R_FAILED(rc))
         {
@@ -927,7 +936,11 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         break;
     }
     
-    if (R_FAILED(rc)) LOG_MSG("fsDeviceOperatorGetGameCardHandle / fsOpenGameCardStorage failed! (0x%08X).", rc);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG("fsDeviceOperatorGetGameCardHandle / fsOpenGameCardStorage failed! (0x%08X).", rc);
+        if (g_gameCardStatus == GameCardStatus_InsertedAndInfoNotLoaded && partition == 0) g_gameCardStatus = GameCardStatus_NoGameCardPatchEnabled;
+    }
     
     return R_SUCCEEDED(rc);
 }
@@ -942,14 +955,14 @@ NX_INLINE void gamecardCloseHandle(void)
 
 static bool gamecardOpenStorageArea(u8 area)
 {
-    if (!g_gameCardInserted || (area != GameCardStorageArea_Normal && area != GameCardStorageArea_Secure))
+    if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || (area != GameCardStorageArea_Normal && area != GameCardStorageArea_Secure))
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
     /* Return right away if a valid handle has already been retrieved and the desired gamecard storage area is currently open. */
-    if (g_gameCardHandle.value && serviceIsActive(&(g_gameCardStorage.s)) && g_gameCardStorageCurrentArea == area) return true;
+    if (g_gameCardHandle.value && serviceIsActive(&(g_gameCardStorage.s)) && g_gameCardCurrentStorageArea == area) return true;
     
     /* Close both gamecard handle and open storage area. */
     gamecardCloseStorageArea();
@@ -962,14 +975,14 @@ static bool gamecardOpenStorageArea(u8 area)
     }
     
     /* Update current gamecard storage area. */
-    g_gameCardStorageCurrentArea = area;
+    g_gameCardCurrentStorageArea = area;
     
     return true;
 }
 
 static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
 {
-    if (!g_gameCardInserted || !g_gameCardStorageNormalAreaSize || !g_gameCardStorageSecureAreaSize || !out || !read_size || (offset + read_size) > g_gameCardStorageTotalSize)
+    if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || !g_gameCardNormalAreaSize || !g_gameCardSecureAreaSize || !out || !read_size || (offset + read_size) > g_gameCardTotalSize)
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -977,21 +990,21 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
     
     Result rc = 0;
     u8 *out_u8 = (u8*)out;
-    u8 area = (offset < g_gameCardStorageNormalAreaSize ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
+    u8 area = (offset < g_gameCardNormalAreaSize ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
     bool success = false;
     
     /* Handle reads that span both the normal and secure gamecard storage areas. */
-    if (area == GameCardStorageArea_Normal && (offset + read_size) > g_gameCardStorageNormalAreaSize)
+    if (area == GameCardStorageArea_Normal && (offset + read_size) > g_gameCardNormalAreaSize)
     {
         /* Calculate normal storage area size difference. */
-        u64 diff_size = (g_gameCardStorageNormalAreaSize - offset);
+        u64 diff_size = (g_gameCardNormalAreaSize - offset);
         
         /* Read normal storage area data. */
         if (!gamecardReadStorageArea(out_u8, diff_size, offset)) goto end;
         
         /* Adjust variables to read right from the start of the secure storage area. */
         read_size -= diff_size;
-        offset = g_gameCardStorageNormalAreaSize;
+        offset = g_gameCardNormalAreaSize;
         out_u8 += diff_size;
         area = GameCardStorageArea_Secure;
     }
@@ -1004,8 +1017,8 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
         goto end;
     }
     
-    /* Calculate appropiate storage area offset and retrieve the right storage area pointer. */
-    u64 base_offset = (area == GameCardStorageArea_Normal ? offset : (offset - g_gameCardStorageNormalAreaSize));
+    /* Calculate proper storage area offset. */
+    u64 base_offset = (area == GameCardStorageArea_Normal ? offset : (offset - g_gameCardNormalAreaSize));
     
     if (!(base_offset % GAMECARD_PAGE_SIZE) && !(read_size % GAMECARD_PAGE_SIZE))
     {
@@ -1054,17 +1067,11 @@ static void gamecardCloseStorageArea(void)
     
     gamecardCloseHandle();
     
-    g_gameCardStorageCurrentArea = GameCardStorageArea_None;
+    g_gameCardCurrentStorageArea = GameCardStorageArea_None;
 }
 
 static bool gamecardGetStorageAreasSizes(void)
 {
-    if (!g_gameCardInserted)
-    {
-        LOG_MSG("Gamecard not inserted!");
-        return false;
-    }
-    
     for(u8 i = 0; i < 2; i++)
     {
         Result rc = 0;
@@ -1084,19 +1091,18 @@ static bool gamecardGetStorageAreasSizes(void)
         if (R_FAILED(rc) || !area_size)
         {
             LOG_MSG("fsStorageGetSize failed to retrieve %s storage area size! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(area), rc);
-            g_gameCardStorageNormalAreaSize = g_gameCardStorageSecureAreaSize = g_gameCardStorageTotalSize = 0;
             return false;
         }
         
         if (area == GameCardStorageArea_Normal)
         {
-            g_gameCardStorageNormalAreaSize = area_size;
+            g_gameCardNormalAreaSize = area_size;
         } else {
-            g_gameCardStorageSecureAreaSize = area_size;
+            g_gameCardSecureAreaSize = area_size;
         }
     }
     
-    g_gameCardStorageTotalSize = (g_gameCardStorageNormalAreaSize + g_gameCardStorageSecureAreaSize);
+    g_gameCardTotalSize = (g_gameCardNormalAreaSize + g_gameCardSecureAreaSize);
     
     return true;
 }
@@ -1132,39 +1138,6 @@ NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
     return capacity;
 }
 
-static bool gamecardGetDecryptedCardInfoArea(void)
-{
-    const u8 *card_info_key = NULL;
-    u8 card_info_iv[AES_128_KEY_SIZE] = {0};
-    Aes128CbcContext aes_ctx = {0};
-    
-    /* Retrieve CardInfo area key. */
-    card_info_key = keysGetGameCardInfoKey();
-    if (!card_info_key)
-    {
-        LOG_MSG("Failed to retrieve CardInfo area key!");
-        return false;
-    }
-    
-    /* Reverse CardInfo IV. */
-    for(u8 i = 0; i < AES_128_KEY_SIZE; i++) card_info_iv[i] = g_gameCardHeader.card_info_iv[AES_128_KEY_SIZE - i - 1];
-    
-    /* Initialize AES-128-CBC context. */
-    aes128CbcContextCreate(&aes_ctx, card_info_key, card_info_iv, false);
-    
-    /* Decrypt CardInfo area. */
-    aes128CbcDecrypt(&aes_ctx, &g_gameCardInfoArea, &(g_gameCardHeader.card_info), sizeof(GameCardInfo));
-    
-    /* Verify update ID. */
-    if (utilsGetCustomFirmwareType() != UtilsCustomFirmwareType_SXOS && g_gameCardInfoArea.upp_id != GAMECARD_UPDATE_TID)
-    {
-        LOG_MSG("Failed to decrypt CardInfo area!");
-        return false;
-    }
-    
-    return true;
-}
-
 static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size)
 {
     u32 i = 0, magic = 0;
@@ -1175,7 +1148,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     bool success = false, dump_fs_header = false;
     
     if ((name && !*name) || offset < (GAMECARD_CERTIFICATE_OFFSET + sizeof(FsGameCardCertificate)) || !IS_ALIGNED(offset, GAMECARD_PAGE_SIZE) || \
-        (size && (!IS_ALIGNED(size, GAMECARD_PAGE_SIZE) || (offset + size) > g_gameCardStorageTotalSize)))
+        (size && (!IS_ALIGNED(size, GAMECARD_PAGE_SIZE) || (offset + size) > g_gameCardTotalSize)))
     {
         LOG_MSG("Invalid parameters!");
         goto end;
@@ -1302,7 +1275,7 @@ static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition
     HashFileSystemContext *fs_ctx = NULL;
     const char *partition_name = NULL;
     
-    if (!g_gameCardInserted || !g_gameCardInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)
+    if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)
     {
         LOG_MSG("Invalid parameters!");
         goto end;

@@ -97,7 +97,13 @@ bool bfttfInitialize(void)
                 }
                 
                 /* Initialize NCA context. */
-                if (!ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), NULL))
+                bool nca_ctx_init = ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), NULL);
+                
+                /* Free title info. */
+                titleFreeTitleInfo(&title_info);
+                
+                /* Check if NCA context initialization succeeded. */
+                if (!nca_ctx_init)
                 {
                     LOG_MSG("Failed to initialize Data NCA context for %016lX!", font_info->title_id);
                     continue;

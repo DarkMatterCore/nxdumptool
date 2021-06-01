@@ -338,7 +338,7 @@ end:
     return success;
 }
 
-bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_screenshot, bool patch_video_capture)
+bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_screenshot, bool patch_video_capture, bool patch_hdcp)
 {
     if (!nacpIsValidContext(nacp_ctx))
     {
@@ -350,7 +350,7 @@ bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_scre
     u8 nacp_hash[SHA256_HASH_SIZE] = {0};
     
     /* Check if we're not patching anything. */
-    if (!patch_sua && !patch_screenshot && !patch_video_capture) return true;
+    if (!patch_sua && !patch_screenshot && !patch_video_capture && !patch_hdcp) return true;
     
     /* Patch StartupUserAccount, StartupUserAccountOption and UserAccountSwitchLock. */
     if (patch_sua)
@@ -365,6 +365,9 @@ bool nacpGenerateNcaPatch(NacpContext *nacp_ctx, bool patch_sua, bool patch_scre
     
     /* Patch VideoCapture. */
     if (patch_video_capture) data->video_capture = NacpVideoCapture_Enable;
+    
+    /* Patch Hdcp. */
+    if (patch_hdcp) data->hdcp = NacpHdcp_None;
     
     /* Check if we really need to generate this patch. */
     sha256CalculateHash(nacp_hash, data, sizeof(_NacpStruct));

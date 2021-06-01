@@ -455,6 +455,7 @@ int main(int argc, char *argv[])
             } else {
                 selected_idx = (menu == 0 ? title_idx : nca_idx);
                 scroll = (menu == 0 ? title_scroll : 0);
+                if (menu == 0) titleFreeTitleInfo(&cur_title_info);
             }
         }
         

@@ -8,14 +8,12 @@ todo:
     
     usb: improve usbIsReady
     
-    title: orphan system titles
-    title: come up with a better way to handle gamecard titles
     title: more functions for title lookup? (filters, patches / aoc, etc.)
     title: more functions for content lookup? (based on id)
     title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
+    title: manually retrieve version string from control data while generating filenames?
     
     gamecard: functions to display filelist
-    gamecard: move around code to perform the lafw version check at the places we need
     
     pfs0: functions to display filelist
     

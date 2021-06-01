@@ -55,6 +55,7 @@ static options_t options[] = {
     { "disable linked account requirement", 0 },
     { "enable screenshots", 0 },
     { "enable video capture", 0 },
+    { "disable hdcp", 0 },
     { "output device", 0 }
 };
 
@@ -135,7 +136,8 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
     bool patch_sua = (options[4].val == 1);
     bool patch_screenshot = (options[5].val == 1);
     bool patch_video_capture = (options[6].val == 1);
-    UsbHsFsDevice *ums_device = (options[7].val == 0 ? NULL : &(ums_devices[options[7].val - 1]));
+    bool patch_hdcp = (options[7].val == 1);
+    UsbHsFsDevice *ums_device = (options[8].val == 0 ? NULL : &(ums_devices[options[8].val - 1]));
     bool success = false;
     
     if (ums_device && ums_device->write_protect)
@@ -321,7 +323,7 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
                     goto end;
                 }
                 
-                if (!nacpGenerateNcaPatch(cur_nacp_ctx, patch_sua, patch_screenshot, patch_video_capture))
+                if (!nacpGenerateNcaPatch(cur_nacp_ctx, patch_sua, patch_screenshot, patch_video_capture, patch_hdcp))
                 {
                     consolePrint("nacp nca patch failed (%s)\n", cur_nca_ctx->content_id_str);
                     goto end;
@@ -1087,6 +1089,7 @@ int main(int argc, char *argv[])
             } else {
                 selected_idx = (menu == 0 ? title_idx : type_idx);
                 scroll = (menu == 0 ? title_scroll : type_scroll);
+                if (menu == 0) titleFreeUserApplicationData(&user_app_data);
             }
         } else
         if ((btn_down & (HidNpadButton_Left | HidNpadButton_Right)) && menu == 2 && selected_idx != 0)

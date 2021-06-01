@@ -62,7 +62,8 @@ static options_t options[] = {
     { "change acid rsa key/sig", false },
     { "disable linked account requirement", false },
     { "enable screenshots", false },
-    { "enable video capture", false }
+    { "enable video capture", false },
+    { "disable hdcp", false }
 };
 
 static const u32 options_count = MAX_ELEMENTS(options);
@@ -127,6 +128,7 @@ static void dump_thread_func(void *arg)
     bool patch_sua = options[4].val;
     bool patch_screenshot = options[5].val;
     bool patch_video_capture = options[6].val;
+    bool patch_hdcp = options[7].val;
     bool success = false;
     
     u8 *buf = NULL;
@@ -311,7 +313,7 @@ static void dump_thread_func(void *arg)
                     goto end;
                 }
                 
-                if (!nacpGenerateNcaPatch(cur_nacp_ctx, patch_sua, patch_screenshot, patch_video_capture))
+                if (!nacpGenerateNcaPatch(cur_nacp_ctx, patch_sua, patch_screenshot, patch_video_capture, patch_hdcp))
                 {
                     consolePrint("nacp nca patch failed (%s)\n", cur_nca_ctx->content_id_str);
                     goto end;
@@ -1189,6 +1191,7 @@ int main(int argc, char *argv[])
             } else {
                 selected_idx = (menu == 0 ? title_idx : type_idx);
                 scroll = (menu == 0 ? title_scroll : type_scroll);
+                if (menu == 0) titleFreeUserApplicationData(&user_app_data);
             }
         } else
         if ((btn_down & (HidNpadButton_Left | HidNpadButton_Right)) && menu == 2 && selected_idx != 0)
