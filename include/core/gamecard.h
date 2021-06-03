@@ -121,13 +121,13 @@ typedef enum {
 } GameCardSelSec;
 
 typedef enum {
-    GameCardFwVersion_ForDev              = 0,
-    GameCardFwVersion_ForProd             = 1,
-    GameCardFwVersion_ForProdSince400NUP  = 2,  ///< upp_version >= 268435456 (4.0.0-0.0) in GameCardInfo.
-    GameCardFwVersion_ForDevSince1100NUP  = 3,  ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
-    GameCardFwVersion_ForProdSince1100NUP = 4,  ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
-    GameCardFwVersion_ForProdSince1200NUP = 5,  ///< upp_version >= 805306368 (12.0.0-0.0) in GameCardInfo.
-    GameCardFwVersion_Count               = 6
+    GameCardFwVersion_ForDev       = 0,
+    GameCardFwVersion_Since100NUP  = 1, ///< upp_version >= 0 (0.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_Since400NUP  = 2, ///< upp_version >= 268435456 (4.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_Since900NUP  = 3, ///< upp_version >= 603979776 (9.0.0-0.0) in GameCardInfo. Seems to be unused.
+    GameCardFwVersion_Since1100NUP = 4, ///< upp_version >= 738197504 (11.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_Since1200NUP = 5, ///< upp_version >= 805306368 (12.0.0-0.0) in GameCardInfo.
+    GameCardFwVersion_Count        = 6
 } GameCardFwVersion;
 
 typedef enum {
@@ -202,7 +202,7 @@ typedef enum {
 typedef enum {
     GameCardHashFileSystemPartitionType_Root    = 0,
     GameCardHashFileSystemPartitionType_Update  = 1,
-    GameCardHashFileSystemPartitionType_Logo    = 2,    ///< Only available in GameCardFwVersion_Since400NUP gamecards.
+    GameCardHashFileSystemPartitionType_Logo    = 2,    ///< Only available in GameCardFwVersion_Since400NUP or greater gamecards.
     GameCardHashFileSystemPartitionType_Normal  = 3,
     GameCardHashFileSystemPartitionType_Secure  = 4,
     GameCardHashFileSystemPartitionType_Boot    = 5,

@@ -69,10 +69,22 @@ typedef enum {
     NcaContentType_PublicData = 5
 } NcaContentType;
 
+/// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
-    NcaKeyGenerationOld_100_230 = 0,
-    NcaKeyGenerationOld_300     = 2
-} NcaKeyGenerationOld;
+    NcaKeyGeneration_Since100NUP = 0,                               ///< 1.0.0 - 2.3.0.
+    NcaKeyGeneration_Since300NUP = 2,                               ///< 3.0.0.
+    NcaKeyGeneration_Since301NUP = 3,                               ///< 3.0.1 - 3.0.2.
+    NcaKeyGeneration_Since400NUP = 4,                               ///< 4.0.0 - 4.1.0.
+    NcaKeyGeneration_Since500NUP = 5,                               ///< 5.0.0 - 5.1.0.
+    NcaKeyGeneration_Since600NUP = 6,                               ///< 6.0.0 - 6.1.0.
+    NcaKeyGeneration_Since620NUP = 7,                               ///< 6.2.0.
+    NcaKeyGeneration_Since700NUP = 8,                               ///< 7.0.0 - 8.0.1.
+    NcaKeyGeneration_Since810NUP = 9,                               ///< 8.1.0 - 8.1.1.
+    NcaKeyGeneration_Since900NUP = 10,                              ///< 9.0.0 - 9.0.1.
+    NcaKeyGeneration_Since910NUP = 11,                              ///< 9.1.0 - 12.0.2.
+    NcaKeyGeneration_Current     = NcaKeyGeneration_Since910NUP,
+    NcaKeyGeneration_Max         = 32
+} NcaKeyGeneration;
 
 typedef enum {
     NcaKeyAreaEncryptionKeyIndex_Application = 0,
@@ -81,27 +93,12 @@ typedef enum {
     NcaKeyAreaEncryptionKeyIndex_Count       = 3
 } NcaKeyAreaEncryptionKeyIndex;
 
-/// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
-typedef enum {
-    NcaKeyGeneration_301_302  = 3,
-    NcaKeyGeneration_400_410  = 4,
-    NcaKeyGeneration_500_510  = 5,
-    NcaKeyGeneration_600_610  = 6,
-    NcaKeyGeneration_620      = 7,
-    NcaKeyGeneration_700_801  = 8,
-    NcaKeyGeneration_810_811  = 9,
-    NcaKeyGeneration_900_901  = 10,
-    NcaKeyGeneration_910_1202 = 11,
-    NcaKeyGeneration_Current  = NcaKeyGeneration_910_1202,
-    NcaKeyGeneration_Max      = 32
-} NcaKeyGeneration;
-
 /// 'NcaMainSignatureKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
-    NcaMainSignatureKeyGeneration_100_811  = 0,
-    NcaMainSignatureKeyGeneration_900_1202 = 1,
-    NcaMainSignatureKeyGeneration_Current  = NcaMainSignatureKeyGeneration_900_1202,
-    NcaMainSignatureKeyGeneration_Max      = (NcaMainSignatureKeyGeneration_Current + 1)
+    NcaMainSignatureKeyGeneration_Since100NUP = 0,                                          ///< 1.0.0 - 8.1.1.
+    NcaMainSignatureKeyGeneration_Since900NUP = 1,                                          ///< 9.0.0 - 12.0.2.
+    NcaMainSignatureKeyGeneration_Current     = NcaMainSignatureKeyGeneration_Since900NUP,
+    NcaMainSignatureKeyGeneration_Max         = (NcaMainSignatureKeyGeneration_Current + 1)
 } NcaMainSignatureKeyGeneration;
 
 typedef struct {
@@ -140,13 +137,13 @@ typedef struct {
     u32 magic;                                              ///< "NCA0" / "NCA2" / "NCA3".
     u8 distribution_type;                                   ///< NcaDistributionType.
     u8 content_type;                                        ///< NcaContentType.
-    u8 key_generation_old;                                  ///< NcaKeyGenerationOld.
+    u8 key_generation_old;                                  ///< NcaKeyGeneration. Only uses NcaKeyGeneration_Since100NUP and NcaKeyGeneration_Since300NUP values.
     u8 kaek_index;                                          ///< NcaKeyAreaEncryptionKeyIndex.
     u64 content_size;
     u64 program_id;
     u32 content_index;
     VersionType2 sdk_addon_version;
-    u8 key_generation;                                      ///< NcaKeyGeneration.
+    u8 key_generation;                                      ///< NcaKeyGeneration. Uses NcaKeyGeneration_Since301NUP or greater values.
     u8 main_signature_key_generation;                       ///< NcaMainSignatureKeyGeneration.
     u8 reserved[0xE];
     FsRightsId rights_id;                                   ///< Used for titlekey crypto.
@@ -365,7 +362,7 @@ typedef struct {
     u8 format_version;                                  ///< NcaVersion.
     u8 content_type;                                    ///< NcmContentType. Retrieved from NcmContentInfo.
     u64 content_size;                                   ///< Retrieved from NcmContentInfo.
-    u8 key_generation;                                  ///< NcaKeyGenerationOld / NcaKeyGeneration. Retrieved from the decrypted header.
+    u8 key_generation;                                  ///< NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
     bool rights_id_available;
     bool titlekey_retrieved;
