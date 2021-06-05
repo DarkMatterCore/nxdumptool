@@ -327,8 +327,8 @@ class LogConsole:
         if self.frame: self.frame.after(100, self.poll_log_queue)
     
     def display(self, record):
-        msg = self.queue_handler.format(record)
         if self.scrolled_text:
+            msg = self.queue_handler.format(record)
             self.scrolled_text.configure(state='normal')
             self.scrolled_text.insert(tk.END, msg + '\n', record.levelname)
             self.scrolled_text.configure(state='disabled')
@@ -639,7 +639,7 @@ def usbHandleSendFileProperties(cmd_block):
     g_logger.debug(dbg_str)
     
     file_type_str = ('file' if (not g_nspTransferMode) else 'NSP file entry')
-    if g_cliMode and not g_nspTransferMode: g_logger.info('Receiving %s: "%s".' % (file_type_str, filename))
+    if not g_cliMode or (g_cliMode and not g_nspTransferMode): g_logger.info('Receiving %s: "%s".' % (file_type_str, filename))
     
     # Perform integrity checks
     if (not g_nspTransferMode) and file_size and (nsp_header_size >= file_size):
@@ -727,6 +727,7 @@ def usbHandleSendFileProperties(cmd_block):
     use_pbar = (((not g_nspTransferMode) and (file_size > USB_TRANSFER_THRESHOLD)) or (g_nspTransferMode and (g_nspSize > USB_TRANSFER_THRESHOLD)))
     if use_pbar:
         if g_cliMode:
+            # We're not using dynamic tqdm prefixes under CLI mode.
             prefix = ''
         else:
             idx = filename.rfind(os.path.sep)
