@@ -11,7 +11,6 @@ todo:
     title: more functions for title lookup? (filters, patches / aoc, etc.)
     title: more functions for content lookup? (based on id)
     title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
-    title: manually retrieve version string from control data while generating filenames?
     
     gamecard: functions to display filelist
     
