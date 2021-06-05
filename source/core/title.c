@@ -22,6 +22,7 @@
 #include "nxdt_utils.h"
 #include "title.h"
 #include "gamecard.h"
+#include "nacp.h"
 
 #define NS_APPLICATION_RECORD_LIMIT     4096
 
@@ -465,6 +466,8 @@ static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *
 static int titleUserApplicationMetadataEntrySortFunction(const void *a, const void *b);
 static int titleOrphanTitleInfoSortFunction(const void *a, const void *b);
 
+static char *titleGetPatchVersionString(TitleInfo *title_info);
+
 bool titleInitialize(void)
 {
     bool ret = false;
@@ -869,7 +872,7 @@ bool titleIsGameCardInfoUpdated(void)
     return ret;
 }
 
-char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type)
+char *titleGenerateFileName(TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type)
 {
     if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_Delta || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
         (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
@@ -878,15 +881,24 @@ char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 
         return NULL;
     }
     
-    char title_name[0x400] = {0}, *filename = NULL;
     u8 type = (title_info->meta_key.type - 0x80);
+    char title_name[0x400] = {0}, *version_str = NULL, *filename = NULL;
     
     /* Generate filename for this title. */
     if (name_convention == TitleFileNameConvention_Full)
     {
         if (title_info->app_metadata && *(title_info->app_metadata->lang_entry.name))
         {
+            /* Retrieve display version string if we're dealing with a Patch. */
+            if (title_info->meta_key.type == NcmContentMetaType_Patch) version_str = titleGetPatchVersionString(title_info);
+            
             sprintf(title_name, "%s ", title_info->app_metadata->lang_entry.name);
+            if (version_str)
+            {
+                sprintf(title_name + strlen(title_name), "%s ", version_str);
+                free(version_str);
+            }
+            
             if (illegal_char_replace_type) utilsReplaceIllegalCharacters(title_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
         }
         
@@ -923,12 +935,12 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
         
         GameCardHeader gc_header = {0};
         size_t cur_filename_len = 0;
-        char app_name[0x400] = {0}, *tmp_filename = NULL;
+        char app_name[0x400] = {0};
         bool error = false;
         
         for(u32 i = 0; i < title_count; i++)
         {
-            TitleInfo *app_info = titles[i];
+            TitleInfo *app_info = titles[i], *patch_info = NULL;
             if (!app_info || app_info->meta_key.type != NcmContentMetaType_Application) continue;
             
             u32 app_version = app_info->meta_key.version;
@@ -939,11 +951,12 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
             {
                 if (j == i) continue;
                 
-                TitleInfo *patch_info = titles[j];
-                if (!patch_info || patch_info->meta_key.type != NcmContentMetaType_Patch || !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, patch_info->meta_key.id) || \
-                    patch_info->meta_key.version <= app_version) continue;
+                TitleInfo *cur_title_info = titles[j];
+                if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_Patch || !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id) || \
+                    cur_title_info->meta_key.version <= app_version) continue;
                 
-                app_version = patch_info->meta_key.version;
+                patch_info = cur_title_info;
+                app_version = cur_title_info->meta_key.version;
             }
             
             /* Generate current user application name. */
@@ -955,7 +968,17 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
                 
                 if (app_info->app_metadata && *(app_info->app_metadata->lang_entry.name))
                 {
+                    /* Retrieve display version string if the inserted gamecard holds a patch for the current user application. */
+                    char *version_str = NULL;
+                    if (patch_info) version_str = titleGetPatchVersionString(patch_info);
+                    
                     sprintf(app_name + strlen(app_name), "%s ", app_info->app_metadata->lang_entry.name);
+                    if (version_str)
+                    {
+                        sprintf(app_name + strlen(app_name), "%s ", version_str);
+                        free(version_str);
+                    }
+                    
                     if (illegal_char_replace_type) utilsReplaceIllegalCharacters(app_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
                 }
                 
@@ -970,7 +993,7 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
             /* Reallocate output buffer. */
             size_t app_name_len = strlen(app_name);
             
-            tmp_filename = realloc(filename, (cur_filename_len + app_name_len + 1) * sizeof(char));
+            char *tmp_filename = realloc(filename, (cur_filename_len + app_name_len + 1) * sizeof(char));
             if (!tmp_filename)
             {
                 LOG_MSG("Failed to reallocate filename buffer!");
@@ -2402,4 +2425,56 @@ static int titleOrphanTitleInfoSortFunction(const void *a, const void *b)
     }
     
     return 0;
+}
+
+static char *titleGetPatchVersionString(TitleInfo *title_info)
+{
+    NcmContentInfo *nacp_content = NULL;
+    u8 storage_id = 0, hfs_partition_type = 0;
+    NcaContext *nca_ctx = NULL;
+    NacpContext nacp_ctx = {0};
+    char *str = NULL;
+    
+    if (!title_info || title_info->meta_key.type != NcmContentMetaType_Patch || !(nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0)))
+    {
+        LOG_MSG("Invalid parameters!");
+        goto end;
+    }
+    
+    /* Update parameters. */
+    storage_id = title_info->storage_id;
+    if (storage_id == NcmStorageId_GameCard) hfs_partition_type = GameCardHashFileSystemPartitionType_Secure;
+    
+    /* Allocate memory for the NCA context. */
+    nca_ctx = calloc(1, sizeof(NcaContext));
+    if (!nca_ctx)
+    {
+        LOG_MSG("Failed to allocate memory for NCA context!");
+        goto end;
+    }
+    
+    /* Initialize NCA context. */
+    if (!ncaInitializeContext(nca_ctx, storage_id, hfs_partition_type, nacp_content, NULL))
+    {
+        LOG_MSG("Failed to initialize NCA context for Control NCA from %016lX!", title_info->meta_key.id);
+        goto end;
+    }
+    
+    /* Initialize NACP context. */
+    if (!nacpInitializeContext(&nacp_ctx, nca_ctx))
+    {
+        LOG_MSG("Failed to initialize NACP context for %016lX!", title_info->meta_key.id);
+        goto end;
+    }
+    
+    /* Get version string. */
+    str = strndup(nacp_ctx.data->display_version, sizeof(nacp_ctx.data->display_version));
+    if (!str) LOG_MSG("Failed to duplicate version string from %016lX!", title_info->meta_key.id);
+    
+end:
+    nacpFreeContext(&nacp_ctx);
+    
+    if (nca_ctx) free(nca_ctx);
+    
+    return str;
 }

@@ -130,7 +130,7 @@ void titleFreeOrphanTitles(TitleInfo ***orphan_info);
 bool titleIsGameCardInfoUpdated(void);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps. Returns NULL if an error occurs.
-char *titleGenerateFileName(const TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type);
+char *titleGenerateFileName(TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output gamecard dumps. Returns NULL if an error occurs.
 /// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.

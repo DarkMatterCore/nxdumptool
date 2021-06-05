@@ -97,6 +97,7 @@ bool bfttfInitialize(void)
                 }
                 
                 /* Initialize NCA context. */
+                /* NCA contexts don't need to be freed beforehand. */
                 bool nca_ctx_init = ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), NULL);
                 
                 /* Free title info. */

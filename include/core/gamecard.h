@@ -200,13 +200,14 @@ typedef enum {
 } GameCardStatus;
 
 typedef enum {
-    GameCardHashFileSystemPartitionType_Root    = 0,
-    GameCardHashFileSystemPartitionType_Update  = 1,
-    GameCardHashFileSystemPartitionType_Logo    = 2,    ///< Only available in GameCardFwVersion_Since400NUP or greater gamecards.
-    GameCardHashFileSystemPartitionType_Normal  = 3,
-    GameCardHashFileSystemPartitionType_Secure  = 4,
-    GameCardHashFileSystemPartitionType_Boot    = 5,
-    GameCardHashFileSystemPartitionType_Count   = 6     ///< Not a real value.
+    GameCardHashFileSystemPartitionType_None   = 0, ///< Not a real value.
+    GameCardHashFileSystemPartitionType_Root   = 1,
+    GameCardHashFileSystemPartitionType_Update = 2,
+    GameCardHashFileSystemPartitionType_Logo   = 3, ///< Only available in GameCardFwVersion_Since400NUP or greater gamecards.
+    GameCardHashFileSystemPartitionType_Normal = 4,
+    GameCardHashFileSystemPartitionType_Secure = 5,
+    GameCardHashFileSystemPartitionType_Boot   = 6,
+    GameCardHashFileSystemPartitionType_Count  = 7  ///< Not a real value.
 } GameCardHashFileSystemPartitionType;
 
 /// Initializes data needed to access raw gamecard storage areas.

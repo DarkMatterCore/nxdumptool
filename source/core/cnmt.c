@@ -285,7 +285,7 @@ bool cnmtUpdateContentInfo(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx)
             /* Jackpot. Copy content ID and hash to our raw CNMT. */
             memcpy(packaged_content_info->hash, nca_ctx->hash, sizeof(nca_ctx->hash));
             memcpy(&(content_info->content_id), &(nca_ctx->content_id), sizeof(NcmContentId));
-            LOG_MSG("Updated CNMT content record #%u (Title ID %016lX, size 0x%lX, type 0x%02X, ID offset 0x%02X).", i, cnmt_ctx->packaged_header->title_id, content_size, content_info->content_type, \
+            LOG_MSG("Updated CNMT content record #%u (title ID %016lX, size 0x%lX, type 0x%02X, ID offset 0x%02X).", i, cnmt_ctx->packaged_header->title_id, content_size, content_info->content_type, \
                     content_info->id_offset);
             success = true;
             break;

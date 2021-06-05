@@ -95,7 +95,8 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     u8 valid_fs_section_cnt = 0;
     
     if (!out || (storage_id != NcmStorageId_GameCard && !(ncm_storage = titleGetNcmStorageByStorageId(storage_id))) || \
-        (storage_id == NcmStorageId_GameCard && hfs_partition_type >= GameCardHashFileSystemPartitionType_Count) || !content_info || content_info->content_type > NcmContentType_DeltaFragment)
+        (storage_id == NcmStorageId_GameCard && (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)) || !content_info || \
+        content_info->content_type > NcmContentType_DeltaFragment)
     {
         LOG_MSG("Invalid parameters!");
         return false;

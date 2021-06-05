@@ -35,6 +35,8 @@
 
 #define GAMECARD_STORAGE_AREA_NAME(x)           ((x) == GameCardStorageArea_Normal ? "normal" : ((x) == GameCardStorageArea_Secure ? "secure" : "none"))
 
+#define GAMECARD_HFS_PARTITION_NAME_INDEX(x)    ((x) - 1)
+
 #define LAFW_MAGIC                              0x4C414657              /* "LAFW". */
 
 /* Type definitions. */
@@ -139,12 +141,12 @@ static MemoryLocation g_fsProgramMemory = {
 };
 
 static const char *g_gameCardHfsPartitionNames[] = {
-    [GameCardHashFileSystemPartitionType_Root]     = "root",
-    [GameCardHashFileSystemPartitionType_Update]   = "update",
-    [GameCardHashFileSystemPartitionType_Logo]     = "logo",
-    [GameCardHashFileSystemPartitionType_Normal]   = "normal",
-    [GameCardHashFileSystemPartitionType_Secure]   = "secure",
-    [GameCardHashFileSystemPartitionType_Boot]     = "boot"
+    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Root)]   = "root",
+    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Update)] = "update",
+    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Logo)]   = "logo",
+    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Normal)] = "normal",
+    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Secure)] = "secure",
+    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Boot)]   = "boot"
 };
 
 /* Function prototypes. */
@@ -424,7 +426,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out)
 
 bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemContext *out)
 {
-    if (hfs_partition_type >= GameCardHashFileSystemPartitionType_Count || !out)
+    if (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count || !out)
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -474,7 +476,7 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
 
 bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size)
 {
-    if (!entry_name || !*entry_name || (!out_offset && !out_size))
+    if (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count || !entry_name || !*entry_name || (!out_offset && !out_size))
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -1163,7 +1165,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     }
     
     /* Duplicate partition name. */
-    fs_ctx->name = (name ? strdup(name) : strdup(g_gameCardHfsPartitionNames[GameCardHashFileSystemPartitionType_Root]));
+    fs_ctx->name = (name ? strdup(name) : strdup(g_gameCardHfsPartitionNames[GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Root)]));
     if (!fs_ctx->name)
     {
         LOG_MSG("Failed to duplicate Hash FS partition name! (offset 0x%lX).", offset);
@@ -1173,7 +1175,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     /* Determine Hash FS partition type. */
     for(i = GameCardHashFileSystemPartitionType_Root; i < GameCardHashFileSystemPartitionType_Count; i++)
     {
-        if (!strcmp(g_gameCardHfsPartitionNames[i], fs_ctx->name)) break;
+        if (!strcmp(g_gameCardHfsPartitionNames[GAMECARD_HFS_PARTITION_NAME_INDEX(i)], fs_ctx->name)) break;
     }
     
     if (i >= GameCardHashFileSystemPartitionType_Count)
@@ -1273,9 +1275,9 @@ end:
 static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition_type)
 {
     HashFileSystemContext *fs_ctx = NULL;
-    const char *partition_name = NULL;
     
-    if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)
+    if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || !hfs_partition_type || \
+        hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)
     {
         LOG_MSG("Invalid parameters!");
         goto end;
@@ -1288,18 +1290,15 @@ static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition
         goto end;
     }
     
-    /* Get requested partition name. */
-    partition_name = g_gameCardHfsPartitionNames[hfs_partition_type];
-    
     /* Try to find the requested partition by looping through our Hash FS contexts. */
     for(u32 i = 1; i < g_gameCardHfsCount; i++)
     {
         fs_ctx = g_gameCardHfsCtx[i];
-        if (!strcmp(fs_ctx->name, partition_name)) break;
+        if (fs_ctx->type == hfs_partition_type) break;
         fs_ctx = NULL;
     }
     
-    if (!fs_ctx) LOG_MSG("Failed to locate Hash FS partition \"%s\"!", partition_name);
+    if (!fs_ctx) LOG_MSG("Failed to locate Hash FS partition with type %u!", hfs_partition_type);
     
 end:
     return fs_ctx;
