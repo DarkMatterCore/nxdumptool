@@ -2433,7 +2433,7 @@ static char *titleGetPatchVersionString(TitleInfo *title_info)
     u8 storage_id = 0, hfs_partition_type = 0;
     NcaContext *nca_ctx = NULL;
     NacpContext nacp_ctx = {0};
-    char *str = NULL;
+    char display_version[0x11] = {0}, *str = NULL;
     
     if (!title_info || title_info->meta_key.type != NcmContentMetaType_Patch || !(nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0)))
     {
@@ -2467,8 +2467,19 @@ static char *titleGetPatchVersionString(TitleInfo *title_info)
         goto end;
     }
     
-    /* Get version string. */
-    str = strndup(nacp_ctx.data->display_version, sizeof(nacp_ctx.data->display_version));
+    /* Get trimmed version string. */
+    snprintf(display_version, sizeof(display_version), "%s", nacp_ctx.data->display_version);
+    utilsTrimString(display_version);
+    
+    /* Check version string length. */
+    if (!*display_version)
+    {
+        LOG_MSG("Display version string from %016lX is empty!", title_info->meta_key.id);
+        goto end;
+    }
+    
+    /* Duplicate version string. */
+    str = strdup(display_version);
     if (!str) LOG_MSG("Failed to duplicate version string from %016lX!", title_info->meta_key.id);
     
 end:
