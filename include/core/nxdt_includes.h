@@ -1,5 +1,5 @@
 /*
- * common.h
+ * nxdt_includes.h
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,9 +21,10 @@
 
 #pragma once
 
-#ifndef __COMMON_H__
-#define __COMMON_H__
+#ifndef __NXDT_INCLUDES_H__
+#define __NXDT_INCLUDES_H__
 
+/* C headers. */
 #include <stdio.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -38,7 +39,6 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include <unistd.h>
-#include <switch.h>
 
 #ifndef __cplusplus
 #include <stdatomic.h>
@@ -47,18 +47,17 @@
 #define _Atomic(X) std::atomic< X >
 #endif
 
+/* libnx header. */
+#include <switch.h>
+
+/* Global defines. */
+#include "../defines.h"
+
+/* File-based logger. */
 #include "nxdt_log.h"
+
+/* USB Mass Storage support. */
 #include "ums.h"
-
-#define FS_SYSMODULE_TID        (u64)0x0100000000000000
-#define BOOT_SYSMODULE_TID      (u64)0x0100000000000005
-#define SPL_SYSMODULE_TID       (u64)0x0100000000000028
-#define ES_SYSMODULE_TID        (u64)0x0100000000000033
-#define SYSTEM_UPDATE_TID       (u64)0x0100000000000816
-
-#define FAT32_FILESIZE_LIMIT    (u64)0xFFFFFFFF         /* 4 GiB - 1 (4294967295 bytes). */
-
-#define NXDT_ASSERT(name, size) static_assert(sizeof(name) == (size), "Bad size for " #name "! Expected " #size ".")
 
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
 /// Referenced by multiple header files.
@@ -93,4 +92,4 @@ typedef struct {
 
 NXDT_ASSERT(VersionType2, 0x4);
 
-#endif /* __COMMON_H__ */
+#endif /* __NXDT_INCLUDES_H__ */

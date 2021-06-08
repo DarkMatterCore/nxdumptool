@@ -21,6 +21,7 @@
 #include <stdlib.h>
 
 #include <nxdt_utils.h>
+#include <scope_guard.hpp>
 #include <borealis.hpp>
 #include <string>
 
@@ -44,11 +45,9 @@ std::vector<std::string> NOTIFICATIONS = {
 
 int main(int argc, char* argv[])
 {
-    if (!utilsInitializeResources(argc, (const char**)argv))
-    {
-        utilsCloseResources();
-        return EXIT_FAILURE;
-    }
+    ON_SCOPE_EXIT { utilsCloseResources(); };
+    
+    if (!utilsInitializeResources(argc, (const char**)argv)) return EXIT_FAILURE;
     
     // Init the app
     brls::Logger::setLogLevel(brls::LogLevel::DEBUG);
@@ -57,13 +56,12 @@ int main(int argc, char* argv[])
     if (!brls::Application::init("main/name"_i18n))
     {
         brls::Logger::error("Unable to init Borealis application");
-        utilsCloseResources();
         return EXIT_FAILURE;
     }
 
     // Create a sample view
     brls::TabFrame* rootFrame = new brls::TabFrame();
-    rootFrame->setTitle("main/name"_i18n);
+    rootFrame->setTitle(i18n::getStr("main/name", APP_TITLE));
     rootFrame->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg" ));
 
     brls::List* testList = new brls::List();
@@ -114,15 +112,6 @@ int main(int argc, char* argv[])
     brls::ListItem* crashItem = new brls::ListItem("main/divide/title"_i18n, "main/divide/description"_i18n);
     crashItem->getClickEvent()->subscribe([](brls::View* view) { brls::Application::crash("main/divide/crash"_i18n); });
 
-    brls::ListItem* popupItem = new brls::ListItem("popup/open"_i18n);
-    popupItem->getClickEvent()->subscribe([](brls::View* view) {
-        brls::TabFrame* popupTabFrame = new brls::TabFrame();
-        popupTabFrame->addTab("popup/red"_i18n, new brls::Rectangle(nvgRGB(255, 0, 0)));
-        popupTabFrame->addTab("popup/green"_i18n, new brls::Rectangle(nvgRGB(0, 255, 0)));
-        popupTabFrame->addTab("popup/blue"_i18n, new brls::Rectangle(nvgRGB(0, 0, 255)));
-        brls::PopupFrame::open("popup/title"_i18n, BOREALIS_ASSET("icon/" APP_TITLE ".jpg"), popupTabFrame, "popup/subtitle/left"_i18n, "popup/subtitle/right"_i18n);
-    });
-
     brls::ListItem* installerItem = new brls::ListItem("installer/open"_i18n);
     installerItem->getClickEvent()->subscribe([](brls::View* view) {
         brls::StagedAppletFrame* stagedFrame = new brls::StagedAppletFrame();
@@ -133,6 +122,15 @@ int main(int argc, char* argv[])
         stagedFrame->addStage(new SampleInstallerPage(stagedFrame, "installer/stage3/button"_i18n));
 
         brls::Application::pushView(stagedFrame);
+    });
+
+    brls::ListItem* popupItem = new brls::ListItem("popup/open"_i18n);
+    popupItem->getClickEvent()->subscribe([](brls::View* view) {
+        brls::TabFrame* popupTabFrame = new brls::TabFrame();
+        popupTabFrame->addTab("popup/red"_i18n, new brls::Rectangle(nvgRGB(255, 0, 0)));
+        popupTabFrame->addTab("popup/green"_i18n, new brls::Rectangle(nvgRGB(0, 255, 0)));
+        popupTabFrame->addTab("popup/blue"_i18n, new brls::Rectangle(nvgRGB(0, 0, 255)));
+        brls::PopupFrame::open("popup/title"_i18n, BOREALIS_ASSET("icon/" APP_TITLE ".jpg"), popupTabFrame, "popup/subtitle/left"_i18n, "popup/subtitle/right"_i18n);
     });
 
     brls::SelectListItem* layerSelectItem = new brls::SelectListItem("main/layers/title"_i18n, { "main/layers/layer1"_i18n, "main/layers/layer2"_i18n });
@@ -198,8 +196,6 @@ int main(int argc, char* argv[])
 
     // Run the app
     while (brls::Application::mainLoop());
-    
-    utilsCloseResources();
     
     // Exit
     return EXIT_SUCCESS;

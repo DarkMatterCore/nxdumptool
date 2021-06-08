@@ -666,7 +666,7 @@ static bool usbSendCommand(void)
     /* Write command header first. */
     if (!usbWrite(cmd_header, sizeof(UsbCommandHeader)))
     {
-        LOG_MSG("Failed to write header for type 0x%X command!", cmd);
+        if (!g_usbDetectionThreadExitFlag) LOG_MSG("Failed to write header for type 0x%X command!", cmd);
         status = UsbStatusType_WriteCommandFailed;
         goto end;
     }
@@ -1221,7 +1221,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         /* If the USB session has already been established, then use a regular timeout value. */
         rc = eventWait(&(endpoint->CompletionEvent), USB_TRANSFER_TIMEOUT * (u64)1000000000);
     } else {
-        /* If we're starting a USB session, wait indefinitely inside a loop to let the user start the companion app. */
+        /* If we're starting a USB session, wait indefinitely inside a loop to let the user start the host script. */
         int idx = 0;
         Waiter completion_event_waiter = waiterForEvent(&(endpoint->CompletionEvent));
         Waiter exit_event_waiter = waiterForUEvent(&g_usbDetectionThreadExitEvent);

@@ -24,29 +24,15 @@
 #ifndef __NXDT_UTILS_H__
 #define __NXDT_UTILS_H__
 
-#include "common.h"
+/* Included here for convenience. */
+#include "nxdt_includes.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
-
-#define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
-
-#define MEMBER_SIZE(type, member)       sizeof(((type*)NULL)->member)
-
-#define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
-
-#define BIT_LONG(n)                     (1UL << (n))
-
-#define ALIGN_UP(x, y)                  (((x) + ((y) - 1)) & ~((y) - 1))
-#define ALIGN_DOWN(x, y)                ((x) & ~((y) - 1))
-#define IS_ALIGNED(x, y)                (((x) & ((y) - 1)) == 0)
-
-#define IS_POWER_OF_TWO(x)              (((x) & ((x) - 1)) == 0)
-
-#define SCOPED_LOCK(mtx)                for(UtilsScopedLock scoped_lock __attribute__((__cleanup__(utilsUnlockScope))) = utilsLockScope(mtx); scoped_lock.cond; scoped_lock.cond = 0)
+/* Scoped lock macro. */
+#define SCOPED_LOCK(mtx)    for(UtilsScopedLock ANONYMOUS_VARIABLE(scoped_lock) __attribute__((__cleanup__(utilsUnlockScope))) = utilsLockScope(mtx); ANONYMOUS_VARIABLE(scoped_lock).cond; ANONYMOUS_VARIABLE(scoped_lock).cond = 0)
 
 /// Used by scoped locks.
 typedef struct {

@@ -81,7 +81,7 @@ CFLAGS  	+=	`aarch64-none-elf-pkg-config libxml-2.0 --cflags`
 CFLAGS  	+=	`aarch64-none-elf-pkg-config json-c --cflags`
 CFLAGS  	+=	`aarch64-none-elf-pkg-config libturbojpeg --cflags`
 
-CXXFLAGS	:=	$(CFLAGS) -std=c++1z -O2 -Wno-volatile -Wno-unused-parameter
+CXXFLAGS	:=	$(CFLAGS) -std=c++20 -O2 -Wno-volatile -Wno-unused-parameter
 
 ASFLAGS		:=	-g $(ARCH)
 LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
