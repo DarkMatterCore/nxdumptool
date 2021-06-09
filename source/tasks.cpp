@@ -22,11 +22,13 @@
 #include <nxdt_includes.h>
 #include <tasks.hpp>
 
+#define TASK_INTERVAL   100 /* 100 ms. */
+
 namespace nxdt::tasks
 {
     /* Gamecard task. */
     
-    GameCardTask::GameCardTask(GameCardStatusEvent *gc_status_event) : brls::RepeatingTask(100) /* 100 ms intervals. */
+    GameCardTask::GameCardTask(GameCardStatusEvent *gc_status_event) : brls::RepeatingTask(TASK_INTERVAL)
     {
         this->gc_status_event = gc_status_event;
     }
@@ -46,7 +48,7 @@ namespace nxdt::tasks
     
     /* Gamecard title task. */
     
-    GameCardTitleTask::GameCardTitleTask(VoidEvent *gc_title_event) : brls::RepeatingTask(100) /* 100 ms intervals. */
+    GameCardTitleTask::GameCardTitleTask(VoidEvent *gc_title_event) : brls::RepeatingTask(TASK_INTERVAL)
     {
         this->gc_title_event = gc_title_event;
     }
@@ -64,7 +66,7 @@ namespace nxdt::tasks
     
     /* USB Mass Storage task. */
     
-    UmsTask::UmsTask(VoidEvent *ums_event) : brls::RepeatingTask(100) /* 100 ms intervals. */
+    UmsTask::UmsTask(VoidEvent *ums_event) : brls::RepeatingTask(TASK_INTERVAL)
     {
         this->ums_event = ums_event;
     }
@@ -82,7 +84,7 @@ namespace nxdt::tasks
     
     /* USB host device connection task. */
     
-    UsbHostTask::UsbHostTask(BooleanEvent *usb_host_event) : brls::RepeatingTask(100) /* 100 ms intervals. */
+    UsbHostTask::UsbHostTask(BooleanEvent *usb_host_event) : brls::RepeatingTask(TASK_INTERVAL)
     {
         this->usb_host_event = usb_host_event;
     }

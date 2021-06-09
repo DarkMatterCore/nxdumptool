@@ -58,7 +58,7 @@ int main(int argc, char* argv[])
     i18n::loadTranslations();
     
     /* Initialize Borealis. */
-    if (!brls::Application::init("main/name"_i18n)) return EXIT_FAILURE;
+    if (!brls::Application::init(APP_TITLE)) return EXIT_FAILURE;
     
     /* Create root tab frame. */
     brls::TabFrame *root_frame = new brls::TabFrame();
