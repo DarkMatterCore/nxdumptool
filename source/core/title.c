@@ -862,7 +862,7 @@ bool titleIsGameCardInfoUpdated(void)
 {
     bool ret = false;
     
-    SCOPED_LOCK(&g_titleMutex)
+    SCOPED_TRY_LOCK(&g_titleMutex)
     {
         /* Check if the gamecard thread detected a gamecard status change. */
         ret = (g_titleInterfaceInit && g_titleGameCardInfoUpdated);

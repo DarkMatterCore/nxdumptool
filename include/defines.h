@@ -50,6 +50,8 @@
 #define ALWAYS_INLINE                   inline __attribute__((always_inline))
 #define ALWAYS_INLINE_LAMBDA            __attribute__((always_inline))
 
+#define CLEANUP(func)                   __attribute__((__cleanup__(func)))
+
 #define NXDT_ASSERT(name, size)         static_assert(sizeof(name) == (size), "Bad size for " #name "! Expected " #size ".")
 
 /* Global constants used throughout the application. */

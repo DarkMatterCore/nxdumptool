@@ -307,7 +307,7 @@ u8 gamecardGetStatus(void)
 {
     u8 status = GameCardStatus_NotInserted;
     
-    SCOPED_LOCK(&g_gameCardMutex)
+    SCOPED_TRY_LOCK(&g_gameCardMutex)
     {
         if (g_gameCardInterfaceInit) status = g_gameCardStatus;
     }

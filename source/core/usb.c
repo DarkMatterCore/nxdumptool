@@ -308,7 +308,7 @@ void *usbAllocatePageAlignedBuffer(size_t size)
 bool usbIsReady(void)
 {
     bool ret = false;
-    SCOPED_LOCK(&g_usbInterfaceMutex) ret = (g_usbHostAvailable && g_usbSessionStarted);
+    SCOPED_TRY_LOCK(&g_usbInterfaceMutex) ret = (g_usbHostAvailable && g_usbSessionStarted);
     return ret;
 }
 

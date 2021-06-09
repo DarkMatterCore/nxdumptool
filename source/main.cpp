@@ -20,10 +20,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <nxdt_utils.h>
-#include <scope_guard.hpp>
-#include <borealis.hpp>
 #include <string>
+
+#include <nxdt_utils.h>
+#include <tasks.hpp>
+#include <scope_guard.hpp>
 
 #include "custom_layout_tab.hpp"
 #include "sample_installer_page.hpp"
@@ -47,24 +48,54 @@ int main(int argc, char* argv[])
 {
     ON_SCOPE_EXIT { utilsCloseResources(); };
     
+    /* Initialize application resources. */
     if (!utilsInitializeResources(argc, (const char**)argv)) return EXIT_FAILURE;
     
-    // Init the app
+    /* Set Borealis log level. */
     brls::Logger::setLogLevel(brls::LogLevel::DEBUG);
-
+    
+    /* Load Borealis translation files. */
     i18n::loadTranslations();
-    if (!brls::Application::init("main/name"_i18n))
-    {
-        brls::Logger::error("Unable to init Borealis application");
-        return EXIT_FAILURE;
-    }
+    
+    /* Initialize Borealis. */
+    if (!brls::Application::init("main/name"_i18n)) return EXIT_FAILURE;
+    
+    /* Create root tab frame. */
+    brls::TabFrame *root_frame = new brls::TabFrame();
+    root_frame->setTitle(APP_TITLE);
+    root_frame->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
+    root_frame->setFooterText("v" APP_VERSION);
+    
+    /* Create and start gamecard task. */
+    nxdt::tasks::GameCardStatusEvent gc_status_event;
+    nxdt::tasks::GameCardTask *gc_task = new nxdt::tasks::GameCardTask(&gc_status_event);
+    gc_task->start();
+    
+    /* Create and start gamecard title task. */
+    nxdt::tasks::VoidEvent gc_title_event;
+    nxdt::tasks::GameCardTitleTask *gc_title_task = new nxdt::tasks::GameCardTitleTask(&gc_title_event);
+    gc_title_task->start();
+    
+    /* Create and start UMS task. */
+    nxdt::tasks::VoidEvent ums_event;
+    nxdt::tasks::UmsTask *ums_task = new nxdt::tasks::UmsTask(&ums_event);
+    ums_task->start();
+    
+    /* Create and start USB host task. */
+    nxdt::tasks::BooleanEvent usb_host_event;
+    nxdt::tasks::UsbHostTask *usb_host_task = new nxdt::tasks::UsbHostTask(&usb_host_event);
+    usb_host_task->start();
 
-    // Create a sample view
-    brls::TabFrame* rootFrame = new brls::TabFrame();
-    rootFrame->setTitle(i18n::getStr("main/name", APP_TITLE));
-    rootFrame->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg" ));
 
-    brls::List* testList = new brls::List();
+
+
+
+
+
+
+
+
+    brls::List *testList = new brls::List();
 
     brls::ListItem* dialogItem = new brls::ListItem("main/pozznx/open"_i18n);
     dialogItem->getClickEvent()->subscribe([](brls::View* view) {
@@ -183,16 +214,16 @@ int main(int argc, char* argv[])
 
     testList->addView(layerSelectItem);
 
-    rootFrame->addTab("main/tabs/first"_i18n, testList);
-    rootFrame->addTab("main/tabs/second"_i18n, testLayers);
-    rootFrame->addSeparator();
-    rootFrame->addTab("main/tabs/third"_i18n, new brls::Rectangle(nvgRGB(255, 0, 0)));
-    rootFrame->addTab("main/tabs/fourth"_i18n, new brls::Rectangle(nvgRGB(0, 255, 0)));
-    rootFrame->addSeparator();
-    rootFrame->addTab("main/tabs/custom_navigation_tab"_i18n, new CustomLayoutTab());
+    root_frame->addTab("main/tabs/first"_i18n, testList);
+    root_frame->addTab("main/tabs/second"_i18n, testLayers);
+    root_frame->addSeparator();
+    root_frame->addTab("main/tabs/third"_i18n, new brls::Rectangle(nvgRGB(255, 0, 0)));
+    root_frame->addTab("main/tabs/fourth"_i18n, new brls::Rectangle(nvgRGB(0, 255, 0)));
+    root_frame->addSeparator();
+    root_frame->addTab("main/tabs/custom_navigation_tab"_i18n, new CustomLayoutTab());
 
     // Add the root view to the stack
-    brls::Application::pushView(rootFrame);
+    brls::Application::pushView(root_frame);
 
     // Run the app
     while (brls::Application::mainLoop());

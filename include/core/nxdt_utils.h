@@ -32,7 +32,10 @@ extern "C" {
 #endif
 
 /* Scoped lock macro. */
-#define SCOPED_LOCK(mtx)    for(UtilsScopedLock ANONYMOUS_VARIABLE(scoped_lock) __attribute__((__cleanup__(utilsUnlockScope))) = utilsLockScope(mtx); ANONYMOUS_VARIABLE(scoped_lock).cond; ANONYMOUS_VARIABLE(scoped_lock).cond = 0)
+#define SCOPED_LOCK(mtx)        for(UtilsScopedLock ANONYMOUS_VARIABLE(scoped_lock) CLEANUP(utilsUnlockScope) = utilsLockScope(mtx); ANONYMOUS_VARIABLE(scoped_lock).cond; ANONYMOUS_VARIABLE(scoped_lock).cond = 0)
+
+/* Scoped try lock macro. */
+#define SCOPED_TRY_LOCK(mtx)    for(UtilsScopedLock ANONYMOUS_VARIABLE(scoped_lock) CLEANUP(utilsUnlockScope) = utilsTryLockScope(mtx); ANONYMOUS_VARIABLE(scoped_lock).cond; ANONYMOUS_VARIABLE(scoped_lock).cond = 0)
 
 /// Used by scoped locks.
 typedef struct {
@@ -143,6 +146,13 @@ NX_INLINE UtilsScopedLock utilsLockScope(Mutex *mtx)
 {
     UtilsScopedLock scoped_lock = { mtx, !mutexIsLockedByCurrentThread(mtx), 1 };
     if (scoped_lock.lock) mutexLock(scoped_lock.mtx);
+    return scoped_lock;
+}
+
+NX_INLINE UtilsScopedLock utilsTryLockScope(Mutex *mtx)
+{
+    UtilsScopedLock scoped_lock = { mtx, !mutexIsLockedByCurrentThread(mtx), 1 };
+    if (scoped_lock.lock) scoped_lock.cond = (int)mutexTryLock(scoped_lock.mtx);
     return scoped_lock;
 }
 

@@ -97,7 +97,7 @@ bool umsIsDeviceInfoUpdated(void)
 {
     bool ret = false;
     
-    SCOPED_LOCK(&g_umsMutex)
+    SCOPED_TRY_LOCK(&g_umsMutex)
     {
         if (!g_umsInterfaceInit || !g_umsDeviceInfoUpdated) break;
         ret = true;
