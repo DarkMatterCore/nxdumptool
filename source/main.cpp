@@ -44,6 +44,11 @@ std::vector<std::string> NOTIFICATIONS = {
     "Hmm, Steamed Hams!"
 };
 
+nxdt::tasks::GameCardTask *gc_task = nullptr;
+nxdt::tasks::TitleTask *title_task = nullptr;
+nxdt::tasks::UmsTask *ums_task = nullptr;
+nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
+
 int main(int argc, char* argv[])
 {
     ON_SCOPE_EXIT { utilsCloseResources(); };
@@ -60,34 +65,17 @@ int main(int argc, char* argv[])
     /* Initialize Borealis. */
     if (!brls::Application::init(APP_TITLE)) return EXIT_FAILURE;
     
+    /* Start background tasks. */
+    gc_task = new nxdt::tasks::GameCardTask();
+    title_task = new nxdt::tasks::TitleTask();
+    ums_task = new nxdt::tasks::UmsTask();
+    usb_host_task = new nxdt::tasks::UsbHostTask();
+    
     /* Create root tab frame. */
     brls::TabFrame *root_frame = new brls::TabFrame();
     root_frame->setTitle(APP_TITLE);
     root_frame->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
     root_frame->setFooterText("v" APP_VERSION);
-    
-    /* Create and start gamecard task. */
-    nxdt::tasks::GameCardStatusEvent gc_status_event;
-    nxdt::tasks::GameCardTask *gc_task = new nxdt::tasks::GameCardTask(&gc_status_event);
-    gc_task->start();
-    
-    /* Create and start gamecard title task. */
-    nxdt::tasks::VoidEvent gc_title_event;
-    nxdt::tasks::GameCardTitleTask *gc_title_task = new nxdt::tasks::GameCardTitleTask(&gc_title_event);
-    gc_title_task->start();
-    
-    /* Create and start UMS task. */
-    nxdt::tasks::VoidEvent ums_event;
-    nxdt::tasks::UmsTask *ums_task = new nxdt::tasks::UmsTask(&ums_event);
-    ums_task->start();
-    
-    /* Create and start USB host task. */
-    nxdt::tasks::BooleanEvent usb_host_event;
-    nxdt::tasks::UsbHostTask *usb_host_task = new nxdt::tasks::UsbHostTask(&usb_host_event);
-    usb_host_task->start();
-
-
-
 
 
 

@@ -38,48 +38,85 @@ namespace nxdt::tasks
     typedef brls::VoidEvent VoidEvent;
     typedef brls::Event<bool> BooleanEvent;
     
+    /* Custom vector type used to hold pointers to application metadata entries. */
+    typedef std::vector<TitleApplicationMetadata*> TitleApplicationMetadataVector;
+    
+    /* Custom vector type used to hold UMS devices. */
+    typedef std::vector<UsbHsFsDevice> UmsDeviceVector;
+    
     /* Gamecard task. */
     class GameCardTask: public brls::RepeatingTask
     {
         private:
+            GameCardStatusEvent gc_status_event;
+            
             GameCardStatus cur_gc_status = GameCardStatus_NotInserted;
             GameCardStatus prev_gc_status = GameCardStatus_NotInserted;
-            GameCardStatusEvent *gc_status_event = nullptr;
         public:
-            GameCardTask(GameCardStatusEvent *gc_status_event);
+            GameCardTask(void);
+            ~GameCardTask(void);
+            
             void run(retro_time_t current_time) override;
+            
+            GameCardStatusEvent* GetTaskEvent(void);
     };
     
-    /* Gamecard title task. */
-    class GameCardTitleTask: public brls::RepeatingTask
+    /* Title task. */
+    class TitleTask: public brls::RepeatingTask
     {
         private:
-            VoidEvent *gc_title_event = nullptr;
+            VoidEvent title_event;
+            
+            TitleApplicationMetadataVector system_metadata;
+            TitleApplicationMetadataVector user_metadata;
+            
+            void PopulateApplicationMetadataVector(bool is_system);
         public:
-            GameCardTitleTask(VoidEvent *gc_title_event);
+            TitleTask(void);
+            ~TitleTask(void);
+            
             void run(retro_time_t current_time) override;
+            
+            VoidEvent* GetTaskEvent(void);
+            
+            TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
     };
     
     /* USB Mass Storage task. */
     class UmsTask: public brls::RepeatingTask
     {
         private:
-            VoidEvent *ums_event = nullptr;
+            VoidEvent ums_event;
+            
+            UmsDeviceVector ums_devices;
+            
+            void PopulateUmsDeviceVector(void);
         public:
-            UmsTask(VoidEvent *ums_event);
+            UmsTask(void);
+            ~UmsTask(void);
+            
             void run(retro_time_t current_time) override;
+            
+            VoidEvent* GetTaskEvent(void);
+            
+            UmsDeviceVector* GetUmsDevices(void);
     };
     
     /* USB host device connection task. */
     class UsbHostTask: public brls::RepeatingTask
     {
         private:
+            BooleanEvent usb_host_event;
+            
             bool cur_usb_host_status = false;
             bool prev_usb_host_status = false;
-            BooleanEvent *usb_host_event = nullptr;
         public:
-            UsbHostTask(BooleanEvent *usb_host_event);
+            UsbHostTask(void);
+            ~UsbHostTask(void);
+            
             void run(retro_time_t current_time) override;
+            
+            BooleanEvent* GetTaskEvent(void);
     };
 }
 
