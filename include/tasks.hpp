@@ -52,13 +52,22 @@ namespace nxdt::tasks
             
             GameCardStatus cur_gc_status = GameCardStatus_NotInserted;
             GameCardStatus prev_gc_status = GameCardStatus_NotInserted;
+        
         public:
             GameCardTask(void);
             ~GameCardTask(void);
             
             void run(retro_time_t current_time) override;
             
-            GameCardStatusEvent* GetTaskEvent(void);
+            ALWAYS_INLINE GameCardStatusEvent::Subscription RegisterListener(GameCardStatusEvent::Callback cb)
+            {
+                return this->gc_status_event.subscribe(cb);
+            }
+            
+            ALWAYS_INLINE void UnregisterListener(GameCardStatusEvent::Subscription subscription)
+            {
+                this->gc_status_event.unsubscribe(subscription);
+            }
     };
     
     /* Title task. */
@@ -71,15 +80,24 @@ namespace nxdt::tasks
             TitleApplicationMetadataVector user_metadata;
             
             void PopulateApplicationMetadataVector(bool is_system);
+        
         public:
             TitleTask(void);
             ~TitleTask(void);
             
             void run(retro_time_t current_time) override;
             
-            VoidEvent* GetTaskEvent(void);
-            
             TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
+            
+            ALWAYS_INLINE VoidEvent::Subscription RegisterListener(VoidEvent::Callback cb)
+            {
+                return this->title_event.subscribe(cb);
+            }
+            
+            ALWAYS_INLINE void UnregisterListener(VoidEvent::Subscription subscription)
+            {
+                this->title_event.unsubscribe(subscription);
+            }
     };
     
     /* USB Mass Storage task. */
@@ -97,9 +115,17 @@ namespace nxdt::tasks
             
             void run(retro_time_t current_time) override;
             
-            VoidEvent* GetTaskEvent(void);
-            
             UmsDeviceVector* GetUmsDevices(void);
+            
+            ALWAYS_INLINE VoidEvent::Subscription RegisterListener(VoidEvent::Callback cb)
+            {
+                return this->ums_event.subscribe(cb);
+            }
+            
+            ALWAYS_INLINE void UnregisterListener(VoidEvent::Subscription subscription)
+            {
+                this->ums_event.unsubscribe(subscription);
+            }
     };
     
     /* USB host device connection task. */
@@ -116,14 +142,16 @@ namespace nxdt::tasks
             
             void run(retro_time_t current_time) override;
             
-            BooleanEvent* GetTaskEvent(void);
+            ALWAYS_INLINE BooleanEvent::Subscription RegisterListener(BooleanEvent::Callback cb)
+            {
+                return this->usb_host_event.subscribe(cb);
+            }
+            
+            ALWAYS_INLINE void UnregisterListener(BooleanEvent::Subscription subscription)
+            {
+                this->usb_host_event.unsubscribe(subscription);
+            }
     };
 }
-
-/* Declared in main.cpp. */
-extern nxdt::tasks::GameCardTask *g_gamecardTask;
-extern nxdt::tasks::TitleTask *g_titleTask;
-extern nxdt::tasks::UmsTask *g_umsTask;
-extern nxdt::tasks::UsbHostTask *g_usbHostTask;
 
 #endif  /* __TASKS_HPP__ */

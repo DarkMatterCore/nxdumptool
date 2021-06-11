@@ -52,11 +52,6 @@ namespace nxdt::tasks
         }
     }
     
-    GameCardStatusEvent* GameCardTask::GetTaskEvent(void)
-    {
-        return &(this->gc_status_event);
-    }
-    
     /* Title task. */
     
     TitleTask::TitleTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
@@ -118,11 +113,6 @@ namespace nxdt::tasks
         }
     }
     
-    VoidEvent* TitleTask::GetTaskEvent(void)
-    {
-        return &(this->title_event);
-    }
-    
     TitleApplicationMetadataVector* TitleTask::GetApplicationMetadata(bool is_system)
     {
         return (is_system ? &(this->system_metadata) : &(this->user_metadata));
@@ -180,11 +170,6 @@ namespace nxdt::tasks
         }
     }
     
-    VoidEvent* UmsTask::GetTaskEvent(void)
-    {
-        return &(this->ums_event);
-    }
-    
     UmsDeviceVector* UmsTask::GetUmsDevices(void)
     {
         return &(this->ums_devices);
@@ -214,10 +199,5 @@ namespace nxdt::tasks
             this->prev_usb_host_status = this->cur_usb_host_status;
             brls::Logger::debug("USB host status change triggered: {}.", this->cur_usb_host_status);
         }
-    }
-    
-    BooleanEvent* UsbHostTask::GetTaskEvent(void)
-    {
-        return &(this->usb_host_event);
     }
 }
