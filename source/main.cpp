@@ -17,11 +17,6 @@
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-#include <stdio.h>
-#include <stdlib.h>
-
-#include <string>
-
 #include <nxdt_utils.h>
 #include <tasks.hpp>
 #include <scope_guard.hpp>
@@ -44,12 +39,12 @@ std::vector<std::string> NOTIFICATIONS = {
     "Hmm, Steamed Hams!"
 };
 
-nxdt::tasks::GameCardTask *gc_task = nullptr;
-nxdt::tasks::TitleTask *title_task = nullptr;
-nxdt::tasks::UmsTask *ums_task = nullptr;
-nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
+nxdt::tasks::GameCardTask *g_gamecardTask = nullptr;
+nxdt::tasks::TitleTask *g_titleTask = nullptr;
+nxdt::tasks::UmsTask *g_umsTask = nullptr;
+nxdt::tasks::UsbHostTask *g_usbHostTask = nullptr;
 
-int main(int argc, char* argv[])
+int main(int argc, char *argv[])
 {
     ON_SCOPE_EXIT { utilsCloseResources(); };
     
@@ -66,10 +61,10 @@ int main(int argc, char* argv[])
     if (!brls::Application::init(APP_TITLE)) return EXIT_FAILURE;
     
     /* Start background tasks. */
-    gc_task = new nxdt::tasks::GameCardTask();
-    title_task = new nxdt::tasks::TitleTask();
-    ums_task = new nxdt::tasks::UmsTask();
-    usb_host_task = new nxdt::tasks::UsbHostTask();
+    g_gamecardTask = new nxdt::tasks::GameCardTask();
+    g_titleTask = new nxdt::tasks::TitleTask();
+    g_umsTask = new nxdt::tasks::UmsTask();
+    g_usbHostTask = new nxdt::tasks::UsbHostTask();
     
     /* Create root tab frame. */
     brls::TabFrame *root_frame = new brls::TabFrame();

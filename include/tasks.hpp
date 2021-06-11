@@ -120,4 +120,10 @@ namespace nxdt::tasks
     };
 }
 
+/* Declared in main.cpp. */
+extern nxdt::tasks::GameCardTask *g_gamecardTask;
+extern nxdt::tasks::TitleTask *g_titleTask;
+extern nxdt::tasks::UmsTask *g_umsTask;
+extern nxdt::tasks::UsbHostTask *g_usbHostTask;
+
 #endif  /* __TASKS_HPP__ */
