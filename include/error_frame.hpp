@@ -34,7 +34,6 @@ namespace nxdt::views
     {
         private:
             brls::Label *label = nullptr;
-            bool print_dbg = false;
         
         protected:
             void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
