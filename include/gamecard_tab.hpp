@@ -37,7 +37,9 @@ namespace nxdt::views
             GameCardStatus gc_status = GameCardStatus_NotInserted;
             
             ErrorFrame *error_frame = nullptr;
+            
             brls::List *list = nullptr;
+            brls::ListItem *placeholder = nullptr;
             
             std::vector<brls::View*> views;
             int view_index = -1;

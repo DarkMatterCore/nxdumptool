@@ -30,15 +30,18 @@ namespace nxdt::views
     {
         /* Add error frame. */
         this->error_frame = new ErrorFrame("No gamecard inserted.");
-        this->addLayer(this->error_frame);
+        this->addLayerWrapper(this->error_frame);
         
         /* Add list. */
         this->list = new brls::List();
-        this->list->addView(new brls::ListItem("Placeholder"));
-        this->addLayer(this->list);
+        this->placeholder = new brls::ListItem("Placeholder");
+        this->list->addView(this->placeholder);
+        this->addLayerWrapper(this->list);
         
         /* Setup gamecard status task. */
         this->gc_status_task_sub = this->gc_status_task->RegisterListener([this](GameCardStatus gc_status) {
+            if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->changeLayerWrapper(this->error_frame);
+            
             switch(gc_status)
             {
                 case GameCardStatus_NotInserted:
@@ -62,14 +65,11 @@ namespace nxdt::views
                                                   "Please check the logfile and report this issue to " APP_AUTHOR ".");
                     break;
                 case GameCardStatus_InsertedAndInfoLoaded:
-                    this->changeLayer(1);
-                    this->list->invalidate(true);
+                    this->changeLayerWrapper(this->list);
                     break;
                 default:
                     break;
             }
-            
-            if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->changeLayer(0);
             
             this->gc_status = gc_status;
         });
@@ -79,6 +79,9 @@ namespace nxdt::views
     {
         /* Unregister gamecard task listener. */
         this->gc_status_task->UnregisterListener(this->gc_status_task_sub);
+        
+        /* Clear views vector. */
+        if (this->views.size()) this->views.clear();
     }
     
     void GameCardTab::addLayerWrapper(brls::View* view)
@@ -101,11 +104,13 @@ namespace nxdt::views
             }
         }
         
-        if (index == -1 || index == this->view_index) return;
+        if (index == -1) return;
         
-        //reinterpret_cast<brls::TabFrame*>(this->getParent())->onCancel();
+        /* TODO: check all ListItem elements using a loop. */
+        if (brls::Application::getCurrentFocus() == this->placeholder) brls::Application::onGamepadButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, false);
+        
         this->changeLayer(index);
+        this->invalidate(true);
         this->view_index = index;
-        view->invalidate(true);
     }
 }
