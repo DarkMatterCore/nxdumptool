@@ -39,7 +39,12 @@ namespace nxdt::views
             ErrorFrame *error_frame = nullptr;
             
             brls::List *list = nullptr;
-            brls::ListItem *placeholder = nullptr;
+            brls::ListItem *dump_card_image = nullptr;
+            brls::ListItem *dump_certificate = nullptr;
+            brls::ListItem *dump_header = nullptr;
+            brls::ListItem *dump_decrypted_cardinfo = nullptr;
+            brls::ListItem *dump_initial_data = nullptr;
+            brls::ListItem *dump_hfs_partitions = nullptr;
             
             std::vector<brls::View*> views;
             int view_index = -1;

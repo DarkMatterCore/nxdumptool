@@ -1,0 +1,41 @@
+{
+    "error_frame": {
+        "not_inserted": "No gamecard inserted.",
+        "processing": "Processing gamecard, please wait...",
+        "nogc_enabled": "A gamecard has been inserted, but the \"nogc\" patch is enabled.\nNothing at all can be done with the inserted gamecard.\nDisabling this patch *will* update the Lotus ASIC firmware if it's outdated.\nConsider disabling this patch if you wish to use gamecard dumping features.",
+        "lafw_update_required": "A gamecard has been inserted, but a Lotus ASIC firmware update is required.\nUpdate your console using the inserted gamecard and try again.",
+        "info_not_loaded": "A gamecard has been inserted, but an unexpected I/O error occurred.\nPlease report this issue at \"{0}\"."
+    },
+    
+    "list": {
+        "dump_card_image": {
+            "label": "Dump gamecard image",
+            "description": "Generates a raw gamecard image. This is the option most people will want to use."
+        },
+        
+        "dump_certificate": {
+            "label": "Dump gamecard certificate",
+            "description": "The gamecard certificate is used to unequivocally identify each individual gamecard."
+        },
+        
+        "dump_header": {
+            "label": "Dump gamecard header",
+            "description": "The gamecard header holds information such as the location of the root HFS partition and the gamecard capacity.\nOnly useful for developers, preservationists and advanced users."
+        },
+        
+        "dump_decrypted_cardinfo": {
+            "label": "Dump decrypted CardInfo area",
+            "description": "The CardInfo area holds information such as the bundled system update version and the Lotus ASIC firmware version required by the gamecard.\nThis area is part of the gamecard header, but it's always encrypted.\nOnly useful for developers, preservationists and advanced users."
+        },
+        
+        "dump_initial_data": {
+            "label": "Dump InitialData area",
+            "description": "The InitialData area holds cryptographic information used by the Lotus ASIC to communicate with the gamecard.\nIt can't be dumped through normal means - it's not part of the storage areas from gamecard images.\nOnly useful for developers, preservationists and advanced users."
+        },
+        
+        "dump_hfs_partitions": {
+            "label": "Dump Hash File System (HFS) partitions",
+            "description": "Dumps data from the HFS partitions within the gamecard storage areas, in both raw and extracted forms."
+        }
+    }
+}

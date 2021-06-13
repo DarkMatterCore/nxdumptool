@@ -164,7 +164,7 @@ static void gamecardFreeInfo(bool clear_status);
 
 static bool gamecardReadHeader(void);
 
-static bool gamecardGetDecryptedCardInfoArea(void);
+static bool _gamecardGetDecryptedCardInfoArea(void);
 
 static bool gamecardReadInitialData(GameCardKeyArea *out);
 
@@ -341,6 +341,19 @@ bool gamecardGetHeader(GameCardHeader *out)
     {
         ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) memcpy(out, &g_gameCardHeader, sizeof(GameCardHeader));
+    }
+    
+    return ret;
+}
+
+bool gamecardGetDecryptedCardInfoArea(GameCardInfo *out)
+{
+    bool ret = false;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
+        if (ret) memcpy(out, &g_gameCardInfoArea, sizeof(GameCardInfo));
     }
     
     return ret;
@@ -667,7 +680,7 @@ static void gamecardLoadInfo(void)
     if (!gamecardReadHeader()) goto end;
     
     /* Get decrypted CardInfo area from header. */
-    if (!gamecardGetDecryptedCardInfoArea()) goto end;
+    if (!_gamecardGetDecryptedCardInfoArea()) goto end;
     
     /* Check if we meet the Lotus ASIC firmware (LAFW) version requirement. */
     /* Lotus treats the GameCardFwVersion field as the maximum unsupported LAFW version, instead of treating it as the minimum supported version. */
@@ -820,7 +833,7 @@ static bool gamecardReadHeader(void)
     return true;
 }
 
-static bool gamecardGetDecryptedCardInfoArea(void)
+static bool _gamecardGetDecryptedCardInfoArea(void)
 {
     const u8 *card_info_key = NULL;
     u8 card_info_iv[AES_128_KEY_SIZE] = {0};

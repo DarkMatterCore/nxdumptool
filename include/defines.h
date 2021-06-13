@@ -64,9 +64,12 @@
 
 #define FAT32_FILESIZE_LIMIT            (u64)0xFFFFFFFF                                                                         /* 4 GiB - 1 (4294967295 bytes). */
 
-/* Path defines. */
+/* Other defines. */
 
 #define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
+
+#define GITHUB_REPOSITORY_URL           "https://github.com/DarkMatterCore/nxdumptool"
+#define GITHUB_NEW_ISSUE_URL            GITHUB_REPOSITORY_URL "/issues/new/choose"
 
 #endif  /* __DEFINES_H__ */

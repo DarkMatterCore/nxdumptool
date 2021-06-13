@@ -22,20 +22,38 @@
 #include <nxdt_includes.h>
 #include <gamecard_tab.hpp>
 
-using namespace brls::i18n::literals; /* For _i18n. */
+namespace i18n = brls::i18n;    /* For getStr(). */
+using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
     GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : brls::LayerView(), gc_status_task(gc_status_task)
     {
         /* Add error frame. */
-        this->error_frame = new ErrorFrame("No gamecard inserted.");
+        this->error_frame = new ErrorFrame("gamecard_tab/error_frame/not_inserted"_i18n);
         this->addLayerWrapper(this->error_frame);
         
         /* Add list. */
         this->list = new brls::List();
-        this->placeholder = new brls::ListItem("Placeholder");
-        this->list->addView(this->placeholder);
+        
+        this->dump_card_image = new brls::ListItem("gamecard_tab/list/dump_card_image/label"_i18n, "gamecard_tab/list/dump_card_image/description"_i18n);
+        this->list->addView(this->dump_card_image);
+        
+        this->dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, "gamecard_tab/list/dump_certificate/description"_i18n);
+        this->list->addView(this->dump_certificate);
+        
+        this->dump_header = new brls::ListItem("gamecard_tab/list/dump_header/label"_i18n, "gamecard_tab/list/dump_header/description"_i18n);
+        this->list->addView(this->dump_header);
+        
+        this->dump_decrypted_cardinfo = new brls::ListItem("gamecard_tab/list/dump_decrypted_cardinfo/label"_i18n, "gamecard_tab/list/dump_decrypted_cardinfo/description"_i18n);
+        this->list->addView(this->dump_decrypted_cardinfo);
+        
+        this->dump_initial_data = new brls::ListItem("gamecard_tab/list/dump_initial_data/label"_i18n, "gamecard_tab/list/dump_initial_data/description"_i18n);
+        this->list->addView(this->dump_initial_data);
+        
+        this->dump_hfs_partitions = new brls::ListItem("gamecard_tab/list/dump_hfs_partitions/label"_i18n, "gamecard_tab/list/dump_hfs_partitions/description"_i18n);
+        this->list->addView(this->dump_hfs_partitions);
+        
         this->addLayerWrapper(this->list);
         
         /* Setup gamecard status task. */
@@ -45,24 +63,19 @@ namespace nxdt::views
             switch(gc_status)
             {
                 case GameCardStatus_NotInserted:
-                    this->error_frame->SetMessage("No gamecard inserted.");
+                    this->error_frame->SetMessage("gamecard_tab/error_frame/not_inserted"_i18n);
                     break;
                 case GameCardStatus_Processing:
-                    this->error_frame->SetMessage("Processing gamecard, please wait...");
+                    this->error_frame->SetMessage("gamecard_tab/error_frame/processing"_i18n);
                     break;
                 case GameCardStatus_NoGameCardPatchEnabled:
-                    this->error_frame->SetMessage("A gamecard has been inserted, but the \"nogc\" patch is enabled.\n" \
-                                                  "Nothing at all can be done with the inserted gamecard.\n" \
-                                                  "Disabling this patch *will* update the Lotus ASIC firmware if it's outdated.\n" \
-                                                  "Consider disabling this patch if you wish to use gamecard dumping features.");
+                    this->error_frame->SetMessage("gamecard_tab/error_frame/nogc_enabled"_i18n);
                     break;
                 case GameCardStatus_LotusAsicFirmwareUpdateRequired:
-                    this->error_frame->SetMessage("A gamecard has been inserted, but a Lotus ASIC firmware update is required.\n" \
-                                                  "Update your console using the inserted gamecard and try again.");
+                    this->error_frame->SetMessage("gamecard_tab/error_frame/lafw_update_required"_i18n);
                     break;
                 case GameCardStatus_InsertedAndInfoNotLoaded:
-                    this->error_frame->SetMessage("A gamecard has been inserted, but an unexpected I/O error occurred.\n" \
-                                                  "Please check the logfile and report this issue to " APP_AUTHOR ".");
+                    this->error_frame->SetMessage(i18n::getStr("gamecard_tab/error_frame/info_not_loaded"_i18n, GITHUB_NEW_ISSUE_URL));
                     break;
                 case GameCardStatus_InsertedAndInfoLoaded:
                     this->changeLayerWrapper(this->list);
@@ -94,6 +107,7 @@ namespace nxdt::views
     void GameCardTab::changeLayerWrapper(brls::View* view)
     {
         int index = -1;
+        brls::View *current_focus = brls::Application::getCurrentFocus();
         
         for(size_t i = 0; i < this->views.size(); i++)
         {
@@ -106,8 +120,12 @@ namespace nxdt::views
         
         if (index == -1) return;
         
-        /* TODO: check all ListItem elements using a loop. */
-        if (brls::Application::getCurrentFocus() == this->placeholder) brls::Application::onGamepadButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, false);
+        /* Focus the sidebar if we're currently focusing a ListItem element. */
+        if (current_focus && (current_focus == this->dump_card_image || current_focus == this->dump_certificate || current_focus == this->dump_header || \
+            current_focus == this->dump_decrypted_cardinfo || current_focus == this->dump_initial_data || current_focus == this->dump_hfs_partitions))
+        {
+            brls::Application::onGamepadButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, false);
+        }
         
         this->changeLayer(index);
         this->invalidate(true);

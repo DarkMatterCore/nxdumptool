@@ -239,6 +239,9 @@ bool gamecardGetKeyArea(GameCardKeyArea *out);
 /// This area can also be read using gamecardReadStorage(), starting at offset 0.
 bool gamecardGetHeader(GameCardHeader *out);
 
+/// Fills the provided GameCardInfo pointer.
+bool gamecardGetDecryptedCardInfoArea(GameCardInfo *out);
+
 /// Fills the provided FsGameCardCertificate pointer.
 /// This area can also be read using gamecardReadStorage(), starting at GAMECARD_CERTIFICATE_OFFSET.
 bool gamecardGetCertificate(FsGameCardCertificate *out);
