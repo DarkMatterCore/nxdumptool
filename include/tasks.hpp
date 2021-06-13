@@ -53,11 +53,12 @@ namespace nxdt::tasks
             GameCardStatus cur_gc_status = GameCardStatus_NotInserted;
             GameCardStatus prev_gc_status = GameCardStatus_NotInserted;
         
+        protected:
+            void run(retro_time_t current_time) override;
+        
         public:
             GameCardTask(void);
             ~GameCardTask(void);
-            
-            void run(retro_time_t current_time) override;
             
             ALWAYS_INLINE GameCardStatusEvent::Subscription RegisterListener(GameCardStatusEvent::Callback cb)
             {
@@ -81,11 +82,12 @@ namespace nxdt::tasks
             
             void PopulateApplicationMetadataVector(bool is_system);
         
+        protected:
+            void run(retro_time_t current_time) override;
+        
         public:
             TitleTask(void);
             ~TitleTask(void);
-            
-            void run(retro_time_t current_time) override;
             
             TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
             
@@ -109,11 +111,13 @@ namespace nxdt::tasks
             UmsDeviceVector ums_devices;
             
             void PopulateUmsDeviceVector(void);
+        
+        protected:
+            void run(retro_time_t current_time) override;
+        
         public:
             UmsTask(void);
             ~UmsTask(void);
-            
-            void run(retro_time_t current_time) override;
             
             UmsDeviceVector* GetUmsDevices(void);
             
@@ -136,11 +140,13 @@ namespace nxdt::tasks
             
             bool cur_usb_host_status = false;
             bool prev_usb_host_status = false;
+        
+        protected:
+            void run(retro_time_t current_time) override;
+        
         public:
             UsbHostTask(void);
             ~UsbHostTask(void);
-            
-            void run(retro_time_t current_time) override;
             
             ALWAYS_INLINE BooleanEvent::Subscription RegisterListener(BooleanEvent::Callback cb)
             {

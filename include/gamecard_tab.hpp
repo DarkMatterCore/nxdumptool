@@ -1,5 +1,5 @@
 /*
- * root_view.hpp
+ * gamecard_tab.hpp
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,25 +21,34 @@
 
 #pragma once
 
-#ifndef __ROOT_VIEW_HPP__
-#define __ROOT_VIEW_HPP__
+#ifndef __GAMECARD_TAB_HPP__
+#define __GAMECARD_TAB_HPP__
 
 #include "tasks.hpp"
+#include "error_frame.hpp"
 
 namespace nxdt::views
 {
-    class RootView: public brls::TabFrame
+    class GameCardTab: public brls::LayerView
     {
         private:
             nxdt::tasks::GameCardTask *gc_status_task = nullptr;
-            nxdt::tasks::TitleTask *title_task = nullptr;
-            nxdt::tasks::UmsTask *ums_task = nullptr;
-            nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
+            nxdt::tasks::GameCardStatusEvent::Subscription gc_status_task_sub;
+            GameCardStatus gc_status = GameCardStatus_NotInserted;
+            
+            ErrorFrame *error_frame = nullptr;
+            brls::List *list = nullptr;
+            
+            std::vector<brls::View*> views;
+            int view_index = -1;
+            
+            void addLayerWrapper(brls::View* view);
+            void changeLayerWrapper(brls::View* view);
         
         public:
-            RootView(void);
-            ~RootView(void);
+            GameCardTab(nxdt::tasks::GameCardTask *gc_status_task);
+            ~GameCardTab(void);
     };
 }
 
-#endif  /* __ROOT_VIEW_HPP__ */
+#endif  /* __GAMECARD_TAB_HPP__ */

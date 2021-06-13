@@ -1,7 +1,9 @@
 /*
- * root_view.hpp
+ * error_frame.hpp
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
+ *
+ * Based on crash_frame.hpp from Borealis.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -21,25 +23,29 @@
 
 #pragma once
 
-#ifndef __ROOT_VIEW_HPP__
-#define __ROOT_VIEW_HPP__
+#ifndef __ERROR_FRAME_HPP__
+#define __ERROR_FRAME_HPP__
 
-#include "tasks.hpp"
+#include <borealis.hpp>
 
 namespace nxdt::views
 {
-    class RootView: public brls::TabFrame
+    class ErrorFrame: public brls::View
     {
         private:
-            nxdt::tasks::GameCardTask *gc_status_task = nullptr;
-            nxdt::tasks::TitleTask *title_task = nullptr;
-            nxdt::tasks::UmsTask *ums_task = nullptr;
-            nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
+            brls::Label *label = nullptr;
+            bool print_dbg = false;
+        
+        protected:
+            void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
+            void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
         
         public:
-            RootView(void);
-            ~RootView(void);
+            ErrorFrame(std::string msg);
+            ~ErrorFrame(void);
+            
+            void SetMessage(std::string msg);
     };
 }
 
-#endif  /* __ROOT_VIEW_HPP__ */
+#endif  /* __ERROR_FRAME_HPP__ */

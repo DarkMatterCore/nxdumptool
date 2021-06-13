@@ -21,7 +21,7 @@
 
 #include <nxdt_includes.h>
 #include <root_view.hpp>
-//#include <gamecard_tab.hpp>
+#include <gamecard_tab.hpp>
 //#include <user_titles_tab.hpp>
 //#include <system_titles_tab.hpp>
 //#include <options_tab.hpp>
@@ -45,10 +45,21 @@ namespace nxdt::views
         this->setFooterText("v" APP_VERSION);
         
         /* Add tabs. */
-        this->addTab("root_view/tabs/gamecard"_i18n, new brls::Rectangle(nvgRGB(255, 0, 0)));
+        this->addTab("root_view/tabs/gamecard"_i18n, new GameCardTab(this->gc_status_task));
+        this->addSeparator();
         this->addTab("root_view/tabs/user_titles"_i18n, new brls::Rectangle(nvgRGB(0, 255, 0)));
         this->addTab("root_view/tabs/system_titles"_i18n, new brls::Rectangle(nvgRGB(0, 0, 255)));
+        this->addSeparator();
         this->addTab("root_view/tabs/options"_i18n, new brls::Rectangle(nvgRGB(255, 255, 0)));
         this->addTab("root_view/tabs/about"_i18n, new brls::Rectangle(nvgRGB(255, 0, 255)));
+    }
+    
+    RootView::~RootView(void)
+    {
+        /* Stop background tasks. */
+        this->gc_status_task->stop();
+        this->title_task->stop();
+        this->ums_task->stop();
+        this->usb_host_task->stop();
     }
 }

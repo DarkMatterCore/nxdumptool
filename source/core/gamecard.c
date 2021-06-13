@@ -305,7 +305,7 @@ UEvent *gamecardGetStatusChangeUserEvent(void)
 
 u8 gamecardGetStatus(void)
 {
-    u8 status = GameCardStatus_NotInserted;
+    u8 status = GameCardStatus_Processing;
     
     SCOPED_TRY_LOCK(&g_gameCardMutex)
     {

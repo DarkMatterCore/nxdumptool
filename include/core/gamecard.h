@@ -191,12 +191,13 @@ NXDT_ASSERT(GameCardHeader, 0x200);
 
 typedef enum {
     GameCardStatus_NotInserted                     = 0, ///< No gamecard is inserted.
-    GameCardStatus_NoGameCardPatchEnabled          = 1, ///< A gamecard has been inserted, but the running CFW enabled the "nogc" patch at boot.
+    GameCardStatus_Processing                      = 1, ///< A gamecard has been inserted and it's being processed.
+    GameCardStatus_NoGameCardPatchEnabled          = 2, ///< A gamecard has been inserted, but the running CFW enabled the "nogc" patch at boot.
                                                         ///< This triggers an error whenever fsDeviceOperatorGetGameCardHandle is called. Nothing at all can be done with the inserted gamecard.
-    GameCardStatus_LotusAsicFirmwareUpdateRequired = 2, ///< A gamecard has been inserted, but a LAFW update is needed before being able to read the secure storage area.
+    GameCardStatus_LotusAsicFirmwareUpdateRequired = 3, ///< A gamecard has been inserted, but a LAFW update is needed before being able to read the secure storage area.
                                                         ///< Operations on the normal storage area are still possible, though.
-    GameCardStatus_InsertedAndInfoNotLoaded        = 3, ///< A gamecard has been inserted, but an unexpected error unrelated to both "nogc" patch and LAFW version occurred.
-    GameCardStatus_InsertedAndInfoLoaded           = 4  ///< A gamecard has been inserted and all required information could be successfully retrieved from it.
+    GameCardStatus_InsertedAndInfoNotLoaded        = 4, ///< A gamecard has been inserted, but an unexpected error unrelated to both "nogc" patch and LAFW version occurred.
+    GameCardStatus_InsertedAndInfoLoaded           = 5  ///< A gamecard has been inserted and all required information could be successfully retrieved from it.
 } GameCardStatus;
 
 typedef enum {
