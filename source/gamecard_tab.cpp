@@ -41,6 +41,24 @@ namespace nxdt::views
         [GameCardFwVersion_Since1200NUP] = "12.0.0+"
     };
     
+    GameCardTable::GameCardTable(void) : brls::Table() { }
+    
+    GameCardTable::~GameCardTable(void) { }
+    
+    brls::View* GameCardTable::getDefaultFocus(void)
+    {
+        return this;
+    }
+    
+    void GameCardTable::onFocusGained(void)
+    {
+        this->focused = true;
+        
+        this->focusEvent.fire(this);
+        
+        if (this->hasParent()) this->getParent()->onChildFocusGained(this);
+    }
+    
     GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : brls::LayerView(), gc_status_task(gc_status_task)
     {
         /* Error frame. */
@@ -55,7 +73,7 @@ namespace nxdt::views
         /* Gamecard properties table. */
         this->list->addView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
         
-        this->properties_table = new brls::Table();
+        this->properties_table = new GameCardTable();
         this->capacity = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/capacity"_i18n);
         this->total_size = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/total_size"_i18n);
         this->trimmed_size = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/trimmed_size"_i18n);
@@ -189,8 +207,8 @@ namespace nxdt::views
         
         if (index == -1) return;
         
-        /* Focus the sidebar if we're currently focusing a ListItem element. */
-        if (current_focus && (current_focus == this->dump_card_image || current_focus == this->dump_certificate || current_focus == this->dump_header || \
+        /* Focus the sidebar if we're currently focusing an element from our List. */
+        if (current_focus && (current_focus == this->properties_table || current_focus == this->dump_card_image || current_focus == this->dump_certificate || current_focus == this->dump_header || \
             current_focus == this->dump_decrypted_cardinfo || current_focus == this->dump_initial_data || current_focus == this->dump_hfs_partitions))
         {
             brls::Application::onGamepadButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, false);

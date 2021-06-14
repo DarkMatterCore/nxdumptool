@@ -29,6 +29,17 @@
 
 namespace nxdt::views
 {
+    class GameCardTable: public brls::Table
+    {
+        protected:
+            brls::View* getDefaultFocus(void) override;
+            void onFocusGained(void) override;
+        
+        public:
+            GameCardTable(void);
+            ~GameCardTable(void);
+    };
+    
     class GameCardTab: public brls::LayerView
     {
         private:
@@ -40,7 +51,7 @@ namespace nxdt::views
             
             brls::List *list = nullptr;
             
-            brls::Table *properties_table = nullptr;
+            GameCardTable *properties_table = nullptr;
             brls::TableRow *capacity = nullptr;
             brls::TableRow *total_size = nullptr;
             brls::TableRow *trimmed_size = nullptr;
