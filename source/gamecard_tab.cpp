@@ -32,6 +32,15 @@ namespace nxdt::views
         [GameCardCompatibilityType_Terra]  = "Terra"
     };
     
+    static const char *GameCardFwVersionStrings[GameCardFwVersion_Count] = {
+        [GameCardFwVersion_ForDev]       = "1.0.0+",
+        [GameCardFwVersion_Since100NUP]  = "1.0.0+",
+        [GameCardFwVersion_Since400NUP]  = "4.0.0+",
+        [GameCardFwVersion_Since900NUP]  = "9.0.0+",
+        [GameCardFwVersion_Since1100NUP] = "11.0.0+",
+        [GameCardFwVersion_Since1200NUP] = "12.0.0+"
+    };
+    
     GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : brls::LayerView(), gc_status_task(gc_status_task)
     {
         /* Error frame. */
@@ -122,14 +131,17 @@ namespace nxdt::views
                              card_info.upp_version.major_relstep, card_info.upp_version.minor_relstep, card_info.upp_version.value);
                     this->update_version->setValue(std::string(strbuf));
                     
-                    snprintf(strbuf, sizeof(strbuf), "gamecard_tab/list/properties_table/lafw_version_value"_i18n.c_str(), card_info.fw_version + 1);
+                    card_info.fw_version++;
+                    snprintf(strbuf, sizeof(strbuf), "gamecard_tab/list/properties_table/lafw_version_value"_i18n.c_str(), card_info.fw_version, \
+                             card_info.fw_version >= GameCardFwVersion_Count ? "gamecard_tab/list/properties_table/unknown"_i18n.c_str() : GameCardFwVersionStrings[card_info.fw_version]);
                     this->lafw_version->setValue(std::string(strbuf));
                     
                     snprintf(strbuf, sizeof(strbuf), "%u.%u.%u-%u (v%u)", card_info.fw_mode.major, card_info.fw_mode.minor, card_info.fw_mode.micro, card_info.fw_mode.relstep, card_info.fw_mode.value);
                     this->sdk_version->setValue(std::string(strbuf));
                     
-                    snprintf(strbuf, sizeof(strbuf), "%s (%u)", \
-                            card_info.compatibility_type >= GameCardCompatibilityType_Count ? "Unknown" : GameCardCompatibilityTypeStrings[card_info.compatibility_type], card_info.compatibility_type);
+                    snprintf(strbuf, sizeof(strbuf), "%s (%u)", card_info.compatibility_type >= GameCardCompatibilityType_Count ? \
+                             "gamecard_tab/list/properties_table/unknown"_i18n.c_str() : GameCardCompatibilityTypeStrings[card_info.compatibility_type], \
+                             card_info.compatibility_type);
                     this->compatibility_type->setValue(std::string(strbuf));
                     
                     this->changeLayerWrapper(this->list);
