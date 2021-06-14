@@ -39,6 +39,16 @@ namespace nxdt::views
             ErrorFrame *error_frame = nullptr;
             
             brls::List *list = nullptr;
+            
+            brls::Table *properties_table = nullptr;
+            brls::TableRow *capacity = nullptr;
+            brls::TableRow *total_size = nullptr;
+            brls::TableRow *trimmed_size = nullptr;
+            brls::TableRow *update_version = nullptr;
+            brls::TableRow *lafw_version = nullptr;
+            brls::TableRow *sdk_version = nullptr;
+            brls::TableRow *compatibility_type = nullptr;
+            
             brls::ListItem *dump_card_image = nullptr;
             brls::ListItem *dump_certificate = nullptr;
             brls::ListItem *dump_header = nullptr;

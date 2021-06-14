@@ -137,7 +137,8 @@ typedef enum {
 
 typedef enum {
     GameCardCompatibilityType_Normal = 0,
-    GameCardCompatibilityType_Terra  = 1
+    GameCardCompatibilityType_Terra  = 1,
+    GameCardCompatibilityType_Count  = 2
 } GameCardCompatibilityType;
 
 /// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under HOS 9.0.0+) and the IV from `GameCardHeader`.

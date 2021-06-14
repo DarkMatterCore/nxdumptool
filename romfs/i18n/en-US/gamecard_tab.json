@@ -8,6 +8,20 @@
     },
     
     "list": {
+        "properties_table": {
+            "header": "Gamecard properties",
+            "capacity": "Capacity",
+            "total_size": "Total size",
+            "trimmed_size": "Trimmed size",
+            "update_version": "Bundled update version",
+            "lafw_version": "Required Lotus ASIC firmware version",
+            "lafw_version_value": "%lu or greater",
+            "sdk_version": "SDK version",
+            "compatibility_type": "Compatibility type"
+        },
+        
+        "dump_options": "Dump options",
+        
         "dump_card_image": {
             "label": "Dump gamecard image",
             "description": "Generates a raw gamecard image. This is the option most people will want to use."
