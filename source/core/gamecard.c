@@ -683,10 +683,9 @@ static void gamecardLoadInfo(void)
     if (!_gamecardGetDecryptedCardInfoArea()) goto end;
     
     /* Check if we meet the Lotus ASIC firmware (LAFW) version requirement. */
-    /* Lotus treats the GameCardFwVersion field as the maximum unsupported LAFW version, instead of treating it as the minimum supported version. */
-    if (g_lafwVersion <= g_gameCardInfoArea.fw_version)
+    if (g_lafwVersion < g_gameCardInfoArea.fw_version)
     {
-        LOG_MSG("LAFW version doesn't meet gamecard requirement! (%lu <= %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
+        LOG_MSG("LAFW version doesn't meet gamecard requirement! (%lu < %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
         g_gameCardStatus = GameCardStatus_LotusAsicFirmwareUpdateRequired;
         goto end;
     }

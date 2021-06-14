@@ -49,6 +49,8 @@ namespace nxdt::views
         
         /* List. */
         this->list = new brls::List();
+        this->list->setSpacing(this->list->getSpacing() / 2);
+        this->list->setMarginBottom(20);
         
         /* Gamecard properties table. */
         this->list->addView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
@@ -131,7 +133,6 @@ namespace nxdt::views
                              card_info.upp_version.major_relstep, card_info.upp_version.minor_relstep, card_info.upp_version.value);
                     this->update_version->setValue(std::string(strbuf));
                     
-                    card_info.fw_version++;
                     snprintf(strbuf, sizeof(strbuf), "gamecard_tab/list/properties_table/lafw_version_value"_i18n.c_str(), card_info.fw_version, \
                              card_info.fw_version >= GameCardFwVersion_Count ? "gamecard_tab/list/properties_table/unknown"_i18n.c_str() : GameCardFwVersionStrings[card_info.fw_version]);
                     this->lafw_version->setValue(std::string(strbuf));
