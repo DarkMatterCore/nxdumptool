@@ -29,6 +29,7 @@
 
 namespace nxdt::views
 {
+    /* Extended class to display a focusable (but unhighlightable) table. */
     class GameCardTable: public brls::Table
     {
         protected:
@@ -37,9 +38,9 @@ namespace nxdt::views
         
         public:
             GameCardTable(void);
-            ~GameCardTable(void);
     };
     
+    /* Extended class to switch between ErrorFrame and List views whenever the gamecard status event is triggered. */
     class GameCardTab: public brls::LayerView
     {
         private:

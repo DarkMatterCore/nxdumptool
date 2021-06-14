@@ -17,8 +17,7 @@
             "lafw_version": "Required LAFW version",
             "lafw_version_value": "%lu or greater (%s)",
             "sdk_version": "SDK version",
-            "compatibility_type": "Compatibility type",
-            "unknown": "Unknown"
+            "compatibility_type": "Compatibility type"
         },
         
         "dump_options": "Dump options",

@@ -25,7 +25,7 @@
 //#include <user_titles_tab.hpp>
 //#include <system_titles_tab.hpp>
 //#include <options_tab.hpp>
-//#include <about_tab.hpp>
+#include <about_tab.hpp>
 
 using namespace brls::i18n::literals; /* For _i18n. */
 
@@ -51,7 +51,8 @@ namespace nxdt::views
         this->addTab("root_view/tabs/system_titles"_i18n, new brls::Rectangle(nvgRGB(0, 0, 255)));
         this->addSeparator();
         this->addTab("root_view/tabs/options"_i18n, new brls::Rectangle(nvgRGB(255, 255, 0)));
-        this->addTab("root_view/tabs/about"_i18n, new brls::Rectangle(nvgRGB(255, 0, 255)));
+        this->addSeparator();
+        this->addTab("root_view/tabs/about"_i18n, new AboutTab());
     }
     
     RootView::~RootView(void)

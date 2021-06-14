@@ -72,4 +72,7 @@
 #define GITHUB_REPOSITORY_URL           "https://github.com/DarkMatterCore/nxdumptool"
 #define GITHUB_NEW_ISSUE_URL            GITHUB_REPOSITORY_URL "/issues/new/choose"
 
+#define BOREALIS_URL                    "https://github.com/natinusala/borealis"
+#define LIBUSBHSFS_URL                  "https://github.com/DarkMatterCore/libusbhsfs"
+
 #endif  /* __DEFINES_H__ */

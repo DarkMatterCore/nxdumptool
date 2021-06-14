@@ -43,8 +43,6 @@ namespace nxdt::views
     
     GameCardTable::GameCardTable(void) : brls::Table() { }
     
-    GameCardTable::~GameCardTable(void) { }
-    
     brls::View* GameCardTable::getDefaultFocus(void)
     {
         return this;
@@ -53,9 +51,7 @@ namespace nxdt::views
     void GameCardTable::onFocusGained(void)
     {
         this->focused = true;
-        
         this->focusEvent.fire(this);
-        
         if (this->hasParent()) this->getParent()->onChildFocusGained(this);
     }
     
@@ -151,15 +147,15 @@ namespace nxdt::views
                              card_info.upp_version.major_relstep, card_info.upp_version.minor_relstep, card_info.upp_version.value);
                     this->update_version->setValue(std::string(strbuf));
                     
-                    snprintf(strbuf, sizeof(strbuf), "gamecard_tab/list/properties_table/lafw_version_value"_i18n.c_str(), card_info.fw_version, \
-                             card_info.fw_version >= GameCardFwVersion_Count ? "gamecard_tab/list/properties_table/unknown"_i18n.c_str() : GameCardFwVersionStrings[card_info.fw_version]);
+                    snprintf(strbuf, sizeof(strbuf), "%lu (%s)", card_info.fw_version, \
+                             card_info.fw_version >= GameCardFwVersion_Count ? "generic/unknown"_i18n.c_str() : GameCardFwVersionStrings[card_info.fw_version]);
                     this->lafw_version->setValue(std::string(strbuf));
                     
                     snprintf(strbuf, sizeof(strbuf), "%u.%u.%u-%u (v%u)", card_info.fw_mode.major, card_info.fw_mode.minor, card_info.fw_mode.micro, card_info.fw_mode.relstep, card_info.fw_mode.value);
                     this->sdk_version->setValue(std::string(strbuf));
                     
-                    snprintf(strbuf, sizeof(strbuf), "%s (%u)", card_info.compatibility_type >= GameCardCompatibilityType_Count ? \
-                             "gamecard_tab/list/properties_table/unknown"_i18n.c_str() : GameCardCompatibilityTypeStrings[card_info.compatibility_type], \
+                    snprintf(strbuf, sizeof(strbuf), "%s (%u)", \
+                             card_info.compatibility_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n.c_str() : GameCardCompatibilityTypeStrings[card_info.compatibility_type], \
                              card_info.compatibility_type);
                     this->compatibility_type->setValue(std::string(strbuf));
                     

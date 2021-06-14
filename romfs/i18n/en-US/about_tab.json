@@ -1,0 +1,5 @@
+{
+    "description": "Nintendo Switch Dump Tool",
+    "copyright": "Licensed under GPLv3+\n\u00A9 2020 - 2021 {0}",
+    "links": "\uE016  Source code is available at: {0}.\n\uE016  {1} is powered by Borealis, a hardware-accelerated UI library: {2}.\n\uE016  USB Mass Storage device support is powered by libusbhsfs: {3}."
+}
