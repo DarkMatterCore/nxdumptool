@@ -102,7 +102,7 @@ namespace nxdt::views
                 {
                     u64 size = 0;
                     GameCardInfo card_info = {0};
-                    char strbuf[0x100] = {0};
+                    char strbuf[0x40] = {0};
                     
                     gamecardGetRomCapacity(&size);
                     utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));
