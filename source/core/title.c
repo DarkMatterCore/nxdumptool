@@ -443,7 +443,7 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void);
 static TitleApplicationMetadata *titleGenerateDummySystemMetadataEntry(u64 title_id);
 static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApplicationMetadata *out);
 
-NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system);
+NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system, u32 extra_app_count);
 
 static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_storage);
 static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, NcmContentMetaKey **out_meta_keys, u32 *out_meta_key_count);
@@ -1619,12 +1619,12 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
     return true;
 }
 
-NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system)
+NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system, u32 extra_app_count)
 {
     if ((is_system && (!g_systemMetadata || !g_systemMetadataCount)) || (!is_system && (!g_userMetadata || !g_userMetadataCount)) || !title_id) return NULL;
     
     TitleApplicationMetadata **cached_app_metadata = (is_system ? g_systemMetadata : g_userMetadata);
-    u32 cached_app_metadata_count = (is_system ? g_systemMetadataCount : g_userMetadataCount);
+    u32 cached_app_metadata_count = ((is_system ? g_systemMetadataCount : g_userMetadataCount) + extra_app_count);
     
     for(u32 i = 0; i < cached_app_metadata_count; i++)
     {
@@ -1713,7 +1713,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
                      (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(cur_title_info->meta_key.id) : \
                      titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id))));
         
-        cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, storage_id == NcmStorageId_BuiltInSystem);
+        cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, storage_id == NcmStorageId_BuiltInSystem, 0);
         if (!cur_title_info->app_metadata && storage_id == NcmStorageId_BuiltInSystem)
         {
             /* Generate dummy system metadata entry if we have no hardcoded information for this system title. */
@@ -2113,7 +2113,7 @@ static bool titleRefreshGameCardTitleInfo(void)
                      titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id))));
         
         /* Do not proceed if application metadata has already been retrieved, or if we can successfully retrieve it. */
-        if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false)) != NULL) continue;
+        if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, extra_app_count)) != NULL) continue;
         
         /* Retrieve application metadata pointer. */
         TitleApplicationMetadata *cur_app_metadata = g_userMetadata[g_userMetadataCount + extra_app_count];

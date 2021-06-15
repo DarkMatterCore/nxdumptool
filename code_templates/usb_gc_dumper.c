@@ -377,12 +377,7 @@ static bool waitForGameCardAndUsb(void)
     consolePrint("waiting for gamecard...\n");
     
     u8 status = GameCardStatus_NotInserted;
-    
-    while(true)
-    {
-        status = gamecardGetStatus();
-        if (status > GameCardStatus_NotInserted) break;
-    }
+    while(status <= GameCardStatus_Processing) status = gamecardGetStatus();
     
     switch(status)
     {
@@ -401,6 +396,7 @@ static bool waitForGameCardAndUsb(void)
     
     if (status != GameCardStatus_InsertedAndInfoLoaded)
     {
+        consolePrint("press any button\n");
         utilsWaitForButtonPress(0);
         return false;
     }
