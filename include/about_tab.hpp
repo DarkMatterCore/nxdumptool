@@ -28,24 +28,12 @@
 
 namespace nxdt::views
 {
-    /* Extended class to display a focusable (but unhighlightable) image. */
-    class AboutTabLogo: public brls::Image
-    {
-        protected:
-            void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
-            brls::View* getDefaultFocus(void);
-            //void onFocusGained(void);
-        
-        public:
-            AboutTabLogo(void);
-    };
-    
     /* Extended class to display a focusable (but unhighlightable) label. */
     class AboutTabLabel: public brls::Label
     {
         protected:
-            brls::View* getDefaultFocus(void);
-            //void onFocusGained(void);
+            brls::View* getDefaultFocus(void) override;
+            void onFocusGained(void) override;
         
         public:
             AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center = false, bool multiline = true);
@@ -53,8 +41,16 @@ namespace nxdt::views
     
     class AboutTab: public brls::List
     {
+        private:
+            brls::Image *logo = nullptr;
+        
+        protected:
+            void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
+            void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
+        
         public:
             AboutTab(void);
+            ~AboutTab(void);
     };
 }
 

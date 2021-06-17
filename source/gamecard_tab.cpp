@@ -27,11 +27,6 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    static const char *GameCardCompatibilityTypeStrings[GameCardCompatibilityType_Count] = {
-        [GameCardCompatibilityType_Normal] = "Normal",
-        [GameCardCompatibilityType_Terra]  = "Terra"
-    };
-    
     static const char *GameCardFwVersionStrings[GameCardFwVersion_Count] = {
         [GameCardFwVersion_ForDev]       = "1.0.0+",
         [GameCardFwVersion_Since100NUP]  = "1.0.0+",
@@ -39,6 +34,11 @@ namespace nxdt::views
         [GameCardFwVersion_Since900NUP]  = "9.0.0+",
         [GameCardFwVersion_Since1100NUP] = "11.0.0+",
         [GameCardFwVersion_Since1200NUP] = "12.0.0+"
+    };
+    
+    static const char *GameCardCompatibilityTypeStrings[GameCardCompatibilityType_Count] = {
+        [GameCardCompatibilityType_Normal] = "Normal",
+        [GameCardCompatibilityType_Terra]  = "Terra"
     };
     
     GameCardTable::GameCardTable(void) : brls::Table() { }
@@ -125,39 +125,27 @@ namespace nxdt::views
                     break;
                 case GameCardStatus_InsertedAndInfoLoaded:
                 {
-                    u64 size = 0;
                     GameCardInfo card_info = {0};
-                    char strbuf[0x40] = {0};
-                    
-                    gamecardGetRomCapacity(&size);
-                    utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));
-                    this->capacity->setValue(std::string(strbuf));
-                    
-                    gamecardGetTotalSize(&size);
-                    utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));
-                    this->total_size->setValue(std::string(strbuf));
-                    
-                    gamecardGetTrimmedSize(&size);
-                    utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));
-                    this->trimmed_size->setValue(std::string(strbuf));
-                    
                     gamecardGetDecryptedCardInfoArea(&card_info);
                     
-                    snprintf(strbuf, sizeof(strbuf), "%u.%u.%u-%u.%u (v%u)", card_info.upp_version.major, card_info.upp_version.minor, card_info.upp_version.micro, \
-                             card_info.upp_version.major_relstep, card_info.upp_version.minor_relstep, card_info.upp_version.value);
-                    this->update_version->setValue(std::string(strbuf));
+                    this->capacity->setValue(this->GetFormattedSizeString(&gamecardGetRomCapacity));
+                    this->total_size->setValue(this->GetFormattedSizeString(&gamecardGetTotalSize));
+                    this->trimmed_size->setValue(this->GetFormattedSizeString(&gamecardGetTrimmedSize));
                     
-                    snprintf(strbuf, sizeof(strbuf), "%lu (%s)", card_info.fw_version, \
-                             card_info.fw_version >= GameCardFwVersion_Count ? "generic/unknown"_i18n.c_str() : GameCardFwVersionStrings[card_info.fw_version]);
-                    this->lafw_version->setValue(std::string(strbuf));
+                    const VersionType1 *upp_version = &(card_info.upp_version);
+                    this->update_version->setValue(fmt::format("{}.{}.{}-{}.{} (v{})", upp_version->major, upp_version->minor, upp_version->micro, upp_version->major_relstep, \
+                                                                                       upp_version->minor_relstep, upp_version->value));
                     
-                    snprintf(strbuf, sizeof(strbuf), "%u.%u.%u-%u (v%u)", card_info.fw_mode.major, card_info.fw_mode.minor, card_info.fw_mode.micro, card_info.fw_mode.relstep, card_info.fw_mode.value);
-                    this->sdk_version->setValue(std::string(strbuf));
+                    u64 fw_version = card_info.fw_version;
+                    this->lafw_version->setValue(fmt::format("{} ({})", fw_version, fw_version >= GameCardFwVersion_Count ? "generic/unknown"_i18n : GameCardFwVersionStrings[fw_version]));
                     
-                    snprintf(strbuf, sizeof(strbuf), "%s (%u)", \
-                             card_info.compatibility_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n.c_str() : GameCardCompatibilityTypeStrings[card_info.compatibility_type], \
-                             card_info.compatibility_type);
-                    this->compatibility_type->setValue(std::string(strbuf));
+                    const VersionType2 *fw_mode = &(card_info.fw_mode);
+                    this->sdk_version->setValue(fmt::format("{}.{}.{}-{} (v{})", fw_mode->major, fw_mode->minor, fw_mode->micro, fw_mode->relstep, fw_mode->value));
+                    
+                    u8 compatibility_type = card_info.compatibility_type;
+                    this->compatibility_type->setValue(fmt::format("{} ({})", \
+                                                                   compatibility_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n : GameCardCompatibilityTypeStrings[compatibility_type], \
+                                                                   compatibility_type));
                     
                     this->changeLayerWrapper(this->list);
                     
@@ -213,5 +201,16 @@ namespace nxdt::views
         this->changeLayer(index);
         this->invalidate(true);
         this->view_index = index;
+    }
+    
+    std::string GameCardTab::GetFormattedSizeString(GameCardSizeFunc func)
+    {
+        u64 size = 0;
+        char strbuf[0x40] = {0};
+        
+        func(&size);
+        utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));
+        
+        return std::string(strbuf);
     }
 }

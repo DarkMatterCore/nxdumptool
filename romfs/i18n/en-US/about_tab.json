@@ -1,5 +1,20 @@
-{
+﻿{
     "description": "Nintendo Switch Dump Tool",
-    "copyright": "Licensed under GPLv3+\n\u00A9 2020 - 2021 {0}",
-    "links": "\uE016  Source code is available at: {0}.\n\uE016  {1} is powered by Borealis, a hardware-accelerated UI library: {2}.\n\uE016  USB Mass Storage device support is powered by libusbhsfs: {3}."
+    
+    "copyright": "Licensed under GPLv3+\n\u00A9 2020 - 2021 {0}\n{1}",
+    
+    "dependencies": {
+        "header": "Dependencies",
+        "value": "\uE016  {0} is powered by Borealis, a hardware-accelerated UI library: {1}.\n\uE016  USB Mass Storage device support is powered by libusbhsfs: {2}.\n\uE016  FatFs is used to mount FAT volumes from the eMMC storage: {3}.\n\uE016  LZ4 is used to decompress NSO binaries: {4}."
+    },
+    
+    "acknowledgments": {
+        "header": "Acknowledgments",
+        "value": "\uE016  Switchbrew and libnx contributors.\n\uE016  SciresM, for hactool and Atmosphère-NX.\n\uE016  shchmue, for Lockpick and its runtime key-collection algorithm, as well as helping in reverse engineering tasks.\n\uE016  Adubbz, for Tinfoil and its ES service bindings.\n\uE016  RattletraPM, for the awesome icon.\n\uE016  Whovian9369, for being a key piece throughout the whole development by providing with lots of testing and cool ideas.\n\uE016  0Liam and Shadów, for their tremendous help in understanding Nintendo Switch file and data formats.\n\uE016  The folks from NSWDB.COM and No-Intro.org, for being kind enough to put up public APIs to perform online checksum lookups.\n\uE016  The folks at the nxdumptool Discord server.\n\uE016  The Comfy Boyes, for always being awesome and supportive. You know who you are.\n\uE016  My girlfriend, for always being by my side and motivating me to keep working on all my projects. I love you. \u2665\n\uE016  And, at last but not least, you! Thank you for using my work!"
+    },
+    
+    "links": {
+        "header": "Additional links and resources",
+        "value": "\uE016  Discord server: {0}."
+    }
 }

@@ -43,6 +43,8 @@ namespace nxdt::views
     /* Extended class to switch between ErrorFrame and List views whenever the gamecard status event is triggered. */
     class GameCardTab: public brls::LayerView
     {
+        typedef bool (*GameCardSizeFunc)(u64 *size);
+        
         private:
             nxdt::tasks::GameCardTask *gc_status_task = nullptr;
             nxdt::tasks::GameCardStatusEvent::Subscription gc_status_task_sub;
@@ -73,6 +75,8 @@ namespace nxdt::views
             
             void addLayerWrapper(brls::View* view);
             void changeLayerWrapper(brls::View* view);
+            
+            std::string GetFormattedSizeString(GameCardSizeFunc func);
         
         public:
             GameCardTab(nxdt::tasks::GameCardTask *gc_status_task);

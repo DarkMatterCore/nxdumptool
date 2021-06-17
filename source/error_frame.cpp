@@ -83,7 +83,7 @@ namespace nxdt::views
         this->label->invalidate(true);
         
         this->label->setBoundaries(
-            this->x + this->width / 2 - this->label->getWidth() / 2,
+            this->x + (this->width - this->label->getWidth()) / 2,
             this->y + (this->height - style->AppletFrame.footerHeight) / 2,
             this->label->getWidth(),
             this->label->getHeight());

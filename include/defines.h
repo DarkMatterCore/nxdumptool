@@ -74,5 +74,9 @@
 
 #define BOREALIS_URL                    "https://github.com/natinusala/borealis"
 #define LIBUSBHSFS_URL                  "https://github.com/DarkMatterCore/libusbhsfs"
+#define FATFS_URL                       "http://elm-chan.org/fsw/ff/00index_e.html"
+#define LZ4_URL                         "https://github.com/lz4/lz4"
+
+#define DISCORD_SERVER_URL              "https://discord.gg/SCbbcQx"
 
 #endif  /* __DEFINES_H__ */
