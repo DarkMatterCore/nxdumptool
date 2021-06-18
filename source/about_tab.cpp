@@ -29,7 +29,7 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    AboutTabLabel::AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center, bool multiline) : brls::Label(labelStyle, text, multiline)
+    AboutTabLabel::AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center) : brls::Label(labelStyle, text, true)
     {
         if (center) this->setHorizontalAlign(NVG_ALIGN_CENTER);
     }
@@ -48,6 +48,7 @@ namespace nxdt::views
     
     AboutTab::AboutTab(void) : brls::List()
     {
+        /* Set custom spacing. */
         this->setSpacing(this->getSpacing() / 2);
         this->setMarginBottom(20);
         
@@ -59,28 +60,28 @@ namespace nxdt::views
         this->logo->setOpacity(0.3F);
         
         /* Description. */
-        AboutTabLabel* description = new AboutTabLabel(brls::LabelStyle::CRASH, "about_tab/description"_i18n, true);
-        this->addView(description);
+        this->addView(new AboutTabLabel(brls::LabelStyle::CRASH, "about_tab/description"_i18n, true));
         
         /* Copyright. */
-        brls::Label* copyright = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("about_tab/copyright"_i18n, APP_AUTHOR, GITHUB_REPOSITORY_URL), true);
+        brls::Label *copyright = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("about_tab/copyright"_i18n, APP_AUTHOR, GITHUB_REPOSITORY_URL), true);
         copyright->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->addView(copyright);
         
         /* Dependencies. */
         this->addView(new brls::Header("about_tab/dependencies/header"_i18n));
-        brls::Label* dependencies = new brls::Label(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/value"_i18n, APP_TITLE, BOREALIS_URL, LIBUSBHSFS_URL, FATFS_URL, LZ4_URL), true);
-        this->addView(dependencies);
+        this->addView(new brls::Label(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/line_00"_i18n, APP_TITLE, BOREALIS_URL), true));
+        this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/line_01"_i18n, LIBUSBHSFS_URL)));
+        this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/line_02"_i18n, FATFS_URL)));
+        this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/line_03"_i18n, LZ4_URL)));
         
         /* Acknowledgments. */
         this->addView(new brls::Header("about_tab/acknowledgments/header"_i18n));
-        AboutTabLabel* acknowledgments = new AboutTabLabel(brls::LabelStyle::SMALL, "about_tab/acknowledgments/value"_i18n);
-        this->addView(acknowledgments);
+        for(int i = 0; i < 8; i++) this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr(fmt::format("about_tab/acknowledgments/line_{:02d}", i)), false));
+        for(int i = 8; i < 12; i++) this->addView(new brls::Label(brls::LabelStyle::SMALL, i18n::getStr(fmt::format("about_tab/acknowledgments/line_{:02d}", i)), true));
         
         /* Additional links and resources. */
         this->addView(new brls::Header("about_tab/links/header"_i18n));
-        AboutTabLabel* links = new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/links/value"_i18n, DISCORD_SERVER_URL));
-        this->addView(links);
+        this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/links/line_00"_i18n, DISCORD_SERVER_URL)));
     }
     
     AboutTab::~AboutTab(void)

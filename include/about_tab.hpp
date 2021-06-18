@@ -36,7 +36,7 @@ namespace nxdt::views
             void onFocusGained(void) override;
         
         public:
-            AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center = false, bool multiline = true);
+            AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center = false);
     };
     
     class AboutTab: public brls::List
