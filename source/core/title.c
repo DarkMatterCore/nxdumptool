@@ -97,8 +97,14 @@ static const char *g_filenameTypeStrings[] = {
 static const TitleSystemEntry g_systemTitles[] = {
     /* System modules. */
     /* Meta + Program NCAs. */
+    { 0x0100000000000000, "fs" },                               ///< Unused, bundled with kernel.
+    { 0x0100000000000001, "ldr" },                              ///< Unused, bundled with kernel.
+    { 0x0100000000000002, "ncm" },                              ///< Unused, bundled with kernel.
+    { 0x0100000000000003, "pm" },                               ///< Unused, bundled with kernel.
+    { 0x0100000000000004, "sm" },                               ///< Unused, bundled with kernel.
+    { 0x0100000000000005, "boot" },                             ///< Unused, bundled with kernel.
     { 0x0100000000000006, "usb" },
-    { 0x0100000000000007, "tma" },
+    { 0x0100000000000007, "htc" },
     { 0x0100000000000008, "boot2" },
     { 0x0100000000000009, "settings" },
     { 0x010000000000000A, "bus" },
@@ -131,6 +137,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000025, "nim" },
     { 0x0100000000000026, "cec" },
     { 0x0100000000000027, "tspm" },
+    { 0x0100000000000028, "spl" },                              ///< Unused, bundled with kernel.
     { 0x0100000000000029, "lbl" },
     { 0x010000000000002A, "btm" },
     { 0x010000000000002B, "erpt" },
@@ -203,7 +210,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000829, "PlatformConfigCalcio" },
     { 0x0100000000000830, "NgWordT" },
     { 0x0100000000000831, "PlatformConfigAula" },
-    { 0x0100000000000832, "CradleFirmwareAula" },   ///< Placeholder.
+    { 0x0100000000000832, "CradleFirmwareAula" },               ///< Placeholder.
     
     /* System applets. */
     /* Meta + Program NCAs. */
@@ -229,17 +236,36 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000001013, "myPage" },
     { 0x0100000000001014, "PlayReport" },
     { 0x0100000000001015, "MaintenanceMenu" },
+    { 0x0100000000001016, "application_install" },              ///< Placeholder.
+    { 0x0100000000001018, "systemupdate_dl_throughput" },       ///< Placeholder.
+    { 0x0100000000001019, "volume_update"},                     ///< Placeholder.
     { 0x010000000000101A, "gift" },
     { 0x010000000000101B, "DummyECApplet" },
     { 0x010000000000101C, "userMigration" },
     { 0x010000000000101D, "EncounterSys" },
+    { 0x010000000000101E, "pearljam" },                         ///< Placeholder.
+    { 0x010000000000101F, "nim_glue_unknown" },                 ///< Placeholder.
     { 0x0100000000001020, "story" },
+    { 0x0100000000001021, "systemupdate_pass" },                ///< Placeholder.
     { 0x0100000000001023, "statistics" },
+    { 0x0100000000001024, "syslog" },
+    { 0x0100000000001025, "am_unknown_1" },                     ///< Placeholder.
+    { 0x0100000000001026, "olsc_unknown" },                     ///< Placeholder.
+    { 0x0100000000001027, "account_unknown" },                  ///< Placeholder.
+    { 0x0100000000001028, "ns_unknown_1" },                     ///< Placeholder.
+    { 0x010000000000102A, "am_unknown_2" },                     ///< Placeholder.
+    { 0x010000000000102B, "glue_unknown_1" },                   ///< Placeholder.
+    { 0x010000000000102E, "blacklist" },
+    { 0x010000000000102F, "content_delivery" },
+    { 0x0100000000001031, "ns_unknown_2" },                     ///< Placeholder.
+    { 0x0100000000001032, "glue_unknown_2" },                   ///< Placeholder.
     { 0x0100000000001033, "promotion" },
+    { 0x0100000000001034, "ngct_unknown" },                     ///< Placeholder.
+    { 0x0100000000001037, "nim_unknown" },                      ///< Placeholder.
     { 0x0100000000001038, "sample" },
     { 0x0100000000001FFF, "EndOceanProgramId" },
     
-    /* System debug applets. */
+    /* Development system applets. */
     { 0x0100000000002000, "A2BoardFunction" },
     { 0x0100000000002001, "A3Wireless" },
     { 0x0100000000002002, "C1LcdAndKey" },
@@ -330,23 +356,85 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000002130, "LuciaConverter" },
     { 0x0100000000002133, "CalDumper" },
     { 0x0100000000002134, "AnalogStickEvaluationTool" },
+    { 0x010000000000216D, "ExhibitionSaveDataSnapshot" },       ///< Placeholder.
+    { 0x0100000000002178, "SecureStartupSettings" },            ///< Placeholder.
     
-    /* System debug modules. */
+    /* Debug system modules. */
     { 0x0100000000003002, "DummyProcess" },
     { 0x0100000000003003, "DebugMonitor0" },
     { 0x0100000000003004, "SystemHelloWorld" },
     
-    /* Target tools. */
+    /* Development system modules. */
+    { 0x010000000000B120, "nvdbgsvc" },
+    { 0x010000000000B14A, "manu" },
+    { 0x010000000000B14B, "ManuUsbLoopBack" },
+    { 0x010000000000B1B8, "DevFwdbgHbPackage" },
+    { 0x010000000000B1B9, "DevFwdbgUsbPackage" },
+    { 0x010000000000B1BA, "ProdFwdbgPackage" },
+    { 0x010000000000B22A, "scs" },
+    { 0x010000000000B22B, "ControllerFirmwareDebug" },
+    { 0x010000000000B240, "htc" },
+    
+    /* Bdk system modules. */
+    { 0x010000000000C600, "BdkSample01" },
+    { 0x010000000000C601, "BdkSample02" },
+    { 0x010000000000C602, "BdkSample03" },
+    { 0x010000000000C603, "BdkSample04" },
+    
+    /* Micro system modules. */
+    { 0x010000000000D609, "dmnt.gen2" },
+    { 0x010000000000D60A, "msm_unknown_1" },                    ///< Placeholder.
+    { 0x010000000000D60B, "msm_unknown_3" },                    ///< Placeholder.
+    { 0x010000000000D60C, "msm_unknown_3" },                    ///< Placeholder.
+    { 0x010000000000D60D, "msm_unknown_4" },                    ///< Placeholder.
+    { 0x010000000000D60E, "msm_unknown_5" },                    ///< Placeholder.
+    { 0x010000000000D610, "msm_unknown_6" },                    ///< Placeholder.
+    { 0x010000000000D611, "msm_unknown_7" },                    ///< Placeholder.
+    { 0x010000000000D612, "msm_unknown_8" },                    ///< Placeholder.
+    { 0x010000000000D613, "msm_unknown_9" },                    ///< Placeholder.
+    { 0x010000000000D614, "msm_unknown_10" },                   ///< Placeholder.
+    { 0x010000000000D615, "msm_unknown_11" },                   ///< Placeholder.
+    { 0x010000000000D616, "msm_unknown_12" },                   ///< Placeholder.
+    { 0x010000000000D617, "msm_unknown_13" },                   ///< Placeholder.
+    { 0x010000000000D619, "msm_unknown_14" },                   ///< Placeholder.
+    { 0x010000000000D623, "DevServer" },
+    
+    /* System applications. */
+    { 0x01008BB00013C000, "flog" },
+    { 0x0100069000078000, "RetailInteractiveDisplayMenu" },
+    { 0x010000B003486000, "AudioUsbMicDebugTool" },
+    { 0x0100458001E04000, "BcatTestApp01" },
+    { 0x0100F910020F8000, "BcatTestApp02" },
+    { 0x0100B7D0020FC000, "BcatTestApp03" },
+    { 0x0100132002100000, "BcatTestApp04" },
+    { 0x0100935002116000, "BcatTestApp05" },
+    { 0x0100DA4002130000, "BcatTestApp06" },
+    { 0x0100B0F002104000, "BcatTestApp07" },
+    { 0x010051E002132000, "BcatTestApp08" },
+    { 0x01004CB0015C8000, "BcatTestApp09" },
+    { 0x01009720015CA000, "BcatTestApp10" },
+    { 0x01002F20015C6000, "BcatTestApp11" },
+    { 0x0100204001F90000, "BcatTestApp12" },
+    { 0x0100060001F92000, "BcatTestApp13" },
+    { 0x0100C26001F94000, "BcatTestApp14" },
+    { 0x0100462001F96000, "BcatTestApp15" },
+    { 0x01005C6001F98000, "BcatTestApp16" },
+    { 0x010070000E3C0000, "EncounterUsr" },
+    { 0x010086000E49C000, "EncounterUsrDummy" },
+    { 0x0100810002D5A000, "ShopMonitaringTool" },
+    { 0x010023D002B98000, "DeltaStress" },
+    
+    /* Pre-release system applets. */
     { 0x1000000000000001, "SystemInitializer" },
     { 0x1000000000000004, "CalWriter" },
     { 0x1000000000000005, "DevMenuCommand" },
     { 0x1000000000000006, "SettingsManager" },
-    { 0x1000000000000007, "ApplicationLauncer" },   ///< Also DevMenu?
+    { 0x1000000000000007, "DevMenu" },
     { 0x100000000000000B, "SnapShotDumper" },
     { 0x100000000000000C, "SystemUpdater" },
     { 0x100000000000000E, "ControllerFirmwareUpdater" },
     
-    /* Prototype titles. */
+    /* Pre-release system modules. */
     { 0x1000000000000201, "usb" },
     { 0x1000000000000202, "tma" },
     { 0x1000000000000203, "boot2" },
@@ -376,49 +464,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x100000000000021F, "nfc" },
     { 0x1000000000000220, "psc" },
     { 0x1000000000000221, "capsrv" },
-    { 0x1000000000000222, "am" },
-    
-    /* Factory system modules. */
-    { 0x010000000000B120, "nvdbgsvc" },
-    { 0x010000000000B14A, "manu" },
-    { 0x010000000000B14B, "ManuUsbLoopBack" },
-    { 0x010000000000B1B8, "DevFwdbgHbPackage" },
-    { 0x010000000000B1B9, "DevFwdbgUsbPackage" },
-    { 0x010000000000B1BA, "ProdFwdbgPackage" },
-    { 0x010000000000B22A, "scs" },
-    { 0x010000000000B22B, "ControllerFirmwareDebug" },
-    { 0x010000000000B240, "htc" },
-    { 0x010000000000C600, "BdkSample01" },
-    { 0x010000000000C601, "BdkSample02" },
-    { 0x010000000000C602, "BdkSample03" },
-    { 0x010000000000C603, "BdkSample04" },
-    { 0x010000000000D609, "dmnt.gen2" },
-    { 0x010000000000D623, "DevServer" },
-    
-    /* System applications. */
-    { 0x01008BB00013C000, "flog" },
-    { 0x0100069000078000, "RetailInteractiveDisplayMenu" },
-    { 0x010000B003486000, "AudioUsbMicDebugTool" },
-    { 0x0100458001E04000, "BcatTestApp01" },
-    { 0x0100F910020F8000, "BcatTestApp02" },
-    { 0x0100B7D0020FC000, "BcatTestApp03" },
-    { 0x0100132002100000, "BcatTestApp04" },
-    { 0x0100935002116000, "BcatTestApp05" },
-    { 0x0100DA4002130000, "BcatTestApp06" },
-    { 0x0100B0F002104000, "BcatTestApp07" },
-    { 0x010051E002132000, "BcatTestApp08" },
-    { 0x01004CB0015C8000, "BcatTestApp09" },
-    { 0x01009720015CA000, "BcatTestApp10" },
-    { 0x01002F20015C6000, "BcatTestApp11" },
-    { 0x0100204001F90000, "BcatTestApp12" },
-    { 0x0100060001F92000, "BcatTestApp13" },
-    { 0x0100C26001F94000, "BcatTestApp14" },
-    { 0x0100462001F96000, "BcatTestApp15" },
-    { 0x01005C6001F98000, "BcatTestApp16" },
-    { 0x010070000E3C0000, "EncounterUsr" },
-    { 0x010086000E49C000, "EncounterUsrDummy" },
-    { 0x0100810002D5A000, "ShopMonitaringTool" },
-    { 0x010023D002B98000, "DeltaStress" }
+    { 0x1000000000000222, "am" }
 };
 
 static const u32 g_systemTitlesCount = MAX_ELEMENTS(g_systemTitles);
