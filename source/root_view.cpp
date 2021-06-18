@@ -19,7 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <nxdt_includes.h>
+#include <nxdt_utils.h>
 #include <root_view.hpp>
 #include <gamecard_tab.hpp>
 //#include <user_titles_tab.hpp>
@@ -33,7 +33,11 @@ namespace nxdt::views
 {
     RootView::RootView(void) : brls::TabFrame()
     {
+        /* Check if we're running under applet mode. */
+        this->applet_mode = utilsAppletModeCheck();
+        
         /* Start background tasks. */
+        this->status_info_task = new nxdt::tasks::StatusInfoTask();
         this->gc_status_task = new nxdt::tasks::GameCardTask();
         this->title_task = new nxdt::tasks::TitleTask();
         this->ums_task = new nxdt::tasks::UmsTask();

@@ -23,7 +23,7 @@
         "dump_options": "Dump options",
         
         "dump_card_image": {
-            "label": "Dump gamecard image",
+            "label": "Dump gamecard image (XCI)",
             "description": "Generates a raw gamecard image. This is the option most people will want to use."
         },
         

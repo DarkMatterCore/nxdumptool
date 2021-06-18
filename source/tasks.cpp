@@ -26,6 +26,80 @@
 
 namespace nxdt::tasks
 {
+    /* Status info task. */
+    
+    StatusInfoTask::StatusInfoTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL * 10)
+    {
+        brls::RepeatingTask::start();
+        brls::Logger::debug("Status info task started.");
+    }
+    
+    StatusInfoTask::~StatusInfoTask(void)
+    {
+        /* Clear current time string. */
+        this->cur_time.clear();
+        
+        brls::Logger::debug("Status info task stopped.");
+    }
+    
+    void StatusInfoTask::run(retro_time_t current_time)
+    {
+        brls::RepeatingTask::run(current_time);
+        
+        /* Get current time. */
+        bool is_am = true;
+        time_t unix_time = time(NULL);
+        struct tm *timeinfo = localtime(&unix_time);
+        
+        if (timeinfo->tm_hour > 12)
+        {
+            timeinfo->tm_hour -= 12;
+            is_am = false;
+        } else
+        if (!timeinfo->tm_hour)
+        {
+            timeinfo->tm_hour = 12;
+        }
+        
+        this->cur_time.clear();
+        fmt::format_to(std::back_inserter(this->cur_time), "{:02d}:{:02d}:{:02d} {}", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, is_am ? "AM" : "PM");
+        
+        /* Get battery stats. */
+        psmGetBatteryChargePercentage(&(this->charge_percentage));
+        psmGetChargerType(&(this->charger_type));
+        
+        /* Get network connection status. */
+        Result rc = nifmGetInternetConnectionStatus(&(this->connection_type), &(this->signal_strength), &(this->connection_status));
+        if (R_FAILED(rc))
+        {
+            this->connection_type = (NifmInternetConnectionType)0;
+            this->signal_strength = 0;
+            this->connection_status = (NifmInternetConnectionStatus)0;
+        }
+        
+        this->status_info_event.fire();
+    }
+    
+    std::string StatusInfoTask::GetCurrentTimeString(void)
+    {
+        return this->cur_time;
+    }
+    
+    void StatusInfoTask::GetBatteryStats(u32 *out_charge_percentage, PsmChargerType *out_charger_type)
+    {
+        if (!out_charge_percentage || !out_charger_type) return;
+        *out_charge_percentage = this->charge_percentage;
+        *out_charger_type = this->charger_type;
+    }
+    
+    void StatusInfoTask::GetNetworkStats(NifmInternetConnectionType *out_connection_type, u32 *out_signal_strength, NifmInternetConnectionStatus *out_connection_status)
+    {
+        if (!out_connection_type || !out_signal_strength || !out_connection_status) return;
+        *out_connection_type = this->connection_type;
+        *out_signal_strength = this->signal_strength;
+        *out_connection_status = this->connection_status;
+    }
+    
     /* Gamecard task. */
     
     GameCardTask::GameCardTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)

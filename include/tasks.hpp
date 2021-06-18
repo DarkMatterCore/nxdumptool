@@ -44,6 +44,43 @@ namespace nxdt::tasks
     /* Custom vector type used to hold UMS devices. */
     typedef std::vector<UsbHsFsDevice> UmsDeviceVector;
     
+    /* Status info task. */
+    class StatusInfoTask: public brls::RepeatingTask
+    {
+        private:
+            VoidEvent status_info_event;
+            
+            std::string cur_time = "";
+            
+            u32 charge_percentage = 0;
+            PsmChargerType charger_type = PsmChargerType_Unconnected;
+            
+            NifmInternetConnectionType connection_type = (NifmInternetConnectionType)0;
+            u32 signal_strength = 0;
+            NifmInternetConnectionStatus connection_status = (NifmInternetConnectionStatus)0;
+        
+        protected:
+            void run(retro_time_t current_time) override;
+        
+        public:
+            StatusInfoTask(void);
+            ~StatusInfoTask(void);
+            
+            std::string GetCurrentTimeString(void);
+            void GetBatteryStats(u32 *out_charge_percentage, PsmChargerType *out_charger_type);
+            void GetNetworkStats(NifmInternetConnectionType *out_connection_type, u32 *out_signal_strength, NifmInternetConnectionStatus *out_connection_status);
+            
+            ALWAYS_INLINE VoidEvent::Subscription RegisterListener(VoidEvent::Callback cb)
+            {
+                return this->status_info_event.subscribe(cb);
+            }
+            
+            ALWAYS_INLINE void UnregisterListener(VoidEvent::Subscription subscription)
+            {
+                this->status_info_event.unsubscribe(subscription);
+            }
+    };
+    
     /* Gamecard task. */
     class GameCardTask: public brls::RepeatingTask
     {

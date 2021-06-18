@@ -31,6 +31,9 @@ namespace nxdt::views
     class RootView: public brls::TabFrame
     {
         private:
+            bool applet_mode = false;
+            
+            nxdt::tasks::StatusInfoTask *status_info_task = nullptr;
             nxdt::tasks::GameCardTask *gc_status_task = nullptr;
             nxdt::tasks::TitleTask *title_task = nullptr;
             nxdt::tasks::UmsTask *ums_task = nullptr;
