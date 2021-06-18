@@ -58,6 +58,7 @@ namespace nxdt::tasks
             NifmInternetConnectionType connection_type = (NifmInternetConnectionType)0;
             u32 signal_strength = 0;
             NifmInternetConnectionStatus connection_status = (NifmInternetConnectionStatus)0;
+            char *ip_addr = NULL;
         
         protected:
             void run(retro_time_t current_time) override;
@@ -68,7 +69,7 @@ namespace nxdt::tasks
             
             std::string GetCurrentTimeString(void);
             void GetBatteryStats(u32 *out_charge_percentage, PsmChargerType *out_charger_type);
-            void GetNetworkStats(NifmInternetConnectionType *out_connection_type, u32 *out_signal_strength, NifmInternetConnectionStatus *out_connection_status);
+            void GetNetworkStats(NifmInternetConnectionType *out_connection_type, u32 *out_signal_strength, NifmInternetConnectionStatus *out_connection_status, char **out_ip_addr);
             
             ALWAYS_INLINE VoidEvent::Subscription RegisterListener(VoidEvent::Callback cb)
             {

@@ -21,14 +21,18 @@
 
 #include <nxdt_includes.h>
 #include <tasks.hpp>
+#include <arpa/inet.h>
 
 #define NXDT_TASK_INTERVAL  100 /* 100 ms. */
+
+namespace i18n = brls::i18n;    /* For getStr(). */
+using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::tasks
 {
     /* Status info task. */
     
-    StatusInfoTask::StatusInfoTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL * 10)
+    StatusInfoTask::StatusInfoTask(void) : brls::RepeatingTask(1000)
     {
         brls::RepeatingTask::start();
         brls::Logger::debug("Status info task started.");
@@ -61,8 +65,11 @@ namespace nxdt::tasks
             timeinfo->tm_hour = 12;
         }
         
+        timeinfo->tm_mon++;
+        timeinfo->tm_year += 1900;
+        
         this->cur_time.clear();
-        fmt::format_to(std::back_inserter(this->cur_time), "{:02d}:{:02d}:{:02d} {}", timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, is_am ? "AM" : "PM");
+        this->cur_time = i18n::getStr("root_view/date"_i18n, timeinfo->tm_year, timeinfo->tm_mon, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, is_am ? "AM" : "PM");
         
         /* Get battery stats. */
         psmGetBatteryChargePercentage(&(this->charge_percentage));
@@ -70,11 +77,21 @@ namespace nxdt::tasks
         
         /* Get network connection status. */
         Result rc = nifmGetInternetConnectionStatus(&(this->connection_type), &(this->signal_strength), &(this->connection_status));
-        if (R_FAILED(rc))
+        if (R_SUCCEEDED(rc))
         {
+            if (this->connection_type && this->connection_status == NifmInternetConnectionStatus_Connected)
+            {
+                struct in_addr addr = { .s_addr = 0 };
+                nifmGetCurrentIpAddress(&(addr.s_addr));
+                this->ip_addr = inet_ntoa(addr);
+            } else {
+                this->ip_addr = NULL;
+            }
+        } else {
             this->connection_type = (NifmInternetConnectionType)0;
             this->signal_strength = 0;
             this->connection_status = (NifmInternetConnectionStatus)0;
+            this->ip_addr = NULL;
         }
         
         this->status_info_event.fire();
@@ -92,12 +109,13 @@ namespace nxdt::tasks
         *out_charger_type = this->charger_type;
     }
     
-    void StatusInfoTask::GetNetworkStats(NifmInternetConnectionType *out_connection_type, u32 *out_signal_strength, NifmInternetConnectionStatus *out_connection_status)
+    void StatusInfoTask::GetNetworkStats(NifmInternetConnectionType *out_connection_type, u32 *out_signal_strength, NifmInternetConnectionStatus *out_connection_status, char **out_ip_addr)
     {
-        if (!out_connection_type || !out_signal_strength || !out_connection_status) return;
+        if (!out_connection_type || !out_signal_strength || !out_connection_status || !out_ip_addr) return;
         *out_connection_type = this->connection_type;
         *out_signal_strength = this->signal_strength;
         *out_connection_status = this->connection_status;
+        *out_ip_addr = this->ip_addr;
     }
     
     /* Gamecard task. */

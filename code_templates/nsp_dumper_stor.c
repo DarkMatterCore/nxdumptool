@@ -521,7 +521,7 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
     
     utilsCreateDirectoryTree(path, false);
     
-    if (nsp_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(path))
+    if (!ums_device && nsp_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(path))
     {
         consolePrint("create concatenation file failed\n");
         goto end;
@@ -742,7 +742,7 @@ end:
     if (fd)
     {
         fclose(fd);
-        if (!success) utilsRemoveConcatenationFile(path);
+        if (!ums_device && !success) utilsRemoveConcatenationFile(path);
         utilsCommitSdCardFileSystemChanges();
     }
     

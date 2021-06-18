@@ -1,4 +1,10 @@
 {
+    "applet_mode": "\uE8B2  Applet Mode  \uE8B2",
+    
+    "date": "{1:02d}/{2:02d}/{0} {3:02d}:{4:02d}:{5:02d} {6}",
+    
+    "not_connected": "Not connected",
+    
     "tabs": {
         "gamecard": "Gamecard",
         "user_titles": "User titles",

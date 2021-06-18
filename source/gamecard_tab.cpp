@@ -102,7 +102,7 @@ namespace nxdt::views
         
         this->addLayerWrapper(this->list);
         
-        /* Setup gamecard status task. */
+        /* Subscribe to gamecard status event. */
         this->gc_status_task_sub = this->gc_status_task->RegisterListener([this](GameCardStatus gc_status) {
             if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->changeLayerWrapper(this->error_frame);
             
