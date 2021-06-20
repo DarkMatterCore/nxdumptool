@@ -25,15 +25,15 @@
 #define __GAMECARD_TAB_HPP__
 
 #include "tasks.hpp"
-#include "error_layer_view.hpp"
+#include "layered_error_frame.hpp"
 #include "focusable_item.hpp"
 
 namespace nxdt::views
 {
     /* Instantiate the template for our class. */
-    typedef ErrorLayerView<nxdt::tasks::GameCardTask, nxdt::tasks::GameCardStatusEvent> GameCardErrorLayerView;
+    typedef LayeredErrorFrame<nxdt::tasks::GameCardTask, nxdt::tasks::GameCardStatusEvent> GameCardLayeredErrorFrame;
     
-    class GameCardTab: public GameCardErrorLayerView
+    class GameCardTab: public GameCardLayeredErrorFrame
     {
         typedef bool (*GameCardSizeFunc)(u64 *size);
         

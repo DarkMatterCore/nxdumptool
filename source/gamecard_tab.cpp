@@ -41,7 +41,7 @@ namespace nxdt::views
         [GameCardCompatibilityType_Terra]  = "Terra"
     };
     
-    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : GameCardErrorLayerView(gc_status_task)
+    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : GameCardLayeredErrorFrame(gc_status_task)
     {
         /* Error frame. */
         this->SetErrorFrameMessage("gamecard_tab/error_frame/not_inserted"_i18n);

@@ -1,5 +1,5 @@
 /*
- * error_layer_view.hpp
+ * layered_error_frame.hpp
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,8 +21,8 @@
 
 #pragma once
 
-#ifndef __ERROR_LAYER_VIEW_HPP__
-#define __ERROR_LAYER_VIEW_HPP__
+#ifndef __LAYERED_ERROR_FRAME_HPP__
+#define __LAYERED_ERROR_FRAME_HPP__
 
 #include "error_frame.hpp"
 
@@ -30,7 +30,7 @@ namespace nxdt::views
 {
     /* Extended class to switch between ErrorFrame and List views whenever an event is triggered. */
     template<typename TaskType, typename EventType>
-    class ErrorLayerView: public brls::LayerView
+    class LayeredErrorFrame: public brls::LayerView
     {
         private:
             TaskType *task = nullptr;
@@ -50,12 +50,12 @@ namespace nxdt::views
             void RegisterListener(typename EventType::Callback cb);
         
         public:
-            ErrorLayerView(TaskType *task);
-            ~ErrorLayerView(void);
+            LayeredErrorFrame(TaskType *task);
+            ~LayeredErrorFrame(void);
     };
     
     template<typename TaskType, typename EventType>
-    ErrorLayerView<TaskType, EventType>::ErrorLayerView(TaskType *task) : brls::LayerView(), task(task)
+    LayeredErrorFrame<TaskType, EventType>::LayeredErrorFrame(TaskType *task) : brls::LayerView(), task(task)
     {
         /* Error frame. */
         this->error_frame = new ErrorFrame();
@@ -69,7 +69,7 @@ namespace nxdt::views
     }
     
     template<typename TaskType, typename EventType>
-    ErrorLayerView<TaskType, EventType>::~ErrorLayerView(void)
+    LayeredErrorFrame<TaskType, EventType>::~LayeredErrorFrame(void)
     {
         /* Unregister task listeners. */
         for(typename EventType::Subscription task_sub : this->task_subs) this->task->UnregisterListener(task_sub);
@@ -82,7 +82,7 @@ namespace nxdt::views
     }
     
     template<typename TaskType, typename EventType>
-    void ErrorLayerView<TaskType, EventType>::SwitchLayerView(bool use_error_frame)
+    void LayeredErrorFrame<TaskType, EventType>::SwitchLayerView(bool use_error_frame)
     {
         if ((use_error_frame && this->layer_view_index == 0) || (!use_error_frame && this->layer_view_index == 1)) return;
         
@@ -106,24 +106,24 @@ namespace nxdt::views
     }
     
     template<typename TaskType, typename EventType>
-    void ErrorLayerView<TaskType, EventType>::SetErrorFrameMessage(std::string msg)
+    void LayeredErrorFrame<TaskType, EventType>::SetErrorFrameMessage(std::string msg)
     {
         this->error_frame->SetMessage(msg);
     }
     
     template<typename TaskType, typename EventType>
-    void ErrorLayerView<TaskType, EventType>::AddListView(brls::View* view)
+    void LayeredErrorFrame<TaskType, EventType>::AddListView(brls::View* view)
     {
         this->list->addView(view);
         this->list_views.push_back(view);
     }
     
     template<typename TaskType, typename EventType>
-    void ErrorLayerView<TaskType, EventType>::RegisterListener(typename EventType::Callback cb)
+    void LayeredErrorFrame<TaskType, EventType>::RegisterListener(typename EventType::Callback cb)
     {
         typename EventType::Subscription task_sub = this->task->RegisterListener(cb);
         this->task_subs.push_back(task_sub);
     }
 }
 
-#endif  /* __ERROR_LAYER_VIEW_HPP__ */
+#endif  /* __LAYERED_ERROR_FRAME_HPP__ */
