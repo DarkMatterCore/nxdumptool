@@ -25,7 +25,7 @@
 #define __GAMECARD_TAB_HPP__
 
 #include "tasks.hpp"
-#include "error_frame.hpp"
+#include "error_layer_view.hpp"
 
 namespace nxdt::views
 {
@@ -40,19 +40,15 @@ namespace nxdt::views
             GameCardTable(void);
     };
     
-    /* Extended class to switch between ErrorFrame and List views whenever the gamecard status event is triggered. */
-    class GameCardTab: public brls::LayerView
+    /* Instantiate the template for our class. */
+    typedef ErrorLayerView<nxdt::tasks::GameCardTask, nxdt::tasks::GameCardStatusEvent> GameCardErrorLayerView;
+    
+    class GameCardTab: public GameCardErrorLayerView
     {
         typedef bool (*GameCardSizeFunc)(u64 *size);
         
         private:
-            nxdt::tasks::GameCardTask *gc_status_task = nullptr;
-            nxdt::tasks::GameCardStatusEvent::Subscription gc_status_task_sub;
             GameCardStatus gc_status = GameCardStatus_NotInserted;
-            
-            ErrorFrame *error_frame = nullptr;
-            
-            brls::List *list = nullptr;
             
             GameCardTable *properties_table = nullptr;
             brls::TableRow *capacity = nullptr;
@@ -70,17 +66,10 @@ namespace nxdt::views
             brls::ListItem *dump_initial_data = nullptr;
             brls::ListItem *dump_hfs_partitions = nullptr;
             
-            std::vector<brls::View*> views;
-            int view_index = -1;
-            
-            void addLayerWrapper(brls::View* view);
-            void changeLayerWrapper(brls::View* view);
-            
             std::string GetFormattedSizeString(GameCardSizeFunc func);
         
         public:
             GameCardTab(nxdt::tasks::GameCardTask *gc_status_task);
-            ~GameCardTab(void);
     };
 }
 

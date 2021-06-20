@@ -55,19 +55,13 @@ namespace nxdt::views
         if (this->hasParent()) this->getParent()->onChildFocusGained(this);
     }
     
-    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : brls::LayerView(), gc_status_task(gc_status_task)
+    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : GameCardErrorLayerView(gc_status_task)
     {
         /* Error frame. */
-        this->error_frame = new ErrorFrame("gamecard_tab/error_frame/not_inserted"_i18n);
-        this->addLayerWrapper(this->error_frame);
-        
-        /* List. */
-        this->list = new brls::List();
-        this->list->setSpacing(this->list->getSpacing() / 2);
-        this->list->setMarginBottom(20);
+        this->SetErrorFrameMessage("gamecard_tab/error_frame/not_inserted"_i18n);
         
         /* Gamecard properties table. */
-        this->list->addView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
+        this->AddListView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
         
         this->properties_table = new GameCardTable();
         this->capacity = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/capacity"_i18n);
@@ -77,51 +71,49 @@ namespace nxdt::views
         this->lafw_version = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/lafw_version"_i18n);
         this->sdk_version = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/sdk_version"_i18n);
         this->compatibility_type = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/compatibility_type"_i18n);
-        this->list->addView(this->properties_table);
+        this->AddListView(this->properties_table);
         
         /* ListItem elements. */
-        this->list->addView(new brls::Header("gamecard_tab/list/dump_options"_i18n));
+        this->AddListView(new brls::Header("gamecard_tab/list/dump_options"_i18n));
         
         this->dump_card_image = new brls::ListItem("gamecard_tab/list/dump_card_image/label"_i18n, "gamecard_tab/list/dump_card_image/description"_i18n);
-        this->list->addView(this->dump_card_image);
+        this->AddListView(this->dump_card_image);
         
         this->dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, "gamecard_tab/list/dump_certificate/description"_i18n);
-        this->list->addView(this->dump_certificate);
+        this->AddListView(this->dump_certificate);
         
         this->dump_header = new brls::ListItem("gamecard_tab/list/dump_header/label"_i18n, "gamecard_tab/list/dump_header/description"_i18n);
-        this->list->addView(this->dump_header);
+        this->AddListView(this->dump_header);
         
         this->dump_decrypted_cardinfo = new brls::ListItem("gamecard_tab/list/dump_decrypted_cardinfo/label"_i18n, "gamecard_tab/list/dump_decrypted_cardinfo/description"_i18n);
-        this->list->addView(this->dump_decrypted_cardinfo);
+        this->AddListView(this->dump_decrypted_cardinfo);
         
         this->dump_initial_data = new brls::ListItem("gamecard_tab/list/dump_initial_data/label"_i18n, "gamecard_tab/list/dump_initial_data/description"_i18n);
-        this->list->addView(this->dump_initial_data);
+        this->AddListView(this->dump_initial_data);
         
         this->dump_hfs_partitions = new brls::ListItem("gamecard_tab/list/dump_hfs_partitions/label"_i18n, "gamecard_tab/list/dump_hfs_partitions/description"_i18n);
-        this->list->addView(this->dump_hfs_partitions);
-        
-        this->addLayerWrapper(this->list);
+        this->AddListView(this->dump_hfs_partitions);
         
         /* Subscribe to gamecard status event. */
-        this->gc_status_task_sub = this->gc_status_task->RegisterListener([this](GameCardStatus gc_status) {
-            if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->changeLayerWrapper(this->error_frame);
+        this->RegisterListener([this](GameCardStatus gc_status) {
+            if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->SwitchLayerView(true);
             
             switch(gc_status)
             {
                 case GameCardStatus_NotInserted:
-                    this->error_frame->SetMessage("gamecard_tab/error_frame/not_inserted"_i18n);
+                    this->SetErrorFrameMessage("gamecard_tab/error_frame/not_inserted"_i18n);
                     break;
                 case GameCardStatus_Processing:
-                    this->error_frame->SetMessage("gamecard_tab/error_frame/processing"_i18n);
+                    this->SetErrorFrameMessage("gamecard_tab/error_frame/processing"_i18n);
                     break;
                 case GameCardStatus_NoGameCardPatchEnabled:
-                    this->error_frame->SetMessage("gamecard_tab/error_frame/nogc_enabled"_i18n);
+                    this->SetErrorFrameMessage("gamecard_tab/error_frame/nogc_enabled"_i18n);
                     break;
                 case GameCardStatus_LotusAsicFirmwareUpdateRequired:
-                    this->error_frame->SetMessage("gamecard_tab/error_frame/lafw_update_required"_i18n);
+                    this->SetErrorFrameMessage("gamecard_tab/error_frame/lafw_update_required"_i18n);
                     break;
                 case GameCardStatus_InsertedAndInfoNotLoaded:
-                    this->error_frame->SetMessage(i18n::getStr("gamecard_tab/error_frame/info_not_loaded"_i18n, GITHUB_NEW_ISSUE_URL));
+                    this->SetErrorFrameMessage(i18n::getStr("gamecard_tab/error_frame/info_not_loaded"_i18n, GITHUB_NEW_ISSUE_URL));
                     break;
                 case GameCardStatus_InsertedAndInfoLoaded:
                 {
@@ -147,7 +139,7 @@ namespace nxdt::views
                                                                    compatibility_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n : GameCardCompatibilityTypeStrings[compatibility_type], \
                                                                    compatibility_type));
                     
-                    this->changeLayerWrapper(this->list);
+                    this->SwitchLayerView(false);
                     
                     break;
                 }
@@ -157,50 +149,6 @@ namespace nxdt::views
             
             this->gc_status = gc_status;
         });
-    }
-    
-    GameCardTab::~GameCardTab(void)
-    {
-        /* Unregister gamecard task listener. */
-        this->gc_status_task->UnregisterListener(this->gc_status_task_sub);
-        
-        /* Clear views vector. */
-        if (this->views.size()) this->views.clear();
-    }
-    
-    void GameCardTab::addLayerWrapper(brls::View* view)
-    {
-        this->views.push_back(view);
-        this->addLayer(view);
-        if (this->view_index == -1) this->view_index = 0;
-    }
-    
-    void GameCardTab::changeLayerWrapper(brls::View* view)
-    {
-        int index = -1;
-        brls::View *current_focus = brls::Application::getCurrentFocus();
-        
-        for(size_t i = 0; i < this->views.size(); i++)
-        {
-            if (this->views[i] == view)
-            {
-                index = (int)i;
-                break;
-            }
-        }
-        
-        if (index == -1) return;
-        
-        /* Focus the sidebar if we're currently focusing an element from our List. */
-        if (current_focus && (current_focus == this->properties_table || current_focus == this->dump_card_image || current_focus == this->dump_certificate || current_focus == this->dump_header || \
-            current_focus == this->dump_decrypted_cardinfo || current_focus == this->dump_initial_data || current_focus == this->dump_hfs_partitions))
-        {
-            brls::Application::onGamepadButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, false);
-        }
-        
-        this->changeLayer(index);
-        this->invalidate(true);
-        this->view_index = index;
     }
     
     std::string GameCardTab::GetFormattedSizeString(GameCardSizeFunc func)

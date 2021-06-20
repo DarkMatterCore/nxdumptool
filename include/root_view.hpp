@@ -39,7 +39,7 @@ namespace nxdt::views
             nxdt::tasks::UmsTask *ums_task = nullptr;
             nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
             
-            brls::VoidEvent::Subscription status_info_task_sub;
+            nxdt::tasks::VoidEvent::Subscription status_info_task_sub;
             
             brls::Label *applet_mode_lbl = nullptr;
             brls::Label *time_lbl = nullptr;
