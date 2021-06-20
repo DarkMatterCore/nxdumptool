@@ -41,7 +41,7 @@ namespace nxdt::views
         [GameCardCompatibilityType_Terra]  = "Terra"
     };
     
-    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : GameCardLayeredErrorFrame(gc_status_task)
+    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : LayeredErrorFrame(), gc_status_task(gc_status_task)
     {
         /* Error frame. */
         this->SetErrorFrameMessage("gamecard_tab/error_frame/not_inserted"_i18n);
@@ -81,7 +81,7 @@ namespace nxdt::views
         this->AddListView(this->dump_hfs_partitions);
         
         /* Subscribe to gamecard status event. */
-        this->RegisterListener([this](GameCardStatus gc_status) {
+        this->gc_status_task_sub = this->gc_status_task->RegisterListener([this](GameCardStatus gc_status) {
             if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->SwitchLayerView(true);
             
             switch(gc_status)
@@ -135,6 +135,12 @@ namespace nxdt::views
             
             this->gc_status = gc_status;
         });
+    }
+    
+    GameCardTab::~GameCardTab(void)
+    {
+        /* Unregister task listener. */
+        this->gc_status_task->UnregisterListener(this->gc_status_task_sub);
     }
     
     std::string GameCardTab::GetFormattedSizeString(GameCardSizeFunc func)

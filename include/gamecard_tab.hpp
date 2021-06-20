@@ -30,14 +30,13 @@
 
 namespace nxdt::views
 {
-    /* Instantiate the template for our class. */
-    typedef LayeredErrorFrame<nxdt::tasks::GameCardTask, nxdt::tasks::GameCardStatusEvent> GameCardLayeredErrorFrame;
-    
-    class GameCardTab: public GameCardLayeredErrorFrame
+    class GameCardTab: public LayeredErrorFrame
     {
         typedef bool (*GameCardSizeFunc)(u64 *size);
         
         private:
+            nxdt::tasks::GameCardTask *gc_status_task = nullptr;
+            nxdt::tasks::GameCardStatusEvent::Subscription gc_status_task_sub;
             GameCardStatus gc_status = GameCardStatus_NotInserted;
             
             FocusableTable *properties_table = nullptr;
@@ -60,6 +59,7 @@ namespace nxdt::views
         
         public:
             GameCardTab(nxdt::tasks::GameCardTask *gc_status_task);
+            ~GameCardTab(void);
     };
 }
 

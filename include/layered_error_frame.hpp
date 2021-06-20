@@ -28,102 +28,26 @@
 
 namespace nxdt::views
 {
-    /* Extended class to switch between ErrorFrame and List views whenever an event is triggered. */
-    template<typename TaskType, typename EventType>
+    /* Extended class to switch between ErrorFrame and List views on demand. */
     class LayeredErrorFrame: public brls::LayerView
     {
         private:
-            TaskType *task = nullptr;
-            std::vector<typename EventType::Subscription> task_subs;
+            int layer_view_index = 0;
             
             ErrorFrame *error_frame = nullptr;
             
             brls::List *list = nullptr;
             std::vector<brls::View*> list_views;
-            
-            int layer_view_index = 0;
         
         protected:
             void SwitchLayerView(bool use_error_frame);
             void SetErrorFrameMessage(std::string msg = "");
             void AddListView(brls::View* view);
-            void RegisterListener(typename EventType::Callback cb);
         
         public:
-            LayeredErrorFrame(TaskType *task);
+            LayeredErrorFrame(void);
             ~LayeredErrorFrame(void);
     };
-    
-    template<typename TaskType, typename EventType>
-    LayeredErrorFrame<TaskType, EventType>::LayeredErrorFrame(TaskType *task) : brls::LayerView(), task(task)
-    {
-        /* Error frame. */
-        this->error_frame = new ErrorFrame();
-        this->addLayer(this->error_frame);
-        
-        /* List. */
-        this->list = new brls::List();
-        this->list->setSpacing(this->list->getSpacing() / 2);
-        this->list->setMarginBottom(20);
-        this->addLayer(this->list);
-    }
-    
-    template<typename TaskType, typename EventType>
-    LayeredErrorFrame<TaskType, EventType>::~LayeredErrorFrame(void)
-    {
-        /* Unregister task listeners. */
-        for(typename EventType::Subscription task_sub : this->task_subs) this->task->UnregisterListener(task_sub);
-        
-        /* Clear task subscriptions vector. */
-        if (this->task_subs.size()) this->task_subs.clear();
-        
-        /* Clear list views vector. */
-        if (this->list_views.size()) this->list_views.clear();
-    }
-    
-    template<typename TaskType, typename EventType>
-    void LayeredErrorFrame<TaskType, EventType>::SwitchLayerView(bool use_error_frame)
-    {
-        if ((use_error_frame && this->layer_view_index == 0) || (!use_error_frame && this->layer_view_index == 1)) return;
-        
-        int index = (this->layer_view_index ^ 1);
-        brls::View *current_focus = brls::Application::getCurrentFocus();
-        
-        /* Focus the sidebar if we're currently focusing an element from our List. */
-        for(brls::View* list_view : this->list_views)
-        {
-            if (current_focus == list_view)
-            {
-                brls::Application::onGamepadButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, false);
-                break;
-            }
-        }
-        
-        /* Change layer view. */
-        this->changeLayer(index);
-        this->invalidate(true);
-        this->layer_view_index = index;
-    }
-    
-    template<typename TaskType, typename EventType>
-    void LayeredErrorFrame<TaskType, EventType>::SetErrorFrameMessage(std::string msg)
-    {
-        this->error_frame->SetMessage(msg);
-    }
-    
-    template<typename TaskType, typename EventType>
-    void LayeredErrorFrame<TaskType, EventType>::AddListView(brls::View* view)
-    {
-        this->list->addView(view);
-        this->list_views.push_back(view);
-    }
-    
-    template<typename TaskType, typename EventType>
-    void LayeredErrorFrame<TaskType, EventType>::RegisterListener(typename EventType::Callback cb)
-    {
-        typename EventType::Subscription task_sub = this->task->RegisterListener(cb);
-        this->task_subs.push_back(task_sub);
-    }
 }
 
 #endif  /* __LAYERED_ERROR_FRAME_HPP__ */
