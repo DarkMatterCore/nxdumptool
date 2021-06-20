@@ -41,20 +41,6 @@ namespace nxdt::views
         [GameCardCompatibilityType_Terra]  = "Terra"
     };
     
-    GameCardTable::GameCardTable(void) : brls::Table() { }
-    
-    brls::View* GameCardTable::getDefaultFocus(void)
-    {
-        return this;
-    }
-    
-    void GameCardTable::onFocusGained(void)
-    {
-        this->focused = true;
-        this->focusEvent.fire(this);
-        if (this->hasParent()) this->getParent()->onChildFocusGained(this);
-    }
-    
     GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : GameCardErrorLayerView(gc_status_task)
     {
         /* Error frame. */
@@ -63,7 +49,7 @@ namespace nxdt::views
         /* Gamecard properties table. */
         this->AddListView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
         
-        this->properties_table = new GameCardTable();
+        this->properties_table = new FocusableTable(false);
         this->capacity = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/capacity"_i18n);
         this->total_size = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/total_size"_i18n);
         this->trimmed_size = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/trimmed_size"_i18n);

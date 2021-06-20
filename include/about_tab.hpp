@@ -25,18 +25,18 @@
 #define __ABOUT_TAB_HPP__
 
 #include <borealis.hpp>
+#include "focusable_item.hpp"
 
 namespace nxdt::views
 {
-    /* Extended class to display a focusable (but unhighlightable) label. */
-    class AboutTabLabel: public brls::Label
+    /* Extended class to display a focusable and optionally centered (but unhighlightable) label. */
+    class AboutTabLabel: public FocusableLabel
     {
-        protected:
-            brls::View* getDefaultFocus(void) override;
-            void onFocusGained(void) override;
-        
         public:
-            AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center = false);
+            AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center = false) : FocusableLabel(false, labelStyle, text, true)
+            {
+                if (center) this->setHorizontalAlign(NVG_ALIGN_CENTER);
+            }
     };
     
     class AboutTab: public brls::List

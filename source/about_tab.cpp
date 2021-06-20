@@ -29,23 +29,6 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    AboutTabLabel::AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center) : brls::Label(labelStyle, text, true)
-    {
-        if (center) this->setHorizontalAlign(NVG_ALIGN_CENTER);
-    }
-    
-    brls::View* AboutTabLabel::getDefaultFocus(void)
-    {
-        return this;
-    }
-    
-    void AboutTabLabel::onFocusGained(void)
-    {
-        this->focused = true;
-        this->focusEvent.fire(this);
-        if (this->hasParent()) this->getParent()->onChildFocusGained(this);
-    }
-    
     AboutTab::AboutTab(void) : brls::List()
     {
         /* Set custom spacing. */

@@ -26,20 +26,10 @@
 
 #include "tasks.hpp"
 #include "error_layer_view.hpp"
+#include "focusable_item.hpp"
 
 namespace nxdt::views
 {
-    /* Extended class to display a focusable (but unhighlightable) table. */
-    class GameCardTable: public brls::Table
-    {
-        protected:
-            brls::View* getDefaultFocus(void) override;
-            void onFocusGained(void) override;
-        
-        public:
-            GameCardTable(void);
-    };
-    
     /* Instantiate the template for our class. */
     typedef ErrorLayerView<nxdt::tasks::GameCardTask, nxdt::tasks::GameCardStatusEvent> GameCardErrorLayerView;
     
@@ -50,7 +40,7 @@ namespace nxdt::views
         private:
             GameCardStatus gc_status = GameCardStatus_NotInserted;
             
-            GameCardTable *properties_table = nullptr;
+            FocusableTable *properties_table = nullptr;
             brls::TableRow *capacity = nullptr;
             brls::TableRow *total_size = nullptr;
             brls::TableRow *trimmed_size = nullptr;
