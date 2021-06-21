@@ -22,12 +22,11 @@
 #include <nxdt_utils.h>
 #include <user_titles_tab.hpp>
 
-namespace i18n = brls::i18n;    /* For getStr(). */
-using namespace i18n::literals; /* For _i18n. */
+using namespace brls::i18n::literals;   /* For _i18n. */
 
 namespace nxdt::views
 {
-    UserTitlesTab::UserTitlesTab(nxdt::tasks::TitleTask *title_task) : LayeredErrorFrame("user_titles_tab/error_frame/no_titles_available"_i18n), title_task(title_task)
+    UserTitlesTab::UserTitlesTab(nxdt::tasks::TitleTask *title_task) : LayeredErrorFrame("user_titles_tab/no_titles_available"_i18n), title_task(title_task)
     {
         /* Populate list. */
         this->PopulateList();
@@ -36,6 +35,7 @@ namespace nxdt::views
         this->title_task_sub = this->title_task->RegisterListener([this](void) {
             /* Update list. */
             this->PopulateList();
+            brls::Application::notify("user_titles_tab/notification"_i18n);
         });
     }
     
