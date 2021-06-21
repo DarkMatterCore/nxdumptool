@@ -32,7 +32,7 @@ namespace nxdt::views
 {
     class GameCardTab: public LayeredErrorFrame
     {
-        typedef bool (*GameCardSizeFunc)(u64 *size);
+        typedef bool (*GameCardSizeFunc)(u64 *out_size);
         
         private:
             nxdt::tasks::GameCardTask *gc_status_task = nullptr;

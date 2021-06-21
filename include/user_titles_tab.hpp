@@ -1,5 +1,5 @@
 /*
- * layered_error_frame.hpp
+ * user_titles_tab.hpp
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,25 +21,27 @@
 
 #pragma once
 
-#ifndef __LAYERED_ERROR_FRAME_HPP__
-#define __LAYERED_ERROR_FRAME_HPP__
+#ifndef __USER_TITLES_TAB_HPP__
+#define __USER_TITLES_TAB_HPP__
 
-#include "error_frame.hpp"
+#include "tasks.hpp"
+#include "layered_error_frame.hpp"
 
 namespace nxdt::views
 {
-    /* Extended class to switch between ErrorFrame and List views on demand. */
-    class LayeredErrorFrame: public brls::LayerView
+    class UserTitlesTab: public LayeredErrorFrame
     {
-        protected:
-            ErrorFrame *error_frame = nullptr;
-            brls::List *list = nullptr;
+        private:
+            nxdt::tasks::TitleTask *title_task = nullptr;
+            nxdt::tasks::VoidEvent::Subscription title_task_sub;
+            nxdt::tasks::TitleApplicationMetadataVector *user_app_metadata = nullptr;
             
-            void SwitchLayerView(bool use_error_frame);
+            void PopulateList(void);
         
         public:
-            LayeredErrorFrame(std::string msg = "");
+            UserTitlesTab(nxdt::tasks::TitleTask *title_task);
+            ~UserTitlesTab(void);
     };
 }
 
-#endif  /* __LAYERED_ERROR_FRAME_HPP__ */
+#endif  /* __USER_TITLES_TAB_HPP__ */

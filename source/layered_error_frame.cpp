@@ -23,56 +23,35 @@
 
 namespace nxdt::views
 {
-    LayeredErrorFrame::LayeredErrorFrame(void) : brls::LayerView()
+    LayeredErrorFrame::LayeredErrorFrame(std::string msg) : brls::LayerView()
     {
         /* Error frame. */
-        this->error_frame = new ErrorFrame();
+        this->error_frame = new ErrorFrame(msg);
         this->addLayer(this->error_frame);
         
         /* List. */
         this->list = new brls::List();
-        this->list->setSpacing(this->list->getSpacing() / 2);
-        this->list->setMarginBottom(20);
         this->addLayer(this->list);
-    }
-    
-    LayeredErrorFrame::~LayeredErrorFrame(void)
-    {
-        /* Clear list views vector. */
-        if (this->list_views.size()) this->list_views.clear();
     }
     
     void LayeredErrorFrame::SwitchLayerView(bool use_error_frame)
     {
-        if ((use_error_frame && this->layer_view_index == 0) || (!use_error_frame && this->layer_view_index == 1)) return;
+        int index = this->getLayerIndex();
+        int new_index = (index ^ 1);
+        brls::View *cur_focus = brls::Application::getCurrentFocus();
         
-        int index = (this->layer_view_index ^ 1);
-        brls::View *current_focus = brls::Application::getCurrentFocus();
+        /* Don't proceed if we're already at the desired view layer. */
+        if (index < 0 || index > 1 || (use_error_frame && index == 0) || (!use_error_frame && index == 1)) return;
         
-        /* Focus the sidebar if we're currently focusing an element from our List. */
-        for(brls::View* list_view : this->list_views)
+        /* Focus the sidebar if we're currently focusing an element from our List and we're about to switch to the error frame. */
+        if (use_error_frame && cur_focus && cur_focus->hasParent())
         {
-            if (current_focus == list_view)
-            {
-                brls::Application::onGamepadButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, false);
-                break;
-            }
+            brls::View *cur_focus_parent = cur_focus->getParent();
+            if (cur_focus_parent && cur_focus_parent->hasParent() && cur_focus_parent->getParent() == this->list) brls::Application::onGamepadButtonPressed(GLFW_GAMEPAD_BUTTON_DPAD_LEFT, false);
         }
         
         /* Change layer view. */
-        this->changeLayer(index);
+        this->changeLayer(new_index);
         this->invalidate(true);
-        this->layer_view_index = index;
-    }
-    
-    void LayeredErrorFrame::SetErrorFrameMessage(std::string msg)
-    {
-        this->error_frame->SetMessage(msg);
-    }
-    
-    void LayeredErrorFrame::AddListView(brls::View* view)
-    {
-        this->list->addView(view);
-        this->list_views.push_back(view);
     }
 }

@@ -41,13 +41,14 @@ namespace nxdt::views
         [GameCardCompatibilityType_Terra]  = "Terra"
     };
     
-    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : LayeredErrorFrame(), gc_status_task(gc_status_task)
+    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : LayeredErrorFrame("gamecard_tab/error_frame/not_inserted"_i18n), gc_status_task(gc_status_task)
     {
-        /* Error frame. */
-        this->SetErrorFrameMessage("gamecard_tab/error_frame/not_inserted"_i18n);
+        /* Set custom spacing. */
+        this->list->setSpacing(this->list->getSpacing() / 2);
+        this->list->setMarginBottom(20);
         
         /* Gamecard properties table. */
-        this->AddListView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
+        this->list->addView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
         
         this->properties_table = new FocusableTable(false);
         this->capacity = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/capacity"_i18n);
@@ -57,28 +58,28 @@ namespace nxdt::views
         this->lafw_version = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/lafw_version"_i18n);
         this->sdk_version = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/sdk_version"_i18n);
         this->compatibility_type = this->properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/compatibility_type"_i18n);
-        this->AddListView(this->properties_table);
+        this->list->addView(this->properties_table);
         
         /* ListItem elements. */
-        this->AddListView(new brls::Header("gamecard_tab/list/dump_options"_i18n));
+        this->list->addView(new brls::Header("gamecard_tab/list/dump_options"_i18n));
         
         this->dump_card_image = new brls::ListItem("gamecard_tab/list/dump_card_image/label"_i18n, "gamecard_tab/list/dump_card_image/description"_i18n);
-        this->AddListView(this->dump_card_image);
+        this->list->addView(this->dump_card_image);
         
         this->dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, "gamecard_tab/list/dump_certificate/description"_i18n);
-        this->AddListView(this->dump_certificate);
+        this->list->addView(this->dump_certificate);
         
         this->dump_header = new brls::ListItem("gamecard_tab/list/dump_header/label"_i18n, "gamecard_tab/list/dump_header/description"_i18n);
-        this->AddListView(this->dump_header);
+        this->list->addView(this->dump_header);
         
         this->dump_decrypted_cardinfo = new brls::ListItem("gamecard_tab/list/dump_decrypted_cardinfo/label"_i18n, "gamecard_tab/list/dump_decrypted_cardinfo/description"_i18n);
-        this->AddListView(this->dump_decrypted_cardinfo);
+        this->list->addView(this->dump_decrypted_cardinfo);
         
         this->dump_initial_data = new brls::ListItem("gamecard_tab/list/dump_initial_data/label"_i18n, "gamecard_tab/list/dump_initial_data/description"_i18n);
-        this->AddListView(this->dump_initial_data);
+        this->list->addView(this->dump_initial_data);
         
         this->dump_hfs_partitions = new brls::ListItem("gamecard_tab/list/dump_hfs_partitions/label"_i18n, "gamecard_tab/list/dump_hfs_partitions/description"_i18n);
-        this->AddListView(this->dump_hfs_partitions);
+        this->list->addView(this->dump_hfs_partitions);
         
         /* Subscribe to gamecard status event. */
         this->gc_status_task_sub = this->gc_status_task->RegisterListener([this](GameCardStatus gc_status) {
@@ -87,19 +88,19 @@ namespace nxdt::views
             switch(gc_status)
             {
                 case GameCardStatus_NotInserted:
-                    this->SetErrorFrameMessage("gamecard_tab/error_frame/not_inserted"_i18n);
+                    this->error_frame->SetMessage("gamecard_tab/error_frame/not_inserted"_i18n);
                     break;
                 case GameCardStatus_Processing:
-                    this->SetErrorFrameMessage("gamecard_tab/error_frame/processing"_i18n);
+                    this->error_frame->SetMessage("gamecard_tab/error_frame/processing"_i18n);
                     break;
                 case GameCardStatus_NoGameCardPatchEnabled:
-                    this->SetErrorFrameMessage("gamecard_tab/error_frame/nogc_enabled"_i18n);
+                    this->error_frame->SetMessage("gamecard_tab/error_frame/nogc_enabled"_i18n);
                     break;
                 case GameCardStatus_LotusAsicFirmwareUpdateRequired:
-                    this->SetErrorFrameMessage("gamecard_tab/error_frame/lafw_update_required"_i18n);
+                    this->error_frame->SetMessage("gamecard_tab/error_frame/lafw_update_required"_i18n);
                     break;
                 case GameCardStatus_InsertedAndInfoNotLoaded:
-                    this->SetErrorFrameMessage(i18n::getStr("gamecard_tab/error_frame/info_not_loaded"_i18n, GITHUB_NEW_ISSUE_URL));
+                    this->error_frame->SetMessage(i18n::getStr("gamecard_tab/error_frame/info_not_loaded"_i18n, GITHUB_NEW_ISSUE_URL));
                     break;
                 case GameCardStatus_InsertedAndInfoLoaded:
                 {
