@@ -2,7 +2,3 @@
 	path = libs/libusbhsfs
 	url = https://github.com/DarkMatterCore/libusbhsfs
 	branch = main
-[submodule "borealis"]
-	path = libs/borealis
-	url = https://github.com/DarkMatterCore/borealis
-	branch = nxdumptool
