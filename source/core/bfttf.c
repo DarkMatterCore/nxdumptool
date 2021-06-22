@@ -213,7 +213,7 @@ bool bfttfGetFontByType(BfttfFontData *font_data, u8 font_type)
     
     bool ret = false;
     
-    SCOPED_LOCK(&g_bfttfMutex)
+    SCOPED_TRY_LOCK(&g_bfttfMutex)
     {
         BfttfFontInfo *font_info = &(g_fontInfo[font_type]);
         if (font_info->size <= 8 || !font_info->data)
