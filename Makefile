@@ -40,6 +40,11 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 GIT_BRANCH			:=	$(shell git rev-parse --abbrev-ref HEAD)
 GIT_COMMIT			:=	$(shell git rev-parse --short HEAD)
+GIT_REV				:=	${GIT_BRANCH}.${GIT_COMMIT}
+
+ifneq (, $(strip $(shell git status --porcelain 2>/dev/null)))
+GIT_REV				:=	$(GIT_REV)-dirty
+endif
 
 VERSION_MAJOR		:=	2
 VERSION_MINOR		:=	0
@@ -74,7 +79,7 @@ ARCH		:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS		:=	-g -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
 CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
 CFLAGS		+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
-CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\"
+CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_REV=\"${GIT_REV}\"
 CFLAGS		+=	-DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\""
 CFLAGS  	+=	`aarch64-none-elf-pkg-config zlib --cflags`
 CFLAGS  	+=	`aarch64-none-elf-pkg-config libxml-2.0 --cflags`

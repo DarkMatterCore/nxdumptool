@@ -106,7 +106,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         
         /* Create logfile. */
         logWriteStringToLogFile("________________________________________________________________\r\n");
-        LOG_MSG(APP_TITLE " v%u.%u.%u starting (" GIT_COMMIT "). Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+        LOG_MSG(APP_TITLE " v%u.%u.%u starting (" GIT_REV "). Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
         if (g_appLaunchPath) LOG_MSG("Launch path: \"%s\".", g_appLaunchPath);
         
         /* Log Horizon OS version. */
