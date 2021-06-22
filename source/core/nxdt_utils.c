@@ -29,6 +29,7 @@
 #include "usb.h"
 #include "title.h"
 #include "bfttf.h"
+#include "bfsar.h"
 #include "fatfs/ff.h"
 
 /* Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits. */
@@ -153,6 +154,9 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Initialize BFTTF interface. */
         if (!bfttfInitialize()) break;
         
+        /* Initialize BFSAR interface. */
+        if (!bfsarInitialize()) break;
+        
         /* Mount eMMC BIS System partition. */
         if (!utilsMountEmmcBisSystemPartitionStorage()) break;
         
@@ -211,6 +215,9 @@ void utilsCloseResources(void)
         
         /* Unmount eMMC BIS System partition. */
         utilsUnmountEmmcBisSystemPartitionStorage();
+        
+        /* Deinitialize BFSAR interface. */
+        bfsarExit();
         
         /* Deinitialize BFTTF interface. */
         bfttfExit();
