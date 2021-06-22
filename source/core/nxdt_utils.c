@@ -29,7 +29,7 @@
 #include "usb.h"
 #include "title.h"
 #include "bfttf.h"
-#include "bfsar.h"
+#include "nxdt_bfsar.h"
 #include "fatfs/ff.h"
 
 /* Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits. */
@@ -87,7 +87,7 @@ static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_
 bool utilsInitializeResources(const int program_argc, const char **program_argv)
 {
     Result rc = 0;
-    bool ret = false;
+    bool ret = false, flag = false;
     
     SCOPED_LOCK(&g_resourcesMutex)
     {
@@ -160,7 +160,12 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Mount eMMC BIS System partition. */
         if (!utilsMountEmmcBisSystemPartitionStorage()) break;
         
+        /* Enable video recording. */
+        rc = appletIsGamePlayRecordingSupported(&flag);
+        if (R_SUCCEEDED(rc) && flag) appletInitializeGamePlayRecording();
+        
         /* Disable screen dimming and auto sleep. */
+        /* TODO: only use this function right before starting a dump procedure - make sure to handle power button presses as well. */
         appletSetMediaPlaybackState(true);
         
         /* Overclock system. */
@@ -839,7 +844,7 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
     
     if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
     
-    /* TO DO: read config here to actually know the value to use with utilsOverclockSystem. */
+    /* TODO: read config here to actually know the value to use with utilsOverclockSystem. */
     utilsOverclockSystem(true);
 }
 

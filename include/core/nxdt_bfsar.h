@@ -1,5 +1,5 @@
 /*
- * bfsar.h
+ * nxdt_bfsar.h
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,8 +21,8 @@
 
 #pragma once
 
-#ifndef __BFSAR_H__
-#define __BFSAR_H__
+#ifndef __NXDT_BFSAR_H__
+#define __NXDT_BFSAR_H__
 
 #ifdef __cplusplus
 extern "C" {
@@ -41,4 +41,4 @@ const char *bfsarGetFilePath(void);
 }
 #endif
 
-#endif /* __BFSAR_H__ */
+#endif /* __NXDT_BFSAR_H__ */

@@ -1,5 +1,5 @@
 /*
- * bfsar.c
+ * nxdt_bfsar.c
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -20,7 +20,7 @@
  */
 
 #include "nxdt_utils.h"
-#include "bfsar.h"
+#include "nxdt_bfsar.h"
 #include "romfs.h"
 #include "title.h"
 
@@ -75,6 +75,8 @@ bool bfsarInitialize(void)
         /* Create BFSAR file in the SD card root directory. */
         if (use_root) sprintf(g_bfsarPath, "/" BFSAR_FILENAME);
         
+        LOG_MSG("BFSAR path: \"%s\".", g_bfsarPath);
+        
         /* Check if the BFSAR file is already available and not empty. */
         bfsar_file = fopen(g_bfsarPath, "rb");
         if (bfsar_file)
@@ -104,16 +106,16 @@ bool bfsarInitialize(void)
         }
         
         /* Initialize NCA context. */
-        if (!ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), NULL))
+        if (!ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Program, 0), NULL))
         {
-            LOG_MSG("Failed to initialize qlaunch Data NCA context!");
+            LOG_MSG("Failed to initialize qlaunch Program NCA context!");
             break;
         }
         
         /* Initialize RomFS context. */
-        if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[0])))
+        if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[1])))
         {
-            LOG_MSG("Failed to initialize RomFS context for qlaunch Data NCA!");
+            LOG_MSG("Failed to initialize RomFS context for qlaunch Program NCA!");
             break;
         }
         
@@ -185,7 +187,7 @@ void bfsarExit(void)
     {
         /* Clear BFSAR file path. */
         *g_bfsarPath = '\0';
-        g_bfttfInterfaceInit = false;
+        g_bfsarInterfaceInit = false;
     }
 }
 
@@ -195,7 +197,7 @@ const char *bfsarGetFilePath(void)
     
     SCOPED_TRY_LOCK(&g_bfsarMutex)
     {
-        if (g_bfttfInterfaceInit) ret = (const char*)g_bfsarPath;
+        if (g_bfsarInterfaceInit) ret = (const char*)g_bfsarPath;
     }
     
     return ret;

@@ -1,54 +1,59 @@
-/*
- * main.cpp
- *
- * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
- *
- * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
- *
- * nxdumptool is free software: you can redistribute it and/or modify
- * it under the terms of the GNU General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * nxdumptool is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU General Public License for more details.
- *
- * You should have received a copy of the GNU General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
 #include <nxdt_utils.h>
 #include <scope_guard.hpp>
-#include <root_view.hpp>
 
-int main(int argc, char *argv[])
+#include <borealis.hpp>
+
+#include "captioned_image.hpp"
+#include "components_tab.hpp"
+#include "main_activity.hpp"
+#include "recycling_list_tab.hpp"
+
+using namespace brls::literals; // for _i18n
+
+int main(int argc, char* argv[])
 {
     /* Set scope guard to clean up resources at exit. */
     ON_SCOPE_EXIT { utilsCloseResources(); };
-    
+
     /* Initialize application resources. */
     if (!utilsInitializeResources(argc, (const char**)argv)) return EXIT_FAILURE;
-    
-    /* Set Borealis log level. */
+
+    // Set log level
+    // We recommend to use INFO for real apps
     brls::Logger::setLogLevel(brls::LogLevel::DEBUG);
-    
-    /* Load Borealis translation files. */
-    brls::i18n::loadTranslations();
-    
-    /* Initialize Borealis. */
-    if (!brls::Application::init(APP_TITLE)) return EXIT_FAILURE;
-    
-    /* Create root view. */
-    nxdt::views::RootView *root_view = new nxdt::views::RootView();
-    
-    /* Add the root view to the stack. */
-    brls::Application::pushView(root_view);
-    
-    /* Run the application. */
-    while(brls::Application::mainLoop());
-    
-    /* Exit. */
+
+    // Init the app and i18n
+    if (!brls::Application::init())
+    {
+        brls::Logger::error("Unable to init Borealis application");
+        return EXIT_FAILURE;
+    }
+
+    brls::Application::createWindow("demo/title"_i18n);
+
+    // Have the application register an action on every activity that will quit when you press BUTTON_START
+    brls::Application::setGlobalQuit(true);
+
+    // Register custom views (including tabs, which are views)
+    brls::Application::registerXMLView("CaptionedImage", CaptionedImage::create);
+    brls::Application::registerXMLView("RecyclingListTab", RecyclingListTab::create);
+    brls::Application::registerXMLView("ComponentsTab", ComponentsTab::create);
+
+    // Add custom values to the theme
+    brls::getLightTheme().addColor("captioned_image/caption", nvgRGB(2, 176, 183));
+    brls::getDarkTheme().addColor("captioned_image/caption", nvgRGB(51, 186, 227));
+
+    // Add custom values to the style
+    brls::getStyle().addMetric("about/padding_top_bottom", 50);
+    brls::getStyle().addMetric("about/padding_sides", 75);
+    brls::getStyle().addMetric("about/description_margin", 50);
+
+    // Create and push the main activity to the stack
+    brls::Application::pushActivity(new MainActivity());
+
+    // Run the app
+    while (brls::Application::mainLoop());
+
+    // Exit
     return EXIT_SUCCESS;
 }

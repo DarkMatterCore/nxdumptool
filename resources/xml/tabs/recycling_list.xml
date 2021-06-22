@@ -1,0 +1,11 @@
+<brls:Box
+    width="auto"
+    height="auto">
+
+    <brls:Rectangle
+        width="auto"
+        height="auto"
+        grow="1.0"
+        color="#0000FF" />
+
+</brls:Box>
