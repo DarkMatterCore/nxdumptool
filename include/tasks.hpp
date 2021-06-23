@@ -128,7 +128,7 @@ namespace nxdt::tasks
             ~TitleTask(void);
             
             /* Intentionally left here to let system titles views retrieve metadata. */
-            TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
+            const TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
             
             ALWAYS_INLINE TitleEvent::Subscription RegisterListener(TitleEvent::Callback cb)
             {

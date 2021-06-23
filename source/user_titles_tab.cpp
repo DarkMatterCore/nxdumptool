@@ -29,12 +29,12 @@ namespace nxdt::views
     UserTitlesTab::UserTitlesTab(nxdt::tasks::TitleTask *title_task) : LayeredErrorFrame("user_titles_tab/no_titles_available"_i18n), title_task(title_task)
     {
         /* Populate list. */
-        this->PopulateList();
+        this->PopulateList(this->title_task->GetApplicationMetadata(false));
         
         /* Subscribe to title event. */
-        this->title_task_sub = this->title_task->RegisterListener([this](void) {
+        this->title_task_sub = this->title_task->RegisterListener([this](const nxdt::tasks::TitleApplicationMetadataVector* user_app_metadata) {
             /* Update list. */
-            this->PopulateList();
+            this->PopulateList(user_app_metadata);
             brls::Application::notify("user_titles_tab/notification"_i18n);
         });
     }
@@ -43,14 +43,17 @@ namespace nxdt::views
     {
         /* Unregister task listener. */
         this->title_task->UnregisterListener(this->title_task_sub);
+        
+        /* Clear user application metadata map. */
+        this->list_item_metadata.clear();
     }
     
-    void UserTitlesTab::PopulateList(void)
+    void UserTitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* user_app_metadata)
     {
-        bool refocus = false;
+        if (!user_app_metadata) return;
         
-        this->user_app_metadata = this->title_task->GetApplicationMetadata(false);
-        size_t user_app_metadata_count = this->user_app_metadata->size();
+        bool refocus = false;
+        size_t user_app_metadata_count = user_app_metadata->size();
         
         if (user_app_metadata_count)
         {
@@ -75,15 +78,22 @@ namespace nxdt::views
         this->list->clear();
         this->list->invalidate(true);
         
+        /* Clear our private user application map. */
+        this->list_item_metadata.clear();
+        
         /* Immediately return if we have no user application metadata. */
         if (!user_app_metadata_count) return;
         
         /* Populate list. */
-        for(TitleApplicationMetadata *cur_app_metadata : *(this->user_app_metadata))
+        for(TitleApplicationMetadata *cur_app_metadata : *user_app_metadata)
         {
+            /* Add list item for this application metadata to our list. */
             brls::ListItem *list_item = new brls::ListItem(std::string(cur_app_metadata->lang_entry.name), "", std::string(cur_app_metadata->lang_entry.author));
             list_item->setThumbnail(cur_app_metadata->icon, cur_app_metadata->icon_size);
             this->list->addView(list_item);
+            
+            /* Update our private user application metadata map. */
+            this->list_item_metadata.insert(std::make_pair(list_item, cur_app_metadata));
         }
         
         /* Switch to the list. */

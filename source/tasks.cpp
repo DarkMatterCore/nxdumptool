@@ -142,7 +142,7 @@ namespace nxdt::tasks
         }
     }
     
-    TitleApplicationMetadataVector* TitleTask::GetApplicationMetadata(bool is_system)
+    const TitleApplicationMetadataVector* TitleTask::GetApplicationMetadata(bool is_system)
     {
         return (is_system ? &(this->system_metadata) : &(this->user_metadata));
     }

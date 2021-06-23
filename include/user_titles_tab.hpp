@@ -33,10 +33,10 @@ namespace nxdt::views
     {
         private:
             nxdt::tasks::TitleTask *title_task = nullptr;
-            nxdt::tasks::VoidEvent::Subscription title_task_sub;
-            nxdt::tasks::TitleApplicationMetadataVector *user_app_metadata = nullptr;
+            nxdt::tasks::TitleEvent::Subscription title_task_sub;
+            std::unordered_map<brls::ListItem*, TitleApplicationMetadata*> list_item_metadata;
             
-            void PopulateList(void);
+            void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* user_app_metadata);
         
         public:
             UserTitlesTab(nxdt::tasks::TitleTask *title_task);
