@@ -264,7 +264,7 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
         consolePrint("%s #%u initialize nca ctx succeeded\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
         
         // don't go any further with this nca if we can't access its fs data because it's pointless
-        // to do: add preload warning
+        // TODO: add preload warning
         if (cur_nca_ctx->rights_id_available && !cur_nca_ctx->titlekey_retrieved)
         {
             j++;

@@ -961,7 +961,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
 
 NX_INLINE void gamecardCloseHandle(void)
 {
-    /* TO DO: find a way to properly close a gamecard handle. */
+    /* TODO: find a way to properly close a gamecard handle. */
     if (!g_gameCardHandle.value) return;
     svcCloseHandle(g_gameCardHandle.value);
     g_gameCardHandle.value = 0;

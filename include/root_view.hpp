@@ -33,18 +33,18 @@ namespace nxdt::views
         private:
             bool applet_mode = false;
             
+            brls::Label *applet_mode_lbl = nullptr;
+            brls::Label *time_lbl = nullptr;
+            brls::Label *battery_icon = nullptr, *battery_percentage = nullptr;
+            brls::Label *connection_icon = nullptr, *connection_status_lbl = nullptr;
+            
             nxdt::tasks::StatusInfoTask *status_info_task = nullptr;
             nxdt::tasks::GameCardTask *gc_status_task = nullptr;
             nxdt::tasks::TitleTask *title_task = nullptr;
             nxdt::tasks::UmsTask *ums_task = nullptr;
             nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
             
-            nxdt::tasks::VoidEvent::Subscription status_info_task_sub;
-            
-            brls::Label *applet_mode_lbl = nullptr;
-            brls::Label *time_lbl = nullptr;
-            brls::Label *battery_icon = nullptr, *battery_percentage = nullptr;
-            brls::Label *connection_icon = nullptr, *connection_status_lbl = nullptr;
+            nxdt::tasks::StatusInfoEvent::Subscription status_info_task_sub;
         
         protected:
             void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;

@@ -972,17 +972,21 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
         TitleInfo **titles = title_storage->titles;
         u32 title_count = title_storage->title_count;
         
-        if (!g_titleInterfaceInit || !g_titleGameCardAvailable || !titles || !title_count || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
+        GameCardHeader gc_header = {0};
+        size_t cur_filename_len = 0;
+        char app_name[0x400] = {0};
+        bool error = false;
+        
+        if (!g_titleInterfaceInit || !g_titleGameCardAvailable || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
             (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
         {
             LOG_MSG("Invalid parameters!");
             break;
         }
         
-        GameCardHeader gc_header = {0};
-        size_t cur_filename_len = 0;
-        char app_name[0x400] = {0};
-        bool error = false;
+        /* Check if the gamecard title storage is empty. */
+        /* This is especially true for Kiosk / Quest gamecards. */
+        if (!titles || !title_count) goto fallback;
         
         for(u32 i = 0; i < title_count; i++)
         {
@@ -1058,12 +1062,12 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
             cur_filename_len += app_name_len;
         }
         
+fallback:
         if (!filename && !error)
         {
             LOG_MSG("Error: the inserted gamecard doesn't hold any user applications!");
             
             /* Fallback string if no applications can be found. */
-            /* This function is guaranteed to fail with Kiosk / Quest gamecards, so that's why this is needed. */
             sprintf(app_name, "gamecard");
             
             if (gamecardGetHeader(&gc_header))
@@ -1074,6 +1078,7 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
             }
             
             filename = strdup(app_name);
+            if (!filename) LOG_MSG("Failed to duplicate fallback filename!");
         }
     }
     
@@ -1093,41 +1098,29 @@ const char *titleGetNcmContentMetaTypeName(u8 content_meta_type)
 
 NX_INLINE void titleFreeApplicationMetadata(void)
 {
-    if (g_systemMetadata)
+    for(u8 i = 0; i < 2; i++)
     {
-        for(u32 i = 0; i < g_systemMetadataCount; i++)
-        {
-            TitleApplicationMetadata *cur_app_metadata = g_systemMetadata[i];
-            if (cur_app_metadata)
-            {
-                if (cur_app_metadata->icon) free(cur_app_metadata->icon);
-                free(cur_app_metadata);
-            }
-        }
+        TitleApplicationMetadata **cached_app_metadata = (i == 0 ? g_systemMetadata : g_userMetadata);
+        u32 cached_app_metadata_count = (i == 0 ? g_systemMetadataCount : g_userMetadataCount);
         
-        free(g_systemMetadata);
-        g_systemMetadata = NULL;
+        if (cached_app_metadata)
+        {
+            for(u32 j = 0; j < cached_app_metadata_count; j++)
+            {
+                TitleApplicationMetadata *cur_app_metadata = cached_app_metadata[j];
+                if (cur_app_metadata)
+                {
+                    if (cur_app_metadata->icon) free(cur_app_metadata->icon);
+                    free(cur_app_metadata);
+                }
+            }
+            
+            free(cached_app_metadata);
+        }
     }
     
-    g_systemMetadataCount = 0;
-    
-    if (g_userMetadata)
-    {
-        for(u32 i = 0; i < g_userMetadataCount; i++)
-        {
-            TitleApplicationMetadata *cur_app_metadata = g_userMetadata[i];
-            if (cur_app_metadata)
-            {
-                if (cur_app_metadata->icon) free(cur_app_metadata->icon);
-                free(cur_app_metadata);
-            }
-        }
-        
-        free(g_userMetadata);
-        g_userMetadata = NULL;
-    }
-    
-    g_userMetadataCount = 0;
+    g_systemMetadata = g_userMetadata = NULL;
+    g_systemMetadataCount = g_userMetadataCount = 0;
 }
 
 static bool titleReallocateApplicationMetadata(u32 extra_app_count, bool is_system, bool free_entries)

@@ -27,12 +27,18 @@
 //#include <options_tab.hpp>
 #include <about_tab.hpp>
 
-using namespace brls::i18n::literals; /* For _i18n. */
+namespace i18n = brls::i18n;    /* For getStr(). */
+using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
     RootView::RootView(void) : brls::TabFrame()
     {
+        /* Set UI properties. */
+        this->setTitle(APP_TITLE);
+        this->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
+        this->setFooterText("v" APP_VERSION);
+        
         /* Check if we're running under applet mode. */
         this->applet_mode = utilsAppletModeCheck();
         
@@ -65,11 +71,6 @@ namespace nxdt::views
         this->ums_task = new nxdt::tasks::UmsTask();
         this->usb_host_task = new nxdt::tasks::UsbHostTask();
         
-        /* Set UI properties. */
-        this->setTitle(APP_TITLE);
-        this->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
-        this->setFooterText("v" APP_VERSION);
-        
         /* Add tabs. */
         this->addTab("root_view/tabs/gamecard"_i18n, new GameCardTab(this->gc_status_task));
         this->addSeparator();
@@ -81,20 +82,34 @@ namespace nxdt::views
         this->addTab("root_view/tabs/about"_i18n, new AboutTab());
         
         /* Subscribe to status info event. */
-        this->status_info_task_sub = this->status_info_task->RegisterListener([this](void) {
-            u32 charge_percentage = 0;
-            PsmChargerType charger_type = PsmChargerType_Unconnected;
-            
-            NifmInternetConnectionType connection_type = (NifmInternetConnectionType)0;
-            u32 signal_strength = 0;
-            NifmInternetConnectionStatus connection_status = (NifmInternetConnectionStatus)0;
-            char *ip_addr = NULL;
-            
+        this->status_info_task_sub = this->status_info_task->RegisterListener([this](const nxdt::tasks::StatusInfoData *status_info_data) {
             /* Update time label. */
-            this->time_lbl->setText(this->status_info_task->GetCurrentTimeString());
+            bool is_am = true;
+            struct tm *timeinfo = status_info_data->timeinfo;
+            
+            timeinfo->tm_mon++;
+            timeinfo->tm_year += 1900;
+            
+            if ("root_view/time_format"_i18n.compare("12") == 0)
+            {
+                /* Adjust time for 12-hour clock. */
+                if (timeinfo->tm_hour > 12)
+                {
+                    timeinfo->tm_hour -= 12;
+                    is_am = false;
+                } else
+                if (!timeinfo->tm_hour)
+                {
+                    timeinfo->tm_hour = 12;
+                }
+            }
+            
+            this->time_lbl->setText(i18n::getStr("root_view/date"_i18n, timeinfo->tm_year, timeinfo->tm_mon, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, \
+                                                 is_am ? "AM" : "PM"));
             
             /* Update battery labels. */
-            this->status_info_task->GetBatteryStats(&charge_percentage, &charger_type);
+            u32 charge_percentage = status_info_data->charge_percentage;
+            PsmChargerType charger_type = status_info_data->charger_type;
             
             this->battery_icon->setText(charger_type != PsmChargerType_Unconnected ? "\uE1A3" : (charge_percentage <= 15 ? "\uE19C" : "\uE1A4"));
             this->battery_icon->setColor(charger_type != PsmChargerType_Unconnected ? nvgRGB(0, 255, 0) : (charge_percentage <= 15 ? nvgRGB(255, 0, 0) : brls::Application::getTheme()->textColor));
@@ -102,7 +117,8 @@ namespace nxdt::views
             this->battery_percentage->setText(fmt::format("{}%", charge_percentage));
             
             /* Update network label. */
-            this->status_info_task->GetNetworkStats(&connection_type, &signal_strength, &connection_status, &ip_addr);
+            NifmInternetConnectionType connection_type = status_info_data->connection_type;
+            char *ip_addr = status_info_data->ip_addr;
             
             this->connection_icon->setText(!connection_type ? "\uE195" : (connection_type == NifmInternetConnectionType_WiFi ? "\uE63E" : "\uE8BE"));
             this->connection_status_lbl->setText(ip_addr ? std::string(ip_addr) : "root_view/not_connected"_i18n);
@@ -117,6 +133,12 @@ namespace nxdt::views
         /* Unregister status info task listener. */
         this->status_info_task->UnregisterListener(this->status_info_task_sub);
         
+        /* Stop background tasks. */
+        this->gc_status_task->stop();
+        this->title_task->stop();
+        this->ums_task->stop();
+        this->usb_host_task->stop();
+        
         /* Destroy labels. */
         delete this->applet_mode_lbl;
         delete this->time_lbl;
@@ -124,16 +146,12 @@ namespace nxdt::views
         delete this->battery_percentage;
         delete this->connection_icon;
         delete this->connection_status_lbl;
-        
-        /* Stop background tasks. */
-        this->gc_status_task->stop();
-        this->title_task->stop();
-        this->ums_task->stop();
-        this->usb_host_task->stop();
     }
     
     void RootView::draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx)
     {
+        brls::AppletFrame::draw(vg, x, y, width, height, style, ctx);
+        
         if (this->applet_mode) this->applet_mode_lbl->frame(ctx);
         
         this->time_lbl->frame(ctx);
@@ -143,8 +161,6 @@ namespace nxdt::views
         
         this->connection_icon->frame(ctx);
         this->connection_status_lbl->frame(ctx);
-        
-        brls::AppletFrame::draw(vg, x, y, width, height, style, ctx);
     }
     
     void RootView::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)

@@ -33,32 +33,35 @@
 
 namespace nxdt::tasks
 {
-    /* Custom event types used by the tasks defined below. */
-    typedef brls::Event<GameCardStatus> GameCardStatusEvent;
-    typedef brls::VoidEvent VoidEvent;
-    typedef brls::Event<bool> BooleanEvent;
+    /* Used to hold status info data. */
+    typedef struct {
+        struct tm *timeinfo;
+        u32 charge_percentage;
+        PsmChargerType charger_type;
+        NifmInternetConnectionType connection_type;
+        char *ip_addr;
+    } StatusInfoData;
     
-    /* Custom vector type used to hold pointers to application metadata entries. */
+    /* Used to hold pointers to application metadata entries. */
     typedef std::vector<TitleApplicationMetadata*> TitleApplicationMetadataVector;
     
-    /* Custom vector type used to hold UMS devices. */
+    /* Used to hold UMS devices. */
     typedef std::vector<UsbHsFsDevice> UmsDeviceVector;
     
+    /* Custom event types. */
+    typedef brls::Event<const StatusInfoData*> StatusInfoEvent;
+    typedef brls::Event<GameCardStatus> GameCardStatusEvent;
+    typedef brls::Event<const TitleApplicationMetadataVector*> TitleEvent;
+    typedef brls::Event<const UmsDeviceVector*> UmsEvent;
+    typedef brls::Event<bool> UsbHostEvent;
+    
     /* Status info task. */
+    /* Its event returns a pointer to a StatusInfoData struct. */
     class StatusInfoTask: public brls::RepeatingTask
     {
         private:
-            VoidEvent status_info_event;
-            
-            std::string cur_time = "";
-            
-            u32 charge_percentage = 0;
-            PsmChargerType charger_type = PsmChargerType_Unconnected;
-            
-            NifmInternetConnectionType connection_type = (NifmInternetConnectionType)0;
-            u32 signal_strength = 0;
-            NifmInternetConnectionStatus connection_status = (NifmInternetConnectionStatus)0;
-            char *ip_addr = NULL;
+            StatusInfoEvent status_info_event;
+            StatusInfoData status_info_data = {0};
         
         protected:
             void run(retro_time_t current_time) override;
@@ -67,27 +70,23 @@ namespace nxdt::tasks
             StatusInfoTask(void);
             ~StatusInfoTask(void);
             
-            std::string GetCurrentTimeString(void);
-            void GetBatteryStats(u32 *out_charge_percentage, PsmChargerType *out_charger_type);
-            void GetNetworkStats(NifmInternetConnectionType *out_connection_type, u32 *out_signal_strength, NifmInternetConnectionStatus *out_connection_status, char **out_ip_addr);
-            
-            ALWAYS_INLINE VoidEvent::Subscription RegisterListener(VoidEvent::Callback cb)
+            ALWAYS_INLINE StatusInfoEvent::Subscription RegisterListener(StatusInfoEvent::Callback cb)
             {
                 return this->status_info_event.subscribe(cb);
             }
             
-            ALWAYS_INLINE void UnregisterListener(VoidEvent::Subscription subscription)
+            ALWAYS_INLINE void UnregisterListener(StatusInfoEvent::Subscription subscription)
             {
                 this->status_info_event.unsubscribe(subscription);
             }
     };
     
     /* Gamecard task. */
+    /* Its event returns a GameCardStatus value. */
     class GameCardTask: public brls::RepeatingTask
     {
         private:
             GameCardStatusEvent gc_status_event;
-            
             GameCardStatus cur_gc_status = GameCardStatus_NotInserted;
             GameCardStatus prev_gc_status = GameCardStatus_NotInserted;
         
@@ -110,10 +109,11 @@ namespace nxdt::tasks
     };
     
     /* Title task. */
+    /* Its event returns a pointer to a TitleApplicationMetadataVector with metadata for user titles (system titles don't change at runtime). */
     class TitleTask: public brls::RepeatingTask
     {
         private:
-            VoidEvent title_event;
+            TitleEvent title_event;
             
             TitleApplicationMetadataVector system_metadata;
             TitleApplicationMetadataVector user_metadata;
@@ -127,24 +127,26 @@ namespace nxdt::tasks
             TitleTask(void);
             ~TitleTask(void);
             
+            /* Intentionally left here to let system titles views retrieve metadata. */
             TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
             
-            ALWAYS_INLINE VoidEvent::Subscription RegisterListener(VoidEvent::Callback cb)
+            ALWAYS_INLINE TitleEvent::Subscription RegisterListener(TitleEvent::Callback cb)
             {
                 return this->title_event.subscribe(cb);
             }
             
-            ALWAYS_INLINE void UnregisterListener(VoidEvent::Subscription subscription)
+            ALWAYS_INLINE void UnregisterListener(TitleEvent::Subscription subscription)
             {
                 this->title_event.unsubscribe(subscription);
             }
     };
     
     /* USB Mass Storage task. */
+    /* Its event returns a pointer to a UmsDeviceVector. */
     class UmsTask: public brls::RepeatingTask
     {
         private:
-            VoidEvent ums_event;
+            UmsEvent ums_event;
             
             UmsDeviceVector ums_devices;
             
@@ -157,14 +159,12 @@ namespace nxdt::tasks
             UmsTask(void);
             ~UmsTask(void);
             
-            UmsDeviceVector* GetUmsDevices(void);
-            
-            ALWAYS_INLINE VoidEvent::Subscription RegisterListener(VoidEvent::Callback cb)
+            ALWAYS_INLINE UmsEvent::Subscription RegisterListener(UmsEvent::Callback cb)
             {
                 return this->ums_event.subscribe(cb);
             }
             
-            ALWAYS_INLINE void UnregisterListener(VoidEvent::Subscription subscription)
+            ALWAYS_INLINE void UnregisterListener(UmsEvent::Subscription subscription)
             {
                 this->ums_event.unsubscribe(subscription);
             }
@@ -174,7 +174,7 @@ namespace nxdt::tasks
     class UsbHostTask: public brls::RepeatingTask
     {
         private:
-            BooleanEvent usb_host_event;
+            UsbHostEvent usb_host_event;
             
             bool cur_usb_host_status = false;
             bool prev_usb_host_status = false;
@@ -186,12 +186,12 @@ namespace nxdt::tasks
             UsbHostTask(void);
             ~UsbHostTask(void);
             
-            ALWAYS_INLINE BooleanEvent::Subscription RegisterListener(BooleanEvent::Callback cb)
+            ALWAYS_INLINE UsbHostEvent::Subscription RegisterListener(UsbHostEvent::Callback cb)
             {
                 return this->usb_host_event.subscribe(cb);
             }
             
-            ALWAYS_INLINE void UnregisterListener(BooleanEvent::Subscription subscription)
+            ALWAYS_INLINE void UnregisterListener(UsbHostEvent::Subscription subscription)
             {
                 this->usb_host_event.unsubscribe(subscription);
             }

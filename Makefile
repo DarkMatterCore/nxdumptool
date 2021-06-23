@@ -40,6 +40,11 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 GIT_BRANCH			:=	$(shell git rev-parse --abbrev-ref HEAD)
 GIT_COMMIT			:=	$(shell git rev-parse --short HEAD)
+GIT_REV				:=	${GIT_BRANCH}-${GIT_COMMIT}
+
+ifneq (, $(strip $(shell git status --porcelain 2>/dev/null)))
+GIT_REV				:=	$(GIT_REV)-dirty
+endif
 
 VERSION_MAJOR		:=	2
 VERSION_MINOR		:=	0
@@ -49,6 +54,7 @@ APP_TITLE			:=	nxdumptool
 APP_AUTHOR			:=	DarkMatterCore
 APP_VERSION			:=	${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_MICRO}
 
+# TODO: remove this after the PoC builds are no longer needed.
 ifneq ($(origin BUILD_TYPE),undefined)
 APP_TITLE			:=	${BUILD_TYPE}
 endif
@@ -61,10 +67,10 @@ ICON				:=	romfs/icon/${APP_TITLE}.jpg
 INCLUDES			:=	include include/core include/fatfs
 ROMFS       		:=	romfs
 
-USBHSFS_PATH		:=	$(TOPDIR)/libs/libusbhsfs
-
 BOREALIS_PATH		:=	libs/borealis
 BOREALIS_RESOURCES	:=	romfs:/
+
+USBHSFS_PATH		:=	$(TOPDIR)/libs/libusbhsfs
 
 #---------------------------------------------------------------------------------
 # options for code generation
@@ -74,12 +80,11 @@ ARCH		:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 CFLAGS		:=	-g -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
 CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
 CFLAGS		+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
-CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\"
+CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_REV=\"${GIT_REV}\"
 CFLAGS		+=	-DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\""
 CFLAGS  	+=	`aarch64-none-elf-pkg-config zlib --cflags`
 CFLAGS  	+=	`aarch64-none-elf-pkg-config libxml-2.0 --cflags`
-CFLAGS  	+=	`aarch64-none-elf-pkg-config json-c --cflags`
-CFLAGS  	+=	`aarch64-none-elf-pkg-config libturbojpeg --cflags`
+#CFLAGS  	+=	`aarch64-none-elf-pkg-config json-c --cflags`
 
 CXXFLAGS	:=	$(CFLAGS) -std=c++20 -O2 -Wno-volatile -Wno-unused-parameter
 
@@ -87,6 +92,7 @@ ASFLAGS		:=	-g $(ARCH)
 LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lusbhsfs -lntfs-3g -llwext4 -lnx
+#LIBS		+=	-ljson-c
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
@@ -183,7 +189,7 @@ ifneq ($(ROMFS),)
 	export NROFLAGS += --romfsdir=$(CURDIR)/$(ROMFS)
 endif
 
-.PHONY: $(BUILD) clean clean_all all
+.PHONY: $(BUILD) all clean clean_all
 
 #---------------------------------------------------------------------------------
 all: $(BUILD)

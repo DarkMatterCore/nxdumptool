@@ -61,6 +61,7 @@
 #define SPL_SYSMODULE_TID               (u64)0x0100000000000028
 #define ES_SYSMODULE_TID                (u64)0x0100000000000033
 #define SYSTEM_UPDATE_TID               (u64)0x0100000000000816
+#define QLAUNCH_TID                     (u64)0x0100000000001000
 
 #define FAT32_FILESIZE_LIMIT            (u64)0xFFFFFFFF                                                                         /* 4 GiB - 1 (4294967295 bytes). */
 

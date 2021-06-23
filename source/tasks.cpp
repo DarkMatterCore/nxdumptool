@@ -23,16 +23,13 @@
 #include <tasks.hpp>
 #include <arpa/inet.h>
 
-#define NXDT_TASK_INTERVAL  100 /* 100 ms. */
-
-namespace i18n = brls::i18n;    /* For getStr(). */
-using namespace i18n::literals; /* For _i18n. */
+#define NXDT_TASK_INTERVAL  250 /* 250 ms. */
 
 namespace nxdt::tasks
 {
     /* Status info task. */
     
-    StatusInfoTask::StatusInfoTask(void) : brls::RepeatingTask(1000)
+    StatusInfoTask::StatusInfoTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
         brls::Logger::debug("Status info task started.");
@@ -40,9 +37,6 @@ namespace nxdt::tasks
     
     StatusInfoTask::~StatusInfoTask(void)
     {
-        /* Clear current time string. */
-        this->cur_time.clear();
-        
         brls::Logger::debug("Status info task stopped.");
     }
     
@@ -50,72 +44,37 @@ namespace nxdt::tasks
     {
         brls::RepeatingTask::run(current_time);
         
+        StatusInfoData *status_info_data = &(this->status_info_data);
+        
         /* Get current time. */
-        bool is_am = true;
         time_t unix_time = time(NULL);
-        struct tm *timeinfo = localtime(&unix_time);
-        
-        if (timeinfo->tm_hour > 12)
-        {
-            timeinfo->tm_hour -= 12;
-            is_am = false;
-        } else
-        if (!timeinfo->tm_hour)
-        {
-            timeinfo->tm_hour = 12;
-        }
-        
-        timeinfo->tm_mon++;
-        timeinfo->tm_year += 1900;
-        
-        this->cur_time.clear();
-        this->cur_time = i18n::getStr("root_view/date"_i18n, timeinfo->tm_year, timeinfo->tm_mon, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, is_am ? "AM" : "PM");
+        status_info_data->timeinfo = localtime(&unix_time);
         
         /* Get battery stats. */
-        psmGetBatteryChargePercentage(&(this->charge_percentage));
-        psmGetChargerType(&(this->charger_type));
+        psmGetBatteryChargePercentage(&(status_info_data->charge_percentage));
+        psmGetChargerType(&(status_info_data->charger_type));
         
         /* Get network connection status. */
-        Result rc = nifmGetInternetConnectionStatus(&(this->connection_type), &(this->signal_strength), &(this->connection_status));
+        u32 signal_strength = 0;
+        NifmInternetConnectionStatus connection_status = (NifmInternetConnectionStatus)0;
+        
+        Result rc = nifmGetInternetConnectionStatus(&(status_info_data->connection_type), &signal_strength, &connection_status);
         if (R_SUCCEEDED(rc))
         {
-            if (this->connection_type && this->connection_status == NifmInternetConnectionStatus_Connected)
+            if (status_info_data->connection_type && connection_status == NifmInternetConnectionStatus_Connected)
             {
                 struct in_addr addr = { .s_addr = 0 };
                 nifmGetCurrentIpAddress(&(addr.s_addr));
-                this->ip_addr = inet_ntoa(addr);
+                status_info_data->ip_addr = inet_ntoa(addr);
             } else {
-                this->ip_addr = NULL;
+                status_info_data->ip_addr = NULL;
             }
         } else {
-            this->connection_type = (NifmInternetConnectionType)0;
-            this->signal_strength = 0;
-            this->connection_status = (NifmInternetConnectionStatus)0;
-            this->ip_addr = NULL;
+            status_info_data->connection_type = (NifmInternetConnectionType)0;
+            status_info_data->ip_addr = NULL;
         }
         
-        this->status_info_event.fire();
-    }
-    
-    std::string StatusInfoTask::GetCurrentTimeString(void)
-    {
-        return this->cur_time;
-    }
-    
-    void StatusInfoTask::GetBatteryStats(u32 *out_charge_percentage, PsmChargerType *out_charger_type)
-    {
-        if (!out_charge_percentage || !out_charger_type) return;
-        *out_charge_percentage = this->charge_percentage;
-        *out_charger_type = this->charger_type;
-    }
-    
-    void StatusInfoTask::GetNetworkStats(NifmInternetConnectionType *out_connection_type, u32 *out_signal_strength, NifmInternetConnectionStatus *out_connection_status, char **out_ip_addr)
-    {
-        if (!out_connection_type || !out_signal_strength || !out_connection_status || !out_ip_addr) return;
-        *out_connection_type = this->connection_type;
-        *out_signal_strength = this->signal_strength;
-        *out_connection_status = this->connection_status;
-        *out_ip_addr = this->ip_addr;
+        this->status_info_event.fire(status_info_data);
     }
     
     /* Gamecard task. */
@@ -168,28 +127,6 @@ namespace nxdt::tasks
         brls::Logger::debug("Title task stopped.");
     }
     
-    void TitleTask::PopulateApplicationMetadataVector(bool is_system)
-    {
-        TitleApplicationMetadata **app_metadata = NULL;
-        u32 app_metadata_count = 0;
-        
-        /* Get pointer to output vector. */
-        TitleApplicationMetadataVector *vector = (is_system ? &(this->system_metadata) : &(this->user_metadata));
-        if (vector->size()) vector->clear();
-        
-        /* Get application metadata entries. */
-        app_metadata = titleGetApplicationMetadataEntries(is_system, &app_metadata_count);
-        if (!app_metadata) return;
-        
-        /* Fill output vector. */
-        for(u32 i = 0; i < app_metadata_count; i++) vector->push_back(app_metadata[i]);
-        
-        /* Free application metadata array. */
-        free(app_metadata);
-        
-        brls::Logger::debug("Retrieved {} {} metadata {}.", app_metadata_count, is_system ? "system" : "user", app_metadata_count == 1 ? "entry" : "entries");
-    }
-    
     void TitleTask::run(retro_time_t current_time)
     {
         brls::RepeatingTask::run(current_time);
@@ -200,7 +137,7 @@ namespace nxdt::tasks
             this->PopulateApplicationMetadataVector(false);
             
             /* Fire task event. */
-            this->title_event.fire();
+            this->title_event.fire(&(this->user_metadata));
             brls::Logger::debug("Title info updated.");
         }
     }
@@ -208,6 +145,29 @@ namespace nxdt::tasks
     TitleApplicationMetadataVector* TitleTask::GetApplicationMetadata(bool is_system)
     {
         return (is_system ? &(this->system_metadata) : &(this->user_metadata));
+    }
+    
+    void TitleTask::PopulateApplicationMetadataVector(bool is_system)
+    {
+        TitleApplicationMetadata **app_metadata = NULL;
+        u32 app_metadata_count = 0;
+        
+        /* Get pointer to output vector. */
+        TitleApplicationMetadataVector *vector = (is_system ? &(this->system_metadata) : &(this->user_metadata));
+        vector->clear();
+        
+        /* Get application metadata entries. */
+        app_metadata = titleGetApplicationMetadataEntries(is_system, &app_metadata_count);
+        if (app_metadata)
+        {
+            /* Fill output vector. */
+            for(u32 i = 0; i < app_metadata_count; i++) vector->push_back(app_metadata[i]);
+            
+            /* Free application metadata array. */
+            free(app_metadata);
+        }
+        
+        brls::Logger::debug("Retrieved {} {} metadata {}.", app_metadata_count, is_system ? "system" : "user", app_metadata_count == 1 ? "entry" : "entries");
     }
     
     /* USB Mass Storage task. */
@@ -226,27 +186,6 @@ namespace nxdt::tasks
         brls::Logger::debug("UMS task stopped.");
     }
     
-    void UmsTask::PopulateUmsDeviceVector(void)
-    {
-        UsbHsFsDevice *ums_devices = NULL;
-        u32 ums_device_count = 0;
-        
-        /* Clear UMS device vector (if needed). */
-        if (this->ums_devices.size()) this->ums_devices.clear();
-        
-        /* Get UMS devices. */
-        ums_devices = umsGetDevices(&ums_device_count);
-        if (!ums_devices) return;
-        
-        /* Fill UMS device vector. */
-        for(u32 i = 0; i < ums_device_count; i++) this->ums_devices.push_back(ums_devices[i]);
-        
-        /* Free UMS devices array. */
-        free(ums_devices);
-        
-        brls::Logger::debug("Retrieved info for {} UMS {}.", ums_device_count, ums_device_count == 1 ? "device" : "devices");
-    }
-    
     void UmsTask::run(retro_time_t current_time)
     {
         brls::RepeatingTask::run(current_time);
@@ -257,14 +196,31 @@ namespace nxdt::tasks
             this->PopulateUmsDeviceVector();
             
             /* Fire task event. */
-            this->ums_event.fire();
+            this->ums_event.fire(&(this->ums_devices));
             brls::Logger::debug("UMS device info updated.");
         }
     }
     
-    UmsDeviceVector* UmsTask::GetUmsDevices(void)
+    void UmsTask::PopulateUmsDeviceVector(void)
     {
-        return &(this->ums_devices);
+        UsbHsFsDevice *ums_devices = NULL;
+        u32 ums_device_count = 0;
+        
+        /* Clear UMS device vector. */
+        this->ums_devices.clear();
+        
+        /* Get UMS devices. */
+        ums_devices = umsGetDevices(&ums_device_count);
+        if (ums_devices)
+        {
+            /* Fill UMS device vector. */
+            for(u32 i = 0; i < ums_device_count; i++) this->ums_devices.push_back(ums_devices[i]);
+            
+            /* Free UMS devices array. */
+            free(ums_devices);
+        }
+        
+        brls::Logger::debug("Retrieved info for {} UMS {}.", ums_device_count, ums_device_count == 1 ? "device" : "devices");
     }
     
     /* USB host device connection task. */
@@ -287,8 +243,8 @@ namespace nxdt::tasks
         this->cur_usb_host_status = usbIsReady();
         if (this->cur_usb_host_status != this->prev_usb_host_status)
         {
-            this->usb_host_event.fire(this->cur_usb_host_status);
             this->prev_usb_host_status = this->cur_usb_host_status;
+            this->usb_host_event.fire(this->cur_usb_host_status);
             brls::Logger::debug("USB host status change triggered: {}.", this->cur_usb_host_status);
         }
     }
