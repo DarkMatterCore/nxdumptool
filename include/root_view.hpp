@@ -39,7 +39,7 @@ namespace nxdt::views
             nxdt::tasks::UmsTask *ums_task = nullptr;
             nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
             
-            nxdt::tasks::VoidEvent::Subscription status_info_task_sub;
+            nxdt::tasks::StatusInfoEvent::Subscription status_info_task_sub;
             
             brls::Label *applet_mode_lbl = nullptr;
             brls::Label *time_lbl = nullptr;
@@ -47,8 +47,8 @@ namespace nxdt::views
             brls::Label *connection_icon = nullptr, *connection_status_lbl = nullptr;
         
         protected:
-            void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
-            void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
+            void draw(NVGcontext* vg, float x, float y, float width, float height, brls::Style style, brls::FrameContext* ctx) override;
+            void onLayout(void) override;
         
         public:
             RootView(void);
