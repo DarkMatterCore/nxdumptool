@@ -29,12 +29,21 @@
 
 namespace nxdt::views
 {
+    /* Expanded ListItem class to hold a title ID. */
+    class UserTitlesItem: public brls::ListItem
+    {
+        private:
+            u64 title_id = 0;
+        
+        public:
+            UserTitlesItem(TitleApplicationMetadata *app_metadata);
+    };
+    
     class UserTitlesTab: public LayeredErrorFrame
     {
         private:
             nxdt::tasks::TitleTask *title_task = nullptr;
             nxdt::tasks::TitleEvent::Subscription title_task_sub;
-            std::unordered_map<brls::ListItem*, TitleApplicationMetadata*> list_item_metadata;
             
             void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* user_app_metadata);
         

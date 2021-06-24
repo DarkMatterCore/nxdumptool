@@ -26,6 +26,12 @@ using namespace brls::i18n::literals;   /* For _i18n. */
 
 namespace nxdt::views
 {
+    UserTitlesItem::UserTitlesItem(TitleApplicationMetadata *app_metadata) : brls::ListItem(std::string(app_metadata->lang_entry.name), "", std::string(app_metadata->lang_entry.author)), \
+                                                                             title_id(app_metadata->title_id)
+    {
+        if (app_metadata->icon && app_metadata->icon_size) this->setThumbnail(app_metadata->icon, app_metadata->icon_size);
+    }
+    
     UserTitlesTab::UserTitlesTab(nxdt::tasks::TitleTask *title_task) : LayeredErrorFrame("user_titles_tab/no_titles_available"_i18n), title_task(title_task)
     {
         /* Populate list. */
@@ -43,9 +49,6 @@ namespace nxdt::views
     {
         /* Unregister task listener. */
         this->title_task->UnregisterListener(this->title_task_sub);
-        
-        /* Clear user application metadata map. */
-        this->list_item_metadata.clear();
     }
     
     void UserTitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* user_app_metadata)
@@ -78,23 +81,11 @@ namespace nxdt::views
         this->list->clear();
         this->list->invalidate(true);
         
-        /* Clear our private user application map. */
-        this->list_item_metadata.clear();
-        
         /* Immediately return if we have no user application metadata. */
         if (!user_app_metadata_count) return;
         
         /* Populate list. */
-        for(TitleApplicationMetadata *cur_app_metadata : *user_app_metadata)
-        {
-            /* Add list item for this application metadata to our list. */
-            brls::ListItem *list_item = new brls::ListItem(std::string(cur_app_metadata->lang_entry.name), "", std::string(cur_app_metadata->lang_entry.author));
-            list_item->setThumbnail(cur_app_metadata->icon, cur_app_metadata->icon_size);
-            this->list->addView(list_item);
-            
-            /* Update our private user application metadata map. */
-            this->list_item_metadata.insert(std::make_pair(list_item, cur_app_metadata));
-        }
+        for(TitleApplicationMetadata *cur_app_metadata : *user_app_metadata) this->list->addView(new UserTitlesItem(cur_app_metadata));
         
         /* Switch to the list. */
         this->list->invalidate(true);
