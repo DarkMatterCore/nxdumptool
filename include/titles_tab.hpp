@@ -1,5 +1,5 @@
 /*
- * user_titles_tab.hpp
+ * titles_tab.hpp
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,8 +21,8 @@
 
 #pragma once
 
-#ifndef __USER_TITLES_TAB_HPP__
-#define __USER_TITLES_TAB_HPP__
+#ifndef __TITLES_TAB_HPP__
+#define __TITLES_TAB_HPP__
 
 #include "tasks.hpp"
 #include "layered_error_frame.hpp"
@@ -30,27 +30,30 @@
 namespace nxdt::views
 {
     /* Expanded ListItem class to hold a title ID. */
-    class UserTitlesItem: public brls::ListItem
+    class TitlesTabItem: public brls::ListItem
     {
         private:
             u64 title_id = 0;
+            bool is_system = false;
         
         public:
-            UserTitlesItem(TitleApplicationMetadata *app_metadata);
+            TitlesTabItem(TitleApplicationMetadata *app_metadata, bool is_system);
     };
     
-    class UserTitlesTab: public LayeredErrorFrame
+    class TitlesTab: public LayeredErrorFrame
     {
         private:
             nxdt::tasks::TitleTask *title_task = nullptr;
             nxdt::tasks::TitleEvent::Subscription title_task_sub;
             
-            void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* user_app_metadata);
+            bool is_system = false;
+            
+            void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* app_metadata);
         
         public:
-            UserTitlesTab(nxdt::tasks::TitleTask *title_task);
-            ~UserTitlesTab(void);
+            TitlesTab(nxdt::tasks::TitleTask *title_task, bool is_system);
+            ~TitlesTab(void);
     };
 }
 
-#endif  /* __USER_TITLES_TAB_HPP__ */
+#endif  /* __TITLES_TAB_HPP__ */
