@@ -29,15 +29,40 @@
 
 namespace nxdt::views
 {
-    /* Expanded ListItem class to hold a title ID. */
+    /* Expanded TabFrame class used as a PopupFrame for titles. */
+    class TitlesTabPopup: public brls::TabFrame
+    {
+        private:
+            const TitleApplicationMetadata *app_metadata = nullptr;
+            bool is_system = false;
+            
+            TitleUserApplicationData user_app_data = {0};
+            TitleInfo *system_title_info = NULL;
+        
+        public:
+            TitlesTabPopup(const TitleApplicationMetadata *app_metadata, bool is_system);
+            ~TitlesTabPopup(void);
+    };
+    
+    /* Expanded ListItem class to hold application metadata. */
     class TitlesTabItem: public brls::ListItem
     {
         private:
-            u64 title_id = 0;
+            const TitleApplicationMetadata *app_metadata = nullptr;
             bool is_system = false;
         
         public:
-            TitlesTabItem(TitleApplicationMetadata *app_metadata, bool is_system);
+            TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system);
+            
+            ALWAYS_INLINE const TitleApplicationMetadata *GetApplicationMetadata(void)
+            {
+                return this->app_metadata;
+            }
+            
+            ALWAYS_INLINE bool IsSystemTitle(void)
+            {
+                return this->is_system;
+            }
     };
     
     class TitlesTab: public LayeredErrorFrame
