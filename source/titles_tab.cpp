@@ -104,10 +104,6 @@ namespace nxdt::views
     {
         if (!app_metadata) return;
         
-        /* Block inputs while we're doing our thing. */
-        brls::Application::blockInputs();
-        ON_SCOPE_EXIT { brls::Application::unblockInputs(); };
-        
         /* Populate variables. */
         size_t app_metadata_count = app_metadata->size();
         bool update_focused_view = this->IsListItemFocused();

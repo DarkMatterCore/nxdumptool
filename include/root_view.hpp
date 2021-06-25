@@ -37,6 +37,7 @@ namespace nxdt::views
             brls::Label *time_lbl = nullptr;
             brls::Label *battery_icon = nullptr, *battery_percentage = nullptr;
             brls::Label *connection_icon = nullptr, *connection_status_lbl = nullptr;
+            brls::Label *usb_icon = nullptr, *usb_host_speed_lbl = nullptr;
             
             nxdt::tasks::StatusInfoTask *status_info_task = nullptr;
             nxdt::tasks::GameCardTask *gc_status_task = nullptr;
@@ -45,6 +46,7 @@ namespace nxdt::views
             nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
             
             nxdt::tasks::StatusInfoEvent::Subscription status_info_task_sub;
+            nxdt::tasks::UsbHostEvent::Subscription usb_host_task_sub;
         
         protected:
             void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
