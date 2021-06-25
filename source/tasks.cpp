@@ -56,7 +56,7 @@ namespace nxdt::tasks
         
         /* Get network connection status. */
         u32 signal_strength = 0;
-        NifmInternetConnectionStatus connection_status = (NifmInternetConnectionStatus)0;
+        NifmInternetConnectionStatus connection_status = static_cast<NifmInternetConnectionStatus>(0);
         
         Result rc = nifmGetInternetConnectionStatus(&(status_info_data->connection_type), &signal_strength, &connection_status);
         if (R_SUCCEEDED(rc))
@@ -70,7 +70,7 @@ namespace nxdt::tasks
                 status_info_data->ip_addr = NULL;
             }
         } else {
-            status_info_data->connection_type = (NifmInternetConnectionType)0;
+            status_info_data->connection_type = static_cast<NifmInternetConnectionType>(0);
             status_info_data->ip_addr = NULL;
         }
         

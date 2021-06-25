@@ -33,10 +33,12 @@ namespace nxdt::views
 {
     RootView::RootView(void) : brls::TabFrame()
     {
+        int material = brls::Application::getFontStash()->material;
+        
         /* Set UI properties. */
         this->setTitle(APP_TITLE);
         this->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
-        this->setFooterText("v" APP_VERSION);
+        this->setFooterText("v" APP_VERSION " (" GIT_REV ")");
         
         /* Check if we're running under applet mode. */
         this->applet_mode = utilsAppletModeCheck();
@@ -44,20 +46,21 @@ namespace nxdt::views
         /* Create labels. */
         this->applet_mode_lbl = new brls::Label(brls::LabelStyle::HINT, "root_view/applet_mode"_i18n);
         this->applet_mode_lbl->setColor(nvgRGB(255, 0, 0));
+        this->applet_mode_lbl->setFontSize(brls::Application::getStyle()->AppletFrame.titleSize);
         this->applet_mode_lbl->setParent(this);
         
         this->time_lbl = new brls::Label(brls::LabelStyle::SMALL, "");
         this->time_lbl->setParent(this);
         
         this->battery_icon = new brls::Label(brls::LabelStyle::SMALL, "");
-        this->battery_icon->setFont(brls::Application::getFontStash()->material);
+        this->battery_icon->setFont(material);
         this->battery_icon->setParent(this);
         
         this->battery_percentage = new brls::Label(brls::LabelStyle::SMALL, "");
         this->battery_percentage->setParent(this);
         
         this->connection_icon = new brls::Label(brls::LabelStyle::SMALL, "");
-        this->connection_icon->setFont(brls::Application::getFontStash()->material);
+        this->connection_icon->setFont(material);
         this->connection_icon->setParent(this);
         
         this->connection_status_lbl = new brls::Label(brls::LabelStyle::SMALL, "");
@@ -71,21 +74,40 @@ namespace nxdt::views
         this->usb_host_task = new nxdt::tasks::UsbHostTask();
         
         /* Add tabs. */
-        this->addTab("root_view/tabs/gamecard"_i18n, new GameCardTab(this->gc_status_task));
+        GameCardTab *gamecard_tab = new GameCardTab(this->gc_status_task);
+        this->addTab("root_view/tabs/gamecard"_i18n, gamecard_tab);
+        gamecard_tab->SetParentSidebarItem(static_cast<brls::SidebarItem*>(this->sidebar->getChild(this->sidebar->getViewsCount() - 1)));
+        
         this->addSeparator();
-        this->addTab("root_view/tabs/user_titles"_i18n, new TitlesTab(this->title_task, false));
-        this->addTab("root_view/tabs/system_titles"_i18n, new TitlesTab(this->title_task, true));
+        
+        TitlesTab *user_titles_tab = new TitlesTab(this->title_task, false);
+        this->addTab("root_view/tabs/user_titles"_i18n, user_titles_tab);
+        user_titles_tab->SetParentSidebarItem(static_cast<brls::SidebarItem*>(this->sidebar->getChild(this->sidebar->getViewsCount() - 1)));
+        
+        TitlesTab *system_titles_tab = new TitlesTab(this->title_task, true);
+        this->addTab("root_view/tabs/system_titles"_i18n, system_titles_tab);
+        system_titles_tab->SetParentSidebarItem(static_cast<brls::SidebarItem*>(this->sidebar->getChild(this->sidebar->getViewsCount() - 1)));
+        
         this->addSeparator();
+        
         this->addTab("root_view/tabs/options"_i18n, new brls::Rectangle(nvgRGB(255, 255, 0)));
+        
         this->addSeparator();
+        
         this->addTab("root_view/tabs/about"_i18n, new AboutTab());
         
         /* Subscribe to status info event. */
         this->status_info_task_sub = this->status_info_task->RegisterListener([this](const nxdt::tasks::StatusInfoData *status_info_data) {
-            /* Update time label. */
             bool is_am = true;
             struct tm *timeinfo = status_info_data->timeinfo;
             
+            u32 charge_percentage = status_info_data->charge_percentage;
+            PsmChargerType charger_type = status_info_data->charger_type;
+            
+            NifmInternetConnectionType connection_type = status_info_data->connection_type;
+            char *ip_addr = status_info_data->ip_addr;
+            
+            /* Update time label. */
             timeinfo->tm_mon++;
             timeinfo->tm_year += 1900;
             
@@ -107,18 +129,12 @@ namespace nxdt::views
                                                  is_am ? "AM" : "PM"));
             
             /* Update battery labels. */
-            u32 charge_percentage = status_info_data->charge_percentage;
-            PsmChargerType charger_type = status_info_data->charger_type;
-            
             this->battery_icon->setText(charger_type != PsmChargerType_Unconnected ? "\uE1A3" : (charge_percentage <= 15 ? "\uE19C" : "\uE1A4"));
             this->battery_icon->setColor(charger_type != PsmChargerType_Unconnected ? nvgRGB(0, 255, 0) : (charge_percentage <= 15 ? nvgRGB(255, 0, 0) : brls::Application::getTheme()->textColor));
             
             this->battery_percentage->setText(fmt::format("{}%", charge_percentage));
             
-            /* Update network label. */
-            NifmInternetConnectionType connection_type = status_info_data->connection_type;
-            char *ip_addr = status_info_data->ip_addr;
-            
+            /* Update network labels. */
             this->connection_icon->setText(!connection_type ? "\uE195" : (connection_type == NifmInternetConnectionType_WiFi ? "\uE63E" : "\uE8BE"));
             this->connection_status_lbl->setText(ip_addr ? std::string(ip_addr) : "root_view/not_connected"_i18n);
             
@@ -173,8 +189,8 @@ namespace nxdt::views
             /* Applet mode label. */
             this->applet_mode_lbl->invalidate(true);
             this->applet_mode_lbl->setBoundaries(
-                this->x + (this->width / 4) - (this->applet_mode_lbl->getWidth() / 2),
-                this->y + this->height - (style->AppletFrame.footerHeight / 2),
+                this->x + (this->width - this->applet_mode_lbl->getWidth()) / 2,
+                this->y + (style->AppletFrame.headerHeightRegular / 2) + style->AppletFrame.titleOffset,
                 this->applet_mode_lbl->getWidth(),
                 this->applet_mode_lbl->getHeight());
         }

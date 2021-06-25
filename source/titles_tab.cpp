@@ -65,14 +65,18 @@ namespace nxdt::views
                                                                                                  app_metadata(app_metadata),
                                                                                                  is_system(is_system)
     {
-        brls::Style* style = brls::Application::getStyle();
-        
         /* Set sublabel. */
-        this->subLabel = (!this->is_system ? std::string(app_metadata->lang_entry.author) : fmt::format("{:016X}", this->app_metadata->title_id));
-        this->setHeight(style->List.Item.heightWithSubLabel);
+        if (!this->is_system)
+        {
+            this->subLabel = std::string(app_metadata->lang_entry.author);
+            this->setHeight(brls::Application::getStyle()->List.Item.heightWithSubLabel);
+        }
         
         /* Set thumbnail (if needed). */
         if (app_metadata->icon && app_metadata->icon_size) this->setThumbnail(app_metadata->icon, app_metadata->icon_size);
+        
+        /* Set value. */
+        this->setValue(fmt::format("{:016X}", this->app_metadata->title_id), false, false);
     }
     
     TitlesTab::TitlesTab(nxdt::tasks::TitleTask *title_task, bool is_system) : LayeredErrorFrame("titles_tab/no_titles_available"_i18n), title_task(title_task), is_system(is_system)
@@ -100,39 +104,25 @@ namespace nxdt::views
     
     void TitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* app_metadata)
     {
+        if (!app_metadata) return;
+        
         /* Block inputs while we're doing our thing. */
         brls::Application::blockInputs();
         ON_SCOPE_EXIT { brls::Application::unblockInputs(); };
         
-        if (!app_metadata) return;
-        
-        bool refocus = false;
+        /* Populate variables. */
         size_t app_metadata_count = app_metadata->size();
+        bool update_focused_view = this->IsListItemFocused();
+        int focus_stack_index = this->GetFocusStackViewIndex();
         
-        if (app_metadata_count)
-        {
-            /* Determine if we need to refocus after updating the list. */
-            brls::View *cur_view = brls::Application::getCurrentFocus();
-            while(cur_view)
-            {
-                if (cur_view == this->list)
-                {
-                    refocus = true;
-                    break;
-                }
-                
-                cur_view = cur_view->getParent();
-            }
-        } else {
-            /* If we need to, switch to the error frame *before* cleaning up our list. */
-            this->SwitchLayerView(true);
-        }
+        /* If needed, switch to the error frame *before* cleaning up our list. */
+        if (!app_metadata_count) this->SwitchLayerView(true);
         
         /* Clear list. */
         this->list->clear();
         this->list->invalidate(true);
         
-        /* Immediately return if we have no user application metadata. */
+        /* Return immediately if we have no user application metadata. */
         if (!app_metadata_count) return;
         
         /* Populate list. */
@@ -176,15 +166,11 @@ namespace nxdt::views
             this->list->addView(title);
         }
         
+        /* Update focus stack, if needed. */
+        if (focus_stack_index > -1) this->UpdateFocusStackViewAtIndex(focus_stack_index, this->list->getChild(0));
+        
         /* Switch to the list. */
         this->list->invalidate(true);
-        this->SwitchLayerView(false);
-        
-        /* Refocus, if needed. */
-        if (refocus)
-        {
-            brls::Application::giveFocus(this->list->getChild(0));
-            this->list->willAppear(true);
-        }
+        this->SwitchLayerView(false, update_focused_view, focus_stack_index < 0);
     }
 }
