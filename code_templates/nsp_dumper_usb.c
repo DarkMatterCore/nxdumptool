@@ -809,7 +809,8 @@ static void nspDump(TitleInfo *title_info)
     Thread dump_thread = {0};
     
     time_t start = 0, btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
-    bool usb_conn = false, btn_cancel_cur_state = false, btn_cancel_prev_state = false;
+    bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
+    u8 usb_host_speed = UsbHostSpeed_None;
     
     u64 prev_size = 0;
     u8 prev_time = 0, percent = 0;
@@ -849,13 +850,13 @@ static void nspDump(TitleInfo *title_info)
         consolePrint("%lu ", now - start);
         consoleRefresh();
         
-        if ((usb_conn = usbIsReady())) break;
+        if ((usb_host_speed = usbIsReady())) break;
         utilsSleep(1);
     }
     
     consolePrint("\n");
     
-    if (!usb_conn)
+    if (!usb_host_speed)
     {
         consolePrint("usb connection failed\n");
         return;

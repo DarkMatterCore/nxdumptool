@@ -561,7 +561,7 @@ int main(int argc, char *argv[])
     consolePrint("waiting for usb connection... ");
     
     time_t start = time(NULL);
-    bool usb_conn = false;
+    u8 usb_host_speed = UsbHostSpeed_None;
     
     while(true)
     {
@@ -569,13 +569,13 @@ int main(int argc, char *argv[])
         if ((now - start) >= 10) break;
         consolePrint("%lu ", now - start);
         
-        if ((usb_conn = usbIsReady())) break;
+        if ((usb_host_speed = usbIsReady())) break;
         utilsSleep(1);
     }
     
     consolePrint("\n");
     
-    if (!usb_conn)
+    if (!usb_host_speed)
     {
         consolePrint("usb connection failed\n");
         goto out2;
