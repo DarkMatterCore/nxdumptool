@@ -90,8 +90,6 @@ namespace nxdt::views
             this->title_task_sub = this->title_task->RegisterListener([this](const nxdt::tasks::TitleApplicationMetadataVector* app_metadata) {
                 /* Update list. */
                 this->PopulateList(app_metadata);
-                
-                brls::Application::notify("titles_tab/user_titles_notification"_i18n);
             });
         }
     }

@@ -83,8 +83,6 @@ namespace nxdt::views
         
         /* Subscribe to gamecard status event. */
         this->gc_status_task_sub = this->gc_status_task->RegisterListener([this](GameCardStatus gc_status) {
-            brls::Application::notify("gamecard_tab/notification"_i18n);
-            
             if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->SwitchLayerView(true);
             
             switch(gc_status)

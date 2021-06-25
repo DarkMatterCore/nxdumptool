@@ -1,6 +1,4 @@
 {
-    "notification": "Gamecard status change detected!",
-    
     "error_frame": {
         "not_inserted": "No gamecard inserted.",
         "processing": "Processing gamecard, please wait...",

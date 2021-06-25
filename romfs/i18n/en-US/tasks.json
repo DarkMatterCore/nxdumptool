@@ -1,0 +1,6 @@
+{
+    "notifications": {
+        "gamecard": "Gamecard status change detected!",
+        "user_titles": "User titles updated!"
+    }
+}

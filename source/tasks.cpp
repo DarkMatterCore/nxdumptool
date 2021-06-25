@@ -25,6 +25,8 @@
 
 #define NXDT_TASK_INTERVAL  250 /* 250 ms. */
 
+using namespace brls::i18n::literals;   /* For _i18n. */
+
 namespace nxdt::tasks
 {
     /* Status info task. */
@@ -97,9 +99,14 @@ namespace nxdt::tasks
         this->cur_gc_status = (GameCardStatus)gamecardGetStatus();
         if (this->cur_gc_status != this->prev_gc_status)
         {
-            this->gc_status_event.fire(this->cur_gc_status);
-            this->prev_gc_status = this->cur_gc_status;
             brls::Logger::debug("Gamecard status change triggered: {}.", this->cur_gc_status);
+            brls::Application::notify("tasks/notifications/gamecard"_i18n);
+            
+            /* Update previous gamecard status. */
+            this->prev_gc_status = this->cur_gc_status;
+            
+            /* Fire task event. */
+            this->gc_status_event.fire(this->cur_gc_status);
         }
     }
     
@@ -133,12 +140,14 @@ namespace nxdt::tasks
         
         if (titleIsGameCardInfoUpdated())
         {
+            brls::Logger::debug("Title info updated.");
+            brls::Application::notify("tasks/notifications/user_titles"_i18n);
+            
             /* Update user metadata vector. */
             this->PopulateApplicationMetadataVector(false);
             
             /* Fire task event. */
             this->title_event.fire(&(this->user_metadata));
-            brls::Logger::debug("Title info updated.");
         }
     }
     
