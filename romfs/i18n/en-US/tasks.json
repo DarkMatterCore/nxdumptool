@@ -1,6 +1,9 @@
 {
     "notifications": {
         "gamecard": "Gamecard status change detected!",
-        "user_titles": "User titles updated!"
+        "user_titles": "User titles updated!",
+        "ums_device": "USB Mass Storage devices updated!",
+        "usb_host_connected": "USB host connected!",
+        "usb_host_disconnected": "USB host disconnected!"
     }
 }

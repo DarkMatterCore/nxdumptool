@@ -53,7 +53,7 @@ namespace nxdt::tasks
     typedef brls::Event<GameCardStatus> GameCardStatusEvent;
     typedef brls::Event<const TitleApplicationMetadataVector*> TitleEvent;
     typedef brls::Event<const UmsDeviceVector*> UmsEvent;
-    typedef brls::Event<bool> UsbHostEvent;
+    typedef brls::Event<UsbHostSpeed> UsbHostEvent;
     
     /* Status info task. */
     /* Its event returns a pointer to a StatusInfoData struct. */
@@ -175,9 +175,8 @@ namespace nxdt::tasks
     {
         private:
             UsbHostEvent usb_host_event;
-            
-            bool cur_usb_host_status = false;
-            bool prev_usb_host_status = false;
+            UsbHostSpeed cur_usb_host_speed = UsbHostSpeed_None;
+            UsbHostSpeed prev_usb_host_speed = UsbHostSpeed_None;
         
         protected:
             void run(retro_time_t current_time) override;

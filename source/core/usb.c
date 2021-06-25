@@ -305,10 +305,30 @@ void *usbAllocatePageAlignedBuffer(size_t size)
     return memalign(USB_TRANSFER_ALIGNMENT, size);
 }
 
-bool usbIsReady(void)
+u8 usbIsReady(void)
 {
-    bool ret = false;
-    SCOPED_TRY_LOCK(&g_usbInterfaceMutex) ret = (g_usbHostAvailable && g_usbSessionStarted);
+    u8 ret = UsbHostSpeed_None;
+    
+    SCOPED_TRY_LOCK(&g_usbInterfaceMutex)
+    {
+        if (!g_usbHostAvailable || !g_usbSessionStarted) break;
+        
+        switch(g_usbEndpointMaxPacketSize)
+        {
+            case USB_FS_EP_MAX_PACKET_SIZE: /* USB 1.x. */
+                ret = UsbHostSpeed_FullSpeed;
+                break;
+            case USB_HS_EP_MAX_PACKET_SIZE: /* USB 2.0. */
+                ret = UsbHostSpeed_HighSpeed;
+                break;
+            case USB_SS_EP_MAX_PACKET_SIZE: /* USB 3.0. */
+                ret = UsbHostSpeed_SuperSpeed;
+                break;
+            default:
+                break;
+        }
+    }
+    
     return ret;
 }
 

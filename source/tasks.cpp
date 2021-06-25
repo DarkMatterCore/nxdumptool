@@ -76,6 +76,7 @@ namespace nxdt::tasks
             status_info_data->ip_addr = NULL;
         }
         
+        /* Fire task event. */
         this->status_info_event.fire(status_info_data);
     }
     
@@ -96,7 +97,7 @@ namespace nxdt::tasks
     {
         brls::RepeatingTask::run(current_time);
         
-        this->cur_gc_status = (GameCardStatus)gamecardGetStatus();
+        this->cur_gc_status = static_cast<GameCardStatus>(gamecardGetStatus());
         if (this->cur_gc_status != this->prev_gc_status)
         {
             brls::Logger::debug("Gamecard status change triggered: {}.", this->cur_gc_status);
@@ -201,12 +202,14 @@ namespace nxdt::tasks
         
         if (umsIsDeviceInfoUpdated())
         {
+            brls::Logger::debug("UMS device info updated.");
+            brls::Application::notify("tasks/notifications/ums_device"_i18n);
+            
             /* Update UMS device vector. */
             this->PopulateUmsDeviceVector();
             
             /* Fire task event. */
             this->ums_event.fire(&(this->ums_devices));
-            brls::Logger::debug("UMS device info updated.");
         }
     }
     
@@ -249,12 +252,17 @@ namespace nxdt::tasks
     {
         brls::RepeatingTask::run(current_time);
         
-        this->cur_usb_host_status = usbIsReady();
-        if (this->cur_usb_host_status != this->prev_usb_host_status)
+        this->cur_usb_host_speed = static_cast<UsbHostSpeed>(usbIsReady());
+        if (this->cur_usb_host_speed != this->prev_usb_host_speed)
         {
-            this->prev_usb_host_status = this->cur_usb_host_status;
-            this->usb_host_event.fire(this->cur_usb_host_status);
-            brls::Logger::debug("USB host status change triggered: {}.", this->cur_usb_host_status);
+            brls::Logger::debug("USB host speed changed: {}.", this->cur_usb_host_speed);
+            brls::Application::notify(this->cur_usb_host_speed ? "tasks/notifications/usb_host_connected"_i18n : "tasks/notifications/usb_host_disconnected"_i18n);
+            
+            /* Update previous USB host speed. */
+            this->prev_usb_host_speed = this->cur_usb_host_speed;
+            
+            /* Fire task event. */
+            this->usb_host_event.fire(this->cur_usb_host_speed);
         }
     }
 }

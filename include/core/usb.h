@@ -33,6 +33,14 @@ extern "C" {
 
 #define USB_TRANSFER_BUFFER_SIZE    0x800000    /* 8 MiB. */
 
+/// Used to indicate the USB speed selected by the host device.
+typedef enum {
+    UsbHostSpeed_None       = 0,
+    UsbHostSpeed_FullSpeed  = 1,    ///< USB 1.x.
+    UsbHostSpeed_HighSpeed  = 2,    ///< USB 2.0.
+    UsbHostSpeed_SuperSpeed = 3     ///< USB 3.0.
+} UsbHostSpeed;
+
 /// Initializes the USB interface, input and output endpoints and allocates an internal transfer buffer.
 bool usbInitialize(void);
 
@@ -43,7 +51,8 @@ void usbExit(void);
 void *usbAllocatePageAlignedBuffer(size_t size);
 
 /// Used to check if the console has been connected to a USB host device and if a valid USB session has been established.
-bool usbIsReady(void);
+/// Returns a value from the UsbHostSpeed enum.
+u8 usbIsReady(void);
 
 /// Sends file properties to the host device before starting a file data transfer. Must be called before usbSendFileData().
 /// If 'nsp_header_size' is greater than zero, NSP transfer mode will be enabled. The file will be treated as a NSP and this value will be taken as its full Partition FS header size.
