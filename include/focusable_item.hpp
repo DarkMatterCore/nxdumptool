@@ -40,6 +40,7 @@ namespace nxdt::views
                 return this;
             }
             
+            void playClickAnimation(void) override;
             void onFocusGained(void) override;
         
         public:
@@ -49,6 +50,13 @@ namespace nxdt::views
                 this->highlight_view = highlight_view;
             }
     };
+    
+    template<typename ViewType>
+    void FocusableItem<ViewType>::playClickAnimation(void)
+    {
+        /* Play click animation. */
+        if (this->highlight_view) brls::View::playClickAnimation();
+    }
     
     template<typename ViewType>
     void FocusableItem<ViewType>::onFocusGained(void)

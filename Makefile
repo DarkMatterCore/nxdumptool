@@ -77,7 +77,7 @@ USBHSFS_PATH		:=	$(TOPDIR)/libs/libusbhsfs
 #---------------------------------------------------------------------------------
 ARCH		:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS		:=	-g -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
+CFLAGS		:=	-g -gdwarf-4 -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
 CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
 CFLAGS		+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
 CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_REV=\"${GIT_REV}\"
@@ -86,10 +86,10 @@ CFLAGS  	+=	`aarch64-none-elf-pkg-config zlib --cflags`
 CFLAGS  	+=	`aarch64-none-elf-pkg-config libxml-2.0 --cflags`
 #CFLAGS  	+=	`aarch64-none-elf-pkg-config json-c --cflags`
 
-CXXFLAGS	:=	$(CFLAGS) -std=c++20 -O2 -Wno-volatile -Wno-unused-parameter
+CXXFLAGS	:=	$(CFLAGS) -std=c++20 -Wno-volatile -Wno-unused-parameter
 
-ASFLAGS		:=	-g $(ARCH)
-LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
+ASFLAGS		:=	-g -gdwarf-4 $(ARCH)
+LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g -gdwarf-4 $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lusbhsfs -lntfs-3g -llwext4 -lnx
 #LIBS		+=	-ljson-c
