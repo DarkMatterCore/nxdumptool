@@ -36,7 +36,8 @@ namespace nxdt::views
         this->setMarginBottom(20);
         
         /* Logo. */
-        this->logo = new brls::Image(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
+        this->logo = new brls::Image();
+        this->logo->setImage(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
         this->logo->setWidth(LOGO_SIZE);
         this->logo->setHeight(LOGO_SIZE);
         this->logo->setScaleType(brls::ImageScaleType::NO_RESIZE);
