@@ -68,7 +68,7 @@ namespace nxdt::views
         /* Set sublabel. */
         if (!this->is_system)
         {
-            this->subLabel = std::string(app_metadata->lang_entry.author);
+            this->setSubLabel(std::string(app_metadata->lang_entry.author));
             this->setHeight(brls::Application::getStyle()->List.Item.heightWithSubLabel);
         }
         

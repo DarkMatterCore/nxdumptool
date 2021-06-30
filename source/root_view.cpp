@@ -50,27 +50,34 @@ namespace nxdt::views
         this->applet_mode_lbl->setParent(this);
         
         this->time_lbl = new brls::Label(brls::LabelStyle::SMALL, "");
+        this->time_lbl->setVerticalAlign(NVG_ALIGN_TOP);
         this->time_lbl->setParent(this);
         
         this->battery_icon = new brls::Label(brls::LabelStyle::SMALL, "");
         this->battery_icon->setFont(material);
+        this->battery_icon->setVerticalAlign(NVG_ALIGN_TOP);
         this->battery_icon->setParent(this);
         
         this->battery_percentage = new brls::Label(brls::LabelStyle::SMALL, "");
+        this->battery_percentage->setVerticalAlign(NVG_ALIGN_TOP);
         this->battery_percentage->setParent(this);
         
         this->connection_icon = new brls::Label(brls::LabelStyle::SMALL, "");
         this->connection_icon->setFont(material);
+        this->connection_icon->setVerticalAlign(NVG_ALIGN_TOP);
         this->connection_icon->setParent(this);
         
         this->connection_status_lbl = new brls::Label(brls::LabelStyle::SMALL, "");
+        this->connection_status_lbl->setVerticalAlign(NVG_ALIGN_TOP);
         this->connection_status_lbl->setParent(this);
         
         this->usb_icon = new brls::Label(brls::LabelStyle::SMALL, "\uE1E0");
         this->usb_icon->setFont(material);
+        this->usb_icon->setVerticalAlign(NVG_ALIGN_TOP);
         this->usb_icon->setParent(this);
         
         this->usb_host_speed_lbl = new brls::Label(brls::LabelStyle::SMALL, "root_view/not_connected"_i18n);
+        this->usb_host_speed_lbl->setVerticalAlign(NVG_ALIGN_TOP);
         this->usb_host_speed_lbl->setParent(this);
         
         /* Start background tasks. */
@@ -211,54 +218,40 @@ namespace nxdt::views
         if (this->applet_mode)
         {
             /* Applet mode label. */
-            this->applet_mode_lbl->invalidate(true);
-            
-            x_pos = (this->x + (this->width - this->applet_mode_lbl->getWidth()) / 2);
+            x_pos = (this->x + (this->width - this->applet_mode_lbl->getTextWidth()) / 2);
             y_pos = (this->y + (style->AppletFrame.headerHeightRegular / 2) + style->AppletFrame.titleOffset);
             
-            this->applet_mode_lbl->setBoundaries(x_pos, y_pos, this->applet_mode_lbl->getWidth(), this->applet_mode_lbl->getHeight());
-            y_pos = 0;
+            this->applet_mode_lbl->setBoundaries(x_pos, y_pos, 0, 0);
         }
         
         /* Time label. */
-        this->time_lbl->invalidate(true);
+        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->time_lbl->getTextWidth());
+        y_pos = this->y + style->AppletFrame.imageTopPadding;
         
-        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->time_lbl->getWidth());
-        y_pos += this->y + 25 + this->time_lbl->getHeight();
-        
-        this->time_lbl->setBoundaries(x_pos, y_pos, this->time_lbl->getWidth(), this->time_lbl->getHeight());
+        this->time_lbl->setBoundaries(x_pos, y_pos, 0, 0);
         
         /* Battery stats and network connection labels. */
-        this->battery_icon->invalidate(true);
-        this->battery_percentage->invalidate(true);
+        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->connection_status_lbl->getTextWidth());
+        y_pos += (this->time_lbl->getTextHeight() + 5);
         
-        this->connection_icon->invalidate(true);
-        this->connection_status_lbl->invalidate(true);
+        this->connection_status_lbl->setBoundaries(x_pos, y_pos, 0, 0);
+        x_pos -= (5 + this->connection_icon->getTextWidth());
         
-        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->connection_status_lbl->getWidth());
-        y_pos += (20 + this->connection_icon->getHeight());
+        this->connection_icon->setBoundaries(x_pos, y_pos, 0, 0);
+        x_pos -= (10 + this->battery_percentage->getTextWidth());
         
-        this->connection_status_lbl->setBoundaries(x_pos, y_pos, this->connection_status_lbl->getWidth(), this->connection_status_lbl->getHeight());
-        x_pos -= (5 + this->connection_icon->getWidth());
+        this->battery_percentage->setBoundaries(x_pos, y_pos, 0, 0);
+        x_pos -= (5 + this->battery_icon->getTextWidth());
         
-        this->connection_icon->setBoundaries(x_pos, y_pos, this->connection_icon->getWidth(), this->connection_icon->getHeight());
-        x_pos -= (10 + this->battery_percentage->getWidth());
-        
-        this->battery_percentage->setBoundaries(x_pos, y_pos, this->battery_percentage->getWidth(), this->battery_percentage->getHeight());
-        x_pos -= (5 + this->battery_icon->getWidth());
-        
-        this->battery_icon->setBoundaries(x_pos, y_pos, this->battery_icon->getWidth(), this->battery_icon->getHeight());
+        this->battery_icon->setBoundaries(x_pos, y_pos, 0, 0);
         
         /* USB host speed labels. */
-        this->usb_icon->invalidate(true);
-        this->usb_host_speed_lbl->invalidate(true);
+        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->usb_host_speed_lbl->getTextWidth());
+        y_pos += (this->connection_status_lbl->getTextHeight() + 5);
         
-        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->usb_host_speed_lbl->getWidth());
-        y_pos += (20 + this->usb_icon->getHeight());
+        this->usb_host_speed_lbl->setBoundaries(x_pos, y_pos, 0, 0);
+        x_pos -= (5 + this->usb_icon->getTextWidth());
         
-        this->usb_host_speed_lbl->setBoundaries(x_pos, y_pos, this->usb_host_speed_lbl->getWidth(), this->usb_host_speed_lbl->getHeight());
-        x_pos -= (5 + this->usb_icon->getWidth());
-        
-        this->usb_icon->setBoundaries(x_pos, y_pos, this->battery_icon->getWidth(), this->battery_icon->getHeight());
+        this->usb_icon->setBoundaries(x_pos, y_pos, 0, 0);
     }
 }
