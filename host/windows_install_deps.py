@@ -10,5 +10,5 @@ from sys import executable
 
 root_dir = dirname(__file__)
 
-run([executable, '-m', 'pip', 'install', '--user', '-r', join(root_dir, 'requirements-win32.txt')])
+run([executable, '-m', 'pip', 'install', '-r', join(root_dir, 'requirements-win32.txt')])
 input('Press enter to close')

@@ -1,3 +1,4 @@
+.vscode
 build
 host/__pycache__
 host/build
