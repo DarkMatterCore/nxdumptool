@@ -173,7 +173,7 @@ typedef struct {
     u8 rom_size;                                    ///< GameCardRomSize.
     u8 header_version;                              ///< Always 0.
     u8 flags;                                       ///< GameCardFlags.
-    u64 package_id;                                 ///< Used for challenge–response authentication.
+    u64 package_id;                                 ///< Used for challenge-response authentication.
     u32 valid_data_end_address;                     ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 reserved[0x4];
     u8 card_info_iv[AES_128_KEY_SIZE];              ///< AES-128-CBC IV for the CardInfo area (reversed).
@@ -183,7 +183,7 @@ typedef struct {
     u8 initial_data_hash[SHA256_HASH_SIZE];
     u32 sel_sec;                                    ///< GameCardSelSec.
     u32 sel_t1_key;                                 ///< Always 2.
-    u32 sel_key;                                    ///> Always 0.
+    u32 sel_key;                                    ///< Always 0.
     u32 lim_area;                                   ///< Expressed in GAMECARD_PAGE_SIZE units.
     GameCardInfo card_info;
 } GameCardHeader;

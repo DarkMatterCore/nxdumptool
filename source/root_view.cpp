@@ -50,33 +50,40 @@ namespace nxdt::views
         this->applet_mode_lbl->setParent(this);
         
         this->time_lbl = new brls::Label(brls::LabelStyle::SMALL, "");
+        this->time_lbl->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->time_lbl->setVerticalAlign(NVG_ALIGN_TOP);
         this->time_lbl->setParent(this);
         
         this->battery_icon = new brls::Label(brls::LabelStyle::SMALL, "");
         this->battery_icon->setFont(material);
+        this->battery_icon->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->battery_icon->setVerticalAlign(NVG_ALIGN_TOP);
         this->battery_icon->setParent(this);
         
         this->battery_percentage = new brls::Label(brls::LabelStyle::SMALL, "");
+        this->battery_percentage->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->battery_percentage->setVerticalAlign(NVG_ALIGN_TOP);
         this->battery_percentage->setParent(this);
         
         this->connection_icon = new brls::Label(brls::LabelStyle::SMALL, "");
         this->connection_icon->setFont(material);
+        this->connection_icon->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->connection_icon->setVerticalAlign(NVG_ALIGN_TOP);
         this->connection_icon->setParent(this);
         
         this->connection_status_lbl = new brls::Label(brls::LabelStyle::SMALL, "");
+        this->connection_status_lbl->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->connection_status_lbl->setVerticalAlign(NVG_ALIGN_TOP);
         this->connection_status_lbl->setParent(this);
         
         this->usb_icon = new brls::Label(brls::LabelStyle::SMALL, "\uE1E0");
         this->usb_icon->setFont(material);
+        this->usb_icon->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->usb_icon->setVerticalAlign(NVG_ALIGN_TOP);
         this->usb_icon->setParent(this);
         
         this->usb_host_speed_lbl = new brls::Label(brls::LabelStyle::SMALL, "root_view/not_connected"_i18n);
+        this->usb_host_speed_lbl->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->usb_host_speed_lbl->setVerticalAlign(NVG_ALIGN_TOP);
         this->usb_host_speed_lbl->setParent(this);
         
@@ -151,18 +158,12 @@ namespace nxdt::views
             /* Update network labels. */
             this->connection_icon->setText(!connection_type ? "\uE195" : (connection_type == NifmInternetConnectionType_WiFi ? "\uE63E" : "\uE8BE"));
             this->connection_status_lbl->setText(ip_addr ? std::string(ip_addr) : "root_view/not_connected"_i18n);
-            
-            /* Update layout. */
-            this->invalidate(true);
         });
         
         /* Subscribe to USB host event. */
         this->usb_host_task_sub = this->usb_host_task->RegisterListener([this](UsbHostSpeed usb_host_speed) {
             /* Update USB host speed label. */
             this->usb_host_speed_lbl->setText(usb_host_speed ? fmt::format("USB {}.0", usb_host_speed) : "root_view/not_connected"_i18n);
-            
-            /* Update layout. */
-            this->invalidate(true);
         });
     }
     
@@ -222,36 +223,47 @@ namespace nxdt::views
             y_pos = (this->y + (style->AppletFrame.headerHeightRegular / 2) + style->AppletFrame.titleOffset);
             
             this->applet_mode_lbl->setBoundaries(x_pos, y_pos, 0, 0);
+            this->applet_mode_lbl->invalidate();
         }
         
         /* Time label. */
-        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->time_lbl->getTextWidth());
+        x_pos = (this->x + this->width - style->AppletFrame.separatorSpacing - style->AppletFrame.footerTextSpacing);
         y_pos = this->y + style->AppletFrame.imageTopPadding;
         
         this->time_lbl->setBoundaries(x_pos, y_pos, 0, 0);
+        this->time_lbl->invalidate();
         
         /* Battery stats and network connection labels. */
-        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->connection_status_lbl->getTextWidth());
         y_pos += (this->time_lbl->getTextHeight() + 5);
         
         this->connection_status_lbl->setBoundaries(x_pos, y_pos, 0, 0);
-        x_pos -= (5 + this->connection_icon->getTextWidth());
+        this->connection_status_lbl->invalidate();
+        
+        x_pos -= (5 + this->connection_status_lbl->getTextWidth());
         
         this->connection_icon->setBoundaries(x_pos, y_pos, 0, 0);
-        x_pos -= (10 + this->battery_percentage->getTextWidth());
+        this->connection_icon->invalidate();
+        
+        x_pos -= (10 + this->connection_icon->getTextWidth());
         
         this->battery_percentage->setBoundaries(x_pos, y_pos, 0, 0);
-        x_pos -= (5 + this->battery_icon->getTextWidth());
+        this->battery_percentage->invalidate();
+        
+        x_pos -= (5 + this->battery_percentage->getTextWidth());
         
         this->battery_icon->setBoundaries(x_pos, y_pos, 0, 0);
+        this->battery_icon->invalidate();
         
         /* USB host speed labels. */
-        x_pos = (this->x + this->width - (style->AppletFrame.separatorSpacing * 2) - this->usb_host_speed_lbl->getTextWidth());
+        x_pos = (this->x + this->width - style->AppletFrame.separatorSpacing - style->AppletFrame.footerTextSpacing);
         y_pos += (this->connection_status_lbl->getTextHeight() + 5);
         
         this->usb_host_speed_lbl->setBoundaries(x_pos, y_pos, 0, 0);
-        x_pos -= (5 + this->usb_icon->getTextWidth());
+        this->usb_host_speed_lbl->invalidate();
+        
+        x_pos -= (5 + this->usb_host_speed_lbl->getTextWidth());
         
         this->usb_icon->setBoundaries(x_pos, y_pos, 0, 0);
+        this->usb_icon->invalidate();
     }
 }

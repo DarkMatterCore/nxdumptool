@@ -87,7 +87,7 @@ namespace nxdt::views
             this->logo->getWidth(),
             this->logo->getHeight());
         
-        this->logo->invalidate(true);
+        this->logo->invalidate();
         
         brls::ScrollView::layout(vg, style, stash);
     }

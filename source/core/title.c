@@ -24,10 +24,10 @@
 #include "gamecard.h"
 #include "nacp.h"
 
-#define NS_APPLICATION_RECORD_LIMIT     4096
+#define NS_APPLICATION_RECORD_BLOCK_SIZE    1024
 
-#define TITLE_STORAGE_COUNT             4                                       /* GameCard, BuiltInSystem, BuiltInUser, SdCard. */
-#define TITLE_STORAGE_INDEX(storage_id) ((storage_id) - NcmStorageId_GameCard)
+#define TITLE_STORAGE_COUNT                 4                                       /* GameCard, BuiltInSystem, BuiltInUser, SdCard. */
+#define TITLE_STORAGE_INDEX(storage_id)     ((storage_id) - NcmStorageId_GameCard)
 
 /* Type definitions. */
 
@@ -464,7 +464,8 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x100000000000021F, "nfc" },
     { 0x1000000000000220, "psc" },
     { 0x1000000000000221, "capsrv" },
-    { 0x1000000000000222, "am" }
+    { 0x1000000000000222, "am" },
+    { 0x1000000000000223, "ssl" }
 };
 
 static const u32 g_systemTitlesCount = MAX_ELEMENTS(g_systemTitles);
@@ -1459,26 +1460,41 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void)
 {
     Result rc = 0;
     
-    NsApplicationRecord *app_records = NULL;
-    u32 app_records_count = 0, extra_app_count = 0;
+    NsApplicationRecord *app_records = NULL, *tmp_app_records = NULL;
+    u32 app_records_block_count = 0, app_records_count = 0, extra_app_count = 0;
+    size_t app_records_size = 0, app_records_block_size = (NS_APPLICATION_RECORD_BLOCK_SIZE * sizeof(NsApplicationRecord));
     
     bool success = false, free_entries = false;
     
-    /* Allocate memory for the NS application records. */
-    app_records = calloc(NS_APPLICATION_RECORD_LIMIT, sizeof(NsApplicationRecord));
-    if (!app_records)
-    {
-        LOG_MSG("Failed to allocate memory for NS application records!");
-        return false;
-    }
-    
-    /* Retrieve NS application records. */
-    rc = nsListApplicationRecord(app_records, NS_APPLICATION_RECORD_LIMIT, 0, (s32*)&app_records_count);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG("nsListApplicationRecord failed! (0x%08X).", rc);
-        goto end;
-    }
+    /* Retrieve NS application records in a loop until we get them all. */
+    do {
+        /* Allocate memory for the NS application records. */
+        tmp_app_records = realloc(app_records, app_records_size + app_records_block_size);
+        if (!tmp_app_records)
+        {
+            LOG_MSG("Failed to reallocate NS application records buffer! (%u)", app_records_count);
+            goto end;
+        }
+        
+        app_records = tmp_app_records;
+        tmp_app_records = NULL;
+        app_records_size += app_records_block_size;
+        
+        /* Clear newly allocated block. */
+        NsApplicationRecord *app_records_block = &(app_records[app_records_count]);
+        memset(app_records_block, 0, app_records_block_size);
+        
+        /* Retrieve NS application records. */
+        rc = nsListApplicationRecord(app_records_block, NS_APPLICATION_RECORD_BLOCK_SIZE, (s32)app_records_count, (s32*)&app_records_block_count);
+        if (R_FAILED(rc))
+        {
+            LOG_MSG("nsListApplicationRecord failed! (0x%08X) (%u).", rc, app_records_count);
+            if (!app_records_count) goto end;
+            break; /* Gotta work with what we have. */
+        }
+        
+        app_records_count += app_records_block_count;
+    } while(app_records_block_count >= NS_APPLICATION_RECORD_BLOCK_SIZE);
     
     /* Return right away if no records were retrieved. */
     if (!app_records_count)

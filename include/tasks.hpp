@@ -89,6 +89,7 @@ namespace nxdt::tasks
             GameCardStatusEvent gc_status_event;
             GameCardStatus cur_gc_status = GameCardStatus_NotInserted;
             GameCardStatus prev_gc_status = GameCardStatus_NotInserted;
+            bool first_notification = true;
         
         protected:
             void run(retro_time_t current_time) override;

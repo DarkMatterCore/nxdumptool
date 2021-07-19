@@ -92,6 +92,6 @@ namespace nxdt::views
     void ErrorFrame::SetMessage(std::string msg)
     {
         this->label->setText(msg);
-        this->invalidate(true);
+        this->invalidate();
     }
 }

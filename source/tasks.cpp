@@ -86,6 +86,8 @@ namespace nxdt::tasks
     {
         brls::RepeatingTask::start();
         brls::Logger::debug("Gamecard task started.");
+        
+        this->first_notification = (gamecardGetStatus() >= GameCardStatus_Processing);
     }
     
     GameCardTask::~GameCardTask(void)
@@ -101,7 +103,24 @@ namespace nxdt::tasks
         if (this->cur_gc_status != this->prev_gc_status)
         {
             brls::Logger::debug("Gamecard status change triggered: {}.", this->cur_gc_status);
-            brls::Application::notify("tasks/notifications/gamecard"_i18n);
+            
+            if (!this->first_notification)
+            {
+                if (this->prev_gc_status == GameCardStatus_NotInserted && this->cur_gc_status == GameCardStatus_Processing)
+                {
+                    brls::Application::notify("gamecard_tab/error_frame/processing"_i18n);
+                } else
+                if (this->prev_gc_status == GameCardStatus_Processing && this->cur_gc_status > GameCardStatus_Processing)
+                {
+                    brls::Application::notify("tasks/notifications/gamecard_status_updated"_i18n);
+                } else
+                if (this->cur_gc_status == GameCardStatus_NotInserted)
+                {
+                    brls::Application::notify("tasks/notifications/gamecard_ejected"_i18n);
+                }
+            } else {
+                this->first_notification = false;
+            }
             
             /* Update previous gamecard status. */
             this->prev_gc_status = this->cur_gc_status;
@@ -142,7 +161,7 @@ namespace nxdt::tasks
         if (titleIsGameCardInfoUpdated())
         {
             brls::Logger::debug("Title info updated.");
-            brls::Application::notify("tasks/notifications/user_titles"_i18n);
+            //brls::Application::notify("tasks/notifications/user_titles"_i18n);
             
             /* Update user metadata vector. */
             this->PopulateApplicationMetadataVector(false);
