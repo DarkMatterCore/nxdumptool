@@ -1434,7 +1434,7 @@ static bool titleGenerateMetadataEntriesFromSystemTitles(void)
         /* Fill information. */
         const TitleSystemEntry *system_title = &(g_systemTitles[extra_app_count]);
         cur_app_metadata->title_id = system_title->title_id;
-        sprintf(cur_app_metadata->lang_entry.name, system_title->name);
+        sprintf(cur_app_metadata->lang_entry.name, "%s", system_title->name);
         
         /* Set application metadata entry pointer. */
         g_systemMetadata[g_systemMetadataCount + extra_app_count] = cur_app_metadata;

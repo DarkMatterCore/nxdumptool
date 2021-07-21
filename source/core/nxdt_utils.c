@@ -65,6 +65,20 @@ static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
 static const char g_illegalFileSystemChars[] = "\\/:*?\"<>|";
 static const size_t g_illegalFileSystemCharsLength = (MAX_ELEMENTS(g_illegalFileSystemChars) - 1);
 
+static const char *g_outputDirs[] = {
+    HBMENU_BASE_PATH,
+    APP_BASE_PATH,
+    GAMECARD_PATH,
+    CERT_PATH,
+    HFS_PATH,
+    NSP_PATH,
+    TICKET_PATH,
+    NCA_PATH,
+    NCA_FS_PATH
+};
+
+static const size_t g_outputDirsCount = MAX_ELEMENTS(g_outputDirs);
+
 /* Function prototypes. */
 
 static void _utilsGetLaunchPath(int program_argc, const char **program_argv);
@@ -87,7 +101,7 @@ static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_
 bool utilsInitializeResources(const int program_argc, const char **program_argv)
 {
     Result rc = 0;
-    bool ret = false, flag = false;
+    bool ret = false;
     
     SCOPED_LOCK(&g_resourcesMutex)
     {
@@ -129,6 +143,9 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         g_programAppletType = appletGetAppletType();
         LOG_MSG("Running under %s mode.", _utilsAppletModeCheck() ? "applet" : "title override");
         
+        /* Create output directories (SD card only). */
+        utilsCreateOutputDirectories(NULL);
+        
         /* Initialize USB interface. */
         if (!usbInitialize()) break;
         
@@ -160,22 +177,34 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Mount eMMC BIS System partition. */
         if (!utilsMountEmmcBisSystemPartitionStorage()) break;
         
-        /* Enable video recording. */
-        rc = appletIsGamePlayRecordingSupported(&flag);
-        if (R_SUCCEEDED(rc) && flag) appletInitializeGamePlayRecording();
+        /* Mount application RomFS. */
+        rc = romfsInit();
+        if (R_FAILED(rc))
+        {
+            LOG_MSG("Failed to mount RomFS container!");
+            break;
+        }
         
-        /* Disable screen dimming and auto sleep. */
-        /* TODO: only use this function right before starting a dump procedure - make sure to handle power button presses as well. */
-        appletSetMediaPlaybackState(true);
+        /* Load configuration. */
+        if (!configInitialize()) break;
         
         /* Overclock system. */
-        utilsOverclockSystem(true);
+        utilsOverclockSystem(configGetBoolean("overclock"));
         
         /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked). */
         appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
         
-        /* Mount application RomFS. */
-        romfsInit();
+        /* Enable video recording if we're running under title override mode. */
+        if (!_utilsAppletModeCheck())
+        {
+            bool flag = false;
+            rc = appletIsGamePlayRecordingSupported(&flag);
+            if (R_SUCCEEDED(rc) && flag) appletInitializeGamePlayRecording();
+        }
+        
+        /* Disable screen dimming and auto sleep. */
+        /* TODO: only use this function while dealing with a dump process - make sure to handle power button presses as well. */
+        appletSetMediaPlaybackState(true);
         
         /* Redirect stdout and stderr over network to nxlink. */
         rc = socketInitializeDefault();
@@ -203,8 +232,12 @@ void utilsCloseResources(void)
         
         socketExit();
         
-        /* Unmount application RomFS. */
-        romfsExit();
+        /* Enable screen dimming and auto sleep. */
+        /* TODO: only use this function while dealing with a dump process - make sure to handle power button presses as well. */
+        appletSetMediaPlaybackState(false);
+        
+        /* Unblock HOME button presses. */
+        utilsChangeHomeButtonBlockStatus(false);
         
         /* Unset our overclock applet hook. */
         appletUnhook(&g_systemOverclockCookie);
@@ -212,11 +245,11 @@ void utilsCloseResources(void)
         /* Restore hardware clocks. */
         utilsOverclockSystem(false);
         
-        /* Enable screen dimming and auto sleep. */
-        appletSetMediaPlaybackState(false);
+        /* Close configuration interface. */
+        configExit();
         
-        /* Unblock HOME button presses. */
-        utilsChangeHomeButtonBlockStatus(false);
+        /* Unmount application RomFS. */
+        romfsExit();
         
         /* Unmount eMMC BIS System partition. */
         utilsUnmountEmmcBisSystemPartitionStorage();
@@ -574,6 +607,24 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
     return true;
 }
 
+void utilsCreateOutputDirectories(const char *device)
+{
+    size_t device_len = 0;
+    char path[FS_MAX_PATH] = {0};
+    
+    if (device && (!(device_len = strlen(device)) || device[device_len - 1] != ':'))
+    {
+        LOG_MSG("Invalid parameters!");
+        return;
+    }
+    
+    for(size_t i = 0; i < g_outputDirsCount; i++)
+    {
+        sprintf(path, "%s%s", (device ? device : "sdmc:"), g_outputDirs[i]);
+        mkdir(path, 0744);
+    }
+}
+
 bool utilsCheckIfFileExists(const char *path)
 {
     if (!path || !*path) return false;
@@ -844,8 +895,7 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
     
     if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
     
-    /* TODO: read config here to actually know the value to use with utilsOverclockSystem. */
-    utilsOverclockSystem(true);
+    utilsOverclockSystem(configGetBoolean("overclock"));
 }
 
 static void utilsPrintConsoleError(void)

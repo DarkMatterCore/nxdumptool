@@ -27,8 +27,6 @@
 #include "nca.h"
 #include "rsa.h"
 
-#define KEYS_FILE_PATH                          "sdmc:/switch/prod.keys"    /* Location used by Lockpick_RCM. */
-
 #define ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT  0x10001
 
 /* Type definitions. */

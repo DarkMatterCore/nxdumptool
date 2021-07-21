@@ -65,9 +65,36 @@
 
 #define FAT32_FILESIZE_LIMIT            (u64)0xFFFFFFFF                                                                         /* 4 GiB - 1 (4294967295 bytes). */
 
-/* Other defines. */
+#define UTF8_BOM                        "\xEF\xBB\xBF"
+#define CRLF                            "\r\n"
 
-#define APP_BASE_PATH                   "sdmc:/switch/" APP_TITLE "/"
+#define HBMENU_BASE_PATH                "/switch/"
+#define APP_BASE_PATH                   HBMENU_BASE_PATH APP_TITLE "/"
+
+#define GAMECARD_PATH                   APP_BASE_PATH "Gamecard/"
+#define CERT_PATH                       APP_BASE_PATH "Certificate/"
+#define HFS_PATH                        APP_BASE_PATH "HFS/"
+#define NSP_PATH                        APP_BASE_PATH "NSP/"
+#define TICKET_PATH                     APP_BASE_PATH "Ticket/"
+#define NCA_PATH                        APP_BASE_PATH "NCA/"
+#define NCA_FS_PATH                     APP_BASE_PATH "NCA FS/"
+
+#define CONFIG_PATH                     "sdmc:" APP_BASE_PATH "config.json"
+#define DEFAULT_CONFIG_PATH             "romfs:/default_config.json"
+
+#define NRO_NAME                        APP_TITLE ".nro"
+#define NRO_PATH                        APP_BASE_PATH NRO_NAME
+
+#define NSWDB_XML_PATH                  APP_BASE_PATH "NSWreleases.xml"
+
+#define KEYS_FILE_PATH                  "sdmc:" HBMENU_BASE_PATH "prod.keys"                                                    /* Location used by Lockpick_RCM. */
+
+#define LOG_FILE_NAME                   APP_TITLE ".log"
+#define LOG_BUF_SIZE                    0x400000                                                                                /* 4 MiB. */
+#define LOG_FORCE_FLUSH                 0                                                                                       /* Forces a log buffer flush each time the logfile is written to. */
+
+#define NXLINK_TIMEOUT                  2000
+
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
 #define GITHUB_REPOSITORY_URL           "https://github.com/DarkMatterCore/nxdumptool"
@@ -79,5 +106,7 @@
 #define LZ4_URL                         "https://github.com/lz4/lz4"
 
 #define DISCORD_SERVER_URL              "https://discord.gg/SCbbcQx"
+
+#define LOCKPICK_RCM_URL                "https://github.com/shchmue/Lockpick_RCM"
 
 #endif  /* __DEFINES_H__ */

@@ -18,6 +18,11 @@ todo:
     
     bktr: functions to display filelist (wrappers for romfs functions tbh)
     
+    usb: change buffer size?
+    usb: change chunk size?
+    usb: improve abi (make it rest-like?)
+    usb: improve cancel mechanism
+    
     others: config load/save using json
     others: dump verification via nswdb / no-intro
     others: update application feature

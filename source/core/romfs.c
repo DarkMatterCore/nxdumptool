@@ -276,7 +276,7 @@ bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectory
 RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *ctx, const char *path)
 {
     size_t path_len = 0;
-    char *path_dup = NULL, *pch = NULL;
+    char *path_dup = NULL, *pch = NULL, *state = NULL;
     RomFileSystemDirectoryEntry *dir_entry = NULL;
     
     if (!ctx || !ctx->dir_table || !ctx->dir_table_size || !path || *path != '/' || !(path_len = strlen(path)) || !(dir_entry = romfsGetDirectoryEntryByOffset(ctx, 0)))
@@ -288,14 +288,14 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
     /* Check if the root directory was requested. */
     if (path_len == 1) return dir_entry;
     
-    /* Duplicate path to avoid problems with strtok(). */
+    /* Duplicate path to avoid problems with strtok_r(). */
     if (!(path_dup = strdup(path)))
     {
         LOG_MSG("Unable to duplicate input path! (\"%s\").", path);
         return NULL;
     }
     
-    pch = strtok(path_dup, "/");
+    pch = strtok_r(path_dup, "/", &state);
     if (!pch)
     {
         LOG_MSG("Failed to tokenize input path! (\"%s\").", path);
@@ -311,7 +311,7 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
             break;
         }
         
-        pch = strtok(NULL, "/");
+        pch = strtok_r(NULL, "/", &state);
     }
     
 end:

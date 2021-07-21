@@ -66,11 +66,7 @@ namespace nxdt::views
                                                                                                  is_system(is_system)
     {
         /* Set sublabel. */
-        if (!this->is_system)
-        {
-            this->setSubLabel(std::string(app_metadata->lang_entry.author));
-            this->setHeight(brls::Application::getStyle()->List.Item.heightWithSubLabel);
-        }
+        if (!this->is_system) this->setSubLabel(std::string(app_metadata->lang_entry.author));
         
         /* Set thumbnail (if needed). */
         if (app_metadata->icon && app_metadata->icon_size) this->setThumbnail(app_metadata->icon, app_metadata->icon_size);
@@ -102,10 +98,8 @@ namespace nxdt::views
     
     void TitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* app_metadata)
     {
-        if (!app_metadata) return;
-        
         /* Populate variables. */
-        size_t app_metadata_count = app_metadata->size();
+        size_t app_metadata_count = (app_metadata ? app_metadata->size() : 0);
         bool update_focused_view = this->IsListItemFocused();
         int focus_stack_index = this->GetFocusStackViewIndex();
         

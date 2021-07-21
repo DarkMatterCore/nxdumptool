@@ -84,15 +84,14 @@ CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_R
 CFLAGS		+=	-DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\""
 CFLAGS  	+=	`aarch64-none-elf-pkg-config zlib --cflags`
 CFLAGS  	+=	`aarch64-none-elf-pkg-config libxml-2.0 --cflags`
-#CFLAGS  	+=	`aarch64-none-elf-pkg-config json-c --cflags`
+CFLAGS  	+=	`aarch64-none-elf-pkg-config json-c --cflags`
 
 CXXFLAGS	:=	$(CFLAGS) -std=c++20 -Wno-volatile -Wno-unused-parameter
 
 ASFLAGS		:=	-g -gdwarf-4 $(ARCH)
 LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g -gdwarf-4 $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -lz -lusbhsfs -lntfs-3g -llwext4 -lnx
-#LIBS		+=	-ljson-c
+LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -ljson-c -lz -lusbhsfs -lntfs-3g -llwext4 -lnx
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

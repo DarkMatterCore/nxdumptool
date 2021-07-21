@@ -116,6 +116,10 @@ void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);
 /// Returns false if there's an error.
 bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_free);
 
+/// Creates output directories in the specified device.
+/// If 'device' is NULL, output directories will be created on the SD card.
+void utilsCreateOutputDirectories(const char *device);
+
 /// Returns true if a file exists.
 bool utilsCheckIfFileExists(const char *path);
 

@@ -300,7 +300,7 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
     }
     
     u32 i = 0;
-    char issuer_copy[0x40] = {0};
+    char issuer_copy[0x40] = {0}, *pch = NULL, *state = NULL;
     bool success = true;
     
     dst->count = certGetCertificateCountInSignatureIssuer(issuer);
@@ -317,11 +317,11 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
         return false;
     }
     
-    /* Copy string to avoid problems with strtok(). */
+    /* Copy string to avoid problems with strtok_r(). */
     /* The "Root-" parent from the issuer string is skipped. */
-    snprintf(issuer_copy, 0x40, "%s", issuer + 5);
+    snprintf(issuer_copy, sizeof(issuer_copy), "%s", issuer + 5);
     
-    char *pch = strtok(issuer_copy, "-");
+    pch = strtok_r(issuer_copy, "-", &state);
     while(pch != NULL)
     {
         if (!_certRetrieveCertificateByName(&(dst->certs[i]), pch))
@@ -332,7 +332,7 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
         }
         
         i++;
-        pch = strtok(NULL, "-");
+        pch = strtok_r(NULL, "-", &state);
     }
     
     if (!success) certFreeCertificateChain(dst);
@@ -345,17 +345,17 @@ static u32 certGetCertificateCountInSignatureIssuer(const char *issuer)
     if (!issuer || !*issuer) return 0;
     
     u32 count = 0;
-    char issuer_copy[0x40] = {0};
+    char issuer_copy[0x40] = {0}, *pch = NULL, *state = NULL;
     
-    /* Copy string to avoid problems with strtok(). */
+    /* Copy string to avoid problems with strtok_r(). */
     /* The "Root-" parent from the issuer string is skipped. */
-    snprintf(issuer_copy, 0x40, issuer + 5);
+    snprintf(issuer_copy, sizeof(issuer_copy), "%s", issuer + 5);
     
-    char *pch = strtok(issuer_copy, "-");
+    pch = strtok_r(issuer_copy, "-", &state);
     while(pch != NULL)
     {
         count++;
-        pch = strtok(NULL, "-");
+        pch = strtok_r(NULL, "-", &state);
     }
     
     return count;

@@ -21,10 +21,6 @@
 
 #include "nxdt_utils.h"
 
-#define LOG_FILE_NAME   APP_TITLE ".log"
-#define LOG_BUF_SIZE    0x400000            /* 4 MiB. */
-#define LOG_FORCE_FLUSH 0                   /* Forces a log buffer flush each time the logfile is written to. */
-
 /* Global variables. */
 
 static Mutex g_logMutex = 0;
@@ -37,9 +33,7 @@ static s64 g_logFileOffset = 0;
 static char *g_logBuffer = NULL;
 static size_t g_logBufferLength = 0;
 
-static const char *g_utf8Bom = "\xEF\xBB\xBF";
 static const char *g_logStrFormat = "[%d-%02d-%02d %02d:%02d:%02d.%09lu] %s -> ";
-static const char *g_logLineBreak = "\r\n";
 
 /* Function prototypes. */
 
@@ -121,7 +115,7 @@ __attribute__((format(printf, 4, 5))) void logWriteFormattedStringToBuffer(char 
     /* Generate formatted string. */
     sprintf(dst_ptr + dst_str_len, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
     vsprintf(dst_ptr + dst_str_len + (size_t)str1_len, fmt, args);
-    strcat(dst_ptr, g_logLineBreak);
+    strcat(dst_ptr, CRLF);
     
 end:
     va_end(args);
@@ -141,7 +135,7 @@ __attribute__((format(printf, 4, 5))) void logWriteBinaryDataToLogFile(const voi
     
     /* Generate hex string representation. */
     utilsGenerateHexStringFromData(data_str, data_str_size, data, data_size, true);
-    strcat(data_str, g_logLineBreak);
+    strcat(data_str, CRLF);
     
     SCOPED_LOCK(&g_logMutex)
     {
@@ -322,7 +316,7 @@ static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, 
         /* Nice and easy string formatting using the log buffer. */
         sprintf(g_logBuffer + g_logBufferLength, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
         vsprintf(g_logBuffer + g_logBufferLength + (size_t)str1_len, fmt, args);
-        strcat(g_logBuffer, g_logLineBreak);
+        strcat(g_logBuffer, CRLF);
         g_logBufferLength += log_str_len;
     } else {
         /* Flush log buffer. */
@@ -336,7 +330,7 @@ static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, 
         /* Generate formatted string. */
         sprintf(tmp_str, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
         vsprintf(tmp_str + (size_t)str1_len, fmt, args);
-        strcat(tmp_str, g_logLineBreak);
+        strcat(tmp_str, CRLF);
         
         /* Write formatted string data until it no longer exceeds the log buffer size. */
         while(log_str_len >= LOG_BUF_SIZE)
@@ -432,8 +426,8 @@ static bool logOpenLogFile(void)
             /* Write UTF-8 BOM right away (if needed). */
             if (!g_logFileOffset)
             {
-                size_t utf8_bom_len = strlen(g_utf8Bom);
-                fsFileWrite(&g_logFile, g_logFileOffset, g_utf8Bom, utf8_bom_len, FsWriteOption_Flush);
+                size_t utf8_bom_len = strlen(UTF8_BOM);
+                fsFileWrite(&g_logFile, g_logFileOffset, UTF8_BOM, utf8_bom_len, FsWriteOption_Flush);
                 g_logFileOffset += (s64)utf8_bom_len;
             }
         } else {

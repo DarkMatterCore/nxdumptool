@@ -56,6 +56,9 @@
 /* File-based logger. */
 #include "nxdt_log.h"
 
+/* Configuration handler. */
+#include "config.h"
+
 /* USB Mass Storage support. */
 #include "ums.h"
 
