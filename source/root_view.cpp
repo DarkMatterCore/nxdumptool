@@ -23,7 +23,7 @@
 #include <root_view.hpp>
 #include <gamecard_tab.hpp>
 #include <titles_tab.hpp>
-//#include <options_tab.hpp>
+#include <options_tab.hpp>
 #include <about_tab.hpp>
 
 namespace i18n = brls::i18n;    /* For getStr(). */
@@ -111,7 +111,7 @@ namespace nxdt::views
         
         this->addSeparator();
         
-        this->addTab("root_view/tabs/options"_i18n, new brls::Rectangle(nvgRGB(255, 255, 0)));
+        this->addTab("root_view/tabs/options"_i18n, new OptionsTab());
         
         this->addSeparator();
         

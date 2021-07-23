@@ -919,10 +919,10 @@ bool titleIsGameCardInfoUpdated(void)
     return ret;
 }
 
-char *titleGenerateFileName(TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type)
+char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 illegal_char_replace_type)
 {
-    if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_Delta || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
-        (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
+    if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_Delta || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
+        (naming_convention == TitleNamingConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
     {
         LOG_MSG("Invalid parameters!");
         return NULL;
@@ -932,7 +932,7 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 name_convention, u8 illega
     char title_name[0x400] = {0}, *version_str = NULL, *filename = NULL;
     
     /* Generate filename for this title. */
-    if (name_convention == TitleFileNameConvention_Full)
+    if (naming_convention == TitleNamingConvention_Full)
     {
         if (title_info->app_metadata && *(title_info->app_metadata->lang_entry.name))
         {
@@ -951,7 +951,7 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 name_convention, u8 illega
         
         sprintf(title_name + strlen(title_name), "[%016lX][v%u][%s]", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type]);
     } else
-    if (name_convention == TitleFileNameConvention_IdAndVersionOnly)
+    if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
     {
         sprintf(title_name, "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type]);
     }
@@ -963,7 +963,7 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 name_convention, u8 illega
     return filename;
 }
 
-char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_type)
+char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replace_type)
 {
     char *filename = NULL;
     
@@ -978,8 +978,8 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
         char app_name[0x400] = {0};
         bool error = false;
         
-        if (!g_titleInterfaceInit || !g_titleGameCardAvailable || name_convention > TitleFileNameConvention_IdAndVersionOnly || \
-            (name_convention == TitleFileNameConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
+        if (!g_titleInterfaceInit || !g_titleGameCardAvailable || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
+            (naming_convention == TitleNamingConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
         {
             LOG_MSG("Invalid parameters!");
             break;
@@ -1013,7 +1013,7 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
             /* Generate current user application name. */
             *app_name = '\0';
             
-            if (name_convention == TitleFileNameConvention_Full)
+            if (naming_convention == TitleNamingConvention_Full)
             {
                 if (cur_filename_len) strcat(app_name, " + ");
                 
@@ -1035,7 +1035,7 @@ char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_
                 
                 sprintf(app_name + strlen(app_name), "[%016lX][v%u]", app_info->meta_key.id, app_version);
             } else
-            if (name_convention == TitleFileNameConvention_IdAndVersionOnly)
+            if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
             {
                 if (cur_filename_len) strcat(app_name, "+");
                 sprintf(app_name + strlen(app_name), "%016lX_v%u", app_info->meta_key.id, app_version);

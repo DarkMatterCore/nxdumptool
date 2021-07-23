@@ -1,0 +1,20 @@
+{
+    "overclock": {
+        "label": "Overclock",
+        "description": "Overclocks both CPU and MEM to 1785 MHz and 1600 MHz, respectively, in order to speed up dump operations. This is considered a relatively safe action.\n\nIf the application is running under title override mode, and sys-clk is active, and a clock profile has been created for the overriden title, this setting has no effect at all.",
+        "value_enabled": "Yes",
+        "value_disabled": "No"
+    },
+    
+    "naming_convention": {
+        "label": "Naming convention",
+        "description": "Sets the naming convention used for all output dumps.\n\n\uE016  Full: \"{Name} [{Id}][v{Version}][{Type}]\".\n\uE016  ID and version only: \"{Id}_v{Version}_{Type}\".\n\nIf \"Full\" is selected, the display version string will also be appended to dumped updates whenever possible.",
+        "value_00": "Full",
+        "value_01": "ID and version only"
+    },
+    
+    "update_app": {
+        "label": "Update application",
+        "description": "Checks if an update is available in nxdumptool's GitHub repository. Requires Internet connectivity."
+    }
+}

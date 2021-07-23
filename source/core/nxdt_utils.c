@@ -153,7 +153,11 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         if (!umsInitialize()) break;
         
         /* Load keyset. */
-        if (!keysLoadKeyset()) break;
+        if (!keysLoadKeyset())
+        {
+            LOG_MSG("Failed to load keyset!\nUpdate your keys file with Lockpick_RCM:\n" LOCKPICK_RCM_URL);
+            break;
+        }
         
         /* Allocate NCA crypto buffer. */
         if (!ncaAllocateCryptoBuffer())

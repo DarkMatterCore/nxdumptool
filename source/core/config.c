@@ -151,6 +151,8 @@ static bool configParseConfigJson(void)
 end:
     if (use_default_config)
     {
+        LOG_MSG("Loading default configuration.");
+        
         /* Free config JSON. */
         configFreeConfigJson();
         
@@ -171,7 +173,7 @@ end:
 static void configWriteConfigJson(void)
 {
     if (!g_configJson) return;
-    if (json_object_to_file_ext(CONFIG_PATH, g_configJson, JSON_C_TO_STRING_PRETTY) != 0) configLogJsonError();
+    if (json_object_to_file_ext(CONFIG_PATH, g_configJson, JSON_C_TO_STRING_SPACED | JSON_C_TO_STRING_PRETTY) != 0) configLogJsonError();
 }
 
 static void configFreeConfigJson(void)
@@ -231,7 +233,7 @@ end:
 
 static bool configValidateJsonRootObject(const struct json_object *obj)
 {
-    bool ret = false, overclock_found = false, name_convention_found = false, dump_destination_found = false, gamecard_found = false;
+    bool ret = false, overclock_found = false, naming_convention_found = false, dump_destination_found = false, gamecard_found = false;
     bool nsp_found = false, ticket_found = false, nca_fs_found = false;
     
     if (!configValidateJsonObject(obj)) goto end;
@@ -239,7 +241,7 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
     json_object_object_foreach(obj, key, val)
     {
         JSON_VALIDATE_FIELD(Boolean, overclock);
-        JSON_VALIDATE_FIELD(Integer, name_convention, TitleFileNameConvention_Full, TitleFileNameConvention_IdAndVersionOnly);
+        JSON_VALIDATE_FIELD(Integer, naming_convention, TitleNamingConvention_Full, TitleNamingConvention_IdAndVersionOnly);
         JSON_VALIDATE_FIELD(Integer, dump_destination, ConfigDumpDestination_SdCard, ConfigDumpDestination_UsbHost);
         JSON_VALIDATE_OBJECT(GameCard, gamecard);
         JSON_VALIDATE_OBJECT(Nsp, nsp);
@@ -248,7 +250,7 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
         goto end;
     }
     
-    ret = (overclock_found && name_convention_found && dump_destination_found && gamecard_found && nsp_found && ticket_found && nca_fs_found);
+    ret = (overclock_found && naming_convention_found && dump_destination_found && gamecard_found && nsp_found && ticket_found && nca_fs_found);
     
 end:
     return ret;

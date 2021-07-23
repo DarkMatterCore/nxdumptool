@@ -67,11 +67,12 @@ typedef struct {
 } TitleUserApplicationData;
 
 typedef enum {
-    TitleFileNameConvention_Full             = 0,   ///< Individual titles: "[{Name}] [{TitleId}][v{TitleVersion}][{TitleType}]".
-                                                    ///< Gamecards: "[{Name1}] [{TitleId1}][v{TitleVersion1}] + ... + [{NameN}] [{TitleIdN}][v{TitleVersionN}]".
-    TitleFileNameConvention_IdAndVersionOnly = 1    ///< Individual titles: "{TitleId}_v{TitleVersion}_{TitleType}".
-                                                    ///< Gamecards: "{TitleId1}_v{TitleVersion1}_{TitleType1} + ... + {TitleIdN}_v{TitleVersionN}_{TitleTypeN}".
-} TitleFileNameConvention;
+    TitleNamingConvention_Full             = 0, ///< Individual titles: "{Name} [{Id}][v{Version}][{Type}]".
+                                                ///< Gamecards: "[{Name1}] [{Id1}][v{Version1}] + ... + [{NameN}] [{IdN}][v{VersionN}]".
+    TitleNamingConvention_IdAndVersionOnly = 1, ///< Individual titles: "{Id}_v{Version}_{Type}".
+                                                ///< Gamecards: "{TitleId1}_v{TitleVersion1}_{TitleType1} + ... + {TitleIdN}_v{TitleVersionN}_{TitleTypeN}".
+    TitleNamingConvention_Count            = 2
+} TitleNamingConvention;
 
 typedef enum {
     TitleFileNameIllegalCharReplaceType_None               = 0,
@@ -130,11 +131,11 @@ void titleFreeOrphanTitles(TitleInfo ***orphan_info);
 bool titleIsGameCardInfoUpdated(void);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps. Returns NULL if an error occurs.
-char *titleGenerateFileName(TitleInfo *title_info, u8 name_convention, u8 illegal_char_replace_type);
+char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 illegal_char_replace_type);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output gamecard dumps. Returns NULL if an error occurs.
 /// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.
-char *titleGenerateGameCardFileName(u8 name_convention, u8 illegal_char_replace_type);
+char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replace_type);
 
 /// Returns a pointer to a string holding the name of the provided NcmContentType value. Returns NULL if the provided value is invalid.
 const char *titleGetNcmContentTypeName(u8 content_type);

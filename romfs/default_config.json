@@ -1,6 +1,6 @@
 {
     "overclock": true,
-    "name_convention": 0,
+    "naming_convention": 0,
     "dump_destination": 0,
     "gamecard": {
         "append_key_area": false,
