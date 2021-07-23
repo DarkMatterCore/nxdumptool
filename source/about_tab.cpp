@@ -57,6 +57,7 @@ namespace nxdt::views
         this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/line_01"_i18n, LIBUSBHSFS_URL)));
         this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/line_02"_i18n, FATFS_URL)));
         this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/line_03"_i18n, LZ4_URL)));
+        this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/dependencies/line_04"_i18n, JSON_C_URL)));
         
         /* Acknowledgments. */
         this->addView(new brls::Header("about_tab/acknowledgments/header"_i18n));

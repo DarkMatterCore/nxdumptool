@@ -104,6 +104,7 @@
 #define LIBUSBHSFS_URL                  "https://github.com/DarkMatterCore/libusbhsfs"
 #define FATFS_URL                       "http://elm-chan.org/fsw/ff/00index_e.html"
 #define LZ4_URL                         "https://github.com/lz4/lz4"
+#define JSON_C_URL                      "https://github.com/json-c/json-c"
 
 #define DISCORD_SERVER_URL              "https://discord.gg/SCbbcQx"
 

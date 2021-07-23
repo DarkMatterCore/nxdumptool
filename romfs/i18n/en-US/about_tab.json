@@ -8,7 +8,8 @@
         "line_00": "\uE016  {0} is powered by Borealis, a hardware-accelerated UI library: {1}.",
         "line_01": "\uE016  USB Mass Storage device support is powered by libusbhsfs: {0}.",
         "line_02": "\uE016  FatFs is used to mount FAT volumes from the eMMC storage: {0}.",
-        "line_03": "\uE016  LZ4 is used to decompress NSO binaries: {0}."
+        "line_03": "\uE016  LZ4 is used to decompress NSO binaries: {0}.",
+        "line_04": "\uE016  json-c is used to parse JSON-formatted data: {0}."
     },
     
     "acknowledgments": {
