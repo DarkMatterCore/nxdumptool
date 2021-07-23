@@ -178,7 +178,7 @@ static void dump_thread_func(void *arg)
     }
     
     /* Generate output path. */
-    if (!(dump_name = titleGenerateFileName(title_info, TitleFileNameConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars)))
+    if (!(dump_name = titleGenerateFileName(title_info, TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars)))
     {
         consolePrint("title generate file name failed\n");
         goto end;

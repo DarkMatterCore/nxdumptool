@@ -187,7 +187,7 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
     }
     
     /* Generate output path. */
-    if (!(dump_name = titleGenerateFileName(title_info, TitleFileNameConvention_Full, ums_device ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
+    if (!(dump_name = titleGenerateFileName(title_info, TitleNamingConvention_Full, ums_device ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
     {
         consolePrint("title generate file name failed\n");
         goto end;

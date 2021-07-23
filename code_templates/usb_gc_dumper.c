@@ -461,7 +461,7 @@ static bool sendGameCardKeyAreaViaUsb(void)
     GameCardKeyArea gc_key_area = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleFileNameConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
     
     if (!dumpGameCardKeyArea(&gc_key_area) || !filename) goto end;
     
@@ -493,7 +493,7 @@ static bool sendGameCardCertificateViaUsb(void)
     FsGameCardCertificate gc_cert = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleFileNameConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
     
     if (!gamecardGetCertificate(&gc_cert) || !filename)
     {
@@ -541,7 +541,7 @@ static bool sendGameCardImageViaUsb(void)
     
     consolePrint("gamecard image dump\nappend key area: %s | keep certificate: %s | trim dump: %s\n\n", g_appendKeyArea ? "yes" : "no", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no");
     
-    filename = titleGenerateGameCardFileName(TitleFileNameConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
     if (!filename)
     {
         consolePrint("failed to generate gamecard filename!\n");
