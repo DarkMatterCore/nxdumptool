@@ -82,9 +82,6 @@ CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DV
 CFLAGS		+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
 CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_REV=\"${GIT_REV}\"
 CFLAGS		+=	-DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\""
-CFLAGS  	+=	`aarch64-none-elf-pkg-config zlib --cflags`
-CFLAGS  	+=	`aarch64-none-elf-pkg-config libxml-2.0 --cflags`
-CFLAGS  	+=	`aarch64-none-elf-pkg-config json-c --cflags`
 
 CXXFLAGS	:=	$(CFLAGS) -std=c++20 -Wno-volatile -Wno-unused-parameter
 

@@ -1,5 +1,5 @@
 /*
- * options_tab.hpp
+ * http.c
  *
  * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -19,27 +19,5 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#pragma once
-
-#ifndef __OPTIONS_TAB_HPP__
-#define __OPTIONS_TAB_HPP__
-
-#include <borealis.hpp>
-
-namespace nxdt::views
-{
-    class OptionsTab: public brls::List
-    {
-        private:
-            bool display_notification = true;
-            brls::menu_timer_t notification_timer = 0.0f;
-            brls::menu_timer_ctx_entry_t notification_timer_ctx = {0};
-            
-            void DisplayNotification(std::string str);
-        public:
-            OptionsTab(void);
-            ~OptionsTab(void);
-    };
-}
-
-#endif  /* __OPTIONS_TAB_HPP__ */
+#include "nxdt_utils.h"
+#include "http.h"

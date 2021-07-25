@@ -59,6 +59,9 @@
 /* Configuration handler. */
 #include "config.h"
 
+/* HTTP requests handler. */
+#include "http.h"
+
 /* USB Mass Storage support. */
 #include "ums.h"
 

@@ -24,6 +24,8 @@
 #ifndef __CONFIG_H__
 #define __CONFIG_H__
 
+#include <json-c/json.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif

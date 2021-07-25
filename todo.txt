@@ -23,6 +23,7 @@ todo:
     usb: improve abi (make it rest-like?)
     usb: improve cancel mechanism
     
+    others: move curl (de)initialization to http.c
     others: use hardcoded directories, move data to hardcoded directory if the launch path isn't the right one
     others: dump verification via nswdb / no-intro
     others: update application feature

@@ -1,4 +1,6 @@
 {
+    "dump_options_info": "Dump options are displayed in their respective menus for convenience.",
+    
     "overclock": {
         "label": "Overclock",
         "description": "Overclocks both CPU and MEM to 1785 MHz and 1600 MHz, respectively, in order to speed up dump operations. This is considered a relatively safe action.\n\nIf the application is running under title override mode, and sys-clk is active, and a clock profile has been created for the overriden title, this setting has no effect at all.",
@@ -16,5 +18,10 @@
     "update_app": {
         "label": "Update application",
         "description": "Checks if an update is available in nxdumptool's GitHub repository. Requires Internet connectivity."
+    },
+    
+    "notifications": {
+        "is_nso": "The application is running as a NSO. Unable to update.",
+        "already_updated": "The application has already been updated. Please reload."
     }
 }

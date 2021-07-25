@@ -23,8 +23,6 @@
 #include "config.h"
 #include "title.h"
 
-#include <json-c/json.h>
-
 #define JSON_VALIDATE_FIELD(type, name, ...) \
 if (!strcmp(key, #name)) { \
     if (name##_found || !configValidateJson##type(val, ##__VA_ARGS__)) goto end; \
@@ -241,8 +239,8 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
     json_object_object_foreach(obj, key, val)
     {
         JSON_VALIDATE_FIELD(Boolean, overclock);
-        JSON_VALIDATE_FIELD(Integer, naming_convention, TitleNamingConvention_Full, TitleNamingConvention_IdAndVersionOnly);
-        JSON_VALIDATE_FIELD(Integer, dump_destination, ConfigDumpDestination_SdCard, ConfigDumpDestination_UsbHost);
+        JSON_VALIDATE_FIELD(Integer, naming_convention, TitleNamingConvention_Full, TitleNamingConvention_Count - 1);
+        JSON_VALIDATE_FIELD(Integer, dump_destination, ConfigDumpDestination_SdCard, ConfigDumpDestination_Count - 1);
         JSON_VALIDATE_OBJECT(GameCard, gamecard);
         JSON_VALIDATE_OBJECT(Nsp, nsp);
         JSON_VALIDATE_OBJECT(Ticket, ticket);
@@ -268,7 +266,7 @@ static bool configValidateJsonGameCardObject(const struct json_object *obj)
         JSON_VALIDATE_FIELD(Boolean, keep_certificate);
         JSON_VALIDATE_FIELD(Boolean, trim_dump);
         JSON_VALIDATE_FIELD(Boolean, calculate_checksum);
-        JSON_VALIDATE_FIELD(Integer, checksum_lookup_method, ConfigChecksumLookupMethod_None, ConfigChecksumLookupMethod_NoIntro);
+        JSON_VALIDATE_FIELD(Integer, checksum_lookup_method, ConfigChecksumLookupMethod_None, ConfigChecksumLookupMethod_Count - 1);
         goto end;
     }
     
