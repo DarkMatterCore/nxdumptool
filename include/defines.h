@@ -85,20 +85,22 @@
 #define NRO_NAME                        APP_TITLE ".nro"
 #define NRO_PATH                        APP_BASE_PATH NRO_NAME
 
-#define NSWDB_XML_PATH                  APP_BASE_PATH "NSWreleases.xml"
-
 #define KEYS_FILE_PATH                  "sdmc:" HBMENU_BASE_PATH "prod.keys"                                                    /* Location used by Lockpick_RCM. */
 
 #define LOG_FILE_NAME                   APP_TITLE ".log"
 #define LOG_BUF_SIZE                    0x400000                                                                                /* 4 MiB. */
 #define LOG_FORCE_FLUSH                 0                                                                                       /* Forces a log buffer flush each time the logfile is written to. */
 
-#define NXLINK_TIMEOUT                  2000
-
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
+
+#define HTTP_USER_AGENT                 APP_TITLE "/" APP_VERSION " (Nintendo Switch)"
+#define HTTP_CONNECT_TIMEOUT            10L                                                                                     /* 10 seconds. */
+#define HTTP_BUFFER_SIZE                131072L                                                                                 /* 128 KiB. */
 
 #define GITHUB_REPOSITORY_URL           "https://github.com/DarkMatterCore/nxdumptool"
 #define GITHUB_NEW_ISSUE_URL            GITHUB_REPOSITORY_URL "/issues/new/choose"
+
+#define NSWDB_XML_PATH                  APP_BASE_PATH "NSWreleases.xml"
 
 #define BOREALIS_URL                    "https://github.com/natinusala/borealis"
 #define LIBUSBHSFS_URL                  "https://github.com/DarkMatterCore/libusbhsfs"

@@ -63,7 +63,8 @@ static ServiceInfo g_serviceInfo[] = {
     { false, "es", NULL, &esInitialize, &esExit },
     { false, "set", NULL, &setInitialize, &setExit },
     { false, "set:sys", NULL, &setsysInitialize, &setsysExit },
-    { false, "set:cal", NULL, &setcalInitialize, &setcalExit }
+    { false, "set:cal", NULL, &setcalInitialize, &setcalExit },
+    { false, "bsd:u", NULL, &socketInitializeDefault, &socketExit }                                     /* socketInitialize*() functions take care of initializing bsd:* too. */
 };
 
 static const u32 g_serviceInfoCount = MAX_ELEMENTS(g_serviceInfo);

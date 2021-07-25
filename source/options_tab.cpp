@@ -75,6 +75,13 @@ namespace nxdt::views
         });
         this->addView(naming_convention);
         
+        /* Update NSWDB XML. */
+        brls::ListItem *update_nswdb_xml = new brls::ListItem("options_tab/update_nswdb_xml/label"_i18n, "options_tab/update_nswdb_xml/description"_i18n);
+        update_nswdb_xml->getClickEvent()->subscribe([this](brls::View* view) {
+            this->DisplayNotification("Not implemented.");
+        });
+        this->addView(update_nswdb_xml);
+        
         /* Update application. */
         brls::ListItem *update_app = new brls::ListItem("options_tab/update_app/label"_i18n, "options_tab/update_app/description"_i18n);
         update_app->getClickEvent()->subscribe([this](brls::View* view) {

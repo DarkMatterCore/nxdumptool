@@ -41,6 +41,7 @@ if (!strcmp(key, #name)) { \
 vartype configGet##functype(const char *path) { \
     vartype ret = (vartype)0; \
     SCOPED_LOCK(&g_configMutex) { \
+        if (!g_configInterfaceInit) break; \
         struct json_object *obj = configGetJsonObjectByPath(g_configJson, path); \
         if (!obj || !configValidateJson##functype(obj, ##__VA_ARGS__)) break; \
         ret = (vartype)json_object_get_##jsontype(obj); \
@@ -51,6 +52,7 @@ vartype configGet##functype(const char *path) { \
 #define JSON_SETTER(functype, vartype, jsontype, ...) \
 void configSet##functype(const char *path, vartype value) { \
     SCOPED_LOCK(&g_configMutex) { \
+        if (!g_configInterfaceInit) break; \
         struct json_object *obj = configGetJsonObjectByPath(g_configJson, path); \
         if (!obj || !configValidateJson##functype(obj, ##__VA_ARGS__)) break; \
         if (json_object_set_##jsontype(obj, value)) { \

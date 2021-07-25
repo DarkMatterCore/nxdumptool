@@ -146,6 +146,10 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Create output directories (SD card only). */
         utilsCreateOutputDirectories(NULL);
         
+        /* Initialize HTTP interface. */
+        /* CURL must be initialized before starting any other threads. */
+        if (!httpInitialize()) break;
+        
         /* Initialize USB interface. */
         if (!usbInitialize()) break;
         
@@ -189,7 +193,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
             break;
         }
         
-        /* Load configuration. */
+        /* Initialize configuration interface. */
         if (!configInitialize()) break;
         
         /* Overclock system. */
@@ -210,17 +214,6 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* TODO: only use this function while dealing with a dump process - make sure to handle power button presses as well. */
         appletSetMediaPlaybackState(true);
         
-        /* Initialize socket driver. */
-        rc = socketInitializeDefault();
-        if (R_FAILED(rc))
-        {
-            LOG_MSG("socketInitializeDefault failed! (0x%08X).", rc);
-            break;
-        }
-        
-        /* Initialize CURL. */
-        curl_global_init(CURL_GLOBAL_ALL);
-        
         /* Redirect stdout and stderr over network to nxlink. */
         g_nxLinkSocketFd = nxlinkConnectToHost(true, true);
         
@@ -237,18 +230,12 @@ void utilsCloseResources(void)
 {
     SCOPED_LOCK(&g_resourcesMutex)
     {
-        /* Cleanup CURL. */
-        curl_global_cleanup();
-        
         /* Close nxlink socket. */
         if (g_nxLinkSocketFd >= 0)
         {
             close(g_nxLinkSocketFd);
             g_nxLinkSocketFd = -1;
         }
-        
-        /* Deinitialize socket driver. */
-        socketExit();
         
         /* Enable screen dimming and auto sleep. */
         /* TODO: only use this function while dealing with a dump process - make sure to handle power button presses as well. */
@@ -273,7 +260,7 @@ void utilsCloseResources(void)
         utilsUnmountEmmcBisSystemPartitionStorage();
         
         /* Deinitialize BFSAR interface. */
-        bfsarExit();
+        //bfsarExit();
         
         /* Deinitialize BFTTF interface. */
         bfttfExit();
@@ -292,6 +279,9 @@ void utilsCloseResources(void)
         
         /* Close USB interface. */
         usbExit();
+        
+        /* Close HTTP interface. */
+        httpExit();
         
         /* Close initialized services. */
         servicesClose();
