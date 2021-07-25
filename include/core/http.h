@@ -66,7 +66,7 @@ bool httpPerformGetRequest(const char *url, bool force_https, size_t *outsize, H
 bool httpDownloadFile(const char *path, const char *url, bool force_https, HttpProgressCallback progress_cb, void *progress_ptr);
 
 /// Wrapper for httpPerformGetRequest() + httpWriteBufferCallback() that manages a HttpBuffer element on its own.
-/// Returns a pointer to a dynamically allocated buffer that holds the downloaded data, which must be freed by the user.
+/// Returns a pointer to a dynamically allocated buffer that holds the downloaded data, which must be freed by the user. This buffer is not NULL terminated.
 /// Providing 'outsize' is mandatory. Returns NULL if the request fails.
 char *httpDownloadData(size_t *outsize, const char *url, bool force_https, HttpProgressCallback progress_cb, void *progress_ptr);
 
