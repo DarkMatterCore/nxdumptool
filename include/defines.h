@@ -93,6 +93,8 @@
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
+#define DOWNLOAD_TASK_INTERVAL          100                                                                                     /* 100 milliseconds. */
+
 #define HTTP_USER_AGENT                 APP_TITLE "/" APP_VERSION " (Nintendo Switch)"
 #define HTTP_CONNECT_TIMEOUT            10L                                                                                     /* 10 seconds. */
 #define HTTP_BUFFER_SIZE                131072L                                                                                 /* 128 KiB. */

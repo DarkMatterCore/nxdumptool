@@ -31,7 +31,7 @@
 #include <future>
 #include <mutex>
 
-namespace nxdt::utils
+namespace nxdt::tasks
 {
     /* Used by AsyncTask to throw exceptions whenever required. */
     class AsyncTaskException : std::exception
