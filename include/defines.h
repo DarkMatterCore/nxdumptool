@@ -100,6 +100,7 @@
 #define GITHUB_REPOSITORY_URL           "https://github.com/DarkMatterCore/nxdumptool"
 #define GITHUB_NEW_ISSUE_URL            GITHUB_REPOSITORY_URL "/issues/new/choose"
 
+#define NSWDB_XML_URL                   "http://nswdb.com/xml.php"
 #define NSWDB_XML_PATH                  APP_BASE_PATH "NSWreleases.xml"
 
 #define BOREALIS_URL                    "https://github.com/natinusala/borealis"

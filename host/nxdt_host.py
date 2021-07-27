@@ -133,7 +133,7 @@ SERVER_START_MSG = 'Please connect a Nintendo Switch console running {}.'.format
 SERVER_STOP_MSG = 'Exit {} on your console or disconnect it at any time to stop the server.'.format(USB_DEV_PRODUCT)
 
 # Default directory paths.
-INITIAL_DIR = os.path.abspath(os.path.dirname(__file__))
+INITIAL_DIR = os.path.abspath(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__))
 DEFAULT_DIR = (INITIAL_DIR + os.path.sep + USB_DEV_PRODUCT)
 
 # Application icon (PNG).
@@ -221,7 +221,7 @@ APP_ICON = b'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAAAR
            b'43EDnoiNHI8a8FRs5HjMgCdjI8cj7+rp2MhR/Z3p7b5gyzRyjN0ei80cwP+bQrjkWSh1LgAAAABJRU5ErkJggg=='
 
 # Taskbar Type Library (TLB). Used under Windows 7 or greater.
-TASKBAR_LIB_NAME = 'TaskbarLib.tlb'
+TASKBAR_LIB_PATH = (INITIAL_DIR + os.path.sep + 'TaskbarLib.tlb')
 
 TASKBAR_LIB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAATgAAADMDAAAAAAAA/////xgAAAAgAAAAgAAAAP////8AAAAAAAAAAGQAAADIAAAA' + \
               b'LAEAAJABAAD0AQAAWAIAALwCAAAgAwAAhAMAAOgDAABMBAAAsAQAABQFAAB8AQAAeAUAAP////8PAAAA/////wAAAAD/////DwAAAP////8AAAAA/////w8AAABMCAAA' + \
@@ -1033,19 +1033,19 @@ def uiInitialize():
         try:
             import comtypes.client as cc
             
-            tlb_fp = open(TASKBAR_LIB_NAME, 'wb')
+            tlb_fp = open(TASKBAR_LIB_PATH, 'wb')
             tlb_fp.write(base64.b64decode(TASKBAR_LIB))
             tlb_fp.close()
             del_tlb = True
             
-            g_tlb = cc.GetModule(TASKBAR_LIB_NAME)
+            g_tlb = cc.GetModule('TASKBAR_LIB_PATH')
             
             g_taskbar = cc.CreateObject('{56FDF344-FD6D-11D0-958A-006097C9A090}', interface=g_tlb.ITaskbarList3)
             g_taskbar.HrInit()
         except:
             traceback.print_exc()
         
-        if del_tlb: os.remove(TASKBAR_LIB_NAME)
+        if del_tlb: os.remove(TASKBAR_LIB_PATH)
     
     # Create root Tkinter object.
     g_tkRoot = tk.Tk()

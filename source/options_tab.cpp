@@ -78,7 +78,12 @@ namespace nxdt::views
         /* Update NSWDB XML. */
         brls::ListItem *update_nswdb_xml = new brls::ListItem("options_tab/update_nswdb_xml/label"_i18n, "options_tab/update_nswdb_xml/description"_i18n);
         update_nswdb_xml->getClickEvent()->subscribe([this](brls::View* view) {
-            this->DisplayNotification("Not implemented.");
+            brls::Dialog *dialog = new brls::Dialog("this is a test");
+            dialog->setCancelable(false);
+            dialog->addButton("cancel?", [dialog](brls::View *view) {
+                dialog->close();
+            });
+            dialog->open(false);
         });
         this->addView(update_nswdb_xml);
         

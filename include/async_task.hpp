@@ -29,7 +29,7 @@
 
 #include <exception>
 #include <future>
-#include <atomic>
+#include <mutex>
 
 namespace nxdt::utils
 {
@@ -65,19 +65,24 @@ namespace nxdt::utils
     class AsyncTask
     {
         private:
+            std::recursive_mutex mtx;
             AsyncTaskStatus m_status = AsyncTaskStatus::PENDING;
             Result m_result{};
             std::future<Result> m_future{};
-            std::atomic<Progress> m_progress{};
-            std::atomic_bool m_cancelled = false;
-            std::atomic_bool m_rethrowException = false;
+            Progress m_progress{};
+            bool m_cancelled = false, m_rethrowException = false;
             std::exception_ptr m_exceptionPtr{};
             
             /* Runs on the calling thread after doInBackground() finishes execution. */
             void finish(Result&& result)
             {
+                std::lock_guard<std::recursive_mutex> lock(this->mtx);
+                
                 /* Copy result. */
                 this->m_result = result;
+                
+                /* Update status. */
+                this->m_status = AsyncTaskStatus::FINISHED;
                 
                 /* Call appropiate post-execution function. */
                 if (this->isCancelled())
@@ -87,11 +92,8 @@ namespace nxdt::utils
                     this->onPostExecute(this->m_result);
                 }
                 
-                /* Update status. */
-                this->m_status = AsyncTaskStatus::FINISHED;
-                
                 /* Rethrow asynchronous task exception (if available). */
-                if (this->m_rethrowException.load() && this->m_exceptionPtr) std::rethrow_exception(this->m_exceptionPtr);
+                if (this->m_rethrowException && this->m_exceptionPtr) std::rethrow_exception(this->m_exceptionPtr);
             }
         
         protected:
@@ -139,11 +141,20 @@ namespace nxdt::utils
             /* Stores the current progress inside the class. Runs on the asynchronous task thread. */
             virtual void publishProgress(const Progress& progress)
             {
+                std::lock_guard<std::recursive_mutex> lock(this->mtx);
+                
                 /* Don't proceed if the task isn't running. */
                 if (this->getStatus() != AsyncTaskStatus::RUNNING || this->isCancelled()) return;
                 
                 /* Update progress. */
-                this->m_progress.store(progress);
+                this->m_progress = progress;
+            }
+            
+            /* Returns the current progress. May run on both threads. */
+            Progress getProgress(void)
+            {
+                std::lock_guard<std::recursive_mutex> lock(this->mtx);
+                return this->m_progress;
             }
         
         public:
@@ -152,11 +163,13 @@ namespace nxdt::utils
             /* Cancels the task. Runs on the calling thread. */
             void cancel(void) noexcept
             {
+                std::lock_guard<std::recursive_mutex> lock(this->mtx);
+                
                 /* Return right away if the task has already completed, or if it has already been cancelled. */
                 if (this->getStatus() == AsyncTaskStatus::FINISHED || this->isCancelled()) return;
                 
                 /* Update cancel flag. */
-                this->m_cancelled.store(true);
+                this->m_cancelled = true;
             }
             
             /* Starts the asynchronous task. Runs on the calling thread. */
@@ -188,8 +201,9 @@ namespace nxdt::utils
                     try {
                         return this->postResult(this->doInBackground(params...));
                     } catch(...) {
+                        std::lock_guard<std::recursive_mutex> lock(this->mtx);
                         this->cancel();
-                        this->m_rethrowException.store(true);
+                        this->m_rethrowException = true;
                         this->m_exceptionPtr = std::current_exception();
                     }
                     
@@ -264,17 +278,20 @@ namespace nxdt::utils
                 return this->m_status;
             }
             
-            /* Returns true if the task was cancelled before it completed normally. Runs on both threads. */
+            /* Returns true if the task was cancelled before it completed normally. May be used on both threads. */
             /* Can be used by the asynchronous task to return prematurely. */
             bool isCancelled(void) noexcept
             {
-                return this->m_cancelled.load();
+                std::lock_guard<std::recursive_mutex> lock(this->mtx);
+                return this->m_cancelled;
             }
             
             /* Used by the calling thread to refresh the task progress, preferrably inside a loop. Returns true if the task finished. */
             /* If an exception is thrown by the asynchronous task, it will be rethrown by this function. */
             bool loopCallback(void)
             {
+                std::lock_guard<std::recursive_mutex> lock(this->mtx);
+                
                 auto status = this->getStatus();
                 
                 /* Return immediately if the task already finished. */
@@ -289,8 +306,8 @@ namespace nxdt::utils
                 {
                     case std::future_status::timeout:
                         /* Update progress. */
-                        this->onProgressUpdate(this->m_progress.load());
-                        return false;
+                        this->onProgressUpdate(this->m_progress);
+                        break;
                     case std::future_status::ready:
                         /* Finish task. */
                         this->finish(this->m_future.get());

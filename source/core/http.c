@@ -123,7 +123,6 @@ bool httpPerformGetRequest(const char *url, bool force_https, size_t *outsize, H
         curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
         curl_easy_setopt(curl, CURLOPT_MAXREDIRS, 50L);
         curl_easy_setopt(curl, CURLOPT_TCP_KEEPALIVE, 1L);
-        curl_easy_setopt(curl, CURLOPT_ACCEPT_ENCODING, "");
         curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, HTTP_CONNECT_TIMEOUT);
         curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, HTTP_BUFFER_SIZE);
         curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, (long)(force_https ? CURL_HTTP_VERSION_2TLS : CURL_HTTP_VERSION_1_1));
