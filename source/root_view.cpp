@@ -111,7 +111,7 @@ namespace nxdt::views
         
         this->addSeparator();
         
-        this->addTab("root_view/tabs/options"_i18n, new OptionsTab());
+        this->addTab("root_view/tabs/options"_i18n, new OptionsTab(this->status_info_task));
         
         this->addSeparator();
         

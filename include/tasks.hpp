@@ -31,6 +31,7 @@
 #include "core/title.h"
 #include "core/ums.h"
 #include "core/usb.h"
+#include "download_task.hpp"
 
 namespace nxdt::tasks
 {
@@ -70,6 +71,8 @@ namespace nxdt::tasks
         public:
             StatusInfoTask(void);
             ~StatusInfoTask(void);
+            
+            const StatusInfoData* GetStatusInfoData(void);
             
             ALWAYS_INLINE StatusInfoEvent::Subscription RegisterListener(StatusInfoEvent::Callback cb)
             {

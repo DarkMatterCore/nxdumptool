@@ -42,6 +42,11 @@ namespace nxdt::tasks
         brls::Logger::debug("Status info task stopped.");
     }
     
+    const StatusInfoData* StatusInfoTask::GetStatusInfoData(void)
+    {
+        return &(this->status_info_data);
+    }
+    
     void StatusInfoTask::run(retro_time_t current_time)
     {
         brls::RepeatingTask::run(current_time);

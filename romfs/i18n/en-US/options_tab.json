@@ -31,9 +31,10 @@
     },
     
     "notifications": {
-        "is_nso": "The application is running as an NSO. Unable to update.",
-        "already_updated": "The application has already been updated. Please reload.",
+        "no_internet_connection": "Internet connection unavailable. Unable to update.",
         "update_failed": "Update failed! For more information, please check the logfile.",
-        "nswdb_xml_updated": "NSWDB XML successfully updated!"
+        "nswdb_xml_updated": "NSWDB XML successfully updated!",
+        "is_nso": "The application is running as an NSO. Unable to update.",
+        "already_updated": "The application has already been updated. Please reload."
     }
 }

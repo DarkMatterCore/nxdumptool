@@ -185,7 +185,7 @@ namespace nxdt::views
         return true;
     }
     
-    OptionsTab::OptionsTab(void) : brls::List()
+    OptionsTab::OptionsTab(nxdt::tasks::StatusInfoTask *status_info_task) : brls::List(), status_info_task(status_info_task)
     {
         /* Set custom spacing. */
         this->setSpacing(this->getSpacing() / 2);
@@ -241,6 +241,13 @@ namespace nxdt::views
         brls::ListItem *update_nswdb_xml = new brls::ListItem("options_tab/update_nswdb_xml/label"_i18n, "options_tab/update_nswdb_xml/description"_i18n);
         
         update_nswdb_xml->getClickEvent()->subscribe([this](brls::View* view) {
+            if (!this->status_info_task->GetStatusInfoData()->ip_addr)
+            {
+                /* Display a notification if no Internet connection is available. */
+                this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);
+                return;
+            }
+            
             OptionsTabUpdateFileDialog *dialog = new OptionsTabUpdateFileDialog(NSWDB_XML_PATH, NSWDB_XML_URL, false, "options_tab/notifications/nswdb_xml_updated"_i18n);
             dialog->open(false);
         });
@@ -257,7 +264,13 @@ namespace nxdt::views
                 this->DisplayNotification("options_tab/notifications/is_nso"_i18n);
                 return;
             } else
-            if (false)
+            if (!this->status_info_task->GetStatusInfoData()->ip_addr)
+            {
+                /* Display a notification if no Internet connection is available. */
+                this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);
+                return;
+            } else
+            if (false)  /// TODO: add a proper check here
             {
                 /* Display a notification if the application has already been updated. */
                 this->DisplayNotification("options_tab/notifications/already_updated"_i18n);
