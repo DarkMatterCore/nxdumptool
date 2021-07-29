@@ -26,7 +26,7 @@
 
 #include <borealis.hpp>
 
-#include "defines.h"
+#include "core/nxdt_utils.h"
 #include "async_task.hpp"
 
 namespace nxdt::tasks
@@ -177,6 +177,9 @@ namespace nxdt::tasks
         
         /* Pause task handler. */
         this->task_handler->pause();
+        
+        /* Unset long running process state. */
+        utilsSetLongRunningProcessState(false);
     }
     
     template<typename Result, typename... Params>
@@ -190,11 +193,17 @@ namespace nxdt::tasks
         
         /* Update progress one last time. */
         this->onProgressUpdate(this->getProgress());
+        
+        /* Unset long running process state. */
+        utilsSetLongRunningProcessState(false);
     }
     
     template<typename Result, typename... Params>
     void DownloadTask<Result, Params...>::onPreExecute(void)
     {
+        /* Set long running process state. */
+        utilsSetLongRunningProcessState(true);
+        
         /* Start task handler. */
         this->task_handler->start();
         

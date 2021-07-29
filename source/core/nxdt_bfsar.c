@@ -168,7 +168,13 @@ bool bfsarInitialize(void)
         ret = g_bfsarInterfaceInit = true;
     }
     
-    if (bfsar_file) fclose(bfsar_file);
+    if (bfsar_file)
+    {
+        fclose(bfsar_file);
+        
+        /* Commit SD card filesystem changes. */
+        utilsCommitSdCardFileSystemChanges();
+    }
     
     if (bfsar_data) free(bfsar_data);
     

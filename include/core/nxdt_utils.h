@@ -85,8 +85,9 @@ FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
 /// Enables/disables CPU/MEM overclocking.
 void utilsOverclockSystem(bool overclock);
 
-/// (Un)blocks HOME button presses.
-void utilsChangeHomeButtonBlockStatus(bool block);
+/// (Un)blocks HOME button presses and (un)sets screen dimming and auto sleep.
+/// Must be called before starting long-running processes.
+void utilsSetLongRunningProcessState(bool state);
 
 /// Thread management functions.
 bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_id);

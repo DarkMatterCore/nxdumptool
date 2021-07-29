@@ -55,7 +55,7 @@ static FATFS *g_emmcBisSystemPartitionFatFsObj = NULL;
 
 static AppletHookCookie g_systemOverclockCookie = {0};
 
-static bool g_homeButtonBlocked = false;
+static bool g_longRunningProcess = false;
 
 static int g_nxLinkSocketFd = -1;
 
@@ -93,6 +93,8 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
+
+static void utilsChangeHomeButtonBlockStatus(bool block);
 
 static void utilsPrintConsoleError(void);
 
@@ -210,10 +212,6 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
             if (R_SUCCEEDED(rc) && flag) appletInitializeGamePlayRecording();
         }
         
-        /* Disable screen dimming and auto sleep. */
-        /* TODO: only use this function while dealing with a dump process - make sure to handle power button presses as well. */
-        appletSetMediaPlaybackState(true);
-        
         /* Redirect stdout and stderr over network to nxlink. */
         g_nxLinkSocketFd = nxlinkConnectToHost(true, true);
         
@@ -237,12 +235,8 @@ void utilsCloseResources(void)
             g_nxLinkSocketFd = -1;
         }
         
-        /* Enable screen dimming and auto sleep. */
-        /* TODO: only use this function while dealing with a dump process - make sure to handle power button presses as well. */
-        appletSetMediaPlaybackState(false);
-        
-        /* Unblock HOME button presses. */
-        utilsChangeHomeButtonBlockStatus(false);
+        /* Unset long running process state. */
+        utilsSetLongRunningProcessState(false);
         
         /* Unset our overclock applet hook. */
         appletUnhook(&g_systemOverclockCookie);
@@ -335,21 +329,21 @@ void utilsOverclockSystem(bool overclock)
     servicesChangeHardwareClockRates(cpu_rate, mem_rate);
 }
 
-void utilsChangeHomeButtonBlockStatus(bool block)
+void utilsSetLongRunningProcessState(bool state)
 {
     SCOPED_LOCK(&g_resourcesMutex)
     {
-        /* Only change HOME button blocking status if we're running as a regular application or a system application, and if its current blocking status is different than the requested one. */
-        if (_utilsAppletModeCheck() || block == g_homeButtonBlocked) break;
+        /* Don't proceed if the requested state matches the current one. */
+        if (state == g_longRunningProcess) break;
         
-        if (block)
-        {
-            appletBeginBlockingHomeButtonShortAndLongPressed(0);
-        } else {
-            appletEndBlockingHomeButtonShortAndLongPressed();
-        }
+        /* Change HOME button block status. */
+        utilsChangeHomeButtonBlockStatus(state);
         
-        g_homeButtonBlocked = block;
+        /* (Un)set screen dimming and auto sleep. */
+        appletSetMediaPlaybackState(state);
+        
+        /* Update flag. */
+        g_longRunningProcess = state;
     }
 }
 
@@ -904,6 +898,19 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
     if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
     
     utilsOverclockSystem(configGetBoolean("overclock"));
+}
+
+static void utilsChangeHomeButtonBlockStatus(bool block)
+{
+    /* Only change HOME button blocking status if we're running as a regular application or a system application. */
+    if (_utilsAppletModeCheck()) return;
+    
+    if (block)
+    {
+        appletBeginBlockingHomeButtonShortAndLongPressed(0);
+    } else {
+        appletEndBlockingHomeButtonShortAndLongPressed();
+    }
 }
 
 static void utilsPrintConsoleError(void)

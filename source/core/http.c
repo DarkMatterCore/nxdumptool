@@ -209,6 +209,9 @@ bool httpDownloadFile(const char *path, const char *url, bool force_https, HttpP
     /* Delete output file if the request failed. */
     if (!ret) remove(path);
     
+    /* Commit SD card filesystem changes. */
+    utilsCommitSdCardFileSystemChanges();
+    
     return ret;
 }
 

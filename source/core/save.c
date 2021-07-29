@@ -1770,7 +1770,12 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
         f_rewind(save_fd);
     }
     
-    if (fd) fclose(fd);
+    if (fd)
+    {
+        fclose(fd);
+        utilsCommitSdCardFileSystemChanges();
+    }
+    
     if (buf) free(buf);*/
     
     save_ctx = calloc(1, sizeof(save_ctx_t));
