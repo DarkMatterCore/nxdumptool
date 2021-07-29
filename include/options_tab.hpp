@@ -26,8 +26,47 @@
 
 #include <borealis.hpp>
 
+#include "download_task.hpp"
+
 namespace nxdt::views
 {
+    /* Used as the content view for OptionsTabUpdateFileDialog. */
+    class OptionsTabUpdateFileDialogContent: public brls::View
+    {
+        private:
+            brls::ProgressDisplay *progress_display = nullptr;
+            brls::Label *size_label = nullptr, *speed_eta_label = nullptr;
+            
+            std::string GetFormattedSizeString(size_t size);
+            std::string GetFormattedSizeString(double size);
+        
+        protected:
+            void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
+            void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
+        
+        public:
+            OptionsTabUpdateFileDialogContent(void);
+            ~OptionsTabUpdateFileDialogContent(void);
+            
+            void SetProgress(const nxdt::tasks::DownloadTaskProgress& progress);
+            
+            void willAppear(bool resetState = false) override;
+            void willDisappear(bool resetState = false) override;
+    };
+    
+    /* Update file dialog. */
+    class OptionsTabUpdateFileDialog: public brls::Dialog
+    {
+        private:
+            nxdt::tasks::DownloadFileTask download_task;
+            std::string success_str;
+        
+        public:
+            OptionsTabUpdateFileDialog(std::string path, std::string url, bool force_https, std::string success_str);
+            
+            bool onCancel(void) override;
+    };
+    
     class OptionsTab: public brls::List
     {
         private:

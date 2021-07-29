@@ -572,18 +572,18 @@ void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src,
     dst[j] = '\0';
 }
 
-void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size)
+void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size)
 {
     if (!dst || dst_size < 2) return;
     
-    double converted_size = (double)size;
+    size = fabs(size);
     
     for(u32 i = 0; i < g_sizeSuffixesCount; i++)
     {
-        if (converted_size >= pow(1024.0, i + 1) && (i + 1) < g_sizeSuffixesCount) continue;
+        if (size >= pow(1024.0, i + 1) && (i + 1) < g_sizeSuffixesCount) continue;
         
-        converted_size /= pow(1024.0, i);
-        snprintf(dst, dst_size, "%.*f %s", (converted_size >= 100.0 ? 0 : (converted_size >= 10.0 ? 1 : 2)), converted_size, g_sizeSuffixes[i]);
+        size /= pow(1024.0, i);
+        snprintf(dst, dst_size, "%.2F %s", size, g_sizeSuffixes[i]);
         break;
     }
 }

@@ -150,7 +150,7 @@ namespace nxdt::views
         char strbuf[0x40] = {0};
         
         func(&size);
-        utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));
+        utilsGenerateFormattedSizeString(static_cast<double>(size), strbuf, sizeof(strbuf));
         
         return std::string(strbuf);
     }

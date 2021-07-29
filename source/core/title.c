@@ -1760,7 +1760,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
         cur_title_info->storage_id = storage_id;
         memcpy(&(cur_title_info->meta_key), cur_meta_key, sizeof(NcmContentMetaKey));
         cur_title_info->version.value = cur_title_info->meta_key.version;
-        utilsGenerateFormattedSizeString(cur_title_info->size, cur_title_info->size_str, sizeof(cur_title_info->size_str));
+        utilsGenerateFormattedSizeString((double)cur_title_info->size, cur_title_info->size_str, sizeof(cur_title_info->size_str));
         
         /* Retrieve application metadata. */
         u64 app_id = (cur_title_info->meta_key.type <= NcmContentMetaType_Application ? cur_title_info->meta_key.id : \

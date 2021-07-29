@@ -39,7 +39,7 @@ namespace nxdt::tasks
         int percentage;         ///< Progress percentage.
         
         /// Fields set by DownloadTask::onProgressUpdate().
-        double speed;           ///< Download speed expressed in KiB/s.
+        double speed;           ///< Download speed expressed in bytes per second.
         std::string eta;        ///< Formatted ETA string.
     } DownloadTaskProgress;
     
@@ -205,6 +205,8 @@ namespace nxdt::tasks
     template<typename Result, typename... Params>
     void DownloadTask<Result, Params...>::onProgressUpdate(const DownloadTaskProgress& progress)
     {
+        AsyncTaskStatus status = this->getStatus();
+        
         /* Return immediately if there has been no progress at all, or if it the task has been cancelled. */
         bool proceed = (progress.current > prev_current || (progress.current == prev_current && (!progress.size || progress.current >= progress.size)));
         if (!proceed || this->isCancelled()) return;
@@ -215,27 +217,35 @@ namespace nxdt::tasks
         std::chrono::duration<double> diff_time = (cur_time - this->prev_time);
         
         double diff_time_conv = diff_time.count();
-        if (diff_time_conv < 1.0 && ((progress.size && progress.current < progress.size) || this->getStatus() == AsyncTaskStatus::RUNNING)) return;
+        if (diff_time_conv < 1.0 && ((progress.size && progress.current < progress.size) || status == AsyncTaskStatus::RUNNING)) return;
         
         /* Calculate transferred data size difference between the last progress update and the current one. */
         double diff_current = static_cast<double>(progress.current - prev_current);
         
-        /* Calculate download speed in kibibytes per second (KiB/s). */
-        double speed = ((diff_current / diff_time_conv) / 1024.0);
-        
-        /* Calculate remaining data size in kibibytes (KiB) and ETA if we know the download size. */
-        double eta = 0.0;
-        
-        if (progress.size)
-        {
-            double remaining = (static_cast<double>(progress.size - progress.current) / 1024.0);
-            eta = (remaining / speed);
-        }
+        /* Calculate download speed in bytes per second. */
+        double speed = (diff_current / diff_time_conv);
         
         /* Fill struct. */
         DownloadTaskProgress new_progress = progress;
         new_progress.speed = speed;
-        new_progress.eta = (progress.size ? fmt::format("{:02}H{:02}M{:02}S", std::fmod(eta, 86400.0) / 3600.0, std::fmod(eta, 3600.0) / 60.0, std::fmod(eta, 60.0)) : "");
+        
+        if (progress.size)
+        {
+            /* Calculate remaining data size and ETA if we know the download size. */
+            double remaining = static_cast<double>(progress.size - progress.current);
+            double eta = (remaining / speed);
+            new_progress.eta = fmt::format("{:02}H{:02}M{:02}S", std::fmod(eta, 86400.0) / 3600.0, std::fmod(eta, 3600.0) / 60.0, std::fmod(eta, 60.0));
+        } else {
+            /* No download size means no ETA calculation, sadly. */
+            new_progress.eta = "";
+        }
+        
+        /* Set download size if we don't know it and if this is the final chunk. */
+        if (!new_progress.size && status == AsyncTaskStatus::FINISHED)
+        {
+            new_progress.size = new_progress.current;
+            new_progress.percentage = 100;
+        }
         
         /* Update class variables. */
         this->prev_time = cur_time;

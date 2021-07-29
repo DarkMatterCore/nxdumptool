@@ -109,7 +109,7 @@ void utilsTrimString(char *str);
 void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase);
 
 /// Formats the provided 'size' value to a human-readable size string and stores it in 'dst'.
-void utilsGenerateFormattedSizeString(u64 size, char *dst, size_t dst_size);
+void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size);
 
 /// Saves the total size and free space available from the filesystem pointed to by the input path (e.g. "sdmc:/") to 'out_total' and 'out_free', respectively.
 /// Either 'out_total' or 'out_free' can be NULL, but at least one of them must be a valid pointer.

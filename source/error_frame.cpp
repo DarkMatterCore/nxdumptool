@@ -79,7 +79,7 @@ namespace nxdt::views
     
     void ErrorFrame::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
     {
-        this->label->setWidth(roundf((float)this->width * 0.90f));
+        this->label->setWidth(roundf(static_cast<float>(this->width) * 0.90f));
         this->label->invalidate(true);
         
         this->label->setBoundaries(

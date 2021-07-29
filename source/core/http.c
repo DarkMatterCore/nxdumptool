@@ -105,6 +105,7 @@ bool httpPerformGetRequest(const char *url, bool force_https, size_t *outsize, H
         long http_code = 0;
         curl_off_t download_size = 0, content_length = 0;
         char curl_err_buf[CURL_ERROR_SIZE] = {0};
+        const char *error_str = NULL;
         
         /* Start CURL session. */
         curl = curl_easy_init();
@@ -167,10 +168,12 @@ bool httpPerformGetRequest(const char *url, bool force_https, size_t *outsize, H
                     if (curl_err_buf[curl_err_buf_len - 1] == '\n') curl_err_buf[--curl_err_buf_len] = '\0';
                     if (curl_err_buf[curl_err_buf_len - 1] == '\r') curl_err_buf[--curl_err_buf_len] = '\0';
                     
-                    LOG_MSG("%s", curl_err_buf);
+                    error_str = curl_err_buf;
                 } else {
-                    LOG_MSG("%s", curl_easy_strerror(res));
+                    error_str = curl_easy_strerror(res);
                 }
+                
+                if (error_str) LOG_MSG("CURL error info: \"%s\".", error_str);
             }
         }
     }

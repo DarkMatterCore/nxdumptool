@@ -25,8 +25,15 @@
         "description": "Checks if an update is available in nxdumptool's GitHub repository. Requires Internet connectivity."
     },
     
+    "update_dialog": {
+        "cancel": "Cancel",
+        "close": "Close"
+    },
+    
     "notifications": {
         "is_nso": "The application is running as an NSO. Unable to update.",
-        "already_updated": "The application has already been updated. Please reload."
+        "already_updated": "The application has already been updated. Please reload.",
+        "update_failed": "Update failed! For more information, please check the logfile.",
+        "nswdb_xml_updated": "NSWDB XML successfully updated!"
     }
 }
