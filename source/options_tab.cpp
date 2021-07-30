@@ -241,13 +241,14 @@ namespace nxdt::views
         brls::ListItem *update_nswdb_xml = new brls::ListItem("options_tab/update_nswdb_xml/label"_i18n, "options_tab/update_nswdb_xml/description"_i18n);
         
         update_nswdb_xml->getClickEvent()->subscribe([this](brls::View* view) {
-            if (!this->status_info_task->GetStatusInfoData()->ip_addr)
+            if (!this->status_info_task->IsInternetConnectionAvailable())
             {
                 /* Display a notification if no Internet connection is available. */
                 this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);
                 return;
             }
             
+            /* Open update dialog. */
             OptionsTabUpdateFileDialog *dialog = new OptionsTabUpdateFileDialog(NSWDB_XML_PATH, NSWDB_XML_URL, false, "options_tab/notifications/nswdb_xml_updated"_i18n);
             dialog->open(false);
         });
@@ -264,7 +265,7 @@ namespace nxdt::views
                 this->DisplayNotification("options_tab/notifications/is_nso"_i18n);
                 return;
             } else
-            if (!this->status_info_task->GetStatusInfoData()->ip_addr)
+            if (!this->status_info_task->IsInternetConnectionAvailable())
             {
                 /* Display a notification if no Internet connection is available. */
                 this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);

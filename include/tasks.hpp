@@ -72,7 +72,7 @@ namespace nxdt::tasks
             StatusInfoTask(void);
             ~StatusInfoTask(void);
             
-            const StatusInfoData* GetStatusInfoData(void);
+            bool IsInternetConnectionAvailable(void);
             
             ALWAYS_INLINE StatusInfoEvent::Subscription RegisterListener(StatusInfoEvent::Callback cb)
             {

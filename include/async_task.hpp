@@ -97,8 +97,9 @@ namespace nxdt::tasks
             }
         
         protected:
-            /* Set class as non-copyable. */
+            /* Set class as non-copyable and non-moveable. */
             NON_COPYABLE(AsyncTask);
+            NON_MOVEABLE(AsyncTask);
             
             virtual ~AsyncTask(void) noexcept
             {

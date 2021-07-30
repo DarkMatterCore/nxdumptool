@@ -42,9 +42,9 @@ namespace nxdt::tasks
         brls::Logger::debug("Status info task stopped.");
     }
     
-    const StatusInfoData* StatusInfoTask::GetStatusInfoData(void)
+    bool StatusInfoTask::IsInternetConnectionAvailable(void)
     {
-        return &(this->status_info_data);
+        return (this->status_info_data.ip_addr != NULL);
     }
     
     void StatusInfoTask::run(retro_time_t current_time)

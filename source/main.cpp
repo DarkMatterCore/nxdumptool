@@ -23,6 +23,8 @@
 #include <scope_guard.hpp>
 #include <root_view.hpp>
 
+using namespace brls::i18n::literals;   /* For _i18n. */
+
 int main(int argc, char *argv[])
 {
     /* Set scope guard to clean up resources at exit. */
@@ -40,11 +42,18 @@ int main(int argc, char *argv[])
     /* Initialize Borealis. */
     if (!brls::Application::init(APP_TITLE)) return EXIT_FAILURE;
     
-    /* Create root view. */
-    nxdt::views::RootView *root_view = new nxdt::views::RootView();
-    
-    /* Add the root view to the stack. */
-    brls::Application::pushView(root_view);
+    /* Check if we're running under applet mode. */
+    if (utilsAppletModeCheck())
+    {
+        /* Push crash frame with the applet mode warning. */
+        brls::Application::pushView(new brls::CrashFrame("generic/applet_mode_warning"_i18n, [](brls::View *view) {
+            /* Swap crash frame with root view whenever the crash frame button is clicked. */
+            brls::Application::swapView(new nxdt::views::RootView());
+        }));
+    } else {
+        /* Push root view. */
+        brls::Application::pushView(new nxdt::views::RootView());
+    }
     
     /* Run the application. */
     while(brls::Application::mainLoop());

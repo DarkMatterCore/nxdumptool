@@ -1,3 +1,5 @@
 {
-    "unknown": "Unknown"
+    "unknown": "Unknown",
+    
+    "applet_mode_warning": "\uE8B2  Warning: the application is running under Applet Mode!  \uE8B2\nThis mode severely limits the amount of usable RAM. If you consistently reproduce any crashes, please consider running the application via title override (hold R while launching a game)."
 }

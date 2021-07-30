@@ -266,4 +266,9 @@ namespace nxdt::views
         this->usb_icon->setBoundaries(x_pos, y_pos, 0, 0);
         this->usb_icon->invalidate();
     }
+    
+    brls::View* RootView::getDefaultFocus(void)
+    {
+        return this->sidebar->getChild(0);
+    }
 }

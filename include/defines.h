@@ -47,6 +47,10 @@
     cls(const cls&) = delete; \
     cls& operator=(const cls&) = delete
 
+#define NON_MOVEABLE(cls) \
+    cls(cls&&) = delete; \
+    cls& operator=(cls&&) = delete
+
 #define ALWAYS_INLINE                   inline __attribute__((always_inline))
 #define ALWAYS_INLINE_LAMBDA            __attribute__((always_inline))
 
