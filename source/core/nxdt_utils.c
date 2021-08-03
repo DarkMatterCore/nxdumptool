@@ -599,7 +599,7 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
     
     if ((ret = statvfs(stat_path, &info)) != 0)
     {
-        LOG_MSG("statvfs failed! (%d) (errno: %d).", ret, errno);
+        LOG_MSG("statvfs failed for \"%s\"! (%d) (errno: %d).", stat_path, ret, errno);
         return false;
     }
     

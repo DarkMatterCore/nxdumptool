@@ -18,6 +18,7 @@
         "enable_screenshots": false,
         "enable_video_capture": false,
         "disable_hdcp": false,
+        "append_authoringtool_data": true,
         "lookup_checksum": true
     },
     "ticket": {
