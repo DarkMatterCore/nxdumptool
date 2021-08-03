@@ -456,7 +456,7 @@ static bool sendGameCardKeyAreaViaUsb(void)
 {
     if (!waitForGameCardAndUsb()) return false;
     
-    utilsChangeHomeButtonBlockStatus(false);
+    utilsSetLongRunningProcessState(true);
     
     GameCardKeyArea gc_key_area = {0};
     bool success = false;
@@ -476,7 +476,7 @@ static bool sendGameCardKeyAreaViaUsb(void)
 end:
     if (filename) free(filename);
     
-    utilsChangeHomeButtonBlockStatus(false);
+    utilsSetLongRunningProcessState(false);
     
     consolePrint("press any button to continue");
     utilsWaitForButtonPress(0);
@@ -488,7 +488,7 @@ static bool sendGameCardCertificateViaUsb(void)
 {
     if (!waitForGameCardAndUsb()) return false;
     
-    utilsChangeHomeButtonBlockStatus(true);
+    utilsSetLongRunningProcessState(true);
     
     FsGameCardCertificate gc_cert = {0};
     bool success = false;
@@ -514,7 +514,7 @@ static bool sendGameCardCertificateViaUsb(void)
 end:
     if (filename) free(filename);
     
-    utilsChangeHomeButtonBlockStatus(false);
+    utilsSetLongRunningProcessState(false);
     
     consolePrint("press any button to continue");
     utilsWaitForButtonPress(0);
@@ -526,7 +526,7 @@ static bool sendGameCardImageViaUsb(void)
 {
     if (!waitForGameCardAndUsb()) return false;
     
-    utilsChangeHomeButtonBlockStatus(true);
+    utilsSetLongRunningProcessState(true);
     
     u64 gc_size = 0;
     u32 key_area_crc = 0;
@@ -686,7 +686,7 @@ end:
     
     if (filename) free(filename);
     
-    utilsChangeHomeButtonBlockStatus(false);
+    utilsSetLongRunningProcessState(false);
     
     consolePrint("press any button to continue");
     utilsWaitForButtonPress(0);

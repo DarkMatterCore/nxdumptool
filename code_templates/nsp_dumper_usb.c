@@ -63,7 +63,8 @@ static options_t options[] = {
     { "disable linked account requirement", false },
     { "enable screenshots", false },
     { "enable video capture", false },
-    { "disable hdcp", false }
+    { "disable hdcp", false },
+    { "append authoringtool data", true }
 };
 
 static const u32 options_count = MAX_ELEMENTS(options);
@@ -129,6 +130,7 @@ static void dump_thread_func(void *arg)
     bool patch_screenshot = options[5].val;
     bool patch_video_capture = options[6].val;
     bool patch_hdcp = options[7].val;
+    bool append_authoringtool_data = options[8].val;
     bool success = false;
     
     u8 *buf = NULL;
@@ -166,10 +168,6 @@ static void dump_thread_func(void *arg)
     
     if (!shared_data || !(title_info = (TitleInfo*)shared_data->data) || !title_info->content_count || !title_info->content_infos) goto end;
     
-    program_count = titleGetContentCountByType(title_info, NcmContentType_Program);
-    control_count = titleGetContentCountByType(title_info, NcmContentType_Control);
-    legal_info_count = titleGetContentCountByType(title_info, NcmContentType_LegalInformation);
-    
     /* Allocate memory for the dump process. */
     if (!(buf = usbAllocatePageAlignedBuffer(BLOCK_SIZE)))
     {
@@ -196,22 +194,37 @@ static void dump_thread_func(void *arg)
         goto end;
     }
     
-    if (program_count && !(program_info_ctx = calloc(program_count, sizeof(ProgramInfoContext))))
+    // determine if we should initialize programinfo ctx
+    if (change_acid_rsa || append_authoringtool_data)
     {
-        consolePrint("program info ctx calloc failed\n");
-        goto end;
+        program_count = titleGetContentCountByType(title_info, NcmContentType_Program);
+        if (program_count && !(program_info_ctx = calloc(program_count, sizeof(ProgramInfoContext))))
+        {
+            consolePrint("program info ctx calloc failed\n");
+            goto end;
+        }
     }
     
-    if (control_count && !(nacp_ctx = calloc(control_count, sizeof(NacpContext))))
+    // determine if we should initialize nacp ctx
+    if (patch_sua || patch_screenshot || patch_video_capture || patch_hdcp || append_authoringtool_data)
     {
-        consolePrint("nacp ctx calloc failed\n");
-        goto end;
+        control_count = titleGetContentCountByType(title_info, NcmContentType_Control);
+        if (control_count && !(nacp_ctx = calloc(control_count, sizeof(NacpContext))))
+        {
+            consolePrint("nacp ctx calloc failed\n");
+            goto end;
+        }
     }
     
-    if (legal_info_count && !(legal_info_ctx = calloc(legal_info_count, sizeof(LegalInfoContext))))
+    // determine if we should initialize legalinfo ctx
+    if (append_authoringtool_data)
     {
-        consolePrint("legal info ctx calloc failed\n");
-        goto end;
+        legal_info_count = titleGetContentCountByType(title_info, NcmContentType_LegalInformation);
+        if (legal_info_count && !(legal_info_ctx = calloc(legal_info_count, sizeof(LegalInfoContext))))
+        {
+            consolePrint("legal info ctx calloc failed\n");
+            goto end;
+        }
     }
     
     // set meta nca as the last nca
@@ -277,6 +290,9 @@ static void dump_thread_func(void *arg)
         {
             case NcmContentType_Program:
             {
+                // don't proceed if we didn't allocate programinfo ctx
+                if (!program_count || !program_info_ctx) break;
+                
                 ProgramInfoContext *cur_program_info_ctx = &(program_info_ctx[program_idx]);
                 
                 if (!programInfoInitializeContext(cur_program_info_ctx, cur_nca_ctx))
@@ -291,7 +307,7 @@ static void dump_thread_func(void *arg)
                     goto end;
                 }
                 
-                if (!programInfoGenerateAuthoringToolXml(cur_program_info_ctx))
+                if (append_authoringtool_data && !programInfoGenerateAuthoringToolXml(cur_program_info_ctx))
                 {
                     consolePrint("program info xml failed (%s)\n", cur_nca_ctx->content_id_str);
                     goto end;
@@ -305,6 +321,9 @@ static void dump_thread_func(void *arg)
             }
             case NcmContentType_Control:
             {
+                // don't proceed if we didn't allocate nacp ctx
+                if (!control_count || !nacp_ctx) break;
+                
                 NacpContext *cur_nacp_ctx = &(nacp_ctx[control_idx]);
                 
                 if (!nacpInitializeContext(cur_nacp_ctx, cur_nca_ctx))
@@ -319,7 +338,7 @@ static void dump_thread_func(void *arg)
                     goto end;
                 }
                 
-                if (!nacpGenerateAuthoringToolXml(cur_nacp_ctx, title_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
+                if (append_authoringtool_data && !nacpGenerateAuthoringToolXml(cur_nacp_ctx, title_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
                 {
                     consolePrint("nacp xml failed (%s)\n", cur_nca_ctx->content_id_str);
                     goto end;
@@ -333,6 +352,9 @@ static void dump_thread_func(void *arg)
             }
             case NcmContentType_LegalInformation:
             {
+                // don't proceed if we didn't allocate legalinfo ctx
+                if (!legal_info_count || !legal_info_ctx) break;
+                
                 LegalInfoContext *cur_legal_info_ctx = &(legal_info_ctx[legal_info_idx]);
                 
                 if (!legalInfoInitializeContext(cur_legal_info_ctx, cur_nca_ctx))
@@ -362,7 +384,7 @@ static void dump_thread_func(void *arg)
     
     // generate cnmt xml right away even though we don't yet have all the data we need
     // This is because we need its size to calculate the full nsp size
-    if (!cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, title_info->content_count))
+    if (append_authoringtool_data && !cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, title_info->content_count))
     {
         consolePrint("cnmt xml #1 failed\n");
         goto end;
@@ -409,15 +431,19 @@ static void dump_thread_func(void *arg)
     }
     
     // add cnmt xml info
-    sprintf(entry_name, "%s.cnmt.xml", meta_nca_ctx->content_id_str);
-    if (!pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cnmt_ctx.authoring_tool_xml_size, &(meta_nca_ctx->content_type_ctx_data_idx)))
+    if (append_authoringtool_data)
     {
-        consolePrint("pfs add entry failed: %s\n", entry_name);
-        goto end;
+        sprintf(entry_name, "%s.cnmt.xml", meta_nca_ctx->content_id_str);
+        if (!pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cnmt_ctx.authoring_tool_xml_size, &(meta_nca_ctx->content_type_ctx_data_idx)))
+        {
+            consolePrint("pfs add entry failed: %s\n", entry_name);
+            goto end;
+        }
     }
     
     // add content type ctx data info
-    for(u32 i = 0; i < (title_info->content_count - 1); i++)
+    u32 limit = append_authoringtool_data ? (title_info->content_count - 1) : 0;
+    for(u32 i = 0; i < limit; i++)
     {
         bool ret = false;
         NcaContext *cur_nca_ctx = &(nca_ctx[i]);
@@ -611,33 +637,36 @@ static void dump_thread_func(void *arg)
         }
     }
     
-    // regenerate cnmt xml
-    if (!cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, title_info->content_count))
+    if (append_authoringtool_data)
     {
-        consolePrint("cnmt xml #2 failed\n");
-        goto end;
-    }
-    
-    // write cnmt xml
-    tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx);
-    if (!usbSendFilePropertiesCommon(cnmt_ctx.authoring_tool_xml_size, tmp_name) || !usbSendFileData(cnmt_ctx.authoring_tool_xml, cnmt_ctx.authoring_tool_xml_size))
-    {
-        consolePrint("send \"%s\" failed\n", tmp_name);
-        goto end;
-    }
-    
-    nsp_offset += cnmt_ctx.authoring_tool_xml_size;
-    shared_data->data_written += cnmt_ctx.authoring_tool_xml_size;
-    
-    // update cnmt xml pfs entry name
-    if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx, meta_nca_ctx->content_id_str))
-    {
-        consolePrint("pfs update entry name cnmt xml failed\n");
-        goto end;
+        // regenerate cnmt xml
+        if (!cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, title_info->content_count))
+        {
+            consolePrint("cnmt xml #2 failed\n");
+            goto end;
+        }
+        
+        // write cnmt xml
+        tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx);
+        if (!usbSendFilePropertiesCommon(cnmt_ctx.authoring_tool_xml_size, tmp_name) || !usbSendFileData(cnmt_ctx.authoring_tool_xml, cnmt_ctx.authoring_tool_xml_size))
+        {
+            consolePrint("send \"%s\" failed\n", tmp_name);
+            goto end;
+        }
+        
+        nsp_offset += cnmt_ctx.authoring_tool_xml_size;
+        shared_data->data_written += cnmt_ctx.authoring_tool_xml_size;
+        
+        // update cnmt xml pfs entry name
+        if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx, meta_nca_ctx->content_id_str))
+        {
+            consolePrint("pfs update entry name cnmt xml failed\n");
+            goto end;
+        }
     }
     
     // write content type ctx data
-    for(u32 i = 0; i < (title_info->content_count - 1); i++)
+    for(u32 i = 0; i < limit; i++)
     {
         NcaContext *cur_nca_ctx = &(nca_ctx[i]);
         if (!cur_nca_ctx->content_type_ctx) continue;
@@ -1130,9 +1159,9 @@ int main(int argc, char *argv[])
             } else
             if (menu == 3)
             {
-                utilsChangeHomeButtonBlockStatus(true);
+                utilsSetLongRunningProcessState(true);
                 nspDump(title_info);
-                utilsChangeHomeButtonBlockStatus(false);
+                utilsSetLongRunningProcessState(false);
             }
             
             if (error || menu >= 3)

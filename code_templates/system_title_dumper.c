@@ -394,9 +394,9 @@ int main(int argc, char *argv[])
             if (menu == 3)
             {
                 consoleClear();
-                utilsChangeHomeButtonBlockStatus(true);
+                utilsSetLongRunningProcessState(true);
                 dumpFsSection(cur_title_info, &(nca_ctx->fs_ctx[selected_idx]));
-                utilsChangeHomeButtonBlockStatus(false);
+                utilsSetLongRunningProcessState(false);
             }
             
             if (error || menu >= 3)

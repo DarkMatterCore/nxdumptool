@@ -597,7 +597,7 @@ int main(int argc, char *argv[])
     time_t btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
     bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
     
-    utilsChangeHomeButtonBlockStatus(true);
+    utilsSetLongRunningProcessState(true);
     
     consolePrint("hold b to cancel\n\n");
     
@@ -653,7 +653,7 @@ int main(int argc, char *argv[])
     utilsJoinThread(&write_thread);
     consolePrint("write_thread done: %lu\n", time(NULL));
     
-    utilsChangeHomeButtonBlockStatus(false);
+    utilsSetLongRunningProcessState(false);
     
     if (shared_data.read_error || shared_data.write_error)
     {
