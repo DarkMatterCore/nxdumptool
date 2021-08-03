@@ -12,6 +12,7 @@ host/nxdumptool
 *.pfs0
 *.lst
 *.tar.bz2
+*.7z
 *.log
 *.spec
 *.exe

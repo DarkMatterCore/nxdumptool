@@ -1,9 +1,9 @@
 #!/bin/bash
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-tar_filename="nxdumptool-rewrite_poc_$(git rev-parse --short HEAD).tar.bz2"
+archive_filename="nxdumptool-rewrite_poc_$(git rev-parse --short HEAD).7z"
 
-rm -f ./*.tar.bz2
+rm -f ./*.7z
 
 rm -rf ./code_templates/tmp
 mkdir ./code_templates/tmp
@@ -41,7 +41,7 @@ done
 make clean_all
 
 cd ./code_templates/tmp
-tar -cjf ../../$tar_filename *
+7z a ../../$archive_filename *
 
 cd ../..
 rm -f ./source/main.c
