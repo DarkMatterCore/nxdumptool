@@ -290,8 +290,4 @@ void gameCardDumpNSWDBCheck(u32 crc);
 
 void noIntroDumpCheck(bool isDigital, u32 crc);
 
-void updateNSWDBXml();
-
-bool updateApplication();
-
 #endif

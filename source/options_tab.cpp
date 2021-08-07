@@ -213,6 +213,9 @@ namespace nxdt::views
             /* Return immediately if the JSON task hasn't finished. */
             if (!this->json_task.isFinished()) return;
             
+            bool pop_view = false;
+            std::string notification = "";
+            
             /* Retrieve task result. */
             nxdt::tasks::DownloadDataResult json_task_result = this->json_task.get();
             this->json_buf = json_task_result.first;
@@ -221,16 +224,36 @@ namespace nxdt::views
             /* Parse downloaded JSON object. */
             if (utilsParseGitHubReleaseJsonData(this->json_buf, this->json_buf_size, &(this->json_data)))
             {
-                /* Display changelog. */
-                this->DisplayChangelog();
+                /* Check if the application can be updated. */
+                if (utilsIsApplicationUpdatable(this->json_data.version, this->json_data.commit_hash))
+                {
+                    /* Display changelog. */
+                    this->DisplayChangelog();
+                } else {
+                    /* Update flag. */
+                    pop_view = true;
+                    
+                    /* Set notification string. */
+                    notification = "options_tab/notifications/up_to_date"_i18n;
+                }
             } else {
-                /* Log downloaded data if we failed to parse it. */
+                /* Log downloaded data. */
                 LOG_DATA(this->json_buf, this->json_buf_size, "Failed to parse GitHub release JSON. Downloaded data:");
                 
-                /* Display notification. */
-                brls::Application::notify("options_tab/notifications/github_json_failed"_i18n);
+                /* Update flag. */
+                pop_view = true;
                 
-                /* Pop view */
+                /* Set notification string. */
+                notification = "options_tab/notifications/github_json_failed"_i18n;
+            }
+            
+            /* Pop view (if needed). */
+            if (pop_view)
+            {
+                /* Display notification. */
+                brls::Application::notify(notification);
+                
+                /* Pop view. */
                 this->onCancel();
             }
         });

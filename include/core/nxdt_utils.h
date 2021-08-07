@@ -151,9 +151,19 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 /// Furthermore, if the full length for the generated path is >= FS_MAX_PATH, NULL will be returned.
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
 
+/// Returns the current application updated state.
+bool utilsGetApplicationUpdatedState(void);
+
+/// Sets the application updated state to true, which makes utilsCloseResources() replace the application NRO.
+void utilsSetApplicationUpdatedState(void);
+
 /// Parses the provided GitHub release JSON data buffer.
 /// The data from the output buffer must be freed using utilsFreeGitHubReleaseJsonData().
 bool utilsParseGitHubReleaseJsonData(const char *json_buf, size_t json_buf_size, UtilsGitHubReleaseJsonData *out);
+
+/// Parses the provided version string and compares it to the application version. Returns true if the application can be updated.
+/// If both versions are equal, the provided commit hash is compared to our commit hash - if they're different, true will be returned.
+bool utilsIsApplicationUpdatable(const char *version, const char *commit_hash);
 
 /// Frees previously allocated data from a UtilsGitHubReleaseJsonData element.
 NX_INLINE void utilsFreeGitHubReleaseJsonData(UtilsGitHubReleaseJsonData *data)
@@ -162,13 +172,6 @@ NX_INLINE void utilsFreeGitHubReleaseJsonData(UtilsGitHubReleaseJsonData *data)
     if (data->obj) json_object_put(data->obj);
     memset(data, 0, sizeof(UtilsGitHubReleaseJsonData));
 }
-
-/// Returns the current application updated state.
-bool utilsGetApplicationUpdatedState(void);
-
-/// Sets the application updated state to true, which makes utilsCloseResources() replace the application NRO.
-/// Use carefully.
-void utilsSetApplicationUpdatedState(void);
 
 /// Simple wrapper to sleep the current thread for a specific number of full seconds.
 NX_INLINE void utilsSleep(u64 seconds)

@@ -35,6 +35,14 @@
 /* Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits. */
 #define NT_MAX_FILENAME_LENGTH  255
 
+/* Type definitions. */
+
+typedef struct {
+    u32 major;
+    u32 minor;
+    u32 micro;
+} UtilsApplicationVersion;
+
 /* Global variables. */
 
 static bool g_resourcesInit = false;
@@ -828,6 +836,18 @@ end:
     return path;
 }
 
+bool utilsGetApplicationUpdatedState(void)
+{
+    bool ret = false;
+    SCOPED_LOCK(&g_resourcesMutex) ret = g_appUpdated;
+    return ret;
+}
+
+void utilsSetApplicationUpdatedState(void)
+{
+    SCOPED_LOCK(&g_resourcesMutex) g_appUpdated = true;
+}
+
 bool utilsParseGitHubReleaseJsonData(const char *json_buf, size_t json_buf_size, UtilsGitHubReleaseJsonData *out)
 {
     if (!json_buf || !json_buf_size || !out)
@@ -906,16 +926,46 @@ end:
     return ret;
 }
 
-bool utilsGetApplicationUpdatedState(void)
+bool utilsIsApplicationUpdatable(const char *version, const char *commit_hash)
 {
+    if (!version || !*version || *version != 'v' || !commit_hash || !*commit_hash)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
     bool ret = false;
-    SCOPED_LOCK(&g_resourcesMutex) ret = g_appUpdated;
+    UtilsApplicationVersion cur_version = { VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO }, new_version = {0};
+    
+    /* Parse version string. */
+    sscanf(version, "v%u.%u.%u", &(new_version.major), &(new_version.minor), &(new_version.micro));
+    
+    /* Compare versions. */
+    if (cur_version.major == new_version.major)
+    {
+        if (cur_version.minor == new_version.minor)
+        {
+            if (cur_version.micro == new_version.micro)
+            {
+                /* Versions are equal. Let's compare the commit hashes and return true if they're different. */
+                ret = (strncasecmp(commit_hash, GIT_COMMIT, 7) != 0);
+            } else
+            if (cur_version.micro < new_version.micro)
+            {
+                ret = true;
+            }
+        } else
+        if (cur_version.minor < new_version.minor)
+        {
+            ret = true;
+        }
+    } else
+    if (cur_version.major < new_version.major)
+    {
+        ret = true;
+    }
+    
     return ret;
-}
-
-void utilsSetApplicationUpdatedState(void)
-{
-    SCOPED_LOCK(&g_resourcesMutex) g_appUpdated = true;
 }
 
 static void _utilsGetLaunchPath(int program_argc, const char **program_argv)

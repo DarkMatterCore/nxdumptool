@@ -43,6 +43,7 @@
         "is_nso": "The application is running as an NSO. Unable to update.",
         "already_updated": "The application has already been updated. Please reload.",
         "github_json_failed": "Failed to download or parse GitHub release JSON!",
+        "up_to_date": "The application is up to date!",
         "app_updated": "Application successfully updated! Please reload for the changes to take effect."
     }
 }
