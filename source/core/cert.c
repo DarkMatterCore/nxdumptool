@@ -322,7 +322,7 @@ static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst
     snprintf(issuer_copy, sizeof(issuer_copy), "%s", issuer + 5);
     
     pch = strtok_r(issuer_copy, "-", &state);
-    while(pch != NULL)
+    while(pch)
     {
         if (!_certRetrieveCertificateByName(&(dst->certs[i]), pch))
         {
@@ -352,7 +352,7 @@ static u32 certGetCertificateCountInSignatureIssuer(const char *issuer)
     snprintf(issuer_copy, sizeof(issuer_copy), "%s", issuer + 5);
     
     pch = strtok_r(issuer_copy, "-", &state);
-    while(pch != NULL)
+    while(pch)
     {
         count++;
         pch = strtok_r(NULL, "-", &state);

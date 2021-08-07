@@ -52,6 +52,17 @@ typedef enum {
     UtilsCustomFirmwareType_ReiNX      = 3
 } UtilsCustomFirmwareType;
 
+/// Used to handle parsed data from a GitHub release JSON.
+/// All strings are dynamically allocated.
+typedef struct {
+    struct json_object *obj;    ///< JSON object. Must be freed using json_object_put().
+    const char *version;        ///< Pointer to the version string, referenced by obj.
+    const char *commit_hash;    ///< Pointer to the commit hash string, referenced by obj.
+    struct tm date;             ///< Release date.
+    const char *changelog;      ///< Pointer to the changelog string, referenced by obj.
+    const char *download_url;   ///< Pointer to the download URL string, referenced by obj.
+} UtilsGitHubReleaseJsonData;
+
 /// Resource initialization.
 /// Called at program startup.
 bool utilsInitializeResources(const int program_argc, const char **program_argv);
@@ -139,6 +150,25 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 /// If an extension is provided, it will always be preserved, regardless of any possible truncations being carried out.
 /// Furthermore, if the full length for the generated path is >= FS_MAX_PATH, NULL will be returned.
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
+
+/// Parses the provided GitHub release JSON data buffer.
+/// The data from the output buffer must be freed using utilsFreeGitHubReleaseJsonData().
+bool utilsParseGitHubReleaseJsonData(const char *json_buf, size_t json_buf_size, UtilsGitHubReleaseJsonData *out);
+
+/// Frees previously allocated data from a UtilsGitHubReleaseJsonData element.
+NX_INLINE void utilsFreeGitHubReleaseJsonData(UtilsGitHubReleaseJsonData *data)
+{
+    if (!data) return;
+    if (data->obj) json_object_put(data->obj);
+    memset(data, 0, sizeof(UtilsGitHubReleaseJsonData));
+}
+
+/// Returns the current application updated state.
+bool utilsGetApplicationUpdatedState(void);
+
+/// Sets the application updated state to true, which makes utilsCloseResources() replace the application NRO.
+/// Use carefully.
+void utilsSetApplicationUpdatedState(void);
 
 /// Simple wrapper to sleep the current thread for a specific number of full seconds.
 NX_INLINE void utilsSleep(u64 seconds)

@@ -79,6 +79,8 @@ static const char *g_outputDirs[] = {
 
 static const size_t g_outputDirsCount = MAX_ELEMENTS(g_outputDirs);
 
+static bool g_appUpdated = false;
+
 /* Function prototypes. */
 
 static void _utilsGetLaunchPath(int program_argc, const char **program_argv);
@@ -114,7 +116,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         _utilsGetLaunchPath(program_argc, program_argv);
         
         /* Retrieve pointer to the SD card FsFileSystem element. */
-        if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem("sdmc:")))
+        if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem(DEVOPTAB_SDMC_DEVICE)))
         {
             LOG_MSG("Failed to retrieve FsFileSystem object for the SD card!");
             break;
@@ -123,7 +125,6 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Create logfile. */
         logWriteStringToLogFile("________________________________________________________________\r\n");
         LOG_MSG(APP_TITLE " v%u.%u.%u starting (" GIT_REV "). Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
-        if (g_appLaunchPath) LOG_MSG("Launch path: \"%s\".", g_appLaunchPath);
         
         /* Log Horizon OS version. */
         u32 hos_version = hosversionGet();
@@ -147,6 +148,22 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         
         /* Create output directories (SD card only). */
         utilsCreateOutputDirectories(NULL);
+        
+        if (g_appLaunchPath)
+        {
+            LOG_MSG("Launch path: \"%s\".", g_appLaunchPath);
+            
+            /* Move NRO if the launch path isn't the right one, then return. */
+            /* TODO: uncomment this block whenever we are ready for a release. */
+            /*if (strcmp(g_appLaunchPath, NRO_PATH) != 0)
+            {
+                remove(NRO_PATH);
+                rename(g_appLaunchPath, NRO_PATH);
+                
+                LOG_MSG("Moved NRO to \"%s\". Please reload the application.", NRO_PATH);
+                break;
+            }*/
+        }
         
         /* Initialize HTTP interface. */
         /* CURL must be initialized before starting any other threads. */
@@ -279,6 +296,14 @@ void utilsCloseResources(void)
         
         /* Close initialized services. */
         servicesClose();
+        
+        /* Replace application NRO (if needed). */
+        /* TODO: uncomment this block whenever we're ready for a release. */
+        /*if (g_appUpdated)
+        {
+            remove(NRO_PATH);
+            rename(NRO_TMP_PATH, NRO_PATH);
+        }*/
         
         /* Close logfile. */
         logCloseLogFile();
@@ -622,7 +647,7 @@ void utilsCreateOutputDirectories(const char *device)
     
     for(size_t i = 0; i < g_outputDirsCount; i++)
     {
-        sprintf(path, "%s%s", (device ? device : "sdmc:"), g_outputDirs[i]);
+        sprintf(path, "%s%s", (device ? device : DEVOPTAB_SDMC_DEVICE), g_outputDirs[i]);
         mkdir(path, 0744);
     }
 }
@@ -803,13 +828,103 @@ end:
     return path;
 }
 
+bool utilsParseGitHubReleaseJsonData(const char *json_buf, size_t json_buf_size, UtilsGitHubReleaseJsonData *out)
+{
+    if (!json_buf || !json_buf_size || !out)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    bool ret = false;
+    const char *published_at = NULL;
+    struct json_object *assets = NULL;
+    
+    /* Free output buffer beforehand. */
+    utilsFreeGitHubReleaseJsonData(out);
+    
+    /* Parse JSON object. */
+    out->obj = jsonParseFromString(json_buf, json_buf_size);
+    if (!out->obj)
+    {
+        LOG_MSG("Failed to parse JSON object!");
+        return false;
+    }
+    
+    /* Get required JSON elements. */
+    out->version = jsonGetString(out->obj, "tag_name");
+    out->commit_hash = jsonGetString(out->obj, "target_commitish");
+    published_at = jsonGetString(out->obj, "published_at");
+    out->changelog = jsonGetString(out->obj, "body");
+    assets = jsonGetArray(out->obj, "assets");
+    
+    if (!out->version || !out->commit_hash || !published_at || !out->changelog || !assets)
+    {
+        LOG_MSG("Failed to retrieve required elements from the provided JSON!");
+        goto end;
+    }
+    
+    /* Parse release date. */
+    if (!strptime(published_at, "%Y-%m-%dT%H:%M:%SZ", &(out->date)))
+    {
+        LOG_MSG("Failed to parse release date \"%s\"!", published_at);
+        goto end;
+    }
+    
+    /* Loop through the assets array until we find the NRO. */
+    size_t assets_len = json_object_array_length(assets);
+    for(size_t i = 0; i < assets_len; i++)
+    {
+        struct json_object *cur_asset = NULL;
+        const char *asset_name = NULL;
+        
+        /* Get current asset object. */
+        cur_asset = json_object_array_get_idx(assets, i);
+        if (!cur_asset) continue;
+        
+        /* Get current asset name. */
+        asset_name = jsonGetString(cur_asset, "name");
+        if (!asset_name || strcmp(asset_name, NRO_NAME) != 0) continue;
+        
+        /* Jackpot. Get the download URL. */
+        out->download_url = jsonGetString(cur_asset, "browser_download_url");
+        break;
+    }
+    
+    if (!out->download_url)
+    {
+        LOG_MSG("Failed to retrieve required elements from the provided JSON!");
+        goto end;
+    }
+    
+    /* Update return value. */
+    ret = true;
+    
+end:
+    if (!ret) utilsFreeGitHubReleaseJsonData(out);
+    
+    return ret;
+}
+
+bool utilsGetApplicationUpdatedState(void)
+{
+    bool ret = false;
+    SCOPED_LOCK(&g_resourcesMutex) ret = g_appUpdated;
+    return ret;
+}
+
+void utilsSetApplicationUpdatedState(void)
+{
+    SCOPED_LOCK(&g_resourcesMutex) g_appUpdated = true;
+}
+
 static void _utilsGetLaunchPath(int program_argc, const char **program_argv)
 {
     if (program_argc <= 0 || !program_argv) return;
     
     for(int i = 0; i < program_argc; i++)
     {
-        if (program_argv[i] && !strncmp(program_argv[i], "sdmc:/", 6))
+        if (program_argv[i] && !strncmp(program_argv[i], DEVOPTAB_SDMC_DEVICE "/", 6))
         {
             g_appLaunchPath = program_argv[i];
             break;

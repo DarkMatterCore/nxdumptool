@@ -70,21 +70,23 @@ __attribute__((format(printf, 4, 5))) void logWriteFormattedStringToBuffer(char 
     char *dst_ptr = *dst, *tmp_str = NULL;
     size_t dst_cur_size = *dst_size, dst_str_len = (dst_ptr ? strlen(dst_ptr) : 0);
     
+    struct tm ts = {0};
+    struct timespec now = {0};
+    
     if (dst_str_len >= dst_cur_size) return;
     
     va_start(args, fmt);
     
     /* Get current time with nanosecond precision. */
-    struct timespec now = {0};
     clock_gettime(CLOCK_REALTIME, &now);
     
     /* Get local time. */
-    struct tm *ts = localtime(&(now.tv_sec));
-    ts->tm_year += 1900;
-    ts->tm_mon++;
+    localtime_r(&(now.tv_sec), &ts);
+    ts.tm_year += 1900;
+    ts.tm_mon++;
     
     /* Get formatted string length. */
-    str1_len = snprintf(NULL, 0, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
+    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
     if (str1_len <= 0) goto end;
     
     str2_len = vsnprintf(NULL, 0, fmt, args);
@@ -113,7 +115,7 @@ __attribute__((format(printf, 4, 5))) void logWriteFormattedStringToBuffer(char 
     }
     
     /* Generate formatted string. */
-    sprintf(dst_ptr + dst_str_len, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
+    sprintf(dst_ptr + dst_str_len, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
     vsprintf(dst_ptr + dst_str_len + (size_t)str1_len, fmt, args);
     strcat(dst_ptr, CRLF);
     
@@ -272,17 +274,19 @@ static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, 
     char *tmp_str = NULL;
     size_t tmp_len = 0;
     
-    /* Get current time with nanosecond precision. */
+    struct tm ts = {0};
     struct timespec now = {0};
+    
+    /* Get current time with nanosecond precision. */
     clock_gettime(CLOCK_REALTIME, &now);
     
     /* Get local time. */
-    struct tm *ts = localtime(&(now.tv_sec));
-    ts->tm_year += 1900;
-    ts->tm_mon++;
+    localtime_r(&(now.tv_sec), &ts);
+    ts.tm_year += 1900;
+    ts.tm_mon++;
     
     /* Get formatted string length. */
-    str1_len = snprintf(NULL, 0, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
+    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
     if (str1_len <= 0) return;
     
     str2_len = vsnprintf(NULL, 0, fmt, args);
@@ -314,7 +318,7 @@ static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, 
         }
         
         /* Nice and easy string formatting using the log buffer. */
-        sprintf(g_logBuffer + g_logBufferLength, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
+        sprintf(g_logBuffer + g_logBufferLength, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
         vsprintf(g_logBuffer + g_logBufferLength + (size_t)str1_len, fmt, args);
         strcat(g_logBuffer, CRLF);
         g_logBufferLength += log_str_len;
@@ -328,7 +332,7 @@ static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, 
         if (!tmp_str) return;
         
         /* Generate formatted string. */
-        sprintf(tmp_str, g_logStrFormat, ts->tm_year, ts->tm_mon, ts->tm_mday, ts->tm_hour, ts->tm_min, ts->tm_sec, now.tv_nsec, func_name);
+        sprintf(tmp_str, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
         vsprintf(tmp_str + (size_t)str1_len, fmt, args);
         strcat(tmp_str, CRLF);
         

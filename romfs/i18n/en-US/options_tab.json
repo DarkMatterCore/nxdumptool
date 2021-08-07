@@ -22,7 +22,13 @@
     
     "update_app": {
         "label": "Update application",
-        "description": "Checks if an update is available in nxdumptool's GitHub repository. Requires Internet connectivity."
+        "description": "Checks if an update is available in nxdumptool's GitHub repository. Requires Internet connectivity.",
+        "frame": {
+            "please_wait": "Please wait…",
+            "release_details": "Commit hash: {0:.7}\nRelease date: {1} UTC+0",
+            "changelog_header": "Changelog",
+            "update_action": "Update"
+        }
     },
     
     "update_dialog": {
@@ -32,9 +38,11 @@
     
     "notifications": {
         "no_internet_connection": "Internet connection unavailable. Unable to update.",
-        "update_failed": "Update failed! For more information, please check the logfile.",
+        "update_failed": "Update failed! Check the logfile for more info.",
         "nswdb_xml_updated": "NSWDB XML successfully updated!",
         "is_nso": "The application is running as an NSO. Unable to update.",
-        "already_updated": "The application has already been updated. Please reload."
+        "already_updated": "The application has already been updated. Please reload.",
+        "github_json_failed": "Failed to download or parse GitHub release JSON!",
+        "app_updated": "Application successfully updated! Please reload for the changes to take effect."
     }
 }

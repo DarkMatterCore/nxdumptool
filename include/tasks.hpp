@@ -37,7 +37,7 @@ namespace nxdt::tasks
 {
     /* Used to hold status info data. */
     typedef struct {
-        struct tm *timeinfo;
+        struct tm timeinfo;
         u32 charge_percentage;
         PsmChargerType charger_type;
         NifmInternetConnectionType connection_type;

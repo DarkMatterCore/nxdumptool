@@ -30,14 +30,13 @@
 
 namespace nxdt::views
 {
-    /* Used as the content view for OptionsTabUpdateFileDialog. */
-    class OptionsTabUpdateFileDialogContent: public brls::View
+    /* Used in OptionsTabUpdateFileDialog and OptionsTabUpdateApplicationFrame to display the update progress. */
+    class OptionsTabUpdateProgress: public brls::View
     {
         private:
             brls::ProgressDisplay *progress_display = nullptr;
-            brls::Label *size_label = nullptr, *speed_eta_label = nullptr;
+            brls::Label *size_lbl = nullptr, *speed_eta_lbl = nullptr;
             
-            std::string GetFormattedSizeString(size_t size);
             std::string GetFormattedSizeString(double size);
         
         protected:
@@ -45,8 +44,8 @@ namespace nxdt::views
             void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
         
         public:
-            OptionsTabUpdateFileDialogContent(void);
-            ~OptionsTabUpdateFileDialogContent(void);
+            OptionsTabUpdateProgress(void);
+            ~OptionsTabUpdateProgress(void);
             
             void SetProgress(const nxdt::tasks::DownloadTaskProgress& progress);
             
@@ -63,8 +62,35 @@ namespace nxdt::views
         
         public:
             OptionsTabUpdateFileDialog(std::string path, std::string url, bool force_https, std::string success_str);
+    };
+    
+    /* Update application frame. */
+    class OptionsTabUpdateApplicationFrame: public brls::StagedAppletFrame
+    {
+        private:
+            nxdt::tasks::DownloadDataTask json_task;
+            char *json_buf = NULL;
+            size_t json_buf_size = 0;
+            UtilsGitHubReleaseJsonData json_data = {0};
             
+            brls::Label *wait_lbl = nullptr;                      /// First stage.
+            brls::List *changelog_list = nullptr;                   /// Second stage.
+            OptionsTabUpdateProgress *update_progress = nullptr;    /// Third stage.
+            
+            nxdt::tasks::DownloadFileTask nro_task;
+            
+            brls::GenericEvent::Subscription focus_event_sub;
+            
+            void DisplayChangelog(void);
+            void DisplayUpdateProgress(void);
+        
+        protected:
+            void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
             bool onCancel(void) override;
+        
+        public:
+            OptionsTabUpdateApplicationFrame(void);
+            ~OptionsTabUpdateApplicationFrame(void);
     };
     
     class OptionsTab: public brls::List

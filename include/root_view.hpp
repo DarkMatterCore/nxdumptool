@@ -56,6 +56,8 @@ namespace nxdt::views
         public:
             RootView(void);
             ~RootView(void);
+            
+            static std::string GetFormattedDateString(const struct tm& timeinfo);
     };
 }
 

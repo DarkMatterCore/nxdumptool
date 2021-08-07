@@ -21,75 +21,80 @@
 
 #include <nxdt_utils.h>
 #include <options_tab.hpp>
+#include <root_view.hpp>
+#include <focusable_item.hpp>
 #include <title.h>
+#include <sstream>
 
-using namespace brls::i18n::literals;   /* For _i18n. */
+namespace i18n = brls::i18n;    /* For getStr(). */
+using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    OptionsTabUpdateFileDialogContent::OptionsTabUpdateFileDialogContent(void)
+    OptionsTabUpdateProgress::OptionsTabUpdateProgress(void)
     {
         this->progress_display = new brls::ProgressDisplay();
         this->progress_display->setParent(this);
         
-        this->size_label = new brls::Label(brls::LabelStyle::MEDIUM, "", false);
-        this->size_label->setVerticalAlign(NVG_ALIGN_BOTTOM);
-        this->size_label->setParent(this);
+        this->size_lbl = new brls::Label(brls::LabelStyle::MEDIUM, "", false);
+        this->size_lbl->setVerticalAlign(NVG_ALIGN_BOTTOM);
+        this->size_lbl->setParent(this);
         
-        this->speed_eta_label = new brls::Label(brls::LabelStyle::MEDIUM, "", false);
-        this->speed_eta_label->setVerticalAlign(NVG_ALIGN_TOP);
-        this->speed_eta_label->setParent(this);
+        this->speed_eta_lbl = new brls::Label(brls::LabelStyle::MEDIUM, "", false);
+        this->speed_eta_lbl->setVerticalAlign(NVG_ALIGN_TOP);
+        this->speed_eta_lbl->setParent(this);
     }
     
-    OptionsTabUpdateFileDialogContent::~OptionsTabUpdateFileDialogContent(void)
+    OptionsTabUpdateProgress::~OptionsTabUpdateProgress(void)
     {
         delete this->progress_display;
-        delete this->size_label;
-        delete this->speed_eta_label;
+        delete this->size_lbl;
+        delete this->speed_eta_lbl;
     }
     
-    void OptionsTabUpdateFileDialogContent::SetProgress(const nxdt::tasks::DownloadTaskProgress& progress)
+    void OptionsTabUpdateProgress::SetProgress(const nxdt::tasks::DownloadTaskProgress& progress)
     {
         /* Update progress percentage. */
-        this->progress_display->setProgress(progress.size ? progress.percentage : 0, 100);
+        this->progress_display->setProgress(progress.percentage, 100);
         
         /* Update size string. */
-        this->size_label->setText(fmt::format("{} / {}", this->GetFormattedSizeString(progress.current), progress.size ? this->GetFormattedSizeString(progress.size) : "?"));
+        this->size_lbl->setText(fmt::format("{} / {}", this->GetFormattedSizeString(static_cast<double>(progress.current)), \
+                                                         progress.size ? this->GetFormattedSizeString(static_cast<double>(progress.size)) : "?"));
         
         /* Update speed / ETA string. */
-        if (progress.eta != "")
+        if (progress.eta.length())
         {
-            this->speed_eta_label->setText(fmt::format("{}/s - ETA: {}", this->GetFormattedSizeString(progress.speed), progress.eta));
+            this->speed_eta_lbl->setText(fmt::format("{}/s - ETA: {}", this->GetFormattedSizeString(progress.speed), progress.eta));
         } else {
-            this->speed_eta_label->setText(fmt::format("{}/s", this->GetFormattedSizeString(progress.speed)));
+            this->speed_eta_lbl->setText(fmt::format("{}/s", this->GetFormattedSizeString(progress.speed)));
         }
         
         this->invalidate();
     }
     
-    void OptionsTabUpdateFileDialogContent::willAppear(bool resetState)
+    void OptionsTabUpdateProgress::willAppear(bool resetState)
     {
         this->progress_display->willAppear(resetState);
     }
     
-    void OptionsTabUpdateFileDialogContent::willDisappear(bool resetState)
+    void OptionsTabUpdateProgress::willDisappear(bool resetState)
     {
         this->progress_display->willDisappear(resetState);
     }
     
-    void OptionsTabUpdateFileDialogContent::draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx)
+    void OptionsTabUpdateProgress::draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx)
     {
         /* Progress display. */
         this->progress_display->frame(ctx);
         
         /* Size label. */
-        this->size_label->frame(ctx);
+        this->size_lbl->frame(ctx);
         
         /* Speed / ETA label. */
-        this->speed_eta_label->frame(ctx);
+        this->speed_eta_lbl->frame(ctx);
     }
     
-    void OptionsTabUpdateFileDialogContent::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
+    void OptionsTabUpdateProgress::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
     {
         unsigned elem_width = roundf(static_cast<float>(this->width) * 0.90f);
         
@@ -103,34 +108,27 @@ namespace nxdt::views
         this->progress_display->invalidate(true);
         
         /* Size label. */
-        this->size_label->setWidth(elem_width);
-        this->size_label->invalidate(true);
+        this->size_lbl->setWidth(elem_width);
+        this->size_lbl->invalidate(true);
         
-        this->size_label->setBoundaries(
-            this->x + (this->width - this->size_label->getWidth()) / 2,
+        this->size_lbl->setBoundaries(
+            this->x + (this->width - this->size_lbl->getWidth()) / 2,
             this->progress_display->getY() - this->progress_display->getHeight() / 8,
-            this->size_label->getWidth(),
-            this->size_label->getHeight());
+            this->size_lbl->getWidth(),
+            this->size_lbl->getHeight());
         
         /* Speed / ETA label. */
-        this->speed_eta_label->setWidth(elem_width);
-        this->speed_eta_label->invalidate(true);
+        this->speed_eta_lbl->setWidth(elem_width);
+        this->speed_eta_lbl->invalidate(true);
         
-        this->speed_eta_label->setBoundaries(
-            this->x + (this->width - this->speed_eta_label->getWidth()) / 2,
+        this->speed_eta_lbl->setBoundaries(
+            this->x + (this->width - this->speed_eta_lbl->getWidth()) / 2,
             this->progress_display->getY() + this->progress_display->getHeight() + this->progress_display->getHeight() / 8,
-            this->speed_eta_label->getWidth(),
-            this->speed_eta_label->getHeight());
+            this->speed_eta_lbl->getWidth(),
+            this->speed_eta_lbl->getHeight());
     }
     
-    std::string OptionsTabUpdateFileDialogContent::GetFormattedSizeString(size_t size)
-    {
-        char strbuf[0x40] = {0};
-        utilsGenerateFormattedSizeString(static_cast<double>(size), strbuf, sizeof(strbuf));
-        return std::string(strbuf);
-    }
-    
-    std::string OptionsTabUpdateFileDialogContent::GetFormattedSizeString(double size)
+    std::string OptionsTabUpdateProgress::GetFormattedSizeString(double size)
     {
         char strbuf[0x40] = {0};
         utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));
@@ -140,27 +138,31 @@ namespace nxdt::views
     OptionsTabUpdateFileDialog::OptionsTabUpdateFileDialog(std::string path, std::string url, bool force_https, std::string success_str) : brls::Dialog(), success_str(success_str)
     {
         /* Set content view. */
-        OptionsTabUpdateFileDialogContent *content = new OptionsTabUpdateFileDialogContent();
-        this->setContentView(content);
+        OptionsTabUpdateProgress *update_progress = new OptionsTabUpdateProgress();
+        this->setContentView(update_progress);
         
         /* Add cancel button. */
         this->addButton("options_tab/update_dialog/cancel"_i18n, [this](brls::View* view) {
-            this->onCancel();
+            /* Cancel download task. */
+            this->download_task.cancel();
+            
+            /* Close dialog. */
+            this->close();
         });
         
         /* Disable cancelling with B button. */
         this->setCancelable(false);
         
         /* Subscribe to the download task. */
-        this->download_task.RegisterListener([this, content](const nxdt::tasks::DownloadTaskProgress& progress) {
+        this->download_task.RegisterListener([this, update_progress](const nxdt::tasks::DownloadTaskProgress& progress) {
             /* Update progress. */
-            content->SetProgress(progress);
+            update_progress->SetProgress(progress);
             
             /* Check if the download task has finished. */
             if (this->download_task.isFinished())
             {
                 /* Stop spinner. */
-                content->willDisappear();
+                update_progress->willDisappear();
                 
                 /* Update button label. */
                 this->setButtonText(0, "options_tab/update_dialog/close"_i18n);
@@ -174,15 +176,203 @@ namespace nxdt::views
         this->download_task.execute(path, url, force_https);
     }
     
-    bool OptionsTabUpdateFileDialog::onCancel(void)
+    OptionsTabUpdateApplicationFrame::OptionsTabUpdateApplicationFrame(void) : brls::StagedAppletFrame(false)
     {
-        /* Cancel download task. */
-        this->download_task.cancel();
+        /* Set UI properties. */
+        this->setTitle("options_tab/update_app/label"_i18n);
+        this->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
+        this->setFooterText("v" APP_VERSION " (" GIT_REV ")");
         
-        /* Close dialog. */
-        this->close();
+        /* Add first stage. */
+        this->wait_lbl = new brls::Label(brls::LabelStyle::DIALOG, "options_tab/update_app/frame/please_wait"_i18n, false);
+        this->wait_lbl->setHorizontalAlign(NVG_ALIGN_CENTER);
+        this->addStage(this->wait_lbl);
+        
+        /* Add second stage. */
+        this->changelog_list = new brls::List();
+        this->changelog_list->setSpacing(this->changelog_list->getSpacing() / 2);
+        this->changelog_list->setMarginBottom(20);
+        this->addStage(this->changelog_list);
+        
+        /* Add third stage. */
+        this->update_progress = new OptionsTabUpdateProgress();
+        this->addStage(this->update_progress);
+        
+        /* Register cancel action. */
+        this->registerAction("brls/hints/back"_i18n, brls::Key::B, [this](void){
+            return this->onCancel();
+        });
+        
+        /* Subscribe to the global focus change event so we can rebuild hints as soon as this frame is pushed to the view stack. */
+        this->focus_event_sub = brls::Application::getGlobalFocusChangeEvent()->subscribe([this](brls::View* view) {
+            this->rebuildHints();
+        });
+        
+        /* Subscribe to the JSON task. */
+        this->json_task.RegisterListener([this](const nxdt::tasks::DownloadTaskProgress& progress) {
+            /* Return immediately if the JSON task hasn't finished. */
+            if (!this->json_task.isFinished()) return;
+            
+            /* Retrieve task result. */
+            nxdt::tasks::DownloadDataResult json_task_result = this->json_task.get();
+            this->json_buf = json_task_result.first;
+            this->json_buf_size = json_task_result.second;
+            
+            /* Parse downloaded JSON object. */
+            if (utilsParseGitHubReleaseJsonData(this->json_buf, this->json_buf_size, &(this->json_data)))
+            {
+                /* Display changelog. */
+                this->DisplayChangelog();
+            } else {
+                /* Log downloaded data if we failed to parse it. */
+                LOG_DATA(this->json_buf, this->json_buf_size, "Failed to parse GitHub release JSON. Downloaded data:");
+                
+                /* Display notification. */
+                brls::Application::notify("options_tab/notifications/github_json_failed"_i18n);
+                
+                /* Pop view */
+                this->onCancel();
+            }
+        });
+        
+        /* Start JSON task. */
+        this->json_task.execute(GITHUB_API_RELEASE_URL, true);
+    }
+    
+    OptionsTabUpdateApplicationFrame::~OptionsTabUpdateApplicationFrame(void)
+    {
+        /* Free parsed JSON data. */
+        utilsFreeGitHubReleaseJsonData(&(this->json_data));
+        
+        /* Free JSON buffer. */
+        if (this->json_buf) free(this->json_buf);
+        
+        /* Unsubscribe focus event listener. */
+        brls::Application::getGlobalFocusChangeEvent()->unsubscribe(this->focus_event_sub);
+    }
+    
+    void OptionsTabUpdateApplicationFrame::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
+    {
+        brls::StagedAppletFrame::layout(vg, style, stash);
+        
+        if (this->getCurrentStage() == 0)
+        {
+            /* Center wait label. */
+            this->wait_lbl->setBoundaries(this->x + (this->width / 2), this->y, this->width, this->height);
+            this->wait_lbl->invalidate();
+        }
+    }
+    
+    bool OptionsTabUpdateApplicationFrame::onCancel(void)
+    {
+        /* Cancel NRO task. */
+        this->nro_task.cancel();
+        
+        /* Cancel JSON task. */
+        this->json_task.cancel();
+        
+        /* Pop view. */
+        brls::Application::popView();
         
         return true;
+    }
+    
+    void OptionsTabUpdateApplicationFrame::DisplayChangelog(void)
+    {
+        std::string item;
+        std::stringstream ss(std::string(this->json_data.changelog));
+        
+        /* Display version string at the top. */
+        FocusableLabel *version_lbl = new FocusableLabel(false, brls::LabelStyle::CRASH, std::string(this->json_data.version), true);
+        version_lbl->setHorizontalAlign(NVG_ALIGN_CENTER);
+        this->changelog_list->addView(version_lbl);
+        
+        /* Display release date and commit hash. */
+        brls::Label *release_details_lbl = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("options_tab/update_app/frame/release_details"_i18n, \
+                                                           this->json_data.commit_hash, RootView::GetFormattedDateString(this->json_data.date)), true);
+        release_details_lbl->setHorizontalAlign(NVG_ALIGN_CENTER);
+        this->changelog_list->addView(release_details_lbl);
+        
+        /* Add changelog header. */
+        this->changelog_list->addView(new brls::Header("options_tab/update_app/frame/changelog_header"_i18n));
+        
+        /* Split changelog string and fill list. */
+        while(std::getline(ss, item))
+        {
+            /* Don't proceed if this is an empty line. */
+            /* Make sure to remove any possible carriage returns. */
+            size_t item_len = item.length();
+            if (!item_len) continue;
+            
+            if (item.back() == '\r')
+            {
+                if (item_len > 1)
+                {
+                    item.pop_back();
+                } else {
+                    continue;
+                }
+            }
+            
+            /* Add line to the changelog view. */
+            this->changelog_list->addView(new FocusableLabel(false, brls::LabelStyle::SMALL, item, true));
+        }
+        
+        /* Register update action. */
+        this->registerAction("options_tab/update_app/frame/update_action"_i18n, brls::Key::PLUS, [this](void){
+            /* Display update progress. */
+            this->DisplayUpdateProgress();
+            
+            return true;
+        });
+        
+        /* Rebuild action hints. */
+        this->rebuildHints();
+        
+        /* Go to the next stage. */
+        this->nextStage();
+    }
+    
+    void OptionsTabUpdateApplicationFrame::DisplayUpdateProgress(void)
+    {
+        /* Remove update action. */
+        this->registerAction("options_tab/update_app/frame/update_action"_i18n, brls::Key::PLUS, [](void){
+            return true;
+        }, true);
+        
+        /* Register cancel action once more, using a different label. */
+        this->registerAction("options_tab/update_dialog/cancel"_i18n, brls::Key::B, [this](void){
+            return this->onCancel();
+        });
+        
+        /* Rebuild action hints. */
+        this->rebuildHints();
+        
+        /* Subscribe to the NRO task. */
+        this->nro_task.RegisterListener([this](const nxdt::tasks::DownloadTaskProgress& progress) {
+            /* Update progress. */
+            this->update_progress->SetProgress(progress);
+            
+            /* Check if the download task has finished. */
+            if (this->nro_task.isFinished())
+            {
+                /* Get NRO task result and immediately set application updated state if the task succeeded. */
+                bool ret = this->nro_task.get();
+                if (ret) utilsSetApplicationUpdatedState();
+                
+                /* Display notification. */
+                brls::Application::notify(ret ? "options_tab/notifications/app_updated"_i18n : "options_tab/notifications/update_failed"_i18n);
+                
+                /* Pop view */
+                this->onCancel();
+            }
+        });
+        
+        /* Start NRO task. */
+        this->nro_task.execute(NRO_TMP_PATH, std::string(this->json_data.download_url), true);
+        
+        /* Go to the next stage. */
+        this->nextStage();
     }
     
     OptionsTab::OptionsTab(nxdt::tasks::StatusInfoTask *status_info_task) : brls::List(), status_info_task(status_info_task)
@@ -271,17 +461,15 @@ namespace nxdt::views
                 this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);
                 return;
             } else
-            if (false)  /// TODO: add a proper check here
+            if (utilsGetApplicationUpdatedState())
             {
                 /* Display a notification if the application has already been updated. */
                 this->DisplayNotification("options_tab/notifications/already_updated"_i18n);
                 return;
             }
             
-            /*brls::StagedAppletFrame *staged_frame = new brls::StagedAppletFrame();
-            staged_frame->setTitle("options_tab/update_app/label"_i18n);
-            
-            brls::Application::pushView(staged_frame);*/
+            /* Display update frame. */
+            brls::Application::pushView(new OptionsTabUpdateApplicationFrame(), brls::ViewAnimation::FADE, false);
         });
         
         this->addView(update_app);

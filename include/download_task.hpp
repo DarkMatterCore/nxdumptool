@@ -162,7 +162,7 @@ namespace nxdt::tasks
         /* Fill struct. */
         progress.size = static_cast<size_t>(dltotal);
         progress.current = static_cast<size_t>(dlnow);
-        progress.percentage = static_cast<int>((progress.current * 100) / progress.size);
+        progress.percentage = (progress.size ? static_cast<int>((progress.current * 100) / progress.size) : 0);
         
         /* Push progress onto the class. */
         task->publishProgress(progress);
@@ -243,7 +243,7 @@ namespace nxdt::tasks
             /* Calculate remaining data size and ETA if we know the download size. */
             double remaining = static_cast<double>(progress.size - progress.current);
             double eta = (remaining / speed);
-            new_progress.eta = fmt::format("{:02}H{:02}M{:02}S", std::fmod(eta, 86400.0) / 3600.0, std::fmod(eta, 3600.0) / 60.0, std::fmod(eta, 60.0));
+            new_progress.eta = fmt::format("{:02.0F}H{:02.0F}M{:02.0F}S", std::fmod(eta, 86400.0) / 3600.0, std::fmod(eta, 3600.0) / 60.0, std::fmod(eta, 60.0));
         } else {
             /* No download size means no ETA calculation, sadly. */
             new_progress.eta = "";

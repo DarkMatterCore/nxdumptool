@@ -72,6 +72,8 @@
 #define UTF8_BOM                        "\xEF\xBB\xBF"
 #define CRLF                            "\r\n"
 
+#define DEVOPTAB_SDMC_DEVICE            "sdmc:"
+
 #define HBMENU_BASE_PATH                "/switch/"
 #define APP_BASE_PATH                   HBMENU_BASE_PATH APP_TITLE "/"
 
@@ -83,13 +85,14 @@
 #define NCA_PATH                        APP_BASE_PATH "NCA/"
 #define NCA_FS_PATH                     APP_BASE_PATH "NCA FS/"
 
-#define CONFIG_PATH                     "sdmc:" APP_BASE_PATH "config.json"
+#define CONFIG_PATH                     DEVOPTAB_SDMC_DEVICE APP_BASE_PATH "config.json"
 #define DEFAULT_CONFIG_PATH             "romfs:/default_config.json"
 
 #define NRO_NAME                        APP_TITLE ".nro"
-#define NRO_PATH                        APP_BASE_PATH NRO_NAME
+#define NRO_PATH                        DEVOPTAB_SDMC_DEVICE APP_BASE_PATH NRO_NAME
+#define NRO_TMP_PATH                    NRO_PATH ".tmp"
 
-#define KEYS_FILE_PATH                  "sdmc:" HBMENU_BASE_PATH "prod.keys"                                                    /* Location used by Lockpick_RCM. */
+#define KEYS_FILE_PATH                  DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "prod.keys"                                                    /* Location used by Lockpick_RCM. */
 
 #define LOG_FILE_NAME                   APP_TITLE ".log"
 #define LOG_BUF_SIZE                    0x400000                                                                                /* 4 MiB. */
@@ -103,8 +106,14 @@
 #define HTTP_CONNECT_TIMEOUT            10L                                                                                     /* 10 seconds. */
 #define HTTP_BUFFER_SIZE                131072L                                                                                 /* 128 KiB. */
 
-#define GITHUB_REPOSITORY_URL           "https://github.com/DarkMatterCore/nxdumptool"
+#define GITHUB_URL                      "https://github.com"
+#define GITHUB_API_URL                  "https://api.github.com"
+#define GITHUB_REPOSITORY               APP_AUTHOR "/" APP_TITLE
+
+#define GITHUB_REPOSITORY_URL           GITHUB_URL "/" GITHUB_REPOSITORY
 #define GITHUB_NEW_ISSUE_URL            GITHUB_REPOSITORY_URL "/issues/new/choose"
+
+#define GITHUB_API_RELEASE_URL          GITHUB_API_URL "/repos/" GITHUB_REPOSITORY "/releases/latest"
 
 #define NSWDB_XML_URL                   "http://nswdb.com/xml.php"
 #define NSWDB_XML_PATH                  APP_BASE_PATH "NSWreleases.xml"

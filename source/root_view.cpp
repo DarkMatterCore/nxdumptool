@@ -119,9 +119,6 @@ namespace nxdt::views
         
         /* Subscribe to status info event. */
         this->status_info_task_sub = this->status_info_task->RegisterListener([this](const nxdt::tasks::StatusInfoData *status_info_data) {
-            bool is_am = true;
-            struct tm *timeinfo = status_info_data->timeinfo;
-            
             u32 charge_percentage = status_info_data->charge_percentage;
             PsmChargerType charger_type = status_info_data->charger_type;
             
@@ -129,25 +126,7 @@ namespace nxdt::views
             char *ip_addr = status_info_data->ip_addr;
             
             /* Update time label. */
-            timeinfo->tm_mon++;
-            timeinfo->tm_year += 1900;
-            
-            if ("root_view/time_format"_i18n.compare("12") == 0)
-            {
-                /* Adjust time for 12-hour clock. */
-                if (timeinfo->tm_hour > 12)
-                {
-                    timeinfo->tm_hour -= 12;
-                    is_am = false;
-                } else
-                if (!timeinfo->tm_hour)
-                {
-                    timeinfo->tm_hour = 12;
-                }
-            }
-            
-            this->time_lbl->setText(i18n::getStr("root_view/date"_i18n, timeinfo->tm_year, timeinfo->tm_mon, timeinfo->tm_mday, timeinfo->tm_hour, timeinfo->tm_min, timeinfo->tm_sec, \
-                                                 is_am ? "AM" : "PM"));
+            this->time_lbl->setText(this->GetFormattedDateString(status_info_data->timeinfo));
             
             /* Update battery labels. */
             this->battery_icon->setText(charger_type != PsmChargerType_Unconnected ? "\uE1A3" : (charge_percentage <= 15 ? "\uE19C" : "\uE1A4"));
@@ -190,6 +169,32 @@ namespace nxdt::views
         delete this->connection_status_lbl;
         delete this->usb_icon;
         delete this->usb_host_speed_lbl;
+    }
+    
+    std::string RootView::GetFormattedDateString(const struct tm& timeinfo)
+    {
+        bool is_am = true;
+        struct tm ts = timeinfo;
+        
+        /* Update time label. */
+        ts.tm_mon++;
+        ts.tm_year += 1900;
+        
+        if ("generic/time_format"_i18n.compare("12") == 0)
+        {
+            /* Adjust time for 12-hour clock. */
+            if (ts.tm_hour > 12)
+            {
+                ts.tm_hour -= 12;
+                is_am = false;
+            } else
+            if (!ts.tm_hour)
+            {
+                ts.tm_hour = 12;
+            }
+        }
+        
+        return i18n::getStr("generic/date"_i18n, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, is_am ? "AM" : "PM");
     }
     
     void RootView::draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx)

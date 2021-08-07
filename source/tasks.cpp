@@ -55,7 +55,7 @@ namespace nxdt::tasks
         
         /* Get current time. */
         time_t unix_time = time(NULL);
-        status_info_data->timeinfo = localtime(&unix_time);
+        localtime_r(&unix_time, &(status_info_data->timeinfo));
         
         /* Get battery stats. */
         psmGetBatteryChargePercentage(&(status_info_data->charge_percentage));

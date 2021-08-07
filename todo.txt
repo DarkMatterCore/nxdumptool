@@ -23,10 +23,10 @@ todo:
     usb: improve abi (make it rest-like?)
     usb: improve cancel mechanism
     
-    others: move curl (de)initialization to http.c
-    others: use hardcoded directories, move data to hardcoded directory if the launch path isn't the right one
+    others: fix shrinking bar
+    others: add version / commit hash check before updating app
+    others: check todo with grep
     others: dump verification via nswdb / no-intro
-    others: update application feature
     others: fatfs browser for emmc partitions
 
 reminder:
