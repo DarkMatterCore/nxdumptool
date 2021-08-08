@@ -181,7 +181,6 @@ namespace nxdt::views
         /* Set UI properties. */
         this->setTitle("options_tab/update_app/label"_i18n);
         this->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
-        this->setFooterText("v" APP_VERSION " (" GIT_REV ")");
         
         /* Add first stage. */
         this->wait_lbl = new brls::Label(brls::LabelStyle::DIALOG, "options_tab/update_app/frame/please_wait"_i18n, false);

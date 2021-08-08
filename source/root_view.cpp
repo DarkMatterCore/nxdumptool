@@ -38,7 +38,6 @@ namespace nxdt::views
         /* Set UI properties. */
         this->setTitle(APP_TITLE);
         this->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
-        this->setFooterText("v" APP_VERSION " (" GIT_REV ")");
         
         /* Check if we're running under applet mode. */
         this->applet_mode = utilsAppletModeCheck();
