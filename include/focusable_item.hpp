@@ -32,7 +32,7 @@ namespace nxdt::views
     class FocusableItem: public ViewType
     {
         private:
-            bool highlight_view;
+            bool highlight, highlight_bg;
         
         protected:
             brls::View* getDefaultFocus(void) override
@@ -40,42 +40,45 @@ namespace nxdt::views
                 return this;
             }
             
-            void playClickAnimation(void) override;
-            void onFocusGained(void) override;
+            bool isHighlightBackgroundEnabled(void) override
+            {
+                return this->highlight_bg;
+            }
+            
+            void onFocusGained(void) override
+            {
+                if (this->highlight)
+                {
+                    /* Focus and highlight view. */
+                    brls::View::onFocusGained();
+                } else {
+                    /* Focus view without highlighting it. */
+                    this->focused = true;
+                    this->focusEvent.fire(this);
+                    if (this->hasParent()) this->getParent()->onChildFocusGained(this);
+                }
+            }
         
         public:
             template<typename... Types>
-            FocusableItem(bool highlight_view, Types... args) : ViewType(args...)
-            {
-                this->highlight_view = highlight_view;
-            }
+            FocusableItem(bool highlight, bool highlight_bg, Types... args) : ViewType(args...), highlight(highlight), highlight_bg(highlight_bg) { }
     };
     
-    template<typename ViewType>
-    void FocusableItem<ViewType>::playClickAnimation(void)
-    {
-        /* Play click animation. */
-        if (this->highlight_view) brls::View::playClickAnimation();
-    }
+    /* Define templated classes for the focusable items we're gonna use. */
     
-    template<typename ViewType>
-    void FocusableItem<ViewType>::onFocusGained(void)
+    class FocusableLabel: public FocusableItem<brls::Label>
     {
-        if (this->highlight_view)
-        {
-            /* Focus and highlight view. */
-            brls::View::onFocusGained();
-        } else {
-            /* Focus view without highlighting it. */
-            this->focused = true;
-            this->focusEvent.fire(this);
-            if (this->hasParent()) this->getParent()->onChildFocusGained(this);
-        }
-    }
+        public:
+            template<typename... Types>
+            FocusableLabel(Types... args) : FocusableItem<brls::Label>(false, false, args...) { }
+    };
     
-    /* Instantiate templates for the focusable item classes we're gonna use. */
-    typedef FocusableItem<brls::Label> FocusableLabel;
-    typedef FocusableItem<brls::Table> FocusableTable;
+    class FocusableTable: public FocusableItem<brls::Table>
+    {
+        public:
+            template<typename... Types>
+            FocusableTable(Types... args) : FocusableItem<brls::Table>(true, false, args...) { }
+    };
 }
 
 #endif  /* __FOCUSABLE_ITEM_HPP__ */

@@ -104,6 +104,8 @@
 
 #define HTTP_USER_AGENT                 APP_TITLE "/" APP_VERSION " (Nintendo Switch)"
 #define HTTP_CONNECT_TIMEOUT            10L                                                                                     /* 10 seconds. */
+#define HTTP_LOW_SPEED_LIMIT            30L                                                                                     /* 30 bytes per second. */
+#define HTTP_LOW_SPEED_TIME             HTTP_CONNECT_TIMEOUT
 #define HTTP_BUFFER_SIZE                131072L                                                                                 /* 128 KiB. */
 
 #define GITHUB_URL                      "https://github.com"
