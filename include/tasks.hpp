@@ -33,6 +33,10 @@
 #include "core/usb.h"
 #include "download_task.hpp"
 
+#define EVENT_SUBSCRIPTION(event_type, event_name) \
+    ALWAYS_INLINE event_type::Subscription RegisterListener(event_type::Callback cb) { return this->event_name.subscribe(cb); } \
+    ALWAYS_INLINE void UnregisterListener(event_type::Subscription subscription) { this->event_name.unsubscribe(subscription); }
+
 namespace nxdt::tasks
 {
     /* Used to hold status info data. */
@@ -74,15 +78,7 @@ namespace nxdt::tasks
             
             bool IsInternetConnectionAvailable(void);
             
-            ALWAYS_INLINE StatusInfoEvent::Subscription RegisterListener(StatusInfoEvent::Callback cb)
-            {
-                return this->status_info_event.subscribe(cb);
-            }
-            
-            ALWAYS_INLINE void UnregisterListener(StatusInfoEvent::Subscription subscription)
-            {
-                this->status_info_event.unsubscribe(subscription);
-            }
+            EVENT_SUBSCRIPTION(StatusInfoEvent, status_info_event);
     };
     
     /* Gamecard task. */
@@ -102,15 +98,7 @@ namespace nxdt::tasks
             GameCardTask(void);
             ~GameCardTask(void);
             
-            ALWAYS_INLINE GameCardStatusEvent::Subscription RegisterListener(GameCardStatusEvent::Callback cb)
-            {
-                return this->gc_status_event.subscribe(cb);
-            }
-            
-            ALWAYS_INLINE void UnregisterListener(GameCardStatusEvent::Subscription subscription)
-            {
-                this->gc_status_event.unsubscribe(subscription);
-            }
+            EVENT_SUBSCRIPTION(GameCardStatusEvent, gc_status_event);
     };
     
     /* Title task. */
@@ -135,15 +123,7 @@ namespace nxdt::tasks
             /* Intentionally left here to let system titles views retrieve metadata. */
             const TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
             
-            ALWAYS_INLINE TitleEvent::Subscription RegisterListener(TitleEvent::Callback cb)
-            {
-                return this->title_event.subscribe(cb);
-            }
-            
-            ALWAYS_INLINE void UnregisterListener(TitleEvent::Subscription subscription)
-            {
-                this->title_event.unsubscribe(subscription);
-            }
+            EVENT_SUBSCRIPTION(TitleEvent, title_event);
     };
     
     /* USB Mass Storage task. */
@@ -152,7 +132,6 @@ namespace nxdt::tasks
     {
         private:
             UmsEvent ums_event;
-            
             UmsDeviceVector ums_devices;
             
             void PopulateUmsDeviceVector(void);
@@ -164,15 +143,7 @@ namespace nxdt::tasks
             UmsTask(void);
             ~UmsTask(void);
             
-            ALWAYS_INLINE UmsEvent::Subscription RegisterListener(UmsEvent::Callback cb)
-            {
-                return this->ums_event.subscribe(cb);
-            }
-            
-            ALWAYS_INLINE void UnregisterListener(UmsEvent::Subscription subscription)
-            {
-                this->ums_event.unsubscribe(subscription);
-            }
+            EVENT_SUBSCRIPTION(UmsEvent, ums_event);
     };
     
     /* USB host device connection task. */
@@ -190,16 +161,10 @@ namespace nxdt::tasks
             UsbHostTask(void);
             ~UsbHostTask(void);
             
-            ALWAYS_INLINE UsbHostEvent::Subscription RegisterListener(UsbHostEvent::Callback cb)
-            {
-                return this->usb_host_event.subscribe(cb);
-            }
-            
-            ALWAYS_INLINE void UnregisterListener(UsbHostEvent::Subscription subscription)
-            {
-                this->usb_host_event.unsubscribe(subscription);
-            }
+            EVENT_SUBSCRIPTION(UsbHostEvent, usb_host_event);
     };
 }
+
+#undef EVENT_SUBSCRIPTION
 
 #endif  /* __TASKS_HPP__ */

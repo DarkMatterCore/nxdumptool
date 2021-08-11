@@ -26,7 +26,7 @@
 
 #include <borealis.hpp>
 
-#include "tasks.hpp"
+#include "root_view.hpp"
 
 namespace nxdt::views
 {
@@ -96,7 +96,7 @@ namespace nxdt::views
     class OptionsTab: public brls::List
     {
         private:
-            nxdt::tasks::StatusInfoTask *status_info_task = nullptr;
+            RootView *root_view = nullptr;
             
             bool display_notification = true;
             brls::menu_timer_t notification_timer = 0.0f;
@@ -104,7 +104,7 @@ namespace nxdt::views
             
             void DisplayNotification(std::string str);
         public:
-            OptionsTab(nxdt::tasks::StatusInfoTask *status_info_task);
+            OptionsTab(RootView *root_view);
             ~OptionsTab(void);
     };
 }

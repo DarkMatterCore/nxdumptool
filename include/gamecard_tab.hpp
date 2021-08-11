@@ -24,7 +24,7 @@
 #ifndef __GAMECARD_TAB_HPP__
 #define __GAMECARD_TAB_HPP__
 
-#include "tasks.hpp"
+#include "root_view.hpp"
 #include "layered_error_frame.hpp"
 #include "focusable_item.hpp"
 
@@ -35,7 +35,8 @@ namespace nxdt::views
         typedef bool (*GameCardSizeFunc)(u64 *out_size);
         
         private:
-            nxdt::tasks::GameCardTask *gc_status_task = nullptr;
+            RootView *root_view = nullptr;
+            
             nxdt::tasks::GameCardStatusEvent::Subscription gc_status_task_sub;
             GameCardStatus gc_status = GameCardStatus_NotInserted;
             
@@ -58,7 +59,7 @@ namespace nxdt::views
             std::string GetFormattedSizeString(GameCardSizeFunc func);
         
         public:
-            GameCardTab(nxdt::tasks::GameCardTask *gc_status_task);
+            GameCardTab(RootView *root_view);
             ~GameCardTab(void);
     };
 }

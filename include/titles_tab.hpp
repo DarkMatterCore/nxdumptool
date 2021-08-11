@@ -24,7 +24,7 @@
 #ifndef __TITLES_TAB_HPP__
 #define __TITLES_TAB_HPP__
 
-#include "tasks.hpp"
+#include "root_view.hpp"
 #include "layered_error_frame.hpp"
 
 namespace nxdt::views
@@ -68,15 +68,15 @@ namespace nxdt::views
     class TitlesTab: public LayeredErrorFrame
     {
         private:
-            nxdt::tasks::TitleTask *title_task = nullptr;
-            nxdt::tasks::TitleEvent::Subscription title_task_sub;
+            RootView *root_view = nullptr;
             
+            nxdt::tasks::TitleEvent::Subscription title_task_sub;
             bool is_system = false;
             
             void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* app_metadata);
         
         public:
-            TitlesTab(nxdt::tasks::TitleTask *title_task, bool is_system);
+            TitlesTab(RootView *root_view, bool is_system);
             ~TitlesTab(void);
     };
 }

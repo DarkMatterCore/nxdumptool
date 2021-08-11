@@ -27,21 +27,7 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    static const char *GameCardFwVersionStrings[GameCardFwVersion_Count] = {
-        [GameCardFwVersion_ForDev]       = "1.0.0+",
-        [GameCardFwVersion_Since100NUP]  = "1.0.0+",
-        [GameCardFwVersion_Since400NUP]  = "4.0.0+",
-        [GameCardFwVersion_Since900NUP]  = "9.0.0+",
-        [GameCardFwVersion_Since1100NUP] = "11.0.0+",
-        [GameCardFwVersion_Since1200NUP] = "12.0.0+"
-    };
-    
-    static const char *GameCardCompatibilityTypeStrings[GameCardCompatibilityType_Count] = {
-        [GameCardCompatibilityType_Normal] = "Normal",
-        [GameCardCompatibilityType_Terra]  = "Terra"
-    };
-    
-    GameCardTab::GameCardTab(nxdt::tasks::GameCardTask *gc_status_task) : LayeredErrorFrame("gamecard_tab/error_frame/not_inserted"_i18n), gc_status_task(gc_status_task)
+    GameCardTab::GameCardTab(RootView *root_view) : LayeredErrorFrame("gamecard_tab/error_frame/not_inserted"_i18n), root_view(root_view)
     {
         /* Set custom spacing. */
         this->list->setSpacing(this->list->getSpacing() / 2);
@@ -64,6 +50,11 @@ namespace nxdt::views
         this->list->addView(new brls::Header("gamecard_tab/list/dump_options"_i18n));
         
         this->dump_card_image = new brls::ListItem("gamecard_tab/list/dump_card_image/label"_i18n, "gamecard_tab/list/dump_card_image/description"_i18n);
+        
+        /*this->dump_card_image->getClickEvent()->subscribe([](brls::View *view) {
+            
+        });*/
+        
         this->list->addView(this->dump_card_image);
         
         this->dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, "gamecard_tab/list/dump_certificate/description"_i18n);
@@ -82,7 +73,8 @@ namespace nxdt::views
         this->list->addView(this->dump_hfs_partitions);
         
         /* Subscribe to gamecard status event. */
-        this->gc_status_task_sub = this->gc_status_task->RegisterListener([this](GameCardStatus gc_status) {
+        this->gc_status_task_sub = this->root_view->RegisterGameCardTaskListener([this](GameCardStatus gc_status) {
+            /* Switch to the error layer if gamecard info hasn't been loaded. */
             if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->SwitchLayerView(true);
             
             switch(gc_status)
@@ -104,6 +96,7 @@ namespace nxdt::views
                     break;
                 case GameCardStatus_InsertedAndInfoLoaded:
                 {
+                    /* Fill properties table. */
                     GameCardInfo card_info = {0};
                     gamecardGetDecryptedCardInfoArea(&card_info);
                     
@@ -116,16 +109,17 @@ namespace nxdt::views
                                                                                        upp_version->minor_relstep, upp_version->value));
                     
                     u64 fw_version = card_info.fw_version;
-                    this->lafw_version->setValue(fmt::format("{} ({})", fw_version, fw_version >= GameCardFwVersion_Count ? "generic/unknown"_i18n : GameCardFwVersionStrings[fw_version]));
+                    this->lafw_version->setValue(fmt::format("{} ({})", fw_version, fw_version >= GameCardFwVersion_Count ? "generic/unknown"_i18n : gamecardGetRequiredHosVersionString(fw_version)));
                     
                     const VersionType2 *fw_mode = &(card_info.fw_mode);
                     this->sdk_version->setValue(fmt::format("{}.{}.{}-{} (v{})", fw_mode->major, fw_mode->minor, fw_mode->micro, fw_mode->relstep, fw_mode->value));
                     
                     u8 compatibility_type = card_info.compatibility_type;
                     this->compatibility_type->setValue(fmt::format("{} ({})", \
-                                                                   compatibility_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n : GameCardCompatibilityTypeStrings[compatibility_type], \
+                                                                   compatibility_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n : gamecardGetCompatibilityTypeString(compatibility_type), \
                                                                    compatibility_type));
                     
+                    /* Switch to the list view. */
                     this->SwitchLayerView(false);
                     
                     break;
@@ -134,6 +128,7 @@ namespace nxdt::views
                     break;
             }
             
+            /* Update internal gamecard status. */
             this->gc_status = gc_status;
         });
     }
@@ -141,7 +136,7 @@ namespace nxdt::views
     GameCardTab::~GameCardTab(void)
     {
         /* Unregister task listener. */
-        this->gc_status_task->UnregisterListener(this->gc_status_task_sub);
+        this->root_view->UnregisterGameCardTaskListener(this->gc_status_task_sub);
     }
     
     std::string GameCardTab::GetFormattedSizeString(GameCardSizeFunc func)

@@ -198,7 +198,7 @@ namespace nxdt::views
         this->addStage(this->update_progress);
         
         /* Register cancel action. */
-        this->registerAction("brls/hints/back"_i18n, brls::Key::B, [this](void){
+        this->registerAction("brls/hints/back"_i18n, brls::Key::B, [this](void) {
             return this->onCancel();
         });
         
@@ -294,7 +294,7 @@ namespace nxdt::views
         this->json_task.cancel();
         
         /* Pop view. */
-        brls::Application::popView();
+        brls::Application::popView(brls::ViewAnimation::SLIDE_RIGHT);
         
         return true;
     }
@@ -341,7 +341,7 @@ namespace nxdt::views
         }
         
         /* Register update action. */
-        this->registerAction("options_tab/update_app/frame/update_action"_i18n, brls::Key::PLUS, [this](void){
+        this->registerAction("options_tab/update_app/frame/update_action"_i18n, brls::Key::PLUS, [this](void) {
             /* Display update progress. */
             this->DisplayUpdateProgress();
             
@@ -358,12 +358,12 @@ namespace nxdt::views
     void OptionsTabUpdateApplicationFrame::DisplayUpdateProgress(void)
     {
         /* Remove update action. */
-        this->registerAction("options_tab/update_app/frame/update_action"_i18n, brls::Key::PLUS, [](void){
+        this->registerAction("options_tab/update_app/frame/update_action"_i18n, brls::Key::PLUS, [](void) {
             return true;
         }, true);
         
         /* Register cancel action once more, using a different label. */
-        this->registerAction("options_tab/update_dialog/cancel"_i18n, brls::Key::B, [this](void){
+        this->registerAction("options_tab/update_dialog/cancel"_i18n, brls::Key::B, [this](void) {
             return this->onCancel();
         });
         
@@ -397,7 +397,7 @@ namespace nxdt::views
         this->nextStage();
     }
     
-    OptionsTab::OptionsTab(nxdt::tasks::StatusInfoTask *status_info_task) : brls::List(), status_info_task(status_info_task)
+    OptionsTab::OptionsTab(RootView *root_view) : brls::List(), root_view(root_view)
     {
         /* Set custom spacing. */
         this->setSpacing(this->getSpacing() / 2);
@@ -437,7 +437,7 @@ namespace nxdt::views
                                                                            }, static_cast<unsigned>(configGetInteger("naming_convention")),
                                                                            "options_tab/naming_convention/description"_i18n);
         
-        naming_convention->getValueSelectedEvent()->subscribe([](int selected){
+        naming_convention->getValueSelectedEvent()->subscribe([](int selected) {
             /* Make sure the current value isn't out of bounds. */
             if (selected < 0 || selected > static_cast<int>(TitleNamingConvention_Count)) return;
             
@@ -453,7 +453,7 @@ namespace nxdt::views
         brls::ListItem *update_nswdb_xml = new brls::ListItem("options_tab/update_nswdb_xml/label"_i18n, "options_tab/update_nswdb_xml/description"_i18n);
         
         update_nswdb_xml->getClickEvent()->subscribe([this](brls::View* view) {
-            if (!this->status_info_task->IsInternetConnectionAvailable())
+            if (!this->root_view->IsInternetConnectionAvailable())
             {
                 /* Display a notification if no Internet connection is available. */
                 this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);
@@ -477,7 +477,7 @@ namespace nxdt::views
                 this->DisplayNotification("options_tab/notifications/is_nso"_i18n);
                 return;
             } else
-            if (!this->status_info_task->IsInternetConnectionAvailable())
+            if (!this->root_view->IsInternetConnectionAvailable())
             {
                 /* Display a notification if no Internet connection is available. */
                 this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);
@@ -491,7 +491,7 @@ namespace nxdt::views
             }
             
             /* Display update frame. */
-            brls::Application::pushView(new OptionsTabUpdateApplicationFrame(), brls::ViewAnimation::FADE, false);
+            brls::Application::pushView(new OptionsTabUpdateApplicationFrame(), brls::ViewAnimation::SLIDE_LEFT, false);
         });
         
         this->addView(update_app);

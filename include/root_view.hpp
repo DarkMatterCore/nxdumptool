@@ -26,6 +26,10 @@
 
 #include "tasks.hpp"
 
+#define EVENT_SUBSCRIPTION(func_name, event_type, task_name) \
+    ALWAYS_INLINE nxdt::tasks::event_type::Subscription Register##func_name##Listener(nxdt::tasks::event_type::Callback cb) { return this->task_name->RegisterListener(cb); } \
+    ALWAYS_INLINE void Unregister##func_name##Listener(nxdt::tasks::event_type::Subscription subscription) { this->task_name->UnregisterListener(subscription); }
+
 namespace nxdt::views
 {
     class RootView: public brls::TabFrame
@@ -58,7 +62,27 @@ namespace nxdt::views
             ~RootView(void);
             
             static std::string GetFormattedDateString(const struct tm& timeinfo);
+            
+            /* Wrappers for task functions. */
+            
+            ALWAYS_INLINE bool IsInternetConnectionAvailable(void)
+            {
+                return this->status_info_task->IsInternetConnectionAvailable();
+            }
+            
+            ALWAYS_INLINE const nxdt::tasks::TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system)
+            {
+                return this->title_task->GetApplicationMetadata(is_system);
+            }
+            
+            EVENT_SUBSCRIPTION(StatusInfoTask, StatusInfoEvent, status_info_task);
+            EVENT_SUBSCRIPTION(GameCardTask, GameCardStatusEvent, gc_status_task);
+            EVENT_SUBSCRIPTION(TitleTask, TitleEvent, title_task);
+            EVENT_SUBSCRIPTION(UmsTask, UmsEvent, ums_task);
+            EVENT_SUBSCRIPTION(UsbHostTask, UsbHostEvent, usb_host_task);
     };
 }
+
+#undef EVENT_SUBSCRIPTION
 
 #endif  /* __ROOT_VIEW_HPP__ */

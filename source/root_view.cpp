@@ -94,23 +94,23 @@ namespace nxdt::views
         this->usb_host_task = new nxdt::tasks::UsbHostTask();
         
         /* Add tabs. */
-        GameCardTab *gamecard_tab = new GameCardTab(this->gc_status_task);
+        GameCardTab *gamecard_tab = new GameCardTab(this);
         this->addTab("root_view/tabs/gamecard"_i18n, gamecard_tab);
         gamecard_tab->SetParentSidebarItem(static_cast<brls::SidebarItem*>(this->sidebar->getChild(this->sidebar->getViewsCount() - 1)));
         
         this->addSeparator();
         
-        TitlesTab *user_titles_tab = new TitlesTab(this->title_task, false);
+        TitlesTab *user_titles_tab = new TitlesTab(this, false);
         this->addTab("root_view/tabs/user_titles"_i18n, user_titles_tab);
         user_titles_tab->SetParentSidebarItem(static_cast<brls::SidebarItem*>(this->sidebar->getChild(this->sidebar->getViewsCount() - 1)));
         
-        TitlesTab *system_titles_tab = new TitlesTab(this->title_task, true);
+        TitlesTab *system_titles_tab = new TitlesTab(this, true);
         this->addTab("root_view/tabs/system_titles"_i18n, system_titles_tab);
         system_titles_tab->SetParentSidebarItem(static_cast<brls::SidebarItem*>(this->sidebar->getChild(this->sidebar->getViewsCount() - 1)));
         
         this->addSeparator();
         
-        this->addTab("root_view/tabs/options"_i18n, new OptionsTab(this->status_info_task));
+        this->addTab("root_view/tabs/options"_i18n, new OptionsTab(this));
         
         this->addSeparator();
         
@@ -154,6 +154,7 @@ namespace nxdt::views
         this->status_info_task->UnregisterListener(this->status_info_task_sub);
         
         /* Stop background tasks. */
+        this->status_info_task->stop();
         this->gc_status_task->stop();
         this->title_task->stop();
         this->ums_task->stop();

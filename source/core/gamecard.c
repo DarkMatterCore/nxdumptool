@@ -149,6 +149,20 @@ static const char *g_gameCardHfsPartitionNames[] = {
     [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Boot)]   = "boot"
 };
 
+static const char *g_gameCardHosVersionStrings[GameCardFwVersion_Count] = {
+    [GameCardFwVersion_ForDev]       = "1.0.0",
+    [GameCardFwVersion_Since100NUP]  = "1.0.0",
+    [GameCardFwVersion_Since400NUP]  = "4.0.0",
+    [GameCardFwVersion_Since900NUP]  = "9.0.0",
+    [GameCardFwVersion_Since1100NUP] = "11.0.0",
+    [GameCardFwVersion_Since1200NUP] = "12.0.0"
+};
+
+static const char *g_gameCardCompatibilityTypeStrings[GameCardCompatibilityType_Count] = {
+    [GameCardCompatibilityType_Normal] = "Normal",
+    [GameCardCompatibilityType_Terra]  = "Terra"
+};
+
 /* Function prototypes. */
 
 static bool gamecardGetLotusAsicFirmwareVersion(void);
@@ -516,6 +530,16 @@ bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char 
     }
     
     return ret;
+}
+
+const char *gamecardGetRequiredHosVersionString(u64 fw_version)
+{
+    return (fw_version < GameCardFwVersion_Count ? g_gameCardHosVersionStrings[fw_version] : NULL);
+}
+
+const char *gamecardGetCompatibilityTypeString(u8 compatibility_type)
+{
+    return (compatibility_type < GameCardCompatibilityType_Count ? g_gameCardCompatibilityTypeStrings[compatibility_type] : NULL);
 }
 
 static bool gamecardGetLotusAsicFirmwareVersion(void)

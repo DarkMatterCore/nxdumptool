@@ -75,15 +75,15 @@ namespace nxdt::views
         this->setValue(fmt::format("{:016X}", this->app_metadata->title_id), false, false);
     }
     
-    TitlesTab::TitlesTab(nxdt::tasks::TitleTask *title_task, bool is_system) : LayeredErrorFrame("titles_tab/no_titles_available"_i18n), title_task(title_task), is_system(is_system)
+    TitlesTab::TitlesTab(RootView *root_view, bool is_system) : LayeredErrorFrame("titles_tab/no_titles_available"_i18n), root_view(root_view), is_system(is_system)
     {
         /* Populate list. */
-        this->PopulateList(this->title_task->GetApplicationMetadata(this->is_system));
+        this->PopulateList(this->root_view->GetApplicationMetadata(this->is_system));
         
         /* Subscribe to the title event if this is the user titles tab. */
         if (!this->is_system)
         {
-            this->title_task_sub = this->title_task->RegisterListener([this](const nxdt::tasks::TitleApplicationMetadataVector* app_metadata) {
+            this->title_task_sub = this->root_view->RegisterTitleTaskListener([this](const nxdt::tasks::TitleApplicationMetadataVector* app_metadata) {
                 /* Update list. */
                 this->PopulateList(app_metadata);
             });
@@ -93,7 +93,7 @@ namespace nxdt::views
     TitlesTab::~TitlesTab(void)
     {
         /* Unregister task listener if this is the user titles tab. */
-        if (!this->is_system) this->title_task->UnregisterListener(this->title_task_sub);
+        if (!this->is_system) this->root_view->UnregisterTitleTaskListener(this->title_task_sub);
     }
     
     void TitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* app_metadata)
@@ -120,7 +120,7 @@ namespace nxdt::views
             TitlesTabItem *title = new TitlesTabItem(cur_app_metadata, this->is_system);
             
             /* Register click event. */
-            title->getClickEvent()->subscribe([](brls::View *view){
+            title->getClickEvent()->subscribe([](brls::View *view) {
                 TitlesTabItem *item = static_cast<TitlesTabItem*>(view);
                 const TitleApplicationMetadata *app_metadata = item->GetApplicationMetadata();
                 bool is_system = item->IsSystemTitle();

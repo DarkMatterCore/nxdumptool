@@ -268,6 +268,14 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
 /// If you need to get entry information by index, just retrieve the Hash FS context for the target partition and use Hash FS functions on it.
 bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size);
 
+/// Takes a GameCardFwVersion value. Returns a pointer to a string that represents the minimum HOS version that matches the provided LAFW version.
+/// Returns NULL if the provided value is out of range.
+const char *gamecardGetRequiredHosVersionString(u64 fw_version);
+
+/// Takes a GameCardCompatibilityType value. Returns a pointer to a string that represents the provided compatibility type.
+/// Returns NULL if the provided value is out of range.
+const char *gamecardGetCompatibilityTypeString(u8 compatibility_type);
+
 #ifdef __cplusplus
 }
 #endif
