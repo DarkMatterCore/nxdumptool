@@ -39,6 +39,14 @@ extern "C" {
 #define NPDM_SYSTEM_RESOURCE_MAX_SIZE           0x1FE00000
 #define NPDM_MAIN_THREAD_STACK_SIZE_ALIGNMENT   0x1000
 
+/// 'NpdmAcidSignatureKeyGeneration_Current' will always point to the last known key generation value.
+typedef enum {
+    NpdmAcidSignatureKeyGeneration_Since100NUP = 0,                                          ///< 1.0.0 - 8.1.1.
+    NpdmAcidSignatureKeyGeneration_Since900NUP = 1,                                          ///< 9.0.0 - 12.1.0.
+    NpdmAcidSignatureKeyGeneration_Current     = NpdmAcidSignatureKeyGeneration_Since900NUP,
+    NpdmAcidSignatureKeyGeneration_Max         = (NpdmAcidSignatureKeyGeneration_Current + 1)
+} NpdmAcidSignatureKeyGeneration;
+
 typedef enum {
     NpdmProcessAddressSpace_AddressSpace32Bit           = 0,
     NpdmProcessAddressSpace_AddressSpace64BitOld        = 1,
@@ -60,7 +68,7 @@ NXDT_ASSERT(NpdmMetaFlags, 0x1);
 /// This is followed by ACID and ACI0 sections, both with variable offsets and sizes.
 typedef struct {
     u32 magic;                          ///< "NPDM".
-    u8 acid_signature_key_generation;
+    u8 acid_signature_key_generation;   ///< NpdmAcidSignatureKeyGeneration.
     u8 reserved_1[0x7];
     NpdmMetaFlags flags;
     u8 reserved_2;
@@ -193,7 +201,7 @@ typedef struct {
     u8 content_owner_id_count;
     u8 save_data_owner_id_count;
     u8 reserved;
-    u64 flags;
+    u64 flags;                      ///< NpdmFsAccessControlFlags.
     u64 content_owner_id_min;
     u64 content_owner_id_max;
     u64 save_data_owner_id_min;
@@ -212,7 +220,7 @@ NXDT_ASSERT(NpdmFsAccessControlDescriptor, 0x2C);
 typedef struct {
     u8 version;
     u8 reserved_1[0x3];
-    u64 flags;
+    u64 flags;                          ///< NpdmFsAccessControlFlags.
     u32 content_owner_info_offset;      ///< Relative to the start of this block. Only valid if 'content_owner_info_size' is greater than 0.
     u32 content_owner_info_size;
     u32 save_data_owner_info_offset;    ///< Relative to the start of this block. Only valid if 'save_data_owner_info_size' is greater than 0.

@@ -71,11 +71,11 @@ typedef struct {
     char issuer[0x40];
     u8 titlekey_block[0x100];
     u8 format_version;
-    u8 titlekey_type;               ///< TikTitleKeyType.
+    u8 titlekey_type;           ///< TikTitleKeyType.
     u16 ticket_version;
-    u8 license_type;                ///< TikLicenseType.
-    u8 key_generation;
-    u16 property_mask;              ///< TikPropertyMask.
+    u8 license_type;            ///< TikLicenseType.
+    u8 key_generation;          ///< NcaKeyGeneration.
+    u16 property_mask;          ///< TikPropertyMask.
     u8 reserved[0x8];
     u64 ticket_id;
     u64 device_id;
