@@ -25,6 +25,8 @@
 
 using namespace brls::i18n::literals;   /* For _i18n. */
 
+bool g_borealisInitialized = false;
+
 int main(int argc, char *argv[])
 {
     /* Set scope guard to clean up resources at exit. */
@@ -45,6 +47,7 @@ int main(int argc, char *argv[])
     
     /* Initialize Borealis. */
     if (!brls::Application::init(APP_TITLE)) return EXIT_FAILURE;
+    g_borealisInitialized = true;
     
     /* Check if we're running under applet mode. */
     if (utilsAppletModeCheck())

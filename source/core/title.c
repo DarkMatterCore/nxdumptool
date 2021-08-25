@@ -846,7 +846,7 @@ void titleFreeUserApplicationData(TitleUserApplicationData *user_app_data)
 bool titleAreOrphanTitlesAvailable(void)
 {
     bool ret = false;
-    SCOPED_LOCK(&g_titleMutex) ret = (g_titleInterfaceInit && g_orphanTitleInfo && *g_orphanTitleInfo && g_orphanTitleInfoCount > 0);
+    SCOPED_TRY_LOCK(&g_titleMutex) ret = (g_titleInterfaceInit && g_orphanTitleInfo && *g_orphanTitleInfo && g_orphanTitleInfoCount > 0);
     return ret;
 }
 

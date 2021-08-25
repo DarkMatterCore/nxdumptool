@@ -151,6 +151,9 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 /// Furthermore, if the full length for the generated path is >= FS_MAX_PATH, NULL will be returned.
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
 
+/// Prints an error message using the standard console output and waits for the user to press a button.
+void utilsPrintConsoleError(const char *msg);
+
 /// Returns the current application updated state.
 bool utilsGetApplicationUpdatedState(void);
 

@@ -65,7 +65,7 @@ static AppletHookCookie g_systemOverclockCookie = {0};
 
 static bool g_longRunningProcess = false;
 
-static int g_nxLinkSocketFd = -1;
+static int g_stdoutFd = -1, g_stderrFd = -1, g_nxLinkSocketFd = -1;
 
 static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB" };
 static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
@@ -106,7 +106,8 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
 static void utilsChangeHomeButtonBlockStatus(bool block);
 
-static void utilsPrintConsoleError(void);
+NX_INLINE void utilsCloseFileDescriptor(int *fd);
+static void utilsRestoreConsoleOutput(void);
 
 static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos);
 
@@ -120,6 +121,9 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         ret = g_resourcesInit;
         if (ret) break;
         
+        /* Lock applet exit. */
+        appletLockExit();
+        
         /* Retrieve pointer to the application launch path. */
         _utilsGetLaunchPath(program_argc, program_argv);
         
@@ -132,7 +136,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         
         /* Create logfile. */
         logWriteStringToLogFile("________________________________________________________________\r\n");
-        LOG_MSG(APP_TITLE " v%u.%u.%u starting (" GIT_REV "). Built on " __DATE__ " - " __TIME__ ".", VERSION_MAJOR, VERSION_MINOR, VERSION_MICRO);
+        LOG_MSG(APP_TITLE " v" APP_VERSION " starting (" GIT_REV "). Built on " __DATE__ " - " __TIME__ ".");
         
         /* Log Horizon OS version. */
         u32 hos_version = hosversionGet();
@@ -237,14 +241,33 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
             if (R_SUCCEEDED(rc) && flag) appletInitializeGamePlayRecording();
         }
         
-        /* Redirect stdout and stderr over network to nxlink. */
+        /* Duplicate the stdout and stderr file handles, then redirect stdout and stderr over network to nxlink. */
+        g_stdoutFd = dup(STDOUT_FILENO);
+        g_stderrFd = dup(STDERR_FILENO);
         g_nxLinkSocketFd = nxlinkConnectToHost(true, true);
         
         /* Update flags. */
         ret = g_resourcesInit = true;
     }
     
-    if (!ret) utilsPrintConsoleError();
+    if (!ret)
+    {
+        size_t msg_size = 0;
+        char log_msg[0x100] = {0}, *msg = NULL;
+        
+        /* Get last log message. */
+        logGetLastMessage(log_msg, sizeof(log_msg));
+        
+        /* Generate error message. */
+        utilsAppendFormattedStringToBuffer(&msg, &msg_size, "An error occurred while initializing resources.");
+        if (*log_msg) utilsAppendFormattedStringToBuffer(&msg, &msg_size, "\n\n%s", log_msg);
+        
+        /* Print error message. */
+        utilsPrintConsoleError(msg);
+        
+        /* Free error message. */
+        if (msg) free(msg);
+    }
     
     return ret;
 }
@@ -253,12 +276,8 @@ void utilsCloseResources(void)
 {
     SCOPED_LOCK(&g_resourcesMutex)
     {
-        /* Close nxlink socket. */
-        if (g_nxLinkSocketFd >= 0)
-        {
-            close(g_nxLinkSocketFd);
-            g_nxLinkSocketFd = -1;
-        }
+        /* Restore console output. */
+        utilsRestoreConsoleOutput();
         
         /* Unset long running process state. */
         utilsSetLongRunningProcessState(false);
@@ -315,6 +334,9 @@ void utilsCloseResources(void)
         
         /* Close logfile. */
         logCloseLogFile();
+        
+        /* Unlock applet exit. */
+        appletUnlockExit();
         
         g_resourcesInit = false;
     }
@@ -836,6 +858,48 @@ end:
     return path;
 }
 
+void utilsPrintConsoleError(const char *msg)
+{
+    PadState pad = {0};
+    
+    /* Don't consider stick movement as button inputs. */
+    u64 flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
+                 HidNpadButton_StickRUp | HidNpadButton_StickRDown);
+    
+    /* Configure input. */
+    /* Up to 8 different, full controller inputs. */
+    /* Individual Joy-Cons not supported. */
+    padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
+    padInitializeWithMask(&pad, 0x1000000FFUL);
+    
+    /* Restore console output. */
+    utilsRestoreConsoleOutput();
+    
+    /* Initialize console output. */
+    consoleInit(NULL);
+    
+    /* Print message. */
+    if (msg && *msg)
+    {
+        printf("%s", msg);
+    } else {
+        printf("An error occurred.");
+    }
+    
+    printf("\n\nFor more information, please check the logfile. Press any button to exit.");
+    consoleUpdate(NULL);
+    
+    /* Wait until the user presses a button. */
+    while(appletMainLoop())
+    {
+        padUpdate(&pad);
+        if (padGetButtonsDown(&pad) & flag) break;
+    }
+    
+    /* Deinitialize console output. */
+    consoleExit(NULL);
+}
+
 bool utilsGetApplicationUpdatedState(void)
 {
     bool ret = false;
@@ -1078,39 +1142,31 @@ static void utilsChangeHomeButtonBlockStatus(bool block)
     }
 }
 
-static void utilsPrintConsoleError(void)
+NX_INLINE void utilsCloseFileDescriptor(int *fd)
 {
-    PadState pad = {0};
-    char msg[0x100] = {0};
-    
-    /* Don't consider stick movement as button inputs. */
-    u64 flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
-                 HidNpadButton_StickRUp | HidNpadButton_StickRDown);
-    
-    /* Configure input. */
-    /* Up to 8 different, full controller inputs. */
-    /* Individual Joy-Cons not supported. */
-    padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
-    padInitializeWithMask(&pad, 0x1000000FFUL);
-    
-    /* Get last log message. */
-    logGetLastMessage(msg, sizeof(msg));
-    
-    consoleInit(NULL);
-    
-    printf("An error occurred while initializing resources.\n\n");
-    if (*msg) printf("%s\n\n", msg);
-    printf("For more information, please check the logfile. Press any button to exit.");
-    
-    consoleUpdate(NULL);
-    
-    while(appletMainLoop())
+    if (!fd || *fd < 0) return;
+    close(*fd);
+    *fd = -1;
+}
+
+static void utilsRestoreConsoleOutput(void)
+{
+    SCOPED_LOCK(&g_resourcesMutex)
     {
-        padUpdate(&pad);
-        if (padGetButtonsDown(&pad) & flag) break;
+        if (g_nxLinkSocketFd >= 0) utilsCloseFileDescriptor(&g_nxLinkSocketFd);
+        
+        if (g_stdoutFd >= 0)
+        {
+            dup2(g_stdoutFd, STDOUT_FILENO);
+            utilsCloseFileDescriptor(&g_stdoutFd);
+        }
+        
+        if (g_stderrFd >= 0)
+        {
+            dup2(g_stderrFd, STDERR_FILENO);
+            utilsCloseFileDescriptor(&g_stderrFd);
+        }
     }
-    
-    consoleExit(NULL);
 }
 
 static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos)
