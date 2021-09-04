@@ -28,6 +28,8 @@
 #define BLOCK_SIZE  0x800000
 #define OUTPATH     "sdmc:/systitle_dumps"
 
+bool g_borealisInitialized = false;
+
 static PadState g_padState = {0};
 
 static u8 *buf = NULL;

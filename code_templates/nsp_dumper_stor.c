@@ -32,6 +32,8 @@
 #define BLOCK_SIZE  0x800000
 #define OUTPATH     "/nsp/"
 
+bool g_borealisInitialized = false;
+
 static PadState g_padState = {0};
 
 static const char *dump_type_strings[] = {

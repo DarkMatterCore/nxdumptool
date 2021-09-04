@@ -26,6 +26,8 @@
 
 #define BLOCK_SIZE  0x800000
 
+bool g_borealisInitialized = false;
+
 static PadState g_padState = {0};
 
 static Mutex g_fileMutex = 0;

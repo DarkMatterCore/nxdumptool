@@ -26,6 +26,8 @@
 
 #define BLOCK_SIZE  USB_TRANSFER_BUFFER_SIZE
 
+bool g_borealisInitialized = false;
+
 static PadState g_padState = {0};
 
 /* Type definitions. */

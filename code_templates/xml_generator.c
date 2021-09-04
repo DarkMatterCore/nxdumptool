@@ -27,6 +27,8 @@
 #include "nacp.h"
 #include "legal_info.h"
 
+bool g_borealisInitialized = false;
+
 static PadState g_padState = {0};
 
 static void utilsScanPads(void)
