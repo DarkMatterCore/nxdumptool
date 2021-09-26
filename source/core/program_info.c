@@ -211,9 +211,11 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     if (!programInfoAddStringFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SdkVersion", sdk_version)) goto end;
 
     if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                            "  <ToolVersion />\n"       /* Impossible to get. */ \
-                                            "  <PatchToolVersion />\n"  /* Impossible to get. */ \
+                                            "  <ToolVersion />\n"                       /* Impossible to get. */ \
+                                            "  <NxAddonVersion>%s</NxAddonVersion>\n" \
+                                            "  <PatchToolVersion />\n"                  /* Impossible to get. */ \
                                             "  <BuildTarget>%u</BuildTarget>\n", \
+                                            sdk_version, \
                                             is_64bit ? 64 : 32)) goto end;
     
     /* BuildType. */
@@ -221,6 +223,7 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     
     if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
                                             "  <EnableDeadStrip />\n"                               /* Impossible to get. */ \
+                                            "  <EnableDeadStripSpecified />\n"                      /* Impossible to get. */ \
                                             "  <Desc>%s</Desc>\n" \
                                             "  <DescFileName />\n"                                  /* Impossible to get. */ \
                                             "  <DescFlags>\n" \
@@ -240,17 +243,22 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     /* PrivateApiList. */
     if (!programInfoAddNsoApiListToAuthoringToolXml(&xml_buf, &xml_buf_size, program_info_ctx, "PrivateApi", "Api", "SDK Private")) goto end;
     
+    /* GuidelineApiList. */
+    if (!programInfoAddNsoApiListToAuthoringToolXml(&xml_buf, &xml_buf_size, program_info_ctx, "GuidelineApi", "Api", "SDK Guideline")) goto end;
+    
     /* UnresolvedApiList. */
     if (!programInfoAddNsoSymbolsToAuthoringToolXml(&xml_buf, &xml_buf_size, program_info_ctx)) goto end;
-    
-    /* GuidelineList. */
-    if (!programInfoAddNsoApiListToAuthoringToolXml(&xml_buf, &xml_buf_size, program_info_ctx, "GuidelineApi", "Api", "SDK Guideline")) goto end;
     
     /* FsAccessControlData. */
     if (!programInfoAddFsAccessControlDataToAuthoringToolXml(&xml_buf, &xml_buf_size, program_info_ctx)) goto end;
     
     if (!(success = utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                       "  <History />\n"                /* Impossible to get. */ \
+                                                       "  <EnableGlobalDestructor />\n"             /* Impossible to get. */ \
+                                                       "  <EnableGlobalDestructorSpecified />\n"    /* Impossible to get. */ \
+                                                       "  <IncludeNssFile />\n"                     /* Impossible to get. */ \
+                                                       "  <IncludeNssFileSpecified />\n"            /* Impossible to get. */ \
+                                                       "  <History />\n"                            /* Impossible to get. */ \
+                                                       "  <TargetTriplet />\n"                      /* Impossible to get. */ \
                                                        "</ProgramInfo>"))) goto end;
     
     /* Update ProgramInfo context. */

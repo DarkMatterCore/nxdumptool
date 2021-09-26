@@ -217,6 +217,12 @@ typedef enum {
 } NacpRuntimeParameterDelivery;
 
 typedef enum {
+    NacpUndecidedParameter75b8b_A     = 0,
+    NacpUndecidedParameter75b8b_B     = 1,
+    NacpUndecidedParameter75b8b_Count = 2   ///< Total values supported by this enum.
+} NacpUndecidedParameter75b8b;
+
+typedef enum {
     NacpCrashReport_Deny  = 0,
     NacpCrashReport_Allow = 1,
     NacpCrashReport_Count = 2   ///< Total values supported by this enum.
@@ -329,7 +335,8 @@ typedef struct {
     u8 logo_handling;                                                                               ///< NacpLogoHandling.
     u8 runtime_add_on_content_install;                                                              ///< NacpRuntimeAddOnContentInstall.
     u8 runtime_parameter_delivery;                                                                  ///< NacpRuntimeParameterDelivery.
-    u8 reserved_1[0x2];
+    u8 undecided_parameter_75b8b;                                                                   ///< NacpUndecidedParameter75b8b.
+    u8 reserved_1;
     u8 crash_report;                                                                                ///< NacpCrashReport.
     u8 hdcp;                                                                                        ///< NacpHdcp.
     u64 seed_for_pseudo_device_id;
@@ -423,6 +430,7 @@ const char *nacpGetLogoTypeString(u8 logo_type);
 const char *nacpGetLogoHandlingString(u8 logo_handling);
 const char *nacpGetRuntimeAddOnContentInstallString(u8 runtime_add_on_content_install);
 const char *nacpGetRuntimeParameterDeliveryString(u8 runtime_parameter_delivery);
+const char *nacpGetUndecidedParameter75b8bString(u8 undecided_parameter_75b8b);
 const char *nacpGetCrashReportString(u8 crash_report);
 const char *nacpGetHdcpString(u8 hdcp);
 const char *nacpGetStartupUserAccountOptionString(u8 startup_user_account_option);

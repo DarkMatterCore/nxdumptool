@@ -36,7 +36,7 @@ extern "C" {
 typedef enum {
     ContentMetaAttribute_IncludesExFatDriver = BIT(0),
     ContentMetaAttribute_Rebootless          = BIT(1),
-    ContentMetaAttribute_Compacted           = BIT(2),
+    ContentMetaAttribute_Compacted           = BIT(2),  ///< One or more NCAs use SparseInfo data.
     ContentMetaAttribute_Count               = 3        ///< Total values supported by this enum.
 } ContentMetaAttribute;
 
