@@ -68,7 +68,6 @@ Thanks to
 * The GNOME project, from which the [high contrast icons](https://commons.wikimedia.org/wiki/GNOME_High_contrast_icons) were retrieved.
 * The folks from ReSwitched, for working towards the creation of a good homebrew ecosystem.
 * The Comfy Boyes, for being both awesome and supportive. You know who you are.
-* My girlfriend, for putting up with me even though I dedicate most of my free time to this little project, and for doing her best to cheer me up and keep me going. I love you.
 
 Changelog
 --------------
