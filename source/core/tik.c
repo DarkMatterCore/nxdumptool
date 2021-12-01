@@ -108,6 +108,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
         return false;
     }
     
+    u8 key_generation = id->c[0xF];
     TikCommonBlock *tik_common_block = NULL;
     
     /* Check if this ticket has already been retrieved. */
@@ -135,16 +136,23 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
         return false;
     }
     
-    /* Even though tickets do have a proper key_generation field, we'll just retrieve it from the rights_id field. */
-    /* Old custom tools used to wipe the key_generation field or save its value to a different offset. */
-    if (!tikGetDecryptedTitleKey(dst->dec_titlekey, dst->enc_titlekey, id->c[0xF]))
+    /* Get common ticket block. */
+    tik_common_block = tikGetCommonBlock(dst->data);
+    
+    /* Get proper key generation value. */
+    /* Nintendo didn't start putting the key generation value into the rights ID until HOS 3.0.1. */
+    /* If this is the case, we'll just use the key generation value from the common ticket block. */
+    /* However, old custom tools used to wipe the key generation field or save its value to a different offset, so this may fail with titles with custom/modified tickets. */
+    if (key_generation < NcaKeyGeneration_Since301NUP || key_generation > NcaKeyGeneration_Max) key_generation = tik_common_block->key_generation;
+    
+    /* Get decrypted titlekey. */
+    if (!tikGetDecryptedTitleKey(dst->dec_titlekey, dst->enc_titlekey, key_generation))
     {
         LOG_MSG("Unable to decrypt titlekey!");
         return false;
     }
     
     /* Generate rights ID string. */
-    tik_common_block = tikGetCommonBlock(dst->data);
     utilsGenerateHexStringFromData(dst->rights_id_str, sizeof(dst->rights_id_str), tik_common_block->rights_id.c, sizeof(tik_common_block->rights_id.c), false);
     
     return true;

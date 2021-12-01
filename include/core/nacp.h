@@ -335,8 +335,8 @@ typedef struct {
     u8 logo_handling;                                                                               ///< NacpLogoHandling.
     u8 runtime_add_on_content_install;                                                              ///< NacpRuntimeAddOnContentInstall.
     u8 runtime_parameter_delivery;                                                                  ///< NacpRuntimeParameterDelivery.
-    u8 undecided_parameter_75b8b;                                                                   ///< NacpUndecidedParameter75b8b.
     u8 reserved_1;
+    u8 undecided_parameter_75b8b;                                                                   ///< NacpUndecidedParameter75b8b.
     u8 crash_report;                                                                                ///< NacpCrashReport.
     u8 hdcp;                                                                                        ///< NacpHdcp.
     u64 seed_for_pseudo_device_id;
