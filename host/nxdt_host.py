@@ -927,7 +927,7 @@ def usbCommandHandler():
            (cmd_id == USB_CMD_SEND_FILE_PROPERTIES and cmd_block_size != USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES) or \
            (cmd_id == USB_CMD_SEND_NSP_HEADER and not cmd_block_size):
             g_logger.error('Invalid command block size for command ID %02X! (0x%X).\n' % (cmd_id, cmd_block_size))
-            usbSendStatus(USB_STATUS_MALFORMED_COMMAND)
+            usbSendStatus(USB_STATUS_MALFORMED_CMD)
             continue
         
         # Run command handler function.
@@ -1038,7 +1038,7 @@ def uiInitialize():
             tlb_fp.close()
             del_tlb = True
             
-            g_tlb = cc.GetModule('TASKBAR_LIB_PATH')
+            g_tlb = cc.GetModule(TASKBAR_LIB_PATH)
             
             g_taskbar = cc.CreateObject('{56FDF344-FD6D-11D0-958A-006097C9A090}', interface=g_tlb.ITaskbarList3)
             g_taskbar.HrInit()
