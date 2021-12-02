@@ -98,7 +98,7 @@ typedef enum {
 /// 'NcaMainSignatureKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
     NcaMainSignatureKeyGeneration_Since100NUP = 0,                                          ///< 1.0.0 - 8.1.1.
-    NcaMainSignatureKeyGeneration_Since900NUP = 1,                                          ///< 9.0.0 - 13.0.0.
+    NcaMainSignatureKeyGeneration_Since900NUP = 1,                                          ///< 9.0.0 - 13.2.0.
     NcaMainSignatureKeyGeneration_Current     = NcaMainSignatureKeyGeneration_Since900NUP,
     NcaMainSignatureKeyGeneration_Max         = (NcaMainSignatureKeyGeneration_Current + 1)
 } NcaMainSignatureKeyGeneration;

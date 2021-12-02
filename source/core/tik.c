@@ -21,7 +21,7 @@
  */
 
 #include "nxdt_utils.h"
-#include "tik.h"
+#include "nca.h"
 #include "cert.h"
 #include "save.h"
 #include "es.h"
