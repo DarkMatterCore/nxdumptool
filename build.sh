@@ -1,7 +1,7 @@
 #!/bin/bash
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-archive_filename="nxdumptool-rewrite_poc_$(git rev-parse --short HEAD).7z"
+archive_filename="nxdumptool-rewrite_poc_$(git rev-parse --short HEAD)"
 
 rm -f ./*.7z
 
@@ -33,7 +33,7 @@ for f in ./code_templates/*.c; do
     
     mkdir ./code_templates/tmp/$filename
     cp ./$filename.nro ./code_templates/tmp/$filename/$filename.nro
-    #cp ./$filename.elf ./code_templates/tmp/$filename/$filename.elf
+    cp ./$filename.elf ./code_templates/tmp/$filename/$filename.elf
     
     make BUILD_TYPE="$filename" clean
 done
@@ -41,7 +41,8 @@ done
 make clean_all
 
 cd ./code_templates/tmp
-7z a ../../$archive_filename *
+7z a ../../"$archive_filename.7z" */*.nro
+7z a ../../"$archive_filename-Debug_ELFs.7z" */*.elf
 
 cd ../..
 rm -f ./source/main.c
