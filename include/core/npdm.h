@@ -42,7 +42,7 @@ extern "C" {
 /// 'NpdmAcidSignatureKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
     NpdmAcidSignatureKeyGeneration_Since100NUP = 0,                                          ///< 1.0.0 - 8.1.1.
-    NpdmAcidSignatureKeyGeneration_Since900NUP = 1,                                          ///< 9.0.0 - 12.1.0.
+    NpdmAcidSignatureKeyGeneration_Since900NUP = 1,                                          ///< 9.0.0 - 13.2.1.
     NpdmAcidSignatureKeyGeneration_Current     = NpdmAcidSignatureKeyGeneration_Since900NUP,
     NpdmAcidSignatureKeyGeneration_Max         = (NpdmAcidSignatureKeyGeneration_Current + 1)
 } NpdmAcidSignatureKeyGeneration;

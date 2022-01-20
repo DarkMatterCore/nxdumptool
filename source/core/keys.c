@@ -327,7 +327,7 @@ const u8 *keysGetNcaMainSignatureModulus(u8 key_generation)
 {
     if (key_generation > NcaMainSignatureKeyGeneration_Current)
     {
-        LOG_MSG("Invalid key generation value! (0x%02X).", key_generation);
+        LOG_MSG("Unsupported key generation value! (0x%02X).", key_generation);
         return NULL;
     }
     
