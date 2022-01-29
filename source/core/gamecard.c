@@ -56,19 +56,6 @@ typedef enum {
     GameCardCapacity_32GiB = BIT_LONG(35)
 } GameCardCapacity;
 
-/// Only kept for documentation purposes, not really used.
-/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardInfo precedes this struct in FS program memory.
-typedef struct {
-    u32 memory_interface_mode;
-    u32 asic_status;
-    u8 card_id_area[0x48];
-    u8 reserved[0x1B0];
-    FsGameCardCertificate certificate;
-    GameCardInitialData initial_data;
-} GameCardSecurityInformation;
-
-NXDT_ASSERT(GameCardSecurityInformation, 0x600);
-
 typedef enum {
     LotusAsicFirmwareType_ReadFw    = 0xFF,
     LotusAsicFirmwareType_ReadDevFw = 0xFFFF,
@@ -180,7 +167,7 @@ static bool gamecardReadHeader(void);
 
 static bool _gamecardGetDecryptedCardInfoArea(void);
 
-static bool gamecardReadInitialData(GameCardKeyArea *out);
+static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out);
 
 static bool gamecardGetHandleAndStorage(u32 partition);
 NX_INLINE void gamecardCloseHandle(void);
@@ -336,14 +323,30 @@ bool gamecardReadStorage(void *out, u64 read_size, u64 offset)
     return ret;
 }
 
-/* Read full FS program memory to retrieve the GameCardInitialData block, which is part of the GameCardKeyArea block. */
-/* In FS program memory, this is stored as part of the GameCardSecurityInformation struct, which is returned by Lotus command "ChangeToSecureMode" (0xF). */
-/* This means it is only available *after* the gamecard secure area has been mounted, which is taken care of in gamecardReadInitialData(). */
-/* The GameCardSecurityInformation struct is only kept for documentation purposes. It isn't used at all to retrieve the GameCardInitialData block. */
+/* Read full FS program memory by calling gamecardGetSecurityInformation, and then extracts out the GameCardInitialData block. */
 bool gamecardGetKeyArea(GameCardKeyArea *out)
 {
+    GameCardSecurityInformation securityInformation;
+
+    /* Clear output. */
+    memset(out, 0, sizeof(GameCardKeyArea));
+
+    if (!gamecardGetSecurityInformation(&securityInformation)) {
+        return false;
+    }
+
+    memcpy(&out->initial_data, &securityInformation.initial_data, sizeof(GameCardInitialData));
+
+    return true;
+}
+
+/* Read full FS program memory to retrieve the GameCardSecurityInformation block. */
+/* In FS program memory, this is returned by Lotus command "ChangeToSecureMode" (0xF). */
+/* This means it is only available *after* the gamecard secure area has been mounted, which is taken care of in gamecardReadSecurityInformation(). */
+bool gamecardGetSecurityInformation(GameCardSecurityInformation *out)
+{
     bool ret = false;
-    SCOPED_LOCK(&g_gameCardMutex) ret = gamecardReadInitialData(out);
+    SCOPED_LOCK(&g_gameCardMutex) ret = gamecardReadSecurityInformation(out);
     return ret;
 }
 
@@ -884,7 +887,7 @@ static bool _gamecardGetDecryptedCardInfoArea(void)
     return true;
 }
 
-static bool gamecardReadInitialData(GameCardKeyArea *out)
+static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
 {
     if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !out)
     {
@@ -893,7 +896,7 @@ static bool gamecardReadInitialData(GameCardKeyArea *out)
     }
     
     /* Clear output. */
-    memset(out, 0, sizeof(GameCardKeyArea));
+    memset(out, 0, sizeof(GameCardSecurityInformation));
     
     /* Open secure storage area. */
     if (!gamecardOpenStorageArea(GameCardStorageArea_Secure))
@@ -924,7 +927,7 @@ static bool gamecardReadInitialData(GameCardKeyArea *out)
         if (!memcmp(tmp_hash, g_gameCardHeader.initial_data_hash, SHA256_HASH_SIZE))
         {
             /* Jackpot. */
-            memcpy(&(out->initial_data), g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
+            memcpy(out, g_fsProgramMemory.data + offset - 0x600, sizeof(GameCardSecurityInformation));
             found = true;
             break;
         }

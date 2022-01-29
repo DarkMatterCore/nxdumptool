@@ -86,6 +86,29 @@ typedef struct {
 
 NXDT_ASSERT(GameCardKeyArea, 0x1000);
 
+typedef struct {
+    u32 asic_security_mode;
+    u32 asic_status;
+    u32 cardid1;
+    u32 cardid2;
+    u8 card_uid[0x40];
+    u8 reserved[0x1B0];
+} GameCardSpecificData;
+
+NXDT_ASSERT(GameCardSpecificData, 0x200);
+
+/// This struct is returned by Lotus command "ChangeToSecureMode" (0xF)
+/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardInfo precedes this struct in FS program memory.
+typedef struct {
+    GameCardSpecificData specific_data;
+    FsGameCardCertificate certificate;
+    u8 ffpadding[0x200];
+    GameCardInitialData initial_data;
+} GameCardSecurityInformation;
+
+NXDT_ASSERT(GameCardSecurityInformation, 0x800);
+
+
 typedef enum {
     GameCardKekIndex_Version0      = 0,
     GameCardKekIndex_VersionForDev = 1
@@ -235,6 +258,10 @@ bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
 /// Fills the provided GameCardKeyArea pointer. Only GameCardInitialData data is retrieved at this moment.
 /// This area can't be read using gamecardReadStorage().
 bool gamecardGetKeyArea(GameCardKeyArea *out);
+
+/// Fills the provided GameCardSecurityInformation pointer
+/// This area can't be read using gamecardReadStorage().
+bool gamecardGetSecurityInformation(GameCardSecurityInformation* out);
 
 /// Fills the provided GameCardHeader pointer.
 /// This area can also be read using gamecardReadStorage(), starting at offset 0.

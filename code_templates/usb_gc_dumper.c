@@ -74,6 +74,7 @@ static void consolePrint(const char *text, ...);
 static u32 menuGetElementCount(const Menu *menu);
 
 static bool sendGameCardKeyAreaViaUsb(void);
+static bool sendGameCardSpecificDataViaUsb(void);
 static bool sendGameCardCertificateViaUsb(void);
 static bool sendGameCardImageViaUsb(void);
 
@@ -153,6 +154,12 @@ static MenuElement *g_rootMenuElements[] = {
         .str = "dump key area (initial data)",
         .child_menu = NULL,
         .task_func = &sendGameCardKeyAreaViaUsb,
+        .element_options = NULL
+    },
+    &(MenuElement){
+        .str = "dump specific data area",
+        .child_menu = NULL,
+        .task_func = &sendGameCardSpecificDataViaUsb,
         .element_options = NULL
     },
     &(MenuElement){
@@ -454,6 +461,24 @@ static bool dumpGameCardKeyArea(GameCardKeyArea *out)
     return true;
 }
 
+static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
+{
+    if (!out)
+    {
+        consolePrint("invalid parameters to dump gamecard security information!\n");
+        return false;
+    }
+
+    if (!gamecardGetSecurityInformation(out))
+    {
+        consolePrint("failed to get gamecard security information\n");
+        return false;
+    }
+
+    consolePrint("get gamecard security information ok\n");
+    return true;
+}
+
 static bool sendGameCardKeyAreaViaUsb(void)
 {
     if (!waitForGameCardAndUsb()) return false;
@@ -483,6 +508,38 @@ end:
     consolePrint("press any button to continue");
     utilsWaitForButtonPress(0);
     
+    return success;
+}
+
+static bool sendGameCardSpecificDataViaUsb(void)
+{
+    if (!waitForGameCardAndUsb()) return false;
+
+    utilsSetLongRunningProcessState(true);
+
+    GameCardSecurityInformation gc_security_information = {0};
+    bool success = false;
+    u32 crc = 0;
+    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+
+    if (!dumpGameCardSecurityInformation(&gc_security_information) || !filename) goto end;
+
+    crc = crc32Calculate(&(gc_security_information.specific_data), sizeof(GameCardSpecificData));
+    snprintf(path, MAX_ELEMENTS(path), "%s (Specific Data) (%08X).bin", filename, crc);
+
+    if (!sendFileData(path, &(gc_security_information.specific_data), sizeof(GameCardSpecificData))) goto end;
+
+    printf("successfully sent specific data as \"%s\"\n", path);
+    success = true;
+
+end:
+    if (filename) free(filename);
+
+    utilsSetLongRunningProcessState(false);
+
+    consolePrint("press any button to continue");
+    utilsWaitForButtonPress(0);
+
     return success;
 }
 
