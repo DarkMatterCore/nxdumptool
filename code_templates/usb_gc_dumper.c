@@ -77,6 +77,7 @@ static bool sendGameCardKeyAreaViaUsb(void);
 static bool sendGameCardSpecificDataViaUsb(void);
 static bool sendGameCardCertificateViaUsb(void);
 static bool sendGameCardImageViaUsb(void);
+static bool sendConsoleLafwViaUsb(void);
 
 static void changeKeyAreaOption(u32 idx);
 static void changeCertificateOption(u32 idx);
@@ -151,27 +152,33 @@ static Menu g_xciMenu = {
 
 static MenuElement *g_rootMenuElements[] = {
     &(MenuElement){
-        .str = "dump key area (initial data)",
+        .str = "dump gamecard initial data",
         .child_menu = NULL,
         .task_func = &sendGameCardKeyAreaViaUsb,
         .element_options = NULL
     },
     &(MenuElement){
-        .str = "dump specific data area",
+        .str = "dump gamecard specific data",
         .child_menu = NULL,
         .task_func = &sendGameCardSpecificDataViaUsb,
         .element_options = NULL
     },
     &(MenuElement){
-        .str = "dump certificate",
+        .str = "dump gamecard certificate",
         .child_menu = NULL,
         .task_func = &sendGameCardCertificateViaUsb,
         .element_options = NULL
     },
     &(MenuElement){
-        .str = "dump xci",
+        .str = "dump gamecard xci",
         .child_menu = &g_xciMenu,
         .task_func = NULL,
+        .element_options = NULL
+    },
+    &(MenuElement){
+        .str = "dump console LAFW",
+        .child_menu = NULL,
+        .task_func = &sendConsoleLafwViaUsb,
         .element_options = NULL
     },
     NULL
@@ -580,6 +587,53 @@ end:
     
     return success;
 }
+
+static bool sendConsoleLafwViaUsb(void)
+{
+    if (!waitForGameCardAndUsb()) return false;
+    
+    utilsSetLongRunningProcessState(true);
+    
+    LotusAsicFirmware lafw = {0};
+    bool success = false;
+    u32 crc = 0;
+    
+    if (!gamecardGetLotusAsicFirmware(&lafw))
+    {
+        consolePrint("failed to get console LAFW\n");
+        goto end;
+    }
+    
+    u32 lafw_version = gamecardConvertLotusAsicFirmwareVersionBitmask(&lafw);
+    
+    const char* filename = "";
+    switch(lafw.fw_type) {
+        case LotusAsicFirmwareType_ReadFw:    filename = "ReadFw"; break;
+        case LotusAsicFirmwareType_ReadDevFw: filename = "ReadDevFw"; break;
+        case LotusAsicFirmwareType_WriterFw:  filename = "WriterFw"; break;
+        case LotusAsicFirmwareType_RmaFw:     filename = "RmaFw"; break;
+        default:                              filename = "Unknown"; break;
+    }
+    
+    consolePrint("get console LAFW ok\n");
+    
+    crc = crc32Calculate(&lafw, sizeof(LotusAsicFirmware));
+    snprintf(path, MAX_ELEMENTS(path), "LAFW (%s) (v%d) (%08X).bin", filename, lafw_version, crc);
+    
+    if (!sendFileData(path, &lafw, sizeof(LotusAsicFirmware))) goto end;
+    
+    printf("successfully sent lafw as \"%s\"\n", path);
+    success = true;
+    
+end:
+    utilsSetLongRunningProcessState(false);
+    
+    consolePrint("press any button to continue");
+    utilsWaitForButtonPress(0);
+    
+    return success;
+}
+
 
 static bool sendGameCardImageViaUsb(void)
 {
