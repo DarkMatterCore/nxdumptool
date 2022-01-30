@@ -922,6 +922,10 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
         {
             /* Jackpot. */
             memcpy(out, g_fsProgramMemory.data + offset - 0x600, sizeof(GameCardSecurityInformation));
+            
+            // Clear out the asic session hash of the current Lotus session with the console.
+            // It's not actually part of the gamecard data, and this changes every time the gamecard is reinserted.
+            memset(out->specific_data.asic_session_hash, 0xFF, 32);
             found = true;
             break;
         }

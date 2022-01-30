@@ -92,7 +92,8 @@ typedef struct {
     u32 cardid1;
     u32 cardid2;
     u8 card_uid[0x40];
-    u8 reserved[0x1B0];
+    u8 reserved[0x190];
+    u8 asic_session_hash[0x20];
 } GameCardSpecificData;
 
 NXDT_ASSERT(GameCardSpecificData, 0x200);
