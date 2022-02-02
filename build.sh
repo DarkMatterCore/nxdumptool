@@ -48,5 +48,3 @@ cd ../..
 rm -f ./source/main.c
 rm -rf ./code_templates/tmp
 mv ./main.cpp ./source/main.cpp
-
-read -p "Press any key to finish ..."
