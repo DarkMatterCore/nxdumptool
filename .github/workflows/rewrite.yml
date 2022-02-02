@@ -1,0 +1,57 @@
+name: Build nxdumptool 'rewrite' tests
+
+on:
+  push:
+    branches: [ rewrite ]
+
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: devkitpro/devkita64
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: recursive
+      - name: Updating repos, install dkp-toolchain-vars, and set permissions...
+        run: |
+          sudo apt-get update ; sudo apt-get upgrade -y patch fakeroot p7zip-full
+          sudo -n dkp-pacman --noconfirm -U $GITHUB_WORKSPACE/libs/dkp-toolchain-vars/dkp-toolchain-vars-1.0.0-2-any.pkg.tar.xz
+          useradd nxdt-build
+          chmod 777 -R $GITHUB_WORKSPACE
+
+      - name: Export variables.
+        run: |
+          export COMMIT="$(git rev-parse --short HEAD)" ; echo commit="$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+
+      - name: Building libusbhsfs - liblwext4...
+        run: |
+          cd $GITHUB_WORKSPACE/libs/libusbhsfs/liblwext4
+          sudo -u nxdt-build -n COMMIT="$(git rev-parse --short HEAD)" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM DEVKITPPC=/opt/devkitpro/devkitPPC dkp-makepkg
+          sudo dkp-pacman -U switch-lwext4*.tar.xz --noconfirm
+
+      - name: Building libusbhsfs - libntfs-3g...
+        run: |
+          cd $GITHUB_WORKSPACE/libs/libusbhsfs/libntfs-3g
+          sudo -u nxdt-build -n COMMIT="$(git rev-parse --short HEAD)" DEVKITPRO=/opt/devkitpro DEVKITARM=/opt/devkitpro/devkitARM DEVKITPPC=/opt/devkitpro/devkitPPC dkp-makepkg
+          sudo dkp-pacman -U switch-libntfs-3g*.tar.xz --noconfirm
+
+      - name: Building nxdumptool...
+        run: |
+          cd $GITHUB_WORKSPACE
+          ./build.sh
+
+      - uses: actions/upload-artifact@v2.3.1
+        with:
+          name: nxdumptool rewrite (NRO) - ${{ env.commit }}.7z
+          path: nxdumptool-rewrite_poc_${{ env.commit }}.7z
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v2.3.1
+        with:
+          name: nxdumptool rewrite - (Debug ELF) - ${{ env.commit }}.7z
+          path: nxdumptool-rewrite_poc_${{ env.commit }}-Debug_ELFs.7z
+          if-no-files-found: error
