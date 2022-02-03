@@ -480,6 +480,9 @@ end:
     
     utilsSetLongRunningProcessState(false);
     
+    FsGameCardIdSet id_set = {0};
+    if (gamecardGetIdSet(&id_set)) LOG_DATA(&id_set, sizeof(FsGameCardIdSet), "Gamecard ID set:");
+    
     consolePrint("press any button to continue");
     utilsWaitForButtonPress(0);
     

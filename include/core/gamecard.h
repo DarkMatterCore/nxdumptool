@@ -236,6 +236,10 @@ bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
 /// This area can't be read using gamecardReadStorage().
 bool gamecardGetKeyArea(GameCardKeyArea *out);
 
+/// Fills the provided FsGameCardIdSet pointer.
+/// This area can't be read using gamecardReadStorage().
+bool gamecardGetIdSet(FsGameCardIdSet *out);
+
 /// Fills the provided GameCardHeader pointer.
 /// This area can also be read using gamecardReadStorage(), starting at offset 0.
 bool gamecardGetHeader(GameCardHeader *out);

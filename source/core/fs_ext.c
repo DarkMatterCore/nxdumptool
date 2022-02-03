@@ -78,3 +78,17 @@ Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const F
     
     return rc;
 }
+
+Result fsDeviceOperatorGetGameCardIdSet(FsDeviceOperator *d, FsGameCardIdSet *out)
+{
+    struct {
+        u64 buf_size;
+    } in = { sizeof(FsGameCardIdSet) };
+    
+    Result rc = serviceDispatchIn(&d->s, 208, in,
+        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
+        .buffers = { { out, sizeof(FsGameCardIdSet) } }
+    );
+    
+    return rc;
+}
