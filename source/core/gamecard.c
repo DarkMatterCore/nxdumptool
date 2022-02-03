@@ -66,6 +66,7 @@ static FsEventNotifier g_gameCardEventNotifier = {0};
 static Event g_gameCardKernelEvent = {0};
 static bool g_openDeviceOperator = false, g_openEventNotifier = false, g_loadKernelEvent = false;
 
+static LotusAsicFirmwareBlob *g_lafwBlob = NULL;
 static u64 g_lafwVersion = 0;
 
 static Thread g_gameCardDetectionThread = {0};
@@ -119,7 +120,7 @@ static const char *g_gameCardCompatibilityTypeStrings[GameCardCompatibilityType_
 
 /* Function prototypes. */
 
-static bool gamecardGetLotusAsicFirmwareVersion(void);
+static bool gamecardReadLotusAsicFirmwareBlob(void);
 
 static bool gamecardCreateDetectionThread(void);
 static void gamecardDestroyDetectionThread(void);
@@ -203,8 +204,8 @@ bool gamecardInitialize(void)
         /* Create user-mode gamecard status change event. */
         ueventCreate(&g_gameCardStatusChangeEvent, true);
         
-        /* Retrieve LAFW version. */
-        if (!gamecardGetLotusAsicFirmwareVersion()) break;
+        /* Retrieve LAFW blob. */
+        if (!gamecardReadLotusAsicFirmwareBlob()) break;
         
         /* Create gamecard detection thread. */
         if (!(g_gameCardDetectionThreadCreated = gamecardCreateDetectionThread())) break;
@@ -225,6 +226,13 @@ void gamecardExit(void)
         {
             gamecardDestroyDetectionThread();
             g_gameCardDetectionThreadCreated = false;
+        }
+        
+        /* Free LAFW blob buffer. */
+        if (g_lafwBlob)
+        {
+            free(g_lafwBlob);
+            g_lafwBlob = NULL;
         }
         
         /* Close gamecard detection kernel event. */
@@ -283,30 +291,6 @@ u8 gamecardGetStatus(void)
     return status;
 }
 
-bool gamecardReadStorage(void *out, u64 read_size, u64 offset)
-{
-    bool ret = false;
-    SCOPED_LOCK(&g_gameCardMutex) ret = gamecardReadStorageArea(out, read_size, offset);
-    return ret;
-}
-
-/* Read full FS program memory by calling gamecardGetSecurityInformation, and then extracts out the GameCardInitialData block. */
-bool gamecardGetKeyArea(GameCardKeyArea *out)
-{
-    GameCardSecurityInformation securityInformation;
-
-    /* Clear output. */
-    memset(out, 0, sizeof(GameCardKeyArea));
-
-    if (!gamecardGetSecurityInformation(&securityInformation)) {
-        return false;
-    }
-
-    memcpy(&out->initial_data, &securityInformation.initial_data, sizeof(GameCardInitialData));
-
-    return true;
-}
-
 /* Read full FS program memory to retrieve the GameCardSecurityInformation block. */
 /* In FS program memory, this is returned by Lotus command "ChangeToSecureMode" (0xF). */
 /* This means it is only available *after* the gamecard secure area has been mounted, which is taken care of in gamecardReadSecurityInformation(). */
@@ -331,6 +315,33 @@ bool gamecardGetIdSet(FsGameCardIdSet *out)
         ret = R_SUCCEEDED(rc);
     }
     
+    return ret;
+}
+
+bool gamecardGetLotusAsicFirmwareBlob(LotusAsicFirmwareBlob *out_lafw_blob, u64 *out_lafw_version)
+{
+    bool ret = false;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        if (!g_gameCardInterfaceInit || !g_lafwBlob || (!out_lafw_blob && !out_lafw_version)) break;
+        
+        /* Copy LAFW blob data. */
+        if (out_lafw_blob) memcpy(out_lafw_blob, g_lafwBlob, sizeof(LotusAsicFirmwareBlob));
+        
+        /* Copy LAFW version. */
+        if (out_lafw_version) *out_lafw_version = g_lafwVersion;
+        
+        ret = true;
+    }
+    
+    return ret;
+}
+
+bool gamecardReadStorage(void *out, u64 read_size, u64 offset)
+{
+    bool ret = false;
+    SCOPED_LOCK(&g_gameCardMutex) ret = gamecardReadStorageArea(out, read_size, offset);
     return ret;
 }
 
@@ -529,93 +540,100 @@ const char *gamecardGetCompatibilityTypeString(u8 compatibility_type)
     return (compatibility_type < GameCardCompatibilityType_Count ? g_gameCardCompatibilityTypeStrings[compatibility_type] : NULL);
 }
 
-bool gamecardGetLotusAsicFirmware(LotusAsicFirmware* out)
+const char *gamecardGetLafwTypeString(u32 lafw_type)
 {
-    bool ret = false;
-    SCOPED_LOCK(&g_gameCardMutex)
+    const char *type = NULL;
+    
+    switch(lafw_type)
     {
-        bool found = false, dev_unit = utilsIsDevelopmentUnit();
-        
-        /* Temporarily set the segment mask to .data. */
-        g_fsProgramMemory.mask = MemoryProgramSegmentType_Data;
-        
-        /* Retrieve full FS program memory dump. */
-        ret = memRetrieveProgramMemorySegment(&g_fsProgramMemory);
-        
-        /* Clear segment mask. */
-        g_fsProgramMemory.mask = 0;
-        
-        if (!ret)
-        {
-            LOG_MSG("Failed to retrieve FS .data segment dump!");
-            goto end;
-        }
-        
-        /* Look for the LAFW ReadFw blob in the FS .data memory dump. */
-        for(u64 offset = 0; offset < g_fsProgramMemory.data_size; offset++)
-        {
-            if ((g_fsProgramMemory.data_size - offset) < sizeof(LotusAsicFirmware)) break;
-            
-            LotusAsicFirmware *lafw_blob = (LotusAsicFirmware*)(g_fsProgramMemory.data + offset);
-            u32 magic = __builtin_bswap32(lafw_blob->magic), fw_type = lafw_blob->fw_type;
-            
-            if (magic == LAFW_MAGIC && ((!dev_unit && fw_type == LotusAsicFirmwareType_ReadFw) || (dev_unit && fw_type == LotusAsicFirmwareType_ReadDevFw)))
-            {
-                /* Jackpot. */
-                memcpy(out, lafw_blob, sizeof(LotusAsicFirmware));
-                found = true;
-                break;
-            }
-        }
-        
-        if (!found)
-        {
-            LOG_MSG("Unable to locate Lotus %s blob in FS .data segment!", dev_unit ? "ReadDevFw" : "ReadFw");
-            goto end;
-        }
-        
-        /* Update flag. */
-        ret = true;
-        
-    end:
-        memFreeMemoryLocation(&g_fsProgramMemory);
+        case LotusAsicFirmwareType_ReadFw:
+            type = "ReadFw";
+            break;
+        case LotusAsicFirmwareType_ReadDevFw:
+            type = "ReadDevFw";
+            break;
+        case LotusAsicFirmwareType_WriterFw:
+            type = "WriterFw";
+            break;
+        case LotusAsicFirmwareType_RmaFw:
+            type = "RmaFw";
+            break;
+        default:
+            break;
     }
-    return ret;
+    
+    return type;
 }
 
-u32 gamecardConvertLotusAsicFirmwareVersionBitmask(LotusAsicFirmware* lafw) {
-    u64 fw_version_bitmask = lafw->fw_version;
-    u32 fw_version = 0;
-    
-    while(fw_version_bitmask)
-    {
-        fw_version += (fw_version_bitmask & 1);
-        fw_version_bitmask >>= 1;
-    }
-    return fw_version;
-}
-
-static bool gamecardGetLotusAsicFirmwareVersion(void)
+static bool gamecardReadLotusAsicFirmwareBlob(void)
 {
-    bool ret = false;
-    LotusAsicFirmware lafw;
+    u64 fw_version = 0;
+    bool ret = false, found = false, dev_unit = utilsIsDevelopmentUnit();
     
-    /* Retrieve LAFW. */
-    ret = gamecardGetLotusAsicFirmware(&lafw);
+    /* Allocate memory for the LAFW blob. */
+    g_lafwBlob = calloc(1, sizeof(LotusAsicFirmwareBlob));
+    if (!g_lafwBlob)
+    {
+        LOG_MSG("Failed to allocate memory for LAFW blob!");
+        goto end;
+    }
+    
+    /* Temporarily set the segment mask to .data. */
+    g_fsProgramMemory.mask = MemoryProgramSegmentType_Data;
+    
+    /* Retrieve full FS program memory dump. */
+    ret = memRetrieveProgramMemorySegment(&g_fsProgramMemory);
+    
+    /* Clear segment mask. */
+    g_fsProgramMemory.mask = 0;
+    
     if (!ret)
     {
-        LOG_MSG("Failed to retrieve Lotus Asic Firmware!");
+        LOG_MSG("Failed to retrieve FS .data segment dump!");
+        goto end;
+    }
+    
+    /* Look for the LAFW ReadFw blob in the FS .data memory dump. */
+    for(u64 offset = 0; offset < g_fsProgramMemory.data_size; offset++)
+    {
+        if ((g_fsProgramMemory.data_size - offset) < sizeof(LotusAsicFirmwareBlob)) break;
+        
+        LotusAsicFirmwareBlob *lafw_blob = (LotusAsicFirmwareBlob*)(g_fsProgramMemory.data + offset);
+        u32 magic = __builtin_bswap32(lafw_blob->magic), fw_type = lafw_blob->fw_type;
+        
+        if (magic == LAFW_MAGIC && ((!dev_unit && fw_type == LotusAsicFirmwareType_ReadFw) || (dev_unit && fw_type == LotusAsicFirmwareType_ReadDevFw)))
+        {
+            /* Jackpot. */
+            memcpy(g_lafwBlob, lafw_blob, sizeof(LotusAsicFirmwareBlob));
+            fw_version = lafw_blob->fw_version;
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found)
+    {
+        LOG_MSG("Unable to locate Lotus %s blob in FS .data segment!", dev_unit ? "ReadDevFw" : "ReadFw");
         goto end;
     }
     
     /* Convert LAFW version bitmask to an integer. */
-    g_lafwVersion = gamecardConvertLotusAsicFirmwareVersionBitmask(&lafw);
+    g_lafwVersion = 0;
+    
+    while(fw_version)
+    {
+        g_lafwVersion += (fw_version & 1);
+        fw_version >>= 1;
+    }
+    
     LOG_MSG("LAFW version: %lu.", g_lafwVersion);
     
     /* Update flag. */
     ret = true;
     
 end:
+    memFreeMemoryLocation(&g_fsProgramMemory);
+    
     return ret;
 }
 
@@ -938,11 +956,12 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
         if (!memcmp(tmp_hash, g_gameCardHeader.initial_data_hash, SHA256_HASH_SIZE))
         {
             /* Jackpot. */
-            memcpy(out, g_fsProgramMemory.data + offset - 0x600, sizeof(GameCardSecurityInformation));
+            memcpy(out, g_fsProgramMemory.data + offset + sizeof(GameCardInitialData) - sizeof(GameCardSecurityInformation), sizeof(GameCardSecurityInformation));
             
-            // Clear out the asic session hash of the current Lotus session with the console.
-            // It's not actually part of the gamecard data, and this changes every time the gamecard is reinserted.
-            memset(out->specific_data.asic_session_hash, 0xFF, 32);
+            /* Clear out the current ASIC session hash. */
+            /* It's not actually part of the gamecard data, and this changes every time a gamecard (re)insertion takes place. */
+            memset(out->specific_data.asic_session_hash, 0xFF, sizeof(out->specific_data.asic_session_hash));
+            
             found = true;
             break;
         }

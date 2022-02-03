@@ -64,7 +64,7 @@ typedef struct
     bool read_error;
     bool write_error;
     bool transfer_cancelled;
-    u32 xci_crc, full_xci_crc;
+    u32 xci_crc;
 } ThreadSharedData;
 
 /* Function prototypes. */
@@ -73,13 +73,12 @@ static void consolePrint(const char *text, ...);
 
 static u32 menuGetElementCount(const Menu *menu);
 
-static bool sendGameCardKeyAreaViaUsb(void);
 static bool sendGameCardSpecificDataViaUsb(void);
 static bool sendGameCardCertificateViaUsb(void);
+static bool sendGameCardInitialDataViaUsb(void);
 static bool sendGameCardImageViaUsb(void);
-static bool sendConsoleLafwViaUsb(void);
+static bool sendConsoleLafwBlobViaUsb(void);
 
-static void changeKeyAreaOption(u32 idx);
 static void changeCertificateOption(u32 idx);
 static void changeTrimOption(u32 idx);
 static void changeCrcOption(u32 idx);
@@ -89,7 +88,7 @@ static void write_thread_func(void *arg);
 
 /* Global variables. */
 
-static bool g_appendKeyArea = false, g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
+static bool g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
 
 static const char *g_xciOptions[] = { "no", "yes", NULL };
 
@@ -99,16 +98,6 @@ static MenuElement *g_xciMenuElements[] = {
         .child_menu = NULL,
         .task_func = &sendGameCardImageViaUsb,
         .element_options = NULL
-    },
-    &(MenuElement){
-        .str = "append key area",
-        .child_menu = NULL,
-        .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 0,
-            .options_func = &changeKeyAreaOption,
-            .options = g_xciOptions
-        }
     },
     &(MenuElement){
         .str = "keep certificate",
@@ -152,12 +141,6 @@ static Menu g_xciMenu = {
 
 static MenuElement *g_rootMenuElements[] = {
     &(MenuElement){
-        .str = "dump gamecard initial data",
-        .child_menu = NULL,
-        .task_func = &sendGameCardKeyAreaViaUsb,
-        .element_options = NULL
-    },
-    &(MenuElement){
         .str = "dump gamecard specific data",
         .child_menu = NULL,
         .task_func = &sendGameCardSpecificDataViaUsb,
@@ -170,15 +153,21 @@ static MenuElement *g_rootMenuElements[] = {
         .element_options = NULL
     },
     &(MenuElement){
+        .str = "dump gamecard initial data",
+        .child_menu = NULL,
+        .task_func = &sendGameCardInitialDataViaUsb,
+        .element_options = NULL
+    },
+    &(MenuElement){
         .str = "dump gamecard xci",
         .child_menu = &g_xciMenu,
         .task_func = NULL,
         .element_options = NULL
     },
     &(MenuElement){
-        .str = "dump console LAFW",
+        .str = "dump console lafw blob",
         .child_menu = NULL,
-        .task_func = &sendConsoleLafwViaUsb,
+        .task_func = &sendConsoleLafwBlobViaUsb,
         .element_options = NULL
     },
     NULL
@@ -450,24 +439,6 @@ static bool sendFileData(const char *path, void *data, size_t data_size)
     return true;
 }
 
-static bool dumpGameCardKeyArea(GameCardKeyArea *out)
-{
-    if (!out)
-    {
-        consolePrint("invalid parameters to dump key area!\n");
-        return false;
-    }
-    
-    if (!gamecardGetKeyArea(out))
-    {
-        consolePrint("failed to get gamecard key area\n");
-        return false;
-    }
-    
-    consolePrint("get gamecard key area ok\n");
-    return true;
-}
-
 static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
 {
     if (!out)
@@ -475,81 +446,46 @@ static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
         consolePrint("invalid parameters to dump gamecard security information!\n");
         return false;
     }
-
+    
     if (!gamecardGetSecurityInformation(out))
     {
         consolePrint("failed to get gamecard security information\n");
         return false;
     }
-
+    
     consolePrint("get gamecard security information ok\n");
     return true;
-}
-
-static bool sendGameCardKeyAreaViaUsb(void)
-{
-    if (!waitForGameCardAndUsb()) return false;
-    
-    utilsSetLongRunningProcessState(true);
-    
-    GameCardKeyArea gc_key_area = {0};
-    bool success = false;
-    u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
-    
-    if (!dumpGameCardKeyArea(&gc_key_area) || !filename) goto end;
-    
-    crc = crc32Calculate(&(gc_key_area.initial_data), sizeof(GameCardInitialData));
-    snprintf(path, MAX_ELEMENTS(path), "%s (Initial Data) (%08X).bin", filename, crc);
-    
-    if (!sendFileData(path, &(gc_key_area.initial_data), sizeof(GameCardInitialData))) goto end;
-    
-    printf("successfully sent key area as \"%s\"\n", path);
-    success = true;
-    
-end:
-    if (filename) free(filename);
-    
-    utilsSetLongRunningProcessState(false);
-    
-    FsGameCardIdSet id_set = {0};
-    if (gamecardGetIdSet(&id_set)) LOG_DATA(&id_set, sizeof(FsGameCardIdSet), "Gamecard ID set:");
-    
-    consolePrint("press any button to continue");
-    utilsWaitForButtonPress(0);
-    
-    return success;
 }
 
 static bool sendGameCardSpecificDataViaUsb(void)
 {
     if (!waitForGameCardAndUsb()) return false;
-
+    
     utilsSetLongRunningProcessState(true);
-
+    
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
     u32 crc = 0;
     char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
-
+    
     if (!dumpGameCardSecurityInformation(&gc_security_information) || !filename) goto end;
-
+    
     crc = crc32Calculate(&(gc_security_information.specific_data), sizeof(GameCardSpecificData));
     snprintf(path, MAX_ELEMENTS(path), "%s (Specific Data) (%08X).bin", filename, crc);
-
+    
     if (!sendFileData(path, &(gc_security_information.specific_data), sizeof(GameCardSpecificData))) goto end;
-
+    
     printf("successfully sent specific data as \"%s\"\n", path);
     success = true;
-
+    
 end:
     if (filename) free(filename);
-
+    
     utilsSetLongRunningProcessState(false);
-
+    
     consolePrint("press any button to continue");
     utilsWaitForButtonPress(0);
-
+    
     return success;
 }
 
@@ -591,44 +527,30 @@ end:
     return success;
 }
 
-static bool sendConsoleLafwViaUsb(void)
+static bool sendGameCardInitialDataViaUsb(void)
 {
     if (!waitForGameCardAndUsb()) return false;
     
     utilsSetLongRunningProcessState(true);
     
-    LotusAsicFirmware lafw = {0};
+    GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
     u32 crc = 0;
+    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
     
-    if (!gamecardGetLotusAsicFirmware(&lafw))
-    {
-        consolePrint("failed to get console LAFW\n");
-        goto end;
-    }
+    if (!dumpGameCardSecurityInformation(&gc_security_information) || !filename) goto end;
     
-    u32 lafw_version = gamecardConvertLotusAsicFirmwareVersionBitmask(&lafw);
+    crc = crc32Calculate(&(gc_security_information.initial_data), sizeof(GameCardInitialData));
+    snprintf(path, MAX_ELEMENTS(path), "%s (Initial Data) (%08X).bin", filename, crc);
     
-    const char* filename = "";
-    switch(lafw.fw_type) {
-        case LotusAsicFirmwareType_ReadFw:    filename = "ReadFw"; break;
-        case LotusAsicFirmwareType_ReadDevFw: filename = "ReadDevFw"; break;
-        case LotusAsicFirmwareType_WriterFw:  filename = "WriterFw"; break;
-        case LotusAsicFirmwareType_RmaFw:     filename = "RmaFw"; break;
-        default:                              filename = "Unknown"; break;
-    }
+    if (!sendFileData(path, &(gc_security_information.initial_data), sizeof(GameCardInitialData))) goto end;
     
-    consolePrint("get console LAFW ok\n");
-    
-    crc = crc32Calculate(&lafw, sizeof(LotusAsicFirmware));
-    snprintf(path, MAX_ELEMENTS(path), "LAFW (%s) (v%d) (%08X).bin", filename, lafw_version, crc);
-    
-    if (!sendFileData(path, &lafw, sizeof(LotusAsicFirmware))) goto end;
-    
-    printf("successfully sent lafw as \"%s\"\n", path);
+    printf("successfully sent initial data as \"%s\"\n", path);
     success = true;
     
 end:
+    if (filename) free(filename);
+    
     utilsSetLongRunningProcessState(false);
     
     consolePrint("press any button to continue");
@@ -637,7 +559,6 @@ end:
     return success;
 }
 
-
 static bool sendGameCardImageViaUsb(void)
 {
     if (!waitForGameCardAndUsb()) return false;
@@ -645,8 +566,6 @@ static bool sendGameCardImageViaUsb(void)
     utilsSetLongRunningProcessState(true);
     
     u64 gc_size = 0;
-    u32 key_area_crc = 0;
-    GameCardKeyArea gc_key_area = {0};
     
     ThreadSharedData shared_data = {0};
     Thread read_thread = {0}, write_thread = {0};
@@ -655,7 +574,7 @@ static bool sendGameCardImageViaUsb(void)
     
     bool success = false;
     
-    consolePrint("gamecard image dump\nappend key area: %s | keep certificate: %s | trim dump: %s\n\n", g_appendKeyArea ? "yes" : "no", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no");
+    consolePrint("gamecard image dump\nkeep certificate: %s | trim dump: %s\n\n", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no");
     
     filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
     if (!filename)
@@ -681,31 +600,10 @@ static bool sendGameCardImageViaUsb(void)
     
     consolePrint("gamecard size: 0x%lX\n", gc_size);
     
-    if (g_appendKeyArea)
-    {
-        gc_size += sizeof(GameCardKeyArea);
-        
-        if (!dumpGameCardKeyArea(&gc_key_area)) goto end;
-        
-        if (g_calcCrc)
-        {
-            key_area_crc = crc32Calculate(&gc_key_area, sizeof(GameCardKeyArea));
-            if (g_appendKeyArea) shared_data.full_xci_crc = key_area_crc;
-        }
-        
-        consolePrint("gamecard size (with key area): 0x%lX\n", gc_size);
-    }
-    
-    snprintf(path, MAX_ELEMENTS(path), "%s (%s) (%s) (%s).xci", filename, g_appendKeyArea ? "keyarea" : "keyarealess", g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
+    snprintf(path, MAX_ELEMENTS(path), "%s (%s) (%s).xci", filename, g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
     if (!usbSendFilePropertiesCommon(gc_size, path))
     {
         consolePrint("failed to send file properties for \"%s\"!\n", path);
-        goto end;
-    }
-    
-    if (g_appendKeyArea && !usbSendFileData(&gc_key_area, sizeof(GameCardKeyArea)))
-    {
-        consolePrint("failed to send gamecard key area data!\n");
         goto end;
     }
     
@@ -789,13 +687,7 @@ static bool sendGameCardImageViaUsb(void)
     printf("process completed in %lu seconds\n", start);
     success = true;
     
-    if (g_calcCrc)
-    {
-        if (g_appendKeyArea) printf("key area crc: %08X | ", key_area_crc);
-        printf("xci crc: %08X", shared_data.xci_crc);
-        if (g_appendKeyArea) printf(" | xci crc (with key area): %08X", shared_data.full_xci_crc);
-        printf("\n");
-    }
+    if (g_calcCrc) printf("xci crc: %08X\n", shared_data.xci_crc);
     
 end:
     if (shared_data.data) free(shared_data.data);
@@ -810,9 +702,43 @@ end:
     return success;
 }
 
-static void changeKeyAreaOption(u32 idx)
+static bool sendConsoleLafwBlobViaUsb(void)
 {
-    g_appendKeyArea = (idx > 0);
+    if (!waitForGameCardAndUsb()) return false;
+    
+    utilsSetLongRunningProcessState(true);
+    
+    u64 lafw_version = 0;
+    LotusAsicFirmwareBlob lafw_blob = {0};
+    bool success = false;
+    u32 crc = 0;
+    
+    if (!gamecardGetLotusAsicFirmwareBlob(&lafw_blob, &lafw_version))
+    {
+        consolePrint("failed to get console lafw blob\n");
+        goto end;
+    }
+    
+    const char *type_str = gamecardGetLafwTypeString(lafw_blob.fw_type);
+    if (!type_str) type_str = "Unknown";
+    
+    consolePrint("get console lafw blob ok\n");
+    
+    crc = crc32Calculate(&lafw_blob, sizeof(LotusAsicFirmwareBlob));
+    snprintf(path, MAX_ELEMENTS(path), "LAFW (%s) (v%lu) (%08X).bin", type_str, lafw_version, crc);
+    
+    if (!sendFileData(path, &lafw_blob, sizeof(LotusAsicFirmwareBlob))) goto end;
+    
+    printf("successfully sent lafw blob as \"%s\"\n", path);
+    success = true;
+    
+end:
+    utilsSetLongRunningProcessState(false);
+    
+    consolePrint("press any button to continue");
+    utilsWaitForButtonPress(0);
+    
+    return success;
 }
 
 static void changeCertificateOption(u32 idx)
@@ -869,11 +795,7 @@ static void read_thread_func(void *arg)
         if (!g_keepCertificate && offset == 0) memset(buf + GAMECARD_CERTIFICATE_OFFSET, 0xFF, sizeof(FsGameCardCertificate));
         
         /* Update checksum */
-        if (g_calcCrc)
-        {
-            shared_data->xci_crc = crc32CalculateWithSeed(shared_data->xci_crc, buf, blksize);
-            if (g_appendKeyArea) shared_data->full_xci_crc = crc32CalculateWithSeed(shared_data->full_xci_crc, buf, blksize);
-        }
+        if (g_calcCrc) shared_data->xci_crc = crc32CalculateWithSeed(shared_data->xci_crc, buf, blksize);
         
         /* Wait until the previous data chunk has been written */
         mutexLock(&g_fileMutex);
