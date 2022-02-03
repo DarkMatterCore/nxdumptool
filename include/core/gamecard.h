@@ -86,6 +86,30 @@ typedef struct {
 
 NXDT_ASSERT(GameCardKeyArea, 0x1000);
 
+typedef struct {
+    u32 asic_security_mode;
+    u32 asic_status;
+    u32 cardid1;
+    u32 cardid2;
+    u8 card_uid[0x40];
+    u8 reserved[0x190];
+    u8 asic_session_hash[0x20];
+} GameCardSpecificData;
+
+NXDT_ASSERT(GameCardSpecificData, 0x200);
+
+/// This struct is returned by Lotus command "ChangeToSecureMode" (0xF)
+/// A copy of the gamecard header without the RSA-2048 signature and a plaintext GameCardInfo precedes this struct in FS program memory.
+typedef struct {
+    GameCardSpecificData specific_data;
+    FsGameCardCertificate certificate;
+    u8 ffpadding[0x200];
+    GameCardInitialData initial_data;
+} GameCardSecurityInformation;
+
+NXDT_ASSERT(GameCardSecurityInformation, 0x800);
+
+
 typedef enum {
     GameCardKekIndex_Version0      = 0,
     GameCardKekIndex_VersionForDev = 1
@@ -212,6 +236,40 @@ typedef enum {
     GameCardHashFileSystemPartitionType_Count  = 7  ///< Not a real value.
 } GameCardHashFileSystemPartitionType;
 
+typedef enum {
+    LotusAsicFirmwareType_ReadFw    = 0xFF,
+    LotusAsicFirmwareType_ReadDevFw = 0xFFFF,
+    LotusAsicFirmwareType_WriterFw  = 0xFFFFFF,
+    LotusAsicFirmwareType_RmaFw     = 0xFFFFFFFF
+} LotusAsicFirmwareType;
+
+typedef enum {
+    LotusAsicDeviceType_Test     = 0,
+    LotusAsicDeviceType_Dev      = 1,
+    LotusAsicDeviceType_Prod     = 2,
+    LotusAsicDeviceType_Prod2Dev = 3
+} LotusAsicDeviceType;
+
+typedef struct {
+    u8 signature[0x100];
+    u32 magic;                      ///< "LAFW".
+    u32 fw_type;                    ///< LotusAsicFirmwareType.
+    u8 reserved_1[0x8];
+    struct {
+        u64 fw_version  : 62;       ///< Stored using a bitmask.
+        u64 device_type : 2;        ///< LotusAsicDeviceType.
+    };
+    u32 data_size;
+    u8 reserved_2[0x4];
+    u8 data_iv[AES_128_KEY_SIZE];
+    char placeholder_str[0x10];     ///< "IDIDIDIDIDIDIDID".
+    u8 reserved_3[0x40];
+    u8 data[0x7680];
+} LotusAsicFirmware;
+
+NXDT_ASSERT(LotusAsicFirmware, 0x7800);
+
+
 /// Initializes data needed to access raw gamecard storage areas.
 /// Also spans a background thread to automatically detect gamecard status changes and to cache data from the inserted gamecard.
 bool gamecardInitialize(void);
@@ -235,6 +293,10 @@ bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
 /// Fills the provided GameCardKeyArea pointer. Only GameCardInitialData data is retrieved at this moment.
 /// This area can't be read using gamecardReadStorage().
 bool gamecardGetKeyArea(GameCardKeyArea *out);
+
+/// Fills the provided GameCardSecurityInformation pointer
+/// This area can't be read using gamecardReadStorage().
+bool gamecardGetSecurityInformation(GameCardSecurityInformation* out);
 
 /// Fills the provided FsGameCardIdSet pointer.
 /// This area can't be read using gamecardReadStorage().
@@ -279,6 +341,12 @@ const char *gamecardGetRequiredHosVersionString(u64 fw_version);
 /// Takes a GameCardCompatibilityType value. Returns a pointer to a string that represents the provided compatibility type.
 /// Returns NULL if the provided value is out of range.
 const char *gamecardGetCompatibilityTypeString(u8 compatibility_type);
+
+/// Fills the provided LotusAsicFirmware pointer with FS's current LAFW blob.
+bool gamecardGetLotusAsicFirmware(LotusAsicFirmware* out);
+
+/// Convert LAFW version bitmask to an integer
+u32 gamecardConvertLotusAsicFirmwareVersionBitmask(LotusAsicFirmware* lafw);
 
 #ifdef __cplusplus
 }
