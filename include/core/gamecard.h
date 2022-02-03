@@ -298,6 +298,10 @@ bool gamecardGetKeyArea(GameCardKeyArea *out);
 /// This area can't be read using gamecardReadStorage().
 bool gamecardGetSecurityInformation(GameCardSecurityInformation* out);
 
+/// Fills the provided FsGameCardIdSet pointer.
+/// This area can't be read using gamecardReadStorage().
+bool gamecardGetIdSet(FsGameCardIdSet *out);
+
 /// Fills the provided GameCardHeader pointer.
 /// This area can also be read using gamecardReadStorage(), starting at offset 0.
 bool gamecardGetHeader(GameCardHeader *out);

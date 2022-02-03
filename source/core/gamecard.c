@@ -317,6 +317,23 @@ bool gamecardGetSecurityInformation(GameCardSecurityInformation *out)
     return ret;
 }
 
+bool gamecardGetIdSet(FsGameCardIdSet *out)
+{
+    bool ret = false;
+    
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !out) break;
+        
+        Result rc = fsDeviceOperatorGetGameCardIdSet(&g_deviceOperator, out);
+        if (R_FAILED(rc)) LOG_MSG("fsDeviceOperatorGetGameCardIdSet failed! (0x%08X)", rc);
+        
+        ret = R_SUCCEEDED(rc);
+    }
+    
+    return ret;
+}
+
 bool gamecardGetHeader(GameCardHeader *out)
 {
     bool ret = false;

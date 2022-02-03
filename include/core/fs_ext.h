@@ -32,17 +32,49 @@ extern "C" {
 
 /// Located at offset 0x7000 in the gamecard image.
 typedef struct {
-    u8 signature[0x100];        ///< RSA-2048-PSS with SHA-256 signature over the rest of the data.
-    u32 magic;                  ///< "CERT".
+    u8 signature[0x100];    ///< RSA-2048-PSS with SHA-256 signature over the rest of the data.
+    u32 magic;              ///< "CERT".
     u32 version;
     u8 kek_index;
     u8 reserved[0x7];
     u8 device_id[0x10];
     u8 iv[0x10];
-    u8 data[0xD0];              ///< Encrypted using the IV from this struct and an unknown key.
+    u8 data[0xD0];          ///< Encrypted using the IV from this struct and an unknown key.
 } FsGameCardCertificate;
 
 NXDT_ASSERT(FsGameCardCertificate, 0x200);
+
+typedef struct {
+    u8 maker_code;      ///< Usually 0xC2 (Macronix).
+    u8 memory_capacity; ///< Matches GameCardRomSize.
+    u8 reserved;        ///< Usually 0x0A / 0x09.
+    u8 memory_type;     ///< Usually 0x21.
+} FsCardId1;
+
+NXDT_ASSERT(FsCardId1, 0x4);
+
+typedef struct {
+    u8 card_security_number;    ///< Usually 0x02.
+    u8 card_type;               ///< Usually 0x00.
+    u8 reserved[0x2];           ///< Usually filled with zeroes.
+} FsCardId2;
+
+NXDT_ASSERT(FsCardId2, 0x4);
+
+typedef struct {
+    u8 reserved[0x4];   ///< Usually filled with zeroes.
+} FsCardId3;
+
+NXDT_ASSERT(FsCardId3, 0x4);
+
+/// Returned by fsDeviceOperatorGetGameCardIdSet.
+typedef struct {
+    FsCardId1 id1;
+    FsCardId2 id2;
+    FsCardId3 id3;
+} FsGameCardIdSet;
+
+NXDT_ASSERT(FsGameCardIdSet, 0xC);
 
 /// IFileSystemProxy.
 Result fsOpenGameCardStorage(FsStorage *out, const FsGameCardHandle *handle, u32 partition);
@@ -51,6 +83,7 @@ Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier *out);
 /// IDeviceOperator.
 Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCardHandle *handle, u32 *out_title_version, u64 *out_title_id);
 Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const FsGameCardHandle *handle, FsGameCardCertificate *out);
+Result fsDeviceOperatorGetGameCardIdSet(FsDeviceOperator *d, FsGameCardIdSet *out);
 
 #ifdef __cplusplus
 }
