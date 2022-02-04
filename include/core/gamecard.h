@@ -249,7 +249,8 @@ typedef enum {
     LotusAsicDeviceType_Test     = 0,
     LotusAsicDeviceType_Dev      = 1,
     LotusAsicDeviceType_Prod     = 2,
-    LotusAsicDeviceType_Prod2Dev = 3
+    LotusAsicDeviceType_Prod2Dev = 3,
+    LotusAsicDeviceType_Count    = 4    ///< Not a real value.
 } LotusAsicDeviceType;
 
 /// Plaintext Lotus ASIC firmware (LAFW) blob. Dumped from FS program memory.
@@ -346,7 +347,11 @@ const char *gamecardGetCompatibilityTypeString(u8 compatibility_type);
 
 /// Takes a LotusAsicFirmwareType value. Returns a pointer to a string that represents the provided LAFW type.
 /// Returns NULL if the provided value is invalid.
-const char *gamecardGetLafwTypeString(u32 lafw_type);
+const char *gamecardGetLafwTypeString(u32 fw_type);
+
+/// Takes a LotusAsicDeviceType value. Returns a pointer to a string that represents the provided LAFW device type.
+/// Returns NULL if the provided value is out of range.
+const char *gamecardGetLafwDeviceTypeString(u64 device_type);
 
 #ifdef __cplusplus
 }

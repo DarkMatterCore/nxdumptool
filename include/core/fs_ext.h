@@ -47,7 +47,7 @@ NXDT_ASSERT(FsGameCardCertificate, 0x200);
 typedef struct {
     u8 maker_code;      ///< Usually 0xC2 (Macronix).
     u8 memory_capacity; ///< Matches GameCardRomSize.
-    u8 reserved;        ///< Usually 0x0A / 0x09.
+    u8 reserved;        ///< Known values: 0x06, 0x09, 0x0A.
     u8 memory_type;     ///< Usually 0x21.
 } FsCardId1;
 

@@ -118,6 +118,13 @@ static const char *g_gameCardCompatibilityTypeStrings[GameCardCompatibilityType_
     [GameCardCompatibilityType_Terra]  = "Terra"
 };
 
+static const char *g_lafwDeviceTypeStrings[LotusAsicDeviceType_Count] = {
+    [LotusAsicDeviceType_Test]     = "Test",
+    [LotusAsicDeviceType_Dev]      = "Dev",
+    [LotusAsicDeviceType_Prod]     = "Prod",
+    [LotusAsicDeviceType_Prod2Dev] = "Prod2Dev"
+};
+
 /* Function prototypes. */
 
 static bool gamecardReadLotusAsicFirmwareBlob(void);
@@ -540,11 +547,11 @@ const char *gamecardGetCompatibilityTypeString(u8 compatibility_type)
     return (compatibility_type < GameCardCompatibilityType_Count ? g_gameCardCompatibilityTypeStrings[compatibility_type] : NULL);
 }
 
-const char *gamecardGetLafwTypeString(u32 lafw_type)
+const char *gamecardGetLafwTypeString(u32 fw_type)
 {
     const char *type = NULL;
     
-    switch(lafw_type)
+    switch(fw_type)
     {
         case LotusAsicFirmwareType_ReadFw:
             type = "ReadFw";
@@ -563,6 +570,11 @@ const char *gamecardGetLafwTypeString(u32 lafw_type)
     }
     
     return type;
+}
+
+const char *gamecardGetLafwDeviceTypeString(u64 device_type)
+{
+    return (device_type < LotusAsicDeviceType_Count ? g_lafwDeviceTypeStrings[device_type] : NULL);
 }
 
 static bool gamecardReadLotusAsicFirmwareBlob(void)

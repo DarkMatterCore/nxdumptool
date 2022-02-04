@@ -65,6 +65,7 @@ typedef struct
     bool write_error;
     bool transfer_cancelled;
     u32 xci_crc;
+    FILE *fp;
 } ThreadSharedData;
 
 /* Function prototypes. */
@@ -73,12 +74,14 @@ static void consolePrint(const char *text, ...);
 
 static u32 menuGetElementCount(const Menu *menu);
 
-static bool sendGameCardSpecificDataViaUsb(void);
-static bool sendGameCardCertificateViaUsb(void);
-static bool sendGameCardInitialDataViaUsb(void);
-static bool sendGameCardImageViaUsb(void);
-static bool sendConsoleLafwBlobViaUsb(void);
+static bool saveGameCardSpecificData(void);
+static bool saveGameCardCertificate(void);
+static bool saveGameCardInitialData(void);
+static bool saveGameCardIdSet(void);
+static bool saveGameCardImage(void);
+static bool saveConsoleLafwBlob(void);
 
+static void changeStorageOption(u32 idx);
 static void changeCertificateOption(u32 idx);
 static void changeTrimOption(u32 idx);
 static void changeCrcOption(u32 idx);
@@ -88,15 +91,16 @@ static void write_thread_func(void *arg);
 
 /* Global variables. */
 
-static bool g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
+static bool g_useUsbHost = false, g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
 
+static const char *g_storageOptions[] = { "sd card", "usb host", NULL };
 static const char *g_xciOptions[] = { "no", "yes", NULL };
 
 static MenuElement *g_xciMenuElements[] = {
     &(MenuElement){
         .str = "start dump",
         .child_menu = NULL,
-        .task_func = &sendGameCardImageViaUsb,
+        .task_func = &saveGameCardImage,
         .element_options = NULL
     },
     &(MenuElement){
@@ -143,19 +147,25 @@ static MenuElement *g_rootMenuElements[] = {
     &(MenuElement){
         .str = "dump gamecard specific data",
         .child_menu = NULL,
-        .task_func = &sendGameCardSpecificDataViaUsb,
+        .task_func = &saveGameCardSpecificData,
         .element_options = NULL
     },
     &(MenuElement){
         .str = "dump gamecard certificate",
         .child_menu = NULL,
-        .task_func = &sendGameCardCertificateViaUsb,
+        .task_func = &saveGameCardCertificate,
         .element_options = NULL
     },
     &(MenuElement){
         .str = "dump gamecard initial data",
         .child_menu = NULL,
-        .task_func = &sendGameCardInitialDataViaUsb,
+        .task_func = &saveGameCardInitialData,
+        .element_options = NULL
+    },
+    &(MenuElement){
+        .str = "dump gamecard id set",
+        .child_menu = NULL,
+        .task_func = &saveGameCardIdSet,
         .element_options = NULL
     },
     &(MenuElement){
@@ -167,8 +177,18 @@ static MenuElement *g_rootMenuElements[] = {
     &(MenuElement){
         .str = "dump console lafw blob",
         .child_menu = NULL,
-        .task_func = &sendConsoleLafwBlobViaUsb,
+        .task_func = &saveConsoleLafwBlob,
         .element_options = NULL
+    },
+    &(MenuElement){
+        .str = "output storage",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &(MenuElementOption){
+            .selected = 0,
+            .options_func = &changeStorageOption,
+            .options = g_storageOptions
+        }
     },
     NULL
 };
@@ -233,6 +253,8 @@ int main(int argc, char *argv[])
     padInitializeWithMask(&g_padState, 0x1000000FFUL);
     
     consoleInit(NULL);
+    
+    chdir(DEVOPTAB_SDMC_DEVICE GAMECARD_PATH);
     
     while(appletMainLoop())
     {
@@ -376,7 +398,7 @@ static u32 menuGetElementCount(const Menu *menu)
     return cnt;
 }
 
-static bool waitForGameCardAndUsb(void)
+static bool waitForGameCard(void)
 {
     consoleClear();
     consolePrint("waiting for gamecard...\n");
@@ -406,34 +428,58 @@ static bool waitForGameCardAndUsb(void)
         return false;
     }
     
+    return true;
+}
+
+static void waitForUsb(void)
+{
+    if (usbIsReady()) return;
+    
     consolePrint("waiting for usb session...\n");
     
     while(true)
     {
         if (usbIsReady()) break;
     }
-    
-    return true;
 }
 
-static bool sendFileData(const char *path, void *data, size_t data_size)
+static bool saveFileData(const char *path, void *data, size_t data_size)
 {
     if (!path || !strlen(path) || !data || !data_size)
     {
-        consolePrint("invalid parameters to send file data!\n");
+        consolePrint("invalid parameters to save file data!\n");
         return false;
     }
     
-    if (!usbSendFilePropertiesCommon(data_size, path))
+    if (g_useUsbHost)
     {
-        consolePrint("failed to send file properties for \"%s\"!\n", path);
-        return false;
-    }
-    
-    if (!usbSendFileData(data, data_size))
-    {
-        consolePrint("failed to send file data for \"%s\"!\n", path);
-        return false;
+        if (!usbSendFilePropertiesCommon(data_size, path))
+        {
+            consolePrint("failed to send file properties for \"%s\"!\n", path);
+            return false;
+        }
+        
+        if (!usbSendFileData(data, data_size))
+        {
+            consolePrint("failed to send file data for \"%s\"!\n", path);
+            return false;
+        }
+    } else {
+        FILE *fp = fopen(path, "wb");
+        if (!fp)
+        {
+            consolePrint("failed to open \"%s\" for writing!\n", path);
+            return false;
+        }
+        
+        size_t ret = fwrite(data, 1, data_size, fp);
+        fclose(fp);
+        
+        if (ret != data_size)
+        {
+            consolePrint("failed to write 0x%lX byte(s) to \"%s\"! (%d)\n", data_size, path, errno);
+            remove(path);
+        }
     }
     
     return true;
@@ -457,25 +503,26 @@ static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
     return true;
 }
 
-static bool sendGameCardSpecificDataViaUsb(void)
+static bool saveGameCardSpecificData(void)
 {
-    if (!waitForGameCardAndUsb()) return false;
+    if (!waitForGameCard()) return false;
+    if (g_useUsbHost) waitForUsb();
     
     utilsSetLongRunningProcessState(true);
     
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
     
     if (!dumpGameCardSecurityInformation(&gc_security_information) || !filename) goto end;
     
     crc = crc32Calculate(&(gc_security_information.specific_data), sizeof(GameCardSpecificData));
     snprintf(path, MAX_ELEMENTS(path), "%s (Specific Data) (%08X).bin", filename, crc);
     
-    if (!sendFileData(path, &(gc_security_information.specific_data), sizeof(GameCardSpecificData))) goto end;
+    if (!saveFileData(path, &(gc_security_information.specific_data), sizeof(GameCardSpecificData))) goto end;
     
-    printf("successfully sent specific data as \"%s\"\n", path);
+    printf("successfully saved specific data as \"%s\"\n", path);
     success = true;
     
 end:
@@ -489,16 +536,17 @@ end:
     return success;
 }
 
-static bool sendGameCardCertificateViaUsb(void)
+static bool saveGameCardCertificate(void)
 {
-    if (!waitForGameCardAndUsb()) return false;
+    if (!waitForGameCard()) return false;
+    if (g_useUsbHost) waitForUsb();
     
     utilsSetLongRunningProcessState(true);
     
     FsGameCardCertificate gc_cert = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
     
     if (!gamecardGetCertificate(&gc_cert) || !filename)
     {
@@ -511,9 +559,9 @@ static bool sendGameCardCertificateViaUsb(void)
     crc = crc32Calculate(&gc_cert, sizeof(FsGameCardCertificate));
     snprintf(path, MAX_ELEMENTS(path), "%s (Certificate) (%08X).bin", filename, crc);
     
-    if (!sendFileData(path, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
+    if (!saveFileData(path, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
     
-    printf("successfully sent certificate as \"%s\"\n", path);
+    printf("successfully saved certificate as \"%s\"\n", path);
     success = true;
     
 end:
@@ -527,25 +575,26 @@ end:
     return success;
 }
 
-static bool sendGameCardInitialDataViaUsb(void)
+static bool saveGameCardInitialData(void)
 {
-    if (!waitForGameCardAndUsb()) return false;
+    if (!waitForGameCard()) return false;
+    if (g_useUsbHost) waitForUsb();
     
     utilsSetLongRunningProcessState(true);
     
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
     
     if (!dumpGameCardSecurityInformation(&gc_security_information) || !filename) goto end;
     
     crc = crc32Calculate(&(gc_security_information.initial_data), sizeof(GameCardInitialData));
     snprintf(path, MAX_ELEMENTS(path), "%s (Initial Data) (%08X).bin", filename, crc);
     
-    if (!sendFileData(path, &(gc_security_information.initial_data), sizeof(GameCardInitialData))) goto end;
+    if (!saveFileData(path, &(gc_security_information.initial_data), sizeof(GameCardInitialData))) goto end;
     
-    printf("successfully sent initial data as \"%s\"\n", path);
+    printf("successfully saved initial data as \"%s\"\n", path);
     success = true;
     
 end:
@@ -559,9 +608,43 @@ end:
     return success;
 }
 
-static bool sendGameCardImageViaUsb(void)
+static bool saveGameCardIdSet(void)
 {
-    if (!waitForGameCardAndUsb()) return false;
+    if (!waitForGameCard()) return false;
+    if (g_useUsbHost) waitForUsb();
+    
+    utilsSetLongRunningProcessState(true);
+    
+    FsGameCardIdSet id_set = {0};
+    bool success = false;
+    u32 crc = 0;
+    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
+    
+    if (!gamecardGetIdSet(&id_set) || !filename) goto end;
+    
+    crc = crc32Calculate(&id_set, sizeof(FsGameCardIdSet));
+    snprintf(path, MAX_ELEMENTS(path), "%s (Card ID Set) (%08X).bin", filename, crc);
+    
+    if (!saveFileData(path, &id_set, sizeof(FsGameCardIdSet))) goto end;
+    
+    printf("successfully saved gamecard id set as \"%s\"\n", path);
+    success = true;
+    
+end:
+    if (filename) free(filename);
+    
+    utilsSetLongRunningProcessState(false);
+    
+    consolePrint("press any button to continue");
+    utilsWaitForButtonPress(0);
+    
+    return success;
+}
+
+static bool saveGameCardImage(void)
+{
+    if (!waitForGameCard()) return false;
+    if (g_useUsbHost) waitForUsb();
     
     utilsSetLongRunningProcessState(true);
     
@@ -574,9 +657,9 @@ static bool sendGameCardImageViaUsb(void)
     
     bool success = false;
     
-    consolePrint("gamecard image dump\nkeep certificate: %s | trim dump: %s\n\n", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no");
+    consolePrint("gamecard image dump\nkeep certificate: %s | trim dump: %s | calculate crc32: %s\n\n", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no", g_calcCrc ? "yes" : "no");
     
-    filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
     if (!filename)
     {
         consolePrint("failed to generate gamecard filename!\n");
@@ -601,10 +684,26 @@ static bool sendGameCardImageViaUsb(void)
     consolePrint("gamecard size: 0x%lX\n", gc_size);
     
     snprintf(path, MAX_ELEMENTS(path), "%s (%s) (%s).xci", filename, g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
-    if (!usbSendFilePropertiesCommon(gc_size, path))
+    
+    if (g_useUsbHost && !usbSendFilePropertiesCommon(gc_size, path))
     {
         consolePrint("failed to send file properties for \"%s\"!\n", path);
         goto end;
+    } else
+    if (!g_useUsbHost)
+    {
+        if (gc_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(path))
+        {
+            consolePrint("failed to create concatenation file for \"%s\"!\n", path);
+            goto end;
+        }
+        
+        shared_data.fp = fopen(path, "wb");
+        if (!shared_data.fp)
+        {
+            consolePrint("failed to open \"%s\" for writing!\n", path);
+            goto end;
+        }
     }
     
     consolePrint("creating threads\n");
@@ -674,7 +773,7 @@ static bool sendGameCardImageViaUsb(void)
     
     if (shared_data.read_error || shared_data.write_error)
     {
-        consolePrint("usb transfer error\n");
+        consolePrint("i/o error\n");
         goto end;
     }
     
@@ -690,6 +789,14 @@ static bool sendGameCardImageViaUsb(void)
     if (g_calcCrc) printf("xci crc: %08X\n", shared_data.xci_crc);
     
 end:
+    if (shared_data.fp)
+    {
+        fclose(shared_data.fp);
+        shared_data.fp = NULL;
+    }
+    
+    if (!success && !g_useUsbHost) utilsRemoveConcatenationFile(path);
+    
     if (shared_data.data) free(shared_data.data);
     
     if (filename) free(filename);
@@ -702,9 +809,10 @@ end:
     return success;
 }
 
-static bool sendConsoleLafwBlobViaUsb(void)
+static bool saveConsoleLafwBlob(void)
 {
-    if (!waitForGameCardAndUsb()) return false;
+    if (!waitForGameCard()) return false;
+    if (g_useUsbHost) waitForUsb();
     
     utilsSetLongRunningProcessState(true);
     
@@ -719,17 +827,20 @@ static bool sendConsoleLafwBlobViaUsb(void)
         goto end;
     }
     
-    const char *type_str = gamecardGetLafwTypeString(lafw_blob.fw_type);
-    if (!type_str) type_str = "Unknown";
+    const char *fw_type_str = gamecardGetLafwTypeString(lafw_blob.fw_type);
+    if (!fw_type_str) fw_type_str = "Unknown";
+    
+    const char *dev_type_str = gamecardGetLafwDeviceTypeString(lafw_blob.device_type);
+    if (!dev_type_str) dev_type_str = "Unknown";
     
     consolePrint("get console lafw blob ok\n");
     
     crc = crc32Calculate(&lafw_blob, sizeof(LotusAsicFirmwareBlob));
-    snprintf(path, MAX_ELEMENTS(path), "LAFW (%s) (v%lu) (%08X).bin", type_str, lafw_version, crc);
+    snprintf(path, MAX_ELEMENTS(path), "LAFW (%s) (%s) (v%lu) (%08X).bin", fw_type_str, dev_type_str, lafw_version, crc);
     
-    if (!sendFileData(path, &lafw_blob, sizeof(LotusAsicFirmwareBlob))) goto end;
+    if (!saveFileData(path, &lafw_blob, sizeof(LotusAsicFirmwareBlob))) goto end;
     
-    printf("successfully sent lafw blob as \"%s\"\n", path);
+    printf("successfully saved lafw blob as \"%s\"\n", path);
     success = true;
     
 end:
@@ -739,6 +850,11 @@ end:
     utilsWaitForButtonPress(0);
     
     return success;
+}
+
+static void changeStorageOption(u32 idx)
+{
+    g_useUsbHost = (idx > 0);
 }
 
 static void changeCertificateOption(u32 idx)
@@ -841,13 +957,19 @@ static void write_thread_func(void *arg)
         
         if (shared_data->read_error || shared_data->transfer_cancelled)
         {
-            if (shared_data->transfer_cancelled) usbCancelFileTransfer();
+            if (shared_data->transfer_cancelled && g_useUsbHost) usbCancelFileTransfer();
             mutexUnlock(&g_fileMutex);
             break;
         }
         
         /* Write current file data chunk */
-        shared_data->write_error = !usbSendFileData(shared_data->data, shared_data->data_size);
+        if (g_useUsbHost)
+        {
+            shared_data->write_error = !usbSendFileData(shared_data->data, shared_data->data_size);
+        } else {
+            shared_data->write_error = (fwrite(shared_data->data, 1, shared_data->data_size, shared_data->fp) != shared_data->data_size);
+        }
+        
         if (!shared_data->write_error)
         {
             shared_data->data_written += shared_data->data_size;
