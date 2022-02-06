@@ -78,6 +78,7 @@ static bool waitForGameCard(void);
 static void waitForUsb(void);
 
 static void generateDumpTxt(void);
+static bool saveDumpTxt(void);
 
 static bool saveGameCardSpecificData(void);
 static bool saveGameCardCertificate(void);
@@ -324,7 +325,7 @@ int main(int argc, char *argv[])
                 
                 /* Run task. */
                 utilsSetLongRunningProcessState(true);
-                selected_element->task_func();
+                if (selected_element->task_func()) saveDumpTxt();
                 utilsSetLongRunningProcessState(false);
                 
                 /* Display prompt. */
@@ -577,8 +578,6 @@ static bool saveGameCardSpecificData(void)
     printf("successfully saved specific data as \"%s\"\n", path);
     success = true;
     
-    saveDumpTxt();
-    
 end:
     if (filename) free(filename);
     
@@ -608,8 +607,6 @@ static bool saveGameCardCertificate(void)
     printf("successfully saved certificate as \"%s\"\n", path);
     success = true;
     
-    saveDumpTxt();
-    
 end:
     if (filename) free(filename);
     
@@ -633,8 +630,6 @@ static bool saveGameCardInitialData(void)
     printf("successfully saved initial data as \"%s\"\n", path);
     success = true;
     
-    saveDumpTxt();
-    
 end:
     if (filename) free(filename);
     
@@ -657,8 +652,6 @@ static bool saveGameCardIdSet(void)
     
     printf("successfully saved gamecard id set as \"%s\"\n", path);
     success = true;
-    
-    saveDumpTxt();
     
 end:
     if (filename) free(filename);
@@ -810,8 +803,6 @@ static bool saveGameCardImage(void)
     
     if (g_calcCrc) printf("xci crc: %08X\n", shared_data.xci_crc);
     
-    saveDumpTxt();
-    
 end:
     if (shared_data.fp)
     {
@@ -856,8 +847,6 @@ static bool saveConsoleLafwBlob(void)
     
     printf("successfully saved lafw blob as \"%s\"\n", path);
     success = true;
-    
-    saveDumpTxt();
     
 end:
     return success;
