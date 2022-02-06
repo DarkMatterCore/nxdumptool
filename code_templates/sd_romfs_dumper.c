@@ -609,8 +609,10 @@ int main(int argc, char *argv[])
     {
         if (shared_data.read_error || shared_data.write_error) break;
         
+        struct tm ts = {0};
         time_t now = time(NULL);
-        struct tm *ts = localtime(&now);
+        localtime_r(&now, &ts);
+        
         size_t size = shared_data.data_written;
         
         utilsScanPads();
@@ -636,11 +638,11 @@ int main(int argc, char *argv[])
         
         btn_cancel_prev_state = btn_cancel_cur_state;
         
-        if (prev_time == ts->tm_sec || prev_size == size) continue;
+        if (prev_time == ts.tm_sec || prev_size == size) continue;
         
         percent = (u8)((size * 100) / shared_data.total_size);
         
-        prev_time = ts->tm_sec;
+        prev_time = ts.tm_sec;
         prev_size = size;
         
         printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));

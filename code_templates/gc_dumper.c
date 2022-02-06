@@ -74,6 +74,11 @@ static void consolePrint(const char *text, ...);
 
 static u32 menuGetElementCount(const Menu *menu);
 
+static bool waitForGameCard(void);
+static void waitForUsb(void);
+
+static void generateDumpTxt(void);
+
 static bool saveGameCardSpecificData(void);
 static bool saveGameCardCertificate(void);
 static bool saveGameCardInitialData(void);
@@ -203,7 +208,7 @@ static Menu g_rootMenu = {
 static Mutex g_fileMutex = 0;
 static CondVar g_readCondvar = 0, g_writeCondvar = 0;
 
-static char path[FS_MAX_PATH] = {0};
+static char path[FS_MAX_PATH] = {0}, txt_info[FS_MAX_PATH] = {0};
 
 static void utilsScanPads(void)
 {
@@ -308,7 +313,23 @@ int main(int argc, char *argv[])
             } else
             if (selected_element->task_func)
             {
+                /* Wait for gamecard. */
+                if (!waitForGameCard()) continue;
+                
+                /* Wait for USB session. */
+                if (g_useUsbHost) waitForUsb();
+                
+                /* Generate dump text. */
+                generateDumpTxt();
+                
+                /* Run task. */
+                utilsSetLongRunningProcessState(true);
                 selected_element->task_func();
+                utilsSetLongRunningProcessState(false);
+                
+                /* Display prompt. */
+                consolePrint("press any button to continue");
+                utilsWaitForButtonPress(0);
             }
         } else
         if ((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown)))
@@ -443,9 +464,35 @@ static void waitForUsb(void)
     }
 }
 
+static void generateDumpTxt(void)
+{
+    *txt_info = '\0';
+    
+    struct tm ts = {0};
+    struct timespec now = {0};
+    
+    /* Get current time with nanosecond precision. */
+    clock_gettime(CLOCK_REALTIME, &now);
+    
+    /* Get UTC time. */
+    gmtime_r(&(now.tv_sec), &ts);
+    ts.tm_year += 1900;
+    ts.tm_mon++;
+    
+    /* Generate dump text. */
+    snprintf(txt_info, MAX_ELEMENTS(txt_info), "dump info:\r\n" \
+                                               "tool:       nxdumptool\r\n" \
+                                               "version:    " APP_VERSION "\r\n" \
+                                               "branch:     " GIT_BRANCH "\r\n" \
+                                               "commit:     " GIT_COMMIT "\r\n" \
+                                               "build date: " __DATE__ " - " __TIME__ "\r\n" \
+                                               "dump date:  %d-%02d-%02d %02d:%02d:%02d.%03lu UTC+0\r\n",
+                                               ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec);
+}
+
 static bool saveFileData(const char *path, void *data, size_t data_size)
 {
-    if (!path || !strlen(path) || !data || !data_size)
+    if (!path || !*path || !data || !data_size)
     {
         consolePrint("invalid parameters to save file data!\n");
         return false;
@@ -485,6 +532,16 @@ static bool saveFileData(const char *path, void *data, size_t data_size)
     return true;
 }
 
+static bool saveDumpTxt(void)
+{
+    if (!*path || !*txt_info) return true;
+    
+    path[strlen(path) - 3] = '\0';
+    strcat(path, "txt");
+    
+    return saveFileData(path, txt_info, strlen(txt_info));
+}
+
 static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
 {
     if (!out)
@@ -505,11 +562,6 @@ static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
 
 static bool saveGameCardSpecificData(void)
 {
-    if (!waitForGameCard()) return false;
-    if (g_useUsbHost) waitForUsb();
-    
-    utilsSetLongRunningProcessState(true);
-    
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
     u32 crc = 0;
@@ -525,24 +577,16 @@ static bool saveGameCardSpecificData(void)
     printf("successfully saved specific data as \"%s\"\n", path);
     success = true;
     
+    saveDumpTxt();
+    
 end:
     if (filename) free(filename);
-    
-    utilsSetLongRunningProcessState(false);
-    
-    consolePrint("press any button to continue");
-    utilsWaitForButtonPress(0);
     
     return success;
 }
 
 static bool saveGameCardCertificate(void)
 {
-    if (!waitForGameCard()) return false;
-    if (g_useUsbHost) waitForUsb();
-    
-    utilsSetLongRunningProcessState(true);
-    
     FsGameCardCertificate gc_cert = {0};
     bool success = false;
     u32 crc = 0;
@@ -564,24 +608,16 @@ static bool saveGameCardCertificate(void)
     printf("successfully saved certificate as \"%s\"\n", path);
     success = true;
     
+    saveDumpTxt();
+    
 end:
     if (filename) free(filename);
-    
-    utilsSetLongRunningProcessState(false);
-    
-    consolePrint("press any button to continue");
-    utilsWaitForButtonPress(0);
     
     return success;
 }
 
 static bool saveGameCardInitialData(void)
 {
-    if (!waitForGameCard()) return false;
-    if (g_useUsbHost) waitForUsb();
-    
-    utilsSetLongRunningProcessState(true);
-    
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
     u32 crc = 0;
@@ -597,24 +633,16 @@ static bool saveGameCardInitialData(void)
     printf("successfully saved initial data as \"%s\"\n", path);
     success = true;
     
+    saveDumpTxt();
+    
 end:
     if (filename) free(filename);
-    
-    utilsSetLongRunningProcessState(false);
-    
-    consolePrint("press any button to continue");
-    utilsWaitForButtonPress(0);
     
     return success;
 }
 
 static bool saveGameCardIdSet(void)
 {
-    if (!waitForGameCard()) return false;
-    if (g_useUsbHost) waitForUsb();
-    
-    utilsSetLongRunningProcessState(true);
-    
     FsGameCardIdSet id_set = {0};
     bool success = false;
     u32 crc = 0;
@@ -630,24 +658,16 @@ static bool saveGameCardIdSet(void)
     printf("successfully saved gamecard id set as \"%s\"\n", path);
     success = true;
     
+    saveDumpTxt();
+    
 end:
     if (filename) free(filename);
-    
-    utilsSetLongRunningProcessState(false);
-    
-    consolePrint("press any button to continue");
-    utilsWaitForButtonPress(0);
     
     return success;
 }
 
 static bool saveGameCardImage(void)
 {
-    if (!waitForGameCard()) return false;
-    if (g_useUsbHost) waitForUsb();
-    
-    utilsSetLongRunningProcessState(true);
-    
     u64 gc_size = 0;
     
     ThreadSharedData shared_data = {0};
@@ -725,8 +745,10 @@ static bool saveGameCardImage(void)
     {
         if (shared_data.read_error || shared_data.write_error) break;
         
+        struct tm ts = {0};
         time_t now = time(NULL);
-        struct tm *ts = localtime(&now);
+        localtime_r(&now, &ts);
+        
         size_t size = shared_data.data_written;
         
         utilsScanPads();
@@ -752,11 +774,11 @@ static bool saveGameCardImage(void)
         
         btn_cancel_prev_state = btn_cancel_cur_state;
         
-        if (prev_time == ts->tm_sec || prev_size == size) continue;
+        if (prev_time == ts.tm_sec || prev_size == size) continue;
         
         percent = (u8)((size * 100) / shared_data.total_size);
         
-        prev_time = ts->tm_sec;
+        prev_time = ts.tm_sec;
         prev_size = size;
         
         printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));
@@ -788,6 +810,8 @@ static bool saveGameCardImage(void)
     
     if (g_calcCrc) printf("xci crc: %08X\n", shared_data.xci_crc);
     
+    saveDumpTxt();
+    
 end:
     if (shared_data.fp)
     {
@@ -801,21 +825,11 @@ end:
     
     if (filename) free(filename);
     
-    utilsSetLongRunningProcessState(false);
-    
-    consolePrint("press any button to continue");
-    utilsWaitForButtonPress(0);
-    
     return success;
 }
 
 static bool saveConsoleLafwBlob(void)
 {
-    if (!waitForGameCard()) return false;
-    if (g_useUsbHost) waitForUsb();
-    
-    utilsSetLongRunningProcessState(true);
-    
     u64 lafw_version = 0;
     LotusAsicFirmwareBlob lafw_blob = {0};
     bool success = false;
@@ -843,12 +857,9 @@ static bool saveConsoleLafwBlob(void)
     printf("successfully saved lafw blob as \"%s\"\n", path);
     success = true;
     
+    saveDumpTxt();
+    
 end:
-    utilsSetLongRunningProcessState(false);
-    
-    consolePrint("press any button to continue");
-    utilsWaitForButtonPress(0);
-    
     return success;
 }
 
