@@ -59,6 +59,8 @@ ifneq ($(origin BUILD_TYPE),undefined)
 APP_TITLE			:=	${BUILD_TYPE}
 endif
 
+BUILD_TIMESTAMP		:=	$(strip $(shell date --utc '+%Y-%m-%d %T UTC'))
+
 TARGET				:=	${APP_TITLE}
 BUILD				:=	build
 SOURCES				:=	source source/core source/fatfs
@@ -81,7 +83,7 @@ CFLAGS		:=	-g -gdwarf-4 -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES)
 CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
 CFLAGS		+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
 CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_REV=\"${GIT_REV}\"
-CFLAGS		+=	-DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\"" -D_GNU_SOURCE
+CFLAGS		+=	-DBUILD_TIMESTAMP="\"${BUILD_TIMESTAMP}\"" -DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\"" -D_GNU_SOURCE
 
 CXXFLAGS	:=	$(CFLAGS) -std=c++20 -Wno-volatile -Wno-unused-parameter
 

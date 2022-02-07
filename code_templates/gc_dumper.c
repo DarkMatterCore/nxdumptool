@@ -470,25 +470,21 @@ static void generateDumpTxt(void)
     *txt_info = '\0';
     
     struct tm ts = {0};
-    struct timespec now = {0};
-    
-    /* Get current time with nanosecond precision. */
-    clock_gettime(CLOCK_REALTIME, &now);
+    time_t now = time(NULL);
     
     /* Get UTC time. */
-    gmtime_r(&(now.tv_sec), &ts);
+    gmtime_r(&now, &ts);
     ts.tm_year += 1900;
     ts.tm_mon++;
     
     /* Generate dump text. */
-    snprintf(txt_info, MAX_ELEMENTS(txt_info), "dump info:\r\n" \
-                                               "tool:       nxdumptool\r\n" \
+    snprintf(txt_info, MAX_ELEMENTS(txt_info), "tool:       nxdumptool\r\n" \
                                                "version:    " APP_VERSION "\r\n" \
                                                "branch:     " GIT_BRANCH "\r\n" \
                                                "commit:     " GIT_COMMIT "\r\n" \
-                                               "build date: " __DATE__ " - " __TIME__ "\r\n" \
-                                               "dump date:  %d-%02d-%02d %02d:%02d:%02d.%03lu UTC+0\r\n",
-                                               ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec);
+                                               "build date: " BUILD_TIMESTAMP "\r\n" \
+                                               "dump date:  %d-%02d-%02d %02d:%02d:%02d UTC\r\n", \
+                                               ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec);
 }
 
 static bool saveFileData(const char *path, void *data, size_t data_size)
