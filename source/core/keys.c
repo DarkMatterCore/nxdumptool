@@ -516,10 +516,14 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
         KeysMemoryKey *key = &(info->keys[i]);
         bool found = false, mandatory = (key->mandatory_func != NULL ? key->mandatory_func() : true);
         
+        /* Skip key if it's not mandatory. */
+        if (!mandatory) continue;
+        
+        /* Check destination pointer. */
         if (!key->dst)
         {
             LOG_MSG("Invalid destination pointer for key \"%s\" in program %016lX!", key->name, info->location.program_id);
-            if (mandatory) goto end;
+            goto end;
         }
         
         /* Hash every key length-sized byte chunk in the process memory buffer until a match is found. */
@@ -541,7 +545,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
         if (!found)
         {
             LOG_MSG("Unable to locate key \"%s\" in process memory from program %016lX!", key->name, info->location.program_id);
-            if (mandatory) goto end;
+            goto end;
         }
     }
     
