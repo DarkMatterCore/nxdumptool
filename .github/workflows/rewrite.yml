@@ -19,7 +19,7 @@ jobs:
       - name: Updating repos, install dkp-toolchain-vars, and set permissions...
         run: |
           sudo apt-get update ; sudo apt-get upgrade -y patch fakeroot p7zip-full
-          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.0-2-any.pkg.tar.xz"
+          sudo -n dkp-pacman --noconfirm -U "https://web.archive.org/web/20220209041425if_/https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.0-2-any.pkg.tar.xz"
           useradd nxdt-build
           chmod 777 -R $GITHUB_WORKSPACE
 
