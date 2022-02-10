@@ -92,7 +92,8 @@
 #define NRO_PATH                        DEVOPTAB_SDMC_DEVICE APP_BASE_PATH NRO_NAME
 #define NRO_TMP_PATH                    NRO_PATH ".tmp"
 
-#define KEYS_FILE_PATH                  DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "prod.keys"                                                    /* Location used by Lockpick_RCM. */
+#define PROD_KEYS_FILE_PATH             DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "prod.keys"                                       /* Location used by Lockpick_RCM for retail unit keys. */
+#define DEV_KEYS_FILE_PATH              DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "dev.keys"                                        /* Location used by Lockpick_RCM for development unit keys. */
 
 #define LOG_FILE_NAME                   APP_TITLE ".log"
 #define LOG_BUF_SIZE                    0x400000                                                                                /* 4 MiB. */

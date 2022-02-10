@@ -812,11 +812,12 @@ static bool keysReadKeysFromFile(void)
     char *key = NULL, *value = NULL;
     char test_name[0x40] = {0};
     bool parse_fail = false, eticket_rsa_kek_available = false;
+    const char *keys_file_path = (utilsIsDevelopmentUnit() ? DEV_KEYS_FILE_PATH : PROD_KEYS_FILE_PATH);
     
-    keys_file = fopen(KEYS_FILE_PATH, "rb");
+    keys_file = fopen(keys_file_path, "rb");
     if (!keys_file)
     {
-        LOG_MSG("Unable to open \"%s\" to retrieve keys!", KEYS_FILE_PATH);
+        LOG_MSG("Unable to open \"%s\" to retrieve keys!", keys_file_path);
         return false;
     }
     
@@ -887,13 +888,13 @@ static bool keysReadKeysFromFile(void)
     
     if (parse_fail || !key_count)
     {
-        if (!key_count) LOG_MSG("Unable to parse necessary keys from \"%s\"! (keys file empty?).", KEYS_FILE_PATH);
+        if (!key_count) LOG_MSG("Unable to parse necessary keys from \"%s\"! (keys file empty?).", keys_file_path);
         return false;
     }
     
     if (!eticket_rsa_kek_available)
     {
-        LOG_MSG("\"eticket_rsa_kek\" unavailable in \"%s\"!", KEYS_FILE_PATH);
+        LOG_MSG("\"eticket_rsa_kek\" unavailable in \"%s\"!", keys_file_path);
         return false;
     }
     
