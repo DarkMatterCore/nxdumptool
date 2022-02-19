@@ -1000,6 +1000,8 @@ int main(int argc, char *argv[])
     u32 type_idx = 0, type_scroll = 0;
     u32 list_count = 0, list_idx = 0;
     
+    bool applet_status = true;
+    
     app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
     if (!app_metadata || !app_count)
     {
@@ -1012,7 +1014,7 @@ int main(int argc, char *argv[])
     
     utilsSleep(1);
     
-    while(true)
+    while((applet_status = appletMainLoop()))
     {
         consoleClear();
         
@@ -1086,7 +1088,7 @@ int main(int argc, char *argv[])
         bool gc_update = false;
         u64 btn_down = 0, btn_held = 0;
         
-        while(true)
+        while((applet_status = appletMainLoop()))
         {
             utilsScanPads();
             btn_down = utilsGetButtonsDown();
@@ -1115,6 +1117,8 @@ int main(int argc, char *argv[])
                 break;
             }
         }
+        
+        if (!applet_status) break;
         
         if (gc_update) continue;
         
@@ -1245,6 +1249,8 @@ int main(int argc, char *argv[])
         
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
+    
+    if (!applet_status) menu = UINT32_MAX;
     
 out2:
     consoleRefresh();

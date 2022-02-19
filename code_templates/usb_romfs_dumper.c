@@ -247,6 +247,7 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
     u8 id_offset = 0;
     u32 selected_idx = 0, page_size = 30, scroll = 0;
     char nca_id_str[0x21] = {0};
+    bool applet_status = true;
     
     NcmContentInfo **content_infos = calloc(program_count, sizeof(NcmContentInfo*));
     if (!content_infos) return 0;
@@ -257,7 +258,7 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
         content_infos[j++] = &(info->content_infos[i]);
     }
     
-    while(true)
+    while((applet_status = appletMainLoop()))
     {
         consoleClear();
         printf("select a program nca to dump the romfs from.\n\n");
@@ -274,13 +275,15 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
         consoleUpdate(NULL);
         
         u64 btn_down = 0, btn_held = 0;
-        while(true)
+        while((applet_status = appletMainLoop()))
         {
             utilsScanPads();
             btn_down = utilsGetButtonsDown();
             btn_held = utilsGetButtonsHeld();
             if (btn_down || btn_held) break;
         }
+        
+        if (!applet_status) break;
         
         if (btn_down & HidNpadButton_A)
         {
@@ -330,7 +333,7 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
     
     free(content_infos);
     
-    return id_offset;
+    return (applet_status ? id_offset : (u8)program_count);
 }
 
 int main(int argc, char *argv[])
@@ -356,7 +359,7 @@ int main(int argc, char *argv[])
     TitleUserApplicationData user_app_data = {0};
     
     u32 selected_idx = 0, page_size = 30, scroll = 0;
-    bool exit_prompt = true;
+    bool applet_status = true, exit_prompt = true;
     
     u8 *buf = NULL;
     
@@ -406,7 +409,7 @@ int main(int argc, char *argv[])
     
     utilsSleep(1);
     
-    while(true)
+    while((applet_status = appletMainLoop()))
     {
         consoleClear();
         printf("select a user application to dump its romfs.\nif an update is available, patch romfs data will be dumped instead.\ndata will be transferred via usb.\npress b to exit.\n\n");
@@ -424,7 +427,7 @@ int main(int argc, char *argv[])
         consoleUpdate(NULL);
         
         u64 btn_down = 0, btn_held = 0;
-        while(true)
+        while((applet_status = appletMainLoop()))
         {
             utilsScanPads();
             btn_down = utilsGetButtonsDown();
@@ -446,6 +449,8 @@ int main(int argc, char *argv[])
                 break;
             }
         }
+        
+        if (!applet_status) break;
         
         if (btn_down & HidNpadButton_A)
         {
@@ -505,6 +510,12 @@ int main(int argc, char *argv[])
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
     
+    if (!applet_status)
+    {
+        exit_prompt = false;
+        goto out2;
+    }
+    
     u32 program_count = titleGetContentCountByType(user_app_data.app_info, NcmContentType_Program);
     if (!program_count)
     {
@@ -513,6 +524,11 @@ int main(int argc, char *argv[])
     }
     
     u8 program_id_offset = get_program_id_offset(user_app_data.app_info, program_count);
+    if (program_id_offset >= program_count)
+    {
+        exit_prompt = false;
+        goto out2;
+    }
     
     consoleClear();
     consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[selected_idx]->lang_entry.name, app_metadata[selected_idx]->title_id + program_id_offset);
@@ -565,7 +581,7 @@ int main(int argc, char *argv[])
     time_t start = time(NULL);
     u8 usb_host_speed = UsbHostSpeed_None;
     
-    while(true)
+    while((applet_status = appletMainLoop()))
     {
         time_t now = time(NULL);
         if ((now - start) >= 10) break;
@@ -573,6 +589,12 @@ int main(int argc, char *argv[])
         
         if ((usb_host_speed = usbIsReady())) break;
         utilsSleep(1);
+    }
+    
+    if (!applet_status)
+    {
+        exit_prompt = false;
+        goto out2;
     }
     
     consolePrint("\n");

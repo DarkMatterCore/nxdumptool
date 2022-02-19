@@ -102,7 +102,7 @@ int main(int argc, char *argv[])
     TitleUserApplicationData user_app_data = {0};
     
     u32 selected_idx = 0, page_size = 30, scroll = 0;
-    bool exit_prompt = true;
+    bool applet_status = true, exit_prompt = true;
     
     NcaContext *nca_ctx = NULL;
     Ticket tik = {0};
@@ -132,7 +132,7 @@ int main(int argc, char *argv[])
     
     utilsSleep(1);
     
-    while(true)
+    while((applet_status = appletMainLoop()))
     {
         consoleClear();
         printf("select a user application to generate xmls for.\npress b to exit.\n\n");
@@ -150,7 +150,7 @@ int main(int argc, char *argv[])
         consoleUpdate(NULL);
         
         u64 btn_down = 0, btn_held = 0;
-        while(true)
+        while((applet_status = appletMainLoop()))
         {
             utilsScanPads();
             btn_down = utilsGetButtonsDown();
@@ -172,6 +172,8 @@ int main(int argc, char *argv[])
                 break;
             }
         }
+        
+        if (!applet_status) break;
         
         if (btn_down & HidNpadButton_A)
         {
@@ -229,6 +231,12 @@ int main(int argc, char *argv[])
         }
         
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
+    }
+    
+    if (!applet_status)
+    {
+        exit_prompt = false;
+        goto out2;
     }
     
     consoleClear();

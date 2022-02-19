@@ -75,7 +75,7 @@ static void consolePrint(const char *text, ...);
 static u32 menuGetElementCount(const Menu *menu);
 
 static bool waitForGameCard(void);
-static void waitForUsb(void);
+static bool waitForUsb(void);
 
 static void generateDumpTxt(void);
 static bool saveDumpTxt(void);
@@ -211,6 +211,8 @@ static CondVar g_readCondvar = 0, g_writeCondvar = 0;
 
 static char path[FS_MAX_PATH] = {0}, txt_info[FS_MAX_PATH] = {0};
 
+static bool g_appletStatus = true;
+
 static void utilsScanPads(void)
 {
     padUpdate(&g_padState);
@@ -295,12 +297,15 @@ int main(int argc, char *argv[])
         consoleUpdate(NULL);
         
         u64 btn_down = 0, btn_held = 0;
-        while(!btn_down && !btn_held)
+        while((g_appletStatus = appletMainLoop()))
         {
             utilsScanPads();
             btn_down = utilsGetButtonsDown();
             btn_held = utilsGetButtonsHeld();
+            if (btn_down || btn_held) break;
         }
+        
+        if (!g_appletStatus) break;
         
         if (btn_down & HidNpadButton_A)
         {
@@ -315,10 +320,14 @@ int main(int argc, char *argv[])
             if (selected_element->task_func)
             {
                 /* Wait for gamecard. */
-                if (!waitForGameCard()) continue;
+                if (!waitForGameCard())
+                {
+                    if (g_appletStatus) continue;
+                    break;
+                }
                 
                 /* Wait for USB session. */
-                if (g_useUsbHost) waitForUsb();
+                if (g_useUsbHost && !waitForUsb()) break;
                 
                 /* Generate dump text. */
                 generateDumpTxt();
@@ -426,7 +435,14 @@ static bool waitForGameCard(void)
     consolePrint("waiting for gamecard...\n");
     
     u8 status = GameCardStatus_NotInserted;
-    while(status <= GameCardStatus_Processing) status = gamecardGetStatus();
+    
+    while((g_appletStatus = appletMainLoop()))
+    {
+        status = gamecardGetStatus();
+        if (status <= GameCardStatus_Processing) break;
+    }
+    
+    if (!g_appletStatus) return false;
     
     switch(status)
     {
@@ -453,16 +469,18 @@ static bool waitForGameCard(void)
     return true;
 }
 
-static void waitForUsb(void)
+static bool waitForUsb(void)
 {
-    if (usbIsReady()) return;
+    if (usbIsReady()) return true;
     
     consolePrint("waiting for usb session...\n");
     
-    while(true)
+    while((g_appletStatus = appletMainLoop()))
     {
         if (usbIsReady()) break;
     }
+    
+    return g_appletStatus;
 }
 
 static void generateDumpTxt(void)
