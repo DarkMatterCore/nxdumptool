@@ -77,7 +77,7 @@ Changelog
 * Built with latest devkitA64 and libnx.
 * Removed AuthoringTool XML generation code to make it possible to dump NSPs from games that use NCAs with sparse / compressed FS sections. Bear in mind ExeFS / RomFS dumping won't still be possible -- using PC tools such as `hactoolnet` to retrieve data from these dumps is encouraged in the meantime.
 * The NPDM ACID signature/private key patch option is now disabled by default.
-* 
+* Updated `removeConsoleDataFromTicket()` to make it wipe other fields that weren't not being cleared.
 
 This is only a bugfix release. I don't expect to release any new versions until the rewrite is finished - the only exception being fixing some kind of feature-breaking bug. Please understand.
 
