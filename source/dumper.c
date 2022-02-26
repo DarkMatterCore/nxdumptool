@@ -780,10 +780,6 @@ int dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInde
     u32 cnmtNcaIndex = 0;
     u8 *cnmtNcaBuf = NULL;
     bool cnmtFound = false;
-    char *cnmtXml = NULL;
-    
-    u32 xml_rec_cnt = 0;
-    xml_record_info *xml_records = NULL, *tmp_xml_rec = NULL;
     
     pfs0_header nspPfs0Header;
     memset(&nspPfs0Header, 0, sizeof(pfs0_header));
@@ -1182,67 +1178,6 @@ int dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInde
             }
         }
         
-        if ((!has_rights_id || (has_rights_id && rights_info.retrieved_tik)) && (xml_content_info[i].type == NcmContentType_Program || xml_content_info[i].type == NcmContentType_Control || xml_content_info[i].type == NcmContentType_LegalInformation))
-        {
-            // Reallocate XML records
-            tmp_xml_rec = realloc(xml_records, (xml_rec_cnt + 1) * sizeof(xml_record_info));
-            if (!tmp_xml_rec)
-            {
-                uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: error reallocating XML records buffer!", __func__);
-                proceed = false;
-                break;
-            }
-            
-            xml_records = tmp_xml_rec;
-            tmp_xml_rec = NULL;
-            
-            memset(&(xml_records[xml_rec_cnt]), 0, sizeof(xml_record_info));
-            xml_records[xml_rec_cnt].nca_index = i;
-            
-            xml_rec_cnt++;
-            
-            // Generate programinfo.xml
-            if (xml_content_info[i].type == NcmContentType_Program)
-            {
-                bool use_acid_pubkey = false;
-                
-                for(j = 0; j < ncaProgramModCnt; j++)
-                {
-                    if (ncaProgramMod[j].nca_index == i)
-                    {
-                        use_acid_pubkey = true;
-                        break;
-                    }
-                }
-                
-                if (!generateProgramInfoXml(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, use_acid_pubkey, &(xml_records[xml_rec_cnt - 1].xml_data), &(xml_records[xml_rec_cnt - 1].xml_size)))
-                {
-                    proceed = false;
-                    break;
-                }
-            }
-            
-            // Retrieve NACP data (XML and icons)
-            if (xml_content_info[i].type == NcmContentType_Control)
-            {
-                if (!retrieveNacpDataFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &(xml_records[xml_rec_cnt - 1].xml_data), &(xml_records[xml_rec_cnt - 1].xml_size), &(xml_records[xml_rec_cnt - 1].nacp_icons), &(xml_records[xml_rec_cnt - 1].nacp_icon_cnt)))
-                {
-                    proceed = false;
-                    break;
-                }
-            }
-            
-            // Retrieve legalinfo.xml
-            if (xml_content_info[i].type == NcmContentType_LegalInformation)
-            {
-                if (!retrieveLegalInfoXmlFromNca(&ncmStorage, &ncaId, &dec_nca_header, xml_content_info[i].decrypted_nca_keys, &(xml_records[xml_rec_cnt - 1].xml_data), &(xml_records[xml_rec_cnt - 1].xml_size)))
-                {
-                    proceed = false;
-                    break;
-                }
-            }
-        }
-        
         // Reencrypt header
         if (!encryptNcaHeader(&dec_nca_header, xml_content_info[i].encrypted_header_mod, NCA_FULL_HEADER_LENGTH))
         {
@@ -1292,18 +1227,6 @@ int dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInde
     // Retrieve CNMT NCA data
     if (!retrieveCnmtNcaData(curStorageId, cnmtNcaBuf, &xml_program_info, xml_content_info, cnmtNcaIndex, &ncaCnmtMod, &rights_info)) goto out;
     
-    // Generate a placeholder CNMT XML. It's length will be used to calculate the final output dump size
-    
-    // Make sure that the output buffer for our CNMT XML is big enough
-    cnmtXml = calloc(NSP_XML_BUFFER_SIZE, sizeof(char));
-    if (!cnmtXml)
-    {
-        uiDrawString(STRING_X_POS, STRING_Y_POS(breaks), FONT_COLOR_ERROR_RGB, "%s: unable to allocate memory for the CNMT XML!", __func__);
-        goto out;
-    }
-    
-    generateCnmtXml(&xml_program_info, xml_content_info, cnmtXml);
-    
     bool includeTikAndCert = (rights_info.retrieved_tik && !tiklessDump);
     
     if (includeTikAndCert)
@@ -1319,42 +1242,17 @@ int dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInde
             goto out;
         }
         
-        // File count = NCA count + CNMT XML + tik + cert
-        nspPfs0Header.file_cnt = (titleContentInfoCnt + 3);
+        // File count = NCA count + tik + cert
+        nspPfs0Header.file_cnt = (titleContentInfoCnt + 2);
         
         // Calculate PFS0 String Table size
-        nspPfs0StrTableSize = (((nspPfs0Header.file_cnt - 4) * NSP_NCA_FILENAME_LENGTH) + (NSP_CNMT_FILENAME_LENGTH * 2) + NSP_TIK_FILENAME_LENGTH + NSP_CERT_FILENAME_LENGTH);
+        nspPfs0StrTableSize = (((titleContentInfoCnt - 1) * NSP_NCA_FILENAME_LENGTH) + NSP_CNMT_FILENAME_LENGTH + NSP_TIK_FILENAME_LENGTH + NSP_CERT_FILENAME_LENGTH);
     } else {
-        // File count = NCA count + CNMT XML
-        nspPfs0Header.file_cnt = (titleContentInfoCnt + 1);
+        // File count = NCA count
+        nspPfs0Header.file_cnt = titleContentInfoCnt;
         
         // Calculate PFS0 String Table size
-        nspPfs0StrTableSize = (((nspPfs0Header.file_cnt - 2) * NSP_NCA_FILENAME_LENGTH) + (NSP_CNMT_FILENAME_LENGTH * 2));
-    }
-    
-    // Add our XML records
-    if (xml_rec_cnt)
-    {
-        for(i = 0; i < xml_rec_cnt; i++)
-        {
-            if (!xml_records[i].xml_data || !xml_records[i].xml_size) continue;
-            
-            nspPfs0Header.file_cnt++;
-            u8 type = xml_content_info[xml_records[i].nca_index].type;
-            nspPfs0StrTableSize += (type == NcmContentType_Program ? NSP_PROGRAM_XML_FILENAME_LENGTH : (type == NcmContentType_Control ? NSP_NACP_XML_FILENAME_LENGTH : NSP_LEGAL_XML_FILENAME_LENGTH));
-            progressCtx.totalSize += xml_records[i].xml_size;
-            
-            // Add icons if we retrieved them
-            if (type == NcmContentType_Control && xml_records[i].nacp_icons && xml_records[i].nacp_icon_cnt)
-            {
-                for(j = 0; j < xml_records[i].nacp_icon_cnt; j++)
-                {
-                    nspPfs0Header.file_cnt++;
-                    nspPfs0StrTableSize += (u32)(strlen(xml_records[i].nacp_icons[j].filename) + 1);
-                    progressCtx.totalSize += xml_records[i].nacp_icons[j].icon_size;
-                }
-            }
-        }
+        nspPfs0StrTableSize = (((titleContentInfoCnt - 1) * NSP_NCA_FILENAME_LENGTH) + NSP_CNMT_FILENAME_LENGTH);
     }
     
     // Start NSP creation
@@ -1401,60 +1299,17 @@ int dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInde
     
     u32 entryIdx = 0, ptrIdx = 0;
     
-    for(i = 0; i <= titleContentInfoCnt; i++, entryIdx++)
+    for(i = 0; i < titleContentInfoCnt; i++, entryIdx++)
     {
-        if (i < titleContentInfoCnt)
-        {
-            // Always reserve the first titleContentInfoCnt entries for our NCAs
-            // Only save the CNMT NCA buffer pointer to the PFS0 file data pointer array. We don't have any other pointers to raw NCA data, so we leave the rest untouched
-            entrySize = xml_content_info[i].size;
-            entryFilenameSize = (i == cnmtNcaIndex ? NSP_CNMT_FILENAME_LENGTH : NSP_NCA_FILENAME_LENGTH);
-            if (i == cnmtNcaIndex) nspPfs0FilePtrs[ptrIdx++] = cnmtNcaBuf;
-        } else {
-            // Reserve the entry right after our NCAs for the CNMT XML
-            entrySize = strlen(cnmtXml);
-            entryFilenameSize = NSP_CNMT_FILENAME_LENGTH;
-            nspPfs0FilePtrs[ptrIdx++] = (u8*)cnmtXml;
-        }
+        // Always reserve the first titleContentInfoCnt entries for our NCAs
+        // Only save the CNMT NCA buffer pointer to the PFS0 file data pointer array. We don't have any other pointers to raw NCA data, so we leave the rest untouched
+        entrySize = xml_content_info[i].size;
+        entryFilenameSize = (i == cnmtNcaIndex ? NSP_CNMT_FILENAME_LENGTH : NSP_NCA_FILENAME_LENGTH);
+        if (i == cnmtNcaIndex) nspPfs0FilePtrs[ptrIdx++] = cnmtNcaBuf;
         
         nspPfs0EntryTable[i].file_size = entrySize;
         nspPfs0EntryTable[i].file_offset = curFileOffset;
         nspPfs0EntryTable[i].filename_offset = curFilenameOffset;
-        
-        curFileOffset += entrySize;
-        curFilenameOffset += entryFilenameSize;
-    }
-    
-    for(i = 0; i < xml_rec_cnt; i++, entryIdx++)
-    {
-        u8 type = xml_content_info[xml_records[i].nca_index].type;
-        
-        if (type == NcmContentType_Control && xml_records[i].nacp_icons && xml_records[i].nacp_icon_cnt)
-        {
-            // Process all icons at once
-            for(j = 0; j < xml_records[i].nacp_icon_cnt; j++, entryIdx++)
-            {
-                entrySize = xml_records[i].nacp_icons[j].icon_size;
-                entryFilenameSize = (u32)(strlen(xml_records[i].nacp_icons[j].filename) + 1); // This is the only entry type with variable filename length
-                nspPfs0FilePtrs[ptrIdx++] = xml_records[i].nacp_icons[j].icon_data;
-                
-                nspPfs0EntryTable[entryIdx].file_size = entrySize;
-                nspPfs0EntryTable[entryIdx].file_offset = curFileOffset;
-                nspPfs0EntryTable[entryIdx].filename_offset = curFilenameOffset;
-                
-                curFileOffset += entrySize;
-                curFilenameOffset += entryFilenameSize;
-            }
-        }
-        
-        // XML entry
-        entrySize = xml_records[i].xml_size;
-        entryFilenameSize = (type == NcmContentType_Program ? NSP_PROGRAM_XML_FILENAME_LENGTH : (type == NcmContentType_Control ? NSP_NACP_XML_FILENAME_LENGTH : NSP_LEGAL_XML_FILENAME_LENGTH));
-        nspPfs0FilePtrs[ptrIdx++] = (u8*)xml_records[i].xml_data;
-        
-        nspPfs0EntryTable[entryIdx].file_size = entrySize;
-        nspPfs0EntryTable[entryIdx].file_offset = curFileOffset;
-        nspPfs0EntryTable[entryIdx].filename_offset = curFilenameOffset;
         
         curFileOffset += entrySize;
         curFilenameOffset += entryFilenameSize;
@@ -1480,7 +1335,6 @@ int dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInde
     // Calculate total dump size
     progressCtx.totalSize += fullPfs0HeaderSize;
     for(i = 0; i < titleContentInfoCnt; i++) progressCtx.totalSize += xml_content_info[i].size;
-    progressCtx.totalSize += strlen(cnmtXml);
     if (includeTikAndCert) progressCtx.totalSize += (ETICKET_TIK_FILE_SIZE + ETICKET_CERT_FILE_SIZE);
     
     convertSize(progressCtx.totalSize, progressCtx.totalSizeStr, MAX_CHARACTERS(progressCtx.totalSizeStr));
@@ -1862,43 +1716,14 @@ int dumpNintendoSubmissionPackage(nspDumpType selectedNspDumpType, u32 titleInde
                 
                 breaks = (progressCtx.line_offset - 4);
                 
-                // Generate proper CNMT XML
-                generateCnmtXml(&xml_program_info, xml_content_info, cnmtXml);
-                
                 // Fill PFS0 string table
                 // This is done here because we'll need to display filenames for the rest of the PFS0 entries starting with the next loop iteration
                 entryIdx = 0;
                 
-                for(j = 0; j <= titleContentInfoCnt; j++, entryIdx++)
+                for(j = 0; j < titleContentInfoCnt; j++, entryIdx++)
                 {
                     char *curFilename = (nspPfs0StrTable + nspPfs0EntryTable[entryIdx].filename_offset);
-                    
-                    if (j < titleContentInfoCnt)
-                    {
-                        sprintf(curFilename, "%s.%s", xml_content_info[j].nca_id_str, (j == cnmtNcaIndex ? "cnmt.nca" : "nca"));
-                    } else
-                    if (j == titleContentInfoCnt)
-                    {
-                        sprintf(curFilename, "%s.cnmt.xml", xml_content_info[cnmtNcaIndex].nca_id_str);
-                    }
-                }
-                
-                for(j = 0; j < xml_rec_cnt; j++, entryIdx++)
-                {
-                    u8 type = xml_content_info[xml_records[j].nca_index].type;
-                    
-                    if (type == NcmContentType_Control && xml_records[j].nacp_icons && xml_records[j].nacp_icon_cnt)
-                    {
-                        // Process all icons at once
-                        for(u32 k = 0; k < xml_records[j].nacp_icon_cnt; k++, entryIdx++)
-                        {
-                            char *curFilename = (nspPfs0StrTable + nspPfs0EntryTable[entryIdx].filename_offset);
-                            sprintf(curFilename, "%s%s", xml_content_info[xml_records[j].nca_index].nca_id_str, strchr(xml_records[j].nacp_icons[k].filename, '.'));
-                        }
-                    }
-                    
-                    char *curFilename = (nspPfs0StrTable + nspPfs0EntryTable[entryIdx].filename_offset);
-                    sprintf(curFilename, "%s.%s.xml", xml_content_info[xml_records[j].nca_index].nca_id_str, (type == NcmContentType_Program ? "programinfo" : (type == NcmContentType_Control ? "nacp" : "legalinfo")));
+                    sprintf(curFilename, "%s.%s", xml_content_info[j].nca_id_str, (j == cnmtNcaIndex ? "cnmt.nca" : "nca"));
                 }
                 
                 if (includeTikAndCert)
@@ -2404,8 +2229,6 @@ out:
     
     if (nspPfs0EntryTable) free(nspPfs0EntryTable);
     
-    if (cnmtXml) free(cnmtXml);
-    
     if (cnmtNcaBuf) free(cnmtNcaBuf);
     
     if (ncaProgramMod)
@@ -2418,17 +2241,6 @@ out:
         }
         
         free(ncaProgramMod);
-    }
-    
-    if (xml_records)
-    {
-        for(i = 0; i < xml_rec_cnt; i++)
-        {
-            if (xml_records[i].xml_data) free(xml_records[i].xml_data);
-            if (xml_records[i].nacp_icons) free(xml_records[i].nacp_icons);
-        }
-        
-        free(xml_records);
     }
     
     if (xml_content_info) free(xml_content_info);

@@ -52,10 +52,7 @@
 #define NPDM_SIGNATURE_AREA_SIZE        0x200
 
 #define NSP_NCA_FILENAME_LENGTH         0x25                // NCA ID + ".nca" + NULL terminator
-#define NSP_CNMT_FILENAME_LENGTH        0x2A                // NCA ID + ".cnmt.nca" / ".cnmt.xml" + NULL terminator
-#define NSP_PROGRAM_XML_FILENAME_LENGTH 0x31                // NCA ID + ".programinfo.xml" + NULL terminator
-#define NSP_NACP_XML_FILENAME_LENGTH    0x2A                // NCA ID + ".nacp.xml" + NULL terminator
-#define NSP_LEGAL_XML_FILENAME_LENGTH   0x2F                // NCA ID + ".legalinfo.xml" + NULL terminator
+#define NSP_CNMT_FILENAME_LENGTH        0x2A                // NCA ID + ".cnmt.nca" + NULL terminator
 #define NSP_TIK_FILENAME_LENGTH         0x25                // Rights ID + ".tik" + NULL terminator
 #define NSP_CERT_FILENAME_LENGTH        0x26                // Rights ID + ".cert" + NULL terminator
 
@@ -290,20 +287,6 @@ typedef struct {
 } nca_program_mod_data;
 
 typedef struct {
-    char filename[100];
-    u64 icon_size;
-    u8 icon_data[0x20000];
-} nacp_icons_ctx;
-
-typedef struct {
-    u32 nca_index;
-    u64 xml_size;
-    char *xml_data;
-    u8 nacp_icon_cnt; // Only used with Control NCAs
-    nacp_icons_ctx *nacp_icons; // Only used with Control NCAs
-} xml_record_info;
-
-typedef struct {
     u64 section_offset; // Relative to NCA start
     u64 section_size;
     u64 hash_table_offset; // Relative to NCA start
@@ -321,16 +304,21 @@ typedef struct {
     u8 padding[0x3C];
     char sig_issuer[0x40];
     u8 titlekey_block[0x100];
-    u8 unk1;
+    u8 format_version;
     u8 titlekey_type;
-    u8 unk2[0x03];
+    u16 ticket_version;
+    u8 license_type;
     u8 master_key_rev;
-    u8 unk3[0x0A];
+    u16 property_mask;
+    u8 unk[0x08];
     u64 ticket_id;
     u64 device_id;
     u8 rights_id[0x10];
     u32 account_id;
-    u8 unk4[0x0C];
+    u32 sect_total_size;
+    u32 sect_hdr_offset;
+    u16 sect_hdr_count;
+    u16 sect_hdr_entry_size;
 } PACKED rsa2048_sha256_ticket;
 
 typedef struct {
@@ -723,8 +711,6 @@ typedef struct {
 
 char *getContentType(u8 type);
 
-void generateCnmtXml(cnmt_xml_program_info *xml_program_info, cnmt_xml_content_info *xml_content_info, char *out);
-
 void convertNcaSizeToU64(const u8 size[0x6], u64 *out);
 
 void convertU64ToNcaSize(const u64 size, u8 out[0x6]);
@@ -752,11 +738,5 @@ bool parseExeFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *n
 int parseRomFsEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys);
 
 bool parseBktrEntryFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, bool use_base_romfs);
-
-bool generateProgramInfoXml(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, bool useCustomAcidRsaPubKey, char **outBuf, u64 *outBufSize);
-
-bool retrieveNacpDataFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **out_nacp_xml, u64 *out_nacp_xml_size, nacp_icons_ctx **out_nacp_icons_ctx, u8 *out_nacp_icons_ctx_cnt);
-
-bool retrieveLegalInfoXmlFromNca(NcmContentStorage *ncmStorage, const NcmContentId *ncaId, nca_header_t *dec_nca_header, u8 *decrypted_nca_keys, char **outBuf, u64 *outBufSize);
 
 #endif

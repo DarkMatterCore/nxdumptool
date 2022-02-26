@@ -58,8 +58,6 @@
 
 #define NCA_CTR_BUFFER_SIZE             DUMP_BUFFER_SIZE                        // 4 MiB (4194304 bytes)
 
-#define NSP_XML_BUFFER_SIZE             (u64)0xA00000                           // 10 MiB (10485760 bytes)
-
 #define APPLICATION_PATCH_BITMASK       (u64)0x800
 #define APPLICATION_ADDON_BITMASK       (u64)0xFFFFFFFFFFFF0000
 

@@ -120,10 +120,8 @@ void loadConfig()
     
     dumpCfg.nspDumpCfg.isFat32 = true;
     dumpCfg.nspDumpCfg.useNoIntroLookup = true;
-    dumpCfg.nspDumpCfg.npdmAcidRsaPatch = true;
     
     dumpCfg.batchDumpCfg.isFat32 = true;
-    dumpCfg.batchDumpCfg.npdmAcidRsaPatch = true;
     dumpCfg.batchDumpCfg.skipDumpedTitles = true;
     dumpCfg.batchDumpCfg.haltOnErrors = true;
     dumpCfg.batchDumpCfg.batchModeSrc = BATCH_SOURCE_ALL;
@@ -2436,9 +2434,15 @@ void removeConsoleDataFromTicket(title_rights_ctx *rights_info)
     memcpy(rights_info->tik_data.titlekey_block, rights_info->enc_titlekey, 0x10);
     
     rights_info->tik_data.titlekey_type = ETICKET_TITLEKEY_COMMON;
+    rights_info->tik_data.property_mask &= ~(BIT(5) | BIT(4));
     rights_info->tik_data.ticket_id = 0;
     rights_info->tik_data.device_id = 0;
     rights_info->tik_data.account_id = 0;
+    
+    rights_info->tik_data.sect_total_size = 0;
+    rights_info->tik_data.sect_hdr_offset = (u32)sizeof(rsa2048_sha256_ticket);
+    rights_info->tik_data.sect_hdr_count = 0;
+    rights_info->tik_data.sect_hdr_entry_size = 0;
 }
 
 bool listDesiredNcaType(NcmContentInfo *titleContentInfos, u32 titleContentInfoCnt, u8 type, int desiredIdOffset, u32 *outIndex, u32 *outCount)
