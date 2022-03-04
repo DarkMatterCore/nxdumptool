@@ -439,7 +439,7 @@ static bool waitForGameCard(void)
     while((g_appletStatus = appletMainLoop()))
     {
         status = gamecardGetStatus();
-        if (status <= GameCardStatus_Processing) break;
+        if (status > GameCardStatus_Processing) break;
     }
     
     if (!g_appletStatus) return false;
