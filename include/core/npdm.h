@@ -76,7 +76,7 @@ typedef struct {
     u8 main_thread_core_number;         ///< Must not exceed NPDM_MAIN_THREAD_MAX_CORE_NUMBER.
     u8 reserved_3[0x4];
     u32 system_resource_size;           ///< Must not exceed NPDM_SYSTEM_RESOURCE_MAX_SIZE.
-    VersionType1 version;
+    Version version;
     u32 main_thread_stack_size;         ///< Must be aligned to NPDM_MAIN_THREAD_STACK_SIZE_ALIGNMENT.
     char name[0x10];                    ///< Usually set to "Application".
     char product_code[0x10];            ///< Usually zeroed out.

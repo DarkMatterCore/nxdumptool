@@ -65,37 +65,43 @@
 /* USB Mass Storage support. */
 #include "ums.h"
 
-/// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
+/// Used to store version numbers expressed in dot notation:
+///     * System version: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
+///     * Application version: "{release}.{private}".
 /// Referenced by multiple header files.
 typedef struct {
     union {
+        u32 value;
         struct {
             u32 minor_relstep : 8;
             u32 major_relstep : 8;
             u32 micro         : 4;
             u32 minor         : 6;
             u32 major         : 6;
-        };
-        u32 value;
+        } system_version;
+        struct {
+            u32 private_ver   : 16;
+            u32 release_ver   : 16;
+        } application_version;
     };
-} VersionType1;
+} Version;
 
-NXDT_ASSERT(VersionType1, 0x4);
+NXDT_ASSERT(Version, 0x4);
 
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{relstep}".
 /// Only used by GameCardFwMode and NcaSdkAddOnVersion.
 typedef struct {
     union {
+        u32 value;
         struct {
             u32 relstep : 8;
             u32 micro   : 8;
             u32 minor   : 8;
             u32 major   : 8;
         };
-        u32 value;
     };
-} VersionType2;
+} SdkAddOnVersion;
 
-NXDT_ASSERT(VersionType2, 0x4);
+NXDT_ASSERT(SdkAddOnVersion, 0x4);
 
 #endif /* __NXDT_INCLUDES_H__ */

@@ -759,11 +759,9 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     
     bool use_extension = (extension && *extension);
     size_t extension_len = (use_extension ? strlen(extension) : 0);
-    bool append_dot = (use_extension && *extension != '.');
     
     size_t path_len = (prefix_len + strlen(filename) + extension_len);
     if (append_path_sep) path_len++;
-    if (append_dot) path_len++;
     
     char *path = NULL, *ptr1 = NULL, *ptr2 = NULL;
     bool filename_only = false, success = false;
@@ -779,7 +777,6 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     if (use_prefix) strcat(path, prefix);
     if (append_path_sep) strcat(path, "/");
     strcat(path, filename);
-    if (append_dot) strcat(path, ".");
     if (use_extension) strcat(path, extension);
     
     /* Retrieve pointer to the first path separator. */
@@ -793,11 +790,14 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     /* Make sure each path element doesn't exceed NT_MAX_FILENAME_LENGTH. */
     while(ptr1)
     {
-        /* End loop if we find a NULL terminator. */
-        if (!filename_only && !*ptr1++) break;
-        
-        /* Get pointer to next path separator. */
-        ptr2 = strchr(ptr1, '/');
+        if (!filename_only)
+        {
+            /* End loop if we find a NULL terminator. */
+            if (!*ptr1++) break;
+            
+            /* Get pointer to next path separator. */
+            ptr2 = strchr(ptr1, '/');
+        }
         
         /* Get current path element size. */
         size_t element_size = (ptr2 ? (size_t)(ptr2 - ptr1) : (path_len - (size_t)(ptr1 - path)));
@@ -819,16 +819,13 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
             if (use_extension)
             {
                 /* Truncate last element. Make sure to preserve the provided file extension. */
-                size_t diff = extension_len;
-                if (append_dot) diff++;
-                
-                if (diff >= last_cp_pos)
+                if (extension_len >= last_cp_pos)
                 {
-                    LOG_MSG("File extension length is >= truncated filename length! (0x%lX >= 0x%lX) (#1).", diff, last_cp_pos);
+                    LOG_MSG("File extension length is >= truncated filename length! (0x%lX >= 0x%lX).", extension_len, last_cp_pos);
                     goto end;
                 }
                 
-                memmove(ptr1 + last_cp_pos - diff, ptr1 + element_size - diff, diff);
+                memmove(ptr1 + last_cp_pos - extension_len, ptr1 + element_size - extension_len, extension_len);
             }
             
             path_len -= (element_size - last_cp_pos);

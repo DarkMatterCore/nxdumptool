@@ -144,7 +144,7 @@ typedef struct {
     u64 content_size;
     u64 program_id;
     u32 content_index;
-    VersionType2 sdk_addon_version;
+    SdkAddOnVersion sdk_addon_version;
     u8 key_generation;                                      ///< NcaKeyGeneration. Uses NcaKeyGeneration_Since301NUP or greater values.
     u8 main_signature_key_generation;                       ///< NcaMainSignatureKeyGeneration.
     u8 reserved[0xE];

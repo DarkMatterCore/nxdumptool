@@ -51,7 +51,7 @@ typedef enum {
 /// Finally, a 0x20 byte long digest is appended to the EOF.
 typedef struct {
     u64 title_id;
-    VersionType1 version;
+    Version version;
     u8 content_meta_type;                                   ///< NcmContentMetaType.
     u8 reserved_1;
     u16 extended_header_size;                               ///< Must match the size from the extended header struct for this content meta type (SystemUpdate, Application, Patch, AddOnContent, Delta).
@@ -61,7 +61,7 @@ typedef struct {
     u8 storage_id;                                          ///< NcmStorageId.
     u8 content_install_type;                                ///< NcmContentInstallType.
     u8 install_state;                                       ///< ContentMetaInstallState.
-    VersionType1 required_download_system_version;
+    Version required_download_system_version;
     u8 reserved_2[0x4];
 } ContentMetaPackagedContentMetaHeader;
 
@@ -76,20 +76,20 @@ typedef struct {
 NXDT_ASSERT(ContentMetaSystemUpdateMetaExtendedHeader, 0x4);
 
 /// Extended header for Application titles.
-/// Equivalent to NcmApplicationMetaExtendedHeader, but using VersionType1 structs.
+/// Equivalent to NcmApplicationMetaExtendedHeader, but using Version structs.
 typedef struct {
     u64 patch_id;
-    VersionType1 required_system_version;
-    VersionType1 required_application_version;
+    Version required_system_version;
+    Version required_application_version;
 } ContentMetaApplicationMetaExtendedHeader;
 
 NXDT_ASSERT(ContentMetaApplicationMetaExtendedHeader, 0x10);
 
 /// Extended header for Patch titles.
-/// Equivalent to NcmPatchMetaExtendedHeader, but using a VersionType1 struct.
+/// Equivalent to NcmPatchMetaExtendedHeader, but using a Version struct.
 typedef struct {
     u64 application_id;
-    VersionType1 required_system_version;
+    Version required_system_version;
     u32 extended_data_size;
     u8 reserved[0x8];
 } ContentMetaPatchMetaExtendedHeader;
@@ -97,10 +97,10 @@ typedef struct {
 NXDT_ASSERT(ContentMetaPatchMetaExtendedHeader, 0x18);
 
 /// Extended header for AddOnContent titles.
-/// Equivalent to NcmAddOnContentMetaExtendedHeader, but using a VersionType1 struct.
+/// Equivalent to NcmAddOnContentMetaExtendedHeader, but using a Version struct.
 typedef struct {
     u64 application_id;
-    VersionType1 required_application_version;
+    Version required_application_version;
     u8 reserved[0x4];
 } ContentMetaAddOnContentMetaExtendedHeader;
 
@@ -186,8 +186,8 @@ NXDT_ASSERT(ContentMetaPatchHistoryHeader, 0x38);
 typedef struct {
     u64 source_patch_id;
     u64 destination_patch_id;
-    VersionType1 source_version;
-    VersionType1 destination_version;
+    Version source_version;
+    Version destination_version;
     u64 download_size;
     u8 reserved[0x8];
 } ContentMetaPatchDeltaHistory;
@@ -197,8 +197,8 @@ NXDT_ASSERT(ContentMetaPatchDeltaHistory, 0x28);
 typedef struct {
     u64 source_patch_id;
     u64 destination_patch_id;
-    VersionType1 source_version;
-    VersionType1 destination_version;
+    Version source_version;
+    Version destination_version;
     u16 fragment_set_count;
     u8 reserved_1[0x6];
     u16 content_info_count;
@@ -244,8 +244,8 @@ NXDT_ASSERT(ContentMetaFragmentIndicator, 0x4);
 typedef struct {
     u64 source_patch_id;
     u64 destination_patch_id;
-    VersionType1 source_version;
-    VersionType1 destination_version;
+    Version source_version;
+    Version destination_version;
     u16 fragment_set_count;
     u8 reserved[0x6];
 } ContentMetaDeltaMetaExtendedDataHeader;
@@ -323,7 +323,7 @@ NX_INLINE u32 cnmtGetRequiredTitleVersion(ContentMetaContext *cnmt_ctx)
 {
     return ((cnmtIsValidContext(cnmt_ctx) && (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || \
             cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)) ? \
-            ((VersionType1*)(cnmt_ctx->extended_header + sizeof(u64)))->value : 0);
+            ((Version*)(cnmt_ctx->extended_header + sizeof(u64)))->value : 0);
 }
 
 #ifdef __cplusplus

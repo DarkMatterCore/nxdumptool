@@ -629,7 +629,7 @@ def usbHandleSendFileProperties(cmd_block):
     g_logger.debug('Received SendFileProperties (%02X) command.' % (USB_CMD_SEND_FILE_PROPERTIES))
     
     # Parse command block.
-    (file_size, filename_length, nsp_header_size, raw_filename) = struct.unpack_from('<QII{}s'.format(USB_FILE_PROPERTIES_MAX_NAME_LENGTH), cmd_block, 0)
+    (file_size, filename_length, nsp_header_size, raw_filename) = struct.unpack_from('<QII%ds' % (USB_FILE_PROPERTIES_MAX_NAME_LENGTH), cmd_block, 0)
     filename = raw_filename.decode('utf-8').strip('\x00')
     
     # Print info.

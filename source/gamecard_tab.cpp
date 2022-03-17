@@ -104,14 +104,14 @@ namespace nxdt::views
                     this->total_size->setValue(this->GetFormattedSizeString(&gamecardGetTotalSize));
                     this->trimmed_size->setValue(this->GetFormattedSizeString(&gamecardGetTrimmedSize));
                     
-                    const VersionType1 *upp_version = &(card_info.upp_version);
-                    this->update_version->setValue(fmt::format("{}.{}.{}-{}.{} (v{})", upp_version->major, upp_version->minor, upp_version->micro, upp_version->major_relstep, \
-                                                                                       upp_version->minor_relstep, upp_version->value));
+                    const Version *upp_version = &(card_info.upp_version);
+                    this->update_version->setValue(fmt::format("{}.{}.{}-{}.{} (v{})", upp_version->system_version.major, upp_version->system_version.minor, upp_version->system_version.micro, \
+                                                                                       upp_version->system_version.major_relstep, upp_version->system_version.minor_relstep, upp_version->value));
                     
                     u64 fw_version = card_info.fw_version;
                     this->lafw_version->setValue(fmt::format("{} ({})", fw_version, fw_version >= GameCardFwVersion_Count ? "generic/unknown"_i18n : gamecardGetRequiredHosVersionString(fw_version)));
                     
-                    const VersionType2 *fw_mode = &(card_info.fw_mode);
+                    const SdkAddOnVersion *fw_mode = &(card_info.fw_mode);
                     this->sdk_version->setValue(fmt::format("{}.{}.{}-{} (v{})", fw_mode->major, fw_mode->minor, fw_mode->micro, fw_mode->relstep, fw_mode->value));
                     
                     u8 compatibility_type = card_info.compatibility_type;

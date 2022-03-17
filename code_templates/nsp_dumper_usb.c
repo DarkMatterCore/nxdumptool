@@ -859,8 +859,8 @@ static void nspDump(TitleInfo *title_info)
     
     consolePrint("source storage: %s\n", title_info->storage_id == NcmStorageId_GameCard ? "gamecard" : (title_info->storage_id == NcmStorageId_BuiltInUser ? "emmc" : "sd card"));
     consolePrint("title id: %016lX\n", title_info->meta_key.id);
-    consolePrint("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.major, title_info->version.minor, title_info->version.micro, title_info->version.major_relstep, \
-                                             title_info->version.minor_relstep);
+    consolePrint("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.system_version.major, title_info->version.system_version.minor, title_info->version.system_version.micro, title_info->version.system_version.major_relstep, \
+                                             title_info->version.system_version.minor_relstep);
     consolePrint("content count: %u\n", title_info->content_count);
     consolePrint("size: %s\n", title_info->size_str);
     consolePrint("______________________________\n\n");
@@ -1046,8 +1046,8 @@ int main(int argc, char *argv[])
                                                 (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : "dlc"));
                 consolePrint("source storage: %s\n", title_info->storage_id == NcmStorageId_GameCard ? "gamecard" : (title_info->storage_id == NcmStorageId_BuiltInUser ? "emmc" : "sd card"));
                 if (title_info->meta_key.type != NcmContentMetaType_Application) consolePrint("title id: %016lX\n", title_info->meta_key.id);
-                consolePrint("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.major, title_info->version.minor, title_info->version.micro, title_info->version.major_relstep, \
-                                                         title_info->version.minor_relstep);
+                consolePrint("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.system_version.major, title_info->version.system_version.minor, title_info->version.system_version.micro, title_info->version.system_version.major_relstep, \
+                                                         title_info->version.system_version.minor_relstep);
                 consolePrint("content count: %u\n", title_info->content_count);
                 consolePrint("size: %s\n", title_info->size_str);
             }

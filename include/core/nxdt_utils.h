@@ -148,6 +148,8 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 /// Returns a pointer to a dynamically allocated string that holds the full path formed by the provided arguments. Both path prefix and file extension are optional.
 /// If any elements from the generated path exceed safe filesystem limits, each exceeding element will be truncated. Truncations, if needed, are performed on a per-codepoint basis (UTF-8).
 /// If an extension is provided, it will always be preserved, regardless of any possible truncations being carried out.
+/// A path separator is automatically placed between the provided prefix and the filename if the prefix doesn't end with one.
+/// A dot *isn't* automatically placed between the filename and the provided extension -- if required, it must be provided as part of the extension string.
 /// Furthermore, if the full length for the generated path is >= FS_MAX_PATH, NULL will be returned.
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
 

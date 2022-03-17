@@ -80,6 +80,8 @@ static bool waitForUsb(void);
 static void generateDumpTxt(void);
 static bool saveDumpTxt(void);
 
+static char *generateOutputFileName(const char *extension);
+
 static bool saveGameCardSpecificData(void);
 static bool saveGameCardCertificate(void);
 static bool saveGameCardInitialData(void);
@@ -557,6 +559,29 @@ static bool saveDumpTxt(void)
     return saveFileData(path, txt_info, strlen(txt_info));
 }
 
+static char *generateOutputFileName(const char *extension)
+{
+    char *filename = NULL, *output = NULL;
+    
+    if (!extension || !*extension || !(filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
+    {
+        consolePrint("failed to get gamecard filename!\n");
+        return NULL;
+    }
+    
+    output = utilsGeneratePath(NULL, filename, extension);
+    free(filename);
+    
+    if (output)
+    {
+        snprintf(path, MAX_ELEMENTS(path), "%s", output);
+    } else {
+        consolePrint("failed to generate output filename!\n");
+    }
+    
+    return output;
+}
+
 static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
 {
     if (!out)
@@ -580,16 +605,19 @@ static bool saveGameCardSpecificData(void)
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
+    char *filename = NULL;
     
-    if (!dumpGameCardSecurityInformation(&gc_security_information) || !filename) goto end;
+    if (!dumpGameCardSecurityInformation(&gc_security_information)) goto end;
     
     crc = crc32Calculate(&(gc_security_information.specific_data), sizeof(GameCardSpecificData));
-    snprintf(path, MAX_ELEMENTS(path), "%s (Specific Data) (%08X).bin", filename, crc);
+    snprintf(path, MAX_ELEMENTS(path), " (Specific Data) (%08X).bin", crc);
     
-    if (!saveFileData(path, &(gc_security_information.specific_data), sizeof(GameCardSpecificData))) goto end;
+    filename = generateOutputFileName(path);
+    if (!filename) goto end;
     
-    printf("successfully saved specific data as \"%s\"\n", path);
+    if (!saveFileData(filename, &(gc_security_information.specific_data), sizeof(GameCardSpecificData))) goto end;
+    
+    printf("successfully saved specific data as \"%s\"\n", filename);
     success = true;
     
 end:
@@ -603,9 +631,9 @@ static bool saveGameCardCertificate(void)
     FsGameCardCertificate gc_cert = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
+    char *filename = NULL;
     
-    if (!gamecardGetCertificate(&gc_cert) || !filename)
+    if (!gamecardGetCertificate(&gc_cert))
     {
         consolePrint("failed to get gamecard certificate\n");
         goto end;
@@ -614,11 +642,14 @@ static bool saveGameCardCertificate(void)
     consolePrint("get gamecard certificate ok\n");
     
     crc = crc32Calculate(&gc_cert, sizeof(FsGameCardCertificate));
-    snprintf(path, MAX_ELEMENTS(path), "%s (Certificate) (%08X).bin", filename, crc);
+    snprintf(path, MAX_ELEMENTS(path), " (Certificate) (%08X).bin", crc);
     
-    if (!saveFileData(path, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
+    filename = generateOutputFileName(path);
+    if (!filename) goto end;
     
-    printf("successfully saved certificate as \"%s\"\n", path);
+    if (!saveFileData(filename, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
+    
+    printf("successfully saved certificate as \"%s\"\n", filename);
     success = true;
     
 end:
@@ -632,16 +663,19 @@ static bool saveGameCardInitialData(void)
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
+    char *filename = NULL;
     
-    if (!dumpGameCardSecurityInformation(&gc_security_information) || !filename) goto end;
+    if (!dumpGameCardSecurityInformation(&gc_security_information)) goto end;
     
     crc = crc32Calculate(&(gc_security_information.initial_data), sizeof(GameCardInitialData));
-    snprintf(path, MAX_ELEMENTS(path), "%s (Initial Data) (%08X).bin", filename, crc);
+    snprintf(path, MAX_ELEMENTS(path), " (Initial Data) (%08X).bin", crc);
     
-    if (!saveFileData(path, &(gc_security_information.initial_data), sizeof(GameCardInitialData))) goto end;
+    filename = generateOutputFileName(path);
+    if (!filename) goto end;
     
-    printf("successfully saved initial data as \"%s\"\n", path);
+    if (!saveFileData(filename, &(gc_security_information.initial_data), sizeof(GameCardInitialData))) goto end;
+    
+    printf("successfully saved initial data as \"%s\"\n", filename);
     success = true;
     
 end:
@@ -655,16 +689,19 @@ static bool saveGameCardIdSet(void)
     FsGameCardIdSet id_set = {0};
     bool success = false;
     u32 crc = 0;
-    char *filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
+    char *filename = NULL;
     
-    if (!gamecardGetIdSet(&id_set) || !filename) goto end;
+    if (!gamecardGetIdSet(&id_set)) goto end;
     
     crc = crc32Calculate(&id_set, sizeof(FsGameCardIdSet));
-    snprintf(path, MAX_ELEMENTS(path), "%s (Card ID Set) (%08X).bin", filename, crc);
+    snprintf(path, MAX_ELEMENTS(path), " (Card ID Set) (%08X).bin", crc);
     
-    if (!saveFileData(path, &id_set, sizeof(FsGameCardIdSet))) goto end;
+    if (!saveFileData(filename, &id_set, sizeof(FsGameCardIdSet))) goto end;
     
-    printf("successfully saved gamecard id set as \"%s\"\n", path);
+    filename = generateOutputFileName(path);
+    if (!filename) goto end;
+    
+    printf("successfully saved gamecard id set as \"%s\"\n", filename);
     success = true;
     
 end:
@@ -686,12 +723,9 @@ static bool saveGameCardImage(void)
     
     consolePrint("gamecard image dump\nkeep certificate: %s | trim dump: %s | calculate crc32: %s\n\n", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no", g_calcCrc ? "yes" : "no");
     
-    filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
-    if (!filename)
-    {
-        consolePrint("failed to generate gamecard filename!\n");
-        goto end;
-    }
+    snprintf(path, MAX_ELEMENTS(path), " (%s) (%s).xci", g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
+    filename = generateOutputFileName(path);
+    if (!filename) goto end;
     
     shared_data.data = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     if (!shared_data.data)
@@ -710,25 +744,23 @@ static bool saveGameCardImage(void)
     
     consolePrint("gamecard size: 0x%lX\n", gc_size);
     
-    snprintf(path, MAX_ELEMENTS(path), "%s (%s) (%s).xci", filename, g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
-    
-    if (g_useUsbHost && !usbSendFilePropertiesCommon(gc_size, path))
+    if (g_useUsbHost && !usbSendFilePropertiesCommon(gc_size, filename))
     {
-        consolePrint("failed to send file properties for \"%s\"!\n", path);
+        consolePrint("failed to send file properties for \"%s\"!\n", filename);
         goto end;
     } else
     if (!g_useUsbHost)
     {
-        if (gc_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(path))
+        if (gc_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(filename))
         {
-            consolePrint("failed to create concatenation file for \"%s\"!\n", path);
+            consolePrint("failed to create concatenation file for \"%s\"!\n", filename);
             goto end;
         }
         
-        shared_data.fp = fopen(path, "wb");
+        shared_data.fp = fopen(filename, "wb");
         if (!shared_data.fp)
         {
-            consolePrint("failed to open \"%s\" for writing!\n", path);
+            consolePrint("failed to open \"%s\" for writing!\n", filename);
             goto end;
         }
     }
@@ -824,7 +856,7 @@ end:
         shared_data.fp = NULL;
     }
     
-    if (!success && !g_useUsbHost) utilsRemoveConcatenationFile(path);
+    if (!success && !g_useUsbHost) utilsRemoveConcatenationFile(filename);
     
     if (shared_data.data) free(shared_data.data);
     

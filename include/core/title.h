@@ -49,7 +49,7 @@ typedef struct {
 typedef struct _TitleInfo {
     u8 storage_id;                                  ///< NcmStorageId.
     NcmContentMetaKey meta_key;                     ///< Used with ncm calls.
-    VersionType1 version;                           ///< Holds the same value from meta_key.version.
+    Version version;                                ///< Holds the same value from meta_key.version.
     u32 content_count;                              ///< Content info count.
     NcmContentInfo *content_infos;                  ///< Content info entries from this title.
     u64 size;                                       ///< Total title size.

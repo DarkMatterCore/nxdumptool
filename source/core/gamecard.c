@@ -435,7 +435,7 @@ bool gamecardGetRomCapacity(u64 *out)
     return ret;
 }
 
-bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out)
+bool gamecardGetBundledFirmwareUpdateVersion(Version *out)
 {
     bool ret = false;
     

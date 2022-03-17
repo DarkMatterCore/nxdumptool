@@ -56,8 +56,13 @@ NXDT_ASSERT(GameCardSpecificData, 0x200);
 
 /// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
 typedef struct {
-    u64 package_id;         ///< Matches package_id from GameCardHeader.
-    u8 reserved[0x8];       ///< Just zeroes.
+    union {
+        u8 value[0x10];
+        struct {
+            u64 package_id;     ///< Matches package_id from GameCardHeader.
+            u8 reserved[0x8];   ///< Just zeroes.
+        };
+    };
 } GameCardKeySource;
 
 NXDT_ASSERT(GameCardKeySource, 0x10);
@@ -138,7 +143,8 @@ typedef enum {
     GameCardFlags_HistoryErase                     = BIT(1),
     GameCardFlags_RepairTool                       = BIT(2),
     GameCardFlags_DifferentRegionCupToTerraDevice  = BIT(3),
-    GameCardFlags_DifferentRegionCupToGlobalDevice = BIT(4)
+    GameCardFlags_DifferentRegionCupToGlobalDevice = BIT(4),
+    GameCardFlags_HasCa10Certificate               = BIT(7)
 } GameCardFlags;
 
 typedef enum {
@@ -172,18 +178,18 @@ typedef enum {
 /// Production XCI header key hash:  2E36CC55157A351090A73E7AE77CF581F69B0B6E48FB066C984879A6ED7D2E96
 /// Development XCI header key hash: 61D5C02244188810E2E3DE69341AC0F3C7653D370C6D3F77CA82B0B7E59F39AD
 typedef struct {
-    u64 fw_version;                 ///< GameCardFwVersion.
-    u32 acc_ctrl_1;                 ///< GameCardAccCtrl1.
-    u32 wait_1_time_read;           ///< Always 0x1388.
-    u32 wait_2_time_read;           ///< Always 0.
-    u32 wait_1_time_write;          ///< Always 0.
-    u32 wait_2_time_write;          ///< Always 0.
-    VersionType2 fw_mode;           ///< Current SdkAddonVersion.
-    VersionType1 upp_version;       ///< Bundled system update version.
-    u8 compatibility_type;          ///< GameCardCompatibilityType.
+    u64 fw_version;             ///< GameCardFwVersion.
+    u32 acc_ctrl_1;             ///< GameCardAccCtrl1.
+    u32 wait_1_time_read;       ///< Always 0x1388.
+    u32 wait_2_time_read;       ///< Always 0.
+    u32 wait_1_time_write;      ///< Always 0.
+    u32 wait_2_time_write;      ///< Always 0.
+    SdkAddOnVersion fw_mode;    ///< Current SdkAddOnVersion.
+    Version upp_version;        ///< Bundled system update version.
+    u8 compatibility_type;      ///< GameCardCompatibilityType.
     u8 reserved_1[0x3];
-    u64 upp_hash;                   ///< SHA-256 checksum for the update partition.
-    u64 upp_id;                     ///< Must match GAMECARD_UPDATE_TID.
+    u64 upp_hash;               ///< SHA-256 (?) checksum for the update partition. The exact way it's calculated is currently unknown.
+    u64 upp_id;                 ///< Must match GAMECARD_UPDATE_TID.
     u8 reserved_2[0x38];
 } GameCardInfo;
 
@@ -325,8 +331,8 @@ bool gamecardGetTrimmedSize(u64 *out);
 /// Fills the provided u64 pointer with the gamecard ROM capacity, based on the GameCardRomSize value from the header. Not the same as gamecardGetTotalSize().
 bool gamecardGetRomCapacity(u64 *out);
 
-/// Fills the provided VersionType1 pointer with the bundled firmware update version in the inserted gamecard.
-bool gamecardGetBundledFirmwareUpdateVersion(VersionType1 *out);
+/// Fills the provided Version pointer with the bundled firmware update version in the inserted gamecard.
+bool gamecardGetBundledFirmwareUpdateVersion(Version *out);
 
 /// Fills the provided HashFileSystemContext pointer using information from the requested Hash FS partition.
 /// Hash FS functions can be used on the retrieved HashFileSystemContext. hfsFreeContext() must be used to free the underlying data from the filled context.
