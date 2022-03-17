@@ -1,7 +1,7 @@
 /*
  * async_task.hpp
  *
- * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * Based on attcs' C++ implementation at:
  * https://github.com/attcs/AsyncTask/blob/master/asynctask.h.

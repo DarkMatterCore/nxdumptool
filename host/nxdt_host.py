@@ -3,7 +3,7 @@
 """
  * nxdt_host.py
  *
- * Copyright (c) 2021, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2021-2022, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -40,7 +40,6 @@ import logging
 import queue
 import shutil
 import time
-import datetime
 import struct
 import usb.core
 import usb.util
@@ -68,7 +67,7 @@ WINDOW_HEIGHT = 470
 APP_VERSION = '0.3'
 
 # Copyright year.
-COPYRIGHT_YEAR = '2021'
+COPYRIGHT_YEAR = '2021-2022'
 
 # USB VID/PID pair.
 USB_DEV_VID = 0x057E
@@ -122,11 +121,7 @@ USB_STATUS_HOST_IO_ERROR           = 8
 SCRIPT_TITLE = "{} host script v{}".format(USB_DEV_PRODUCT, APP_VERSION)
 
 # Copyright text.
-now = datetime.datetime.now()
-cur_year = now.year
-COPYRIGHT_TEXT = "Copyright (c) {}".format(COPYRIGHT_YEAR)
-if cur_year > int(COPYRIGHT_YEAR): COPYRIGHT_TEXT += "-{}".format(cur_year)
-COPYRIGHT_TEXT += ", {}".format(USB_DEV_MANUFACTURER)
+COPYRIGHT_TEXT = "Copyright (c) {}, {}".format(COPYRIGHT_YEAR, USB_DEV_MANUFACTURER)
 
 # Messages displayed as labels.
 SERVER_START_MSG = 'Please connect a Nintendo Switch console running {}.'.format(USB_DEV_PRODUCT)

@@ -1,8 +1,8 @@
 /*
  * scope_guard.hpp
  *
- * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
  * Copyright (c) 2018-2021, SciresM.
+ * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * Scope guard logic lovingly taken from Andrei Alexandrescu's "Systemic Error Handling in C++".
  *

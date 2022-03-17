@@ -4,7 +4,7 @@
  * Heavily based in usb_comms from libnx.
  *
  * Copyright (c) 2018-2020, Switchbrew and libnx contributors.
- * Copyright (c) 2020-2021, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
