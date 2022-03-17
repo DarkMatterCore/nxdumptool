@@ -336,6 +336,25 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
     return (applet_status ? id_offset : (u8)program_count);
 }
 
+static TitleInfo *get_latest_patch_info(TitleInfo *patch_info)
+{
+    if (!patch_info || patch_info->meta_key.type != NcmContentMetaType_Patch) return NULL;
+    
+    TitleInfo *output = patch_info, *tmp = patch_info;
+    u32 highest_version = patch_info->version.value;
+    
+    while((tmp = tmp->next) != NULL)
+    {
+        if (tmp->version.value > highest_version)
+        {
+            output = tmp;
+            highest_version = output->version.value;
+        }
+    }
+    
+    return output;
+}
+
 int main(int argc, char *argv[])
 {
     int ret = 0;
@@ -542,8 +561,10 @@ int main(int argc, char *argv[])
     
     if (user_app_data.patch_info)
     {
-        if (!ncaInitializeContext(update_nca_ctx, user_app_data.patch_info->storage_id, (user_app_data.patch_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-            titleGetContentInfoByTypeAndIdOffset(user_app_data.patch_info, NcmContentType_Program, program_id_offset), NULL))
+        TitleInfo *latest_patch = get_latest_patch_info(user_app_data.patch_info);
+        
+        if (!ncaInitializeContext(update_nca_ctx, latest_patch->storage_id, (latest_patch->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+            titleGetContentInfoByTypeAndIdOffset(latest_patch, NcmContentType_Program, program_id_offset), NULL))
         {
             consolePrint("nca initialize update ctx failed\n");
             goto out2;
