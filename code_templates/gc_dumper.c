@@ -64,7 +64,7 @@ typedef struct
     bool read_error;
     bool write_error;
     bool transfer_cancelled;
-    u32 xci_crc;
+    u32 xci_crc, full_xci_crc;
     FILE *fp;
 } ThreadSharedData;
 
@@ -90,6 +90,7 @@ static bool saveGameCardImage(void);
 static bool saveConsoleLafwBlob(void);
 
 static void changeStorageOption(u32 idx);
+static void changeKeyAreaOption(u32 idx);
 static void changeCertificateOption(u32 idx);
 static void changeTrimOption(u32 idx);
 static void changeCrcOption(u32 idx);
@@ -99,7 +100,7 @@ static void write_thread_func(void *arg);
 
 /* Global variables. */
 
-static bool g_useUsbHost = false, g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
+static bool g_useUsbHost = false, g_appendKeyArea = true, g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
 
 static const char *g_storageOptions[] = { "sd card", "usb host", NULL };
 static const char *g_xciOptions[] = { "no", "yes", NULL };
@@ -110,6 +111,16 @@ static MenuElement *g_xciMenuElements[] = {
         .child_menu = NULL,
         .task_func = &saveGameCardImage,
         .element_options = NULL
+    },
+    &(MenuElement){
+        .str = "append key area",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &(MenuElementOption){
+            .selected = 1,
+            .options_func = &changeKeyAreaOption,
+            .options = g_xciOptions
+        }
     },
     &(MenuElement){
         .str = "keep certificate",
@@ -153,9 +164,9 @@ static Menu g_xciMenu = {
 
 static MenuElement *g_rootMenuElements[] = {
     &(MenuElement){
-        .str = "dump gamecard specific data",
-        .child_menu = NULL,
-        .task_func = &saveGameCardSpecificData,
+        .str = "dump gamecard xci",
+        .child_menu = &g_xciMenu,
+        .task_func = NULL,
         .element_options = NULL
     },
     &(MenuElement){
@@ -177,9 +188,9 @@ static MenuElement *g_rootMenuElements[] = {
         .element_options = NULL
     },
     &(MenuElement){
-        .str = "dump gamecard xci",
-        .child_menu = &g_xciMenu,
-        .task_func = NULL,
+        .str = "dump gamecard specific data",
+        .child_menu = NULL,
+        .task_func = &saveGameCardSpecificData,
         .element_options = NULL
     },
     &(MenuElement){
@@ -714,6 +725,10 @@ static bool saveGameCardImage(void)
 {
     u64 gc_size = 0;
     
+    u32 key_area_crc = 0;
+    GameCardKeyArea gc_key_area = {0};
+    GameCardSecurityInformation gc_security_information = {0};
+    
     ThreadSharedData shared_data = {0};
     Thread read_thread = {0}, write_thread = {0};
     
@@ -721,11 +736,7 @@ static bool saveGameCardImage(void)
     
     bool success = false;
     
-    consolePrint("gamecard image dump\nkeep certificate: %s | trim dump: %s | calculate crc32: %s\n\n", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no", g_calcCrc ? "yes" : "no");
-    
-    snprintf(path, MAX_ELEMENTS(path), " (%s) (%s).xci", g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
-    filename = generateOutputFileName(path);
-    if (!filename) goto end;
+    consolePrint("gamecard image dump\nappend key area: %s | keep certificate: %s | trim dump: %s | calculate crc32: %s\n\n", g_appendKeyArea ? "yes" : "no", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no", g_calcCrc ? "yes" : "no");
     
     shared_data.data = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     if (!shared_data.data)
@@ -744,13 +755,41 @@ static bool saveGameCardImage(void)
     
     consolePrint("gamecard size: 0x%lX\n", gc_size);
     
-    if (g_useUsbHost && !usbSendFilePropertiesCommon(gc_size, filename))
+    if (g_appendKeyArea)
     {
-        consolePrint("failed to send file properties for \"%s\"!\n", filename);
-        goto end;
-    } else
-    if (!g_useUsbHost)
+        gc_size += sizeof(GameCardKeyArea);
+        
+        if (!dumpGameCardSecurityInformation(&gc_security_information)) goto end;
+        
+        memcpy(&(gc_key_area.initial_data), &(gc_security_information.initial_data), sizeof(GameCardInitialData));
+        
+        if (g_calcCrc)
+        {
+            key_area_crc = crc32Calculate(&gc_key_area, sizeof(GameCardKeyArea));
+            shared_data.full_xci_crc = key_area_crc;
+        }
+        
+        consolePrint("gamecard size (with key area): 0x%lX\n", gc_size);
+    }
+    
+    snprintf(path, MAX_ELEMENTS(path), " (%s) (%s) (%s).xci", g_appendKeyArea ? "keyarea" : "keyarealess", g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
+    filename = generateOutputFileName(path);
+    if (!filename) goto end;
+    
+    if (g_useUsbHost)
     {
+        if (!usbSendFilePropertiesCommon(gc_size, filename))
+        {
+            consolePrint("failed to send file properties for \"%s\"!\n", filename);
+            goto end;
+        }
+        
+        if (g_appendKeyArea && !usbSendFileData(&gc_key_area, sizeof(GameCardKeyArea)))
+        {
+            consolePrint("failed to send gamecard key area data!\n");
+            goto end;
+        }
+    } else {
         if (gc_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(filename))
         {
             consolePrint("failed to create concatenation file for \"%s\"!\n", filename);
@@ -761,6 +800,12 @@ static bool saveGameCardImage(void)
         if (!shared_data.fp)
         {
             consolePrint("failed to open \"%s\" for writing!\n", filename);
+            goto end;
+        }
+        
+        if (g_appendKeyArea && fwrite(&gc_key_area, 1, sizeof(GameCardKeyArea), shared_data.fp) != sizeof(GameCardKeyArea))
+        {
+            consolePrint("failed to write gamecard key area data!\n");
             goto end;
         }
     }
@@ -847,7 +892,13 @@ static bool saveGameCardImage(void)
     printf("process completed in %lu seconds\n", start);
     success = true;
     
-    if (g_calcCrc) printf("xci crc: %08X\n", shared_data.xci_crc);
+    if (g_calcCrc)
+    {
+        if (g_appendKeyArea) printf("key area crc: %08X | ", key_area_crc);
+        printf("xci crc: %08X", shared_data.xci_crc);
+        if (g_appendKeyArea) printf(" | xci crc (with key area): %08X", shared_data.full_xci_crc);
+        printf("\n");
+    }
     
 end:
     if (shared_data.fp)
@@ -901,6 +952,11 @@ end:
 static void changeStorageOption(u32 idx)
 {
     g_useUsbHost = (idx > 0);
+}
+
+static void changeKeyAreaOption(u32 idx)
+{
+    g_appendKeyArea = (idx > 0);
 }
 
 static void changeCertificateOption(u32 idx)
@@ -957,7 +1013,11 @@ static void read_thread_func(void *arg)
         if (!g_keepCertificate && offset == 0) memset(buf + GAMECARD_CERTIFICATE_OFFSET, 0xFF, sizeof(FsGameCardCertificate));
         
         /* Update checksum */
-        if (g_calcCrc) shared_data->xci_crc = crc32CalculateWithSeed(shared_data->xci_crc, buf, blksize);
+        if (g_calcCrc)
+        {
+            shared_data->xci_crc = crc32CalculateWithSeed(shared_data->xci_crc, buf, blksize);
+            if (g_appendKeyArea) shared_data->full_xci_crc = crc32CalculateWithSeed(shared_data->full_xci_crc, buf, blksize);
+        }
         
         /* Wait until the previous data chunk has been written */
         mutexLock(&g_fileMutex);
