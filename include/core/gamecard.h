@@ -240,8 +240,7 @@ typedef enum {
     GameCardHashFileSystemPartitionType_Logo   = 3, ///< Only available in GameCardFwVersion_Since400NUP or greater gamecards.
     GameCardHashFileSystemPartitionType_Normal = 4,
     GameCardHashFileSystemPartitionType_Secure = 5,
-    GameCardHashFileSystemPartitionType_Boot   = 6,
-    GameCardHashFileSystemPartitionType_Count  = 7  ///< Not a real value.
+    GameCardHashFileSystemPartitionType_Count  = 6  ///< Total values supported by this enum.
 } GameCardHashFileSystemPartitionType;
 
 typedef enum {

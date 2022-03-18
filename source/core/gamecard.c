@@ -100,8 +100,7 @@ static const char *g_gameCardHfsPartitionNames[] = {
     [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Update)] = "update",
     [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Logo)]   = "logo",
     [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Normal)] = "normal",
-    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Secure)] = "secure",
-    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Boot)]   = "boot"
+    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Secure)] = "secure"
 };
 
 static const char *g_gameCardHosVersionStrings[GameCardFwVersion_Count] = {
