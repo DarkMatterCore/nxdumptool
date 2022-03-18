@@ -1,10 +1,10 @@
 todo:
     
+    nca: support for sparse sections
+    nca: support for compressed fs sections
+    
     log: verbosity levels
     log: nxlink output for advanced users
-    
-    nca: support for compressed fs sections?
-    nca: support for sparse sections?
     
     title: more functions for title lookup? (filters, patches / aoc, etc.)
     title: more functions for content lookup? (based on id)

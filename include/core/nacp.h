@@ -49,7 +49,12 @@ typedef enum {
 typedef enum {
     NacpUserAccountSwitchLock_Disable = 0,
     NacpUserAccountSwitchLock_Enable  = 1,
-    NacpUserAccountSwitchLock_Count   = 2   ///< Total values supported by this enum.
+    NacpUserAccountSwitchLock_Count   = 2,  ///< Total values supported by this enum.
+    
+    // Old.
+    NacpTouchScreenUsage_None         = 0,
+    NacpTouchScreenUsage_Supported    = 1,
+    NacpTouchScreenUsage_Required     = 2
 } NacpUserAccountSwitchLock;
 
 typedef enum {
@@ -61,7 +66,8 @@ typedef enum {
 typedef enum {
     NacpAttribute_Demo                     = BIT(0),
     NacpAttribute_RetailInteractiveDisplay = BIT(1),
-    NacpAttribute_Count                    = 2          ///< Total values supported by this enum.
+    NacpAttribute_DownloadPlay             = BIT(2),    ///< Removed.
+    NacpAttribute_Count                    = 3          ///< Total values supported by this enum.
 } NacpAttribute;
 
 /// Indexes used to access NACP Title structs.
@@ -106,7 +112,7 @@ typedef enum {
     NacpSupportedLanguage_TraditionalChinese   = BIT(13),
     NacpSupportedLanguage_SimplifiedChinese    = BIT(14),
     NacpSupportedLanguage_BrazilianPortuguese  = BIT(15),
-    NacpSupportedLanguage_Count                = 16,        ///< Total values supported by this enum. Should always match NacpLanguage_Count.
+    NacpSupportedLanguage_Count                = 16,                                        ///< Total values supported by this enum. Should always match NacpLanguage_Count.
     
     ///< Old.
     NacpSupportedLanguage_Taiwanese            = NacpSupportedLanguage_TraditionalChinese,
@@ -217,6 +223,14 @@ typedef enum {
 } NacpRuntimeParameterDelivery;
 
 typedef enum {
+    NacpAppropriateAgeForChina_None  = 0,
+    NacpAppropriateAgeForChina_Age8  = 1,
+    NacpAppropriateAgeForChina_Age12 = 2,
+    NacpAppropriateAgeForChina_Age16 = 3,
+    NacpAppropriateAgeForChina_Count = 4    ///< Total values supported by this enum.
+} NacpAppropriateAgeForChina;
+
+typedef enum {
     NacpUndecidedParameter75b8b_A     = 0,
     NacpUndecidedParameter75b8b_B     = 1,
     NacpUndecidedParameter75b8b_Count = 2   ///< Total values supported by this enum.
@@ -240,6 +254,17 @@ typedef enum {
 } NacpStartupUserAccountOption;
 
 typedef enum {
+    NacpRuntimeUpgrade_Deny  = 0,
+    NacpRuntimeUpgrade_Allow = 1,
+    NacpRuntimeUpgrade_Count = 2    ///< Total values supported by this enum.
+} NacpRuntimeUpgrade;
+
+typedef enum {
+    NacpSupportingLimitedLicenses_Demo  = BIT(1),
+    NacpSupportingLimitedLicenses_Count = 1         ///< Total values supported by this enum.
+} NacpSupportingLimitedLicenses;
+
+typedef enum {
     NacpPlayLogQueryCapability_None      = 0,
     NacpPlayLogQueryCapability_WhiteList = 1,
     NacpPlayLogQueryCapability_All       = 2,
@@ -257,9 +282,8 @@ typedef enum {
 } NacpRequiredNetworkServiceLicenseOnLaunch;
 
 typedef enum {
-	NacpJitConfigurationFlag_None    = 0,
-	NacpJitConfigurationFlag_Enabled = 1,
-    NacpJitConfigurationFlag_Count   = 2    ///< Total values supported by this enum.
+    NacpJitConfigurationFlag_Enabled = BIT_LONG(0),
+    NacpJitConfigurationFlag_Count   = 1            ///< Total values supported by this enum.
 } NacpJitConfigurationFlag;
 
 typedef struct {
@@ -269,23 +293,27 @@ typedef struct {
 
 NXDT_ASSERT(NacpJitConfiguration, 0x10);
 
-typedef struct {
-    u16 index        : 15;
-    u16 continue_set : 1;   ///< Called "flag" by Nintendo, which isn't really great.
-} NacpDescriptors;
-
-NXDT_ASSERT(NacpDescriptors, 0x2);
+typedef enum {
+    NacpRequiredAddOnContentsSetDescriptorFlag_None     = 0,
+    NacpRequiredAddOnContentsSetDescriptorFlag_Continue = 1
+} NacpRequiredAddOnContentsSetDescriptorFlag;
 
 typedef struct {
-    NacpDescriptors descriptors[0x20];
+    u16 index : 15;
+    u16 flag  : 1;  ///< NacpRequiredAddOnContentsSetDescriptorFlag.
+} NacpRequiredAddOnContentsSetDescriptor;
+
+NXDT_ASSERT(NacpRequiredAddOnContentsSetDescriptor, 0x2);
+
+typedef struct {
+    NacpRequiredAddOnContentsSetDescriptor descriptors[0x20];
 } NacpRequiredAddOnContentsSetBinaryDescriptor;
 
 NXDT_ASSERT(NacpRequiredAddOnContentsSetBinaryDescriptor, 0x40);
 
 typedef enum {
-    NacpPlayReportPermission_None            = 0,
-    NacpPlayReportPermission_TargetMarketing = 1,
-    NacpPlayReportPermission_Count           = 2    ///< Total values supported by this enum.
+    NacpPlayReportPermission_TargetMarketing = BIT(0),
+    NacpPlayReportPermission_Count           = 1        ///< Total values supported by this enum.
 } NacpPlayReportPermission;
 
 typedef enum {
@@ -300,6 +328,16 @@ typedef enum {
     NacpCrashScreenshotForDev_Count = 2     ///< Total values supported by this enum.
 } NacpCrashScreenshotForDev;
 
+typedef enum {
+    NacpContentsAvailabilityTransitionPolicy_NoPolicy   = 0,
+    NacpContentsAvailabilityTransitionPolicy_Stable     = 1,
+    NacpContentsAvailabilityTransitionPolicy_Changeable = 2,
+    NacpContentsAvailabilityTransitionPolicy_Count      = 3,                                                    ///< Total values supported by this enum.
+    
+    // Old.
+    NacpContentsAvailabilityTransitionPolicy_Legacy     = NacpContentsAvailabilityTransitionPolicy_NoPolicy
+} NacpContentsAvailabilityTransitionPolicy;
+
 typedef struct {
     u64 application_id[8];
 } NacpAccessibleLaunchRequiredVersion;
@@ -310,7 +348,7 @@ typedef struct {
     NacpTitle title[0x10];
     char isbn[0x25];
     u8 startup_user_account;                                                                        ///< NacpStartupUserAccount.
-    u8 user_account_switch_lock;                                                                    ///< NacpUserAccountSwitchLock. Old: touch_screen_usage (None, Supported, Required).
+    u8 user_account_switch_lock;                                                                    ///< NacpUserAccountSwitchLock.
     u8 add_on_content_registration_type;                                                            ///< NacpAddOnContentRegistrationType.
     u32 attribute;                                                                                  ///< NacpAttribute.
     u32 supported_language;                                                                         ///< NacpSupportedLanguage.
@@ -335,14 +373,14 @@ typedef struct {
     u8 logo_handling;                                                                               ///< NacpLogoHandling.
     u8 runtime_add_on_content_install;                                                              ///< NacpRuntimeAddOnContentInstall.
     u8 runtime_parameter_delivery;                                                                  ///< NacpRuntimeParameterDelivery.
-    u8 reserved_1;
+    u8 appropriate_age_for_china;                                                                   ///< NacpAppropriateAgeForChina.
     u8 undecided_parameter_75b8b;                                                                   ///< NacpUndecidedParameter75b8b.
     u8 crash_report;                                                                                ///< NacpCrashReport.
     u8 hdcp;                                                                                        ///< NacpHdcp.
     u64 seed_for_pseudo_device_id;
     char bcat_passphrase[0x41];
     u8 startup_user_account_option;                                                                 ///< NacpStartupUserAccountOption.
-    u8 reserved_2[0x6];
+    u8 reserved_for_user_account_save_data_operation[0x6];
     s64 user_account_save_data_size_max;
     s64 user_account_save_data_journal_size_max;
     s64 device_save_data_size_max;
@@ -352,22 +390,25 @@ typedef struct {
     s64 cache_storage_journal_size;
     s64 cache_storage_data_and_journal_size_max;
     u16 cache_storage_index_max;
-    u8 reserved_3[0x6];
+    u8 reserved_1[0x1];
+    u8 runtime_upgrade;                                                                             ///< NacpRuntimeUpgrade.
+    u32 supporting_limited_licenses;                                                                ///< NacpSupportingLimitedLicenses.
     u64 play_log_queryable_application_id[0x10];
     u8 play_log_query_capability;                                                                   ///< NacpPlayLogQueryCapability.
     u8 repair;                                                                                      ///< NacpRepair.
     u8 program_index;
     u8 required_network_service_license_on_launch;                                                  ///< NacpRequiredNetworkServiceLicenseOnLaunch.
-    u8 reserved_4[0x4];
+    u8 reserved_2[0x4];
     NacpNeighborDetectionClientConfiguration neighbor_detection_client_configuration;
     NacpJitConfiguration jit_configuration;
     NacpRequiredAddOnContentsSetBinaryDescriptor required_add_on_contents_set_binary_descriptor;
     u8 play_report_permission;                                                                      ///< NacpPlayReportPermission.
     u8 crash_screenshot_for_prod;                                                                   ///< NacpCrashScreenshotForProd.
     u8 crash_screenshot_for_dev;                                                                    ///< NacpCrashScreenshotForDev.
-    u8 reserved_5[0x5];
+    u8 contents_availability_transition_policy;                                                     ///< NacpContentsAvailabilityTransitionPolicy.
+    u8 reserved_3[0x4];
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
-    u8 reserved_6[0xBB8];
+    u8 reserved_4[0xBB8];
 } _NacpStruct;
 
 NXDT_ASSERT(_NacpStruct, 0x4000);
@@ -413,8 +454,13 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
 
 /// These functions return pointers to string representations of the input flag/value index (e.g. nacpGetLanguageString(NacpLanguage_AmericanEnglish) -> "AmericanEnglish").
 /// If the input flag/value index is invalid, "Unknown" will be returned.
-/// If dealing with a bitflag field such as NacpAttribute, NacpSupportedLanguage, etc., the provided value must be a 0-based index to the desired flag and not a bitmask from its enum.
-/// (e.g. NacpAttribute_RetailInteractiveDisplay -> Use 1 instead).
+/// If dealing with a bitflag field such as:
+///     * NacpAttribute
+///     * NacpSupportedLanguage
+///     * NacpParentalControl
+///     * NacpStartupUserAccountOption
+///     * NacpRepair
+/// Then, the provided value must be a 0-based index to the desired flag and not a bitmask from its enum (e.g. NacpAttribute_RetailInteractiveDisplay -> use 1 instead).
 const char *nacpGetLanguageString(u8 language); /// Can also be used for NacpSupportedLanguage flags with values from the NacpLanguage enum.
 const char *nacpGetStartupUserAccountString(u8 startup_user_account);
 const char *nacpGetUserAccountSwitchLockString(u8 user_account_switch_lock);
@@ -430,17 +476,18 @@ const char *nacpGetLogoTypeString(u8 logo_type);
 const char *nacpGetLogoHandlingString(u8 logo_handling);
 const char *nacpGetRuntimeAddOnContentInstallString(u8 runtime_add_on_content_install);
 const char *nacpGetRuntimeParameterDeliveryString(u8 runtime_parameter_delivery);
+const char *nacpGetAppropriateAgeForChina(u8 appropriate_age_for_china);
 const char *nacpGetUndecidedParameter75b8bString(u8 undecided_parameter_75b8b);
 const char *nacpGetCrashReportString(u8 crash_report);
 const char *nacpGetHdcpString(u8 hdcp);
 const char *nacpGetStartupUserAccountOptionString(u8 startup_user_account_option);
+const char *nacpGetRuntimeUpgradeString(u8 runtime_upgrade);
 const char *nacpGetPlayLogQueryCapabilityString(u8 play_log_query_capability);
 const char *nacpGetRepairString(u8 repair);
 const char *nacpGetRequiredNetworkServiceLicenseOnLaunchString(u8 required_network_service_license_on_launch);
-const char *nacpGetJitConfigurationFlagString(u64 jig_configuration_flag);  ///< Uses an input u64 value.
-const char *nacpGetPlayReportPermissionString(u8 play_report_permission);
 const char *nacpGetCrashScreenshotForProdString(u8 crash_screenshot_for_prod);
 const char *nacpGetCrashScreenshotForDevString(u8 crash_screenshot_for_dev);
+const char *nacpGetContentsAvailabilityTransitionPolicyString(u8 contents_availability_transition_policy);
 
 /// Helper inline functions.
 

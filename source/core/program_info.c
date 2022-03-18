@@ -25,6 +25,11 @@
 #include "program_info.h"
 #include "elf_symbol.h"
 
+/* Helper macros. */
+
+#define PI_ADD_FMT_STR_T1(fmt, ...) utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, fmt, ##__VA_ARGS__)
+#define PI_ADD_FMT_STR_T2(fmt, ...) utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, fmt, ##__VA_ARGS__)
+
 /* Global variables. */
 
 static const char *g_trueString = "True", *g_falseString = "False";
@@ -203,36 +208,33 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     /* Get SDK version and build type strings. */
     if (!programInfoGetSdkVersionAndBuildTypeFromSdkNso(program_info_ctx, &sdk_version, &build_type)) goto end;
     
-    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
-                                            "<ProgramInfo>\n")) goto end;
+    if (!PI_ADD_FMT_STR_T1("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
+                           "<ProgramInfo>\n")) goto end;
     
     /* SdkVersion. */
     if (!programInfoAddStringFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "SdkVersion", sdk_version)) goto end;
-
-    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                            "  <ToolVersion />\n"                       /* Impossible to get. */ \
-                                            "  <NxAddonVersion>%s</NxAddonVersion>\n" \
-                                            "  <PatchToolVersion />\n"                  /* Impossible to get. */ \
-                                            "  <BuildTarget>%u</BuildTarget>\n", \
-                                            sdk_version, \
-                                            is_64bit ? 64 : 32)) goto end;
+    
+    if (!PI_ADD_FMT_STR_T1("  <ToolVersion />\n"                        /* Impossible to get. */ \
+                           "  <NxAddonVersion>%s</NxAddonVersion>\n" \
+                           "  <PatchToolVersion />\n"                   /* Impossible to get. */ \
+                           "  <BuildTarget>%u</BuildTarget>\n", \
+                           sdk_version, \
+                           is_64bit ? 64 : 32)) goto end;
     
     /* BuildType. */
     if (!programInfoAddStringFieldToAuthoringToolXml(&xml_buf, &xml_buf_size, "BuildType", build_type)) goto end;
     
-    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                            "  <EnableDeadStrip />\n"                               /* Impossible to get. */ \
-                                            "  <EnableDeadStripSpecified />\n"                      /* Impossible to get. */ \
-                                            "  <Desc>%s</Desc>\n" \
-                                            "  <DescFileName />\n"                                  /* Impossible to get. */ \
-                                            "  <DescFlags>\n" \
-                                            "    <Production>%s</Production>\n" \
-                                            "    <UnqualifiedApproval>%s</UnqualifiedApproval>\n" \
-                                            "  </DescFlags>\n", \
-                                            npdm_acid_b64, \
-                                            program_info_ctx->npdm_ctx.acid_header->flags.production ? g_trueString : g_falseString, \
-                                            program_info_ctx->npdm_ctx.acid_header->flags.unqualified_approval ? g_trueString : g_falseString)) goto end;
+    if (!PI_ADD_FMT_STR_T1("  <EnableDeadStrip />\n"                                /* Impossible to get. */ \
+                           "  <EnableDeadStripSpecified />\n"                       /* Impossible to get. */ \
+                           "  <Desc>%s</Desc>\n" \
+                           "  <DescFileName />\n"                                   /* Impossible to get. */ \
+                           "  <DescFlags>\n" \
+                           "    <Production>%s</Production>\n" \
+                           "    <UnqualifiedApproval>%s</UnqualifiedApproval>\n" \
+                           "  </DescFlags>\n", \
+                           npdm_acid_b64, \
+                           program_info_ctx->npdm_ctx.acid_header->flags.production ? g_trueString : g_falseString, \
+                           program_info_ctx->npdm_ctx.acid_header->flags.unqualified_approval ? g_trueString : g_falseString)) goto end;
     
     /* MiddlewareList. */
     if (!programInfoAddNsoApiListToAuthoringToolXml(&xml_buf, &xml_buf_size, program_info_ctx, "Middleware", "Module", "SDK MW")) goto end;
@@ -252,14 +254,13 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     /* FsAccessControlData. */
     if (!programInfoAddFsAccessControlDataToAuthoringToolXml(&xml_buf, &xml_buf_size, program_info_ctx)) goto end;
     
-    if (!(success = utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                       "  <EnableGlobalDestructor />\n"             /* Impossible to get. */ \
-                                                       "  <EnableGlobalDestructorSpecified />\n"    /* Impossible to get. */ \
-                                                       "  <IncludeNssFile />\n"                     /* Impossible to get. */ \
-                                                       "  <IncludeNssFileSpecified />\n"            /* Impossible to get. */ \
-                                                       "  <History />\n"                            /* Impossible to get. */ \
-                                                       "  <TargetTriplet />\n"                      /* Impossible to get. */ \
-                                                       "</ProgramInfo>"))) goto end;
+    if (!(success = PI_ADD_FMT_STR_T1("  <EnableGlobalDestructor />\n"          /* Impossible to get. */ \
+                                      "  <EnableGlobalDestructorSpecified />\n" /* Impossible to get. */ \
+                                      "  <IncludeNssFile />\n"                  /* Impossible to get. */ \
+                                      "  <IncludeNssFileSpecified />\n"         /* Impossible to get. */ \
+                                      "  <History />\n"                         /* Impossible to get. */ \
+                                      "  <TargetTriplet />\n"                   /* Impossible to get. */ \
+                                      "</ProgramInfo>"))) goto end;
     
     /* Update ProgramInfo context. */
     program_info_ctx->authoring_tool_xml = xml_buf;
@@ -397,11 +398,11 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
     /* Append an empty XML element if no entries for this API list exist. */
     if (!api_list_exists)
     {
-        success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%sList />\n", api_list_tag);
+        success = PI_ADD_FMT_STR_T2("  <%sList />\n", api_list_tag);
         goto end;
     }
     
-    if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%sList>\n", api_list_tag)) goto end;
+    if (!PI_ADD_FMT_STR_T2("  <%sList>\n", api_list_tag)) goto end;
     
     /* Retrieve full API list. */
     for(u32 i = 0; i < program_info_ctx->nso_count; i++)
@@ -415,24 +416,23 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
             
             if (programInfoIsApiInfoEntryValid(sdk_prefix, sdk_prefix_len, sdk_entry, &sdk_entry_vender, &sdk_entry_vender_len, &sdk_entry_name, false))
             {
-                if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, \
-                                                        "    <%s>\n" \
-                                                        "      <%sName>%s</%sName>\n" \
-                                                        "      <VenderName>%.*s</VenderName>\n" \
-                                                        "      <NsoName>%s</NsoName>\n" \
-                                                        "    </%s>\n", \
-                                                        api_list_tag, \
-                                                        api_entry_prefix, sdk_entry_name, api_entry_prefix, \
-                                                        sdk_entry_vender_len, sdk_entry_vender, \
-                                                        nso_ctx->nso_filename, \
-                                                        api_list_tag)) goto end;
+                if (!PI_ADD_FMT_STR_T2("    <%s>\n" \
+                                       "      <%sName>%s</%sName>\n" \
+                                       "      <VenderName>%.*s</VenderName>\n" \
+                                       "      <NsoName>%s</NsoName>\n" \
+                                       "    </%s>\n", \
+                                       api_list_tag, \
+                                       api_entry_prefix, sdk_entry_name, api_entry_prefix, \
+                                       sdk_entry_vender_len, sdk_entry_vender, \
+                                       nso_ctx->nso_filename, \
+                                       api_list_tag)) goto end;
             }
             
             j += strlen(sdk_entry);
         }
     }
     
-    success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  </%sList>\n", api_list_tag);
+    success = PI_ADD_FMT_STR_T2("  </%sList>\n", api_list_tag);
     
 end:
     return success;
@@ -466,8 +466,7 @@ static bool programInfoAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml
         return false;
     }
     
-    return ((value && *value) ? utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s>%s</%s>\n", tag_name, value, tag_name) : \
-            utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <%s />\n", tag_name));
+    return ((value && *value) ? PI_ADD_FMT_STR_T2("  <%s>%s</%s>\n", tag_name, value, tag_name) : PI_ADD_FMT_STR_T2("  <%s />\n", tag_name));
 }
 
 static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_buf_size, ProgramInfoContext *program_info_ctx)
@@ -488,8 +487,8 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
     for(u32 i = 0; i < program_info_ctx->nso_count; i++)
     {
         nso_ctx = &(program_info_ctx->nso_ctx[i]);
-        if (nso_ctx->nso_filename && !strcmp(nso_ctx->nso_filename, "main") && nso_ctx->rodata_dynstr_section && nso_ctx->rodata_dynstr_section_size && nso_ctx->rodata_dynsym_section && \
-            nso_ctx->rodata_dynsym_section_size) break;
+        if (nso_ctx->nso_filename && !strcmp(nso_ctx->nso_filename, "main") && nso_ctx->rodata_dynstr_section && nso_ctx->rodata_dynstr_section_size && \
+            nso_ctx->rodata_dynsym_section && nso_ctx->rodata_dynsym_section_size) break;
         nso_ctx = NULL;
     }
     
@@ -511,7 +510,7 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
     /* Bail out if we couldn't find any valid symbols. */
     if (!symbols_exist) goto end;
     
-    if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <UnresolvedApiList>\n")) goto end;
+    if (!PI_ADD_FMT_STR_T2("  <UnresolvedApiList>\n")) goto end;
     
     /* Parse ELF dynamic symbol table to retrieve the symbol strings. */
     for(u64 i = 0; i < nso_ctx->rodata_dynsym_section_size; i += symbol_size)
@@ -520,20 +519,19 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
         
         if (!programInfoIsElfSymbolValid(nso_ctx->rodata_dynsym_section + i, nso_ctx->rodata_dynstr_section, nso_ctx->rodata_dynstr_section_size, is_64bit, &symbol_str)) continue;
         
-        if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, \
-                                                "    <UnresolvedApi>\n" \
-                                                "      <ApiName>%s</ApiName>\n" \
-                                                "      <NsoName>%s</NsoName>\n" \
-                                                "    </UnresolvedApi>\n", \
-                                                symbol_str, \
-                                                nso_ctx->nso_filename)) goto end;
+        if (!PI_ADD_FMT_STR_T2("    <UnresolvedApi>\n" \
+                               "      <ApiName>%s</ApiName>\n" \
+                               "      <NsoName>%s</NsoName>\n" \
+                               "    </UnresolvedApi>\n", \
+                               symbol_str, \
+                               nso_ctx->nso_filename)) goto end;
     }
     
-    success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  </UnresolvedApiList>\n");
+    success = PI_ADD_FMT_STR_T2("  </UnresolvedApiList>\n");
     
 end:
     /* Append an empty XML element if no valid symbols exist. */
-    if (!success && (!nso_ctx || !symbols_exist)) success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <UnresolvedApiList />\n");
+    if (!success && (!nso_ctx || !symbols_exist)) success = PI_ADD_FMT_STR_T2("  <UnresolvedApiList />\n");
     
     return success;
 }
@@ -592,25 +590,24 @@ static bool programInfoAddFsAccessControlDataToAuthoringToolXml(char **xml_buf, 
     /* Padding to a 0x4-byte boundary is needed. Each accessibility field takes up a single byte, so we can get away with it by aligning the ID count. */
     save_data_owner_ids = (u64*)((u8*)save_data_owner_block + sizeof(NpdmFsAccessControlDataSaveDataOwnerBlock) + ALIGN_UP(save_data_owner_block->save_data_owner_id_count, 0x4));
     
-    if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <FsAccessControlData>\n")) goto end;
+    if (!PI_ADD_FMT_STR_T2("  <FsAccessControlData>\n")) goto end;
     
     /* Append save data owner IDs. */
     for(u32 i = 0; i < save_data_owner_block->save_data_owner_id_count; i++)
     {
-        if (!utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, \
-                                                "    <SaveDataOwnerIds>\n" \
-                                                "      <Accessibility>%s</Accessibility>\n" \
-                                                "      <Id>0x%016lx</Id>\n" \
-                                                "    </SaveDataOwnerIds>\n", \
-                                                g_facAccessibilityStrings[save_data_owner_block->accessibility[i] & 0x3], \
-                                                save_data_owner_ids[i])) goto end;
+        if (!PI_ADD_FMT_STR_T2("    <SaveDataOwnerIds>\n" \
+                               "      <Accessibility>%s</Accessibility>\n" \
+                               "      <Id>0x%016lx</Id>\n" \
+                               "    </SaveDataOwnerIds>\n", \
+                               g_facAccessibilityStrings[save_data_owner_block->accessibility[i] & 0x3], \
+                               save_data_owner_ids[i])) goto end;
     }
     
-    success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  </FsAccessControlData>\n");
+    success = PI_ADD_FMT_STR_T2("  </FsAccessControlData>\n");
     
 end:
     /* Append an empty XML element if no FS access control data exists. */
-    if (!success && !sdo_data_available) success = utilsAppendFormattedStringToBuffer(xml_buf, xml_buf_size, "  <FsAccessControlData />\n");
+    if (!success && !sdo_data_available) success = PI_ADD_FMT_STR_T2("  <FsAccessControlData />\n");
     
     return success;
 }

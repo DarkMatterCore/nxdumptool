@@ -23,7 +23,10 @@
 #include "cnmt.h"
 #include "title.h"
 
+/* Helper macros. */
+
 #define CNMT_MINIMUM_FILENAME_LENGTH    23  /* Content Meta Type + "_" + Title ID + ".cnmt". */
+#define CNMT_ADD_FMT_STR(fmt, ...)      utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, fmt, ##__VA_ARGS__)
 
 /* Global variables. */
 
@@ -367,31 +370,33 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     cnmt_ctx->authoring_tool_xml = NULL;
     cnmt_ctx->authoring_tool_xml_size = 0;
     
-    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                            "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
-                                            "<ContentMeta>\n" \
-                                            "  <Type>%s</Type>\n" \
-                                            "  <Id>0x%016lx</Id>\n" \
-                                            "  <Version>%u</Version>\n" \
-                                            "  <ReleaseVersion />\n" \
-                                            "  <PrivateVersion />\n",
-                                            titleGetNcmContentMetaTypeName(cnmt_ctx->packaged_header->content_meta_type), \
-                                            cnmt_ctx->packaged_header->title_id, \
-                                            cnmt_ctx->packaged_header->version.value)) goto end;
+    if (!CNMT_ADD_FMT_STR("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n" \
+                          "<ContentMeta>\n" \
+                          "  <Type>%s</Type>\n" \
+                          "  <Id>0x%016lx</Id>\n" \
+                          "  <Version>%u</Version>\n" \
+                          "  <ReleaseVersion>%u</ReleaseVersion>\n" \
+                          "  <PrivateVersion>%u</PrivateVersion>\n", \
+                          titleGetNcmContentMetaTypeName(cnmt_ctx->packaged_header->content_meta_type), \
+                          cnmt_ctx->packaged_header->title_id, \
+                          cnmt_ctx->packaged_header->version.value, \
+                          cnmt_ctx->packaged_header->version.application_version.release_ver, \
+                          cnmt_ctx->packaged_header->version.application_version.private_ver)) goto end;
     
     /* ContentMetaAttribute. */
     for(i = 0; i < ContentMetaAttribute_Count; i++)
     {
         if (!(cnmt_ctx->packaged_header->content_meta_attribute & (u8)BIT(i))) continue;
-        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <ContentMetaAttribute>%s</ContentMetaAttribute>\n", g_cnmtAttributeStrings[i])) goto end;
+        if (!CNMT_ADD_FMT_STR("  <ContentMetaAttribute>%s</ContentMetaAttribute>\n", g_cnmtAttributeStrings[i])) goto end;
         count++;
     }
     
-    if (!count && !utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <ContentMetaAttribute />\n")) goto end;
+    if (!count && !CNMT_ADD_FMT_STR("  <ContentMetaAttribute />\n")) goto end;
     
-    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "  <RequiredDownloadSystemVersion>%u</RequiredDownloadSystemVersion>\n", \
-                                            cnmt_ctx->packaged_header->required_download_system_version.value)) goto end;
+    /* RequiredDownloadSystemVersion. */
+    if (!CNMT_ADD_FMT_STR("  <RequiredDownloadSystemVersion>%u</RequiredDownloadSystemVersion>\n", cnmt_ctx->packaged_header->required_download_system_version.value)) goto end;
     
+    /* Contents. */
     for(i = 0; i < nca_ctx_count; i++)
     {
         NcaContext *cur_nca_ctx = &(nca_ctx[i]);
@@ -417,34 +422,35 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
             goto end;
         }
         
-        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                "  <Content>\n" \
-                                                "    <Type>%s</Type>\n" \
-                                                "    <Id>%s</Id>\n" \
-                                                "    <Size>%lu</Size>\n" \
-                                                "    <Hash>%s</Hash>\n" \
-                                                "    <KeyGeneration>%u</KeyGeneration>\n" \
-                                                "    <IdOffset>%u</IdOffset>\n" \
-                                                "  </Content>\n", \
-                                                titleGetNcmContentTypeName(cur_nca_ctx->content_type), \
-                                                cur_nca_ctx->content_id_str, \
-                                                cur_nca_ctx->content_size, \
-                                                cur_nca_ctx->hash_str, \
-                                                cur_nca_ctx->key_generation, \
-                                                cur_nca_ctx->id_offset)) goto end;
+        if (!CNMT_ADD_FMT_STR("  <Content>\n" \
+                              "    <Type>%s</Type>\n" \
+                              "    <Id>%s</Id>\n" \
+                              "    <Size>%lu</Size>\n" \
+                              "    <Hash>%s</Hash>\n" \
+                              "    <KeyGeneration>%u</KeyGeneration>\n" \
+                              "    <IdOffset>%u</IdOffset>\n" \
+                              "  </Content>\n", \
+                              titleGetNcmContentTypeName(cur_nca_ctx->content_type), \
+                              cur_nca_ctx->content_id_str, \
+                              cur_nca_ctx->content_size, \
+                              cur_nca_ctx->hash_str, \
+                              cur_nca_ctx->key_generation, \
+                              cur_nca_ctx->id_offset)) goto end;
     }
     
     utilsGenerateHexStringFromData(digest_str, sizeof(digest_str), cnmt_ctx->digest, CNMT_DIGEST_SIZE, false);
     
-    if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                            "  <ContentMeta />\n" \
-                                            "  <Digest>%s</Digest>\n" \
-                                            "  <KeyGenerationMin>%u</KeyGenerationMin>\n" \
-                                            "  <KeepGeneration />\n" \
-                                            "  <KeepGenerationSpecified />\n", \
-                                            digest_str, \
-                                            cnmt_ctx->nca_ctx->key_generation)) goto end;
+    /* ContentMeta, Digest, KeyGenerationMin, KeepGeneration and KeepGenerationSpecified. */
+    if (!CNMT_ADD_FMT_STR("  <ContentMeta />\n" \
+                          "  <Digest>%s</Digest>\n" \
+                          "  <KeyGenerationMin>%u</KeyGenerationMin>\n" \
+                          "  <KeepGeneration />\n" \
+                          "  <KeepGenerationSpecified />\n", \
+                          digest_str, \
+                          cnmt_ctx->nca_ctx->key_generation)) goto end;
     
+    /* RequiredSystemVersion (Application, Patch) / RequiredApplicationVersion (AddOnContent). */
+    /* PatchId (Application) / ApplicationId (Patch, AddOnContent). */
     if (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || \
         cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)
     {
@@ -454,21 +460,20 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
         u64 required_title_id = cnmtGetRequiredTitleId(cnmt_ctx);
         const char *required_title_type_str = cnmtGetRequiredTitleTypeString(cnmt_ctx->packaged_header->content_meta_type);
         
-        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                "  <%s>%u</%s>\n" \
-                                                "  <%s>0x%016lx</%s>\n", \
-                                                required_title_version_str, required_title_version, required_title_version_str, \
-                                                required_title_type_str, required_title_id, required_title_type_str)) goto end;
+        if (!CNMT_ADD_FMT_STR("  <%s>%u</%s>\n" \
+                              "  <%s>0x%016lx</%s>\n", \
+                              required_title_version_str, required_title_version, required_title_version_str, \
+                              required_title_type_str, required_title_id, required_title_type_str)) goto end;
     }
     
+    /* RequiredApplicationVersion (Application). */
     if (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application)
     {
-        if (!utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, \
-                                                "  <RequiredApplicationVersion>%u</RequiredApplicationVersion>\n", \
-                                                ((ContentMetaApplicationMetaExtendedHeader*)cnmt_ctx->extended_header)->required_application_version.value)) goto end;
+        if (!CNMT_ADD_FMT_STR("  <RequiredApplicationVersion>%u</RequiredApplicationVersion>\n", \
+                              ((ContentMetaApplicationMetaExtendedHeader*)cnmt_ctx->extended_header)->required_application_version.value)) goto end;
     }
     
-    if (!(success = utilsAppendFormattedStringToBuffer(&xml_buf, &xml_buf_size, "</ContentMeta>"))) goto end;
+    if (!(success = CNMT_ADD_FMT_STR("</ContentMeta>"))) goto end;
     
     /* Update CNMT context. */
     cnmt_ctx->authoring_tool_xml = xml_buf;

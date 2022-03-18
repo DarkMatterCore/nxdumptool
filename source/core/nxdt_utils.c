@@ -159,7 +159,8 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         LOG_MSG("Running under %s mode.", _utilsAppletModeCheck() ? "applet" : "title override");
         
         /* Create output directories (SD card only). */
-        utilsCreateOutputDirectories(NULL);
+        /* TODO: remove the APP_TITLE check whenever we're ready for a release. */
+        if (!strcasecmp(APP_TITLE, "nxdumptool")) utilsCreateOutputDirectories(NULL);
         
         if (g_appLaunchPath)
         {

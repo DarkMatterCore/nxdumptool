@@ -696,10 +696,10 @@ static bool saveGameCardIdSet(void)
     crc = crc32Calculate(&id_set, sizeof(FsGameCardIdSet));
     snprintf(path, MAX_ELEMENTS(path), " (Card ID Set) (%08X).bin", crc);
     
-    if (!saveFileData(filename, &id_set, sizeof(FsGameCardIdSet))) goto end;
-    
     filename = generateOutputFileName(path);
     if (!filename) goto end;
+    
+    if (!saveFileData(filename, &id_set, sizeof(FsGameCardIdSet))) goto end;
     
     printf("successfully saved gamecard id set as \"%s\"\n", filename);
     success = true;

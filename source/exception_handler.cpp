@@ -24,9 +24,12 @@
 #include <nxdt_utils.h>
 #include <borealis.hpp>
 
-#define FP_MASK             0xFFFFFFFFFF000000UL
-#define STACK_TRACE_SIZE    0x20
-#define IS_HB_ADDR(x)       (info.addr && info.size && (x) >= info.addr && (x) < (info.addr + info.size))
+/* Helper macros. */
+
+#define FP_MASK                     0xFFFFFFFFFF000000UL
+#define STACK_TRACE_SIZE            0x20
+#define IS_HB_ADDR(x)               (info.addr && info.size && (x) >= info.addr && (x) < (info.addr + info.size))
+#define EH_ADD_FMT_STR(fmt, ...)    utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, fmt, ##__VA_ARGS__)
 
 namespace i18n = brls::i18n;    /* For getStr(). */
 using namespace i18n::literals; /* For _i18n. */
@@ -168,45 +171,45 @@ extern "C" {
                 break;
         }
         
-        utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "Type: %s (0x%X)\r\n", error_desc_str.c_str(), ctx->error_desc);
+        EH_ADD_FMT_STR("Type: %s (0x%X)\r\n", error_desc_str.c_str(), ctx->error_desc);
         
         /* Log CPU registers. */
-        utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "Registers:");
+        EH_ADD_FMT_STR("Registers:");
         
         for(size_t i = 0; i < MAX_ELEMENTS(ctx->cpu_gprs); i++)
         {
             u64 reg = ctx->cpu_gprs[i].x;
-            utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "\r\n    X%02lu:  0x%lX", i, reg);
-            if (IS_HB_ADDR(reg)) utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, " (BASE + 0x%lX)", reg - info.addr);
+            EH_ADD_FMT_STR("\r\n    X%02lu:  0x%lX", i, reg);
+            if (IS_HB_ADDR(reg)) EH_ADD_FMT_STR(" (BASE + 0x%lX)", reg - info.addr);
         }
         
-        utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "\r\n    FP:   0x%lX", ctx->fp.x);
-        if (IS_HB_ADDR(ctx->fp.x)) utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, " (BASE + 0x%lX)", ctx->fp.x - info.addr);
+        EH_ADD_FMT_STR("\r\n    FP:   0x%lX", ctx->fp.x);
+        if (IS_HB_ADDR(ctx->fp.x)) EH_ADD_FMT_STR(" (BASE + 0x%lX)", ctx->fp.x - info.addr);
         
-        utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "\r\n    LR:   0x%lX", ctx->lr.x);
-        if (IS_HB_ADDR(ctx->lr.x)) utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, " (BASE + 0x%lX)", ctx->lr.x - info.addr);
+        EH_ADD_FMT_STR("\r\n    LR:   0x%lX", ctx->lr.x);
+        if (IS_HB_ADDR(ctx->lr.x)) EH_ADD_FMT_STR(" (BASE + 0x%lX)", ctx->lr.x - info.addr);
         
-        utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "\r\n    SP:   0x%lX", ctx->sp.x);
-        if (IS_HB_ADDR(ctx->sp.x)) utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, " (BASE + 0x%lX)", ctx->sp.x - info.addr);
+        EH_ADD_FMT_STR("\r\n    SP:   0x%lX", ctx->sp.x);
+        if (IS_HB_ADDR(ctx->sp.x)) EH_ADD_FMT_STR(" (BASE + 0x%lX)", ctx->sp.x - info.addr);
         
-        utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "\r\n    PC:   0x%lX", ctx->pc.x);
-        if (IS_HB_ADDR(ctx->pc.x)) utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, " (BASE + 0x%lX)", ctx->pc.x - info.addr);
-        utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "\r\n");
+        EH_ADD_FMT_STR("\r\n    PC:   0x%lX", ctx->pc.x);
+        if (IS_HB_ADDR(ctx->pc.x)) EH_ADD_FMT_STR(" (BASE + 0x%lX)", ctx->pc.x - info.addr);
+        EH_ADD_FMT_STR("\r\n");
         
         /* Unwind stack. */
         if (nxdt::utils::UnwindStack(stack_trace, &stack_trace_size, STACK_TRACE_SIZE, ctx->fp.x))
         {
             /* Log stack trace. */
-            utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "Stack Trace:");
+            EH_ADD_FMT_STR("Stack Trace:");
             
             for(u32 i = 0; i < stack_trace_size; i++)
             {
                 u64 addr = stack_trace[i];
-                utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "\r\n    [%02u]: 0x%lX", stack_trace_size - i - 1, addr);
-                if (IS_HB_ADDR(addr)) utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, " (BASE + 0x%lX)", addr - info.addr);
+                EH_ADD_FMT_STR("\r\n    [%02u]: 0x%lX", stack_trace_size - i - 1, addr);
+                if (IS_HB_ADDR(addr)) EH_ADD_FMT_STR(" (BASE + 0x%lX)", addr - info.addr);
             }
             
-            utilsAppendFormattedStringToBuffer(&exception_str, &exception_str_size, "\r\n");
+            EH_ADD_FMT_STR("\r\n");
         }
         
         /* Write log string. */
@@ -216,7 +219,8 @@ extern "C" {
         if (exception_str) free(exception_str);
         
         /* Abort program execution. */
-        crash_str = (g_borealisInitialized ? i18n::getStr("generic/exception_triggered"_i18n, error_desc_str, ctx->error_desc) : fmt::format("Fatal exception triggered!\nReason: {} (0x{:X}).", error_desc_str, ctx->error_desc));
+        crash_str = (g_borealisInitialized ? i18n::getStr("generic/exception_triggered"_i18n, error_desc_str, ctx->error_desc) : \
+                                             fmt::format("Fatal exception triggered!\nReason: {} (0x{:X}).", error_desc_str, ctx->error_desc));
         crash_str += (fmt::format("\nPC: 0x{:X}", ctx->pc.x) + (IS_HB_ADDR(ctx->pc.x) ? fmt::format(" (BASE + 0x{:X}).", ctx->pc.x - info.addr) : "."));
         nxdt::utils::AbortProgramExecution(crash_str);
     }
