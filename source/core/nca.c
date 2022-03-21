@@ -390,8 +390,8 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 
 void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || !buf || !buf_size || \
-        (buf_offset + buf_size) > ctx->content_size) return;
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || \
+        !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
     
     patch->written = true;
     
@@ -1026,7 +1026,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
     
     bool success = false;
     
-    if (!ctx || !ctx->enabled || !(nca_ctx = (NcaContext*)ctx->nca_ctx) || (!is_integrity_patch && (ctx->header.hash_type != NcaHashType_HierarchicalSha256 || \
+    if (!ctx || !ctx->enabled || ctx->has_sparse_layer || !(nca_ctx = (NcaContext*)ctx->nca_ctx) || (!is_integrity_patch && (ctx->header.hash_type != NcaHashType_HierarchicalSha256 || \
         !ctx->header.hash_data.hierarchical_sha256_data.hash_block_size || !(layer_count = ctx->header.hash_data.hierarchical_sha256_data.hash_region_count) || \
         layer_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !(last_layer_size = ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1].size))) || \
         (is_integrity_patch && (ctx->header.hash_type != NcaHashType_HierarchicalIntegrity || \
@@ -1251,7 +1251,7 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     u8 *out = NULL;
     bool success = false;
     
-    if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
+    if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || ctx->has_sparse_layer || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
         ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type >= NcaEncryptionType_AesCtrEx || !data || !data_size || \
         (data_offset + data_size) > ctx->section_size || !out_block_size || !out_block_offset)
     {

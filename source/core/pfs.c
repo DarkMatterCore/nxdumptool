@@ -51,7 +51,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     /* Fill context. */
     out->nca_fs_ctx = nca_fs_ctx;
     
-    if (!ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header.hash_data.hierarchical_sha256_data), nca_fs_ctx->section_size))
+    if (!nca_fs_ctx->has_sparse_layer && !ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header.hash_data.hierarchical_sha256_data), nca_fs_ctx->section_size))
     {
         LOG_MSG("Invalid HierarchicalSha256 block!");
         goto end;

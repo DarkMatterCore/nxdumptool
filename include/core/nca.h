@@ -450,7 +450,7 @@ bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, 
 /// Input offset must be relative to the start of the NCA FS section.
 /// Output size and offset are guaranteed to be aligned to the AES sector size used by the encryption type from the FS section.
 /// Output offset is relative to the start of the NCA content file, making it easier to use the output encrypted block to seamlessly replace data while dumping a NCA.
-/// This function isn't compatible with Patch RomFS sections.
+/// This function doesn't support Patch RomFS sections, nor sections with Sparse and/or Compressed storage.
 /// Used internally by both ncaGenerateHierarchicalSha256Patch() and ncaGenerateHierarchicalIntegrityPatch().
 void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
 

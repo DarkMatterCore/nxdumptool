@@ -65,7 +65,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         out->offset = hash_region->offset;
         out->size = hash_region->size;
     } else {
-        if (!ncaValidateHierarchicalIntegrityOffsets(&(nca_fs_ctx->header.hash_data.integrity_meta_info), nca_fs_ctx->section_size))
+        if (!nca_fs_ctx->has_sparse_layer && !ncaValidateHierarchicalIntegrityOffsets(&(nca_fs_ctx->header.hash_data.integrity_meta_info), nca_fs_ctx->section_size))
         {
             LOG_MSG("Invalid HierarchicalIntegrity block!");
             goto end;
