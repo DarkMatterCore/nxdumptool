@@ -43,7 +43,9 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
         update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || update_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx || \
         base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || \
         __builtin_bswap32(update_nca_fs_ctx->header.patch_info.indirect_bucket.header.magic) != NCA_BKTR_MAGIC || \
+        update_nca_fs_ctx->header.patch_info.indirect_bucket.header.version != NCA_BKTR_VERSION || \
         __builtin_bswap32(update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.header.magic) != NCA_BKTR_MAGIC || \
+        update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.header.version != NCA_BKTR_VERSION || \
         (update_nca_fs_ctx->header.patch_info.indirect_bucket.offset + update_nca_fs_ctx->header.patch_info.indirect_bucket.size) != update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.offset || \
         (update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.offset + update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.size) != update_nca_fs_ctx->section_size || \
         (base_nca_ctx->rights_id_available && !base_nca_ctx->titlekey_retrieved) || (update_nca_ctx->rights_id_available && !update_nca_ctx->titlekey_retrieved))

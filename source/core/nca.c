@@ -169,10 +169,14 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         NcaFsSectionContext *fs_ctx = &(out->fs_ctx[i]);
         u8 *fs_header_hash = out->header.fs_header_hash[i].hash;
         
+        NcaSparseInfo *sparse_info = &(fs_ctx->header.sparse_info);
+        NcaBucketInfo *sparse_bucket = &(sparse_info->bucket);
+        
         /* Fill section context. */
         fs_ctx->nca_ctx = out;
         fs_ctx->section_num = i;
         fs_ctx->section_type = NcaFsSectionType_Invalid; /* Placeholder. */
+        fs_ctx->has_sparse_layer = (sparse_info->generation != 0);
         
         /* Don't proceed if this NCA FS section isn't populated. */
         if (!ncaIsFsInfoEntryValid(fs_info)) continue;
@@ -187,9 +191,8 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         fs_ctx->section_offset = NCA_FS_SECTOR_OFFSET(fs_info->start_sector);
         fs_ctx->section_size = (NCA_FS_SECTOR_OFFSET(fs_info->end_sector) - fs_ctx->section_offset);
         
-        /* Check if we're dealing with an invalid offset/size. */
-        if (fs_ctx->section_offset < sizeof(NcaHeader) || !fs_ctx->section_size || \
-            (fs_ctx->section_offset + fs_ctx->section_size) > out->content_size) continue;
+        /* Check if we're dealing with an invalid start offset or an empty size. */
+        if (fs_ctx->section_offset < sizeof(NcaHeader) || !fs_ctx->section_size) continue;
         
         /* Determine encryption type. */
         fs_ctx->encryption_type = (out->format_version == NcaVersion_Nca0 ? NcaEncryptionType_AesXts : fs_ctx->header.encryption_type);
@@ -229,6 +232,24 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         /* Check if we're dealing with an invalid section type value. */
         if (fs_ctx->section_type >= NcaFsSectionType_Invalid) continue;
         
+        /* Check if we're dealing with a sparse storage. */
+        if (fs_ctx->has_sparse_layer)
+        {
+            /* Check if the sparse bucket is valid. */
+            u64 raw_storage_offset = sparse_info->physical_offset;
+            u64 raw_storage_size = (sparse_bucket->offset + sparse_bucket->size);
+            
+            if (__builtin_bswap32(sparse_bucket->header.magic) != NCA_BKTR_MAGIC || sparse_bucket->header.version != NCA_BKTR_VERSION || raw_storage_offset < sizeof(NcaHeader) || \
+                !raw_storage_size || ((raw_storage_offset + raw_storage_size) > out->content_size) || !sparse_bucket->header.entry_count) continue;
+            
+            /* Set sparse table properties. */
+            fs_ctx->sparse_table_offset = (sparse_info->physical_offset + sparse_bucket->offset);
+            fs_ctx->sparse_table_size = sparse_bucket->size;
+        } else {
+            /* Check if we're within boundaries. */
+            if ((fs_ctx->section_offset + fs_ctx->section_size) > out->content_size) continue;
+        }
+        
         /* Initialize crypto data. */
         if ((!out->rights_id_available || (out->rights_id_available && out->titlekey_retrieved)) && fs_ctx->encryption_type > NcaEncryptionType_None && \
             fs_ctx->encryption_type <= NcaEncryptionType_AesCtrEx)
@@ -236,11 +257,22 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
             /* Initialize the partial AES counter for this section. */
             aes128CtrInitializePartialCtr(fs_ctx->ctr, fs_ctx->header.aes_ctr_upper_iv.value, fs_ctx->section_offset);
             
+            if (fs_ctx->has_sparse_layer)
+            {
+                /* Initialize the partial AES counter for the sparse info bucket table. */
+                NcaAesCtrUpperIv sparse_upper_iv = {0};
+                memcpy(sparse_upper_iv.value, fs_ctx->header.aes_ctr_upper_iv.value, sizeof(sparse_upper_iv.value));
+                sparse_upper_iv.generation = ((u32)(sparse_info->generation) << 16);
+                
+                aes128CtrInitializePartialCtr(fs_ctx->sparse_ctr, sparse_upper_iv.value, fs_ctx->sparse_table_offset);
+            }
+            
             /* Initialize AES context. */
             if (out->rights_id_available)
             {
                 /* AES-128-CTR is always used for FS crypto in NCAs with a rights ID. */
                 aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->titlekey, fs_ctx->ctr);
+                if (fs_ctx->has_sparse_layer) aes128CtrContextCreate(&(fs_ctx->sparse_ctr_ctx), out->titlekey, fs_ctx->sparse_ctr);
             } else {
                 if (fs_ctx->encryption_type == NcaEncryptionType_AesXts)
                 {
@@ -252,6 +284,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
                 {
                     /* Patch RomFS sections also use the AES-128-CTR key from the decrypted NCA key area, for some reason. */
                     aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->decrypted_key_area.aes_ctr, fs_ctx->ctr);
+                    if (fs_ctx->has_sparse_layer) aes128CtrContextCreate(&(fs_ctx->sparse_ctr_ctx), out->decrypted_key_area.aes_ctr, fs_ctx->sparse_ctr);
                 } /***else
                 if (fs_ctx->encryption_type == NcaEncryptionType_AesCtr)
                 {
