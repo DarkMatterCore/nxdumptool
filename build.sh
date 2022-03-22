@@ -3,6 +3,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 archive_filename="nxdumptool-rewrite_poc_$(git rev-parse --short HEAD)"
 
+# Clean-up from last build
 rm -f ./*.7z
 
 rm -rf ./code_templates/tmp
@@ -12,6 +13,7 @@ mv ./source/main.cpp ./main.cpp
 
 make clean_all
 
+# Build loop
 for f in ./code_templates/*.c; do
     basename="$(basename "$f")"
     filename="${basename%.*}"
@@ -38,12 +40,15 @@ for f in ./code_templates/*.c; do
     make BUILD_TYPE="$filename" clean
 done
 
+# Post build clean-up
 make clean_all
 
+# Package resulting binaries
 cd ./code_templates/tmp
 7z a ../../"$archive_filename.7z" */*.nro
 7z a ../../"$archive_filename-Debug_ELFs.7z" */*.elf
 
+# Final clean-up
 cd ../..
 rm -f ./source/main.c
 rm -rf ./code_templates/tmp
