@@ -3,7 +3,7 @@ cd "$(dirname "${BASH_SOURCE[0]}")"
 
 archive_filename="nxdumptool-rewrite_poc_$(git rev-parse --short HEAD)"
 
-# Clean-up
+# Clean-up from last build
 rm -f ./*.7z
 
 rm -rf ./code_templates/tmp
