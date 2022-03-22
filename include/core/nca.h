@@ -85,7 +85,8 @@ typedef enum {
     NcaKeyGeneration_Since910NUP  = 11,                             ///< 9.1.0 - 12.0.3.
     NcaKeyGeneration_Since1210NUP = 12,                             ///< 12.1.0.
     NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
-    NcaKeyGeneration_Current      = NcaKeyGeneration_Since1300NUP,
+    NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0.
+    NcaKeyGeneration_Current      = NcaKeyGeneration_Since1400NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;
 
@@ -442,7 +443,7 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 /// If dealing with Patch RomFS sections, this function should only be used when *not* reading BKTR AesCtrEx storage data. Use ncaReadAesCtrExStorageFromBktrSection() for that.
 bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 
-/// Reads decrypted BKTR AesCtrEx storage data from a NCA Patch RomFS section using an input context and a AesCtrEx CTR value.
+/// Reads decrypted BKTR AesCtrEx storage data from a NCA Patch RomFS section using an input context and an AesCtrEx CTR value.
 /// Input offset must be relative to the start of the NCA FS section.
 bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val);
 

@@ -164,6 +164,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000040, "nd" },
     { 0x0100000000000041, "ngct" },
     { 0x0100000000000042, "pgl" },
+    { 0x0100000000000045, "omm" },
     
     /* System data archives. */
     /* Meta + Data NCAs. */
