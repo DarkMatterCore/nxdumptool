@@ -55,8 +55,8 @@ typedef struct {
     u8 nca_header_key[AES_128_KEY_SIZE * 2];                                                        ///< Generated from nca_header_kek_sealed and nca_header_key_source.
     
     ///< RSA-2048-PSS moduli used to verify the main signature from NCA headers.
-    u8 nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];      ///< Moduli used in retail units. Retrieved from the .rodata segment in the FS sysmodule.
-    u8 nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];       ///< Moduli used in development units. Retrieved from the .rodata segment in the FS sysmodule.
+    u8 nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];          ///< Moduli used in retail units. Retrieved from the .rodata segment in the FS sysmodule.
+    u8 nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];           ///< Moduli used in development units. Retrieved from the .rodata segment in the FS sysmodule.
     
     ///< AES-128-ECB keys needed to handle key area crypto from NCA headers.
     u8 nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Count][AES_128_KEY_SIZE];                      ///< Retrieved from the .rodata segment in the FS sysmodule.
@@ -162,8 +162,8 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
                 0xF9, 0x2E, 0x84, 0x98, 0x17, 0x2C, 0xAF, 0x9C, 0x20, 0xE3, 0xF1, 0xF7, 0xD3, 0xE7, 0x2C, 0x62,
                 0x50, 0xA9, 0x40, 0x7A, 0xE7, 0x84, 0xE0, 0x03, 0x58, 0x07, 0x85, 0xA5, 0x68, 0x0B, 0x80, 0x33
             },
-            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_Since100NUP]),
-            .dst = g_ncaKeyset.nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_Since100NUP],
+            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Since100NUP]),
+            .dst = g_ncaKeyset.nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Since100NUP],
             .mandatory_func = &keysIsProductionModulus1xMandatory
         },
         {
@@ -172,8 +172,8 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
                 0x5F, 0x6B, 0xE3, 0x1C, 0x31, 0x6E, 0x7C, 0xB2, 0x1C, 0xA7, 0xB9, 0xA1, 0x70, 0x6A, 0x9D, 0x58,
                 0x04, 0xEB, 0x90, 0x53, 0x72, 0xEF, 0xCB, 0x56, 0xD1, 0x93, 0xF2, 0xAF, 0x9E, 0x8A, 0xD1, 0xFA
             },
-            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_Since900NUP]),
-            .dst = g_ncaKeyset.nca_main_signature_moduli_prod[NcaMainSignatureKeyGeneration_Since900NUP],
+            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Since900NUP]),
+            .dst = g_ncaKeyset.nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Since900NUP],
             .mandatory_func = &keysIsProductionModulus9xMandatory
         },
         {
@@ -182,8 +182,8 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
                 0x50, 0xF8, 0x26, 0xBB, 0x13, 0xFE, 0xB2, 0x6D, 0x83, 0xCF, 0xFF, 0xD8, 0x38, 0x45, 0xC3, 0x51,
                 0x4D, 0xCB, 0x06, 0x91, 0x83, 0x52, 0x06, 0x35, 0x7A, 0xC1, 0xDA, 0x6B, 0xF1, 0x60, 0x9F, 0x18
             },
-            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_Since100NUP]),
-            .dst = g_ncaKeyset.nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_Since100NUP],
+            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Since100NUP]),
+            .dst = g_ncaKeyset.nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Since100NUP],
             .mandatory_func = &keysIsDevelopmentModulus1xMandatory
         },
         {
@@ -192,8 +192,8 @@ static KeysMemoryInfo g_fsRodataMemoryInfo = {
                 0x56, 0xF5, 0x06, 0xEF, 0x8E, 0xCA, 0x2A, 0x29, 0x6F, 0x65, 0x45, 0xE1, 0x87, 0x60, 0x01, 0x11,
                 0xBC, 0xC7, 0x38, 0x56, 0x99, 0x16, 0xAD, 0xA5, 0xDD, 0x89, 0xF2, 0xE9, 0xAB, 0x28, 0x5B, 0x18
             },
-            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_Since900NUP]),
-            .dst = g_ncaKeyset.nca_main_signature_moduli_dev[NcaMainSignatureKeyGeneration_Since900NUP],
+            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Since900NUP]),
+            .dst = g_ncaKeyset.nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Since900NUP],
             .mandatory_func = &keysIsDevelopmentModulus9xMandatory
         },
         {
@@ -325,7 +325,7 @@ const u8 *keysGetNcaHeaderKey(void)
 
 const u8 *keysGetNcaMainSignatureModulus(u8 key_generation)
 {
-    if (key_generation > NcaMainSignatureKeyGeneration_Current)
+    if (key_generation > NcaSignatureKeyGeneration_Current)
     {
         LOG_MSG("Unsupported key generation value! (0x%02X).", key_generation);
         return NULL;

@@ -85,7 +85,7 @@ typedef enum {
     NcaKeyGeneration_Since910NUP  = 11,                             ///< 9.1.0 - 12.0.3.
     NcaKeyGeneration_Since1210NUP = 12,                             ///< 12.1.0.
     NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
-    NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0.
+    NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.0.
     NcaKeyGeneration_Current      = NcaKeyGeneration_Since1400NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;
@@ -97,13 +97,13 @@ typedef enum {
     NcaKeyAreaEncryptionKeyIndex_Count       = 3
 } NcaKeyAreaEncryptionKeyIndex;
 
-/// 'NcaMainSignatureKeyGeneration_Current' will always point to the last known key generation value.
+/// 'NcaSignatureKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
-    NcaMainSignatureKeyGeneration_Since100NUP = 0,                                          ///< 1.0.0 - 8.1.1.
-    NcaMainSignatureKeyGeneration_Since900NUP = 1,                                          ///< 9.0.0 - 13.2.1.
-    NcaMainSignatureKeyGeneration_Current     = NcaMainSignatureKeyGeneration_Since900NUP,
-    NcaMainSignatureKeyGeneration_Max         = (NcaMainSignatureKeyGeneration_Current + 1)
-} NcaMainSignatureKeyGeneration;
+    NcaSignatureKeyGeneration_Since100NUP = 0,                                      ///< 1.0.0 - 8.1.1.
+    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 14.1.0.
+    NcaSignatureKeyGeneration_Current     = NcaSignatureKeyGeneration_Since900NUP,
+    NcaSignatureKeyGeneration_Max         = (NcaSignatureKeyGeneration_Current + 1)
+} NcaSignatureKeyGeneration;
 
 typedef struct {
     u32 start_sector;   ///< Expressed in NCA_FS_SECTOR_SIZE sectors.
@@ -148,7 +148,7 @@ typedef struct {
     u32 content_index;
     SdkAddOnVersion sdk_addon_version;
     u8 key_generation;                                      ///< NcaKeyGeneration. Uses NcaKeyGeneration_Since301NUP or greater values.
-    u8 main_signature_key_generation;                       ///< NcaMainSignatureKeyGeneration.
+    u8 main_signature_key_generation;                       ///< NcaSignatureKeyGeneration.
     u8 reserved[0xE];
     FsRightsId rights_id;                                   ///< Used for titlekey crypto.
     NcaFsInfo fs_info[NCA_FS_HEADER_COUNT];                 ///< Start and end sectors for each NCA FS section.

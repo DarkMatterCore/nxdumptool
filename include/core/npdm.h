@@ -39,13 +39,13 @@ extern "C" {
 #define NPDM_SYSTEM_RESOURCE_MAX_SIZE           0x1FE00000
 #define NPDM_MAIN_THREAD_STACK_SIZE_ALIGNMENT   0x1000
 
-/// 'NpdmAcidSignatureKeyGeneration_Current' will always point to the last known key generation value.
+/// 'NpdmSignatureKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
-    NpdmAcidSignatureKeyGeneration_Since100NUP = 0,                                          ///< 1.0.0 - 8.1.1.
-    NpdmAcidSignatureKeyGeneration_Since900NUP = 1,                                          ///< 9.0.0 - 13.2.1.
-    NpdmAcidSignatureKeyGeneration_Current     = NpdmAcidSignatureKeyGeneration_Since900NUP,
-    NpdmAcidSignatureKeyGeneration_Max         = (NpdmAcidSignatureKeyGeneration_Current + 1)
-} NpdmAcidSignatureKeyGeneration;
+    NpdmSignatureKeyGeneration_Since100NUP = 0,                                         ///< 1.0.0 - 8.1.1.
+    NpdmSignatureKeyGeneration_Since900NUP = 1,                                         ///< 9.0.0 - 14.1.0.
+    NpdmSignatureKeyGeneration_Current     = NpdmSignatureKeyGeneration_Since900NUP,
+    NpdmSignatureKeyGeneration_Max         = (NpdmSignatureKeyGeneration_Current + 1)
+} NpdmSignatureKeyGeneration;
 
 typedef enum {
     NpdmProcessAddressSpace_AddressSpace32Bit           = 0,
@@ -68,7 +68,7 @@ NXDT_ASSERT(NpdmMetaFlags, 0x1);
 /// This is followed by ACID and ACI0 sections, both with variable offsets and sizes.
 typedef struct {
     u32 magic;                          ///< "NPDM".
-    u8 acid_signature_key_generation;   ///< NpdmAcidSignatureKeyGeneration.
+    u8 acid_signature_key_generation;   ///< NpdmSignatureKeyGeneration.
     u8 reserved_1[0x7];
     NpdmMetaFlags flags;
     u8 reserved_2;
@@ -116,7 +116,9 @@ typedef struct {
     u8 public_key[0x100];           ///< RSA public key used to verify the ACID signature from the Program NCA header.
     u32 magic;                      ///< "ACID".
     u32 size;                       ///< Must be equal to ACID section size from the META header minus 0x100 (ACID signature size).
-    u8 reserved_1[0x4];
+    u8 version;                     ///< 9.0.0+.
+    u8 unknown;                     ///< 14.0.0+.
+    u8 reserved_1[0x2];
     NpdmAcidFlags flags;
     u64 program_id_min;
     u64 program_id_max;
