@@ -109,8 +109,8 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info);
 static bool keysDeriveNcaHeaderKey(void);
 static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void);
 
-static int keysGetKeyAndValueFromFile(FILE *f, char **key, char **value);
-static char keysConvertHexCharToBinary(char c);
+static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **value);
+static char keysConvertHexDigitToBinary(char c);
 static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 size);
 static bool keysReadKeysFromFile(void);
 
@@ -627,27 +627,23 @@ static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void)
 
 /**
  * Reads a line from file f and parses out the key and value from it.
- * The format of a line must match /^ *[A-Za-z0-9_] *[,=] *.+$/.
+ * The format of a line must match /^[ \t]*\w+[ \t]*[,=][ \t]*(?:[A-Fa-f0-9]{2})+[ \t]*$/.
  * If a line ends in \r, the final \r is stripped.
  * The input file is assumed to have been opened with the 'b' flag.
  * The input file is assumed to contain only ASCII.
  *
- * A line cannot exceed 512 bytes in length.
- * Lines that are excessively long will be silently truncated.
+ * On success, *line will point to a dynamically allocated buffer that holds
+ * the read line, whilst *key and *value will be set to point to the key and
+ * value strings within *line, respectively. *line must be freed by the caller.
+ * On failure, *line, *key and *value will all be set to NULL.
+ * Empty lines and end of file are both considered failures.
  *
- * On success, *key and *value will be set to point to the key and value in
- * the input line, respectively.
- * *key and *value may also be NULL in case of empty lines.
- * On failure, *key and *value will be set to NULL.
- * End of file is considered failure.
+ * This function is thread-safe.
  *
- * Because *key and *value will point to a static buffer, their contents must be
- * copied before calling this function again.
- * For the same reason, this function is not thread-safe.
- *
- * The key will be converted to lowercase.
- * An empty key is considered a parse error, but an empty value is returned as
- * success.
+ * Both key and value strings will be converted to lowercase.
+ * Empty key and/or value strings are both considered a parse error.
+ * Furthermore, a parse error will also be returned if the value string length
+ * is not a multiple of 2.
  *
  * This function assumes that the file can be trusted not to contain any NUL in
  * the contents.
@@ -656,112 +652,200 @@ static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void)
  * the line, at the end of the line as well as around = (or ,) will be ignored.
  *
  * @param f the file to read
+ * @param line pointer to change to point to the read line
  * @param key pointer to change to point to the key
  * @param value pointer to change to point to the value
  * @return 0 on success,
  *         1 on end of file,
- *         -1 on parse error (line too long, line malformed)
+ *         -1 on parse error (line malformed, empty line)
  *         -2 on I/O error
  */
-static int keysGetKeyAndValueFromFile(FILE *f, char **key, char **value)
+static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **value)
 {
-    if (!f || !key || !value)
+    if (!f || !line || !key || !value)
     {
         LOG_MSG("Invalid parameters!");
         return -2;
     }
     
-#define SKIP_SPACE(p) do {\
-    for (; (*p == ' ' || *p == '\t'); ++p);\
-} while(0);
+    int ret = -1;
+    size_t n = 0;
+    ssize_t read = 0;
+    char *l = NULL, *k = NULL, *v = NULL, *p = NULL, *e = NULL;
     
-    static char line[512] = {0};
-    char *k, *v, *p, *end;
-    
-    *key = *value = NULL;
-    
+    /* Clear inputs beforehand. */
+    if (*line) free(*line);
+    *line = *key = *value = NULL;
     errno = 0;
     
-    if (fgets(line, (int)sizeof(line), f) == NULL)
+    /* Read line. */
+    read = __getline(line, &n, f);
+    if (errno != 0 || read <= 0)
     {
-        if (feof(f))
-        {
-            return 1;
-        } else {
-            return -2;
-        }
+        ret = ((errno == 0 && (read == 0 || feof(f))) ? 1 : -2);
+        if (ret != 1) LOG_MSG("__getline failed! (0x%lX, %ld, %d, %d).", ftell(f), read, errno, ret);
+        goto end;
     }
     
-    if (errno != 0) return -2;
+    n = (ftell(f) - (size_t)read);
     
-    if (*line == '\n' || *line == '\r' || *line == '\0') return 0;
-    
-    /* Not finding \r or \n is not a problem.
-     * The line might just be exactly 512 characters long, we have no way to
-     * tell.
-     * Additionally, it's possible that the last line of a file is not actually
-     * a line (i.e., does not end in '\n'); we do want to handle those.
-     */
-    if ((p = strchr(line, '\r')) != NULL || (p = strchr(line, '\n')) != NULL)
+    /* Check if we're dealing with an empty line. */
+    l = *line;
+    if (*l == '\n' || *l == '\r' || *l == '\0')
     {
-        end = p;
+        LOG_MSG("Empty line detected! (0x%lX, 0x%lX).", n, read);
+        goto end;
+    }
+    
+    /* Not finding '\r' or '\n' is not a problem. */
+    /* It's possible that the last line of a file isn't actually a line (i.e., does not end in '\n'). */
+    /* We do want to handle those. */
+    if ((p = strchr(l, '\r')) != NULL || (p = strchr(l, '\n')) != NULL)
+    {
+        e = p;
         *p = '\0';
     } else {
-        end = (line + strlen(line) + 1);
+        e = (l + read + 1);
     }
     
-    p = line;
+#define SKIP_SPACE(p) do { \
+        for(; (*p == ' ' || *p == '\t'); ++p); \
+    } while(0);
+    
+    /* Skip leading whitespace before the key name string. */
+    p = l;
     SKIP_SPACE(p);
     k = p;
     
-    /* Validate key and convert to lower case. */
-    for (; *p != ' ' && *p != ',' && *p != '\t' && *p != '='; ++p)
+    /* Validate key name string. */
+    for(; *p != ' ' && *p != '\t' && *p != ',' && *p != '='; ++p)
     {
-        if (*p == '\0') return -1;
+        /* Bail out if we reached the end of string. */
+        if (*p == '\0')
+        {
+            LOG_MSG("End of string reached while validating key name string! (#1) (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
+            goto end;
+        }
         
+        /* Convert uppercase characters to lowercase. */
         if (*p >= 'A' && *p <= 'Z')
         {
-            *p = 'a' + (*p - 'A');
+            *p = ('a' + (*p - 'A'));
             continue;
         }
         
-        if (*p != '_' && (*p < '0' && *p > '9') && (*p < 'a' && *p > 'z')) return -1;
+        /* Handle unsupported characters. */
+        if (*p != '_' && (*p < '0' || *p > '9') && (*p < 'a' || *p > 'z'))
+        {
+            LOG_MSG("Unsupported character detected in key name string! (0x%lX, 0x%lX, 0x%lX, 0x%02X).", n, read, (size_t)(p - l), *p);
+            goto end;
+        }
     }
     
     /* Bail if the final ++p put us at the end of string. */
-    if (*p == '\0') return -1;
+    if (*p == '\0')
+    {
+        LOG_MSG("End of string reached while validating key name string! (#2) (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
+        goto end;
+    }
     
-    /* We should be at the end of key now and either whitespace or [,=] follows. */
+    /* We should be at the end of the key name string now and either whitespace or [,=] follows. */
     if (*p == '=' || *p == ',')
     {
         *p++ = '\0';
     } else {
+        /* Skip leading whitespace before [,=]. */
         *p++ = '\0';
         SKIP_SPACE(p);
-        if (*p != '=' && *p != ',') return -1;
+        
+        if (*p != '=' && *p != ',')
+        {
+            LOG_MSG("Unable to find expected [,=]! (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
+            goto end;
+        }
+        
         *p++ = '\0';
     }
     
-    /* Empty key is an error. */
-    if (*k == '\0') return -1;
+    /* Empty key name string is an error. */
+    if (*k == '\0')
+    {
+        LOG_MSG("Key name string empty! (0x%lX, 0x%lX).", n, read);
+        goto end;
+    }
     
+    /* Skip trailing whitespace after [,=]. */
     SKIP_SPACE(p);
     v = p;
     
-    /* Skip trailing whitespace. */
-    for (p = end - 1; *p == '\t' || *p == ' '; --p);
+#undef SKIP_SPACE
     
-    *(p + 1) = '\0';
+    /* Validate value string. */
+    for(; p < e && *p != ' ' && *p != '\t'; ++p)
+    {
+        /* Bail out if we reached the end of string. */
+        if (*p == '\0')
+        {
+            LOG_MSG("End of string reached while validating value string! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(p - l), k);
+            goto end;
+        }
+        
+        /* Convert uppercase characters to lowercase. */
+        if (*p >= 'A' && *p <= 'F')
+        {
+            *p = ('a' + (*p - 'A'));
+            continue;
+        }
+        
+        /* Handle unsupported characters. */
+        if ((*p < '0' || *p > '9') && (*p < 'a' || *p > 'f'))
+        {
+            LOG_MSG("Unsupported character detected in value string! (0x%lX, 0x%lX, 0x%lX, 0x%02X, %s).", n, read, (size_t)(p - l), *p, k);
+            goto end;
+        }
+    }
     
+    /* We should be at the end of the value string now and whitespace may optionally follow. */
+    l = p;
+    if (p < e)
+    {
+        /* Skip trailing whitespace after the value string. */
+        /* Make sure there's no additional data after this. */
+        *p++ = '\0';
+        for(; p < e && (*p == ' ' || *p == '\t'); ++p);
+        
+        if (p < e)
+        {
+            LOG_MSG("Additional data detected after value string and before line end! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(p - *line), k);
+            goto end;
+        }
+    }
+    
+    /* Empty value string and value string length not being a multiple of 2 are both errors. */
+    if (*v == '\0' || ((l - v) % 2) != 0)
+    {
+        LOG_MSG("Invalid value string length! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(l - v), k);
+        goto end;
+    }
+    
+    /* Update pointers. */
     *key = k;
     *value = v;
     
-    return 0;
+    /* Update return value. */
+    ret = 0;
     
-#undef SKIP_SPACE
+end:
+    if (ret != 0)
+    {
+        if (*line) free(*line);
+        *line = *key = *value = NULL;
+    }
+    
+    return ret;
 }
 
-static char keysConvertHexCharToBinary(char c)
+static char keysConvertHexDigitToBinary(char c)
 {
     if ('a' <= c && c <= 'f') return (c - 'a' + 0xA);
     if ('A' <= c && c <= 'F') return (c - 'A' + 0xA);
@@ -790,7 +874,7 @@ static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 siz
     
     for(u32 i = 0; i < hex_str_len; i++)
     {
-        char val = keysConvertHexCharToBinary(value[i]);
+        char val = keysConvertHexDigitToBinary(value[i]);
         if (val == 'z')
         {
             LOG_MSG("Invalid hex character in key \"%s\" at position %u!", key, i);
@@ -809,9 +893,9 @@ static bool keysReadKeysFromFile(void)
     int ret = 0;
     u32 key_count = 0;
     FILE *keys_file = NULL;
-    char *key = NULL, *value = NULL;
+    char *line = NULL, *key = NULL, *value = NULL;
     char test_name[0x40] = {0};
-    bool parse_fail = false, eticket_rsa_kek_available = false;
+    bool eticket_rsa_kek_available = false;
     const char *keys_file_path = (utilsIsDevelopmentUnit() ? DEV_KEYS_FILE_PATH : PROD_KEYS_FILE_PATH);
     
     keys_file = fopen(keys_file_path, "rb");
@@ -821,74 +905,56 @@ static bool keysReadKeysFromFile(void)
         return false;
     }
     
+#define PARSE_HEX_KEY(name, out, decl) \
+    if (!strcmp(key, name) && keysParseHexKey(out, key, value, sizeof(out))) { \
+        key_count++; \
+        decl; \
+    }
+    
+#define PARSE_HEX_KEY_WITH_INDEX(name, out) \
+    snprintf(test_name, sizeof(test_name), "%s_%02x", name, i); \
+    PARSE_HEX_KEY(test_name, out, break);
+    
     while(true)
     {
-        ret = keysGetKeyAndValueFromFile(keys_file, &key, &value);
-        if (ret == 1 || ret == -2) break;   /* Break from the while loop if EOF is reached or if an I/O error occurs. */
+        /* Get key and value strings from the current line. */
+        /* Break from the while loop if EOF is reached or if an I/O error occurs. */
+        ret = keysGetKeyAndValueFromFile(keys_file, &line, &key, &value);
+        if (ret == 1 || ret == -2) break;
         
-        /* Ignore malformed lines. */
+        /* Ignore malformed or empty lines. */
         if (ret != 0 || !key || !value) continue;
         
-        if (!strcasecmp(key, "eticket_rsa_kek"))
+        PARSE_HEX_KEY("eticket_rsa_kek", g_ncaKeyset.eticket_rsa_kek, eticket_rsa_kek_available = true; continue);
+        
+        /* This only appears on consoles that use the new PRODINFO key generation scheme. */
+        PARSE_HEX_KEY("eticket_rsa_kek_personalized", g_ncaKeyset.eticket_rsa_kek_personalized, eticket_rsa_kek_available = true; continue);
+        
+        for(u32 i = 0; i < NcaKeyGeneration_Max; i++)
         {
-            if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek)))) break;
-            eticket_rsa_kek_available = true;
-            key_count++;
-        } else
-        if (!strcasecmp(key, "eticket_rsa_kek_personalized"))
-        {
-            /* This only appears on consoles that use the new PRODINFO key generation scheme. */
-            if ((parse_fail = !keysParseHexKey(g_ncaKeyset.eticket_rsa_kek_personalized, key, value, sizeof(g_ncaKeyset.eticket_rsa_kek_personalized)))) break;
-            eticket_rsa_kek_available = true;
-            key_count++;
-        } else {
-            for(u32 i = 0; i < NcaKeyGeneration_Max; i++)
-            {
-                snprintf(test_name, sizeof(test_name), "titlekek_%02x", i);
-                if (!strcasecmp(key, test_name))
-                {
-                    if ((parse_fail = !keysParseHexKey(g_ncaKeyset.ticket_common_keys[i], key, value, sizeof(g_ncaKeyset.ticket_common_keys[i])))) break;
-                    key_count++;
-                    break;
-                }
-                
-                snprintf(test_name, sizeof(test_name), "key_area_key_application_%02x", i);
-                if (!strcasecmp(key, test_name))
-                {
-                    if ((parse_fail = !keysParseHexKey(g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_Application][i], key, value, \
-                        sizeof(g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_Application][i])))) break;
-                    key_count++;
-                    break;
-                }
-                
-                snprintf(test_name, sizeof(test_name), "key_area_key_ocean_%02x", i);
-                if (!strcasecmp(key, test_name))
-                {
-                    if ((parse_fail = !keysParseHexKey(g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_Ocean][i], key, value, \
-                        sizeof(g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_Ocean][i])))) break;
-                    key_count++;
-                    break;
-                }
-                
-                snprintf(test_name, sizeof(test_name), "key_area_key_system_%02x", i);
-                if (!strcasecmp(key, test_name))
-                {
-                    if ((parse_fail = !keysParseHexKey(g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_System][i], key, value, \
-                        sizeof(g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_System][i])))) break;
-                    key_count++;
-                    break;
-                }
-            }
+            PARSE_HEX_KEY_WITH_INDEX("titlekek", g_ncaKeyset.ticket_common_keys[i]);
             
-            if (parse_fail) break;
+            PARSE_HEX_KEY_WITH_INDEX("key_area_key_application", g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_Application][i]);
+            
+            PARSE_HEX_KEY_WITH_INDEX("key_area_key_ocean", g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_Ocean][i]);
+            
+            PARSE_HEX_KEY_WITH_INDEX("key_area_key_system", g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_System][i]);
         }
     }
     
+#undef PARSE_HEX_KEY_WITH_INDEX
+    
+#undef PARSE_HEX_KEY
+    
+    if (line) free(line);
+    
     fclose(keys_file);
     
-    if (parse_fail || !key_count)
+    if (key_count)
     {
-        if (!key_count) LOG_MSG("Unable to parse necessary keys from \"%s\"! (keys file empty?).", keys_file_path);
+        LOG_MSG("Loaded %u key(s) from \"%s\".", key_count, keys_file_path);
+    } else {
+        LOG_MSG("Unable to parse keys from \"%s\"! (keys file empty?).", keys_file_path);
         return false;
     }
     
