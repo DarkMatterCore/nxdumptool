@@ -278,7 +278,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         
         /* Initialize crypto data. */
         if ((!out->rights_id_available || (out->rights_id_available && out->titlekey_retrieved)) && fs_ctx->encryption_type > NcaEncryptionType_None && \
-            fs_ctx->encryption_type <= NcaEncryptionType_AesCtrEx)
+            fs_ctx->encryption_type <= NcaEncryptionType_AesCtrExSkipLayerHash)
         {
             /* Initialize the partial AES counter for this section. */
             aes128CtrInitializePartialCtr(fs_ctx->ctr, fs_ctx->header.aes_ctr_upper_iv.value, fs_ctx->section_offset);
@@ -306,18 +306,12 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
                     aes128XtsContextCreate(&(fs_ctx->xts_decrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, false);
                     aes128XtsContextCreate(&(fs_ctx->xts_encrypt_ctx), out->decrypted_key_area.aes_xts_1, out->decrypted_key_area.aes_xts_2, true);
                 } else
-                if (fs_ctx->encryption_type == NcaEncryptionType_AesCtr || fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx)
+                if (fs_ctx->encryption_type >= NcaEncryptionType_AesCtr && fs_ctx->encryption_type <= NcaEncryptionType_AesCtrExSkipLayerHash)
                 {
                     /* Patch RomFS sections also use the AES-128-CTR key from the decrypted NCA key area, for some reason. */
                     aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->decrypted_key_area.aes_ctr, fs_ctx->ctr);
                     if (fs_ctx->has_sparse_layer) aes128CtrContextCreate(&(fs_ctx->sparse_ctr_ctx), out->decrypted_key_area.aes_ctr, fs_ctx->sparse_ctr);
-                } /***else
-                if (fs_ctx->encryption_type == NcaEncryptionType_AesCtr)
-                {
-                    aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->decrypted_key_area.aes_ctr, fs_ctx->ctr);
-                } else {
-                    aes128CtrContextCreate(&(fs_ctx->ctr_ctx), out->decrypted_key_area.aes_ctr_ex, fs_ctx->ctr);
-                }***/
+                }
             }
         }
         
@@ -454,15 +448,6 @@ bool ncaRemoveTitleKeyCrypto(NcaContext *ctx)
     /* AES-128-XTS is not used in FS sections from NCAs with titlekey crypto. */
     /* Patch RomFS sections also use the AES-128-CTR key from the decrypted NCA key area, for some reason. */
     memcpy(ctx->decrypted_key_area.aes_ctr, ctx->titlekey, AES_128_KEY_SIZE);
-    
-    /***for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
-    {
-        NcaFsSectionContext *fs_ctx = &(ctx->fs_ctx[i]);
-        if (!fs_ctx->enabled || (fs_ctx->encryption_type != NcaEncryptionType_AesCtr && fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx)) continue;
-        
-        u8 *key_ptr = (fs_ctx->encryption_type == NcaEncryptionType_AesCtr ? ctx->decrypted_key_area.aes_ctr : ctx->decrypted_key_area.aes_ctr_ex);
-        memcpy(key_ptr, ctx->titlekey, AES_128_KEY_SIZE);
-    }***/
     
     /* Encrypt NCA key area. */
     if (!ncaEncryptKeyArea(ctx))
@@ -719,23 +704,25 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
     }
     
     const u8 null_key[AES_128_KEY_SIZE] = {0};
-    u8 key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4);
+    
+    u8 key_count = NCA_KEY_AREA_USED_KEY_COUNT;
+    if (ctx->format_version == NcaVersion_Nca0) key_count--;
     
     /* Check if we're dealing with a NCA0 with a plaintext key area. */
     if (ncaIsVersion0KeyAreaEncrypted(ctx))
     {
-        memcpy(&(ctx->decrypted_key_area), &(ctx->header.encrypted_key_area), NCA_USED_KEY_AREA_SIZE);
+        memcpy(&(ctx->decrypted_key_area), &(ctx->header.encrypted_key_area), sizeof(NcaDecryptedKeyArea));
         return true;
     }
     
     /* Clear decrypted key area. */
-    memset(&(ctx->decrypted_key_area), 0, NCA_USED_KEY_AREA_SIZE);
+    memset(&(ctx->decrypted_key_area), 0, sizeof(NcaDecryptedKeyArea));
     
     /* Process key area. */
     for(u8 i = 0; i < key_count; i++)
     {
-        const u8 *src_key = ((u8*)&(ctx->header.encrypted_key_area) + (i * AES_128_KEY_SIZE));
-        u8 *dst_key = ((u8*)&(ctx->decrypted_key_area) + (i * AES_128_KEY_SIZE));
+        const u8 *src_key = ctx->header.encrypted_key_area.keys[i];
+        u8 *dst_key = ctx->decrypted_key_area.keys[i];
         
         /* Don't proceed if we're dealing with a null key. */
         if (!memcmp(src_key, null_key, AES_128_KEY_SIZE)) continue;
@@ -759,14 +746,16 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
         return false;
     }
     
-    u8 key_count = (ctx->format_version == NcaVersion_Nca0 ? 2 : 4);
+    u8 key_count = NCA_KEY_AREA_USED_KEY_COUNT;
+    if (ctx->format_version == NcaVersion_Nca0) key_count--;
+    
     const u8 *kaek = NULL, null_key[AES_128_KEY_SIZE] = {0};
     Aes128Context key_area_ctx = {0};
     
     /* Check if we're dealing with a NCA0 with a plaintext key area. */
     if (ncaIsVersion0KeyAreaEncrypted(ctx))
     {
-        memcpy(&(ctx->header.encrypted_key_area), &(ctx->decrypted_key_area), NCA_USED_KEY_AREA_SIZE);
+        memcpy(&(ctx->header.encrypted_key_area), &(ctx->decrypted_key_area), sizeof(NcaDecryptedKeyArea));
         return true;
     }
     
@@ -787,8 +776,8 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
     /* Process key area. */
     for(u8 i = 0; i < key_count; i++)
     {
-        const u8 *src_key = ((u8*)&(ctx->decrypted_key_area) + (i * AES_128_KEY_SIZE));
-        u8 *dst_key = ((u8*)&(ctx->header.encrypted_key_area) + (i * AES_128_KEY_SIZE));
+        const u8 *src_key = ctx->decrypted_key_area.keys[i];
+        u8 *dst_key = ctx->header.encrypted_key_area.keys[i];
         
         /* Don't proceed if we're dealing with a null key. */
         if (!memcmp(src_key, null_key, AES_128_KEY_SIZE)) continue;
@@ -822,7 +811,7 @@ NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx)
     if (!ctx || ctx->format_version != NcaVersion_Nca0) return false;
     
     u8 nca0_key_area_hash[SHA256_HASH_SIZE] = {0};
-    sha256CalculateHash(nca0_key_area_hash, &(ctx->header.encrypted_key_area), NCA_USED_KEY_AREA_SIZE);
+    sha256CalculateHash(nca0_key_area_hash, &(ctx->header.encrypted_key_area), 4 * AES_128_KEY_SIZE);
     return (memcmp(nca0_key_area_hash, g_nca0KeyAreaHash, SHA256_HASH_SIZE) != 0);
 }
 
@@ -847,8 +836,8 @@ NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx)
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset)
 {
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
-        ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_AesCtrEx || !out || !read_size || \
-        (offset + read_size) > ctx->section_size)
+        ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_AesCtrExSkipLayerHash || \
+        !out || !read_size || (offset + read_size) > ctx->section_size)
     {
         LOG_MSG("Invalid NCA FS section header parameters!");
         return false;
@@ -875,7 +864,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     /* Optimization for reads from plaintext FS sections or reads that are aligned to the AES-CTR / AES-XTS sector size. */
     if (ctx->encryption_type == NcaEncryptionType_None || \
         (ctx->encryption_type == NcaEncryptionType_AesXts && !(content_offset % NCA_AES_XTS_SECTOR_SIZE) && !(read_size % NCA_AES_XTS_SECTOR_SIZE)) || \
-        ((ctx->encryption_type == NcaEncryptionType_AesCtr || ctx->encryption_type == NcaEncryptionType_AesCtrEx) && !(content_offset % AES_BLOCK_SIZE) && !(read_size % AES_BLOCK_SIZE)))
+        (ctx->encryption_type >= NcaEncryptionType_AesCtr && ctx->encryption_type <= NcaEncryptionType_AesCtrExSkipLayerHash && !(content_offset % AES_BLOCK_SIZE) && !(read_size % AES_BLOCK_SIZE)))
     {
         /* Read data. */
         if (!ncaReadContentFile(nca_ctx, out, read_size, content_offset))
@@ -904,7 +893,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
                 goto end;
             }
         } else
-        if (ctx->encryption_type == NcaEncryptionType_AesCtr || ctx->encryption_type == NcaEncryptionType_AesCtrEx)
+        if (ctx->encryption_type >= NcaEncryptionType_AesCtr && ctx->encryption_type <= NcaEncryptionType_AesCtrExSkipLayerHash)
         {
             aes128CtrUpdatePartialCtr(ctx->ctr, content_offset);
             aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
@@ -945,7 +934,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
             goto end;
         }
     } else
-    if (ctx->encryption_type == NcaEncryptionType_AesCtr || ctx->encryption_type == NcaEncryptionType_AesCtrEx)
+    if (ctx->encryption_type >= NcaEncryptionType_AesCtr && ctx->encryption_type <= NcaEncryptionType_AesCtrExSkipLayerHash)
     {
         aes128CtrUpdatePartialCtr(ctx->ctr, block_start_offset);
         aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
@@ -964,7 +953,8 @@ end:
 static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val)
 {
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
-        ctx->section_type != NcaFsSectionType_PatchRomFs || ctx->encryption_type != NcaEncryptionType_AesCtrEx || !out || !read_size || (offset + read_size) > ctx->section_size)
+        ctx->section_type != NcaFsSectionType_PatchRomFs || (ctx->encryption_type != NcaEncryptionType_AesCtrEx && ctx->encryption_type != NcaEncryptionType_AesCtrExSkipLayerHash) || \
+        !out || !read_size || (offset + read_size) > ctx->section_size)
     {
         LOG_MSG("Invalid NCA FS section header parameters!");
         return false;
@@ -1277,9 +1267,11 @@ static void *_ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const
     u8 *out = NULL;
     bool success = false;
     
+    // TODO: add support for Sha3 layers and SkipLayer crypto types.
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || ctx->has_sparse_layer || !ctx->nca_ctx || ctx->section_num >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
-        ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type >= NcaEncryptionType_AesCtrEx || !data || !data_size || \
-        (data_offset + data_size) > ctx->section_size || !out_block_size || !out_block_offset)
+        ctx->hash_type < NcaHashType_HierarchicalSha256 || ctx->hash_type > NcaHashType_HierarchicalIntegrity || ctx->encryption_type == NcaEncryptionType_Auto || \
+        ctx->encryption_type >= NcaEncryptionType_AesCtrEx || ctx->section_type >= NcaFsSectionType_Invalid || !data || !data_size || (data_offset + data_size) > ctx->section_size || \
+        !out_block_size || !out_block_offset)
     {
         LOG_MSG("Invalid NCA FS section header parameters!");
         goto end;
