@@ -573,14 +573,14 @@ static bool keysDeriveNcaHeaderKey(void)
     rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_header_kek_sealed, g_ncaKeyset.nca_header_key_source, g_ncaKeyset.nca_header_key);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (nca_header_key, part 1).", rc);
+        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (nca_header_key) (#1).", rc);
         return false;
     }
     
     rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_header_kek_sealed, g_ncaKeyset.nca_header_key_source + AES_128_KEY_SIZE, g_ncaKeyset.nca_header_key + AES_128_KEY_SIZE);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (nca_header_key, part 2).", rc);
+        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (nca_header_key) (#2).", rc);
         return false;
     }
     

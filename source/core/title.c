@@ -238,6 +238,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000001014, "PlayReport" },
     { 0x0100000000001015, "MaintenanceMenu" },
     { 0x0100000000001016, "application_install" },              ///< Placeholder.
+    { 0x0100000000001017, "nn.am.SystemReportTask" },           ///< Placeholder.
     { 0x0100000000001018, "systemupdate_dl_throughput" },       ///< Placeholder.
     { 0x0100000000001019, "volume_update"},                     ///< Placeholder.
     { 0x010000000000101A, "gift" },
@@ -256,6 +257,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000001028, "ns_unknown_1" },                     ///< Placeholder.
     { 0x010000000000102A, "am_unknown_2" },                     ///< Placeholder.
     { 0x010000000000102B, "glue_unknown_1" },                   ///< Placeholder.
+    { 0x010000000000102C, "am_unknown_3" },                     ///< Placeholder.
     { 0x010000000000102E, "blacklist" },
     { 0x010000000000102F, "content_delivery" },
     { 0x0100000000001031, "ns_unknown_2" },                     ///< Placeholder.
@@ -264,6 +266,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000001034, "ngct_unknown" },                     ///< Placeholder.
     { 0x0100000000001037, "nim_unknown" },                      ///< Placeholder.
     { 0x0100000000001038, "sample" },
+    { 0x010000000000103C, "mnpp" },                             ///< Placeholder.
     { 0x0100000000001FFF, "EndOceanProgramId" },
     
     /* Development system applets. */

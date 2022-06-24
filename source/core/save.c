@@ -341,7 +341,7 @@ static u32 save_journal_storage_read(journal_storage_ctx_t *ctx, remap_storage_c
 
 static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_ctx_t *ctx, u64 master_hash_offset, ivfc_save_hdr_t *ivfc)
 {
-    if (!ctx || !ctx->levels || !ivfc || !ivfc->num_levels)
+    if (!ctx || !ivfc || !ivfc->num_levels)
     {
         LOG_MSG("Invalid parameters!");
         return false;

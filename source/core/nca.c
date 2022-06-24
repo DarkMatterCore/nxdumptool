@@ -194,7 +194,26 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         /* Check if we're dealing with an invalid start offset or an empty size. */
         if (fs_ctx->section_offset < sizeof(NcaHeader) || !fs_ctx->section_size) continue;
         
-        /* Determine encryption type. */
+        /* Determine hash and encryption types. */
+        fs_ctx->hash_type = fs_ctx->header.hash_type;
+        if (fs_ctx->hash_type == NcaHashType_Auto || fs_ctx->hash_type == NcaHashType_AutoSha3)
+        {
+            switch(fs_ctx->section_num)
+            {
+                case 0: /* ExeFS Partition FS. */
+                    fs_ctx->hash_type = (fs_ctx->hash_type == NcaHashType_Auto ? NcaHashType_HierarchicalSha256 : NcaHashType_HierarchicalSha3256);
+                    break;
+                case 1: /* RomFS. */
+                    fs_ctx->hash_type = (fs_ctx->hash_type == NcaHashType_Auto ? NcaHashType_HierarchicalIntegrity : NcaHashType_HierarchicalIntegritySha3);
+                    break;
+                case 2: /* Logo Partition FS. */
+                    fs_ctx->hash_type = NcaHashType_None;
+                    break;
+                default:
+                    break;
+            }
+        }
+        
         fs_ctx->encryption_type = (out->format_version == NcaVersion_Nca0 ? NcaEncryptionType_AesXts : fs_ctx->header.encryption_type);
         if (fs_ctx->encryption_type == NcaEncryptionType_Auto)
         {
@@ -212,19 +231,21 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
             }
         }
         
-        /* Check if we're dealing with an invalid encryption type value. */
-        if (fs_ctx->encryption_type == NcaEncryptionType_Auto || fs_ctx->encryption_type > NcaEncryptionType_AesCtrEx) continue;
+        /* Check if we're dealing with invalid hash/encryption type values. */
+        if (fs_ctx->hash_type == NcaHashType_Auto || fs_ctx->hash_type == NcaHashType_AutoSha3 || fs_ctx->hash_type > NcaHashType_HierarchicalIntegritySha3 || \
+            fs_ctx->encryption_type == NcaEncryptionType_Auto || fs_ctx->encryption_type > NcaEncryptionType_AesCtrExSkipLayerHash) continue;
         
         /* Determine FS section type. */
-        if (fs_ctx->header.fs_type == NcaFsType_PartitionFs && fs_ctx->header.hash_type == NcaHashType_HierarchicalSha256)
+        if (fs_ctx->header.fs_type == NcaFsType_PartitionFs && (fs_ctx->hash_type == NcaHashType_HierarchicalSha256 || fs_ctx->hash_type == NcaHashType_HierarchicalSha3256))
         {
             fs_ctx->section_type = NcaFsSectionType_PartitionFs;
         } else
-        if (fs_ctx->header.fs_type == NcaFsType_RomFs && fs_ctx->header.hash_type == NcaHashType_HierarchicalIntegrity)
+        if (fs_ctx->header.fs_type == NcaFsType_RomFs && (fs_ctx->hash_type == NcaHashType_HierarchicalIntegrity || fs_ctx->hash_type == NcaHashType_HierarchicalIntegritySha3))
         {
-            fs_ctx->section_type = (fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx ? NcaFsSectionType_PatchRomFs : NcaFsSectionType_RomFs);
+            fs_ctx->section_type = ((fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || fs_ctx->encryption_type == NcaEncryptionType_AesCtrExSkipLayerHash) ? \
+                                    NcaFsSectionType_PatchRomFs : NcaFsSectionType_RomFs);
         } else
-        if (fs_ctx->header.fs_type == NcaFsType_RomFs && fs_ctx->header.hash_type == NcaHashType_HierarchicalSha256 && out->format_version == NcaVersion_Nca0)
+        if (fs_ctx->header.fs_type == NcaFsType_RomFs && fs_ctx->hash_type == NcaHashType_HierarchicalSha256 && out->format_version == NcaVersion_Nca0)
         {
             fs_ctx->section_type = NcaFsSectionType_Nca0RomFs;
         }
@@ -753,7 +774,7 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
     }
     
     /* Clear encrypted key area. */
-    memset(&(ctx->header.encrypted_key_area), 0, NCA_USED_KEY_AREA_SIZE);
+    memset(&(ctx->header.encrypted_key_area), 0, sizeof(NcaEncryptedKeyArea));
     
     /* Initialize AES-128-ECB encryption context using the retrieved KAEK. */
     aes128ContextCreate(&key_area_ctx, kaek, true);

@@ -42,7 +42,7 @@ extern "C" {
 /// 'NpdmSignatureKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
     NpdmSignatureKeyGeneration_Since100NUP = 0,                                         ///< 1.0.0 - 8.1.1.
-    NpdmSignatureKeyGeneration_Since900NUP = 1,                                         ///< 9.0.0 - 14.1.0.
+    NpdmSignatureKeyGeneration_Since900NUP = 1,                                         ///< 9.0.0 - 14.1.2.
     NpdmSignatureKeyGeneration_Current     = NpdmSignatureKeyGeneration_Since900NUP,
     NpdmSignatureKeyGeneration_Max         = (NpdmSignatureKeyGeneration_Current + 1)
 } NpdmSignatureKeyGeneration;
@@ -92,8 +92,8 @@ NXDT_ASSERT(NpdmMetaHeader, 0x80);
 typedef enum {
     NpdmMemoryRegion_Application     = 0,
     NpdmMemoryRegion_Applet          = 1,
-    NpdmMemoryRegion_SystemSecure    = 2,
-    NpdmMemoryRegion_SystemNonSecure = 3,
+    NpdmMemoryRegion_SecureSystem    = 2,
+    NpdmMemoryRegion_NonSecureSystem = 3,
     
     /// Old.
     NpdmMemoryRegion_NonSecure       = NpdmMemoryRegion_Application,
@@ -103,8 +103,8 @@ typedef enum {
 typedef struct {
     u32 production           : 1;
     u32 unqualified_approval : 1;
-    u32 memory_region        : 2;   ///< NpdmMemoryRegion.
-    u32 reserved             : 28;
+    u32 memory_region        : 5;   ///< NpdmMemoryRegion.
+    u32 reserved             : 25;
 } NpdmAcidFlags;
 
 NXDT_ASSERT(NpdmAcidFlags, 0x4);

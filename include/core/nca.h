@@ -85,7 +85,7 @@ typedef enum {
     NcaKeyGeneration_Since910NUP  = 11,                             ///< 9.1.0 - 12.0.3.
     NcaKeyGeneration_Since1210NUP = 12,                             ///< 12.1.0.
     NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
-    NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.0.
+    NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.2.
     NcaKeyGeneration_Current      = NcaKeyGeneration_Since1400NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;
@@ -100,7 +100,7 @@ typedef enum {
 /// 'NcaSignatureKeyGeneration_Current' will always point to the last known key generation value.
 typedef enum {
     NcaSignatureKeyGeneration_Since100NUP = 0,                                      ///< 1.0.0 - 8.1.1.
-    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 14.1.0.
+    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 14.1.2.
     NcaSignatureKeyGeneration_Current     = NcaSignatureKeyGeneration_Since900NUP,
     NcaSignatureKeyGeneration_Max         = (NcaSignatureKeyGeneration_Current + 1)
 } NcaSignatureKeyGeneration;
@@ -164,18 +164,23 @@ typedef enum {
 } NcaFsType;
 
 typedef enum {
-    NcaHashType_Auto                  = 0,
-    NcaHashType_None                  = 1,
-    NcaHashType_HierarchicalSha256    = 2,  ///< Used by NcaFsType_PartitionFs.
-    NcaHashType_HierarchicalIntegrity = 3   ///< Used by NcaFsType_RomFs.
+    NcaHashType_Auto                      = 0,
+    NcaHashType_None                      = 1,
+    NcaHashType_HierarchicalSha256        = 2,  ///< Used by NcaFsType_PartitionFs.
+    NcaHashType_HierarchicalIntegrity     = 3,  ///< Used by NcaFsType_RomFs.
+    NcaHashType_AutoSha3                  = 4,
+    NcaHashType_HierarchicalSha3256       = 5,
+    NcaHashType_HierarchicalIntegritySha3 = 6
 } NcaHashType;
 
 typedef enum {
-    NcaEncryptionType_Auto     = 0,
-    NcaEncryptionType_None     = 1,
-    NcaEncryptionType_AesXts   = 2,
-    NcaEncryptionType_AesCtr   = 3,
-    NcaEncryptionType_AesCtrEx = 4
+    NcaEncryptionType_Auto                  = 0,
+    NcaEncryptionType_None                  = 1,
+    NcaEncryptionType_AesXts                = 2,
+    NcaEncryptionType_AesCtr                = 3,
+    NcaEncryptionType_AesCtrEx              = 4,
+    NcaEncryptionType_AesCtrSkipLayerHash   = 5,
+    NcaEncryptionType_AesCtrExSkipLayerHash = 6
 } NcaEncryptionType;
 
 typedef struct {
@@ -298,9 +303,18 @@ NXDT_ASSERT(NcaSparseInfo, 0x30);
 /// Used in NCAs with LZ4-compressed sections.
 typedef struct {
     NcaBucketInfo bucket;
+    u8 reserved[0x8];
 } NcaCompressionInfo;
 
-NXDT_ASSERT(NcaCompressionInfo, 0x20);
+NXDT_ASSERT(NcaCompressionInfo, 0x28);
+
+typedef struct {
+    u64 offset;
+    u64 size;
+    u8 hash[SHA256_HASH_SIZE];
+} NcaMetaDataHashDataInfo;
+
+NXDT_ASSERT(NcaMetaDataHashDataInfo, 0x30);
 
 /// Four NCA FS headers are placed right after the 0x400 byte long NCA header in NCA2 and NCA3.
 /// NCA0 place the FS headers at the start sector from the NcaFsInfo entries.
@@ -315,7 +329,8 @@ typedef struct {
     NcaAesCtrUpperIv aes_ctr_upper_iv;
     NcaSparseInfo sparse_info;
     NcaCompressionInfo compression_info;
-    u8 reserved_2[0x68];
+    NcaMetaDataHashDataInfo hash_data_info;
+    u8 reserved_2[0x30];
 } NcaFsHeader;
 
 NXDT_ASSERT(NcaFsHeader, 0x200);
@@ -340,8 +355,9 @@ typedef struct {
     u8 section_num;
     u64 section_offset;
     u64 section_size;
-    u8 section_type;                    ///< NcaFsSectionType.
+    u8 hash_type;                       ///< NcaHashType.
     u8 encryption_type;                 ///< NcaEncryptionType.
+    u8 section_type;                    ///< NcaFsSectionType.
     u8 ctr[AES_BLOCK_SIZE];             ///< Used to update the AES CTR context IV based on the desired offset.
     Aes128CtrContext ctr_ctx;
     Aes128XtsContext xts_decrypt_ctx;

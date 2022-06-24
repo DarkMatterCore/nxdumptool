@@ -260,7 +260,7 @@ typedef enum {
 } NacpRuntimeUpgrade;
 
 typedef enum {
-    NacpSupportingLimitedLicenses_Demo  = BIT(1),
+    NacpSupportingLimitedLicenses_Demo  = BIT(0),
     NacpSupportingLimitedLicenses_Count = 1         ///< Total values supported by this enum.
 } NacpSupportingLimitedLicenses;
 
@@ -368,7 +368,7 @@ typedef struct {
     s64 device_save_data_journal_size;
     s64 bcat_delivery_cache_storage_size;
     char application_error_code_category[0x8];
-    u64 local_communication_id[8];
+    u64 local_communication_id[0x8];
     u8 logo_type;                                                                                   ///< NacpLogoType.
     u8 logo_handling;                                                                               ///< NacpLogoHandling.
     u8 runtime_add_on_content_install;                                                              ///< NacpRuntimeAddOnContentInstall.
@@ -390,7 +390,7 @@ typedef struct {
     s64 cache_storage_journal_size;
     s64 cache_storage_data_and_journal_size_max;
     u16 cache_storage_index_max;
-    u8 reserved_1[0x1];
+    u8 reserved_1;
     u8 runtime_upgrade;                                                                             ///< NacpRuntimeUpgrade.
     u32 supporting_limited_licenses;                                                                ///< NacpSupportingLimitedLicenses.
     u64 play_log_queryable_application_id[0x10];
