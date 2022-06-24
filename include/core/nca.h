@@ -169,8 +169,8 @@ typedef enum {
     NcaHashType_HierarchicalSha256        = 2,  ///< Used by NcaFsType_PartitionFs.
     NcaHashType_HierarchicalIntegrity     = 3,  ///< Used by NcaFsType_RomFs.
     NcaHashType_AutoSha3                  = 4,
-    NcaHashType_HierarchicalSha3256       = 5,
-    NcaHashType_HierarchicalIntegritySha3 = 6
+    NcaHashType_HierarchicalSha3256       = 5,  ///< Used by NcaFsType_PartitionFs.
+    NcaHashType_HierarchicalIntegritySha3 = 6   ///< Used by NcaFsType_RomFs.
 } NcaHashType;
 
 typedef enum {
@@ -336,10 +336,10 @@ typedef struct {
 NXDT_ASSERT(NcaFsHeader, 0x200);
 
 typedef enum {
-    NcaFsSectionType_PartitionFs = 0,   ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256.
-    NcaFsSectionType_RomFs       = 1,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity.
-    NcaFsSectionType_PatchRomFs  = 2,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity + NcaEncryptionType_AesCtrEx.
-    NcaFsSectionType_Nca0RomFs   = 3,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalSha256 + NcaVersion_Nca0.
+    NcaFsSectionType_PartitionFs = 0,   ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256 OR NcaHashType_HierarchicalSha3256 + NcaEncryptionType_AesCtr OR NcaEncryptionType_AesCtrSkipLayerHash.
+    NcaFsSectionType_RomFs       = 1,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity OR NcaHashType_HierarchicalIntegritySha3 + NcaEncryptionType_AesCtr OR NcaEncryptionType_AesCtrSkipLayerHash.
+    NcaFsSectionType_PatchRomFs  = 2,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity OR NcaHashType_HierarchicalIntegritySha3 + NcaEncryptionType_AesCtrEx OR NcaEncryptionType_AesCtrExSkipLayerHash.
+    NcaFsSectionType_Nca0RomFs   = 3,   ///< NcaVersion_Nca0 + NcaFsType_RomFs + NcaHashType_HierarchicalSha256 + NcaEncryptionType_AesXts.
     NcaFsSectionType_Invalid     = 4
 } NcaFsSectionType;
 

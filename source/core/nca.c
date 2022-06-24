@@ -201,13 +201,11 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
             switch(fs_ctx->section_num)
             {
                 case 0: /* ExeFS Partition FS. */
+                case 2: /* Logo Partition FS. */
                     fs_ctx->hash_type = (fs_ctx->hash_type == NcaHashType_Auto ? NcaHashType_HierarchicalSha256 : NcaHashType_HierarchicalSha3256);
                     break;
                 case 1: /* RomFS. */
                     fs_ctx->hash_type = (fs_ctx->hash_type == NcaHashType_Auto ? NcaHashType_HierarchicalIntegrity : NcaHashType_HierarchicalIntegritySha3);
-                    break;
-                case 2: /* Logo Partition FS. */
-                    fs_ctx->hash_type = NcaHashType_None;
                     break;
                 default:
                     break;
@@ -261,7 +259,14 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
             u64 raw_storage_size = (sparse_bucket->offset + sparse_bucket->size);
             
             if (__builtin_bswap32(sparse_bucket->header.magic) != NCA_BKTR_MAGIC || sparse_bucket->header.version != NCA_BKTR_VERSION || raw_storage_offset < sizeof(NcaHeader) || \
-                !raw_storage_size || ((raw_storage_offset + raw_storage_size) > out->content_size) || !sparse_bucket->header.entry_count) continue;
+                ((raw_storage_offset + raw_storage_size) > out->content_size)) continue;
+            
+            if (!raw_storage_size || !sparse_bucket->header.entry_count)
+            {
+                /* Increase valid FS section count but don't set this FS section as enabled, since we can't use it. */
+                valid_fs_section_cnt++;
+                continue;
+            }
             
             /* Set sparse table properties. */
             fs_ctx->sparse_table_offset = (sparse_info->physical_offset + sparse_bucket->offset);
