@@ -59,14 +59,14 @@ typedef struct {
 
 static options_t options[] = {
     { "set download distribution type", false },
-    { "remove console specific data", false },
+    { "remove console specific data", true },
     { "remove titlekey crypto (overrides previous option)", false },
     { "change acid rsa key/sig", false },
     { "disable linked account requirement", false },
     { "enable screenshots", false },
     { "enable video capture", false },
     { "disable hdcp", false },
-    { "append authoringtool data", true }
+    { "append authoringtool data", false }
 };
 
 static const u32 options_count = MAX_ELEMENTS(options);

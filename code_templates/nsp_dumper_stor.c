@@ -51,14 +51,14 @@ typedef struct {
 
 static options_t options[] = {
     { "set download distribution type", 0 },
-    { "remove console specific data", 0 },
+    { "remove console specific data", 1 },
     { "remove titlekey crypto (overrides previous option)", 0 },
     { "change acid rsa key/sig", 0 },
     { "disable linked account requirement", 0 },
     { "enable screenshots", 0 },
     { "enable video capture", 0 },
     { "disable hdcp", 0 },
-    { "append authoringtool data", 1 },
+    { "append authoringtool data", 0 },
     { "output device", 0 }
 };
 
