@@ -37,7 +37,7 @@ extern "C" {
 #endif
 
 #ifndef SHA3_HASH_SIZE_BYTES
-#define SHA3_HASH_SIZE_BYTES(bits) ((bits) / sizeof(u8))
+#define SHA3_HASH_SIZE_BYTES(bits) ((bits) / 8)
 #endif
 
 #ifndef SHA3_BLOCK_SIZE
