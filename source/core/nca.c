@@ -902,47 +902,87 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     }
     
     /* Check if we're supposed to read a hash layer without encryption. */
-    if (ctx->skip_hash_layer_crypto && ((offset + read_size) <= ctx->last_layer_offset || (ctx->last_layer_offset + ctx->last_layer_size) <= offset || \
-        (offset < ctx->last_layer_offset && (offset + read_size) > ctx->last_layer_offset) || \
-        (ctx->last_layer_offset < offset && (ctx->last_layer_offset + ctx->last_layer_size) < (offset + read_size))))
+    if (ctx->skip_hash_layer_crypto)
     {
-        /* Easy route. Just read the plaintext data we need and bail out. */
         if ((offset + read_size) <= ctx->last_layer_offset || (ctx->last_layer_offset + ctx->last_layer_size) <= offset)
         {
+            /* Easy route. Just read the plaintext data we need and bail out. */
             ret = ncaReadContentFile(nca_ctx, out, read_size, content_offset);
             if (!ret) LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash layer) (#1).", read_size, content_offset, \
                               nca_ctx->content_id_str, ctx->section_num);
             goto end;
-        }
-        
-        /* Long, tedious route. Calculate offsets and block sizes. */
-        block_start_offset = content_offset;
-        block_end_offset = ((block_start_offset + read_size) - (offset < ctx->last_layer_offset ? ctx->last_layer_offset : (ctx->last_layer_offset + ctx->last_layer_size)));
-        block_size = (block_end_offset - block_start_offset);
-        
-        if (offset < ctx->last_layer_offset)
+        } else
+        if ((offset < ctx->last_layer_offset && (offset + read_size) > ctx->last_layer_offset && (offset + read_size) <= (ctx->last_layer_offset + ctx->last_layer_size)) || \
+            (ctx->last_layer_offset < offset && (ctx->last_layer_offset + ctx->last_layer_size) > offset && (ctx->last_layer_offset + ctx->last_layer_size) < (offset + read_size)))
         {
-            /* Read plaintext area. */
-            if (!ncaReadContentFile(nca_ctx, out, block_size, block_start_offset))
+            /* Handle reads that span across both plaintext hash layers and encrypted FS area. */
+            bool plaintext_first = (offset < ctx->last_layer_offset);
+            
+            /* Calculate offsets and block sizes. */
+            block_start_offset = content_offset;
+            block_end_offset = (ctx->section_offset + (plaintext_first ? ctx->last_layer_offset : (ctx->last_layer_offset + ctx->last_layer_size)));
+            block_size = (block_end_offset - block_start_offset);
+            
+            if (plaintext_first)
             {
-                LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash layer) (#2).", block_size, block_start_offset, \
+                /* Read plaintext area. Use NCA-relative offset. */
+                if (!ncaReadContentFile(nca_ctx, out, block_size, block_start_offset))
+                {
+                    LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash layer) (#2).", block_size, block_start_offset, \
+                            nca_ctx->content_id_str, ctx->section_num);
+                    goto end;
+                }
+                
+                /* Read encrypted area. Use FS-section-relative offset. */
+                ret = _ncaReadFsSection(ctx, (u8*)out + block_size, read_size - block_size, offset + block_size);
+            } else {
+                /* Read encrypted area. Use FS-section-relative offset. */
+                if (!_ncaReadFsSection(ctx, out, block_size, offset)) goto end;
+                
+                /* Read plaintext area. Use NCA-relative offset. */
+                ret = ncaReadContentFile(nca_ctx, (u8*)out + block_size, read_size - block_size, block_end_offset);
+                if (!ret) LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash layer) (#3).", read_size - block_size, \
+                                block_end_offset, nca_ctx->content_id_str, ctx->section_num);
+            }
+            
+            goto end;
+        } else
+        if (offset < ctx->last_layer_offset && (offset + read_size) > (ctx->last_layer_offset + ctx->last_layer_size))
+        {
+            /* Handle plaintext hash layer + encrypted FS area + plaintext hash layer reads. */
+            u8 *out_u8 = (u8*)out;
+            
+            /* Read plaintext area. Use NCA-relative offset. */
+            block_start_offset = content_offset;
+            block_end_offset = (ctx->section_offset + ctx->last_layer_offset);
+            block_size = (block_end_offset - block_start_offset);
+            
+            if (!ncaReadContentFile(nca_ctx, out_u8, block_size, block_start_offset))
+            {
+                LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash layer) (#4).", block_size, block_start_offset, \
                         nca_ctx->content_id_str, ctx->section_num);
                 goto end;
             }
             
-            /* Read encrypted area. */
-            ret = _ncaReadFsSection(ctx, (u8*)out + block_size, read_size - block_size, offset + block_size);
-        } else {
-            /* Read encrypted area. */
-            if (!_ncaReadFsSection(ctx, out, block_size, offset)) goto end;
+            /* Read encrypted area. Use FS-section-relative offset. */
+            out_u8 += block_size;
+            block_start_offset = ctx->last_layer_offset;
+            block_size = ctx->last_layer_size;
             
-            /* Read plaintext area. */
-            ret = ncaReadContentFile(nca_ctx, (u8*)out + block_size, read_size - block_size, block_end_offset);
-            if (!ret) LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash layer) (#3).", read_size - block_size, \
-                              block_end_offset, nca_ctx->content_id_str, ctx->section_num);
+            if (!_ncaReadFsSection(ctx, out_u8, block_size, block_start_offset)) goto end;
+            
+            /* Read plaintext area. Use NCA-relative offset. */
+            out_u8 += block_size;
+            block_start_offset = (block_end_offset + block_size);
+            block_end_offset = (content_offset + read_size);
+            block_size = (block_end_offset - block_start_offset);
+            
+            ret = ncaReadContentFile(nca_ctx, out_u8, block_size, block_start_offset);
+            if (!ret) LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash layer) (#5).", block_size, block_start_offset, \
+                              nca_ctx->content_id_str, ctx->section_num);
+            
+            goto end;
         }
-        
-        return ret;
     }
     
     /* Optimization for reads from plaintext FS sections or reads that are aligned to the AES-CTR / AES-XTS sector size. */
