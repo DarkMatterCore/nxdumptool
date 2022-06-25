@@ -60,6 +60,7 @@ NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx);
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val);
 
+static void ncaCalculateLayerHash(void *dst, const void *src, size_t size, bool use_sha3);
 static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, void *out, bool is_integrity_patch);
 static bool ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 patch_size, u64 patch_offset, void *buf, u64 buf_size, u64 buf_offset);
 
@@ -1149,6 +1150,16 @@ end:
     return ret;
 }
 
+static void ncaCalculateLayerHash(void *dst, const void *src, size_t size, bool use_sha3)
+{
+    if (use_sha3)
+    {
+        sha256CalculateHash(dst, src, size);
+    } else {
+        sha3256CalculateHash(dst, src, size);
+    }
+}
+
 /* In this function, the term "layer" is used as a generic way to refer to both HierarchicalSha256 hash regions and HierarchicalIntegrity verification levels. */
 static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, void *out, bool is_integrity_patch)
 {
@@ -1164,7 +1175,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
     u8 *parent_layer_block = NULL, *cur_layer_block = NULL;
     u64 last_layer_size = 0;
     
-    bool success = false;
+    bool use_sha3 = false, success = false;
     
     if (!ctx || !ctx->enabled || ctx->has_sparse_layer || !(nca_ctx = (NcaContext*)ctx->nca_ctx) || (!is_integrity_patch && ((ctx->hash_type != NcaHashType_HierarchicalSha256 && \
         ctx->hash_type != NcaHashType_HierarchicalSha3256) || !ctx->header.hash_data.hierarchical_sha256_data.hash_block_size || \
@@ -1187,6 +1198,9 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
     } else {
         ncaFreeHierarchicalIntegrityPatch(hierarchical_integrity_patch);
     }
+    
+    /* Check if we should use SHA3-256 instead of SHA-256 for layer hash calculation. */
+    use_sha3 = (ctx->hash_type == NcaHashType_HierarchicalSha3256 || ctx->hash_type == NcaHashType_HierarchicalIntegritySha3);
     
     /* Process each layer. */
     for(u32 i = layer_count; i > 0; i--)
@@ -1302,12 +1316,12 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
             for(u64 j = 0, k = 0; j < cur_layer_read_size; j += hash_block_size, k++)
             {
                 if (!is_integrity_patch && hash_block_size > (cur_layer_read_size - j)) hash_block_size = (cur_layer_read_size - j);
-                sha256CalculateHash(parent_layer_block + (k * SHA256_HASH_SIZE), cur_layer_block + j, hash_block_size);
+                ncaCalculateLayerHash(parent_layer_block + (k * SHA256_HASH_SIZE), cur_layer_block + j, hash_block_size, use_sha3);
             }
         } else {
             /* Recalculate master hash from the HashData area. */
             u8 *master_hash = (!is_integrity_patch ? ctx->header.hash_data.hierarchical_sha256_data.master_hash : ctx->header.hash_data.integrity_meta_info.master_hash);
-            sha256CalculateHash(master_hash, cur_layer_block, cur_layer_read_size);
+            ncaCalculateLayerHash(master_hash, cur_layer_block, cur_layer_read_size, use_sha3);
         }
         
         if (!ctx->skip_hash_layer_crypto || i == layer_count)

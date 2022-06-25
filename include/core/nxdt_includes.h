@@ -65,6 +65,9 @@
 /* USB Mass Storage support. */
 #include "ums.h"
 
+/* SHA3 checksum calculator. */
+#include "sha3.h"
+
 /// Used to store version numbers expressed in dot notation:
 ///     * System version: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
 ///     * Application version: "{release}.{private}".
