@@ -963,7 +963,6 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
         if (memcmp(g_fsProgramMemory.data + offset, &(g_gameCardHeader.package_id), sizeof(g_gameCardHeader.package_id)) != 0) continue;
         
         sha256CalculateHash(tmp_hash, g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
-        
         if (!memcmp(tmp_hash, g_gameCardHeader.initial_data_hash, SHA256_HASH_SIZE))
         {
             /* Jackpot. */

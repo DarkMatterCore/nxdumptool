@@ -253,12 +253,12 @@ NXDT_ASSERT(NcaIntegrityMetaInfo, 0xE0);
 typedef struct {
     union {
         struct {
-            ///< Used if hash_type == NcaHashType_HierarchicalSha256 (NcaFsType_PartitionFs and NCA0 NcaFsType_RomFs).
+            ///< Used for NcaHashType_HierarchicalSha256 and NcaHashType_HierarchicalSha3256 (NcaFsType_PartitionFs and NCA0 NcaFsType_RomFs).
             NcaHierarchicalSha256Data hierarchical_sha256_data;
             u8 reserved_1[0x80];
         };
         struct {
-            ///< Used if hash_type == NcaHashType_HierarchicalIntegrity (NcaFsType_RomFs).
+            ///< Used if NcaHashType_HierarchicalIntegrity and NcaHashType_HierarchicalIntegritySha3 (NcaFsType_RomFs).
             NcaIntegrityMetaInfo integrity_meta_info;
             u8 reserved_2[0x18];
         };
@@ -366,13 +366,15 @@ typedef struct {
     NcaFsHeader header;                 ///< Plaintext NCA FS section header.
     NcaFsHeader encrypted_header;       ///< Encrypted NCA FS section header. If the plaintext NCA FS section header is modified, this will hold an encrypted copy of it.
                                         ///< Otherwise, this holds the unmodified, encrypted NCA FS section header.
-    bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
-    u8 section_num;
-    u64 section_offset;
+    u8 section_num;                     ///< Index within [0 - 3].
+    u64 section_offset;                 ///< Relative to the start of the NCA content file.
     u64 section_size;
     u8 hash_type;                       ///< NcaHashType.
     u8 encryption_type;                 ///< NcaEncryptionType.
     u8 section_type;                    ///< NcaFsSectionType.
+    bool skip_hash_layer_crypto;        ///< Set to true if hash layer encryption should be skipped while reading section data.
+    u64 last_layer_offset;              ///< Relative to the start of the FS section.
+    u64 last_layer_size;
     u8 ctr[AES_BLOCK_SIZE];             ///< Used to update the AES CTR context IV based on the desired offset.
     Aes128CtrContext ctr_ctx;
     Aes128XtsContext xts_decrypt_ctx;
@@ -384,6 +386,9 @@ typedef struct {
     u64 sparse_table_size;              ///< header.sparse_info.bucket.size. Placed here for convenience.
     u8 sparse_ctr[AES_BLOCK_SIZE];
     Aes128CtrContext sparse_ctr_ctx;
+    
+    ///< NSP-related fields.
+    bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
 } NcaFsSectionContext;
 
 typedef enum {

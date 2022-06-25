@@ -532,7 +532,6 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
             if ((info->location.data_size - j) < key->size) break;
             
             sha256CalculateHash(tmp_hash, info->location.data + j, key->size);
-            
             if (!memcmp(tmp_hash, key->hash, SHA256_HASH_SIZE))
             {
                 /* Jackpot. */
