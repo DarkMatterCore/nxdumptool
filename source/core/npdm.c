@@ -28,6 +28,7 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
     NcaContext *nca_ctx = NULL;
     u64 cur_offset = 0;
     bool success = false, dump_meta_header = false, dump_acid_header = false, dump_aci_header = false;
+    PartitionFileSystemEntry *pfs_entry = NULL;
     
     if (!out || !pfs_ctx || !pfs_ctx->nca_fs_ctx || !(nca_ctx = (NcaContext*)pfs_ctx->nca_fs_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Program || !pfs_ctx->offset || !pfs_ctx->size || \
         !pfs_ctx->is_exefs || pfs_ctx->header_size <= sizeof(PartitionFileSystemHeader) || !pfs_ctx->header)
@@ -40,9 +41,7 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
     npdmFreeContext(out);
     
     /* Get 'main.npdm' file entry. */
-    out->nca_ctx = nca_ctx;
-    out->pfs_ctx = pfs_ctx;
-    if (!(out->pfs_entry = pfsGetEntryByName(out->pfs_ctx, "main.npdm")))
+    if (!(pfs_entry = pfsGetEntryByName(pfs_ctx, "main.npdm")))
     {
         LOG_MSG("'main.npdm' entry unavailable in ExeFS!");
         goto end;
@@ -51,14 +50,14 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
     //LOG_MSG("Found 'main.npdm' entry in Program NCA \"%s\".", nca_ctx->content_id_str);
     
     /* Check raw NPDM size. */
-    if (!out->pfs_entry->size)
+    if (!pfs_entry->size)
     {
         LOG_MSG("Invalid raw NPDM size!");
         goto end;
     }
     
     /* Allocate memory for the raw NPDM data. */
-    out->raw_data_size = out->pfs_entry->size;
+    out->raw_data_size = pfs_entry->size;
     if (!(out->raw_data = malloc(out->raw_data_size)))
     {
         LOG_MSG("Failed to allocate memory for the raw NPDM data!");
@@ -66,7 +65,7 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
     }
     
     /* Read raw NPDM data into memory buffer. */
-    if (!pfsReadEntryData(out->pfs_ctx, out->pfs_entry, out->raw_data, out->raw_data_size, 0))
+    if (!pfsReadEntryData(pfs_ctx, pfs_entry, out->raw_data, out->raw_data_size, 0))
     {
         LOG_MSG("Failed to read raw NPDM data!");
         goto end;
@@ -286,63 +285,4 @@ end:
     }
     
     return success;
-}
-
-bool npdmGenerateNcaPatch(NpdmContext *npdm_ctx)
-{
-    if (!npdmIsValidContext(npdm_ctx) || npdm_ctx->nca_ctx->content_type != NcmContentType_Program)
-    {
-        LOG_MSG("Invalid parameters!");
-        return false;
-    }
-    
-    NcaContext *nca_ctx = npdm_ctx->nca_ctx;
-    
-    /* Check if we really need to generate this patch. */
-    if (!ncaIsHeaderDirty(nca_ctx))
-    {
-        LOG_MSG("Skipping NPDM patching - NCA header hasn't been modified.");
-        return true;
-    }
-    
-    /* Update NPDM ACID public key. */
-    memcpy(npdm_ctx->acid_header->public_key, rsa2048GetCustomPublicKey(), RSA2048_PUBKEY_SIZE);
-    
-    /* Generate Partition FS entry patch. */
-    if (!pfsGenerateEntryPatch(npdm_ctx->pfs_ctx, npdm_ctx->pfs_entry, npdm_ctx->raw_data, npdm_ctx->raw_data_size, 0, &(npdm_ctx->nca_patch)))
-    {
-        LOG_MSG("Failed to generate Partition FS entry patch!");
-        return false;
-    }
-    
-    /* Update NCA ACID signature. */
-    if (!rsa2048GenerateSha256BasedPssSignature(nca_ctx->header.acid_signature, &(nca_ctx->header.magic), NCA_SIGNATURE_AREA_SIZE))
-    {
-        LOG_MSG("Failed to generate RSA-2048-PSS NCA ACID signature!");
-        return false;
-    }
-    
-    /* Update NCA content type context patch status. */
-    nca_ctx->content_type_ctx_patch = true;
-    
-    return true;
-}
-
-void npdmWriteNcaPatch(NpdmContext *npdm_ctx, void *buf, u64 buf_size, u64 buf_offset)
-{
-    NcaContext *nca_ctx = NULL;
-    NcaHierarchicalSha256Patch *nca_patch = (npdm_ctx ? &(npdm_ctx->nca_patch) : NULL);
-    
-    /* Using npdmIsValidContext() here would probably take up precious CPU cycles. */
-    if (!nca_patch || nca_patch->written || !(nca_ctx = npdm_ctx->nca_ctx) || nca_ctx->content_type != NcmContentType_Program || !nca_ctx->content_type_ctx_patch) return;
-    
-    /* Attempt to write Partition FS entry patch. */
-    pfsWriteEntryPatchToMemoryBuffer(npdm_ctx->pfs_ctx, nca_patch, buf, buf_size, buf_offset);
-    
-    /* Check if we need to update the NCA content type context patch status. */
-    if (nca_patch->written)
-    {
-        nca_ctx->content_type_ctx_patch = false;
-        LOG_MSG("NPDM Partition FS entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
-    }
 }

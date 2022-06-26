@@ -36,11 +36,6 @@ list of top level functions designed to alter nca data in order of (possible) us
         
         * ncaRemoveTitlekeyCrypto (can be used with digital titles + game updates in gamecards)
         
-        * programInfoGenerateNcaPatch (Program)
-            * calls npdmGenerateNcaPatch
-                * calls pfsGenerateEntryPatch
-                    * calls ncaGenerateHierarchicalSha256Patch
-        
         * nacpGenerateNcaPatch (Control)
             * calls romfsGenerateFileEntryPatch
                 * calls ncaGenerateHierarchicalSha256Patch / ncaGenerateHierarchicalIntegrityPatch
@@ -61,11 +56,6 @@ list of top level functions designed to alter nca data in order of (possible) us
         * cnmtWriteNcaPatch (writes cnmt patch)
             * calls pfsWriteEntryPatchToMemoryBuffer
                 * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer
-        
-        * programInfoWriteNcaPatch (writes ndpm patch)
-            * calls npdmWriteNcaPatch
-                * calls pfsWriteEntryPatchToMemoryBuffer
-                    * calls ncaWriteHierarchicalSha256PatchToMemoryBuffer
         
         * nacpWriteNcaPatch (writes nacp patch)
             * calls romfsWriteFileEntryPatchToMemoryBuffer

@@ -216,7 +216,7 @@ end:
 
 static bool configValidateJsonNspObject(const struct json_object *obj)
 {
-    bool ret = false, set_download_distribution_found = false, remove_console_data_found = false, remove_titlekey_crypto_found = false, replace_acid_key_sig_found = false;
+    bool ret = false, set_download_distribution_found = false, remove_console_data_found = false, remove_titlekey_crypto_found = false;
     bool disable_linked_account_requirement_found = false, enable_screenshots_found = false, enable_video_capture_found = false, disable_hdcp_found = false, append_authoringtool_data_found = false, lookup_checksum_found = false;
     
     if (!jsonValidateObject(obj)) goto end;
@@ -226,7 +226,6 @@ static bool configValidateJsonNspObject(const struct json_object *obj)
         CONFIG_VALIDATE_FIELD(Boolean, set_download_distribution);
         CONFIG_VALIDATE_FIELD(Boolean, remove_console_data);
         CONFIG_VALIDATE_FIELD(Boolean, remove_titlekey_crypto);
-        CONFIG_VALIDATE_FIELD(Boolean, replace_acid_key_sig);
         CONFIG_VALIDATE_FIELD(Boolean, disable_linked_account_requirement);
         CONFIG_VALIDATE_FIELD(Boolean, enable_screenshots);
         CONFIG_VALIDATE_FIELD(Boolean, enable_video_capture);
@@ -236,7 +235,7 @@ static bool configValidateJsonNspObject(const struct json_object *obj)
         goto end;
     }
     
-    ret = (set_download_distribution_found && remove_console_data_found && remove_titlekey_crypto_found && replace_acid_key_sig_found && disable_linked_account_requirement_found && \
+    ret = (set_download_distribution_found && remove_console_data_found && remove_titlekey_crypto_found && disable_linked_account_requirement_found && \
            enable_screenshots_found && enable_video_capture_found && disable_hdcp_found && append_authoringtool_data_found && lookup_checksum_found);
     
 end:

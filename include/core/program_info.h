@@ -34,7 +34,7 @@ extern "C" {
 typedef struct {
     NcaContext *nca_ctx;                ///< Pointer to the NCA context for the Program NCA from which program data (NPDM / NSO) is retrieved.
     PartitionFileSystemContext pfs_ctx; ///< PartitionFileSystemContext for the Program NCA ExeFS, which is where program data (NPDM / NSO) is stored.
-    NpdmContext npdm_ctx;               ///< NpdmContext for the NPDM stored in Program NCA ExeFS. Holds its own NcaHierarchicalSha256Patch that may be applied to the Program NCA if needed.
+    NpdmContext npdm_ctx;               ///< NpdmContext for the NPDM stored in Program NCA ExeFS.
     u32 nso_count;                      ///< Number of NSOs stored in Program NCA FS section #0.
     NsoContext *nso_ctx;                ///< Pointer to a dynamically allocated buffer that holds 'nso_count' NSO contexts.
     char *authoring_tool_xml;           ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
@@ -71,18 +71,7 @@ NX_INLINE void programInfoFreeContext(ProgramInfoContext *program_info_ctx)
 
 NX_INLINE bool programInfoIsValidContext(ProgramInfoContext *program_info_ctx)
 {
-    return (program_info_ctx && program_info_ctx->nca_ctx && npdmIsValidContext(&(program_info_ctx->npdm_ctx)) && program_info_ctx->npdm_ctx.pfs_ctx == &(program_info_ctx->pfs_ctx) && \
-            program_info_ctx->nso_count && program_info_ctx->nso_ctx);
-}
-
-NX_INLINE bool programInfoGenerateNcaPatch(ProgramInfoContext *program_info_ctx)
-{
-    return (programInfoIsValidContext(program_info_ctx) && npdmGenerateNcaPatch(&(program_info_ctx->npdm_ctx)));
-}
-
-NX_INLINE void programInfoWriteNcaPatch(ProgramInfoContext *program_info_ctx, void *buf, u64 buf_size, u64 buf_offset)
-{
-    if (program_info_ctx) npdmWriteNcaPatch(&(program_info_ctx->npdm_ctx), buf, buf_size, buf_offset);
+    return (program_info_ctx && program_info_ctx->nca_ctx && npdmIsValidContext(&(program_info_ctx->npdm_ctx)) && program_info_ctx->nso_count && program_info_ctx->nso_ctx);
 }
 
 #ifdef __cplusplus

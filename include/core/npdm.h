@@ -599,13 +599,8 @@ typedef struct {
 NXDT_ASSERT(NpdmKernelCapabilityDescriptorEntry, 0x4);
 
 typedef struct {
-    NcaContext *nca_ctx;                                        ///< Pointer to the NCA context for the Program NCA from which NPDM data is retrieved.
-    PartitionFileSystemContext *pfs_ctx;                        ///< PartitionFileSystemContext for the Program NCA FS section #0, which is where the NPDM is stored.
-    PartitionFileSystemEntry *pfs_entry;                        ///< PartitionFileSystemEntry for the NPDM in the Program NCA FS section #0. Used to generate a NcaHierarchicalSha256Patch if needed.
-    NcaHierarchicalSha256Patch nca_patch;                       ///< NcaHierarchicalSha256Patch generated if NPDM modifications are needed. Used to seamlessly replace Program NCA data while writing it.
-                                                                ///< Bear in mind that generating a patch modifies the NCA context.
     u8 *raw_data;                                               ///< Pointer to a dynamically allocated buffer that holds the raw NPDM.
-    u64 raw_data_size;                                          ///< Raw NPDM size. Kept here for convenience - this is part of 'pfs_entry'.
+    u64 raw_data_size;                                          ///< Raw NPDM size.
     NpdmMetaHeader *meta_header;                                ///< Pointer to the NpdmMetaHeader within 'raw_data'.
     NpdmAcidHeader *acid_header;                                ///< Pointer to the NpdmAcidHeader within 'raw_data'.
     NpdmFsAccessControlDescriptor *acid_fac_descriptor;         ///< Pointer to the NpdmFsAccessControlDescriptor within the NPDM ACID section.
@@ -620,26 +615,18 @@ typedef struct {
 /// Initializes a NpdmContext using a previously initialized PartitionFileSystemContext (which must belong to the ExeFS from a Program NCA).
 bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx);
 
-/// Changes the ACID public key from the NPDM in the input NpdmContext, updates the ACID signature from the NCA header in the underlying NCA context and generates a Partition FS entry patch.
-bool npdmGenerateNcaPatch(NpdmContext *npdm_ctx);
-
-/// Writes data from the Partition FS entry patch in the input NpdmContext to the provided buffer.
-void npdmWriteNcaPatch(NpdmContext *npdm_ctx, void *buf, u64 buf_size, u64 buf_offset);
-
 /// Helper inline functions.
 
 NX_INLINE void npdmFreeContext(NpdmContext *npdm_ctx)
 {
     if (!npdm_ctx) return;
-    pfsFreeEntryPatch(&(npdm_ctx->nca_patch));
     if (npdm_ctx->raw_data) free(npdm_ctx->raw_data);
     memset(npdm_ctx, 0, sizeof(NpdmContext));
 }
 
 NX_INLINE bool npdmIsValidContext(NpdmContext *npdm_ctx)
 {
-    return (npdm_ctx && npdm_ctx->nca_ctx && npdm_ctx->pfs_ctx && npdm_ctx->pfs_entry && npdm_ctx->raw_data && npdm_ctx->raw_data_size && npdm_ctx->meta_header && npdm_ctx->acid_header && \
-            npdm_ctx->acid_fac_descriptor && \
+    return (npdm_ctx && npdm_ctx->raw_data && npdm_ctx->raw_data_size && npdm_ctx->meta_header && npdm_ctx->acid_header && npdm_ctx->acid_fac_descriptor && \
             ((npdm_ctx->acid_header->srv_access_control_size && npdm_ctx->acid_sac_descriptor) || (!npdm_ctx->acid_header->srv_access_control_size && !npdm_ctx->acid_sac_descriptor)) && \
             ((npdm_ctx->acid_header->kernel_capability_size && npdm_ctx->acid_kc_descriptor) || (!npdm_ctx->acid_header->kernel_capability_size && !npdm_ctx->acid_kc_descriptor)) && \
             npdm_ctx->aci_header && npdm_ctx->aci_fac_data && \

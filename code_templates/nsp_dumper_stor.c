@@ -53,7 +53,6 @@ static options_t options[] = {
     { "set download distribution type", 0 },
     { "remove console specific data", 1 },
     { "remove titlekey crypto (overrides previous option)", 0 },
-    { "change acid rsa key/sig", 0 },
     { "disable linked account requirement", 0 },
     { "enable screenshots", 0 },
     { "enable video capture", 0 },
@@ -135,13 +134,12 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
     bool set_download_type = (options[0].val == 1);
     bool remove_console_data = (options[1].val == 1);
     bool remove_titlekey_crypto = (options[2].val == 1);
-    bool change_acid_rsa = (options[3].val == 1);
-    bool patch_sua = (options[4].val == 1);
-    bool patch_screenshot = (options[5].val == 1);
-    bool patch_video_capture = (options[6].val == 1);
-    bool patch_hdcp = (options[7].val == 1);
-    bool append_authoringtool_data = (options[8].val == 1);
-    UsbHsFsDevice *ums_device = (options[9].val == 0 ? NULL : &(ums_devices[options[8].val - 1]));
+    bool patch_sua = (options[3].val == 1);
+    bool patch_screenshot = (options[4].val == 1);
+    bool patch_video_capture = (options[5].val == 1);
+    bool patch_hdcp = (options[6].val == 1);
+    bool append_authoringtool_data = (options[7].val == 1);
+    UsbHsFsDevice *ums_device = (options[8].val == 0 ? NULL : &(ums_devices[options[8].val - 1]));
     bool success = false;
     
     if (ums_device && ums_device->write_protect)
@@ -211,7 +209,7 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
     }
     
     // determine if we should initialize programinfo ctx
-    if (change_acid_rsa || append_authoringtool_data)
+    if (append_authoringtool_data)
     {
         program_count = titleGetContentCountByType(title_info, NcmContentType_Program);
         if (program_count && !(program_info_ctx = calloc(program_count, sizeof(ProgramInfoContext))))
@@ -314,12 +312,6 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
                 if (!programInfoInitializeContext(cur_program_info_ctx, cur_nca_ctx))
                 {
                     consolePrint("initialize program info ctx failed (%s)\n", cur_nca_ctx->content_id_str);
-                    goto end;
-                }
-                
-                if (change_acid_rsa && !programInfoGenerateNcaPatch(cur_program_info_ctx))
-                {
-                    consolePrint("program info nca patch failed (%s)\n", cur_nca_ctx->content_id_str);
                     goto end;
                 }
                 
@@ -614,9 +606,6 @@ static void nspDump(TitleInfo *title_info, u64 free_space)
                     {
                         case NcmContentType_Meta:
                             cnmtWriteNcaPatch(&cnmt_ctx, buf, blksize, offset);
-                            break;
-                        case NcmContentType_Program:
-                            programInfoWriteNcaPatch((ProgramInfoContext*)cur_nca_ctx->content_type_ctx, buf, blksize, offset);
                             break;
                         case NcmContentType_Control:
                             nacpWriteNcaPatch((NacpContext*)cur_nca_ctx->content_type_ctx, buf, blksize, offset);

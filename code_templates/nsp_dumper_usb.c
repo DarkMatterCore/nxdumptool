@@ -61,7 +61,6 @@ static options_t options[] = {
     { "set download distribution type", false },
     { "remove console specific data", true },
     { "remove titlekey crypto (overrides previous option)", false },
-    { "change acid rsa key/sig", false },
     { "disable linked account requirement", false },
     { "enable screenshots", false },
     { "enable video capture", false },
@@ -127,12 +126,11 @@ static void dump_thread_func(void *arg)
     bool set_download_type = options[0].val;
     bool remove_console_data = options[1].val;
     bool remove_titlekey_crypto = options[2].val;
-    bool change_acid_rsa = options[3].val;
-    bool patch_sua = options[4].val;
-    bool patch_screenshot = options[5].val;
-    bool patch_video_capture = options[6].val;
-    bool patch_hdcp = options[7].val;
-    bool append_authoringtool_data = options[8].val;
+    bool patch_sua = options[3].val;
+    bool patch_screenshot = options[4].val;
+    bool patch_video_capture = options[5].val;
+    bool patch_hdcp = options[6].val;
+    bool append_authoringtool_data = options[7].val;
     bool success = false;
     
     u8 *buf = NULL;
@@ -197,7 +195,7 @@ static void dump_thread_func(void *arg)
     }
     
     // determine if we should initialize programinfo ctx
-    if (change_acid_rsa || append_authoringtool_data)
+    if (append_authoringtool_data)
     {
         program_count = titleGetContentCountByType(title_info, NcmContentType_Program);
         if (program_count && !(program_info_ctx = calloc(program_count, sizeof(ProgramInfoContext))))
@@ -300,12 +298,6 @@ static void dump_thread_func(void *arg)
                 if (!programInfoInitializeContext(cur_program_info_ctx, cur_nca_ctx))
                 {
                     consolePrint("initialize program info ctx failed (%s)\n", cur_nca_ctx->content_id_str);
-                    goto end;
-                }
-                
-                if (change_acid_rsa && !programInfoGenerateNcaPatch(cur_program_info_ctx))
-                {
-                    consolePrint("program info nca patch failed (%s)\n", cur_nca_ctx->content_id_str);
                     goto end;
                 }
                 
@@ -591,9 +583,6 @@ static void dump_thread_func(void *arg)
                     {
                         case NcmContentType_Meta:
                             cnmtWriteNcaPatch(&cnmt_ctx, buf, blksize, offset);
-                            break;
-                        case NcmContentType_Program:
-                            programInfoWriteNcaPatch((ProgramInfoContext*)cur_nca_ctx->content_type_ctx, buf, blksize, offset);
                             break;
                         case NcmContentType_Control:
                             nacpWriteNcaPatch((NacpContext*)cur_nca_ctx->content_type_ctx, buf, blksize, offset);
