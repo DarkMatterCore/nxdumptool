@@ -6,6 +6,8 @@ todo:
     log: verbosity levels
     log: nxlink output for advanced users
     
+    title: always retrieve names from unpacked nacps? (e.g. if an update changes the name of a title, like deltarune)
+    title: use dlc index as part of the output dump filename?
     title: more functions for title lookup? (filters, patches / aoc, etc.)
     title: more functions for content lookup? (based on id)
     title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles

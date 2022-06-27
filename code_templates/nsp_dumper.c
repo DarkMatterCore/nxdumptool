@@ -29,7 +29,8 @@
 #include "cert.h"
 #include "usb.h"
 
-#define BLOCK_SIZE  0x800000
+#define BLOCK_SIZE  USB_TRANSFER_BUFFER_SIZE
+#define OUTPATH     "/nsp/"
 
 bool g_borealisInitialized = false;
 
@@ -54,23 +55,27 @@ static const u32 dump_type_strings_count = MAX_ELEMENTS(dump_type_strings);
 
 typedef struct {
     char str[64];
-    bool val;
+    u32 val;
 } options_t;
 
 static options_t options[] = {
-    { "set download distribution type", false },
-    { "remove console specific data", true },
-    { "remove titlekey crypto (overrides previous option)", false },
-    { "disable linked account requirement", false },
-    { "enable screenshots", false },
-    { "enable video capture", false },
-    { "disable hdcp", false },
-    { "append authoringtool data", false }
+    { "set download distribution type", 0 },
+    { "remove console specific data", 1 },
+    { "remove titlekey crypto (overrides previous option)", 0 },
+    { "disable linked account requirement", 0 },
+    { "enable screenshots", 0 },
+    { "enable video capture", 0 },
+    { "disable hdcp", 0 },
+    { "append authoringtool data", 0 },
+    { "output device", 0 }
 };
 
 static const u32 options_count = MAX_ELEMENTS(options);
 
 static Mutex g_conMutex = 0;
+
+static UsbHsFsDevice *ums_devices = NULL;
+static u32 ums_device_count = 0;
 
 static void utilsScanPads(void)
 {
@@ -123,18 +128,24 @@ static void dump_thread_func(void *arg)
     
     TitleInfo *title_info = NULL;
     
-    bool set_download_type = options[0].val;
-    bool remove_console_data = options[1].val;
-    bool remove_titlekey_crypto = options[2].val;
-    bool patch_sua = options[3].val;
-    bool patch_screenshot = options[4].val;
-    bool patch_video_capture = options[5].val;
-    bool patch_hdcp = options[6].val;
-    bool append_authoringtool_data = options[7].val;
+    bool set_download_type = (options[0].val == 1);
+    bool remove_console_data = (options[1].val == 1);
+    bool remove_titlekey_crypto = (options[2].val == 1);
+    bool patch_sua = (options[3].val == 1);
+    bool patch_screenshot = (options[4].val == 1);
+    bool patch_video_capture = (options[5].val == 1);
+    bool patch_hdcp = (options[6].val == 1);
+    bool append_authoringtool_data = (options[7].val == 1);
+    u32 output_device = options[8].val;
     bool success = false;
+    
+    UsbHsFsDevice *ums_device = (output_device < 2 ? NULL : &(ums_devices[output_device - 2]));
+    
+    u64 free_space = 0;
     
     u8 *buf = NULL;
     char *dump_name = NULL, *path = NULL;
+    FILE *fd = NULL;
     
     NcaContext *nca_ctx = NULL;
     
@@ -168,6 +179,12 @@ static void dump_thread_func(void *arg)
     
     if (!shared_data || !(title_info = (TitleInfo*)shared_data->data) || !title_info->content_count || !title_info->content_infos) goto end;
     
+    if (ums_device && ums_device->write_protect)
+    {
+        consolePrint("device \"%s\" has write protection enabled!\n", ums_device->name);
+        goto end;
+    }
+    
     /* Allocate memory for the dump process. */
     if (!(buf = usbAllocatePageAlignedBuffer(BLOCK_SIZE)))
     {
@@ -176,15 +193,24 @@ static void dump_thread_func(void *arg)
     }
     
     /* Generate output path. */
-    if (!(dump_name = titleGenerateFileName(title_info, TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars)))
+    if (!(dump_name = titleGenerateFileName(title_info, TitleNamingConvention_Full, output_device == 0 ? TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly : TitleFileNameIllegalCharReplaceType_IllegalFsChars)))
     {
         consolePrint("title generate file name failed\n");
         goto end;
     }
     
-    if (!(path = utilsGeneratePath(NULL, dump_name, ".nsp")))
+    if (output_device != 1) sprintf(entry_name, "%s" OUTPATH, ums_device ? ums_device->name : DEVOPTAB_SDMC_DEVICE);
+    
+    if (!(path = utilsGeneratePath(entry_name, dump_name, ".nsp")))
     {
         consolePrint("generate path failed\n");
+        goto end;
+    }
+    
+    // get device free space
+    if (output_device != 1 && !utilsGetFileSystemStatsByPath(path, NULL, &free_space))
+    {
+        consolePrint("failed to retrieve free space from selected device\n");
         goto end;
     }
     
@@ -517,13 +543,46 @@ static void dump_thread_func(void *arg)
     nsp_size = (nsp_header_size + pfs_file_ctx.fs_size);
     consolePrint("nsp header size: 0x%lX | nsp size: 0x%lX\n", nsp_header_size, nsp_size);
     
-    consolePrint("dump process started, please wait. hold b to cancel.\n");
-    
-    if (!usbSendFileProperties(nsp_size, path, (u32)nsp_header_size))
+    if (output_device != 1)
     {
-        consolePrint("usb send file properties (header) failed\n");
-        goto end;
+        if (nsp_size >= free_space)
+        {
+            consolePrint("nsp size exceeds free space\n");
+            goto end;
+        }
+        
+        if (ums_device && ums_device->fs_type < UsbHsFsDeviceFileSystemType_exFAT && nsp_size > FAT32_FILESIZE_LIMIT)
+        {
+            consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+            goto end;
+        }
+        
+        utilsCreateDirectoryTree(path, false);
+        
+        if (!ums_device && nsp_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(path))
+        {
+            consolePrint("create concatenation file failed\n");
+            goto end;
+        }
+        
+        if (!(fd = fopen(path, "wb")))
+        {
+            consolePrint("fopen failed\n");
+            goto end;
+        }
+        
+        // write placeholder header
+        memset(buf, 0, nsp_header_size);
+        fwrite(buf, 1, nsp_header_size, fd);
+    } else {
+        if (!usbSendFileProperties(nsp_size, path, (u32)nsp_header_size))
+        {
+            consolePrint("usb send file properties (header) failed\n");
+            goto end;
+        }
     }
+    
+    consolePrint("dump process started, please wait. hold b to cancel.\n");
     
     nsp_offset += nsp_header_size;
     
@@ -547,18 +606,21 @@ static void dump_thread_func(void *arg)
         
         bool dirty_header = ncaIsHeaderDirty(cur_nca_ctx);
         
-        tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, i);
-        if (!usbSendFilePropertiesCommon(cur_nca_ctx->content_size, tmp_name))
+        if (output_device == 1)
         {
-            consolePrint("usb send file properties \"%s\" failed\n", tmp_name);
-            goto end;
+            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, i);
+            if (!usbSendFilePropertiesCommon(cur_nca_ctx->content_size, tmp_name))
+            {
+                consolePrint("usb send file properties \"%s\" failed\n", tmp_name);
+                goto end;
+            }
         }
         
         for(u64 offset = 0; offset < cur_nca_ctx->content_size; offset += blksize, nsp_offset += blksize, shared_data->data_written += blksize)
         {
             if (shared_data->transfer_cancelled)
             {
-                usbCancelFileTransfer();
+                if (output_device == 1) usbCancelFileTransfer();
                 goto end;
             }
             
@@ -600,10 +662,15 @@ static void dump_thread_func(void *arg)
             sha256ContextUpdate(&sha256_ctx, buf, blksize);
             
             // write nca chunk
-            if (!usbSendFileData(buf, blksize))
+            if (output_device != 1)
             {
-                consolePrint("send file data failed\n");
-                goto end;
+                fwrite(buf, 1, blksize, fd);
+            } else {
+                if (!usbSendFileData(buf, blksize))
+                {
+                    consolePrint("send file data failed\n");
+                    goto end;
+                }
             }
         }
         
@@ -638,11 +705,16 @@ static void dump_thread_func(void *arg)
         }
         
         // write cnmt xml
-        tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx);
-        if (!usbSendFilePropertiesCommon(cnmt_ctx.authoring_tool_xml_size, tmp_name) || !usbSendFileData(cnmt_ctx.authoring_tool_xml, cnmt_ctx.authoring_tool_xml_size))
+        if (output_device != 1)
         {
-            consolePrint("send \"%s\" failed\n", tmp_name);
-            goto end;
+            fwrite(cnmt_ctx.authoring_tool_xml, 1, cnmt_ctx.authoring_tool_xml_size, fd);
+        } else {
+            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx);
+            if (!usbSendFilePropertiesCommon(cnmt_ctx.authoring_tool_xml_size, tmp_name) || !usbSendFileData(cnmt_ctx.authoring_tool_xml, cnmt_ctx.authoring_tool_xml_size))
+            {
+                consolePrint("send \"%s\" failed\n", tmp_name);
+                goto end;
+            }
         }
         
         nsp_offset += cnmt_ctx.authoring_tool_xml_size;
@@ -687,11 +759,16 @@ static void dump_thread_func(void *arg)
                     NacpIconContext *icon_ctx = &(cur_nacp_ctx->icon_ctx[j]);
                     
                     // write icon
-                    tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, data_idx);
-                    if (!usbSendFilePropertiesCommon(icon_ctx->icon_size, tmp_name) || !usbSendFileData(icon_ctx->icon_data, icon_ctx->icon_size))
+                    if (output_device != 1)
                     {
-                        consolePrint("send \"%s\" failed\n", tmp_name);
-                        goto end;
+                        fwrite(icon_ctx->icon_data, 1, icon_ctx->icon_size, fd);
+                    } else {
+                        tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, data_idx);
+                        if (!usbSendFilePropertiesCommon(icon_ctx->icon_size, tmp_name) || !usbSendFileData(icon_ctx->icon_data, icon_ctx->icon_size))
+                        {
+                            consolePrint("send \"%s\" failed\n", tmp_name);
+                            goto end;
+                        }
                     }
                     
                     nsp_offset += icon_ctx->icon_size;
@@ -719,11 +796,16 @@ static void dump_thread_func(void *arg)
         }
         
         // write xml
-        tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, data_idx);
-        if (!usbSendFilePropertiesCommon(authoring_tool_xml_size, tmp_name) || !usbSendFileData(authoring_tool_xml, authoring_tool_xml_size))
+        if (output_device != 1)
         {
-            consolePrint("send \"%s\" failed\n", tmp_name);
-            goto end;
+            fwrite(authoring_tool_xml, 1, authoring_tool_xml_size, fd);
+        } else {
+            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, data_idx);
+            if (!usbSendFilePropertiesCommon(authoring_tool_xml_size, tmp_name) || !usbSendFileData(authoring_tool_xml, authoring_tool_xml_size))
+            {
+                consolePrint("send \"%s\" failed\n", tmp_name);
+                goto end;
+            }
         }
         
         nsp_offset += authoring_tool_xml_size;
@@ -740,22 +822,32 @@ static void dump_thread_func(void *arg)
     if (retrieve_tik_cert)
     {
         // write ticket
-        tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, pfs_file_ctx.header.entry_count - 2);
-        if (!usbSendFilePropertiesCommon(tik.size, tmp_name) || !usbSendFileData(tik.data, tik.size))
+        if (output_device != 1)
         {
-            consolePrint("send \"%s\" failed\n", tmp_name);
-            goto end;
+            fwrite(tik.data, 1, tik.size, fd);
+        } else {
+            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, pfs_file_ctx.header.entry_count - 2);
+            if (!usbSendFilePropertiesCommon(tik.size, tmp_name) || !usbSendFileData(tik.data, tik.size))
+            {
+                consolePrint("send \"%s\" failed\n", tmp_name);
+                goto end;
+            }
         }
         
         nsp_offset += tik.size;
         shared_data->data_written += tik.size;
         
         // write cert
-        tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, pfs_file_ctx.header.entry_count - 1);
-        if (!usbSendFilePropertiesCommon(raw_cert_chain_size, tmp_name) || !usbSendFileData(raw_cert_chain, raw_cert_chain_size))
+        if (output_device != 1)
         {
-            consolePrint("send \"%s\" failed\n", tmp_name);
-            goto end;
+            fwrite(raw_cert_chain, 1, raw_cert_chain_size, fd);
+        } else {
+            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, pfs_file_ctx.header.entry_count - 1);
+            if (!usbSendFilePropertiesCommon(raw_cert_chain_size, tmp_name) || !usbSendFileData(raw_cert_chain, raw_cert_chain_size))
+            {
+                consolePrint("send \"%s\" failed\n", tmp_name);
+                goto end;
+            }
         }
         
         nsp_offset += raw_cert_chain_size;
@@ -769,10 +861,16 @@ static void dump_thread_func(void *arg)
         goto end;
     }
     
-    if (!usbSendNspHeader(buf, (u32)nsp_header_size))
+    if (output_device != 1)
     {
-        consolePrint("send nsp header failed\n");
-        goto end;
+        rewind(fd);
+        fwrite(buf, 1, nsp_header_size, fd);
+    } else {
+        if (!usbSendNspHeader(buf, (u32)nsp_header_size))
+        {
+            consolePrint("send nsp header failed\n");
+            goto end;
+        }
     }
     
     shared_data->data_written += nsp_header_size;
@@ -783,6 +881,13 @@ end:
     consoleRefresh();
     
     if (!success && !shared_data->transfer_cancelled) shared_data->error = true;
+    
+    if (fd)
+    {
+        fclose(fd);
+        if (!ums_device && !success) utilsRemoveConcatenationFile(path);
+        utilsCommitSdCardFileSystemChanges();
+    }
     
     pfsFreeFileContext(&pfs_file_ctx);
     
@@ -835,6 +940,8 @@ static void nspDump(TitleInfo *title_info)
     u64 prev_size = 0;
     u8 prev_time = 0, percent = 0;
     
+    u32 output_device = options[8].val;
+    
     consoleClear();
     
     consolePrint("%s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
@@ -854,32 +961,50 @@ static void nspDump(TitleInfo *title_info)
     consolePrint("size: %s\n", title_info->size_str);
     consolePrint("______________________________\n\n");
     consolePrint("dump options:\n\n");
-    for(u32 i = 0; i < options_count; i++) consolePrint("%s: %s\n", options[i].str, options[i].val ? "yes" : "no");
-    consolePrint("______________________________\n\n");
+    for(u32 i = 0; i < (options_count - 1); i++) consolePrint("%s: %s\n", options[i].str, options[i].val ? "yes" : "no");
     
-    // make sure we have a valid usb session
-    consolePrint("waiting for usb connection... ");
-    
-    start = time(NULL);
-    
-    while(true)
+    consolePrint("%s: ", options[options_count - 1].str);
+    switch(options[options_count - 1].val)
     {
-        time_t now = time(NULL);
-        if ((now - start) >= 10) break;
-        
-        consolePrint("%lu ", now - start);
-        consoleRefresh();
-        
-        if ((usb_host_speed = usbIsReady())) break;
-        utilsSleep(1);
+        case 0:
+            consolePrint("%s\n", DEVOPTAB_SDMC_DEVICE);
+            break;
+        case 1:
+            consolePrint("usb host (pc)\n");
+            break;
+        default:
+            consolePrint("ums device #%u\n", options[options_count - 1].val - 1);
+            break;
     }
     
-    consolePrint("\n");
+    consolePrint("______________________________\n\n");
     
-    if (!usb_host_speed)
+    if (output_device == 1)
     {
-        consolePrint("usb connection failed\n");
-        return;
+        // make sure we have a valid usb session
+        consolePrint("waiting for usb connection... ");
+        
+        start = time(NULL);
+        
+        while(true)
+        {
+            time_t now = time(NULL);
+            if ((now - start) >= 10) break;
+            
+            consolePrint("%lu ", now - start);
+            consoleRefresh();
+            
+            if ((usb_host_speed = usbIsReady())) break;
+            utilsSleep(1);
+        }
+        
+        consolePrint("\n");
+        
+        if (!usb_host_speed)
+        {
+            consolePrint("usb connection failed\n");
+            return;
+        }
     }
     
     // create dump thread
@@ -947,7 +1072,7 @@ static void nspDump(TitleInfo *title_info)
     
     if (shared_data.error)
     {
-        consolePrint("usb transfer error\n");
+        consolePrint("i/o error\n");
         return;
     }
     
@@ -989,6 +1114,10 @@ int main(int argc, char *argv[])
     u32 type_idx = 0, type_scroll = 0;
     u32 list_count = 0, list_idx = 0;
     
+    u64 device_total_fs_size = 0, device_free_fs_size = 0;
+    char device_total_fs_size_str[36] = {0}, device_free_fs_size_str[32] = {0}, device_info[0x300] = {0};
+    bool device_retrieved_size = false, device_retrieved_info = false;
+    
     bool applet_status = true;
     
     app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
@@ -1001,6 +1130,8 @@ int main(int argc, char *argv[])
     consolePrint("app metadata succeeded\n");
     consoleRefresh();
     
+    ums_devices = umsGetDevices(&ums_device_count);
+    
     utilsSleep(1);
     
     while((applet_status = appletMainLoop()))
@@ -1008,6 +1139,7 @@ int main(int argc, char *argv[])
         consoleClear();
         
         consolePrint("press b to %s.\n", menu == 0 ? "exit" : "go back");
+        if (ums_device_count) consolePrint("press x to safely remove all ums devices.\n");
         consolePrint("______________________________\n\n");
         
         if (menu == 0)
@@ -1064,17 +1196,58 @@ int main(int argc, char *argv[])
                 if (i == 0)
                 {
                     consolePrint("start nsp dump\n");
-                } else {
+                } else
+                if (i < options_count)
+                {
                     consolePrint("%s: < %s >\n", options[i - 1].str, options[i - 1].val ? "yes" : "no");
+                } else {
+                    consolePrint("%s: ", options[i - 1].str);
+                    
+                    u32 output_device = options[i - 1].val;
+                    
+                    if (output_device != 1)
+                    {
+                        if (!device_retrieved_size)
+                        {
+                            sprintf(device_total_fs_size_str, "%s/", output_device == 0 ? DEVOPTAB_SDMC_DEVICE : ums_devices[output_device - 2].name);
+                            utilsGetFileSystemStatsByPath(device_total_fs_size_str, &device_total_fs_size, &device_free_fs_size);
+                            utilsGenerateFormattedSizeString(device_total_fs_size, device_total_fs_size_str, sizeof(device_total_fs_size_str));
+                            utilsGenerateFormattedSizeString(device_free_fs_size, device_free_fs_size_str, sizeof(device_free_fs_size_str));
+                            device_retrieved_size = true;
+                        }
+                        
+                        if (output_device == 0)
+                        {
+                            consolePrint("< sdmc: (%s / %s) >\n", device_free_fs_size_str, device_total_fs_size_str);
+                        } else {
+                            UsbHsFsDevice *ums_device = &(ums_devices[output_device - 2]);
+                            
+                            if (!device_retrieved_info)
+                            {
+                                if (ums_device->product_name[0])
+                                {
+                                    sprintf(device_info, "%s, LUN %u, FS #%u, %s", ums_device->product_name, ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
+                                } else {
+                                    sprintf(device_info, "LUN %u, FS #%u, %s", ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
+                                }
+                                
+                                device_retrieved_info = true;
+                            }
+                            
+                            consolePrint("< %s (%s) (%s / %s) >", ums_device->name, device_info, device_free_fs_size_str, device_total_fs_size_str);
+                        }
+                    } else {
+                        consolePrint("< usb host (pc) >");
+                        device_retrieved_size = device_retrieved_info = false;
+                    }
                 }
             }
         }
         
         consolePrint("\n");
-        
         consoleRefresh();
         
-        bool gc_update = false;
+        bool data_update = false;
         u64 btn_down = 0, btn_held = 0;
         
         while((applet_status = appletMainLoop()))
@@ -1101,7 +1274,21 @@ int main(int argc, char *argv[])
                 type_idx = type_scroll = 0;
                 list_count = list_idx = 0;
                 
-                gc_update = true;
+                data_update = true;
+                
+                break;
+            }
+            
+            if (umsIsDeviceInfoUpdated())
+            {
+                free(ums_devices);
+                
+                ums_devices = umsGetDevices(&ums_device_count);
+                
+                options[options_count - 1].val = 0;
+                device_retrieved_size = device_retrieved_info = false;
+                
+                data_update = true;
                 
                 break;
             }
@@ -1109,7 +1296,7 @@ int main(int argc, char *argv[])
         
         if (!applet_status) break;
         
-        if (gc_update) continue;
+        if (data_update) continue;
         
         if (btn_down & HidNpadButton_A)
         {
@@ -1223,7 +1410,24 @@ int main(int argc, char *argv[])
         } else
         if ((btn_down & (HidNpadButton_Left | HidNpadButton_Right)) && menu == 2 && selected_idx != 0)
         {
-            options[selected_idx - 1].val ^= 1;
+            if (selected_idx < options_count)
+            {
+                options[selected_idx - 1].val ^= 1;
+            } else {
+                bool left = (btn_down & HidNpadButton_Left);
+                u32 *output_device = &(options[selected_idx - 1].val), orig_output_device = *output_device;
+                
+                if (left)
+                {
+                    (*output_device)--;
+                    if (*output_device == UINT32_MAX) *output_device = (ums_device_count + 1);
+                } else {
+                    (*output_device)++;
+                    if (*output_device > (ums_device_count + 1)) *output_device = 0;
+                }
+                
+                if (*output_device != orig_output_device) device_retrieved_size = device_retrieved_info = false;
+            }
         } else
         if ((btn_down & (HidNpadButton_L | HidNpadButton_ZL)) && menu == 2 && title_info->previous)
         {
@@ -1234,6 +1438,17 @@ int main(int argc, char *argv[])
         {
             title_info = title_info->next;
             list_idx++;
+        } else
+        if ((btn_down & HidNpadButton_X) && ums_device_count)
+        {
+            for(u32 i = 0; i < ums_device_count; i++) usbHsFsUnmountDevice(&(ums_devices[i]), false);
+            
+            options[options_count - 1].val = 0;
+            
+            free(ums_devices);
+            ums_devices = NULL;
+            
+            ums_device_count = 0;
         }
         
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
@@ -1249,6 +1464,8 @@ out2:
         consolePrint("press any button to exit\n");
         utilsWaitForButtonPress(0);
     }
+    
+    if (ums_devices) free(ums_devices);
     
     if (app_metadata) free(app_metadata);
     
