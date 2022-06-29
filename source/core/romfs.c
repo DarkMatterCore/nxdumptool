@@ -33,17 +33,15 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     u64 dir_table_offset = 0, file_table_offset = 0;
     bool success = false, dump_fs_header = false;
     
-    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->format_version == NcaVersion_Nca0 && \
-        (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->header.hash_type != NcaHashType_HierarchicalSha256)) || (nca_ctx->format_version != NcaVersion_Nca0 && \
-        (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || nca_fs_ctx->header.hash_type != NcaHashType_HierarchicalIntegrity)) || (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved))
+    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || \
+        (nca_ctx->format_version == NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256)) || \
+        (nca_ctx->format_version != NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
+        (nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegrity && nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegritySha3))) || \
+        (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved))
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
-    
-    u32 layer_count = 0;
-    NcaRegion *hash_region = NULL;
-    NcaHierarchicalIntegrityVerificationLevelInformation *level_information = NULL;
     
     /* Free output context beforehand. */
     romfsFreeContext(out);
@@ -51,31 +49,10 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     /* Fill context. */
     out->nca_fs_ctx = nca_fs_ctx;
     
-    if (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs)
+    if (!ncaGetFsSectionHashTargetProperties(nca_fs_ctx, &(out->offset), &(out->size)))
     {
-        if (!ncaValidateHierarchicalSha256Offsets(&(nca_fs_ctx->header.hash_data.hierarchical_sha256_data), nca_fs_ctx->section_size))
-        {
-            LOG_MSG("Invalid HierarchicalSha256 block!");
-            goto end;
-        }
-        
-        layer_count = nca_fs_ctx->header.hash_data.hierarchical_sha256_data.hash_region_count;
-        hash_region = &(nca_fs_ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1]);
-        
-        out->offset = hash_region->offset;
-        out->size = hash_region->size;
-    } else {
-        if (!nca_fs_ctx->has_sparse_layer && !ncaValidateHierarchicalIntegrityOffsets(&(nca_fs_ctx->header.hash_data.integrity_meta_info), nca_fs_ctx->section_size))
-        {
-            LOG_MSG("Invalid HierarchicalIntegrity block!");
-            goto end;
-        }
-        
-        layer_count = NCA_IVFC_LEVEL_COUNT;
-        level_information = &(nca_fs_ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[layer_count - 1]);
-        
-        out->offset = level_information->offset;
-        out->size = level_information->size;
+        LOG_MSG("Failed to get target hash layer properties!");
+        goto end;
     }
     
     /* Read RomFS header. */

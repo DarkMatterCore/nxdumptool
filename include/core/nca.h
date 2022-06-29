@@ -361,31 +361,32 @@ typedef enum {
 /// Unlike NCA contexts, we don't need to keep a hash for the NCA FS section header in NCA FS section contexts.
 /// This is because the functions that modify the NCA FS section header also update the NCA FS section header hash stored in the NCA header.
 typedef struct {
-    bool enabled;
+    bool enabled;                       ///< Set to true if this NCA FS section has passed all validation checks and can be safely used.
     void *nca_ctx;                      ///< NcaContext. Used to perform NCA reads.
     NcaFsHeader header;                 ///< Plaintext NCA FS section header.
     NcaFsHeader encrypted_header;       ///< Encrypted NCA FS section header. If the plaintext NCA FS section header is modified, this will hold an encrypted copy of it.
                                         ///< Otherwise, this holds the unmodified, encrypted NCA FS section header.
-    u8 section_num;                     ///< Index within [0 - 3].
-    u64 section_offset;                 ///< Relative to the start of the NCA content file.
-    u64 section_size;
+    u8 section_idx;                     ///< Index within [0 - 3].
+    u64 section_offset;                 ///< Relative to the start of the NCA content file. Placed here for convenience.
+    u64 section_size;                   ///< Placed here for convenience.
     u8 hash_type;                       ///< NcaHashType.
     u8 encryption_type;                 ///< NcaEncryptionType.
     u8 section_type;                    ///< NcaFsSectionType.
     bool skip_hash_layer_crypto;        ///< Set to true if hash layer encryption should be skipped while reading section data.
-    u64 last_layer_offset;              ///< Relative to the start of the FS section.
-    u64 last_layer_size;
-    u8 ctr[AES_BLOCK_SIZE];             ///< Used to update the AES CTR context IV based on the desired offset.
-    Aes128CtrContext ctr_ctx;
-    Aes128XtsContext xts_decrypt_ctx;
-    Aes128XtsContext xts_encrypt_ctx;
+    NcaRegion hash_region;              /// Holds the properties for the full hash layer region that precedes the actual FS section data.
+    
+    ///< Crypto-related fields.
+    u8 ctr[AES_BLOCK_SIZE];             ///< Used internally by NCA functions to update the AES-128-CTR context IV based on the desired offset.
+    Aes128CtrContext ctr_ctx;           ///< Used internally by NCA functions to perform AES-128-CTR crypto.
+    Aes128XtsContext xts_decrypt_ctx;   ///< Used internally by NCA functions to perform AES-128-XTS decryption.
+    Aes128XtsContext xts_encrypt_ctx;   ///< Used internally by NCA functions to perform AES-128-XTS encryption.
     
     ///< SparseInfo-related fields.
-    bool has_sparse_layer;
-    u64 sparse_table_offset;            ///< header.sparse_info.physical_offset + header.sparse_info.bucket.offset. Placed here for convenience.
+    bool has_sparse_layer;              ///< Set to true if this NCA FS section has a sparse layer.
+    u64 sparse_table_offset;            ///< header.sparse_info.physical_offset + header.sparse_info.bucket.offset. Relative to the start of the NCA content file. Placed here for convenience.
     u64 sparse_table_size;              ///< header.sparse_info.bucket.size. Placed here for convenience.
-    u8 sparse_ctr[AES_BLOCK_SIZE];
-    Aes128CtrContext sparse_ctr_ctx;
+    u8 sparse_ctr[AES_BLOCK_SIZE];      ///< AES-128-CTR IV used for sparse table decryption.
+    Aes128CtrContext sparse_ctr_ctx;    ///< AES-128-CTR context used for sparse table decryption.
     
     ///< NSP-related fields.
     bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
@@ -487,14 +488,6 @@ bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 of
 /// Input offset must be relative to the start of the NCA FS section.
 bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val);
 
-/// Returns a pointer to a dynamically allocated buffer used to encrypt the input plaintext data, based on the encryption type used by the input NCA FS section, as well as its offset and size.
-/// Input offset must be relative to the start of the NCA FS section.
-/// Output size and offset are guaranteed to be aligned to the AES sector size used by the encryption type from the FS section.
-/// Output offset is relative to the start of the NCA content file, making it easier to use the output encrypted block to seamlessly replace data while dumping a NCA.
-/// This function doesn't support Patch RomFS sections, nor sections with Sparse and/or Compressed storage.
-/// Used internally by both ncaGenerateHierarchicalSha256Patch() and ncaGenerateHierarchicalIntegrityPatch().
-void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, u64 *out_block_size, u64 *out_block_offset);
-
 /// Generates HierarchicalSha256 FS section patch data, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the last HierarchicalSha256 hash region (actual underlying FS).
 /// Bear in mind that this function recalculates both the NcaHashData block master hash and the NCA FS header hash from the NCA header.
@@ -551,32 +544,41 @@ NX_INLINE bool ncaIsHeaderDirty(NcaContext *ctx)
     return (memcmp(tmp_hash, ctx->header_hash, SHA256_HASH_SIZE) != 0);
 }
 
-NX_INLINE bool ncaValidateHierarchicalSha256Offsets(NcaHierarchicalSha256Data *hierarchical_sha256_data, u64 section_size)
+NX_INLINE bool ncaGetFsSectionHashTargetProperties(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size)
 {
-    if (!hierarchical_sha256_data || !section_size || !hierarchical_sha256_data->hash_block_size || !hierarchical_sha256_data->hash_region_count || \
-        hierarchical_sha256_data->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT) return false;
+    if (!ctx || (!out_offset && !out_size)) return false;
     
-    for(u32 i = 0; i < hierarchical_sha256_data->hash_region_count; i++)
+    bool success = true;
+    
+    switch(ctx->hash_type)
     {
-        NcaRegion *hash_region = &(hierarchical_sha256_data->hash_region[i]);
-        if (!hash_region->size || (hash_region->offset + hash_region->size) > section_size) return false;
+        case NcaHashType_None:
+            if (out_offset) *out_offset = 0;
+            if (out_size) *out_size = ctx->section_size;
+            break;
+        case NcaHashType_HierarchicalSha256:
+        case NcaHashType_HierarchicalSha3256:
+            {
+                u32 layer_count = ctx->header.hash_data.hierarchical_sha256_data.hash_region_count;
+                NcaRegion *hash_region = &(ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1]);
+                if (out_offset) *out_offset = hash_region->offset;
+                if (out_size) *out_size = hash_region->size;
+            }
+            break;
+        case NcaHashType_HierarchicalIntegrity:
+        case NcaHashType_HierarchicalIntegritySha3:
+            {
+                NcaHierarchicalIntegrityVerificationLevelInformation *lvl_info = &(ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1]);
+                if (out_offset) *out_offset = lvl_info->offset;
+                if (out_size) *out_size = lvl_info->size;
+            }
+            break;
+        default:
+            success = false;
+            break;
     }
     
-    return true;
-}
-
-NX_INLINE bool ncaValidateHierarchicalIntegrityOffsets(NcaIntegrityMetaInfo *integrity_meta_info, u64 section_size)
-{
-    if (!integrity_meta_info || !section_size || __builtin_bswap32(integrity_meta_info->magic) != NCA_IVFC_MAGIC || integrity_meta_info->master_hash_size != SHA256_HASH_SIZE || \
-        integrity_meta_info->info_level_hash.max_level_count != NCA_IVFC_MAX_LEVEL_COUNT) return false;
-    
-    for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
-    {
-        NcaHierarchicalIntegrityVerificationLevelInformation *level_information = &(integrity_meta_info->info_level_hash.level_information[i]);
-        if (!level_information->size || !level_information->block_order || (level_information->offset + level_information->size) > section_size) return false;
-    }
-    
-    return true;
+    return success;
 }
 
 NX_INLINE void ncaFreeHierarchicalSha256Patch(NcaHierarchicalSha256Patch *patch)

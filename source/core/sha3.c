@@ -78,15 +78,6 @@ static void sha3ContextCreate(Sha3Context *out, u32 hash_size);
 static void sha3ProcessBlock(Sha3Context *ctx);
 static void sha3ProcessLastBlock(Sha3Context *ctx);
 
-/* Functions for SHA3 context creation and simple all-in-one calculation. */
-
-_SHA3_CTX_OPS(224);
-_SHA3_CTX_OPS(256);
-_SHA3_CTX_OPS(384);
-_SHA3_CTX_OPS(512);
-
-#undef _SHA3_CTX_OPS
-
 void sha3ContextUpdate(Sha3Context *ctx, const void *src, size_t size)
 {
     if (!ctx || !src || !size || ctx->finalized)
@@ -161,6 +152,15 @@ void sha3ContextGetHash(Sha3Context *ctx, void *dst)
     /* Copy the output hash. */
     memcpy(dst, ctx->internal_state, ctx->hash_size);
 }
+
+/* Functions for SHA3 context creation and simple all-in-one calculation. */
+
+_SHA3_CTX_OPS(224);
+_SHA3_CTX_OPS(256);
+_SHA3_CTX_OPS(384);
+_SHA3_CTX_OPS(512);
+
+#undef _SHA3_CTX_OPS
 
 static u64 rotl_u64(u64 x, int s)
 {

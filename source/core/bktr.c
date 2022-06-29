@@ -40,8 +40,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     
     if (!out || !base_nca_fs_ctx || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || \
         !update_nca_fs_ctx || !update_nca_fs_ctx->enabled || !(update_nca_ctx = (NcaContext*)update_nca_fs_ctx->nca_ctx) || \
-        update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || (update_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrEx && \
-        update_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrExSkipLayerHash) || base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || \
+        update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || \
         base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || \
         __builtin_bswap32(update_nca_fs_ctx->header.patch_info.indirect_bucket.header.magic) != NCA_BKTR_MAGIC || \
         update_nca_fs_ctx->header.patch_info.indirect_bucket.header.version != NCA_BKTR_VERSION || \
@@ -59,8 +58,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     bktrFreeContext(out);
     
     /* Update missing base NCA RomFS status. */
-    out->missing_base_romfs = (!base_nca_fs_ctx->enabled || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
-                               (base_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtr && base_nca_fs_ctx->encryption_type != NcaEncryptionType_AesCtrSkipLayerHash));
+    out->missing_base_romfs = (!base_nca_fs_ctx->enabled || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs);
     
     /* Initialize base NCA RomFS context. */
     if (!out->missing_base_romfs && !romfsInitializeContext(&(out->base_romfs_ctx), base_nca_fs_ctx))
@@ -149,8 +147,15 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     /* Initialize update NCA RomFS context. */
     /* Don't verify offsets from Patch RomFS sections, because they reflect the full, patched RomFS image. */
     out->patch_romfs_ctx.nca_fs_ctx = update_nca_fs_ctx;
-    out->patch_romfs_ctx.offset = out->offset = update_nca_fs_ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1].offset;
-    out->patch_romfs_ctx.size = out->size = update_nca_fs_ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1].size;
+    
+    if (!ncaGetFsSectionHashTargetProperties(update_nca_fs_ctx, &(out->offset), &(out->size)))
+    {
+        LOG_MSG("Failed to get target hash layer properties!");
+        goto end;
+    }
+    
+    out->patch_romfs_ctx.offset = out->offset;
+    out->patch_romfs_ctx.size = out->size;
     
     /* Read update NCA RomFS header. */
     if (!bktrPhysicalSectionRead(out, &(out->patch_romfs_ctx.header), sizeof(RomFileSystemHeader), out->patch_romfs_ctx.offset))
