@@ -372,7 +372,7 @@ typedef struct {
     u8 hash_type;                       ///< NcaHashType.
     u8 encryption_type;                 ///< NcaEncryptionType.
     u8 section_type;                    ///< NcaFsSectionType.
-    bool skip_hash_layer_crypto;        ///< Set to true if hash layer encryption should be skipped while reading section data.
+    bool skip_hash_layer_crypto;        ///< Set to true if hash layer decryption should be skipped while reading section data.
     NcaRegion hash_region;              /// Holds the properties for the full hash layer region that precedes the actual FS section data.
     
     ///< Crypto-related fields.
@@ -424,6 +424,7 @@ typedef struct {
     u64 content_size;                                   ///< Retrieved from NcmContentInfo.
     u8 key_generation;                                  ///< NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
+    u32 title_version;
     bool rights_id_available;
     bool titlekey_retrieved;
     bool valid_main_signature;
@@ -473,7 +474,7 @@ void ncaFreeCryptoBuffer(void);
 /// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or be used to read ticket data that has already been retrieved.
 /// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik);
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, u32 title_version, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
 /// Input offset must be relative to the start of the NCA content file.

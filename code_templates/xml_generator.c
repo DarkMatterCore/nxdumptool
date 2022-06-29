@@ -281,7 +281,7 @@ int main(int argc, char *argv[])
         if (content_info->content_type == NcmContentType_Meta) continue;
         
         if (!ncaInitializeContext(&(nca_ctx[j]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-            content_info, &tik))
+            content_info, user_app_data.app_info->version.value, &tik))
         {
             consolePrint("%s #%u initialize nca ctx failed\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
             goto out2;
@@ -329,7 +329,7 @@ int main(int argc, char *argv[])
     }
     
     if (!ncaInitializeContext(&(nca_ctx[meta_idx]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Meta, 0), &tik))
+        titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Meta, 0), user_app_data.app_info->version.value, &tik))
     {
         consolePrint("Meta nca initialize ctx failed\n");
         goto out2;

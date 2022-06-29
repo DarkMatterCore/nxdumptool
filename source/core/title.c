@@ -2513,7 +2513,7 @@ static char *titleGetPatchVersionString(TitleInfo *title_info)
     }
     
     /* Initialize NCA context. */
-    if (!ncaInitializeContext(nca_ctx, storage_id, hfs_partition_type, nacp_content, NULL))
+    if (!ncaInitializeContext(nca_ctx, storage_id, hfs_partition_type, nacp_content, title_info->version.value, NULL))
     {
         LOG_MSG("Failed to initialize NCA context for Control NCA from %016lX!", title_info->meta_key.id);
         goto end;

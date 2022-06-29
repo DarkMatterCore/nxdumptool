@@ -392,7 +392,7 @@ int main(int argc, char *argv[])
             } else
             if (menu == 2)
             {
-                if (!ncaInitializeContext(nca_ctx, cur_title_info->storage_id, 0, &(cur_title_info->content_infos[nca_idx]), NULL))
+                if (!ncaInitializeContext(nca_ctx, cur_title_info->storage_id, 0, &(cur_title_info->content_infos[nca_idx]), cur_title_info->version.value, NULL))
                 {
                     consolePrint("nca initialize ctx failed\n");
                     error = true;

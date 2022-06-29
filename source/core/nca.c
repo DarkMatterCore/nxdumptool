@@ -94,7 +94,7 @@ void ncaFreeCryptoBuffer(void)
     }
 }
 
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, Ticket *tik)
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, u32 title_version, Ticket *tik)
 {
     NcmContentStorage *ncm_storage = NULL;
     u8 valid_fs_section_cnt = 0;
@@ -121,6 +121,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     
     out->content_type = content_info->content_type;
     out->id_offset = content_info->id_offset;
+    out->title_version = title_version;
     
     titleConvertNcmContentSizeToU64(content_info->size, &(out->content_size));
     if (out->content_size < NCA_FULL_HEADER_LENGTH)

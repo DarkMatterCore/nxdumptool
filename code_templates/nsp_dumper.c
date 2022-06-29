@@ -257,7 +257,7 @@ static void dump_thread_func(void *arg)
     meta_nca_ctx = &(nca_ctx[title_info->content_count - 1]);
     
     if (!ncaInitializeContext(meta_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Meta, 0), &tik))
+        titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Meta, 0), title_info->version.value, &tik))
     {
         consolePrint("Meta nca initialize ctx failed\n");
         goto end;
@@ -284,7 +284,7 @@ static void dump_thread_func(void *arg)
         if (content_info->content_type == NcmContentType_Meta) continue;
         
         NcaContext *cur_nca_ctx = &(nca_ctx[j]);
-        if (!ncaInitializeContext(cur_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), content_info, &tik))
+        if (!ncaInitializeContext(cur_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), content_info, title_info->version.value, &tik))
         {
             consolePrint("%s #%u initialize nca ctx failed\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
             goto end;

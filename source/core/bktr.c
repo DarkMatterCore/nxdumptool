@@ -41,7 +41,8 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     if (!out || !base_nca_fs_ctx || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || \
         !update_nca_fs_ctx || !update_nca_fs_ctx->enabled || !(update_nca_ctx = (NcaContext*)update_nca_fs_ctx->nca_ctx) || \
         update_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || base_nca_ctx->header.program_id != update_nca_ctx->header.program_id || \
-        base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || \
+        base_nca_ctx->header.content_type != update_nca_ctx->header.content_type || base_nca_ctx->id_offset != update_nca_ctx->id_offset || \
+        base_nca_ctx->title_version > update_nca_ctx->title_version || \
         __builtin_bswap32(update_nca_fs_ctx->header.patch_info.indirect_bucket.header.magic) != NCA_BKTR_MAGIC || \
         update_nca_fs_ctx->header.patch_info.indirect_bucket.header.version != NCA_BKTR_VERSION || \
         __builtin_bswap32(update_nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.header.magic) != NCA_BKTR_MAGIC || \
@@ -60,11 +61,22 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
     /* Update missing base NCA RomFS status. */
     out->missing_base_romfs = (!base_nca_fs_ctx->enabled || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs);
     
-    /* Initialize base NCA RomFS context. */
-    if (!out->missing_base_romfs && !romfsInitializeContext(&(out->base_romfs_ctx), base_nca_fs_ctx))
+    if (!out->missing_base_romfs)
     {
-        LOG_MSG("Failed to initialize base NCA RomFS context!");
-        return false;
+        if (!base_nca_fs_ctx->has_sparse_layer)
+        {
+            /* Initialize base NCA RomFS context. */
+            if (!romfsInitializeContext(&(out->base_romfs_ctx), base_nca_fs_ctx))
+            {
+                LOG_MSG("Failed to initialize base NCA RomFS context!");
+                return false;
+            }
+        } else {
+            /* Initializing the base NCA RomFS on its own is impossible if we're dealing with a sparse layer. */
+            /* Let's just handle everything here. */
+            LOG_MSG("We got here, that's gotta be something.");
+            return false;
+        }
     }
     
     /* Fill context. */
