@@ -33,7 +33,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     u64 dir_table_offset = 0, file_table_offset = 0;
     bool success = false, dump_fs_header = false;
     
-    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || \
+    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->has_sparse_layer || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || \
         (nca_ctx->format_version == NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256)) || \
         (nca_ctx->format_version != NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
         (nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegrity && nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegritySha3))) || \
