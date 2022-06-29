@@ -94,14 +94,15 @@ typedef struct {
 NXDT_ASSERT(BktrAesCtrExStorageBlock, 0x4000);
 
 typedef struct {
-    RomFileSystemContext base_romfs_ctx;        ///< Base NCA RomFS context.
-    RomFileSystemContext patch_romfs_ctx;       ///< Update NCA RomFS context. Must be used with RomFS directory/file entry functions, because it holds the updated directory/file tables.
-    u64 offset;                                 ///< Patched RomFS image offset (relative to the start of the update NCA FS section).
-    u64 size;                                   ///< Patched RomFS image size.
-    u64 body_offset;                            ///< Patched RomFS image file data body offset (relative to the start of the RomFS).
-    BktrIndirectStorageBlock *indirect_block;   ///< BKTR Indirect Storage Block.
-    BktrAesCtrExStorageBlock *aes_ctr_ex_block; ///< BKTR AesCtrEx Storage Block.
-    bool missing_base_romfs;                    ///< If true, only Patch RomFS data is used. Needed for games with base Program NCAs without a RomFS section (e.g. Fortnite, World of Tanks Blitz, etc.).
+    RomFileSystemContext base_romfs_ctx;            ///< Base NCA RomFS context.
+    RomFileSystemContext patch_romfs_ctx;           ///< Update NCA RomFS context. Must be used with RomFS directory/file entry functions, because it holds the updated directory/file tables.
+    u64 offset;                                     ///< Patched RomFS image offset (relative to the start of the update NCA FS section).
+    u64 size;                                       ///< Patched RomFS image size.
+    u64 body_offset;                                ///< Patched RomFS image file data body offset (relative to the start of the RomFS).
+    BktrIndirectStorageBlock *indirect_block;       ///< BKTR Indirect Storage Block.
+    BktrAesCtrExStorageBlock *aes_ctr_ex_block;     ///< BKTR AesCtrEx Storage Block.
+    bool missing_base_romfs;                        ///< If true, only Patch RomFS data is used. Needed for games with base Program NCAs without a RomFS section (e.g. Fortnite, World of Tanks Blitz, etc.).
+    BktrIndirectStorageBlock *base_indirect_block;  ///< Base NCA Indirect Storage Block (sparse layer), if available.
 } BktrContext;
 
 /// Initializes a BKTR context.
@@ -127,6 +128,7 @@ NX_INLINE void bktrFreeContext(BktrContext *ctx)
     romfsFreeContext(&(ctx->patch_romfs_ctx));
     if (ctx->indirect_block) free(ctx->indirect_block);
     if (ctx->aes_ctr_ex_block) free(ctx->aes_ctr_ex_block);
+    if (ctx->base_indirect_block) free(ctx->base_indirect_block);
     memset(ctx, 0, sizeof(BktrContext));
 }
 

@@ -289,6 +289,8 @@ int main(int argc, char *argv[])
         
         consolePrint("%s #%u initialize nca ctx succeeded\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
         
+        if (nca_ctx[j].fs_ctx[0].has_sparse_layer) continue;
+        
         switch(content_info->content_type)
         {
             case NcmContentType_Program:
@@ -351,9 +353,6 @@ int main(int argc, char *argv[])
     if (cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, user_app_data.app_info->content_count))
     {
         consolePrint("cnmt xml succeeded\n");
-        
-        //sprintf(path, "sdmc:/at_xml/%016lX/%s.cnmt", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
-        //writeFile(cnmt_ctx.raw_data, cnmt_ctx.raw_data_size, path);
         
         sprintf(path, "sdmc:/at_xml/%016lX/%s.cnmt.xml", app_metadata[selected_idx]->title_id, cnmt_ctx.nca_ctx->content_id_str);
         writeFile(cnmt_ctx.authoring_tool_xml, cnmt_ctx.authoring_tool_xml_size, path);

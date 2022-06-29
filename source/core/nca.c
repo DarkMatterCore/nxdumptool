@@ -708,19 +708,17 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     
     bool success = false;
     
-    /* Clear FS section context. */
-    memset(fs_ctx, 0, sizeof(NcaFsSectionContext));
-    
     /* Fill section context. */
     fs_ctx->nca_ctx = nca_ctx;
     fs_ctx->section_idx = section_idx;
     fs_ctx->section_type = NcaFsSectionType_Invalid;    /* Placeholder. */
     fs_ctx->has_sparse_layer = (sparse_info->generation != 0);
+    fs_ctx->enabled = false;
     
     /* Don't proceed if this NCA FS section isn't populated. */
     if (!ncaIsFsInfoEntryValid(fs_info))
     {
-        LOG_MSG("Invalid FsInfo entry for section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        //LOG_MSG("Invalid FsInfo entry for section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
     
@@ -828,32 +826,13 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         }
         
         /* Update section size. */
-        fs_ctx->section_size = (MIN(fs_ctx->section_offset, raw_storage_offset) + (MAX(fs_ctx->section_offset, raw_storage_offset) - \
-                                MIN(fs_ctx->section_offset, raw_storage_offset)) + raw_storage_size);
+        fs_ctx->section_size = raw_storage_size;
     }
     
     /* Check if we're within boundaries. */
     if ((fs_ctx->section_offset + fs_ctx->section_size) > nca_ctx->content_size)
     {
         LOG_MSG("FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
-        goto end;
-    }
-    
-    /* Validate HashData boundaries. */
-    if (!ncaFsSectionValidateHashDataBoundaries(fs_ctx)) goto end;
-    
-    /* Get hash layer region size (offset must always be 0). */
-    fs_ctx->hash_region.offset = 0;
-    if (!ncaGetFsSectionHashTargetProperties(fs_ctx, NULL, &(fs_ctx->hash_region.size)))
-    {
-        LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
-        goto end;
-    }
-    
-    /* Check if we're within boundaries. */
-    if (fs_ctx->hash_region.size > fs_ctx->section_size || (fs_ctx->section_offset + fs_ctx->hash_region.size) > nca_ctx->content_size)
-    {
-        LOG_MSG("Hash layer region for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
     
@@ -906,6 +885,24 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         goto end;
     }
     
+    /* Validate HashData boundaries. */
+    if (!ncaFsSectionValidateHashDataBoundaries(fs_ctx)) goto end;
+    
+    /* Get hash layer region size (offset must always be 0). */
+    fs_ctx->hash_region.offset = 0;
+    if (!ncaGetFsSectionHashTargetProperties(fs_ctx, &(fs_ctx->hash_region.size), NULL))
+    {
+        LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
+        goto end;
+    }
+    
+    /* Check if we're within boundaries. */
+    if (fs_ctx->hash_region.size > fs_ctx->section_size || (fs_ctx->section_offset + fs_ctx->hash_region.size) > nca_ctx->content_size)
+    {
+        LOG_MSG("Hash layer region for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        goto end;
+    }
+    
     /* Check if we should skip hash layer decryption while reading this FS section. */
     fs_ctx->skip_hash_layer_crypto = (fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash || fs_ctx->encryption_type == NcaEncryptionType_AesCtrExSkipLayerHash);
     if (fs_ctx->skip_hash_layer_crypto && fs_ctx->hash_type == NcaHashType_None)
@@ -927,7 +924,6 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
             NcaAesCtrUpperIv sparse_upper_iv = {0};
             memcpy(sparse_upper_iv.value, fs_ctx->header.aes_ctr_upper_iv.value, sizeof(sparse_upper_iv.value));
             sparse_upper_iv.generation = ((u32)(sparse_info->generation) << 16);
-            
             aes128CtrInitializePartialCtr(fs_ctx->sparse_ctr, sparse_upper_iv.value, fs_ctx->sparse_table_offset);
         }
         
@@ -987,7 +983,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                 {
                     /* Validate all hash regions boundaries. Skip the last one if a sparse layer is used. */
                     NcaRegion *hash_region = &(hash_data->hash_region[i]);
-                    if (hash_region->offset != accum || !hash_region->size || \
+                    if (hash_region->offset < accum || !hash_region->size || \
                         ((i < (hash_data->hash_region_count - 1) || !ctx->has_sparse_layer) && (hash_region->offset + hash_region->size) > ctx->section_size))
                     {
                         LOG_MSG("HierarchicalSha256 region #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
@@ -996,7 +992,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                         break;
                     }
                     
-                    accum += hash_region->size;
+                    accum = (hash_region->offset + hash_region->size);
                 }
                 
                 success = valid;
@@ -1017,10 +1013,10 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                 
                 for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
                 {
-                    /* Validate all level informations boundaries. Skip the last one if a sparse layer is used. */
-                    NcaHierarchicalIntegrityVerificationLevelInformation *level_information = &(hash_data->info_level_hash.level_information[i]);
-                    if (level_information->offset != accum || !level_information->size || !level_information->block_order || \
-                        ((i < (NCA_IVFC_LEVEL_COUNT - 1) || !ctx->has_sparse_layer) && (level_information->offset + level_information->size) > ctx->section_size))
+                    /* Validate all level informations boundaries. Skip the last one if we're dealing with a Patch RomFS, or if a sparse layer is used. */
+                    NcaHierarchicalIntegrityVerificationLevelInformation *lvl_info = &(hash_data->info_level_hash.level_information[i]);
+                    if (lvl_info->offset < accum || !lvl_info->size || !lvl_info->block_order || ((i < (NCA_IVFC_LEVEL_COUNT - 1) || \
+                        (!ctx->has_sparse_layer && ctx->section_type != NcaFsSectionType_PatchRomFs)) && (lvl_info->offset + lvl_info->size) > ctx->section_size))
                     {
                         LOG_MSG("HierarchicalIntegrity level #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
                                 i, ctx->section_idx, nca_ctx->content_id_str);
@@ -1028,7 +1024,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                         break;
                     }
                     
-                    accum += level_information->size;
+                    accum = (lvl_info->offset + lvl_info->size);
                 }
                 
                 success = valid;

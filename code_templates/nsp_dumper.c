@@ -312,85 +312,88 @@ static void dump_thread_func(void *arg)
             goto end;
         }
         
-        switch(content_info->content_type)
+        if (!cur_nca_ctx->fs_ctx[0].has_sparse_layer)
         {
-            case NcmContentType_Program:
+            switch(content_info->content_type)
             {
-                // don't proceed if we didn't allocate programinfo ctx
-                if (!program_count || !program_info_ctx) break;
-                
-                ProgramInfoContext *cur_program_info_ctx = &(program_info_ctx[program_idx]);
-                
-                if (!programInfoInitializeContext(cur_program_info_ctx, cur_nca_ctx))
+                case NcmContentType_Program:
                 {
-                    consolePrint("initialize program info ctx failed (%s)\n", cur_nca_ctx->content_id_str);
-                    goto end;
+                    // don't proceed if we didn't allocate programinfo ctx or if we're dealing with a sparse layer
+                    if (!program_count || !program_info_ctx) break;
+                    
+                    ProgramInfoContext *cur_program_info_ctx = &(program_info_ctx[program_idx]);
+                    
+                    if (!programInfoInitializeContext(cur_program_info_ctx, cur_nca_ctx))
+                    {
+                        consolePrint("initialize program info ctx failed (%s)\n", cur_nca_ctx->content_id_str);
+                        goto end;
+                    }
+                    
+                    if (!programInfoGenerateAuthoringToolXml(cur_program_info_ctx))
+                    {
+                        consolePrint("program info xml failed (%s)\n", cur_nca_ctx->content_id_str);
+                        goto end;
+                    }
+                    
+                    program_idx++;
+                    
+                    consolePrint("initialize program info ctx succeeded (%s)\n", cur_nca_ctx->content_id_str);
+                    
+                    break;
                 }
-                
-                if (append_authoringtool_data && !programInfoGenerateAuthoringToolXml(cur_program_info_ctx))
+                case NcmContentType_Control:
                 {
-                    consolePrint("program info xml failed (%s)\n", cur_nca_ctx->content_id_str);
-                    goto end;
+                    // don't proceed if we didn't allocate nacp ctx
+                    if (!control_count || !nacp_ctx) break;
+                    
+                    NacpContext *cur_nacp_ctx = &(nacp_ctx[control_idx]);
+                    
+                    if (!nacpInitializeContext(cur_nacp_ctx, cur_nca_ctx))
+                    {
+                        consolePrint("initialize nacp ctx failed (%s)\n", cur_nca_ctx->content_id_str);
+                        goto end;
+                    }
+                    
+                    if (!nacpGenerateNcaPatch(cur_nacp_ctx, patch_sua, patch_screenshot, patch_video_capture, patch_hdcp))
+                    {
+                        consolePrint("nacp nca patch failed (%s)\n", cur_nca_ctx->content_id_str);
+                        goto end;
+                    }
+                    
+                    if (append_authoringtool_data && !nacpGenerateAuthoringToolXml(cur_nacp_ctx, title_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
+                    {
+                        consolePrint("nacp xml failed (%s)\n", cur_nca_ctx->content_id_str);
+                        goto end;
+                    }
+                    
+                    control_idx++;
+                    
+                    consolePrint("initialize nacp ctx succeeded (%s)\n", cur_nca_ctx->content_id_str);
+                    
+                    break;
                 }
-                
-                program_idx++;
-                
-                consolePrint("initialize program info ctx succeeded (%s)\n", cur_nca_ctx->content_id_str);
-                
-                break;
+                case NcmContentType_LegalInformation:
+                {
+                    // don't proceed if we didn't allocate legalinfo ctx
+                    if (!legal_info_count || !legal_info_ctx) break;
+                    
+                    LegalInfoContext *cur_legal_info_ctx = &(legal_info_ctx[legal_info_idx]);
+                    
+                    if (!legalInfoInitializeContext(cur_legal_info_ctx, cur_nca_ctx))
+                    {
+                        consolePrint("initialize legal info ctx failed (%s)\n", cur_nca_ctx->content_id_str);
+                        goto end;
+                    }
+                    
+                    legal_info_idx++;
+                    
+                    consolePrint("initialize legal info ctx succeeded (%s)\n", cur_nca_ctx->content_id_str);
+                    
+                    break;
+                }
+                default:
+                    break;
             }
-            case NcmContentType_Control:
-            {
-                // don't proceed if we didn't allocate nacp ctx
-                if (!control_count || !nacp_ctx) break;
-                
-                NacpContext *cur_nacp_ctx = &(nacp_ctx[control_idx]);
-                
-                if (!nacpInitializeContext(cur_nacp_ctx, cur_nca_ctx))
-                {
-                    consolePrint("initialize nacp ctx failed (%s)\n", cur_nca_ctx->content_id_str);
-                    goto end;
-                }
-                
-                if (!nacpGenerateNcaPatch(cur_nacp_ctx, patch_sua, patch_screenshot, patch_video_capture, patch_hdcp))
-                {
-                    consolePrint("nacp nca patch failed (%s)\n", cur_nca_ctx->content_id_str);
-                    goto end;
-                }
-                
-                if (append_authoringtool_data && !nacpGenerateAuthoringToolXml(cur_nacp_ctx, title_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
-                {
-                    consolePrint("nacp xml failed (%s)\n", cur_nca_ctx->content_id_str);
-                    goto end;
-                }
-                
-                control_idx++;
-                
-                consolePrint("initialize nacp ctx succeeded (%s)\n", cur_nca_ctx->content_id_str);
-                
-                break;
-            }
-            case NcmContentType_LegalInformation:
-            {
-                // don't proceed if we didn't allocate legalinfo ctx
-                if (!legal_info_count || !legal_info_ctx) break;
-                
-                LegalInfoContext *cur_legal_info_ctx = &(legal_info_ctx[legal_info_idx]);
-                
-                if (!legalInfoInitializeContext(cur_legal_info_ctx, cur_nca_ctx))
-                {
-                    consolePrint("initialize legal info ctx failed (%s)\n", cur_nca_ctx->content_id_str);
-                    goto end;
-                }
-                
-                legal_info_idx++;
-                
-                consolePrint("initialize legal info ctx succeeded (%s)\n", cur_nca_ctx->content_id_str);
-                
-                break;
-            }
-            default:
-                break;
         }
         
         if (!ncaEncryptHeader(cur_nca_ctx))

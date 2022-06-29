@@ -98,7 +98,7 @@ static void dumpPartitionFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
     }
     
     snprintf(path, sizeof(path), OUTPATH "/%016lX - %s/%s (%s)/Section %u (%s)", info->meta_key.id, info->app_metadata->lang_entry.name, ((NcaContext*)nca_fs_ctx->nca_ctx)->content_id_str, \
-             titleGetNcmContentTypeName(((NcaContext*)nca_fs_ctx->nca_ctx)->content_type), nca_fs_ctx->section_num, ncaGetFsSectionTypeName(nca_fs_ctx));
+             titleGetNcmContentTypeName(((NcaContext*)nca_fs_ctx->nca_ctx)->content_type), nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
     utilsCreateDirectoryTree(path, true);
     path_len = strlen(path);
     
@@ -174,7 +174,7 @@ static void dumpRomFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
     }
     
     snprintf(path, sizeof(path), OUTPATH "/%016lX - %s/%s (%s)/Section %u (%s)", info->meta_key.id, info->app_metadata->lang_entry.name, ((NcaContext*)nca_fs_ctx->nca_ctx)->content_id_str, \
-             titleGetNcmContentTypeName(((NcaContext*)nca_fs_ctx->nca_ctx)->content_type), nca_fs_ctx->section_num, ncaGetFsSectionTypeName(nca_fs_ctx));
+             titleGetNcmContentTypeName(((NcaContext*)nca_fs_ctx->nca_ctx)->content_type), nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
     utilsCreateDirectoryTree(path, true);
     path_len = strlen(path);
     

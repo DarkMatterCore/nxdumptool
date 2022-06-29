@@ -838,6 +838,8 @@ end:
 
 static void gamecardFreeInfo(bool clear_status)
 {
+    gamecardCloseStorageArea(true);
+    
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
     
     memset(&g_gameCardInfoArea, 0, sizeof(GameCardInfo));
@@ -863,8 +865,6 @@ static void gamecardFreeInfo(bool clear_status)
     }
     
     g_gameCardHfsCount = 0;
-    
-    gamecardCloseStorageArea(true);
     
     if (clear_status) g_gameCardStatus = GameCardStatus_NotInserted;
 }
