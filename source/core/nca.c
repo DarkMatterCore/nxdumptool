@@ -421,26 +421,20 @@ const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
     const char *str = "Invalid";
     bool is_exefs = false;
     
-    if (!ctx || !ctx->enabled || !(nca_ctx = (NcaContext*)ctx->nca_ctx)) return str;
+    if (!ctx || !(nca_ctx = (NcaContext*)ctx->nca_ctx)) return str;
     
     is_exefs = (nca_ctx->content_type == NcmContentType_Program && ctx->section_idx == 0);
     
     switch(ctx->section_type)
     {
         case NcaFsSectionType_PartitionFs:
-            if (ctx->has_sparse_layer)
-            {
-                str = (is_exefs ? "ExeFS (update required)" : "Partition FS (update required)");
-            } else {
-                str = (is_exefs ? "ExeFS" : "Partition FS");
-            }
-            
+            str = (is_exefs ? "ExeFS" : "Partition FS");
             break;
         case NcaFsSectionType_RomFs:
-            str = (ctx->has_sparse_layer ? "RomFS (update required)" : "RomFS");
+            str = "RomFS";
             break;
         case NcaFsSectionType_PatchRomFs:
-            str = "Patch RomFS (base required)";
+            str = "Patch RomFS";
             break;
         case NcaFsSectionType_Nca0RomFs:
             str = "NCA0 RomFS";
@@ -1055,6 +1049,9 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     NcaContext *nca_ctx = (NcaContext*)ctx->nca_ctx;
     u64 content_offset = (ctx->section_offset + offset);
     
+    u64 sparse_virtual_offset = ((ctx->has_sparse_layer && ctx->cur_sparse_virtual_offset) ? (ctx->section_offset + ctx->cur_sparse_virtual_offset) : 0);
+    u64 iv_offset = (sparse_virtual_offset ? sparse_virtual_offset : content_offset);
+    
     u64 block_start_offset = 0, block_end_offset = 0, block_size = 0;
     u64 data_start_offset = 0, chunk_size = 0, out_chunk_size = 0;
     
@@ -1081,6 +1078,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         }
         
         /* Read remaining encrypted data, if needed. Use FS-section-relative offset. */
+        if (sparse_virtual_offset) ctx->cur_sparse_virtual_offset += block_size;
         ret = (read_size ? _ncaReadFsSection(ctx, (u8*)out + block_size, read_size - block_size, offset + block_size) : true);
         goto end;
     } else
@@ -1134,7 +1132,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         } else
         if (ctx->encryption_type >= NcaEncryptionType_AesCtr && ctx->encryption_type <= NcaEncryptionType_AesCtrExSkipLayerHash)
         {
-            aes128CtrUpdatePartialCtr(ctx->ctr, content_offset);
+            aes128CtrUpdatePartialCtr(ctx->ctr, iv_offset);
             aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
             aes128CtrCrypt(&(ctx->ctr_ctx), out, out, read_size);
         }
@@ -1175,7 +1173,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     } else
     if (ctx->encryption_type >= NcaEncryptionType_AesCtr && ctx->encryption_type <= NcaEncryptionType_AesCtrExSkipLayerHash)
     {
-        aes128CtrUpdatePartialCtr(ctx->ctr, block_start_offset);
+        aes128CtrUpdatePartialCtr(ctx->ctr, ALIGN_DOWN(iv_offset, AES_BLOCK_SIZE));
         aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
         aes128CtrCrypt(&(ctx->ctr_ctx), g_ncaCryptoBuffer, g_ncaCryptoBuffer, chunk_size);
     }
@@ -1183,9 +1181,13 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     /* Copy decrypted data. */
     memcpy(out, g_ncaCryptoBuffer + data_start_offset, out_chunk_size);
     
+    /* Perform another read if required. */
+    if (sparse_virtual_offset && block_size > NCA_CRYPTO_BUFFER_SIZE) ctx->cur_sparse_virtual_offset += out_chunk_size;
     ret = (block_size > NCA_CRYPTO_BUFFER_SIZE ? _ncaReadFsSection(ctx, (u8*)out + out_chunk_size, read_size - out_chunk_size, offset + out_chunk_size) : true);
     
 end:
+    if (ctx->has_sparse_layer) ctx->cur_sparse_virtual_offset = 0;
+    
     return ret;
 }
 

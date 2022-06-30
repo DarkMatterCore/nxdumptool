@@ -31,6 +31,7 @@ static bool bktrInitializeAesCtrExStorage(NcaFsSectionContext *nca_fs_ctx, BktrA
 
 static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, u64 offset);
 static bool bktrAesCtrExStorageRead(BktrContext *ctx, void *out, u64 read_size, u64 virtual_offset, u64 section_offset);
+static bool bktrPhysicalSectionSparseRead(BktrContext *ctx, void *out, u64 read_size, u64 offset);
 
 NX_INLINE BktrIndirectStorageBucket *bktrGetIndirectStorageBucket(BktrIndirectStorageBlock *block, u32 bucket_num);
 static BktrIndirectStorageEntry *bktrGetIndirectStorageEntry(BktrIndirectStorageBlock *block, u64 offset);
@@ -76,8 +77,7 @@ bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ct
                 return false;
             }
         } else {
-            /* Initializing the base NCA RomFS on its own is impossible if we're dealing with a sparse layer. */
-            /* Let's just handle everything here, starting with initializing the sparse layer's indirect storage. */
+            /* Initialize the sparse layer's indirect storage. Don't lose time trying to initialize a RomFS context for an incomplete storage. */
             if (!bktrInitializeIndirectStorage(base_nca_fs_ctx, false, &(out->base_indirect_block))) return false;
             
             /* Update the NCA FS section context from the base RomFS context. */
@@ -285,12 +285,7 @@ static bool bktrInitializeIndirectStorage(NcaFsSectionContext *nca_fs_ctx, bool 
     }
     
     /* Decrypt indirect block, if needed. */
-    if (!patch_indirect_bucket)
-    {
-        aes128CtrUpdatePartialCtr(nca_fs_ctx->sparse_ctr, nca_fs_ctx->sparse_table_offset);
-        aes128CtrContextResetCtr(&(nca_fs_ctx->sparse_ctr_ctx), nca_fs_ctx->sparse_ctr);
-        aes128CtrCrypt(&(nca_fs_ctx->sparse_ctr_ctx), indirect_block, indirect_block, nca_fs_ctx->sparse_table_size);
-    }
+    if (!patch_indirect_bucket) aes128CtrCrypt(&(nca_fs_ctx->sparse_ctr_ctx), indirect_block, indirect_block, nca_fs_ctx->sparse_table_size);
     
     /* This simplifies logic greatly... */
     for(u32 i = (indirect_block->bucket_count - 1); i > 0; i--)
@@ -414,9 +409,9 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
     if ((offset + read_size) <= next_indirect_entry->virtual_offset)
     {
         /* Read only within the current indirect storage entry. */
-        /* If we're not dealing with an indirect storage entry with a patch index, just retrieve the data from the base RomFS. */
         if (indirect_entry->indirect_storage_index == BktrIndirectStorageIndex_Patch)
         {
+            /* Retrieve data from the Patch RomFS' AesCtrEx storage. */
             success = bktrAesCtrExStorageRead(ctx, out, read_size, offset, section_offset);
             if (!success) LOG_MSG("Failed to read 0x%lX bytes block from BKTR AesCtrEx storage at offset 0x%lX!", read_size, section_offset);
         } else
@@ -424,19 +419,13 @@ static bool bktrPhysicalSectionRead(BktrContext *ctx, void *out, u64 read_size, 
         {
             if (!ctx->base_romfs_ctx.nca_fs_ctx->has_sparse_layer)
             {
+                /* Retrieve data from the base NCA. */
                 success = ncaReadFsSection(ctx->base_romfs_ctx.nca_fs_ctx, out, read_size, section_offset);
                 if (!success) LOG_MSG("Failed to read 0x%lX bytes block from base RomFS at offset 0x%lX!", read_size, section_offset);
             } else {
-                
-                
-                
-                //ctx->base_indirect_block
-                
-                
-                LOG_MSG("Attempting to read 0x%lX bytes block from sparse layer at offset 0x%lX!", read_size, section_offset);
-                
-                
-                
+                /* Retrieve data from the sparse layer in the base NCA. */
+                success = bktrPhysicalSectionSparseRead(ctx, out, read_size, section_offset);
+                if (!success) LOG_MSG("Failed to read 0x%lX bytes block from sparse layer at offset 0x%lX!", read_size, section_offset);
             }
         } else {
             LOG_MSG("Attempting to read 0x%lX bytes block from non-existent base RomFS at offset 0x%lX!", read_size, section_offset);
@@ -484,6 +473,60 @@ static bool bktrAesCtrExStorageRead(BktrContext *ctx, void *out, u64 read_size, 
         
         success = (bktrPhysicalSectionRead(ctx, out, aes_ctr_ex_block_size, virtual_offset) && \
                    bktrPhysicalSectionRead(ctx, (u8*)out + aes_ctr_ex_block_size, read_size - aes_ctr_ex_block_size, virtual_offset + aes_ctr_ex_block_size));
+    }
+    
+    return success;
+}
+
+static bool bktrPhysicalSectionSparseRead(BktrContext *ctx, void *out, u64 read_size, u64 offset)
+{
+    NcaFsSectionContext *nca_fs_ctx = NULL;
+    
+    if (!ctx || !(nca_fs_ctx = ctx->base_romfs_ctx.nca_fs_ctx) || !nca_fs_ctx->has_sparse_layer || !ctx->base_indirect_block || !out || !read_size)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    BktrIndirectStorageEntry *indirect_entry = NULL, *next_indirect_entry = NULL;
+    u64 section_offset = 0, indirect_block_size = 0;
+    
+    indirect_entry = bktrGetIndirectStorageEntry(ctx->base_indirect_block, offset);
+    if (!indirect_entry)
+    {
+        LOG_MSG("Error retrieving BKTR Indirect Storage Entry at offset 0x%lX!", offset);
+        return false;
+    }
+    
+    next_indirect_entry = (indirect_entry + 1);
+    section_offset = (offset - indirect_entry->virtual_offset + indirect_entry->physical_offset);
+    
+    /* Perform read operation. */
+    bool success = false;
+    if ((offset + read_size) <= next_indirect_entry->virtual_offset)
+    {
+        /* Read only within the current indirect storage entry. */
+        if (indirect_entry->indirect_storage_index == BktrIndirectStorageIndex_Patch)
+        {
+            /* Fill output buffer with zeroes. */
+            memset(out, 0, read_size);
+            success = true;
+        } else {
+            /* Set the virtual offset used for data decryption within the sparse layer. */
+            /* This will be used by ncaReadFsSection(). */
+            nca_fs_ctx->cur_sparse_virtual_offset = offset;
+            
+            /* Retrieve data from the base NCA's sparse layer. */
+            success = ncaReadFsSection(nca_fs_ctx, out, read_size, section_offset);
+            if (!success) LOG_MSG("Failed to read 0x%lX bytes block from sparse layer at offset 0x%lX!", read_size, section_offset);
+        }
+    } else {
+        /* Handle reads that span multiple indirect storage entries. */
+        indirect_block_size = (next_indirect_entry->virtual_offset - offset);
+        
+        success = (bktrPhysicalSectionSparseRead(ctx, out, indirect_block_size, offset) && \
+                   bktrPhysicalSectionSparseRead(ctx, (u8*)out + indirect_block_size, read_size - indirect_block_size, offset + indirect_block_size));
+        if (!success) LOG_MSG("Failed to read 0x%lX bytes block from multiple BKTR indirect storage entries at offset 0x%lX!", read_size, offset);
     }
     
     return success;

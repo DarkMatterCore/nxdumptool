@@ -373,7 +373,7 @@ typedef struct {
     u8 encryption_type;                 ///< NcaEncryptionType.
     u8 section_type;                    ///< NcaFsSectionType.
     bool skip_hash_layer_crypto;        ///< Set to true if hash layer decryption should be skipped while reading section data.
-    NcaRegion hash_region;              /// Holds the properties for the full hash layer region that precedes the actual FS section data.
+    NcaRegion hash_region;              ///< Holds the properties for the full hash layer region that precedes the actual FS section data.
     
     ///< Crypto-related fields.
     u8 ctr[AES_BLOCK_SIZE];             ///< Used internally by NCA functions to update the AES-128-CTR context IV based on the desired offset.
@@ -387,6 +387,7 @@ typedef struct {
     u64 sparse_table_size;              ///< header.sparse_info.bucket.size. Placed here for convenience.
     u8 sparse_ctr[AES_BLOCK_SIZE];      ///< AES-128-CTR IV used for sparse table decryption.
     Aes128CtrContext sparse_ctr_ctx;    ///< AES-128-CTR context used for sparse table decryption.
+    u64 cur_sparse_virtual_offset;      ///< Current sparse layer virtual offset. Used for content decryption if a sparse layer is available.
     
     ///< NSP-related fields.
     bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
