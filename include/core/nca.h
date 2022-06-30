@@ -389,6 +389,15 @@ typedef struct {
     Aes128CtrContext sparse_ctr_ctx;    ///< AES-128-CTR context used for sparse table decryption.
     u64 cur_sparse_virtual_offset;      ///< Current sparse layer virtual offset. Used for content decryption if a sparse layer is available.
     
+    ///< CompressionInfo-related fields.
+    bool has_compression_layer;         ///< Set to true if this NCA FS section has a compression layer.
+    u64 compression_table_offset;       ///< section_offset + hash_target_offset + header.compression_info.bucket.offset. Relative to the start of the NCA content file. Placed here for convenience.
+    u64 compression_table_size;         ///< header.compression_info.bucket.size. Placed here for convenience.
+    
+    
+    
+    
+    
     ///< NSP-related fields.
     bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
 } NcaFsSectionContext;
@@ -481,6 +490,11 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
 /// Input offset must be relative to the start of the NCA content file.
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
+/// Retrieves the offset and/or size from the FS section hierarchical hash target layer.
+/// Output offset is relative to the start of the FS section.
+/// Either 'out_offset' or 'out_size' can be NULL, but at least one of them must be a valid pointer.
+bool ncaGetFsSectionHashTargetProperties(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size);
+
 /// Reads decrypted data from a NCA FS section using an input context.
 /// Input offset must be relative to the start of the NCA FS section.
 /// If dealing with Patch RomFS sections, this function should only be used when *not* reading BKTR AesCtrEx storage data. Use ncaReadAesCtrExStorageFromBktrSection() for that.
@@ -544,43 +558,6 @@ NX_INLINE bool ncaIsHeaderDirty(NcaContext *ctx)
     u8 tmp_hash[SHA256_HASH_SIZE] = {0};
     sha256CalculateHash(tmp_hash, &(ctx->header), sizeof(NcaHeader));
     return (memcmp(tmp_hash, ctx->header_hash, SHA256_HASH_SIZE) != 0);
-}
-
-NX_INLINE bool ncaGetFsSectionHashTargetProperties(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size)
-{
-    if (!ctx || (!out_offset && !out_size)) return false;
-    
-    bool success = true;
-    
-    switch(ctx->hash_type)
-    {
-        case NcaHashType_None:
-            if (out_offset) *out_offset = 0;
-            if (out_size) *out_size = ctx->section_size;
-            break;
-        case NcaHashType_HierarchicalSha256:
-        case NcaHashType_HierarchicalSha3256:
-            {
-                u32 layer_count = ctx->header.hash_data.hierarchical_sha256_data.hash_region_count;
-                NcaRegion *hash_region = &(ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1]);
-                if (out_offset) *out_offset = hash_region->offset;
-                if (out_size) *out_size = hash_region->size;
-            }
-            break;
-        case NcaHashType_HierarchicalIntegrity:
-        case NcaHashType_HierarchicalIntegritySha3:
-            {
-                NcaHierarchicalIntegrityVerificationLevelInformation *lvl_info = &(ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1]);
-                if (out_offset) *out_offset = lvl_info->offset;
-                if (out_size) *out_size = lvl_info->size;
-            }
-            break;
-        default:
-            success = false;
-            break;
-    }
-    
-    return success;
 }
 
 NX_INLINE void ncaFreeHierarchicalSha256Patch(NcaHierarchicalSha256Patch *patch)

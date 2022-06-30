@@ -209,6 +209,47 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
     return ret;
 }
 
+bool ncaGetFsSectionHashTargetProperties(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size)
+{
+    if (!ctx || (!out_offset && !out_size))
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    bool success = true;
+    
+    switch(ctx->hash_type)
+    {
+        case NcaHashType_None:
+            if (out_offset) *out_offset = 0;
+            if (out_size) *out_size = ctx->section_size;
+            break;
+        case NcaHashType_HierarchicalSha256:
+        case NcaHashType_HierarchicalSha3256:
+            {
+                u32 layer_count = ctx->header.hash_data.hierarchical_sha256_data.hash_region_count;
+                NcaRegion *hash_region = &(ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1]);
+                if (out_offset) *out_offset = hash_region->offset;
+                if (out_size) *out_size = hash_region->size;
+            }
+            break;
+        case NcaHashType_HierarchicalIntegrity:
+        case NcaHashType_HierarchicalIntegritySha3:
+            {
+                NcaHierarchicalIntegrityVerificationLevelInformation *lvl_info = &(ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1]);
+                if (out_offset) *out_offset = lvl_info->offset;
+                if (out_size) *out_size = lvl_info->size;
+            }
+            break;
+        default:
+            success = false;
+            break;
+    }
+    
+    return success;
+}
+
 bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset)
 {
     bool ret = false;
@@ -700,14 +741,18 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     NcaSparseInfo *sparse_info = &(fs_ctx->header.sparse_info);
     NcaBucketInfo *sparse_bucket = &(sparse_info->bucket);
     
+    NcaBucketInfo *compression_bucket = &(fs_ctx->header.compression_info.bucket);
+    
     bool success = false;
     
     /* Fill section context. */
+    fs_ctx->enabled = false;
     fs_ctx->nca_ctx = nca_ctx;
     fs_ctx->section_idx = section_idx;
     fs_ctx->section_type = NcaFsSectionType_Invalid;    /* Placeholder. */
     fs_ctx->has_sparse_layer = (sparse_info->generation != 0);
-    fs_ctx->enabled = false;
+    fs_ctx->has_compression_layer = (compression_bucket->offset != 0 && compression_bucket->size != 0);
+    fs_ctx->cur_sparse_virtual_offset = 0;
     
     /* Don't proceed if this NCA FS section isn't populated. */
     if (!ncaIsFsInfoEntryValid(fs_info))
@@ -784,7 +829,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         goto end;
     }
     
-    /* Check if we're dealing with a sparse storage. */
+    /* Check if we're dealing with a sparse layer. */
     if (fs_ctx->has_sparse_layer)
     {
         /* Check if the sparse bucket is valid. */
@@ -792,7 +837,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         u64 raw_storage_size = (sparse_bucket->offset + sparse_bucket->size);
         
         if (__builtin_bswap32(sparse_bucket->header.magic) != NCA_BKTR_MAGIC || sparse_bucket->header.version != NCA_BKTR_VERSION || raw_storage_offset < sizeof(NcaHeader) || \
-            ((raw_storage_offset + raw_storage_size) > nca_ctx->content_size))
+            (raw_storage_offset + raw_storage_size) > nca_ctx->content_size)
         {
             LOG_DATA(sparse_info, sizeof(NcaSparseInfo), "Invalid SparseInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. SparseInfo dump:", section_idx, \
                      nca_ctx->content_id_str, nca_ctx->content_size);
@@ -811,16 +856,39 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         fs_ctx->sparse_table_offset = (sparse_info->physical_offset + sparse_bucket->offset);
         fs_ctx->sparse_table_size = sparse_bucket->size;
         
-        /* Check if we're within boundaries. */
-        if ((fs_ctx->sparse_table_offset + fs_ctx->sparse_table_size) > nca_ctx->content_size)
+        /* Update section size. */
+        fs_ctx->section_size = raw_storage_size;
+    }
+    
+    /* Check if we're dealing with a compression layer. */
+    if (fs_ctx->has_compression_layer)
+    {
+        u64 raw_storage_offset = 0;
+        u64 raw_storage_size = compression_bucket->size;
+        
+        /* Get target hash layer offset. */
+        if (!ncaGetFsSectionHashTargetProperties(fs_ctx, &raw_storage_offset, NULL))
         {
-            LOG_DATA(sparse_info, sizeof(NcaSparseInfo), "SparseInfo table for FS section #%u in \"%s\" is out of NCA boundaries (0x%lX). Skipping FS section. SparseInfo dump:", \
-                     section_idx, nca_ctx->content_id_str, nca_ctx->content_size);
+            LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
             goto end;
         }
         
-        /* Update section size. */
-        fs_ctx->section_size = raw_storage_size;
+        /* Update compression layer offset. */
+        raw_storage_offset += compression_bucket->offset;
+        
+        /* Check if the compression bucket is valid. */
+        if (__builtin_bswap32(compression_bucket->header.magic) != NCA_BKTR_MAGIC || compression_bucket->header.version != NCA_BKTR_VERSION || !sparse_bucket->header.entry_count || \
+            raw_storage_offset < sizeof(NcaHeader) || (raw_storage_offset + raw_storage_size) > fs_ctx->section_size || \
+            (fs_ctx->section_offset + raw_storage_offset + raw_storage_size) > nca_ctx->content_size)
+        {
+            LOG_DATA(sparse_info, sizeof(NcaSparseInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. CompressionInfo dump:", section_idx, \
+                     nca_ctx->content_id_str, nca_ctx->content_size);
+            goto end;
+        }
+        
+        /* Set sparse table properties. */
+        fs_ctx->compression_table_offset = (fs_ctx->section_offset + raw_storage_offset);
+        fs_ctx->compression_table_size = raw_storage_size;
     }
     
     /* Check if we're within boundaries. */
@@ -1223,8 +1291,8 @@ static bool ncaFsSectionCheckHashRegionAccess(NcaFsSectionContext *ctx, u64 offs
 static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val)
 {
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_idx >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
-        ctx->section_type != NcaFsSectionType_PatchRomFs || (ctx->encryption_type != NcaEncryptionType_AesCtrEx && ctx->encryption_type != NcaEncryptionType_AesCtrExSkipLayerHash) || \
-        !out || !read_size || (offset + read_size) > ctx->section_size)
+        ctx->section_type != NcaFsSectionType_PatchRomFs || (ctx->encryption_type != NcaEncryptionType_None && ctx->encryption_type != NcaEncryptionType_AesCtrEx && \
+        ctx->encryption_type != NcaEncryptionType_AesCtrExSkipLayerHash) || !out || !read_size || (offset + read_size) > ctx->section_size)
     {
         LOG_MSG("Invalid NCA FS section header parameters!");
         return false;
