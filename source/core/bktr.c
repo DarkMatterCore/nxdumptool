@@ -37,6 +37,13 @@ typedef struct {
     u32 index;
 } BucketTreeStorageNode;
 
+typedef struct {
+    BucketTreeContext *bktr_ctx;
+    BucketTreeNodeHeader entry_set;
+    u32 entry_index;
+    void *entry;
+} BucketTreeVisitor;
+
 /* Global variables. */
 
 static const char *g_bktrStorageTypeNames[] = {
@@ -71,7 +78,7 @@ NX_INLINE const u64 *bktrGetOffsetNodeArray(const BucketTreeOffsetNode *offset_n
 NX_INLINE const u64 *bktrGetOffsetNodeBegin(const BucketTreeOffsetNode *offset_node);
 NX_INLINE const u64 *bktrGetOffsetNodeEnd(const BucketTreeOffsetNode *offset_node);
 
-static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, void **out_entry);
+static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, BucketTreeVisitor *out_visitor);
 static bool bktrGetTreeNodeEntryIndex(const u64 *start, const u64 *end, u64 virtual_offset, u32 *out_index);
 static bool bktrGetEntryNodeEntryIndex(const BucketTreeNodeHeader *node_header, u64 node_offset, u64 entry_size, u64 virtual_offset, u32 *out_index);
 
@@ -79,7 +86,7 @@ static bool bktrFindEntrySet(u32 *out_index, u64 virtual_offset, u32 node_index)
 static const BucketTreeNodeHeader *bktrGetTreeNodeHeader(BucketTreeContext *ctx, u32 node_index);
 NX_INLINE u32 bktrGetEntrySetIndex(BucketTreeContext *ctx, u32 node_index, u32 offset_index);
 
-static bool bktrFindEntry(BucketTreeContext *ctx, void **out_entry, u64 virtual_offset, u32 entry_set_index);
+static bool bktrFindEntry(BucketTreeContext *ctx, BucketTreeVisitor *out_visitor, u64 virtual_offset, u32 entry_set_index);
 static const BucketTreeNodeHeader *bktrGetEntryNodeHeader(BucketTreeContext *ctx, u32 entry_set_index);
 NX_INLINE u64 bktrGetEntryNodeEntryOffset(u64 entry_set_offset, u64 entry_size, u32 entry_index);
 
@@ -138,11 +145,11 @@ bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offse
         return false;
     }
     
-    void *storage_entry = NULL;
+    BucketTreeVisitor visitor = {0};
     bool success = false;
     
     /* Find storage entry. */
-    if (!bktrFindStorageEntry(ctx, offset, &storage_entry))
+    if (!bktrFindStorageEntry(ctx, offset, &visitor))
     {
         LOG_MSG("Unable to find %s storage entry for offset 0x%lX!", bktrGetStorageTypeName(ctx->storage_type), offset);
         goto end;
@@ -153,13 +160,13 @@ bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offse
     {
         case BucketTreeStorageType_Indirect:
         case BucketTreeStorageType_Sparse:
-            success = bktrReadIndirectStorage(ctx, storage_entry, read_size, offset);
+            success = bktrReadIndirectStorage(&visitor, read_size, offset);
             break;
         case BucketTreeStorageType_AesCtrEx:
-            //success = bktrInitializeAesCtrExStorageContext(out, nca_fs_ctx);
+            success = bktrReadAesCtrExStorage(&visitor, read_size, offset);
             break;
         case BucketTreeStorageType_Compressed:
-            //success = bktrInitializeCompressedStorageContext(out, nca_fs_ctx);
+            success = bktrReadCompressedStorage(&visitor, read_size, offset);
             break;
         default:
             break;
@@ -175,20 +182,21 @@ end:
 
 
 
-static bool bktrReadIndirectStorage(BucketTreeContext *ctx, void *storage_entry, u64 read_size, u64 offset)
+static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, u64 read_size, u64 offset)
 {
+    BucketTreeContext *ctx = visitor->bktr_ctx;
     NcaFsSectionContext *nca_fs_ctx = ctx->nca_fs_ctx;
     bool is_sparse = (ctx->storage_type == BucketTreeStorageType_Sparse);
-    BucketTreeIndirectStorageEntry *entry = (BucketTreeIndirectStorageEntry*)storage_entry;
+    BucketTreeIndirectStorageEntry *entry = (BucketTreeIndirectStorageEntry*)visitor->entry;
     
     /* Validate Indirect Storage entry. */
     if (!bktrIsOffsetWithinStorageRange(entry->virtual_offset) || (nca_fs_ctx->section_offset + entry->physical_offset) >= nca_fs_ctx->section_size)
     {
-        LOG_MSG("Invalid Indirect Storage entry offsets! (0x%lX, 0x%lX).", entry->virtual_offset, entry->physical_offset);
+        LOG_MSG("Invalid Indirect Storage entry! (0x%lX, 0x%lX).", entry->virtual_offset, entry->physical_offset);
         return false;
     }
     
-    
+    /* Prepare to operate in chunks. */
     
     
     
@@ -592,9 +600,9 @@ NX_INLINE const u64 *bktrGetOffsetNodeEnd(const BucketTreeOffsetNode *offset_nod
     return (bktrGetOffsetNodeArray(offset_node) + offset_node->header.count);
 }
 
-static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, void **out_entry)
+static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, BucketTreeVisitor *out_visitor)
 {
-    if (!ctx || !out_entry || virtual_offset >= ctx->storage_table->offset_node.header.offset)
+    if (!ctx || virtual_offset >= ctx->storage_table->offset_node.header.offset || !out_visitor)
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -647,8 +655,8 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, voi
     }
     
     /* Find the entry. */
-    success = bktrFindEntry(ctx, out_entry, virtual_offset, entry_set_index);
-    if (!success) LOG_MSG("Failed to retrieve storage entry pointer!");
+    success = bktrFindEntry(ctx, out_visitor, virtual_offset, entry_set_index);
+    if (!success) LOG_MSG("Failed to retrieve storage entry!");
     
 end:
     return success;
@@ -747,7 +755,7 @@ static const BucketTreeNodeHeader *bktrGetTreeNodeHeader(BucketTreeContext *ctx,
     }
     
     /* Get offset node header. */
-    const BucketTreeNodeHeader *node_header = (const BucketTreeNodeHeader*)((u8*)ctx->table + node_offset);
+    const BucketTreeNodeHeader *node_header = (const BucketTreeNodeHeader*)((u8*)ctx->storage_table + node_offset);
     
     /* Validate offset node header. */
     if (!bktrVerifyNodeHeader(node_header, node_index, node_size, sizeof(u64)))
@@ -764,7 +772,7 @@ NX_INLINE u32 bktrGetEntrySetIndex(BucketTreeContext *ctx, u32 node_index, u32 o
     return (u32)((ctx->offset_count - ctx->storage_table->offset_node.header.count) + (ctx->offset_count * node_index) + offset_index);
 }
 
-static bool bktrFindEntry(BucketTreeContext *ctx, void **out_entry, u64 virtual_offset, u32 entry_set_index)
+static bool bktrFindEntry(BucketTreeContext *ctx, BucketTreeVisitor *out_visitor, u64 virtual_offset, u32 entry_set_index)
 {
     /* Get entry node header. */
     const BucketTreeNodeHeader *entry_set_header = bktrGetEntryNodeHeader(ctx, entry_set_index);
@@ -795,8 +803,13 @@ static bool bktrFindEntry(BucketTreeContext *ctx, void **out_entry, u64 virtual_
         return false;
     }
     
-    /* Update entry pointer. */
-    *out_entry = ((u8*)ctx->table + entry_offset);
+    /* Update output visitor. */
+    memset(out, 0, sizeof(BucketTreeVisitor));
+    
+    out_visitor->bktr_ctx = ctx;
+    memcpy(&(out_visitor->entry_set), entry_set_header, BKTR_NODE_HEADER_SIZE);
+    out_visitor->entry_index = entry_index
+    out_visitor->entry = ((u8*)ctx->storage_table + entry_offset);
     
     return true;
 }
@@ -815,7 +828,7 @@ static const BucketTreeNodeHeader *bktrGetEntryNodeHeader(BucketTreeContext *ctx
     }
     
     /* Get entry node header. */
-    const BucketTreeNodeHeader *entry_set_header = (const BucketTreeNodeHeader*)((u8*)ctx->table + entry_set_offset);
+    const BucketTreeNodeHeader *entry_set_header = (const BucketTreeNodeHeader*)((u8*)ctx->storage_table + entry_set_offset);
     
     /* Validate entry node header. */
     if (!bktrVerifyNodeHeader(entry_set_header, entry_set_index, entry_set_size, entry_size))

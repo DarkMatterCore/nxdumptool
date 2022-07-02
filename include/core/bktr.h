@@ -156,6 +156,9 @@ typedef struct {
     u32 entry_set_count;                ///< Number of BucketTreeEntryNode elements available in this storage.
     u64 start_offset;                   ///< Virtual storage start offset.
     u64 end_offset;                     ///< Virtual storage end offset.
+    
+    // TODO: add sub storage
+    
 } BucketTreeContext;
 
 /// Initializes a Bucket Tree context using the provided NCA FS section context and a storage 
