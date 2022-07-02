@@ -750,6 +750,8 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     fs_ctx->nca_ctx = nca_ctx;
     fs_ctx->section_idx = section_idx;
     fs_ctx->section_type = NcaFsSectionType_Invalid;    /* Placeholder. */
+    fs_ctx->has_patch_indirect_layer = (fs_ctx->header.patch_info.indirect_bucket.size > 0);
+    fs_ctx->has_patch_aes_ctr_ex_layer = (fs_ctx->header.patch_info.aes_ctr_ex_bucket.size > 0);
     fs_ctx->has_sparse_layer = (sparse_info->generation != 0);
     fs_ctx->has_compression_layer = (compression_bucket->offset != 0 && compression_bucket->size != 0);
     fs_ctx->cur_sparse_virtual_offset = 0;
@@ -908,14 +910,14 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         case NcaFsType_RomFs:
             if (fs_ctx->hash_type == NcaHashType_HierarchicalIntegrity || fs_ctx->hash_type == NcaHashType_HierarchicalIntegritySha3)
             {
-                if ((fs_ctx->header.patch_info.indirect_bucket.size > 0 || fs_ctx->header.patch_info.aes_ctr_ex_bucket.size > 0) && \
+                if (fs_ctx->has_patch_indirect_layer && fs_ctx->has_patch_aes_ctr_ex_layer && \
                     (fs_ctx->encryption_type == NcaEncryptionType_None || fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || \
                     fs_ctx->encryption_type == NcaEncryptionType_AesCtrExSkipLayerHash))
                 {
                     /* Patch RomFS. */
                     fs_ctx->section_type = NcaFsSectionType_PatchRomFs;
                 } else
-                if (!fs_ctx->header.patch_info.indirect_bucket.size && !fs_ctx->header.patch_info.aes_ctr_ex_bucket.size && \
+                if (!fs_ctx->has_patch_indirect_layer && !fs_ctx->has_patch_aes_ctr_ex_layer && \
                     ((fs_ctx->encryption_type >= NcaEncryptionType_None && fs_ctx->encryption_type <= NcaEncryptionType_AesCtr) || \
                     fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash))
                 {

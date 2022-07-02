@@ -373,6 +373,18 @@ typedef struct {
     u8 encryption_type;                 ///< NcaEncryptionType.
     u8 section_type;                    ///< NcaFsSectionType.
     
+    ///< PatchInfo-related fields.
+    bool has_patch_indirect_layer;      ///< Set to true if this NCA FS section has an Indirect patch layer.
+    bool has_patch_aes_ctr_ex_layer;    ///< Set to true if this NCA FS section has an AesCtrEx patch layer.
+    
+    ///< SparseInfo-related fields.
+    bool has_sparse_layer;              ///< Set to true if this NCA FS section has a sparse layer.
+    u64 sparse_table_offset;            ///< header.sparse_info.physical_offset + header.sparse_info.bucket.offset. Relative to the start of the NCA content file. Placed here for convenience.
+    
+    ///< CompressionInfo-related fields.
+    bool has_compression_layer;         ///< Set to true if this NCA FS section has a compression layer.
+    u64 compression_table_offset;       ///< hash_target_offset + header.compression_info.bucket.offset. Relative to the start of the FS section. Placed here for convenience.
+    
     ///< Hash-layer-related fields.
     bool skip_hash_layer_crypto;        ///< Set to true if hash layer crypto should be skipped while reading section data.
     NcaRegion hash_region;              ///< Holds the properties for the full hash layer region that precedes the actual FS section data.
@@ -382,14 +394,6 @@ typedef struct {
     Aes128CtrContext ctr_ctx;           ///< Used internally by NCA functions to perform AES-128-CTR crypto.
     Aes128XtsContext xts_decrypt_ctx;   ///< Used internally by NCA functions to perform AES-128-XTS decryption.
     Aes128XtsContext xts_encrypt_ctx;   ///< Used internally by NCA functions to perform AES-128-XTS encryption.
-    
-    ///< SparseInfo-related fields.
-    bool has_sparse_layer;              ///< Set to true if this NCA FS section has a sparse layer.
-    u64 sparse_table_offset;            ///< header.sparse_info.physical_offset + header.sparse_info.bucket.offset. Relative to the start of the NCA content file. Placed here for convenience.
-    
-    ///< CompressionInfo-related fields.
-    bool has_compression_layer;         ///< Set to true if this NCA FS section has a compression layer.
-    u64 compression_table_offset;       ///< hash_target_offset + header.compression_info.bucket.offset. Relative to the start of the FS section. Placed here for convenience.
     
     ///< NSP-related fields.
     bool header_written;                ///< Set to true after this FS section header has been written to an output dump.

@@ -147,13 +147,14 @@ typedef enum {
 
 typedef struct {
     NcaFsSectionContext *nca_fs_ctx;    ///< NCA FS section context. Used to perform operations on the target NCA.
-    NcaBucketInfo bucket;               ///< Bucket info used to initialize this context.
     u8 storage_type;                    ///< BucketTreeStorageType.
     BucketTreeTable *storage_table;     ///< Pointer to the dynamically allocated Bucket Tree Table for this storage.
     u64 node_size;                      ///< Node size for this type of Bucket Tree storage.
     u64 entry_size;                     ///< Size of each individual entry within BucketTreeEntryNode.
     u32 offset_count;                   ///< Number of offsets available within each BucketTreeOffsetNode for this storage.
     u32 entry_set_count;                ///< Number of BucketTreeEntryNode elements available in this storage.
+    u64 node_storage_size;              ///< Offset node segment size within 'storage_table'.
+    u64 entry_storage_size;             ///< Entry node segment size within 'storage_table'.
     u64 start_offset;                   ///< Virtual storage start offset.
     u64 end_offset;                     ///< Virtual storage end offset.
     
@@ -179,7 +180,7 @@ NX_INLINE void bktrFreeContext(BucketTreeContext *ctx)
 NX_INLINE bool bktrIsValidContext(BucketTreeContext *ctx)
 {
     return (ctx && ctx->nca_fs_ctx && ctx->storage_type < BucketTreeStorageType_Count && ctx->storage_table && ctx->node_size && ctx->entry_size && ctx->offset_count && \
-            ctx->entry_set_count && ctx->end_offset > ctx->start_offset);
+            ctx->entry_set_count && ctx->node_storage_size && ctx->entry_storage_size && ctx->end_offset > ctx->start_offset);
 }
 
 NX_INLINE bool bktrIsOffsetWithinStorageRange(BucketTreeContext *ctx, u64 offset)
