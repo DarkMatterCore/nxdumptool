@@ -1012,7 +1012,7 @@ const char *nacpGetContentsAvailabilityTransitionPolicyString(u8 contents_availa
 
 NX_INLINE bool nacpCheckBitflagField(const void *flag, u8 flag_bitcount, u8 idx)
 {
-    if (!flag || !flag_bitcount || !IS_POWER_OF_TWO(flag_bitcount) || idx >= flag_bitcount) return false;
+    if (!flag || !IS_POWER_OF_TWO(flag_bitcount) || idx >= flag_bitcount) return false;
     const u8 *flag_u8 = (const u8*)flag;
     u8 byte_idx = (idx >> 3);
     u8 bitmask = BIT(idx - ALIGN_DOWN(idx, 8));

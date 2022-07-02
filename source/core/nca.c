@@ -836,8 +836,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         u64 raw_storage_offset = sparse_info->physical_offset;
         u64 raw_storage_size = (sparse_bucket->offset + sparse_bucket->size);
         
-        if (__builtin_bswap32(sparse_bucket->header.magic) != NCA_BKTR_MAGIC || sparse_bucket->header.version != NCA_BKTR_VERSION || raw_storage_offset < sizeof(NcaHeader) || \
-            (raw_storage_offset + raw_storage_size) > nca_ctx->content_size)
+        if (!ncaVerifyBucketInfo(sparse_bucket) || raw_storage_offset < sizeof(NcaHeader) || (raw_storage_offset + raw_storage_size) > nca_ctx->content_size)
         {
             LOG_DATA(sparse_info, sizeof(NcaSparseInfo), "Invalid SparseInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. SparseInfo dump:", section_idx, \
                      nca_ctx->content_id_str, nca_ctx->content_size);
@@ -852,11 +851,8 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
             goto end;
         }
         
-        /* Set sparse table properties. */
+        /* Update context. */
         fs_ctx->sparse_table_offset = (sparse_info->physical_offset + sparse_bucket->offset);
-        fs_ctx->sparse_table_size = sparse_bucket->size;
-        
-        /* Update section size. */
         fs_ctx->section_size = raw_storage_size;
     }
     
@@ -877,18 +873,16 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         raw_storage_offset += compression_bucket->offset;
         
         /* Check if the compression bucket is valid. */
-        if (__builtin_bswap32(compression_bucket->header.magic) != NCA_BKTR_MAGIC || compression_bucket->header.version != NCA_BKTR_VERSION || !sparse_bucket->header.entry_count || \
-            raw_storage_offset < sizeof(NcaHeader) || (raw_storage_offset + raw_storage_size) > fs_ctx->section_size || \
-            (fs_ctx->section_offset + raw_storage_offset + raw_storage_size) > nca_ctx->content_size)
+        if (!ncaVerifyBucketInfo(compression_bucket) || !compression_bucket->header.entry_count || raw_storage_offset < sizeof(NcaHeader) || \
+            (raw_storage_offset + raw_storage_size) > fs_ctx->section_size || (fs_ctx->section_offset + raw_storage_offset + raw_storage_size) > nca_ctx->content_size)
         {
-            LOG_DATA(sparse_info, sizeof(NcaSparseInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. CompressionInfo dump:", section_idx, \
-                     nca_ctx->content_id_str, nca_ctx->content_size);
+            LOG_DATA(compression_bucket, sizeof(NcaBucketInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. CompressionInfo dump:", \
+                     section_idx, nca_ctx->content_id_str, nca_ctx->content_size);
             goto end;
         }
         
-        /* Set sparse table properties. */
-        fs_ctx->compression_table_offset = (fs_ctx->section_offset + raw_storage_offset);
-        fs_ctx->compression_table_size = raw_storage_size;
+        /* Update context. */
+        fs_ctx->compression_table_offset = raw_storage_offset;
     }
     
     /* Check if we're within boundaries. */
@@ -980,21 +974,11 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         /* Initialize the partial AES counter for this section. */
         aes128CtrInitializePartialCtr(fs_ctx->ctr, fs_ctx->header.aes_ctr_upper_iv.value, fs_ctx->section_offset);
         
-        if (fs_ctx->has_sparse_layer)
-        {
-            /* Initialize the partial AES counter for the sparse info bucket table. */
-            NcaAesCtrUpperIv sparse_upper_iv = {0};
-            memcpy(sparse_upper_iv.value, fs_ctx->header.aes_ctr_upper_iv.value, sizeof(sparse_upper_iv.value));
-            sparse_upper_iv.generation = ((u32)(sparse_info->generation) << 16);
-            aes128CtrInitializePartialCtr(fs_ctx->sparse_ctr, sparse_upper_iv.value, fs_ctx->sparse_table_offset);
-        }
-        
         /* Initialize AES context. */
         if (nca_ctx->rights_id_available)
         {
             /* AES-128-CTR is always used for FS crypto in NCAs with a rights ID. */
             aes128CtrContextCreate(&(fs_ctx->ctr_ctx), nca_ctx->titlekey, fs_ctx->ctr);
-            if (fs_ctx->has_sparse_layer) aes128CtrContextCreate(&(fs_ctx->sparse_ctr_ctx), nca_ctx->titlekey, fs_ctx->sparse_ctr);
         } else {
             if (fs_ctx->encryption_type == NcaEncryptionType_AesXts)
             {
@@ -1006,7 +990,6 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
             {
                 /* Patch RomFS sections also use the AES-128-CTR key from the decrypted NCA key area, for some reason. */
                 aes128CtrContextCreate(&(fs_ctx->ctr_ctx), nca_ctx->decrypted_key_area.aes_ctr, fs_ctx->ctr);
-                if (fs_ctx->has_sparse_layer) aes128CtrContextCreate(&(fs_ctx->sparse_ctr_ctx), nca_ctx->decrypted_key_area.aes_ctr, fs_ctx->sparse_ctr);
             }
         }
     }

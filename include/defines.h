@@ -39,7 +39,9 @@
 #define ALIGN_DOWN(x, y)                ((x) & ~((y) - 1))
 #define IS_ALIGNED(x, y)                (((x) & ((y) - 1)) == 0)
 
-#define IS_POWER_OF_TWO(x)              (((x) & ((x) - 1)) == 0)
+#define IS_POWER_OF_TWO(x)              ((x) > 0 && ((x) & ((x) - 1)) == 0)
+
+#define DIVIDE_UP(x, y)                 (((x) + ((y) - 1)) / (y))
 
 #define CONCATENATE_IMPL(s1, s2)        s1##s2
 #define CONCATENATE(s1, s2)             CONCATENATE_IMPL(s1, s2)

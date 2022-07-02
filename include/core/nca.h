@@ -372,7 +372,9 @@ typedef struct {
     u8 hash_type;                       ///< NcaHashType.
     u8 encryption_type;                 ///< NcaEncryptionType.
     u8 section_type;                    ///< NcaFsSectionType.
-    bool skip_hash_layer_crypto;        ///< Set to true if hash layer decryption should be skipped while reading section data.
+    
+    ///< Hash-layer-related fields.
+    bool skip_hash_layer_crypto;        ///< Set to true if hash layer crypto should be skipped while reading section data.
     NcaRegion hash_region;              ///< Holds the properties for the full hash layer region that precedes the actual FS section data.
     
     ///< Crypto-related fields.
@@ -384,19 +386,10 @@ typedef struct {
     ///< SparseInfo-related fields.
     bool has_sparse_layer;              ///< Set to true if this NCA FS section has a sparse layer.
     u64 sparse_table_offset;            ///< header.sparse_info.physical_offset + header.sparse_info.bucket.offset. Relative to the start of the NCA content file. Placed here for convenience.
-    u64 sparse_table_size;              ///< header.sparse_info.bucket.size. Placed here for convenience.
-    u8 sparse_ctr[AES_BLOCK_SIZE];      ///< AES-128-CTR IV used for sparse table decryption.
-    Aes128CtrContext sparse_ctr_ctx;    ///< AES-128-CTR context used for sparse table decryption.
-    u64 cur_sparse_virtual_offset;      ///< Current sparse layer virtual offset. Used for content decryption if a sparse layer is available.
     
     ///< CompressionInfo-related fields.
     bool has_compression_layer;         ///< Set to true if this NCA FS section has a compression layer.
-    u64 compression_table_offset;       ///< section_offset + hash_target_offset + header.compression_info.bucket.offset. Relative to the start of the NCA content file. Placed here for convenience.
-    u64 compression_table_size;         ///< header.compression_info.bucket.size. Placed here for convenience.
-    
-    
-    
-    
+    u64 compression_table_offset;       ///< hash_target_offset + header.compression_info.bucket.offset. Relative to the start of the FS section. Placed here for convenience.
     
     ///< NSP-related fields.
     bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
@@ -558,6 +551,11 @@ NX_INLINE bool ncaIsHeaderDirty(NcaContext *ctx)
     u8 tmp_hash[SHA256_HASH_SIZE] = {0};
     sha256CalculateHash(tmp_hash, &(ctx->header), sizeof(NcaHeader));
     return (memcmp(tmp_hash, ctx->header_hash, SHA256_HASH_SIZE) != 0);
+}
+
+NX_INLINE bool ncaVerifyBucketInfo(NcaBucketInfo *bucket)
+{
+    return (bucket && __builtin_bswap32(bucket->header.magic) == NCA_BKTR_MAGIC && bucket->header.version <= NCA_BKTR_VERSION && bucket->header.entry_count >= 0);
 }
 
 NX_INLINE void ncaFreeHierarchicalSha256Patch(NcaHierarchicalSha256Patch *patch)
