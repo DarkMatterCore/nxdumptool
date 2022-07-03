@@ -159,6 +159,55 @@ bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_c
     return success;
 }
 
+bool bktrSetRegularSubStorage(BucketTreeContext *ctx, NcaFsSectionContext *nca_fs_ctx)
+{
+    NcaContext *nca_ctx = NULL;
+    
+    if (!bktrIsValidContext(ctx) || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || \
+        !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved))
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    /* Update the substorage. */
+    BucketTreeSubStorage *substorage = &(ctx->substorages[0]);
+    memset(substorage, 0, sizeof(BucketTreeSubStorage));
+    
+    substorage->index = 0;
+    substorage->nca_fs_ctx = nca_fs_ctx;
+    substorage->type = BucketTreeSubStorageType_Regular;
+    substorage->bktr_ctx = NULL;
+    
+    return true;
+}
+
+bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContext *child_ctx, u8 substorage_index)
+{
+    if (!bktrIsValidContext(parent_ctx) || !bktrIsValidContext(child_ctx) || substorage_index >= BKTR_MAX_SUBSTORAGE_COUNT || \
+        (parent_ctx->storage_type != BucketTreeStorageType_Indirect && substorage_index != 0) || \
+        (parent_ctx->storage_type == BucketTreeStorageType_Indirect && child_ctx->storage_type != BucketTreeStorageType_Compressed && child_ctx->storage_type != BucketTreeStorageType_AesCtrEx) || \
+        (parent_ctx->storage_type == BucketTreeStorageType_Indirect && child_ctx->storage_type == BucketTreeStorageType_Compressed && substorage_index != 0) || \
+        (parent_ctx->storage_type == BucketTreeStorageType_Indirect && child_ctx->storage_type == BucketTreeStorageType_AesCtrEx && substorage_index != 1) || \
+        parent_ctx->storage_type == BucketTreeStorageType_AesCtrEx || parent_ctx->storage_type == BucketTreeStorageType_Sparse || \
+        (parent_ctx->storage_type == BucketTreeStorageType_Compressed && child_ctx->storage_type != BucketTreeStorageType_Indirect && child_ctx->storage_type != BucketTreeStorageType_Sparse))
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    /* Update the substorage. */
+    BucketTreeSubStorage *substorage = &(parent_ctx->substorages[substorage_index]);
+    memset(substorage, 0, sizeof(BucketTreeSubStorage));
+    
+    substorage->index = substorage_index;
+    substorage->nca_fs_ctx = child_ctx->nca_fs_ctx;
+    substorage->type = (child_ctx->storage_type + 1);   /* Convert to BucketTreeSubStorageType value. */
+    substorage->bktr_ctx = child_ctx;
+    
+    return true;
+}
+
 bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offset)
 {
     if (!bktrIsBlockWithinStorageRange(ctx, read_size, offset) || !out)
@@ -204,29 +253,64 @@ end:
 
 
 
-static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset)
+
+
+static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, void *out, u64 read_size, u64 offset)
 {
-    if (!bktrVisitorIsValid(visitor) || !out)
+    if (!bktrIsValidSubstorage(substorage) || !out || !read_size)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
+    bool success = false;
+    
+    if (substorage->type == BucketTreeSubStorageType_Regular)
+    {
+        /* Perform a read on the target NCA. */
+        
+        
+        
+        // TODO: HANDLE SPARSE STORAGE VIRTUAL OFFSET DECRYPTION
+        // substorage->nca_fs_ctx->has_sparse_layer
+        
+        
+        success = ncaReadFsSection(substorage->nca_fs_ctx, out, read_size, offset);
+    } else {
+        /* Perform a read on the target BucketTree storage. */
+        success = bktrReadStorage(substorage->bktr_ctx, out, read_size, offset);
+    }
+    
+    if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX!", read_size, offset);
+    
+    return success;
+}
+
+
+
+
+
+
+
+
+static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset)
+{
     BucketTreeContext *ctx = visitor->bktr_ctx;
     NcaFsSectionContext *nca_fs_ctx = ctx->nca_fs_ctx;
     bool is_sparse = (ctx->storage_type == BucketTreeStorageType_Sparse);
     
+    if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || (!is_sparse && !bktrIsValidSubstorage(&(ctx->substorages[1]))) || \
+        (!is_sparse && ctx->substorages[0].type != BucketTreeSubStorageType_Regular && ctx->substorages[0].type != BucketTreeStorageType_Compressed) || \
+        (is_sparse && ctx->substorages[0].type != BucketTreeSubStorageType_Regular) || (!is_sparse && ctx->substorages[1].type != BucketTreeSubStorageType_AesCtrEx))
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    /* Validate Indirect Storage entry. */
     BucketTreeIndirectStorageEntry cur_entry = {0};
     memcpy(&cur_entry, visitor->entry, sizeof(BucketTreeIndirectStorageEntry));
     
-    
-    
-    // TODO: ADD BASE STORAGE CHECK IF NOT SPARSE
-    
-    
-    
-    
-    /* Validate Indirect Storage entry. */
     if (!bktrIsOffsetWithinStorageRange(ctx, cur_entry.virtual_offset) || cur_entry.virtual_offset > offset || cur_entry.storage_index > BucketTreeIndirectStorageIndex_Patch)
     {
         LOG_MSG("Invalid Indirect Storage entry! (0x%lX) (#1).", cur_entry.virtual_offset);
@@ -287,22 +371,16 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
         if (cur_entry.storage_index == BucketTreeIndirectStorageIndex_Original)
         {
             /* Retrieve data from the original data storage. */
-            
-            
-            
-            // TODO: SET ORIGINAL DATA STORAGE
-            
-            
-            
+            /* This may either be a Regular/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
+            success = bktrReadSubStorage(&(ctx->substorages[0]), out, read_size, data_offset);
+            if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in original data storage!", read_size, data_offset);
         } else {
             if (!is_sparse)
             {
                 /* Retrieve data from the indirect data storage. */
-                
-                
-                // TODO: SET INDIRECT DATA STORAGE
-                
-                
+                /* This must always be the AesCtrEx storage within this very same NCA (Indirect). */
+                success = bktrReadSubStorage(&(ctx->substorages[1]), out, read_size, data_offset);
+                if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in AesCtrEx storage!", read_size, data_offset);
             } else {
                 /* Fill output buffer with zeroes (SparseStorage's ZeroStorage). */
                 memset(0, out, read_size);

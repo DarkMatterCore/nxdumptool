@@ -25,8 +25,6 @@
 #ifndef __BKTR_H__
 #define __BKTR_H__
 
-#include "romfs.h"
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -47,6 +45,8 @@ extern "C" {
 #define BKTR_COMPRESSION_LEVEL_DEFAULT      BKTR_COMPRESSION_LEVEL_MIN
 
 #define BKTR_COMPRESSION_INVALID_PHYS_SIZE  UINT32_MAX
+
+#define BKTR_MAX_SUBSTORAGE_COUNT           2
 
 /// Used as the header for both BucketTreeOffsetNode and BucketTreeEntryNode.
 typedef struct {
@@ -138,32 +138,57 @@ typedef struct {
 NXDT_ASSERT(BucketTreeTable, BKTR_NODE_SIZE);
 
 typedef enum {
-    BucketTreeStorageType_Indirect   = 0,
-    BucketTreeStorageType_AesCtrEx   = 1,
-    BucketTreeStorageType_Compressed = 2,
-    BucketTreeStorageType_Sparse     = 3,   ///< BucketTreeStorageType_Indirect, but uses virtual offsets for data decryption.
+    BucketTreeStorageType_Indirect   = 0,   ///< Uses two substorages: index 0 (points to the base NCA) and index 1 (AesCtrEx storage).
+                                            ///< All reads within storage index 0 use the calculated physical offsets for data decryption.
+    BucketTreeStorageType_AesCtrEx   = 1,   ///< Used as storage index 1 for BucketTreeStorageType_Indirect.
+    BucketTreeStorageType_Compressed = 2,   ///< Uses LZ4-compressed sections.
+    BucketTreeStorageType_Sparse     = 3,   ///< BucketTreeStorageType_Indirect with a twist. Storage index 0 points to the same NCA, and uses virtual offsets for data decryption.
+                                            ///< Zero-filled output is used for any reads within storage index 1.
     BucketTreeStorageType_Count      = 4    ///< Total values supported by this enum.
 } BucketTreeStorageType;
 
+typedef enum {
+    BucketTreeSubStorageType_Regular    = 0,    ///< Body storage with None, XTS or CTR crypto. Most common substorage type, used in all title types.
+                                                ///< May be used as substorage for all BucketTreeStorage types.
+    BucketTreeSubStorageType_Indirect   = 1,    ///< Indirect storage from patch NCAs. May be used as substorage for BucketTreeStorageType_Compressed only.
+    BucketTreeSubStorageType_AesCtrEx   = 2,    ///< AesCtrEx storage from patch NCAs. May be used as substorage for BucketTreeStorageType_Indirect only.
+    BucketTreeSubStorageType_Sparse     = 3,    ///< Sparse storage with CTR crypto, using virtual offsets as lower CTR IVs. Used in base applications only.
+                                                ///< May be used as substorage for BucketTreeStorageType_Compressed only.
+    BucketTreeSubStorageType_Compressed = 4,    ///< Compressed storage. If available, this is always the outmost storage type for any NCA. May be used by all title types.
+                                                ///< May be used as substorage for BucketTreeStorageType_Indirect only.
+    BucketTreeSubStorageType_Count      = 5     ///< Total values supported by this enum.
+} BucketTreeSubStorageType;
+
 typedef struct {
+    u8 index;                           ///< Substorage index.
     NcaFsSectionContext *nca_fs_ctx;    ///< NCA FS section context. Used to perform operations on the target NCA.
-    u8 storage_type;                    ///< BucketTreeStorageType.
-    BucketTreeTable *storage_table;     ///< Pointer to the dynamically allocated Bucket Tree Table for this storage.
-    u64 node_size;                      ///< Node size for this type of Bucket Tree storage.
-    u64 entry_size;                     ///< Size of each individual entry within BucketTreeEntryNode.
-    u32 offset_count;                   ///< Number of offsets available within each BucketTreeOffsetNode for this storage.
-    u32 entry_set_count;                ///< Number of BucketTreeEntryNode elements available in this storage.
-    u64 node_storage_size;              ///< Offset node segment size within 'storage_table'.
-    u64 entry_storage_size;             ///< Entry node segment size within 'storage_table'.
-    u64 start_offset;                   ///< Virtual storage start offset.
-    u64 end_offset;                     ///< Virtual storage end offset.
-    
-    // TODO: add sub storage
-    
+    u8 type;                 ///< BucketTreeSubStorageType.
+    void *bktr_ctx;                     ///< BucketTreeContext related to this storage. Only used if type > BucketTreeSubStorageType_Regular.
+} BucketTreeSubStorage;
+
+typedef struct {
+    NcaFsSectionContext *nca_fs_ctx;                                ///< NCA FS section context. Used to perform operations on the target NCA.
+    u8 storage_type;                                                ///< BucketTreeStorageType.
+    BucketTreeTable *storage_table;                                 ///< Pointer to the dynamically allocated Bucket Tree Table for this storage.
+    u64 node_size;                                                  ///< Node size for this type of Bucket Tree storage.
+    u64 entry_size;                                                 ///< Size of each individual entry within BucketTreeEntryNode.
+    u32 offset_count;                                               ///< Number of offsets available within each BucketTreeOffsetNode for this storage.
+    u32 entry_set_count;                                            ///< Number of BucketTreeEntryNode elements available in this storage.
+    u64 node_storage_size;                                          ///< Offset node segment size within 'storage_table'.
+    u64 entry_storage_size;                                         ///< Entry node segment size within 'storage_table'.
+    u64 start_offset;                                               ///< Virtual storage start offset.
+    u64 end_offset;                                                 ///< Virtual storage end offset.
+    BucketTreeSubStorage substorages[BKTR_MAX_SUBSTORAGE_COUNT];    ///< Substorages required for this BucketTree storage. May be set after initializing this context.
 } BucketTreeContext;
 
-/// Initializes a Bucket Tree context using the provided NCA FS section context and a storage 
+/// Initializes a Bucket Tree context using the provided NCA FS section context and a storage type.
 bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type);
+
+/// Sets a BucketTreeSubStorageType_Regular substorage at index 0.
+bool bktrSetRegularSubStorage(BucketTreeContext *ctx, NcaFsSectionContext *nca_fs_ctx);
+
+/// Sets a substorage with type >= BucketTreeSubStorageType_Indirect and <= BucketTreeSubStorageType_Compressed at the provided index.
+bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContext *child_ctx, u8 substorage_index);
 
 /// Reads data from a Bucket Tree storage using a previously initialized BucketTreeContext.
 bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offset);
@@ -193,104 +218,11 @@ NX_INLINE bool bktrIsBlockWithinStorageRange(BucketTreeContext *ctx, u64 size, u
     return (bktrIsValidContext(ctx) && size > 0 && ctx->start_offset <= offset && size <= (ctx->end_offset - offset));
 }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-typedef struct {
-    RomFileSystemContext base_romfs_ctx;            ///< Base NCA RomFS context.
-    RomFileSystemContext patch_romfs_ctx;           ///< Update NCA RomFS context. Must be used with RomFS directory/file entry functions, because it holds the updated directory/file tables.
-    u64 offset;                                     ///< Patched RomFS image offset (relative to the start of the update NCA FS section).
-    u64 size;                                       ///< Patched RomFS image size.
-    u64 body_offset;                                ///< Patched RomFS image file data body offset (relative to the start of the RomFS).
-    BktrIndirectStorageBlock *indirect_block;       ///< BKTR Indirect Storage Block.
-    BktrAesCtrExStorageBlock *aes_ctr_ex_block;     ///< BKTR AesCtrEx Storage Block.
-    bool missing_base_romfs;                        ///< If true, only Patch RomFS data is used. Needed for games with base Program NCAs without a RomFS section (e.g. Fortnite, World of Tanks Blitz, etc.).
-    BktrIndirectStorageBlock *base_indirect_block;  ///< Base NCA Indirect Storage Block (sparse layer), if available.
-} BktrContext;
-
-/// Initializes a BKTR context.
-bool bktrInitializeContext(BktrContext *out, NcaFsSectionContext *base_nca_fs_ctx, NcaFsSectionContext *update_nca_fs_ctx);
-
-/// Reads raw filesystem data using a BKTR context.
-/// Input offset must be relative to the start of the patched RomFS image.
-bool bktrReadFileSystemData(BktrContext *ctx, void *out, u64 read_size, u64 offset);
-
-/// Reads data from a previously retrieved RomFileSystemFileEntry using a BKTR context.
-/// Input offset must be relative to the start of the RomFS file entry data.
-bool bktrReadFileEntryData(BktrContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
-
-/// Checks if a RomFS file entry is updated by the Patch RomFS.
-bool bktrIsFileEntryUpdated(BktrContext *ctx, RomFileSystemFileEntry *file_entry, bool *out);
-
-/// Miscellaneous functions.
-
-NX_INLINE void bktrFreeContext(BktrContext *ctx)
+NX_INLINE bool bktrIsValidSubstorage(BucketTreeSubStorage *substorage)
 {
-    if (!ctx) return;
-    romfsFreeContext(&(ctx->base_romfs_ctx));
-    romfsFreeContext(&(ctx->patch_romfs_ctx));
-    if (ctx->indirect_block) free(ctx->indirect_block);
-    if (ctx->aes_ctr_ex_block) free(ctx->aes_ctr_ex_block);
-    if (ctx->base_indirect_block) free(ctx->base_indirect_block);
-    memset(ctx, 0, sizeof(BktrContext));
-}
-
-NX_INLINE RomFileSystemDirectoryEntry *bktrGetDirectoryEntryByOffset(BktrContext *ctx, u32 dir_entry_offset)
-{
-    return (ctx ? romfsGetDirectoryEntryByOffset(&(ctx->patch_romfs_ctx), dir_entry_offset) : NULL);
-}
-
-NX_INLINE RomFileSystemFileEntry *bktrGetFileEntryByOffset(BktrContext *ctx, u32 file_entry_offset)
-{
-    return (ctx ? romfsGetFileEntryByOffset(&(ctx->patch_romfs_ctx), file_entry_offset) : NULL);
-}
-
-NX_INLINE bool bktrGetTotalDataSize(BktrContext *ctx, u64 *out_size)
-{
-    return (ctx ? romfsGetTotalDataSize(&(ctx->patch_romfs_ctx), out_size) : false);
-}
-
-NX_INLINE bool bktrGetDirectoryDataSize(BktrContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size)
-{
-    return (ctx ? romfsGetDirectoryDataSize(&(ctx->patch_romfs_ctx), dir_entry, out_size) : false);
-}
-
-NX_INLINE RomFileSystemDirectoryEntry *bktrGetDirectoryEntryByPath(BktrContext *ctx, const char *path)
-{
-    return (ctx ? romfsGetDirectoryEntryByPath(&(ctx->patch_romfs_ctx), path) : NULL);
-}
-
-NX_INLINE RomFileSystemFileEntry *bktrGetFileEntryByPath(BktrContext *ctx, const char *path)
-{
-    return (ctx ? romfsGetFileEntryByPath(&(ctx->patch_romfs_ctx), path) : NULL);
-}
-
-NX_INLINE bool bktrGeneratePathFromDirectoryEntry(BktrContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type)
-{
-    return (ctx ? romfsGeneratePathFromDirectoryEntry(&(ctx->patch_romfs_ctx), dir_entry, out_path, out_path_size, illegal_char_replace_type) : false);
-}
-
-NX_INLINE bool bktrGeneratePathFromFileEntry(BktrContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type)
-{
-    return (ctx ? romfsGeneratePathFromFileEntry(&(ctx->patch_romfs_ctx), file_entry, out_path, out_path_size, illegal_char_replace_type) : false);
+    return (substorage && substorage->index < BKTR_MAX_SUBSTORAGE_COUNT && substorage->nca_fs_ctx && substorage->type < BucketTreeSubStorageType_Count && \
+            ((substorage->type == BucketTreeSubStorageType_Regular && substorage->index == 0 && !substorage->bktr_ctx) || \
+            (substorage->type > BucketTreeSubStorageType_Regular && substorage->bktr_ctx)));
 }
 
 #ifdef __cplusplus
