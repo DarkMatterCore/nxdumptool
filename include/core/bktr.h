@@ -154,10 +154,10 @@ typedef enum {
                                                 ///< May be used as substorage for all BucketTreeStorage types.
     BucketTreeSubStorageType_Indirect   = 1,    ///< Indirect storage from patch NCAs. May be used as substorage for BucketTreeStorageType_Compressed only.
     BucketTreeSubStorageType_AesCtrEx   = 2,    ///< AesCtrEx storage from patch NCAs. May be used as substorage for BucketTreeStorageType_Indirect only.
-    BucketTreeSubStorageType_Sparse     = 3,    ///< Sparse storage with CTR crypto, using virtual offsets as lower CTR IVs. Used in base applications only.
-                                                ///< May be used as substorage for BucketTreeStorageType_Compressed only.
-    BucketTreeSubStorageType_Compressed = 4,    ///< Compressed storage. If available, this is always the outmost storage type for any NCA. May be used by all title types.
+    BucketTreeSubStorageType_Compressed = 3,    ///< Compressed storage. If available, this is always the outmost storage type for any NCA. May be used by all title types.
                                                 ///< May be used as substorage for BucketTreeStorageType_Indirect only.
+    BucketTreeSubStorageType_Sparse     = 4,    ///< Sparse storage with CTR crypto, using virtual offsets as lower CTR IVs. Used in base applications only.
+                                                ///< May be used as substorage for BucketTreeStorageType_Compressed or BucketTreeStorageType_Indirect.
     BucketTreeSubStorageType_Count      = 5     ///< Total values supported by this enum.
 } BucketTreeSubStorageType;
 

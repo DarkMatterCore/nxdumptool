@@ -198,13 +198,14 @@ bool bktrSetRegularSubStorage(BucketTreeContext *ctx, NcaFsSectionContext *nca_f
 bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContext *child_ctx, u8 substorage_index)
 {
     if (!bktrIsValidContext(parent_ctx) || !bktrIsValidContext(child_ctx) || substorage_index >= BKTR_MAX_SUBSTORAGE_COUNT || \
-        (parent_ctx->storage_type != BucketTreeStorageType_Indirect && substorage_index != 0) || \
-        (parent_ctx->storage_type == BucketTreeStorageType_Indirect && child_ctx->storage_type != BucketTreeStorageType_Compressed && child_ctx->storage_type != BucketTreeStorageType_AesCtrEx) || \
-        (parent_ctx->storage_type == BucketTreeStorageType_Indirect && child_ctx->storage_type == BucketTreeStorageType_Compressed && (substorage_index != 0 || parent_ctx->nca_fs_ctx == child_ctx->nca_fs_ctx)) || \
-        (parent_ctx->storage_type == BucketTreeStorageType_Indirect && child_ctx->storage_type == BucketTreeStorageType_AesCtrEx && (substorage_index != 1 || parent_ctx->nca_fs_ctx != child_ctx->nca_fs_ctx)) || \
         parent_ctx->storage_type == BucketTreeStorageType_AesCtrEx || parent_ctx->storage_type == BucketTreeStorageType_Sparse || \
-        (parent_ctx->storage_type == BucketTreeStorageType_Compressed && child_ctx->storage_type != BucketTreeStorageType_Indirect && child_ctx->storage_type != BucketTreeStorageType_Sparse) || \
-        (parent_ctx->storage_type == BucketTreeStorageType_Compressed && parent_ctx->nca_fs_ctx != child_ctx->nca_fs_ctx))
+        (parent_ctx->storage_type != BucketTreeStorageType_Indirect && substorage_index != 0) || \
+        (parent_ctx->storage_type == BucketTreeStorageType_Indirect && (child_ctx->storage_type < BucketTreeStorageType_AesCtrEx || \
+        child_ctx->storage_type > BucketTreeStorageType_Sparse || (child_ctx->storage_type == BucketTreeStorageType_AesCtrEx && (substorage_index != 1 || \
+        parent_ctx->nca_fs_ctx != child_ctx->nca_fs_ctx)) || ((child_ctx->storage_type == BucketTreeStorageType_Compressed || \
+        child_ctx->storage_type == BucketTreeStorageType_Sparse) && (substorage_index != 0 || parent_ctx->nca_fs_ctx == child_ctx->nca_fs_ctx)))) || \
+        (parent_ctx->storage_type == BucketTreeStorageType_Compressed && ((child_ctx->storage_type != BucketTreeStorageType_Indirect && \
+        child_ctx->storage_type != BucketTreeStorageType_Sparse) || parent_ctx->nca_fs_ctx != child_ctx->nca_fs_ctx)))
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -364,7 +365,8 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
     bool is_sparse = (ctx->storage_type == BucketTreeStorageType_Sparse);
     
     if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || (!is_sparse && !bktrIsValidSubstorage(&(ctx->substorages[1]))) || \
-        (!is_sparse && ((ctx->substorages[0].type != BucketTreeSubStorageType_Regular && ctx->substorages[0].type != BucketTreeStorageType_Compressed) || ctx->substorages[1].type != BucketTreeSubStorageType_AesCtrEx)) || \
+        (!is_sparse && ((ctx->substorages[0].type != BucketTreeSubStorageType_Regular && ctx->substorages[0].type != BucketTreeStorageType_Compressed && \
+        ctx->substorages[0].type != BucketTreeSubStorageType_Sparse) || ctx->substorages[1].type != BucketTreeSubStorageType_AesCtrEx)) || \
         (is_sparse && ctx->substorages[0].type != BucketTreeSubStorageType_Regular))
     {
         LOG_MSG("Invalid parameters!");
