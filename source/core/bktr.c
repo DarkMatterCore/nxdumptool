@@ -694,7 +694,7 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
             success = ncaReadAesCtrExStorageFromBktrSection(nca_fs_ctx, params->buffer, params->size, params->offset, params->ctr_val);
         } else {
             /* Make sure to handle Sparse virtual offsets if we need to. */
-            if (params->parent_storage_type == BucketTreeStorageType_Sparse && virtual_offset) nca_fs_ctx->cur_sparse_virtual_offset = params->virtual_offset;
+            if (params->parent_storage_type == BucketTreeStorageType_Sparse && params->virtual_offset) nca_fs_ctx->cur_sparse_virtual_offset = params->virtual_offset;
             
             /* Perform a read on the target NCA. */
             success = ncaReadFsSection(nca_fs_ctx, params->buffer, params->size, params->offset);
