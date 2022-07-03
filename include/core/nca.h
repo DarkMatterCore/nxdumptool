@@ -380,6 +380,7 @@ typedef struct {
     ///< SparseInfo-related fields.
     bool has_sparse_layer;              ///< Set to true if this NCA FS section has a sparse layer.
     u64 sparse_table_offset;            ///< header.sparse_info.physical_offset + header.sparse_info.bucket.offset. Relative to the start of the NCA content file. Placed here for convenience.
+    u64 cur_sparse_virtual_offset;      ///< Current sparse layer virtual offset. Used for content decryption if a sparse layer is available.
     
     ///< CompressionInfo-related fields.
     bool has_compression_layer;         ///< Set to true if this NCA FS section has a compression layer.

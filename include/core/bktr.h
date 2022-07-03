@@ -162,7 +162,7 @@ typedef enum {
 typedef struct {
     u8 index;                           ///< Substorage index.
     NcaFsSectionContext *nca_fs_ctx;    ///< NCA FS section context. Used to perform operations on the target NCA.
-    u8 type;                 ///< BucketTreeSubStorageType.
+    u8 type;                            ///< BucketTreeSubStorageType.
     void *bktr_ctx;                     ///< BucketTreeContext related to this storage. Only used if type > BucketTreeSubStorageType_Regular.
 } BucketTreeSubStorage;
 
@@ -187,7 +187,7 @@ bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_c
 /// Sets a BucketTreeSubStorageType_Regular substorage at index 0.
 bool bktrSetRegularSubStorage(BucketTreeContext *ctx, NcaFsSectionContext *nca_fs_ctx);
 
-/// Sets a substorage with type >= BucketTreeSubStorageType_Indirect and <= BucketTreeSubStorageType_Compressed at the provided index.
+/// Sets a substorage with type >= BucketTreeStorageType_Indirect and <= BucketTreeStorageType_Compressed at the provided index using a previously initialized BucketTreeContext.
 bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContext *child_ctx, u8 substorage_index);
 
 /// Reads data from a Bucket Tree storage using a previously initialized BucketTreeContext.
