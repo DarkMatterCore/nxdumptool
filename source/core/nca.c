@@ -1378,10 +1378,10 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
     
     bool use_sha3 = false, success = false;
     
-    if (!ctx || !ctx->enabled || ctx->has_sparse_layer || !(nca_ctx = (NcaContext*)ctx->nca_ctx) || (!is_integrity_patch && ((ctx->hash_type != NcaHashType_HierarchicalSha256 && \
-        ctx->hash_type != NcaHashType_HierarchicalSha3256) || !ctx->header.hash_data.hierarchical_sha256_data.hash_block_size || \
-        !(layer_count = ctx->header.hash_data.hierarchical_sha256_data.hash_region_count) || layer_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || \
-        !(last_layer_size = ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1].size))) || \
+    if (!ctx || !ctx->enabled || ctx->has_sparse_layer || ctx->has_compression_layer || !(nca_ctx = (NcaContext*)ctx->nca_ctx) || \
+        (!is_integrity_patch && ((ctx->hash_type != NcaHashType_HierarchicalSha256 && ctx->hash_type != NcaHashType_HierarchicalSha3256) || \
+        !ctx->header.hash_data.hierarchical_sha256_data.hash_block_size || !(layer_count = ctx->header.hash_data.hierarchical_sha256_data.hash_region_count) || \
+        layer_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !(last_layer_size = ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1].size))) || \
         (is_integrity_patch && ((ctx->hash_type != NcaHashType_HierarchicalIntegrity && ctx->hash_type != NcaHashType_HierarchicalIntegritySha3) || \
         !(layer_count = (ctx->header.hash_data.integrity_meta_info.info_level_hash.max_level_count - 1)) || layer_count != NCA_IVFC_LEVEL_COUNT || \
         !(last_layer_size = ctx->header.hash_data.integrity_meta_info.info_level_hash.level_information[NCA_IVFC_LEVEL_COUNT - 1].size))) || !data || !data_size || \
@@ -1628,8 +1628,8 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
     u8 *out = NULL;
     bool success = false;
     
-    if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || ctx->has_sparse_layer || !ctx->nca_ctx || ctx->section_idx >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
-        ctx->hash_type <= NcaHashType_None || ctx->hash_type == NcaHashType_AutoSha3 || ctx->hash_type > NcaHashType_HierarchicalIntegritySha3 || \
+    if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || ctx->has_sparse_layer || ctx->has_compression_layer || !ctx->nca_ctx || ctx->section_idx >= NCA_FS_HEADER_COUNT || \
+        ctx->section_offset < sizeof(NcaHeader) || ctx->hash_type <= NcaHashType_None || ctx->hash_type == NcaHashType_AutoSha3 || ctx->hash_type > NcaHashType_HierarchicalIntegritySha3 || \
         ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type == NcaEncryptionType_AesCtrEx || ctx->encryption_type >= NcaEncryptionType_AesCtrExSkipLayerHash || \
         ctx->section_type >= NcaFsSectionType_Invalid || !data || !data_size || (data_offset + data_size) > ctx->section_size || !out_block_size || !out_block_offset)
     {
