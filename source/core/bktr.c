@@ -107,7 +107,7 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
 static bool bktrGetTreeNodeEntryIndex(const u64 *start_ptr, const u64 *end_ptr, u64 virtual_offset, u32 *out_index);
 static bool bktrGetEntryNodeEntryIndex(const BucketTreeNodeHeader *node_header, u64 entry_size, u64 virtual_offset, u32 *out_index);
 
-static bool bktrFindEntrySet(u32 *out_index, u64 virtual_offset, u32 node_index);
+static bool bktrFindEntrySet(BucketTreeContext *ctx, u32 *out_index, u64 virtual_offset, u32 node_index);
 static const BucketTreeNodeHeader *bktrGetTreeNodeHeader(BucketTreeContext *ctx, u32 node_index);
 NX_INLINE u32 bktrGetEntrySetIndex(BucketTreeContext *ctx, u32 node_index, u32 offset_index);
 
@@ -432,7 +432,6 @@ end:
 static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset)
 {
     BucketTreeContext *ctx = visitor->bktr_ctx;
-    NcaFsSectionContext *nca_fs_ctx = ctx->nca_fs_ctx;
     bool is_sparse = (ctx->storage_type == BucketTreeStorageType_Sparse);
     
     if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || (!is_sparse && !bktrIsValidSubstorage(&(ctx->substorages[1]))) || \
@@ -549,7 +548,6 @@ static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSe
         return false;
     }
     
-    NcaContext *nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx;
     NcaBucketInfo *aes_ctr_ex_bucket = &(nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket);
     BucketTreeTable *aes_ctr_ex_table = NULL;
     u64 node_storage_size = 0, entry_storage_size = 0;
@@ -610,7 +608,6 @@ end:
 static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset)
 {
     BucketTreeContext *ctx = visitor->bktr_ctx;
-    NcaFsSectionContext *nca_fs_ctx = ctx->nca_fs_ctx;
     
     if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || ctx->substorages[0].type != BucketTreeSubStorageType_Regular)
     {
@@ -706,7 +703,6 @@ static bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, NcaFs
         return false;
     }
     
-    NcaContext *nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx;
     NcaBucketInfo *compressed_bucket = &(nca_fs_ctx->header.compression_info.bucket);
     BucketTreeTable *compressed_table = NULL;
     u64 node_storage_size = 0, entry_storage_size = 0;
@@ -880,7 +876,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
                 const u64 buffer_size = LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(decompressed_data_size);
                 u8 *buffer = NULL, *read_ptr = NULL;
                 
-                u8 *buffer = calloc(1, buffer_size);
+                buffer = calloc(1, buffer_size);
                 if (!buffer)
                 {
                     LOG_MSG("Failed to allocate 0x%lX-byte long buffer for data decompression! (0x%lX).", buffer_size, decompressed_data_size);
@@ -978,7 +974,7 @@ NX_INLINE void bktrBucketInitializeSubStorageReadParams(BucketTreeSubStorageRead
     out->size = size;
     out->virtual_offset = ((virtual_offset && parent_storage_type == BucketTreeStorageType_Sparse) ? virtual_offset : 0);
     out->ctr_val = ((ctr_val && parent_storage_type == BucketTreeStorageType_AesCtrEx) ? ctr_val : 0);
-    out->aes_ctr_ex_crypt = ((aes_ctr_ex_crypt && parent_storage_type == BucketTreeStorageType_AesCtrEx) true : false);
+    out->aes_ctr_ex_crypt = ((aes_ctr_ex_crypt && parent_storage_type == BucketTreeStorageType_AesCtrEx) ? true : false);
     out->parent_storage_type = parent_storage_type;
 }
 
@@ -1075,7 +1071,7 @@ NX_INLINE u32 bktrGetEntrySetCount(u64 node_size, u64 entry_size, u32 entry_coun
 NX_INLINE u32 bktrGetNodeL2Count(u64 node_size, u64 entry_size, u32 entry_count)
 {
     u32 offset_count_per_node = bktrGetOffsetCount(node_size);
-    u32 entry_set_count = bktrGetEntrySetCount(node_size, entry_size, node_count);
+    u32 entry_set_count = bktrGetEntrySetCount(node_size, entry_size, entry_count);
     
     if (entry_set_count <= offset_count_per_node) return 0;
     
@@ -1118,7 +1114,7 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
     
     /* Get the entry node index. */
     u32 entry_set_index = 0;
-    const u64 *start_ptr = NULL, *end_ptr = NULL, *pos = NULL;
+    const u64 *start_ptr = NULL, *end_ptr = NULL;
     bool success = false;
     
     if (bktrIsExistOffsetL2OnL1(ctx) && virtual_offset < *bktrGetOffsetNodeBegin(offset_node))
@@ -1144,7 +1140,7 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
         if (bktrIsExistL2(ctx))
         {
             u32 node_index = entry_set_index;
-            if (node_index >= ctx->offset_count || !bktrFindEntrySet(&entry_set_index, virtual_offset, node_index))
+            if (node_index >= ctx->offset_count || !bktrFindEntrySet(ctx, &entry_set_index, virtual_offset, node_index))
             {
                 LOG_MSG("Invalid L2 Bucket Tree Node index!");
                 goto end;
@@ -1305,7 +1301,7 @@ static bool bktrFindEntry(BucketTreeContext *ctx, BucketTreeVisitor *out_visitor
     }
     
     /* Update output visitor. */
-    memset(out, 0, sizeof(BucketTreeVisitor));
+    memset(out_visitor, 0, sizeof(BucketTreeVisitor));
     
     out_visitor->bktr_ctx = ctx;
     memcpy(&(out_visitor->entry_set), entry_set_header, sizeof(BucketTreeEntrySetHeader));

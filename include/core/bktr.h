@@ -29,6 +29,8 @@
 extern "C" {
 #endif
 
+#include "nca.h"
+
 #define BKTR_NODE_HEADER_SIZE               0x10
 #define BKTR_NODE_SIZE                      0x4000                      /* Currently shared by all Bucket Tree storage types. */
 #define BKTR_NODE_SIZE_MIN                  0x400
