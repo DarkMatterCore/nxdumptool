@@ -46,9 +46,15 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     /* Free output context beforehand. */
     pfsFreeContext(out);
     
-    /* Fill context. */
-    out->nca_fs_ctx = nca_fs_ctx;
+    /* Initialize NCA storage context. */
+    NcaStorageContext *storage_ctx = &(out->storage_ctx);
+    if (!ncaStorageInitializeContext(storage_ctx, nca_fs_ctx))
+    {
+        LOG_MSG("Failed to initialize NCA storage context!");
+        goto end;
+    }
     
+    /* Get Partition FS offset and size. */
     if (!ncaGetFsSectionHashTargetProperties(nca_fs_ctx, &(out->offset), &(out->size)))
     {
         LOG_MSG("Failed to get target hash layer properties!");
@@ -56,7 +62,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     }
     
     /* Read partial Partition FS header. */
-    if (!ncaReadFsSection(nca_fs_ctx, &pfs_header, sizeof(PartitionFileSystemHeader), out->offset))
+    if (!ncaStorageRead(storage_ctx, &pfs_header, sizeof(PartitionFileSystemHeader), out->offset))
     {
         LOG_MSG("Failed to read partial Partition FS header!");
         goto end;
@@ -89,7 +95,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     }
     
     /* Read full Partition FS header. */
-    if (!ncaReadFsSection(nca_fs_ctx, out->header, out->header_size, out->offset))
+    if (!ncaStorageRead(storage_ctx, out->header, out->header_size, out->offset))
     {
         LOG_MSG("Failed to read full Partition FS header!");
         goto end;
@@ -115,14 +121,14 @@ end:
 
 bool pfsReadPartitionData(PartitionFileSystemContext *ctx, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->nca_fs_ctx || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
     /* Read partition data. */
-    if (!ncaReadFsSection(ctx->nca_fs_ctx, out, read_size, ctx->offset + offset))
+    if (!ncaStorageRead(&(ctx->storage_ctx), out, read_size, ctx->offset + offset))
     {
         LOG_MSG("Failed to read Partition FS data!");
         return false;
@@ -220,8 +226,8 @@ bool pfsGetTotalDataSize(PartitionFileSystemContext *ctx, u64 *out_size)
 
 bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out)
 {
-    if (!ctx || !ctx->nca_fs_ctx || !ctx->header_size || !ctx->header || !fs_entry || !fs_entry->size || (fs_entry->offset + fs_entry->size) > ctx->size || !data || !data_size || \
-        (data_offset + data_size) > fs_entry->size || !out)
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !ctx->header_size || !ctx->header || !fs_entry || !fs_entry->size || \
+        (fs_entry->offset + fs_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > fs_entry->size || !out)
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -229,7 +235,7 @@ bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemE
     
     u64 partition_offset = (ctx->header_size + fs_entry->offset + data_offset);
     
-    if (!ncaGenerateHierarchicalSha256Patch(ctx->nca_fs_ctx, data, data_size, partition_offset, out))
+    if (!ncaGenerateHierarchicalSha256Patch(ctx->storage_ctx.nca_fs_ctx, data, data_size, partition_offset, out))
     {
         LOG_MSG("Failed to generate 0x%lX bytes HierarchicalSha256 patch at offset 0x%lX for Partition FS entry!", data_size, partition_offset);
         return false;

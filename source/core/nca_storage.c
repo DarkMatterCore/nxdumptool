@@ -244,9 +244,3 @@ end:
     
     return success;
 }
-
-NX_INLINE bool ncaStorageIsValidContext(NcaStorageContext *ctx)
-{
-    return (ctx && ctx->base_storage_type >= NcaStorageBaseStorageType_Regular && ctx->base_storage_type <= NcaStorageBaseStorageType_Compressed && ctx->nca_fs_ctx && \
-            ctx->nca_fs_ctx->enabled);
-}

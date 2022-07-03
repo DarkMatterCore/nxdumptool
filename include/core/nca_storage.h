@@ -61,6 +61,14 @@ bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset
 /// Frees a previously initialized NCA storage context.
 void ncaStorageFreeContext(NcaStorageContext *ctx);
 
+/// Helper inline functions.
+
+NX_INLINE bool ncaStorageIsValidContext(NcaStorageContext *ctx)
+{
+    return (ctx && ctx->base_storage_type >= NcaStorageBaseStorageType_Regular && ctx->base_storage_type <= NcaStorageBaseStorageType_Compressed && ctx->nca_fs_ctx && \
+            ctx->nca_fs_ctx->enabled);
+}
+
 #ifdef __cplusplus
 }
 #endif

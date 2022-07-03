@@ -871,12 +871,12 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
         return false;
     }
     
-    BucketTreeContext *ctx = (BucketTreeContext*)substorage->bktr_ctx;
-    NcaFsSectionContext *nca_fs_ctx = substorage->nca_fs_ctx;
     bool success = false;
     
     if (substorage->type == BucketTreeSubStorageType_Regular)
     {
+        NcaFsSectionContext *nca_fs_ctx = substorage->nca_fs_ctx;
+        
         if (params->parent_storage_type == BucketTreeStorageType_AesCtrEx)
         {
             /* Perform a read on the target NCA using AesCtrEx crypto. */
@@ -890,6 +890,7 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
         }
     } else {
         /* Perform a read on the target BucketTree storage. */
+        BucketTreeContext *ctx = (BucketTreeContext*)substorage->bktr_ctx;
         success = bktrReadStorage(ctx, params->buffer, params->size, params->offset);
     }
     
