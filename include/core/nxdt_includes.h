@@ -68,6 +68,10 @@
 /* SHA3 checksum calculator. */
 #include "sha3.h"
 
+/* LZ4 (dec)compression. */
+#define LZ4_STATIC_LINKING_ONLY /* Required by LZ4 to enable in-place decompression. */
+#include "lz4.h"
+
 /// Used to store version numbers expressed in dot notation:
 ///     * System version: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
 ///     * Application version: "{release}.{private}".

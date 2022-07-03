@@ -19,11 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#define LZ4_STATIC_LINKING_ONLY /* Required by LZ4 to enable in-place decompression. */
-
 #include "nxdt_utils.h"
 #include "nso.h"
-#include "lz4.h"
 
 /* Function prototypes. */
 

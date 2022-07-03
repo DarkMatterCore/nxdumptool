@@ -110,7 +110,7 @@ typedef struct {
     u8 compression_type;    ///< BucketTreeCompressedStorageCompressionType.
     s8 compression_level;   ///< Must be within the range [BKTR_COMPRESSION_LEVEL_MIN, BKTR_COMPRESSION_LEVEL_MAX].
     u8 reserved[0x2];
-    u32 physical_size;
+    u32 physical_size;      ///< Compressed data size.
 } BucketTreeCompressedStorageEntry;
 
 NXDT_ASSERT(BucketTreeCompressedStorageEntry, BKTR_COMPRESSED_ENTRY_SIZE);

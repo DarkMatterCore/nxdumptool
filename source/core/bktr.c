@@ -23,7 +23,6 @@
 #include "nxdt_utils.h"
 #include "bktr.h"
 #include "aes.h"
-#include "lz4.h"
 
 /* Type definitions. */
 
@@ -522,7 +521,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
                 if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in AesCtrEx storage!", read_size, data_offset);
             } else {
                 /* Fill output buffer with zeroes (SparseStorage's ZeroStorage). */
-                memset(0, out, read_size);
+                memset(out, 0, read_size);
                 success = true;
             }
         }
@@ -762,6 +761,178 @@ static bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, NcaFs
 end:
     if (!success && compressed_table) free(compressed_table);
     
+    return success;
+}
+
+static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset)
+{
+    BucketTreeContext *ctx = visitor->bktr_ctx;
+    NcaFsSectionContext *nca_fs_ctx = ctx->nca_fs_ctx;
+    u64 compressed_storage_base_offset = nca_fs_ctx->hash_region.size;
+    
+    if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || ctx->substorages[0].type == BucketTreeSubStorageType_AesCtrEx || \
+        ctx->substorages[0].type >= BucketTreeSubStorageType_Compressed)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+    
+    /* Validate Compressed Storage entry. */
+    BucketTreeCompressedStorageEntry cur_entry = {0};
+    memcpy(&cur_entry, visitor->entry, sizeof(BucketTreeCompressedStorageEntry));
+    
+    if (!bktrIsOffsetWithinStorageRange(ctx, cur_entry.virtual_offset) || cur_entry.virtual_offset > offset || cur_entry.compression_type == BucketTreeCompressedStorageCompressionType_2 || \
+        cur_entry.compression_type > BucketTreeCompressedStorageCompressionType_LZ4 || (cur_entry.compression_type != BucketTreeCompressedStorageCompressionType_LZ4 && \
+        cur_entry.compression_level != 0) || (cur_entry.compression_type == BucketTreeCompressedStorageCompressionType_None && cur_entry.physical_size != BKTR_COMPRESSION_INVALID_PHYS_SIZE) || \
+        (cur_entry.compression_type != BucketTreeCompressedStorageCompressionType_None && cur_entry.physical_size == BKTR_COMPRESSION_INVALID_PHYS_SIZE) || \
+        (cur_entry.compression_type == BucketTreeCompressedStorageCompressionType_LZ4 && (cur_entry.compression_level < BKTR_COMPRESSION_LEVEL_MIN || \
+        cur_entry.compression_level > BKTR_COMPRESSION_LEVEL_MAX || !IS_ALIGNED(cur_entry.physical_offset, BKTR_COMPRESSION_PHYS_ALIGNMENT))))
+    {
+        LOG_DATA(&cur_entry, sizeof(BucketTreeCompressedStorageEntry), "Invalid Compressed Storage entry! (#1). Entry dump:");
+        return false;
+    }
+    
+    u64 cur_entry_offset = cur_entry.virtual_offset, next_entry_offset = 0;
+    bool moved = false, success = false;
+    
+    /* Check if we can retrieve the next entry. */
+    if (bktrVisitorCanMoveNext(visitor))
+    {
+        /* Retrieve the next entry. */
+        if (!bktrVisitorMoveNext(visitor))
+        {
+            LOG_MSG("Failed to retrieve next Compressed Storage entry!");
+            goto end;
+        }
+        
+        /* Validate Compressed Storage entry. */
+        BucketTreeCompressedStorageEntry *next_entry = (BucketTreeCompressedStorageEntry*)visitor->entry;
+        if (!bktrIsOffsetWithinStorageRange(ctx, next_entry->virtual_offset) || next_entry->compression_type == BucketTreeCompressedStorageCompressionType_2 || \
+            next_entry->compression_type > BucketTreeCompressedStorageCompressionType_LZ4 || \
+            (next_entry->compression_type != BucketTreeCompressedStorageCompressionType_LZ4 && next_entry->compression_level != 0) || \
+            (next_entry->compression_type == BucketTreeCompressedStorageCompressionType_None && next_entry->physical_size != BKTR_COMPRESSION_INVALID_PHYS_SIZE) || \
+            (next_entry->compression_type != BucketTreeCompressedStorageCompressionType_None && next_entry->physical_size == BKTR_COMPRESSION_INVALID_PHYS_SIZE) || \
+            (next_entry->compression_type == BucketTreeCompressedStorageCompressionType_LZ4 && (next_entry->compression_level < BKTR_COMPRESSION_LEVEL_MIN || \
+            next_entry->compression_level > BKTR_COMPRESSION_LEVEL_MAX || !IS_ALIGNED(next_entry->physical_offset, BKTR_COMPRESSION_PHYS_ALIGNMENT))))
+        {
+            LOG_DATA(next_entry, sizeof(BucketTreeCompressedStorageEntry), "Invalid Compressed Storage entry! (#2). Entry dump:");
+            goto end;
+        }
+        
+        /* Store next entry's virtual offset. */
+        next_entry_offset = next_entry->virtual_offset;
+        
+        /* Update variable. */
+        moved = true;
+    } else {
+        /* Set the next entry offset to the storage's end. */
+        next_entry_offset = ctx->end_offset;
+    }
+    
+    /* Verify next entry offset. */
+    if (next_entry_offset <= cur_entry_offset || offset >= next_entry_offset)
+    {
+        LOG_MSG("Invalid virtual offset for the Compressed Storage's next entry! (0x%lX).", next_entry_offset);
+        goto end;
+    }
+    
+    /* Verify read area size. */
+    if ((offset + read_size) > ctx->end_offset)
+    {
+        LOG_MSG("Error: read area exceeds Compressed Storage size!");
+        goto end;
+    }
+    
+    /* Perform read operation. */
+    if ((offset + read_size) <= next_entry_offset)
+    {
+        /* Read only within the current compressed storage entry. */
+        BucketTreeSubStorageReadParams params = {0};
+        
+        switch(cur_entry.compression_type)
+        {
+            case BucketTreeCompressedStorageCompressionType_None:
+            {
+                /* We can randomly access data that's not compressed. */
+                /* Let's just read what we need. */
+                const u64 data_offset = (compressed_storage_base_offset + (offset - cur_entry_offset + cur_entry.physical_offset));
+                bktrBucketInitializeSubStorageReadParams(&params, out, data_offset, read_size, 0, 0, false, ctx->storage_type);
+                
+                success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
+                if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in non-compressed entry!", read_size, data_offset);
+                
+                break;
+            }
+            case BucketTreeCompressedStorageCompressionType_Zero:
+            {
+                /* Fill output buffer with zeroes. */
+                memset(out, 0, read_size);
+                success = true;
+                break;
+            }
+            case BucketTreeCompressedStorageCompressionType_LZ4:
+            {
+                /* We can't randomly access data that's compressed. */
+                /* Let's be lazy and allocate memory for the full entry, read it and then decompress it. */
+                const u64 data_offset = (compressed_storage_base_offset + cur_entry.physical_offset);
+                const u64 compressed_data_size = cur_entry.physical_size;
+                const u64 decompressed_data_size = (next_entry_offset - cur_entry_offset);
+                const u64 buffer_size = LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(decompressed_data_size);
+                u8 *buffer = NULL, *read_ptr = NULL;
+                
+                u8 *buffer = calloc(1, buffer_size);
+                if (!buffer)
+                {
+                    LOG_MSG("Failed to allocate 0x%lX-byte long buffer for data decompression! (0x%lX).", buffer_size, decompressed_data_size);
+                    break;
+                }
+                
+                /* Adjust read pointer. This will let us use the same buffer for storing read data and decompressing it. */
+                read_ptr = (buffer + (buffer_size - compressed_data_size));
+                bktrBucketInitializeSubStorageReadParams(&params, read_ptr, data_offset, compressed_data_size, 0, 0, false, ctx->storage_type);
+                
+                /* Read compressed LZ4 block. */
+                if (!bktrReadSubStorage(&(ctx->substorages[0]), &params))
+                {
+                    LOG_MSG("Failed to read 0x%lX-byte long compressed block from offset 0x%lX!", compressed_data_size, data_offset);
+                    free(buffer);
+                    break;
+                }
+                
+                /* Decompress LZ4 block. */
+                int lz4_res = 0;
+                if ((lz4_res = LZ4_decompress_safe((char*)read_ptr, (char*)buffer, (int)compressed_data_size, (int)buffer_size)) != (int)decompressed_data_size)
+                {
+                    LOG_MSG("Failed to decompress 0x%lX-byte long compressed block! (0x%08X).", compressed_data_size, (u32)lz4_res);
+                    free(buffer);
+                    break;
+                }
+                
+                /* Copy the data we need. */
+                memcpy(out, buffer + (offset - cur_entry_offset), read_size);
+                
+                /* Free allocated buffer and update return value. */
+                free(buffer);
+                success = true;
+                
+                break;
+            }
+            default:
+                break;
+        }
+    } else {
+        /* Handle reads that span multiple compressed storage entries. */
+        if (moved) bktrVisitorMovePrevious(visitor);
+        
+        const u64 compressed_block_size = (next_entry_offset - offset);
+        
+        success = (bktrReadCompressedStorage(visitor, out, compressed_block_size, offset) && \
+                   bktrReadCompressedStorage(visitor, (u8*)out + compressed_block_size, read_size - compressed_block_size, offset + compressed_block_size));
+        
+        if (!success) LOG_MSG("Failed to read 0x%lX bytes block from multiple Compressed Storage entries at offset 0x%lX!", read_size, offset);
+    }
+    
+end:
     return success;
 }
 
