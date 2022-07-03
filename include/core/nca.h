@@ -498,9 +498,9 @@ bool ncaGetFsSectionHashTargetProperties(NcaFsSectionContext *ctx, u64 *out_offs
 /// If dealing with Patch RomFS sections, this function should only be used when *not* reading BKTR AesCtrEx storage data. Use ncaReadAesCtrExStorageFromBktrSection() for that.
 bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 
-/// Reads decrypted BKTR AesCtrEx storage data from a NCA Patch RomFS section using an input context and an AesCtrEx CTR value.
+/// Reads plaintext AesCtrEx storage data from a NCA Patch RomFS section using an input context and an AesCtrEx CTR value.
 /// Input offset must be relative to the start of the NCA FS section.
-bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val);
+bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt);
 
 /// Generates HierarchicalSha256 FS section patch data, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the last HierarchicalSha256 hash region (actual underlying FS).

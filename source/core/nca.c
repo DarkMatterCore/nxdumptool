@@ -63,7 +63,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx);
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 static bool ncaFsSectionCheckHashRegionAccess(NcaFsSectionContext *ctx, u64 offset, u64 size, u64 *out_chunk_size);
 
-static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val);
+static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt);
 
 static void ncaCalculateLayerHash(void *dst, const void *src, size_t size, bool use_sha3);
 static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, void *out, bool is_integrity_patch);
@@ -257,10 +257,10 @@ bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 of
     return ret;
 }
 
-bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val)
+bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt)
 {
     bool ret = false;
-    SCOPED_LOCK(&g_ncaCryptoBufferMutex) ret = _ncaReadAesCtrExStorageFromBktrSection(ctx, out, read_size, offset, ctr_val);
+    SCOPED_LOCK(&g_ncaCryptoBufferMutex) ret = _ncaReadAesCtrExStorageFromBktrSection(ctx, out, read_size, offset, ctr_val, decrypt);
     return ret;
 }
 
@@ -1273,7 +1273,7 @@ static bool ncaFsSectionCheckHashRegionAccess(NcaFsSectionContext *ctx, u64 offs
     }
 }
 
-static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val)
+static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt)
 {
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_idx >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
         ctx->section_type != NcaFsSectionType_PatchRomFs || (ctx->encryption_type != NcaEncryptionType_None && ctx->encryption_type != NcaEncryptionType_AesCtrEx && \
@@ -1299,7 +1299,7 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
     }
     
     /* Optimization for reads that are aligned to the AES-CTR sector size. */
-    if (!(content_offset % AES_BLOCK_SIZE) && !(read_size % AES_BLOCK_SIZE))
+    if (!decrypt || (!(content_offset % AES_BLOCK_SIZE) && !(read_size % AES_BLOCK_SIZE)))
     {
         /* Read data. */
         if (!ncaReadContentFile(nca_ctx, out, read_size, content_offset))
@@ -1308,10 +1308,13 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
             goto end;
         }
         
-        /* Decrypt data */
-        aes128CtrUpdatePartialCtrEx(ctx->ctr, ctr_val, content_offset);
-        aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
-        aes128CtrCrypt(&(ctx->ctr_ctx), out, out, read_size);
+        /* Decrypt data, if needed. */
+        if (decrypt)
+        {
+            aes128CtrUpdatePartialCtrEx(ctx->ctr, ctr_val, content_offset);
+            aes128CtrContextResetCtr(&(ctx->ctr_ctx), ctx->ctr);
+            aes128CtrCrypt(&(ctx->ctr_ctx), out, out, read_size);
+        }
         
         ret = true;
         goto end;
@@ -1342,7 +1345,7 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
     /* Copy decrypted data. */
     memcpy(out, g_ncaCryptoBuffer + data_start_offset, out_chunk_size);
     
-    ret = (block_size > NCA_CRYPTO_BUFFER_SIZE ? _ncaReadAesCtrExStorageFromBktrSection(ctx, (u8*)out + out_chunk_size, read_size - out_chunk_size, offset + out_chunk_size, ctr_val) : true);
+    ret = (block_size > NCA_CRYPTO_BUFFER_SIZE ? _ncaReadAesCtrExStorageFromBktrSection(ctx, (u8*)out + out_chunk_size, read_size - out_chunk_size, offset + out_chunk_size, ctr_val, decrypt) : true);
     
 end:
     return ret;
