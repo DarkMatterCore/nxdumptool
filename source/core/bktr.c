@@ -682,7 +682,7 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
         return false;
     }
     
-    BucketTreeContext *ctx = substorage->bktr_ctx;
+    BucketTreeContext *ctx = (BucketTreeContext*)substorage->bktr_ctx;
     NcaFsSectionContext *nca_fs_ctx = substorage->nca_fs_ctx;
     bool success = false;
     
