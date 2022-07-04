@@ -46,9 +46,15 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     /* Free output context beforehand. */
     romfsFreeContext(out);
     
-    /* Fill context. */
-    out->nca_fs_ctx = nca_fs_ctx;
+    /* Initialize NCA storage context. */
+    NcaStorageContext *storage_ctx = &(out->storage_ctx);
+    if (!ncaStorageInitializeContext(storage_ctx, nca_fs_ctx))
+    {
+        LOG_MSG("Failed to initialize NCA storage context!");
+        goto end;
+    }
     
+    /* Get RomFS offset and size. */
     if (!ncaGetFsSectionHashTargetProperties(nca_fs_ctx, &(out->offset), &(out->size)))
     {
         LOG_MSG("Failed to get target hash layer properties!");
@@ -56,7 +62,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     }
     
     /* Read RomFS header. */
-    if (!ncaReadFsSection(nca_fs_ctx, &(out->header), sizeof(RomFileSystemHeader), out->offset))
+    if (!ncaStorageRead(storage_ctx, &(out->header), sizeof(RomFileSystemHeader), out->offset))
     {
         LOG_MSG("Failed to read RomFS header!");
         goto end;
@@ -88,7 +94,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         goto end;
     }
     
-    if (!ncaReadFsSection(nca_fs_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
+    if (!ncaStorageRead(storage_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
     {
         LOG_MSG("Failed to read RomFS directory entries table!");
         goto end;
@@ -112,7 +118,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         goto end;
     }
     
-    if (!ncaReadFsSection(nca_fs_ctx, out->file_table, out->file_table_size, out->offset + file_table_offset))
+    if (!ncaStorageRead(storage_ctx, out->file_table, out->file_table_size, out->offset + file_table_offset))
     {
         LOG_MSG("Failed to read RomFS file entries table!");
         goto end;
@@ -143,14 +149,14 @@ end:
 
 bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->nca_fs_ctx || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
     /* Read filesystem data. */
-    if (!ncaReadFsSection(ctx->nca_fs_ctx, out, read_size, ctx->offset + offset))
+    if (!ncaStorageRead(&(ctx->storage_ctx), out, read_size, ctx->offset + offset))
     {
         LOG_MSG("Failed to read RomFS data!");
         return false;
@@ -304,14 +310,16 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     char *path_dup = NULL, *filename = NULL;
     RomFileSystemFileEntry *file_entry = NULL;
     RomFileSystemDirectoryEntry *dir_entry = NULL;
+    NcaContext *nca_ctx = NULL;
     
-    if (!ctx || !ctx->file_table || !ctx->file_table_size || !ctx->nca_fs_ctx || !ctx->nca_fs_ctx->nca_ctx || !path || *path != '/' || (path_len = strlen(path)) <= 1)
+    if (!ctx || !ctx->file_table || !ctx->file_table_size || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !(nca_ctx = (NcaContext*)ctx->storage_ctx.nca_fs_ctx->nca_ctx) || \
+        !path || *path != '/' || (path_len = strlen(path)) <= 1)
     {
         LOG_MSG("Invalid parameters!");
         return NULL;
     }
     
-    content_type = ((NcaContext*)ctx->nca_fs_ctx->nca_ctx)->content_type;
+    content_type = nca_ctx->content_type;
     
     /* Duplicate path. */
     if (!(path_dup = strdup(path)))
@@ -496,29 +504,31 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
 
 bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, const void *data, u64 data_size, u64 data_offset, RomFileSystemFileEntryPatch *out)
 {
-    if (!ctx || !ctx->nca_fs_ctx || !ctx->body_offset || (ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || !file_entry || \
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->storage_ctx.base_storage_type != NcaStorageBaseStorageType_Regular || !ctx->body_offset || \
+        (ctx->storage_ctx.nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->storage_ctx.nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || !file_entry || \
         !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > file_entry->size || !out)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
-    bool success = false;
+    NcaFsSectionContext *nca_fs_ctx = ctx->storage_ctx.nca_fs_ctx;
     u64 fs_offset = (ctx->body_offset + file_entry->offset + data_offset);
+    bool success = false;
     
-    if (ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs)
+    if (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs)
     {
         out->use_old_format_patch = true;
-        success = ncaGenerateHierarchicalSha256Patch(ctx->nca_fs_ctx, data, data_size, fs_offset, &(out->old_format_patch));
+        success = ncaGenerateHierarchicalSha256Patch(nca_fs_ctx, data, data_size, fs_offset, &(out->old_format_patch));
     } else {
         out->use_old_format_patch = false;
-        success = ncaGenerateHierarchicalIntegrityPatch(ctx->nca_fs_ctx, data, data_size, fs_offset, &(out->cur_format_patch));
+        success = ncaGenerateHierarchicalIntegrityPatch(nca_fs_ctx, data, data_size, fs_offset, &(out->cur_format_patch));
     }
     
     out->written = false;
     
     if (!success) LOG_MSG("Failed to generate 0x%lX bytes Hierarchical%s patch at offset 0x%lX for RomFS file entry!", data_size, \
-                          ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? "Sha256" : "Integrity", fs_offset);
+                          nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? "Sha256" : "Integrity", fs_offset);
     
     return success;
 }

@@ -226,8 +226,8 @@ bool pfsGetTotalDataSize(PartitionFileSystemContext *ctx, u64 *out_size)
 
 bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out)
 {
-    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !ctx->header_size || !ctx->header || !fs_entry || !fs_entry->size || \
-        (fs_entry->offset + fs_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > fs_entry->size || !out)
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->storage_ctx.base_storage_type != NcaStorageBaseStorageType_Regular || !ctx->header_size || !ctx->header || \
+        !fs_entry || !fs_entry->size || (fs_entry->offset + fs_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > fs_entry->size || !out)
     {
         LOG_MSG("Invalid parameters!");
         return false;

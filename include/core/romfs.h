@@ -24,7 +24,7 @@
 #ifndef __ROMFS_H__
 #define __ROMFS_H__
 
-#include "nca.h"
+#include "nca_storage.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -107,7 +107,7 @@ typedef struct {
 NXDT_ASSERT(RomFileSystemFileEntry, 0x20);
 
 typedef struct {
-    NcaFsSectionContext *nca_fs_ctx;                ///< Used to read NCA FS section data.
+    NcaStorageContext storage_ctx;                  ///< Used to read NCA FS section data.
     u64 offset;                                     ///< RomFS offset (relative to the start of the NCA FS section).
     u64 size;                                       ///< RomFS size.
     RomFileSystemHeader header;                     ///< RomFS header.
@@ -174,6 +174,7 @@ bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEnt
 NX_INLINE void romfsFreeContext(RomFileSystemContext *ctx)
 {
     if (!ctx) return;
+    ncaStorageFreeContext(&(ctx->storage_ctx));
     if (ctx->dir_table) free(ctx->dir_table);
     if (ctx->file_table) free(ctx->file_table);
     memset(ctx, 0, sizeof(RomFileSystemContext));
@@ -193,15 +194,17 @@ NX_INLINE RomFileSystemFileEntry *romfsGetFileEntryByOffset(RomFileSystemContext
 
 NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx, RomFileSystemFileEntryPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !ctx->nca_fs_ctx || !patch || (!patch->use_old_format_patch && ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
-        (patch->use_old_format_patch && ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !patch || (!patch->use_old_format_patch && ctx->storage_ctx.nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
+        (patch->use_old_format_patch && ctx->storage_ctx.nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
+    
+    NcaContext *nca_ctx = (NcaContext*)ctx->storage_ctx.nca_fs_ctx->nca_ctx;
     
     if (patch->use_old_format_patch)
     {
-        ncaWriteHierarchicalSha256PatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, &(patch->old_format_patch), buf, buf_size, buf_offset);
+        ncaWriteHierarchicalSha256PatchToMemoryBuffer(nca_ctx, &(patch->old_format_patch), buf, buf_size, buf_offset);
         patch->written = patch->old_format_patch.written;
     } else {
-        ncaWriteHierarchicalIntegrityPatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, &(patch->cur_format_patch), buf, buf_size, buf_offset);
+        ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(nca_ctx, &(patch->cur_format_patch), buf, buf_size, buf_offset);
         patch->written = patch->cur_format_patch.written;
     }
 }
