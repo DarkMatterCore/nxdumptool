@@ -21,7 +21,6 @@
 
 #include "nxdt_utils.h"
 #include "legal_info.h"
-#include "romfs.h"
 
 bool legalInfoInitializeContext(LegalInfoContext *out, NcaContext *nca_ctx)
 {

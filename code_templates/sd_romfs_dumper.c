@@ -20,7 +20,7 @@
  */
 
 #include "nxdt_utils.h"
-#include "bktr.h"
+#include "romfs.h"
 #include "gamecard.h"
 #include "title.h"
 
@@ -37,7 +37,6 @@ typedef struct
 {
     FILE *fd;
     RomFileSystemContext *romfs_ctx;
-    BktrContext *bktr_ctx;
     void *data;
     size_t data_size;
     size_t data_written;
@@ -87,7 +86,7 @@ static void consolePrint(const char *text, ...)
 static void read_thread_func(void *arg)
 {
     ThreadSharedData *shared_data = (ThreadSharedData*)arg;
-    if (!shared_data || shared_data->fd || !shared_data->data || !shared_data->total_size || (!shared_data->romfs_ctx && !shared_data->bktr_ctx))
+    if (!shared_data || shared_data->fd || !shared_data->data || !shared_data->total_size || !shared_data->romfs_ctx)
     {
         shared_data->read_error = true;
         goto end;
@@ -101,7 +100,7 @@ static void read_thread_func(void *arg)
     }
     
     u64 file_table_offset = 0;
-    u64 file_table_size = (shared_data->bktr_ctx ? shared_data->bktr_ctx->patch_romfs_ctx.file_table_size : shared_data->romfs_ctx->file_table_size);
+    u64 file_table_size = shared_data->romfs_ctx->file_table_size;
     RomFileSystemFileEntry *file_entry = NULL;
     
     char path[FS_MAX_PATH] = {0};
@@ -130,15 +129,8 @@ static void read_thread_func(void *arg)
         }
         
         /* Retrieve RomFS file entry information. */
-        if (shared_data->bktr_ctx)
-        {
-            shared_data->read_error = (!(file_entry = bktrGetFileEntryByOffset(shared_data->bktr_ctx, file_table_offset)) || \
-                                       !bktrGeneratePathFromFileEntry(shared_data->bktr_ctx, file_entry, path + 11, FS_MAX_PATH - 11, RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly));
-        } else {
-            shared_data->read_error = (!(file_entry = romfsGetFileEntryByOffset(shared_data->romfs_ctx, file_table_offset)) || \
-                                       !romfsGeneratePathFromFileEntry(shared_data->romfs_ctx, file_entry, path + 11, FS_MAX_PATH - 11, RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly));
-        }
-        
+        shared_data->read_error = (!(file_entry = romfsGetFileEntryByOffset(shared_data->romfs_ctx, file_table_offset)) || \
+                                    !romfsGeneratePathFromFileEntry(shared_data->romfs_ctx, file_entry, path + 11, FS_MAX_PATH - 11, RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly));
         if (shared_data->read_error)
         {
             condvarWakeAll(&g_writeCondvar);
@@ -168,8 +160,7 @@ static void read_thread_func(void *arg)
             }
             
             /* Read current file data chunk. */
-            shared_data->read_error = (shared_data->bktr_ctx ? !bktrReadFileEntryData(shared_data->bktr_ctx, file_entry, buf, blksize, offset) : \
-                                       !romfsReadFileEntryData(shared_data->romfs_ctx, file_entry, buf, blksize, offset));
+            shared_data->read_error = !romfsReadFileEntryData(shared_data->romfs_ctx, file_entry, buf, blksize, offset);
             if (shared_data->read_error)
             {
                 condvarWakeAll(&g_writeCondvar);
@@ -406,7 +397,6 @@ int main(int argc, char *argv[])
     NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
     
     RomFileSystemContext romfs_ctx = {0};
-    BktrContext bktr_ctx = {0};
     
     ThreadSharedData shared_data = {0};
     Thread read_thread = {0}, write_thread = {0};
@@ -586,9 +576,18 @@ int main(int argc, char *argv[])
         goto out2;
     }
     
-    if (user_app_data.patch_info)
+    TitleInfo *latest_patch = NULL;
+    if (user_app_data.patch_info) latest_patch = get_latest_patch_info(user_app_data.patch_info);
+    
+    if (base_nca_ctx->fs_ctx[1].has_sparse_layer && (!latest_patch || latest_patch->version.value < user_app_data.app_info->version.value))
     {
-        TitleInfo *latest_patch = get_latest_patch_info(user_app_data.patch_info);
+        consolePrint("base app is a sparse title and no v%u or greater update could be found\n", user_app_data.app_info->version.value);
+        goto out2;
+    }
+    
+    if (latest_patch)
+    {
+        consolePrint("using patch romfs with update v%u\n", latest_patch->version.value);
         
         if (!ncaInitializeContext(update_nca_ctx, latest_patch->storage_id, (latest_patch->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
             titleGetContentInfoByTypeAndIdOffset(latest_patch, NcmContentType_Program, program_id_offset), latest_patch->version.value, NULL))
@@ -597,28 +596,25 @@ int main(int argc, char *argv[])
             goto out2;
         }
         
-        if (!bktrInitializeContext(&bktr_ctx, &(base_nca_ctx->fs_ctx[1]), &(update_nca_ctx->fs_ctx[1])))
+        if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1]), &(update_nca_ctx->fs_ctx[1])))
         {
-            consolePrint("bktr initialize ctx failed\n");
+            consolePrint("romfs initialize ctx failed (update)\n");
             goto out2;
         }
-        
-        shared_data.bktr_ctx = &bktr_ctx;
-        bktrGetTotalDataSize(&bktr_ctx, &(shared_data.total_size));
-        
-        consolePrint("bktr initialize ctx succeeded\n");
     } else {
-        if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1])))
+        consolePrint("using base romfs only\n");
+        
+        if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1]), NULL))
         {
-            consolePrint("romfs initialize ctx failed\n");
+            consolePrint("romfs initialize ctx failed (base)\n");
             goto out2;
         }
-        
-        shared_data.romfs_ctx = &romfs_ctx;
-        romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
-        
-        consolePrint("romfs initialize ctx succeeded\n");
     }
+    
+    shared_data.romfs_ctx = &romfs_ctx;
+    romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
+    
+    consolePrint("romfs initialize ctx succeeded\n");
     
     shared_data.fd = NULL;
     shared_data.data = buf;
@@ -718,7 +714,6 @@ out2:
     }
     
     romfsFreeContext(&romfs_ctx);
-    bktrFreeContext(&bktr_ctx);
     
     if (update_nca_ctx) free(update_nca_ctx);
     

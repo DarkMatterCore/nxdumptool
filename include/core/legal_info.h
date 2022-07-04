@@ -24,7 +24,7 @@
 #ifndef __LEGAL_INFO_H__
 #define __LEGAL_INFO_H__
 
-#include "nca.h"
+#include "romfs.h"
 
 #ifdef __cplusplus
 extern "C" {

@@ -31,14 +31,14 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
 {
     u64 dir_table_offset = 0, file_table_offset = 0;
     NcaContext *base_nca_ctx = NULL, *patch_nca_ctx = NULL;
-    bool dump_fs_header = false, is_patch = (patch_nca_fs_ctx != NULL), success = false;
+    bool dump_fs_header = false, success = false;
     
-    if (!out || !base_nca_fs_ctx || !base_nca_fs_ctx->enabled || (base_nca_fs_ctx->has_sparse_layer && !is_patch) || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || \
+    if (!out || !base_nca_fs_ctx || !base_nca_fs_ctx->enabled || (base_nca_fs_ctx->has_sparse_layer && !patch_nca_fs_ctx) || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || \
         (base_nca_ctx->format_version == NcaVersion_Nca0 && (base_nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || \
         base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256)) || (base_nca_ctx->format_version != NcaVersion_Nca0 && \
         (base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || (base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegrity && \
         base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegritySha3))) || (base_nca_ctx->rights_id_available && !base_nca_ctx->titlekey_retrieved) || \
-        (is_patch && (!patch_nca_fs_ctx->enabled || !(patch_nca_ctx = (NcaContext*)patch_nca_fs_ctx->nca_ctx) || patch_nca_ctx->format_version != base_nca_ctx->format_version || \
+        (patch_nca_fs_ctx && (!patch_nca_fs_ctx->enabled || !(patch_nca_ctx = (NcaContext*)patch_nca_fs_ctx->nca_ctx) || patch_nca_ctx->format_version != base_nca_ctx->format_version || \
         patch_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || (patch_nca_ctx->rights_id_available && !patch_nca_ctx->titlekey_retrieved))))
     {
         LOG_MSG("Invalid parameters!");
@@ -58,9 +58,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
         goto end;
     }
     
-    out->is_patch = is_patch;
-    
-    if (is_patch)
+    if (patch_nca_fs_ctx)
     {
         /* Initialize base NCA storage context. */
         if (!ncaStorageInitializeContext(patch_storage_ctx, patch_nca_fs_ctx))
@@ -77,9 +75,11 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
         }
         
         /* Set default NCA FS storage context. */
+        out->is_patch = true;
         out->default_storage_ctx = patch_storage_ctx;
     } else {
         /* Set default NCA FS storage context. */
+        out->is_patch = false;
         out->default_storage_ctx = base_storage_ctx;
     }
     

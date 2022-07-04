@@ -1,7 +1,7 @@
 todo:
     
-    nca: support for sparse sections
-    nca: support for compressed fs sections
+    nca / nca_storage / bktr: re-test support for all section types
+    nca: add function to retrieve a pointer to a nca fs ctx based on section type? (e.g. like titleGetContentInfoByTypeAndIdOffset)
     
     log: verbosity levels
     log: nxlink output for advanced users
@@ -17,8 +17,6 @@ todo:
     pfs0: functions to display filelist
     
     romfs: functions to display filelist
-    
-    bktr: functions to display filelist (wrappers for romfs functions tbh)
     
     usb: change buffer size?
     usb: change chunk size?

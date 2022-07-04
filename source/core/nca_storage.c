@@ -119,7 +119,7 @@ bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStora
         !(patch_nca_ctx = (NcaContext*)patch_ctx->nca_fs_ctx->nca_ctx) || !(base_nca_ctx = (NcaContext*)base_ctx->nca_fs_ctx->nca_ctx) || \
         patch_ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || base_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
         patch_nca_ctx->header.program_id != base_nca_ctx->header.program_id || patch_nca_ctx->header.content_type != base_nca_ctx->header.content_type || \
-        patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version <= base_nca_ctx->title_version || !patch_ctx->indirect_storage)
+        patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version < base_nca_ctx->title_version || !patch_ctx->indirect_storage)
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -170,26 +170,19 @@ bool ncaStorageGetHashTargetExtents(NcaStorageContext *ctx, u64 *out_offset, u64
     switch(ctx->base_storage_type)
     {
         case NcaStorageBaseStorageType_Regular:
+        case NcaStorageBaseStorageType_Sparse:
+        case NcaStorageBaseStorageType_Indirect:
         {
-            /* Just provide the NCA FS section hash target extents. */
+            /* Regular: just provide the NCA FS section hash target extents -- they already represent physical information. */
+            /* Sparse/Indirect: the base storage's virtual section encompasses the hash layers, too. The NCA FS section hash target extents represent valid virtual information. */
             if (out_offset) *out_offset = hash_target_offset;
             if (out_size) *out_size = hash_target_size;
             break;
         }
-        case NcaStorageBaseStorageType_Sparse:
-        case NcaStorageBaseStorageType_Indirect:
-        {
-            /* Sparse/Indirect storages encompass the entire virtual section. */
-            /* Let's substract the NCA FS section hash target offset from the storage's virtual end offset. */
-            BucketTreeContext *bktr_ctx = (ctx->base_storage_type == NcaStorageBaseStorageType_Sparse ? ctx->sparse_storage : ctx->indirect_storage);
-            if (out_offset) *out_offset = hash_target_offset;
-            if (out_size) *out_size = (bktr_ctx->end_offset - hash_target_offset);
-            break;
-        }
         case NcaStorageBaseStorageType_Compressed:
         {
-            /* Compressed sections already reference the hash target section, so there's no need calculate the full size. */
-            if (out_offset) *out_offset = 0;
+            /* Compressed sections already point to the hash target layer. */
+            if (out_offset) *out_offset = ctx->compressed_storage->start_offset;
             if (out_size) *out_size = ctx->compressed_storage->end_offset;
             break;
         }
@@ -232,7 +225,7 @@ bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset
             break;
     }
     
-    if (!success) LOG_MSG("Failed to read 0x%lX-byte long block from offset 0x%lX in base storage! (%u).", read_size, offset, ctx->base_storage_type);
+    if (!success) LOG_MSG("Failed to read 0x%lX-byte long block from offset 0x%lX in base storage! (type: %u).", read_size, offset, ctx->base_storage_type);
     
     return success;
 }

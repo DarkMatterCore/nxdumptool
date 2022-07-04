@@ -123,7 +123,7 @@ NX_INLINE bool bktrIsExistOffsetL2OnL1(BucketTreeContext *ctx);
 static void bktrInitializeStorageNode(BucketTreeStorageNode *out, u64 entry_size, u32 entry_count);
 static void bktrStorageNodeFind(BucketTreeStorageNode *storage_node, const BucketTreeNodeHeader *node_header, u64 virtual_offset);
 NX_INLINE BucketTreeStorageNodeOffset bktrStorageNodeOffsetAdd(BucketTreeStorageNodeOffset *ofs, u64 value);
-NX_INLINE u64 bktrStorageNodeOffsetSubstract(BucketTreeStorageNodeOffset *ofs1, BucketTreeStorageNodeOffset *ofs2);
+NX_INLINE const u64 bktrStorageNodeOffsetGetEntryVirtualOffset(const BucketTreeNodeHeader *node_header, const BucketTreeStorageNodeOffset *ofs);
 
 NX_INLINE bool bktrVisitorIsValid(BucketTreeVisitor *visitor);
 NX_INLINE bool bktrVisitorCanMoveNext(BucketTreeVisitor *visitor);
@@ -1104,21 +1104,27 @@ static bool bktrGetTreeNodeEntryIndex(const u64 *start_ptr, const u64 *end_ptr, 
     }
     
     u64 *pos = (u64*)start_ptr;
-    bool found = false;
+    u32 index = 0;
     
     while(pos < end_ptr)
     {
-        if (start_ptr < pos && *pos > virtual_offset)
+        if (start_ptr < pos)
         {
-            *out_index = ((u32)(pos - start_ptr) - 1);
-            found = true;
-            break;
+            /* Stop looking if we have found the right offset node. */
+            if (*pos > virtual_offset) break;
+            
+            /* Increment index. */
+            index++;
         }
         
+        /* Increment offset node pointer. */
         pos++;
     }
     
-    return found;
+    /* Update output index. */
+    *out_index = index;
+    
+    return true;
 }
 
 static bool bktrGetEntryNodeEntryIndex(const BucketTreeNodeHeader *node_header, u64 entry_size, u64 virtual_offset, u32 *out_index)
@@ -1299,25 +1305,41 @@ static void bktrInitializeStorageNode(BucketTreeStorageNode *out, u64 entry_size
 
 static void bktrStorageNodeFind(BucketTreeStorageNode *storage_node, const BucketTreeNodeHeader *node_header, u64 virtual_offset)
 {
-    u32 end = storage_node->count;
-    BucketTreeStorageNodeOffset pos = storage_node->start;
-    
-    while(end > 0)
+    /* Check for edge case, short circuit. */
+    if (storage_node->count == 1)
     {
-        u32 half = (end / 2);
-        BucketTreeStorageNodeOffset mid = bktrStorageNodeOffsetAdd(&pos, half);
-        
-        const u64 offset = *((const u64*)((const u8*)node_header + mid.offset));
-        if (offset <= virtual_offset)
-        {
-            pos = bktrStorageNodeOffsetAdd(&mid, 1);
-            end -= (half + 1);
-        } else {
-            end = half;
-        }
+        storage_node->index = 0;
+        return;
     }
     
-    storage_node->index = ((u32)bktrStorageNodeOffsetSubstract(&pos, &(storage_node->start)) - 1);
+    /* Perform a binary search. */
+    u32 entry_count = storage_node->count, low = 0, high = (entry_count - 1);
+    BucketTreeStorageNodeOffset *start = &(storage_node->start);
+    
+    while(low <= high)
+    {
+        /* Get the offset to the middle entry within our current lookup range. */
+        u32 half = ((low + high) / 2);
+        BucketTreeStorageNodeOffset mid = bktrStorageNodeOffsetAdd(start, half);
+        
+        /* Check middle entry's virtual offset. */
+        if (bktrStorageNodeOffsetGetEntryVirtualOffset(node_header, &mid) > virtual_offset)
+        {
+            /* Update our upper limit. */
+            high = (half - 1);
+        } else {
+            /* Check for success. */
+            BucketTreeStorageNodeOffset pos = bktrStorageNodeOffsetAdd(&mid, 1);
+            if (half == (entry_count - 1) || bktrStorageNodeOffsetGetEntryVirtualOffset(node_header, &pos) > virtual_offset)
+            {
+                storage_node->index = half;
+                break;
+            }
+            
+            /* Update our lower limit. */
+            low = (half + 1);
+        }
+    }
 }
 
 NX_INLINE BucketTreeStorageNodeOffset bktrStorageNodeOffsetAdd(BucketTreeStorageNodeOffset *ofs, u64 value)
@@ -1326,9 +1348,9 @@ NX_INLINE BucketTreeStorageNodeOffset bktrStorageNodeOffsetAdd(BucketTreeStorage
     return out;
 }
 
-NX_INLINE u64 bktrStorageNodeOffsetSubstract(BucketTreeStorageNodeOffset *ofs1, BucketTreeStorageNodeOffset *ofs2)
+NX_INLINE const u64 bktrStorageNodeOffsetGetEntryVirtualOffset(const BucketTreeNodeHeader *node_header, const BucketTreeStorageNodeOffset *ofs)
 {
-    return (u64)((ofs1->offset - ofs2->offset) / ofs1->stride);
+    return *((const u64*)((const u8*)node_header + ofs->offset));
 }
 
 NX_INLINE bool bktrVisitorIsValid(BucketTreeVisitor *visitor)
@@ -1356,12 +1378,12 @@ static bool bktrVisitorMoveNext(BucketTreeVisitor *visitor)
     
     BucketTreeContext *ctx = visitor->bktr_ctx;
     BucketTreeEntrySetHeader *entry_set = &(visitor->entry_set);
+    u32 entry_index = (visitor->entry_index + 1);
     bool success = false;
     
     /* Invalidate index. */
     visitor->entry_index = UINT32_MAX;
     
-    u32 entry_index = (visitor->entry_index + 1);
     if (entry_index == entry_set->header.count)
     {
         /* We have reached the end of this entry node. Let's try to retrieve the first entry from the next one. */
@@ -1428,12 +1450,12 @@ static bool bktrVisitorMovePrevious(BucketTreeVisitor *visitor)
     
     BucketTreeContext *ctx = visitor->bktr_ctx;
     BucketTreeEntrySetHeader *entry_set = &(visitor->entry_set);
+    u32 entry_index = visitor->entry_index;
     bool success = false;
     
     /* Invalidate index. */
     visitor->entry_index = UINT32_MAX;
     
-    u32 entry_index = visitor->entry_index;
     if (entry_index == 0)
     {
         /* We have reached the start of this entry node. Let's try to retrieve the last entry from the previous one. */

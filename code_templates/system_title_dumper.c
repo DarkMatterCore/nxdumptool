@@ -167,7 +167,7 @@ static void dumpRomFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
     size_t path_len = 0;
     *path = '\0';
     
-    if (!romfsInitializeContext(&romfs_ctx, nca_fs_ctx))
+    if (!romfsInitializeContext(&romfs_ctx, nca_fs_ctx, NULL))
     {
         consolePrint("romfs initialize ctx failed!\n");
         goto end;
