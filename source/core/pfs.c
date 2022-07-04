@@ -54,6 +54,8 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
         goto end;
     }
     
+    out->nca_fs_ctx = storage_ctx->nca_fs_ctx;
+    
     /* Get Partition FS offset and size. */
     if (!ncaGetFsSectionHashTargetProperties(nca_fs_ctx, &(out->offset), &(out->size)))
     {
@@ -235,7 +237,7 @@ bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemE
     
     u64 partition_offset = (ctx->header_size + fs_entry->offset + data_offset);
     
-    if (!ncaGenerateHierarchicalSha256Patch(ctx->storage_ctx.nca_fs_ctx, data, data_size, partition_offset, out))
+    if (!ncaGenerateHierarchicalSha256Patch(ctx->nca_fs_ctx, data, data_size, partition_offset, out))
     {
         LOG_MSG("Failed to generate 0x%lX bytes HierarchicalSha256 patch at offset 0x%lX for Partition FS entry!", data_size, partition_offset);
         return false;

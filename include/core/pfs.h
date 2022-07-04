@@ -53,6 +53,7 @@ NXDT_ASSERT(PartitionFileSystemEntry, 0x18);
 /// Used with Partition FS sections from NCAs.
 typedef struct {
     NcaStorageContext storage_ctx;      ///< Used to read NCA FS section data.
+    NcaFsSectionContext *nca_fs_ctx;    ///< Same as storage_ctx.nca_fs_ctx. Placed here for convenience.
     u64 offset;                         ///< Partition offset (relative to the start of the NCA FS section).
     u64 size;                           ///< Partition size.
     bool is_exefs;                      ///< ExeFS flag.
@@ -154,8 +155,8 @@ NX_INLINE PartitionFileSystemEntry *pfsGetEntryByName(PartitionFileSystemContext
 
 NX_INLINE void pfsWriteEntryPatchToMemoryBuffer(PartitionFileSystemContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx))) return;
-    ncaWriteHierarchicalSha256PatchToMemoryBuffer((NcaContext*)ctx->storage_ctx.nca_fs_ctx->nca_ctx, patch, buf, buf_size, buf_offset);
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->nca_fs_ctx != ctx->storage_ctx.nca_fs_ctx) return;
+    ncaWriteHierarchicalSha256PatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, patch, buf, buf_size, buf_offset);
 }
 
 NX_INLINE void pfsFreeEntryPatch(NcaHierarchicalSha256Patch *patch)

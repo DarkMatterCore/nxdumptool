@@ -108,6 +108,7 @@ NXDT_ASSERT(RomFileSystemFileEntry, 0x20);
 
 typedef struct {
     NcaStorageContext storage_ctx;                  ///< Used to read NCA FS section data.
+    NcaFsSectionContext *nca_fs_ctx;                ///< Same as storage_ctx.nca_fs_ctx. Placed here for convenience.
     u64 offset;                                     ///< RomFS offset (relative to the start of the NCA FS section).
     u64 size;                                       ///< RomFS size.
     RomFileSystemHeader header;                     ///< RomFS header.
@@ -194,10 +195,11 @@ NX_INLINE RomFileSystemFileEntry *romfsGetFileEntryByOffset(RomFileSystemContext
 
 NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx, RomFileSystemFileEntryPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !patch || (!patch->use_old_format_patch && ctx->storage_ctx.nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
-        (patch->use_old_format_patch && ctx->storage_ctx.nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->nca_fs_ctx != ctx->storage_ctx.nca_fs_ctx || !patch || \
+        (!patch->use_old_format_patch && ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
+        (patch->use_old_format_patch && ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
     
-    NcaContext *nca_ctx = (NcaContext*)ctx->storage_ctx.nca_fs_ctx->nca_ctx;
+    NcaContext *nca_ctx = (NcaContext*)ctx->nca_fs_ctx->nca_ctx;
     
     if (patch->use_old_format_patch)
     {

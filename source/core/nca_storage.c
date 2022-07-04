@@ -99,6 +99,9 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
         out->base_storage_type = NcaStorageBaseStorageType_Compressed;
     }
     
+    /* Update output context. */
+    out->nca_fs_ctx = nca_fs_ctx;
+    
     /* Update return value. */
     success = true;
     

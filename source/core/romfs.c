@@ -54,6 +54,8 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         goto end;
     }
     
+    out->nca_fs_ctx = storage_ctx->nca_fs_ctx;
+    
     /* Get RomFS offset and size. */
     if (!ncaGetFsSectionHashTargetProperties(nca_fs_ctx, &(out->offset), &(out->size)))
     {
@@ -312,7 +314,7 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     RomFileSystemDirectoryEntry *dir_entry = NULL;
     NcaContext *nca_ctx = NULL;
     
-    if (!ctx || !ctx->file_table || !ctx->file_table_size || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !(nca_ctx = (NcaContext*)ctx->storage_ctx.nca_fs_ctx->nca_ctx) || \
+    if (!ctx || !ctx->file_table || !ctx->file_table_size || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !(nca_ctx = (NcaContext*)ctx->nca_fs_ctx->nca_ctx) || \
         !path || *path != '/' || (path_len = strlen(path)) <= 1)
     {
         LOG_MSG("Invalid parameters!");
@@ -505,14 +507,14 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
 bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, const void *data, u64 data_size, u64 data_offset, RomFileSystemFileEntryPatch *out)
 {
     if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->storage_ctx.base_storage_type != NcaStorageBaseStorageType_Regular || !ctx->body_offset || \
-        (ctx->storage_ctx.nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->storage_ctx.nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || !file_entry || \
+        (ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || !file_entry || \
         !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > file_entry->size || !out)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
-    NcaFsSectionContext *nca_fs_ctx = ctx->storage_ctx.nca_fs_ctx;
+    NcaFsSectionContext *nca_fs_ctx = ctx->nca_fs_ctx;
     u64 fs_offset = (ctx->body_offset + file_entry->offset + data_offset);
     bool success = false;
     
