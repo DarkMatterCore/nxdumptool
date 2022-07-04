@@ -155,7 +155,8 @@ NX_INLINE PartitionFileSystemEntry *pfsGetEntryByName(PartitionFileSystemContext
 
 NX_INLINE void pfsWriteEntryPatchToMemoryBuffer(PartitionFileSystemContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->nca_fs_ctx != ctx->storage_ctx.nca_fs_ctx) return;
+    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->nca_fs_ctx != ctx->storage_ctx.nca_fs_ctx || \
+        ctx->storage_ctx.base_storage_type != NcaStorageBaseStorageType_Regular) return;
     ncaWriteHierarchicalSha256PatchToMemoryBuffer((NcaContext*)ctx->nca_fs_ctx->nca_ctx, patch, buf, buf_size, buf_offset);
 }
 

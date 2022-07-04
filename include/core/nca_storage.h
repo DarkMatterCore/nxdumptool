@@ -38,7 +38,7 @@ typedef enum {
     NcaStorageBaseStorageType_Compressed = 4
 } NcaStorageBaseStorageType;
 
-/// Used to perform multi-layer reads within a single NCA FS section.
+/// Used to perform multi-layered reads within a single NCA FS section.
 typedef struct {
     u8 base_storage_type;                   ///< NcaStorageBaseStorageType.
     NcaFsSectionContext *nca_fs_ctx;        ///< NCA FS section context used to initialize this context.
@@ -54,6 +54,11 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
 /// Sets a storage from the provided Base NcaStorageContext as the original substorage for the provided Patch NcaStorageContext's Indirect Storage.
 /// Needed to perform combined reads between a base NCA and a patch NCA.
 bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStorageContext *base_ctx);
+
+/// Retrieves the underlying NCA FS section's hierarchical hash target layer extents. Virtual extents may be returned, depending on the base storage type.
+/// Output offset is relative to the start of the NCA FS section.
+/// Either 'out_offset' or 'out_size' can be NULL, but at least one of them must be a valid pointer.
+bool ncaStorageGetHashTargetExtents(NcaStorageContext *ctx, u64 *out_offset, u64 *out_size);
 
 /// Reads data from the NCA storage using a previously initialized NcaStorageContext.
 bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset);

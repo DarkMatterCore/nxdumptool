@@ -113,7 +113,7 @@ bool bfsarInitialize(void)
         }
         
         /* Initialize RomFS context. */
-        if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[1])))
+        if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[1]), NULL))
         {
             LOG_MSG("Failed to initialize RomFS context for qlaunch Program NCA!");
             break;

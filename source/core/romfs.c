@@ -27,17 +27,19 @@
 static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name);
 static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name);
 
-bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx)
+bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base_nca_fs_ctx, NcaFsSectionContext *patch_nca_fs_ctx)
 {
-    NcaContext *nca_ctx = NULL;
     u64 dir_table_offset = 0, file_table_offset = 0;
-    bool success = false, dump_fs_header = false;
+    NcaContext *base_nca_ctx = NULL, *patch_nca_ctx = NULL;
+    bool dump_fs_header = false, is_patch = (patch_nca_fs_ctx != NULL), success = false;
     
-    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->has_sparse_layer || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || \
-        (nca_ctx->format_version == NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256)) || \
-        (nca_ctx->format_version != NcaVersion_Nca0 && (nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
-        (nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegrity && nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegritySha3))) || \
-        (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved))
+    if (!out || !base_nca_fs_ctx || !base_nca_fs_ctx->enabled || (base_nca_fs_ctx->has_sparse_layer && !is_patch) || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || \
+        (base_nca_ctx->format_version == NcaVersion_Nca0 && (base_nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || \
+        base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256)) || (base_nca_ctx->format_version != NcaVersion_Nca0 && \
+        (base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || (base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegrity && \
+        base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegritySha3))) || (base_nca_ctx->rights_id_available && !base_nca_ctx->titlekey_retrieved) || \
+        (is_patch && (!patch_nca_fs_ctx->enabled || !(patch_nca_ctx = (NcaContext*)patch_nca_fs_ctx->nca_ctx) || patch_nca_ctx->format_version != base_nca_ctx->format_version || \
+        patch_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || (patch_nca_ctx->rights_id_available && !patch_nca_ctx->titlekey_retrieved))))
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -46,32 +48,56 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     /* Free output context beforehand. */
     romfsFreeContext(out);
     
-    /* Initialize NCA storage context. */
-    NcaStorageContext *storage_ctx = &(out->storage_ctx);
-    if (!ncaStorageInitializeContext(storage_ctx, nca_fs_ctx))
+    NcaStorageContext *base_storage_ctx = &(out->storage_ctx[0]), *patch_storage_ctx = &(out->storage_ctx[1]);
+    bool is_nca0_romfs = (base_nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs);
+    
+    /* Initialize base NCA storage context. */
+    if (!ncaStorageInitializeContext(base_storage_ctx, base_nca_fs_ctx))
     {
-        LOG_MSG("Failed to initialize NCA storage context!");
+        LOG_MSG("Failed to initialize base NCA storage context!");
         goto end;
     }
     
-    out->nca_fs_ctx = storage_ctx->nca_fs_ctx;
+    out->is_patch = is_patch;
+    
+    if (is_patch)
+    {
+        /* Initialize base NCA storage context. */
+        if (!ncaStorageInitializeContext(patch_storage_ctx, patch_nca_fs_ctx))
+        {
+            LOG_MSG("Failed to initialize patch NCA storage context!");
+            goto end;
+        }
+        
+        /* Set patch NCA storage original substorage. */
+        if (!ncaStorageSetPatchOriginalSubStorage(patch_storage_ctx, base_storage_ctx))
+        {
+            LOG_MSG("Failed to set patch NCA storage context's original substorage!");
+            goto end;
+        }
+        
+        /* Set default NCA FS storage context. */
+        out->default_storage_ctx = patch_storage_ctx;
+    } else {
+        /* Set default NCA FS storage context. */
+        out->default_storage_ctx = base_storage_ctx;
+    }
     
     /* Get RomFS offset and size. */
-    if (!ncaGetFsSectionHashTargetProperties(nca_fs_ctx, &(out->offset), &(out->size)))
+    if (!ncaStorageGetHashTargetExtents(out->default_storage_ctx, &(out->offset), &(out->size)))
     {
-        LOG_MSG("Failed to get target hash layer properties!");
+        LOG_MSG("Failed to get target hash layer extents!");
         goto end;
     }
     
     /* Read RomFS header. */
-    if (!ncaStorageRead(storage_ctx, &(out->header), sizeof(RomFileSystemHeader), out->offset))
+    if (!ncaStorageRead(out->default_storage_ctx, &(out->header), sizeof(RomFileSystemHeader), out->offset))
     {
         LOG_MSG("Failed to read RomFS header!");
         goto end;
     }
     
-    if ((nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs && out->header.old_format.header_size != ROMFS_OLD_HEADER_SIZE) || \
-        (nca_fs_ctx->section_type == NcaFsSectionType_RomFs && out->header.cur_format.header_size != ROMFS_HEADER_SIZE))
+    if ((is_nca0_romfs && out->header.old_format.header_size != ROMFS_OLD_HEADER_SIZE) || (!is_nca0_romfs && out->header.cur_format.header_size != ROMFS_HEADER_SIZE))
     {
         LOG_MSG("Invalid RomFS header size!");
         dump_fs_header = true;
@@ -79,8 +105,8 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
     }
     
     /* Read directory entries table. */
-    dir_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_offset : out->header.cur_format.directory_entry_offset);
-    out->dir_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.directory_entry_size : out->header.cur_format.directory_entry_size);
+    dir_table_offset = (is_nca0_romfs ? (u64)out->header.old_format.directory_entry_offset : out->header.cur_format.directory_entry_offset);
+    out->dir_table_size = (is_nca0_romfs ? (u64)out->header.old_format.directory_entry_size : out->header.cur_format.directory_entry_size);
     
     if (!out->dir_table_size || (dir_table_offset + out->dir_table_size) > out->size)
     {
@@ -96,15 +122,15 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         goto end;
     }
     
-    if (!ncaStorageRead(storage_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
+    if (!ncaStorageRead(out->default_storage_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
     {
         LOG_MSG("Failed to read RomFS directory entries table!");
         goto end;
     }
     
     /* Read file entries table. */
-    file_table_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_offset : out->header.cur_format.file_entry_offset);
-    out->file_table_size = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.file_entry_size : out->header.cur_format.file_entry_size);
+    file_table_offset = (is_nca0_romfs ? (u64)out->header.old_format.file_entry_offset : out->header.cur_format.file_entry_offset);
+    out->file_table_size = (is_nca0_romfs ? (u64)out->header.old_format.file_entry_size : out->header.cur_format.file_entry_size);
     
     if (!out->file_table_size || (file_table_offset + out->file_table_size) > out->size)
     {
@@ -120,14 +146,14 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_
         goto end;
     }
     
-    if (!ncaStorageRead(storage_ctx, out->file_table, out->file_table_size, out->offset + file_table_offset))
+    if (!ncaStorageRead(out->default_storage_ctx, out->file_table, out->file_table_size, out->offset + file_table_offset))
     {
         LOG_MSG("Failed to read RomFS file entries table!");
         goto end;
     }
     
     /* Get file data body offset. */
-    out->body_offset = (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? (u64)out->header.old_format.body_offset : out->header.cur_format.body_offset);
+    out->body_offset = (is_nca0_romfs ? (u64)out->header.old_format.body_offset : out->header.cur_format.body_offset);
     if (out->body_offset >= out->size)
     {
         LOG_MSG("Invalid RomFS file data body!");
@@ -151,14 +177,14 @@ end:
 
 bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
+    if (!ctx || !ncaStorageIsValidContext(ctx->default_storage_ctx) || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
     /* Read filesystem data. */
-    if (!ncaStorageRead(&(ctx->storage_ctx), out, read_size, ctx->offset + offset))
+    if (!ncaStorageRead(ctx->default_storage_ctx, out, read_size, ctx->offset + offset))
     {
         LOG_MSG("Failed to read RomFS data!");
         return false;
@@ -314,8 +340,8 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     RomFileSystemDirectoryEntry *dir_entry = NULL;
     NcaContext *nca_ctx = NULL;
     
-    if (!ctx || !ctx->file_table || !ctx->file_table_size || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || !(nca_ctx = (NcaContext*)ctx->nca_fs_ctx->nca_ctx) || \
-        !path || *path != '/' || (path_len = strlen(path)) <= 1)
+    if (!ctx || !ctx->file_table || !ctx->file_table_size || !ncaStorageIsValidContext(ctx->default_storage_ctx) || \
+        !(nca_ctx = (NcaContext*)ctx->default_storage_ctx->nca_fs_ctx->nca_ctx) || !path || *path != '/' || (path_len = strlen(path)) <= 1)
     {
         LOG_MSG("Invalid parameters!");
         return NULL;
@@ -506,15 +532,15 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
 
 bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, const void *data, u64 data_size, u64 data_offset, RomFileSystemFileEntryPatch *out)
 {
-    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->storage_ctx.base_storage_type != NcaStorageBaseStorageType_Regular || !ctx->body_offset || \
-        (ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || !file_entry || \
-        !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > file_entry->size || !out)
+    if (!ctx || ctx->is_patch || !ncaStorageIsValidContext(ctx->default_storage_ctx) || ctx->default_storage_ctx->base_storage_type != NcaStorageBaseStorageType_Regular || \
+        !ctx->body_offset || (ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || \
+        !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > file_entry->size || !out)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
     
-    NcaFsSectionContext *nca_fs_ctx = ctx->nca_fs_ctx;
+    NcaFsSectionContext *nca_fs_ctx = ctx->default_storage_ctx->nca_fs_ctx;
     u64 fs_offset = (ctx->body_offset + file_entry->offset + data_offset);
     bool success = false;
     

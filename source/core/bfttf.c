@@ -113,7 +113,7 @@ bool bfttfInitialize(void)
                 
                 /* Initialize RomFS context. */
                 /* This will also free a previous RomFS context, if available. */
-                if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[0])))
+                if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[0]), NULL))
                 {
                     LOG_MSG("Failed to initialize RomFS context for Data NCA from %016lX!", font_info->title_id);
                     continue;

@@ -488,10 +488,10 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
 /// Input offset must be relative to the start of the NCA content file.
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
-/// Retrieves the offset and/or size from the FS section hierarchical hash target layer.
+/// Retrieves the FS section's hierarchical hash target layer extents.
 /// Output offset is relative to the start of the FS section.
 /// Either 'out_offset' or 'out_size' can be NULL, but at least one of them must be a valid pointer.
-bool ncaGetFsSectionHashTargetProperties(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size);
+bool ncaGetFsSectionHashTargetExtents(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size);
 
 /// Reads decrypted data from a NCA FS section using an input context.
 /// Input offset must be relative to the start of the NCA FS section.

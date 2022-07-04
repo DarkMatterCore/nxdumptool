@@ -57,9 +57,9 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     out->nca_fs_ctx = storage_ctx->nca_fs_ctx;
     
     /* Get Partition FS offset and size. */
-    if (!ncaGetFsSectionHashTargetProperties(nca_fs_ctx, &(out->offset), &(out->size)))
+    if (!ncaStorageGetHashTargetExtents(storage_ctx, &(out->offset), &(out->size)))
     {
-        LOG_MSG("Failed to get target hash layer properties!");
+        LOG_MSG("Failed to get target hash layer extents!");
         goto end;
     }
     

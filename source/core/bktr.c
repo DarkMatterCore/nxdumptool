@@ -439,7 +439,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
         if (cur_entry.storage_index == BucketTreeIndirectStorageIndex_Original)
         {
             /* Retrieve data from the original data storage. */
-            /* This may either be a Regular/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
+            /* This may either be a Regular/Sparse/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
             success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
             if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in original data storage!", read_size, data_offset);
         } else {

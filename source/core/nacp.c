@@ -248,7 +248,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
     nacpFreeContext(out);
     
     /* Initialize RomFS context. */
-    if (!romfsInitializeContext(&(out->romfs_ctx), &(nca_ctx->fs_ctx[0])))
+    if (!romfsInitializeContext(&(out->romfs_ctx), &(nca_ctx->fs_ctx[0]), NULL))
     {
         LOG_MSG("Failed to initialize RomFS context!");
         goto end;

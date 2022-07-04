@@ -107,17 +107,18 @@ typedef struct {
 NXDT_ASSERT(RomFileSystemFileEntry, 0x20);
 
 typedef struct {
-    NcaStorageContext storage_ctx;                  ///< Used to read NCA FS section data.
-    NcaFsSectionContext *nca_fs_ctx;                ///< Same as storage_ctx.nca_fs_ctx. Placed here for convenience.
-    u64 offset;                                     ///< RomFS offset (relative to the start of the NCA FS section).
-    u64 size;                                       ///< RomFS size.
-    RomFileSystemHeader header;                     ///< RomFS header.
-    u64 dir_table_size;                             ///< RomFS directory entries table size.
-    RomFileSystemDirectoryEntry *dir_table;         ///< RomFS directory entries table.
-    u64 file_table_size;                            ///< RomFS file entries table size.
-    RomFileSystemFileEntry *file_table;             ///< RomFS file entries table.
-    u64 body_offset;                                ///< RomFS file data body offset (relative to the start of the RomFS).
-    u32 cur_dir_offset;                             ///< Current RomFS directory offset (relative to the start of the directory entries table). Used for RomFS browsing.
+    bool is_patch;                          ///< Set to true if this we're dealing with a Patch RomFS.
+    NcaStorageContext storage_ctx[2];       ///< Used to read NCA FS section data. Index 0: base storage. Index 1: patch storage.
+    NcaStorageContext *default_storage_ctx; ///< Default NCA storage context. Points to one of the two contexts from 'storage_ctx'. Placed here for convenience.
+    u64 offset;                             ///< RomFS offset (relative to the start of the NCA FS section).
+    u64 size;                               ///< RomFS size.
+    RomFileSystemHeader header;             ///< RomFS header.
+    u64 dir_table_size;                     ///< RomFS directory entries table size.
+    RomFileSystemDirectoryEntry *dir_table; ///< RomFS directory entries table.
+    u64 file_table_size;                    ///< RomFS file entries table size.
+    RomFileSystemFileEntry *file_table;     ///< RomFS file entries table.
+    u64 body_offset;                        ///< RomFS file data body offset (relative to the start of the RomFS).
+    u32 cur_dir_offset;                     ///< Current RomFS directory offset (relative to the start of the directory entries table). Used for RomFS browsing.
 } RomFileSystemContext;
 
 typedef struct {
@@ -133,8 +134,10 @@ typedef enum {
     RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly = 2
 } RomFileSystemPathIllegalCharReplaceType;
 
-/// Initializes a RomFS context.
-bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx);
+/// Initializes a RomFS or Patch RomFS context.
+/// 'base_nca_fs_ctx' must always be provided.
+/// 'patch_nca_fs_ctx' shall be NULL if not dealing with a Patch RomFS.
+bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base_nca_fs_ctx, NcaFsSectionContext *patch_nca_fs_ctx);
 
 /// Reads raw filesystem data using a RomFS context.
 /// Input offset must be relative to the start of the RomFS.
@@ -175,7 +178,8 @@ bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEnt
 NX_INLINE void romfsFreeContext(RomFileSystemContext *ctx)
 {
     if (!ctx) return;
-    ncaStorageFreeContext(&(ctx->storage_ctx));
+    ncaStorageFreeContext(&(ctx->storage_ctx[0]));
+    ncaStorageFreeContext(&(ctx->storage_ctx[1]));
     if (ctx->dir_table) free(ctx->dir_table);
     if (ctx->file_table) free(ctx->file_table);
     memset(ctx, 0, sizeof(RomFileSystemContext));
@@ -195,11 +199,11 @@ NX_INLINE RomFileSystemFileEntry *romfsGetFileEntryByOffset(RomFileSystemContext
 
 NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx, RomFileSystemFileEntryPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->nca_fs_ctx != ctx->storage_ctx.nca_fs_ctx || !patch || \
-        (!patch->use_old_format_patch && ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
-        (patch->use_old_format_patch && ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
+    if (!ctx || ctx->is_patch || !ncaStorageIsValidContext(ctx->default_storage_ctx) || ctx->default_storage_ctx->base_storage_type != NcaStorageBaseStorageType_Regular || !patch || \
+        (!patch->use_old_format_patch && ctx->default_storage_ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
+        (patch->use_old_format_patch && ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
     
-    NcaContext *nca_ctx = (NcaContext*)ctx->nca_fs_ctx->nca_ctx;
+    NcaContext *nca_ctx = (NcaContext*)ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
     
     if (patch->use_old_format_patch)
     {

@@ -209,7 +209,7 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
     return ret;
 }
 
-bool ncaGetFsSectionHashTargetProperties(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size)
+bool ncaGetFsSectionHashTargetExtents(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size)
 {
     if (!ctx || (!out_offset && !out_size))
     {
@@ -865,7 +865,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         u64 raw_storage_size = compression_bucket->size;
         
         /* Get target hash layer offset. */
-        if (!ncaGetFsSectionHashTargetProperties(fs_ctx, &raw_storage_offset, NULL))
+        if (!ncaGetFsSectionHashTargetExtents(fs_ctx, &raw_storage_offset, NULL))
         {
             LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
             goto end;
@@ -948,7 +948,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     
     /* Get hash layer region size (offset must always be 0). */
     fs_ctx->hash_region.offset = 0;
-    if (!ncaGetFsSectionHashTargetProperties(fs_ctx, &(fs_ctx->hash_region.size), NULL))
+    if (!ncaGetFsSectionHashTargetExtents(fs_ctx, &(fs_ctx->hash_region.size), NULL))
     {
         LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
         goto end;
