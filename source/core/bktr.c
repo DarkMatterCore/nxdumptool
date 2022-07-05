@@ -363,11 +363,12 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
 {
     BucketTreeContext *ctx = visitor->bktr_ctx;
     bool is_sparse = (ctx->storage_type == BucketTreeStorageType_Sparse);
+    bool missing_original_storage = !bktrIsValidSubstorage(&(ctx->substorages[0]));
 
-    if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || (!is_sparse && !bktrIsValidSubstorage(&(ctx->substorages[1]))) || \
-        (!is_sparse && ((ctx->substorages[0].type != BucketTreeSubStorageType_Regular && ctx->substorages[0].type != BucketTreeStorageType_Compressed && \
-        ctx->substorages[0].type != BucketTreeSubStorageType_Sparse) || ctx->substorages[1].type != BucketTreeSubStorageType_AesCtrEx)) || \
-        (is_sparse && ctx->substorages[0].type != BucketTreeSubStorageType_Regular))
+    if (!out || (is_sparse && (missing_original_storage || ctx->substorages[0].type != BucketTreeSubStorageType_Regular)) || \
+        (!is_sparse && (!bktrIsValidSubstorage(&(ctx->substorages[1])) || ctx->substorages[1].type != BucketTreeSubStorageType_AesCtrEx || \
+        (!missing_original_storage && ((ctx->substorages[0].type != BucketTreeSubStorageType_Regular && \
+        ctx->substorages[0].type != BucketTreeStorageType_Compressed && ctx->substorages[0].type != BucketTreeSubStorageType_Sparse))))))
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -438,10 +439,15 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
 
         if (cur_entry.storage_index == BucketTreeIndirectStorageIndex_Original)
         {
-            /* Retrieve data from the original data storage. */
-            /* This may either be a Regular/Sparse/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
-            success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
-            if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in original data storage!", read_size, data_offset);
+            if (!missing_original_storage)
+            {
+                /* Retrieve data from the original data storage. */
+                /* This may either be a Regular/Sparse/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
+                success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
+                if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in original data storage!", read_size, data_offset);
+            } else {
+                LOG_MSG("Error: attempting to read 0x%lX-byte long chunk from missing original data storage at offset 0x%lX!", read_size, data_offset);
+            }
         } else {
             if (!is_sparse)
             {

@@ -33,12 +33,17 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     NcaContext *base_nca_ctx = NULL, *patch_nca_ctx = NULL;
     bool dump_fs_header = false, success = false;
 
-    if (!out || !base_nca_fs_ctx || !base_nca_fs_ctx->enabled || (base_nca_fs_ctx->has_sparse_layer && !patch_nca_fs_ctx) || !(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || \
-        (base_nca_ctx->format_version == NcaVersion_Nca0 && (base_nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || \
-        base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256)) || (base_nca_ctx->format_version != NcaVersion_Nca0 && \
-        (base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || (base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegrity && \
-        base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegritySha3))) || (base_nca_ctx->rights_id_available && !base_nca_ctx->titlekey_retrieved) || \
-        (patch_nca_fs_ctx && (!patch_nca_fs_ctx->enabled || !(patch_nca_ctx = (NcaContext*)patch_nca_fs_ctx->nca_ctx) || patch_nca_ctx->format_version != base_nca_ctx->format_version || \
+    /* Check if the base RomFS is missing (e.g. Fortnite, World of Tanks Blitz, etc.). */
+    bool missing_base_romfs = (base_nca_fs_ctx && (!base_nca_fs_ctx->enabled || (base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs && \
+                               base_nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)));
+
+    if (!out || !base_nca_fs_ctx || (!patch_nca_fs_ctx && (missing_base_romfs || base_nca_fs_ctx->has_sparse_layer)) || \
+        (!missing_base_romfs && (!(base_nca_ctx = (NcaContext*)base_nca_fs_ctx->nca_ctx) || (base_nca_ctx->format_version == NcaVersion_Nca0 && \
+        (base_nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256)) || \
+        (base_nca_ctx->format_version != NcaVersion_Nca0 && (base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
+        (base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegrity && base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalIntegritySha3))) || \
+        (base_nca_ctx->rights_id_available && !base_nca_ctx->titlekey_retrieved))) || (patch_nca_fs_ctx && (!patch_nca_fs_ctx->enabled || \
+        !(patch_nca_ctx = (NcaContext*)patch_nca_fs_ctx->nca_ctx) || (!missing_base_romfs && patch_nca_ctx->format_version != base_nca_ctx->format_version) || \
         patch_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || (patch_nca_ctx->rights_id_available && !patch_nca_ctx->titlekey_retrieved))))
     {
         LOG_MSG("Invalid parameters!");
@@ -52,7 +57,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     bool is_nca0_romfs = (base_nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs);
 
     /* Initialize base NCA storage context. */
-    if (!ncaStorageInitializeContext(base_storage_ctx, base_nca_fs_ctx))
+    if (!missing_base_romfs && !ncaStorageInitializeContext(base_storage_ctx, base_nca_fs_ctx))
     {
         LOG_MSG("Failed to initialize base NCA storage context!");
         goto end;
@@ -67,8 +72,8 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
             goto end;
         }
 
-        /* Set patch NCA storage original substorage. */
-        if (!ncaStorageSetPatchOriginalSubStorage(patch_storage_ctx, base_storage_ctx))
+        /* Set patch NCA storage original substorage, if available. */
+        if (!missing_base_romfs && !ncaStorageSetPatchOriginalSubStorage(patch_storage_ctx, base_storage_ctx))
         {
             LOG_MSG("Failed to set patch NCA storage context's original substorage!");
             goto end;

@@ -552,6 +552,12 @@ int main(int argc, char *argv[])
     TitleInfo *latest_patch = NULL;
     if (user_app_data.patch_info) latest_patch = get_latest_patch_info(user_app_data.patch_info);
 
+    if (!latest_patch && (!base_nca_ctx->fs_ctx[1].enabled || (base_nca_ctx->fs_ctx[1].section_type != NcaFsSectionType_RomFs && base_nca_ctx->fs_ctx[1].section_type != NcaFsSectionType_Nca0RomFs)))
+    {
+        consolePrint("base app has no valid romfs and no updates could be found\n");
+        goto out2;
+    }
+
     if (base_nca_ctx->fs_ctx[1].has_sparse_layer && (!latest_patch || latest_patch->version.value < user_app_data.app_info->version.value))
     {
         consolePrint("base app is a sparse title and no v%u or greater update could be found\n", user_app_data.app_info->version.value);

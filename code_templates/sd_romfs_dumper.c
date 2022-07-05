@@ -126,6 +126,7 @@ static void read_thread_func(void *arg)
         {
             fclose(shared_data->fd);
             shared_data->fd = NULL;
+            utilsCommitSdCardFileSystemChanges();
         }
 
         /* Retrieve RomFS file entry information. */
@@ -141,6 +142,13 @@ static void read_thread_func(void *arg)
         utilsCreateDirectoryTree(path, false);
 
         /* Create file. */
+        if (file_entry->size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(path))
+        {
+            shared_data->read_error = true;
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
         shared_data->read_error = ((shared_data->fd = fopen(path, "wb")) == NULL);
         if (shared_data->read_error)
         {
@@ -201,9 +209,9 @@ static void read_thread_func(void *arg)
     {
         fclose(shared_data->fd);
         shared_data->fd = NULL;
+        if (shared_data->read_error || shared_data->write_error || shared_data->transfer_cancelled) utilsRemoveConcatenationFile(path);
+        utilsCommitSdCardFileSystemChanges();
     }
-
-    if ((shared_data->read_error || shared_data->write_error || shared_data->transfer_cancelled) && *path) remove(path);
 
     free(buf);
 
@@ -579,6 +587,12 @@ int main(int argc, char *argv[])
     TitleInfo *latest_patch = NULL;
     if (user_app_data.patch_info) latest_patch = get_latest_patch_info(user_app_data.patch_info);
 
+    if (!latest_patch && (!base_nca_ctx->fs_ctx[1].enabled || (base_nca_ctx->fs_ctx[1].section_type != NcaFsSectionType_RomFs && base_nca_ctx->fs_ctx[1].section_type != NcaFsSectionType_Nca0RomFs)))
+    {
+        consolePrint("base app has no valid romfs and no updates could be found\n");
+        goto out2;
+    }
+
     if (base_nca_ctx->fs_ctx[1].has_sparse_layer && (!latest_patch || latest_patch->version.value < user_app_data.app_info->version.value))
     {
         consolePrint("base app is a sparse title and no v%u or greater update could be found\n", user_app_data.app_info->version.value);
@@ -615,6 +629,20 @@ int main(int argc, char *argv[])
     romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
 
     consolePrint("romfs initialize ctx succeeded\n");
+
+    // check free space
+    u64 free_space = 0;
+    if (!utilsGetFileSystemStatsByPath("sdmc:/", NULL, &free_space))
+    {
+        consolePrint("failed to retrieve free sd card space\n");
+        goto out2;
+    }
+
+    if (free_space <= shared_data.total_size)
+    {
+        consolePrint("extracted romfs size (0x%lX) exceeds free sd card space (0x%lX)\n", shared_data.total_size, free_space);
+        goto out2;
+    }
 
     shared_data.fd = NULL;
     shared_data.data = buf;
