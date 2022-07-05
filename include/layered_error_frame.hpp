@@ -33,21 +33,21 @@ namespace nxdt::views
     {
         private:
             brls::SidebarItem *sidebar_item = nullptr;
-        
+
         protected:
             ErrorFrame *error_frame = nullptr;
             brls::List *list = nullptr;
-            
+
             bool IsListItemFocused(void);
-            
+
             int GetFocusStackViewIndex(void);
             bool UpdateFocusStackViewAtIndex(int index, brls::View *view);
-            
+
             void SwitchLayerView(bool use_error_frame, bool update_focused_view = false, bool update_focus_stack = true);
-        
+
         public:
             LayeredErrorFrame(std::string msg = "");
-            
+
             void SetParentSidebarItem(brls::SidebarItem *sidebar_item);
     };
 }

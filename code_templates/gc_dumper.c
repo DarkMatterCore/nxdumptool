@@ -246,7 +246,7 @@ static void utilsWaitForButtonPress(u64 flag)
     /* Don't consider stick movement as button inputs. */
     if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
                         HidNpadButton_StickRUp | HidNpadButton_StickRDown);
-    
+
     while(appletMainLoop())
     {
         utilsScanPads();
@@ -257,44 +257,44 @@ static void utilsWaitForButtonPress(u64 flag)
 int main(int argc, char *argv[])
 {
     int ret = 0;
-    
+
     Menu *cur_menu = &g_rootMenu;
     u32 element_count = menuGetElementCount(cur_menu), page_size = 30;
-    
+
     if (!utilsInitializeResources(argc, (const char**)argv))
     {
         ret = -1;
         goto out;
     }
-    
+
     /* Configure input. */
     /* Up to 8 different, full controller inputs. */
     /* Individual Joy-Cons not supported. */
     padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
     padInitializeWithMask(&g_padState, 0x1000000FFUL);
-    
+
     consoleInit(NULL);
-    
+
     chdir(DEVOPTAB_SDMC_DEVICE GAMECARD_PATH);
-    
+
     while(appletMainLoop())
     {
         consoleClear();
         printf("\npress b to %s.\n\n", cur_menu->parent ? "go back" : "exit");
-        
+
         u32 limit = (cur_menu->scroll + page_size);
         MenuElement *selected_element = cur_menu->elements[cur_menu->selected];
         MenuElementOption *selected_element_options = selected_element->element_options;
-        
+
         for(u32 i = cur_menu->scroll; cur_menu->elements[i] && i < element_count; i++)
         {
             if (i >= limit) break;
-            
+
             MenuElement *cur_element = cur_menu->elements[i];
             MenuElementOption *cur_options = cur_menu->elements[i]->element_options;
-            
+
             printf("%s%s", i == cur_menu->selected ? " -> " : "    ", cur_element->str);
-            
+
             if (cur_options)
             {
                 printf(": ");
@@ -302,13 +302,13 @@ int main(int argc, char *argv[])
                 printf("%s", cur_options->options[cur_options->selected]);
                 if (cur_options->options[cur_options->selected + 1]) printf(" >");
             }
-            
+
             printf("\n");
         }
-        
+
         printf("\n");
         consoleUpdate(NULL);
-        
+
         u64 btn_down = 0, btn_held = 0;
         while((g_appletStatus = appletMainLoop()))
         {
@@ -317,13 +317,13 @@ int main(int argc, char *argv[])
             btn_held = utilsGetButtonsHeld();
             if (btn_down || btn_held) break;
         }
-        
+
         if (!g_appletStatus) break;
-        
+
         if (btn_down & HidNpadButton_A)
         {
             Menu *child_menu = (Menu*)selected_element->child_menu;
-            
+
             if (child_menu)
             {
                 child_menu->parent = cur_menu;
@@ -338,18 +338,18 @@ int main(int argc, char *argv[])
                     if (g_appletStatus) continue;
                     break;
                 }
-                
+
                 /* Wait for USB session. */
                 if (g_useUsbHost && !waitForUsb()) break;
-                
+
                 /* Generate dump text. */
                 generateDumpTxt();
-                
+
                 /* Run task. */
                 utilsSetLongRunningProcessState(true);
                 if (selected_element->task_func()) saveDumpTxt();
                 utilsSetLongRunningProcessState(false);
-                
+
                 /* Display prompt. */
                 consolePrint("press any button to continue");
                 utilsWaitForButtonPress(0);
@@ -358,7 +358,7 @@ int main(int argc, char *argv[])
         if ((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown)))
         {
             cur_menu->selected++;
-            
+
             if (!cur_menu->elements[cur_menu->selected])
             {
                 if (btn_down & HidNpadButton_Down)
@@ -377,7 +377,7 @@ int main(int argc, char *argv[])
         if ((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp)))
         {
             cur_menu->selected--;
-            
+
             if (cur_menu->selected == UINT32_MAX)
             {
                 if (btn_down & HidNpadButton_Up)
@@ -408,19 +408,19 @@ int main(int argc, char *argv[])
         if (btn_down & HidNpadButton_B)
         {
             if (!cur_menu->parent) break;
-            
+
             cur_menu = cur_menu->parent;
             element_count = menuGetElementCount(cur_menu);
         }
-        
+
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
-    
+
 out:
     utilsCloseResources();
-    
+
     consoleExit(NULL);
-    
+
     return ret;
 }
 
@@ -436,7 +436,7 @@ static void consolePrint(const char *text, ...)
 static u32 menuGetElementCount(const Menu *menu)
 {
     if (!menu || !menu->elements || !menu->elements[0]) return 0;
-    
+
     u32 cnt;
     for(cnt = 0; menu->elements[cnt]; cnt++);
     return cnt;
@@ -446,17 +446,17 @@ static bool waitForGameCard(void)
 {
     consoleClear();
     consolePrint("waiting for gamecard...\n");
-    
+
     u8 status = GameCardStatus_NotInserted;
-    
+
     while((g_appletStatus = appletMainLoop()))
     {
         status = gamecardGetStatus();
         if (status > GameCardStatus_Processing) break;
     }
-    
+
     if (!g_appletStatus) return false;
-    
+
     switch(status)
     {
         case GameCardStatus_NoGameCardPatchEnabled:
@@ -471,43 +471,43 @@ static bool waitForGameCard(void)
         default:
             break;
     }
-    
+
     if (status != GameCardStatus_InsertedAndInfoLoaded)
     {
         consolePrint("press any button\n");
         utilsWaitForButtonPress(0);
         return false;
     }
-    
+
     return true;
 }
 
 static bool waitForUsb(void)
 {
     if (usbIsReady()) return true;
-    
+
     consolePrint("waiting for usb session...\n");
-    
+
     while((g_appletStatus = appletMainLoop()))
     {
         if (usbIsReady()) break;
     }
-    
+
     return g_appletStatus;
 }
 
 static void generateDumpTxt(void)
 {
     *txt_info = '\0';
-    
+
     struct tm ts = {0};
     time_t now = time(NULL);
-    
+
     /* Get UTC time. */
     gmtime_r(&now, &ts);
     ts.tm_year += 1900;
     ts.tm_mon++;
-    
+
     /* Generate dump text. */
     snprintf(txt_info, MAX_ELEMENTS(txt_info), "tool:       nxdumptool\r\n" \
                                                "version:    " APP_VERSION "\r\n" \
@@ -525,7 +525,7 @@ static bool saveFileData(const char *path, void *data, size_t data_size)
         consolePrint("invalid parameters to save file data!\n");
         return false;
     }
-    
+
     if (g_useUsbHost)
     {
         if (!usbSendFilePropertiesCommon(data_size, path))
@@ -533,7 +533,7 @@ static bool saveFileData(const char *path, void *data, size_t data_size)
             consolePrint("failed to send file properties for \"%s\"!\n", path);
             return false;
         }
-        
+
         if (!usbSendFileData(data, data_size))
         {
             consolePrint("failed to send file data for \"%s\"!\n", path);
@@ -546,50 +546,50 @@ static bool saveFileData(const char *path, void *data, size_t data_size)
             consolePrint("failed to open \"%s\" for writing!\n", path);
             return false;
         }
-        
+
         size_t ret = fwrite(data, 1, data_size, fp);
         fclose(fp);
-        
+
         if (ret != data_size)
         {
             consolePrint("failed to write 0x%lX byte(s) to \"%s\"! (%d)\n", data_size, path, errno);
             remove(path);
         }
     }
-    
+
     return true;
 }
 
 static bool saveDumpTxt(void)
 {
     if (!*path || !*txt_info) return true;
-    
+
     path[strlen(path) - 3] = '\0';
     strcat(path, "txt");
-    
+
     return saveFileData(path, txt_info, strlen(txt_info));
 }
 
 static char *generateOutputFileName(const char *extension)
 {
     char *filename = NULL, *output = NULL;
-    
+
     if (!extension || !*extension || !(filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
     {
         consolePrint("failed to get gamecard filename!\n");
         return NULL;
     }
-    
+
     output = utilsGeneratePath(NULL, filename, extension);
     free(filename);
-    
+
     if (output)
     {
         snprintf(path, MAX_ELEMENTS(path), "%s", output);
     } else {
         consolePrint("failed to generate output filename!\n");
     }
-    
+
     return output;
 }
 
@@ -600,13 +600,13 @@ static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
         consolePrint("invalid parameters to dump gamecard security information!\n");
         return false;
     }
-    
+
     if (!gamecardGetSecurityInformation(out))
     {
         consolePrint("failed to get gamecard security information\n");
         return false;
     }
-    
+
     consolePrint("get gamecard security information ok\n");
     return true;
 }
@@ -617,23 +617,23 @@ static bool saveGameCardSpecificData(void)
     bool success = false;
     u32 crc = 0;
     char *filename = NULL;
-    
+
     if (!dumpGameCardSecurityInformation(&gc_security_information)) goto end;
-    
+
     crc = crc32Calculate(&(gc_security_information.specific_data), sizeof(GameCardSpecificData));
     snprintf(path, MAX_ELEMENTS(path), " (Specific Data) (%08X).bin", crc);
-    
+
     filename = generateOutputFileName(path);
     if (!filename) goto end;
-    
+
     if (!saveFileData(filename, &(gc_security_information.specific_data), sizeof(GameCardSpecificData))) goto end;
-    
+
     printf("successfully saved specific data as \"%s\"\n", filename);
     success = true;
-    
+
 end:
     if (filename) free(filename);
-    
+
     return success;
 }
 
@@ -643,29 +643,29 @@ static bool saveGameCardCertificate(void)
     bool success = false;
     u32 crc = 0;
     char *filename = NULL;
-    
+
     if (!gamecardGetCertificate(&gc_cert))
     {
         consolePrint("failed to get gamecard certificate\n");
         goto end;
     }
-    
+
     consolePrint("get gamecard certificate ok\n");
-    
+
     crc = crc32Calculate(&gc_cert, sizeof(FsGameCardCertificate));
     snprintf(path, MAX_ELEMENTS(path), " (Certificate) (%08X).bin", crc);
-    
+
     filename = generateOutputFileName(path);
     if (!filename) goto end;
-    
+
     if (!saveFileData(filename, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
-    
+
     printf("successfully saved certificate as \"%s\"\n", filename);
     success = true;
-    
+
 end:
     if (filename) free(filename);
-    
+
     return success;
 }
 
@@ -675,23 +675,23 @@ static bool saveGameCardInitialData(void)
     bool success = false;
     u32 crc = 0;
     char *filename = NULL;
-    
+
     if (!dumpGameCardSecurityInformation(&gc_security_information)) goto end;
-    
+
     crc = crc32Calculate(&(gc_security_information.initial_data), sizeof(GameCardInitialData));
     snprintf(path, MAX_ELEMENTS(path), " (Initial Data) (%08X).bin", crc);
-    
+
     filename = generateOutputFileName(path);
     if (!filename) goto end;
-    
+
     if (!saveFileData(filename, &(gc_security_information.initial_data), sizeof(GameCardInitialData))) goto end;
-    
+
     printf("successfully saved initial data as \"%s\"\n", filename);
     success = true;
-    
+
 end:
     if (filename) free(filename);
-    
+
     return success;
 }
 
@@ -701,81 +701,81 @@ static bool saveGameCardIdSet(void)
     bool success = false;
     u32 crc = 0;
     char *filename = NULL;
-    
+
     if (!gamecardGetIdSet(&id_set)) goto end;
-    
+
     crc = crc32Calculate(&id_set, sizeof(FsGameCardIdSet));
     snprintf(path, MAX_ELEMENTS(path), " (Card ID Set) (%08X).bin", crc);
-    
+
     filename = generateOutputFileName(path);
     if (!filename) goto end;
-    
+
     if (!saveFileData(filename, &id_set, sizeof(FsGameCardIdSet))) goto end;
-    
+
     printf("successfully saved gamecard id set as \"%s\"\n", filename);
     success = true;
-    
+
 end:
     if (filename) free(filename);
-    
+
     return success;
 }
 
 static bool saveGameCardImage(void)
 {
     u64 gc_size = 0;
-    
+
     u32 key_area_crc = 0;
     GameCardKeyArea gc_key_area = {0};
     GameCardSecurityInformation gc_security_information = {0};
-    
+
     ThreadSharedData shared_data = {0};
     Thread read_thread = {0}, write_thread = {0};
-    
+
     char *filename = NULL;
-    
+
     bool success = false;
-    
+
     consolePrint("gamecard image dump\nappend key area: %s | keep certificate: %s | trim dump: %s | calculate crc32: %s\n\n", g_appendKeyArea ? "yes" : "no", g_keepCertificate ? "yes" : "no", g_trimDump ? "yes" : "no", g_calcCrc ? "yes" : "no");
-    
+
     shared_data.data = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     if (!shared_data.data)
     {
         consolePrint("failed to allocate memory for the dump procedure!\n");
         goto end;
     }
-    
+
     if ((!g_trimDump && !gamecardGetTotalSize(&gc_size)) || (g_trimDump && !gamecardGetTrimmedSize(&gc_size)) || !gc_size)
     {
         consolePrint("failed to get gamecard size!\n");
         goto end;
     }
-    
+
     shared_data.total_size = gc_size;
-    
+
     consolePrint("gamecard size: 0x%lX\n", gc_size);
-    
+
     if (g_appendKeyArea)
     {
         gc_size += sizeof(GameCardKeyArea);
-        
+
         if (!dumpGameCardSecurityInformation(&gc_security_information)) goto end;
-        
+
         memcpy(&(gc_key_area.initial_data), &(gc_security_information.initial_data), sizeof(GameCardInitialData));
-        
+
         if (g_calcCrc)
         {
             key_area_crc = crc32Calculate(&gc_key_area, sizeof(GameCardKeyArea));
             shared_data.full_xci_crc = key_area_crc;
         }
-        
+
         consolePrint("gamecard size (with key area): 0x%lX\n", gc_size);
     }
-    
+
     snprintf(path, MAX_ELEMENTS(path), " (%s) (%s) (%s).xci", g_appendKeyArea ? "keyarea" : "keyarealess", g_keepCertificate ? "cert" : "certless", g_trimDump ? "trimmed" : "untrimmed");
     filename = generateOutputFileName(path);
     if (!filename) goto end;
-    
+
     if (g_useUsbHost)
     {
         if (!usbSendFilePropertiesCommon(gc_size, filename))
@@ -783,7 +783,7 @@ static bool saveGameCardImage(void)
             consolePrint("failed to send file properties for \"%s\"!\n", filename);
             goto end;
         }
-        
+
         if (g_appendKeyArea && !usbSendFileData(&gc_key_area, sizeof(GameCardKeyArea)))
         {
             consolePrint("failed to send gamecard key area data!\n");
@@ -795,49 +795,49 @@ static bool saveGameCardImage(void)
             consolePrint("failed to create concatenation file for \"%s\"!\n", filename);
             goto end;
         }
-        
+
         shared_data.fp = fopen(filename, "wb");
         if (!shared_data.fp)
         {
             consolePrint("failed to open \"%s\" for writing!\n", filename);
             goto end;
         }
-        
+
         if (g_appendKeyArea && fwrite(&gc_key_area, 1, sizeof(GameCardKeyArea), shared_data.fp) != sizeof(GameCardKeyArea))
         {
             consolePrint("failed to write gamecard key area data!\n");
             goto end;
         }
     }
-    
+
     consolePrint("creating threads\n");
     utilsCreateThread(&read_thread, read_thread_func, &shared_data, 2);
     utilsCreateThread(&write_thread, write_thread_func, &shared_data, 2);
-    
+
     u8 prev_time = 0;
     u64 prev_size = 0;
     u8 percent = 0;
-    
+
     time_t start = 0, btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
     bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
-    
+
     consolePrint("hold b to cancel\n\n");
-    
+
     start = time(NULL);
-    
+
     while(shared_data.data_written < shared_data.total_size)
     {
         if (shared_data.read_error || shared_data.write_error) break;
-        
+
         struct tm ts = {0};
         time_t now = time(NULL);
         localtime_r(&now, &ts);
-        
+
         size_t size = shared_data.data_written;
-        
+
         utilsScanPads();
         btn_cancel_cur_state = (utilsGetButtonsHeld() & HidNpadButton_B);
-        
+
         if (btn_cancel_cur_state && btn_cancel_cur_state != btn_cancel_prev_state)
         {
             btn_cancel_start_tmr = now;
@@ -855,43 +855,43 @@ static bool saveGameCardImage(void)
         } else {
             btn_cancel_start_tmr = btn_cancel_end_tmr = 0;
         }
-        
+
         btn_cancel_prev_state = btn_cancel_cur_state;
-        
+
         if (prev_time == ts.tm_sec || prev_size == size) continue;
-        
+
         percent = (u8)((size * 100) / shared_data.total_size);
-        
+
         prev_time = ts.tm_sec;
         prev_size = size;
-        
+
         printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));
         consoleUpdate(NULL);
     }
-    
+
     start = (time(NULL) - start);
-    
+
     consolePrint("\nwaiting for threads to join\n");
     utilsJoinThread(&read_thread);
     consolePrint("read_thread done: %lu\n", time(NULL));
     utilsJoinThread(&write_thread);
     consolePrint("write_thread done: %lu\n", time(NULL));
-    
+
     if (shared_data.read_error || shared_data.write_error)
     {
         consolePrint("i/o error\n");
         goto end;
     }
-    
+
     if (shared_data.transfer_cancelled)
     {
         consolePrint("process cancelled\n");
         goto end;
     }
-    
+
     printf("process completed in %lu seconds\n", start);
     success = true;
-    
+
     if (g_calcCrc)
     {
         if (g_appendKeyArea) printf("key area crc: %08X | ", key_area_crc);
@@ -899,20 +899,20 @@ static bool saveGameCardImage(void)
         if (g_appendKeyArea) printf(" | xci crc (with key area): %08X", shared_data.full_xci_crc);
         printf("\n");
     }
-    
+
 end:
     if (shared_data.fp)
     {
         fclose(shared_data.fp);
         shared_data.fp = NULL;
     }
-    
+
     if (!success && !g_useUsbHost) utilsRemoveConcatenationFile(filename);
-    
+
     if (shared_data.data) free(shared_data.data);
-    
+
     if (filename) free(filename);
-    
+
     return success;
 }
 
@@ -922,29 +922,29 @@ static bool saveConsoleLafwBlob(void)
     LotusAsicFirmwareBlob lafw_blob = {0};
     bool success = false;
     u32 crc = 0;
-    
+
     if (!gamecardGetLotusAsicFirmwareBlob(&lafw_blob, &lafw_version))
     {
         consolePrint("failed to get console lafw blob\n");
         goto end;
     }
-    
+
     const char *fw_type_str = gamecardGetLafwTypeString(lafw_blob.fw_type);
     if (!fw_type_str) fw_type_str = "Unknown";
-    
+
     const char *dev_type_str = gamecardGetLafwDeviceTypeString(lafw_blob.device_type);
     if (!dev_type_str) dev_type_str = "Unknown";
-    
+
     consolePrint("get console lafw blob ok\n");
-    
+
     crc = crc32Calculate(&lafw_blob, sizeof(LotusAsicFirmwareBlob));
     snprintf(path, MAX_ELEMENTS(path), "LAFW (%s) (%s) (v%lu) (%08X).bin", fw_type_str, dev_type_str, lafw_version, crc);
-    
+
     if (!saveFileData(path, &lafw_blob, sizeof(LotusAsicFirmwareBlob))) goto end;
-    
+
     printf("successfully saved lafw blob as \"%s\"\n", path);
     success = true;
-    
+
 end:
     return success;
 }
@@ -982,25 +982,25 @@ static void read_thread_func(void *arg)
         shared_data->read_error = true;
         goto end;
     }
-    
+
     u8 *buf = malloc(BLOCK_SIZE);
     if (!buf)
     {
         shared_data->read_error = true;
         goto end;
     }
-    
+
     for(u64 offset = 0, blksize = BLOCK_SIZE; offset < shared_data->total_size; offset += blksize)
     {
         if (blksize > (shared_data->total_size - offset)) blksize = (shared_data->total_size - offset);
-        
+
         /* Check if the transfer has been cancelled by the user */
         if (shared_data->transfer_cancelled)
         {
             condvarWakeAll(&g_writeCondvar);
             break;
         }
-        
+
         /* Read current data chunk */
         shared_data->read_error = !gamecardReadStorage(buf, blksize, offset);
         if (shared_data->read_error)
@@ -1008,39 +1008,39 @@ static void read_thread_func(void *arg)
             condvarWakeAll(&g_writeCondvar);
             break;
         }
-        
+
         /* Remove certificate */
         if (!g_keepCertificate && offset == 0) memset(buf + GAMECARD_CERTIFICATE_OFFSET, 0xFF, sizeof(FsGameCardCertificate));
-        
+
         /* Update checksum */
         if (g_calcCrc)
         {
             shared_data->xci_crc = crc32CalculateWithSeed(shared_data->xci_crc, buf, blksize);
             if (g_appendKeyArea) shared_data->full_xci_crc = crc32CalculateWithSeed(shared_data->full_xci_crc, buf, blksize);
         }
-        
+
         /* Wait until the previous data chunk has been written */
         mutexLock(&g_fileMutex);
-        
+
         if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
-        
+
         if (shared_data->write_error)
         {
             mutexUnlock(&g_fileMutex);
             break;
         }
-        
+
         /* Copy current file data chunk to the shared buffer */
         memcpy(shared_data->data, buf, blksize);
         shared_data->data_size = blksize;
-        
+
         /* Wake up the write thread to continue writing data */
         mutexUnlock(&g_fileMutex);
         condvarWakeAll(&g_writeCondvar);
     }
-    
+
     free(buf);
-    
+
 end:
     threadExit();
 }
@@ -1053,21 +1053,21 @@ static void write_thread_func(void *arg)
         shared_data->write_error = true;
         goto end;
     }
-    
+
     while(shared_data->data_written < shared_data->total_size)
     {
         /* Wait until the current file data chunk has been read */
         mutexLock(&g_fileMutex);
-        
+
         if (!shared_data->data_size && !shared_data->read_error) condvarWait(&g_writeCondvar, &g_fileMutex);
-        
+
         if (shared_data->read_error || shared_data->transfer_cancelled)
         {
             if (shared_data->transfer_cancelled && g_useUsbHost) usbCancelFileTransfer();
             mutexUnlock(&g_fileMutex);
             break;
         }
-        
+
         /* Write current file data chunk */
         if (g_useUsbHost)
         {
@@ -1075,20 +1075,20 @@ static void write_thread_func(void *arg)
         } else {
             shared_data->write_error = (fwrite(shared_data->data, 1, shared_data->data_size, shared_data->fp) != shared_data->data_size);
         }
-        
+
         if (!shared_data->write_error)
         {
             shared_data->data_written += shared_data->data_size;
             shared_data->data_size = 0;
         }
-        
+
         /* Wake up the read thread to continue reading data */
         mutexUnlock(&g_fileMutex);
         condvarWakeAll(&g_readCondvar);
-        
+
         if (shared_data->write_error) break;
     }
-    
+
 end:
     threadExit();
 }

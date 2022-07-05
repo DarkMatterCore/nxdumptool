@@ -85,25 +85,25 @@ void sha3ContextUpdate(Sha3Context *ctx, const void *src, size_t size)
         LOG_MSG("Invalid parameters!");
         return;
     }
-    
+
     const u8 *src_u8 = (u8*)src;
     size_t remaining = size;
-    
+
     /* Process we have anything buffered. */
     if (ctx->buffered_bytes > 0)
     {
         /* Determine how much we can copy. */
         const size_t copy_size = MIN(ctx->block_size - ctx->buffered_bytes, remaining);
-        
+
         /* Mix the bytes into our state. */
         u8 *dst = (((u8*)ctx->internal_state) + ctx->buffered_bytes);
         for(size_t i = 0; i < copy_size; ++i) dst[i] ^= src_u8[i];
-        
+
         /* Advance. */
         src_u8 += copy_size;
         remaining -= copy_size;
         ctx->buffered_bytes += copy_size;
-        
+
         /* Process a block, if we filled one. */
         if (ctx->buffered_bytes == ctx->block_size)
         {
@@ -111,20 +111,20 @@ void sha3ContextUpdate(Sha3Context *ctx, const void *src, size_t size)
             ctx->buffered_bytes = 0;
         }
     }
-    
+
     /* Process blocks, if we have any. */
     while(remaining >= ctx->block_size)
     {
         /* Mix the bytes into our state. */
         u8 *dst = (u8*)ctx->internal_state;
         for(size_t i = 0; i < ctx->block_size; ++i) dst[i] ^= src_u8[i];
-        
+
         sha3ProcessBlock(ctx);
-        
+
         src_u8 += ctx->block_size;
         remaining -= ctx->block_size;
     }
-    
+
     /* Copy any leftover data to our buffer. */
     if (remaining > 0)
     {
@@ -141,14 +141,14 @@ void sha3ContextGetHash(Sha3Context *ctx, void *dst)
         LOG_MSG("Invalid parameters!");
         return;
     }
-    
+
     /* If we need to, process the last block. */
     if (!ctx->finalized)
     {
         sha3ProcessLastBlock(ctx);
         ctx->finalized = true;
     }
-    
+
     /* Copy the output hash. */
     memcpy(dst, ctx->internal_state, ctx->hash_size);
 }
@@ -166,7 +166,7 @@ static u64 rotl_u64(u64 x, int s)
 {
     int N = (sizeof(u64) * 8);
     int r = (s % N);
-    
+
     if (r == 0)
     {
         return x;
@@ -175,7 +175,7 @@ static u64 rotl_u64(u64 x, int s)
     {
         return ((x << r) | (x >> (N - r)));
     }
-    
+
     return rotr_u64(x, -r);
 }
 
@@ -183,7 +183,7 @@ static u64 rotr_u64(u64 x, int s)
 {
     int N = (sizeof(u64) * 8);
     int r = (s % N);
-    
+
     if (r == 0)
     {
         return x;
@@ -192,7 +192,7 @@ static u64 rotr_u64(u64 x, int s)
     {
         return ((x >> r) | (x << (N - r)));
     }
-    
+
     return rotl_u64(x, -r);
 }
 
@@ -203,9 +203,9 @@ static void sha3ContextCreate(Sha3Context *out, u32 hash_size)
         LOG_MSG("Invalid parameters!");
         return;
     }
-    
+
     memset(out, 0, sizeof(Sha3Context));
-    
+
     out->hash_size = SHA3_HASH_SIZE_BYTES(hash_size);
     out->block_size = SHA3_BLOCK_SIZE(hash_size);
 }
@@ -213,7 +213,7 @@ static void sha3ContextCreate(Sha3Context *out, u32 hash_size)
 static void sha3ProcessBlock(Sha3Context *ctx)
 {
     u64 tmp = 0, C[5] = {0};
-    
+
     /* Perform all rounds. */
     for(u8 round = 0; round < SHA3_NUM_ROUNDS; ++round)
     {
@@ -222,13 +222,13 @@ static void sha3ProcessBlock(Sha3Context *ctx)
         {
             C[i] = (ctx->internal_state[i] ^ ctx->internal_state[i + 5] ^ ctx->internal_state[i + 10] ^ ctx->internal_state[i + 15] ^ ctx->internal_state[i + 20]);
         }
-        
+
         for(size_t i = 0; i < 5; ++i)
         {
             tmp = (C[(i + 4) % 5] ^ rotl_u64(C[(i + 1) % 5], 1));
             for(size_t j = 0; j < 5; ++j) ctx->internal_state[(5 * j) + i] ^= tmp;
         }
-        
+
         /* Handle rho/pi. */
         tmp = ctx->internal_state[1];
         for(size_t i = 0; i < SHA3_NUM_ROUNDS; ++i)
@@ -238,14 +238,14 @@ static void sha3ProcessBlock(Sha3Context *ctx)
             ctx->internal_state[rho_next_idx] = rotl_u64(tmp, g_rhoShiftBit[i]);
             tmp = C[0];
         }
-        
+
         /* Handle chi. */
         for(size_t i = 0; i < 5; ++i)
         {
             for(size_t j = 0; j < 5; ++j) C[j] = ctx->internal_state[(5 * i) + j];
             for(size_t j = 0; j < 5; ++j) ctx->internal_state[(5 * i) + j] ^= ((~C[(j + 1) % 5]) & C[(j + 2) % 5]);
         }
-        
+
         /* Handle iota. */
         ctx->internal_state[0] ^= g_iotaRoundConstant[round];
     }
@@ -255,10 +255,10 @@ static void sha3ProcessLastBlock(Sha3Context *ctx)
 {
     /* Mix final bits (011) into our state. */
     ((u8*)ctx->internal_state)[ctx->buffered_bytes] ^= 0b110;
-    
+
     /* Mix in the high bit of the last word in our block. */
     ctx->internal_state[(ctx->block_size / sizeof(u64)) - 1] ^= g_finalMask;
-    
+
     /* Process the last block. */
     sha3ProcessBlock(ctx);
 }

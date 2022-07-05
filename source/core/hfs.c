@@ -29,14 +29,14 @@ bool hfsReadPartitionData(HashFileSystemContext *ctx, void *out, u64 read_size, 
         LOG_MSG("Invalid parameters!");
         return false;
     }
-    
+
     /* Read partition data. */
     if (!gamecardReadStorage(out, read_size, ctx->offset + offset))
     {
         LOG_MSG("Failed to read Hash FS partition data!");
         return false;
     }
-    
+
     return true;
 }
 
@@ -47,14 +47,14 @@ bool hfsReadEntryData(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry,
         LOG_MSG("Invalid parameters!");
         return false;
     }
-    
+
     /* Read entry data. */
     if (!hfsReadPartitionData(ctx, out, read_size, ctx->header_size + fs_entry->offset + offset))
     {
         LOG_MSG("Failed to read Partition FS entry data!");
         return false;
     }
-    
+
     return true;
 }
 
@@ -63,13 +63,13 @@ bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size)
     u64 total_size = 0;
     u32 entry_count = hfsGetEntryCount(ctx);
     HashFileSystemEntry *fs_entry = NULL;
-    
+
     if (!entry_count || !out_size)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
-    
+
     for(u32 i = 0; i < entry_count; i++)
     {
         if (!(fs_entry = hfsGetEntryByIndex(ctx, i)))
@@ -77,12 +77,12 @@ bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size)
             LOG_MSG("Failed to retrieve Hash FS entry #%u!", i);
             return false;
         }
-        
+
         total_size += fs_entry->size;
     }
-    
+
     *out_size = total_size;
-    
+
     return true;
 }
 
@@ -91,15 +91,15 @@ bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *o
     HashFileSystemEntry *fs_entry = NULL;
     u32 entry_count = hfsGetEntryCount(ctx), name_table_size = 0;
     char *name_table = hfsGetNameTable(ctx);
-    
+
     if (!entry_count || !name_table || !name || !*name || !out_idx)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
-    
+
     name_table_size = ((HashFileSystemHeader*)ctx->header)->name_table_size;
-    
+
     for(u32 i = 0; i < entry_count; i++)
     {
         if (!(fs_entry = hfsGetEntryByIndex(ctx, i)))
@@ -107,19 +107,19 @@ bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *o
             LOG_MSG("Failed to retrieve Hash FS entry #%u!", i);
             break;
         }
-        
+
         if (fs_entry->name_offset >= name_table_size)
         {
             LOG_MSG("Name offset from Hash FS entry #%u exceeds name table size!", i);
             break;
         }
-        
+
         if (!strcmp(name_table + fs_entry->name_offset, name))
         {
             *out_idx = i;
             return true;
         }
     }
-    
+
     return false;
 }

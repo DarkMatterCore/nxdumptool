@@ -229,51 +229,51 @@ NX_INLINE bool titleCheckIfDeltaIdBelongsToApplicationId(u64 app_id, u64 delta_i
 NX_INLINE u32 titleGetContentCountByType(TitleInfo *info, u8 content_type)
 {
     if (!info || !info->content_count || !info->content_infos || content_type > NcmContentType_DeltaFragment) return 0;
-    
+
     u32 cnt = 0;
-    
+
     for(u32 i = 0; i < info->content_count; i++)
     {
         if (info->content_infos[i].content_type == content_type) cnt++;
     }
-    
+
     return cnt;
 }
 
 NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, u8 content_type, u8 id_offset)
 {
     if (!info || !info->content_count || !info->content_infos || content_type > NcmContentType_DeltaFragment) return NULL;
-    
+
     for(u32 i = 0; i < info->content_count; i++)
     {
         NcmContentInfo *cur_content_info = &(info->content_infos[i]);
         if (cur_content_info->content_type == content_type && cur_content_info->id_offset == id_offset) return cur_content_info;
     }
-    
+
     return NULL;
 }
 
 NX_INLINE u32 titleGetCountFromInfoBlock(TitleInfo *title_info)
 {
     if (!title_info) return 0;
-    
+
     u32 count = 1;
     TitleInfo *cur_info = title_info->previous;
-    
+
     while(cur_info)
     {
         count++;
         cur_info = cur_info->previous;
     }
-    
+
     cur_info = title_info->next;
-    
+
     while(cur_info)
     {
         count++;
         cur_info = cur_info->next;
     }
-    
+
     return count;
 }
 

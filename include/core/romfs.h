@@ -202,9 +202,9 @@ NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx,
     if (!ctx || ctx->is_patch || !ncaStorageIsValidContext(ctx->default_storage_ctx) || ctx->default_storage_ctx->base_storage_type != NcaStorageBaseStorageType_Regular || !patch || \
         (!patch->use_old_format_patch && ctx->default_storage_ctx->nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs) || \
         (patch->use_old_format_patch && ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
-    
+
     NcaContext *nca_ctx = (NcaContext*)ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
-    
+
     if (patch->use_old_format_patch)
     {
         ncaWriteHierarchicalSha256PatchToMemoryBuffer(nca_ctx, &(patch->old_format_patch), buf, buf_size, buf_offset);

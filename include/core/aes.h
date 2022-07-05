@@ -38,9 +38,9 @@ size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src,
 NX_INLINE void aes128CtrInitializePartialCtr(u8 *out, const u8 *ctr, u64 offset)
 {
     if (!out || !ctr) return;
-    
+
     offset >>= 4;
-    
+
     for(u8 i = 0; i < 8; i++)
     {
         out[i] = ctr[0x8 - i - 1];
@@ -54,9 +54,9 @@ NX_INLINE void aes128CtrInitializePartialCtr(u8 *out, const u8 *ctr, u64 offset)
 NX_INLINE void aes128CtrUpdatePartialCtr(u8 *ctr, u64 offset)
 {
     if (!ctr) return;
-    
+
     offset >>= 4;
-    
+
     for(u8 i = 0; i < 8; i++)
     {
         ctr[0x10 - i - 1] = (u8)(offset & 0xFF);
@@ -69,15 +69,15 @@ NX_INLINE void aes128CtrUpdatePartialCtr(u8 *ctr, u64 offset)
 NX_INLINE void aes128CtrUpdatePartialCtrEx(u8 *ctr, u32 ctr_val, u64 offset)
 {
     if (!ctr) return;
-    
+
     offset >>= 4;
-    
+
     for(u8 i = 0; i < 8; i++)
     {
         ctr[0x10 - i - 1] = (u8)(offset & 0xFF);
         offset >>= 8;
     }
-    
+
     for(u8 i = 0; i < 4; i++)
     {
         ctr[0x8 - i - 1] = (u8)(ctr_val & 0xFF);

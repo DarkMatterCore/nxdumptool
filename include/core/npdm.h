@@ -94,7 +94,7 @@ typedef enum {
     NpdmMemoryRegion_Applet          = 1,
     NpdmMemoryRegion_SecureSystem    = 2,
     NpdmMemoryRegion_NonSecureSystem = 3,
-    
+
     /// Old.
     NpdmMemoryRegion_NonSecure       = NpdmMemoryRegion_Application,
     NpdmMemoryRegion_Secure          = NpdmMemoryRegion_Applet
@@ -333,7 +333,7 @@ typedef enum {
     NpdmSystemCallId_CreateTransferMemory           = BIT(21),
     NpdmSystemCallId_CloseHandle                    = BIT(22),
     NpdmSystemCallId_ResetSignal                    = BIT(23),
-    
+
     ///< System calls for index 1.
     NpdmSystemCallId_WaitSynchronization            = BIT(0),
     NpdmSystemCallId_CancelSynchronization          = BIT(1),
@@ -359,7 +359,7 @@ typedef enum {
     NpdmSystemCallId_UnmapPhysicalMemory            = BIT(21),
     NpdmSystemCallId_GetDebugFutureThreadInfo       = BIT(22),  ///< Old: SystemCallId_GetFutureThreadInfo.
     NpdmSystemCallId_GetLastThreadInfo              = BIT(23),
-    
+
     ///< System calls for index 2.
     NpdmSystemCallId_GetResourceLimitLimitValue     = BIT(0),
     NpdmSystemCallId_GetResourceLimitCurrentValue   = BIT(1),
@@ -385,7 +385,7 @@ typedef enum {
     NpdmSystemCallId_CreateEvent                    = BIT(21),
     NpdmSystemCallId_Reserved9                      = BIT(22),
     NpdmSystemCallId_Reserved10                     = BIT(23),
-    
+
     ///< System calls for index 3.
     NpdmSystemCallId_MapPhysicalMemoryUnsafe        = BIT(0),
     NpdmSystemCallId_UnmapPhysicalMemoryUnsafe      = BIT(1),
@@ -411,7 +411,7 @@ typedef enum {
     NpdmSystemCallId_InvalidateProcessDataCache     = BIT(21),
     NpdmSystemCallId_StoreProcessDataCache          = BIT(22),
     NpdmSystemCallId_FlushProcessDataCache          = BIT(23),
-    
+
     ///< System calls for index 4.
     NpdmSystemCallId_DebugActiveProcess             = BIT(0),
     NpdmSystemCallId_BreakDebugProcess              = BIT(1),
@@ -437,7 +437,7 @@ typedef enum {
     NpdmSystemCallId_UnmapProcessMemory             = BIT(21),
     NpdmSystemCallId_QueryProcessMemory             = BIT(22),
     NpdmSystemCallId_MapProcessCodeMemory           = BIT(23),
-    
+
     ///< System calls for index 5.
     NpdmSystemCallId_UnmapProcessCodeMemory         = BIT(0),
     NpdmSystemCallId_CreateProcess                  = BIT(1),
@@ -447,7 +447,7 @@ typedef enum {
     NpdmSystemCallId_CreateResourceLimit            = BIT(5),
     NpdmSystemCallId_SetResourceLimitLimitValue     = BIT(6),
     NpdmSystemCallId_CallSecureMonitor              = BIT(7),
-    
+
     NpdmSystemCallId_Count                          = 0xC0     ///< Total values supported by this enum.
 } NpdmSystemCallId;
 

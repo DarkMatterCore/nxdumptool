@@ -50,13 +50,13 @@ DRESULT disk_read (
 )
 {
     (void)pdrv;
-    
+
     Result rc = 0;
     u64 start_offset = ((u64)FF_MAX_SS * (u64)sector);
     u64 read_size = ((u64)FF_MAX_SS * (u64)count);
-    
+
     rc = fsStorageRead(utilsGetEmmcBisSystemPartitionStorage(), start_offset, buff, read_size);
-    
+
     return (R_SUCCEEDED(rc) ? RES_OK : RES_ERROR);
 }
 

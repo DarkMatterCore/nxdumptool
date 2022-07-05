@@ -36,45 +36,45 @@ namespace nxdt::views
     {
         private:
             bool applet_mode = false;
-            
+
             brls::Label *applet_mode_lbl = nullptr;
             brls::Label *time_lbl = nullptr;
             brls::Label *battery_icon = nullptr, *battery_percentage = nullptr;
             brls::Label *connection_icon = nullptr, *connection_status_lbl = nullptr;
             brls::Label *usb_icon = nullptr, *usb_host_speed_lbl = nullptr;
-            
+
             nxdt::tasks::StatusInfoTask *status_info_task = nullptr;
             nxdt::tasks::GameCardTask *gc_status_task = nullptr;
             nxdt::tasks::TitleTask *title_task = nullptr;
             nxdt::tasks::UmsTask *ums_task = nullptr;
             nxdt::tasks::UsbHostTask *usb_host_task = nullptr;
-            
+
             nxdt::tasks::StatusInfoEvent::Subscription status_info_task_sub;
             nxdt::tasks::UsbHostEvent::Subscription usb_host_task_sub;
-        
+
         protected:
             void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
             void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
             brls::View *getDefaultFocus(void) override;
-        
+
         public:
             RootView(void);
             ~RootView(void);
-            
+
             static std::string GetFormattedDateString(const struct tm& timeinfo);
-            
+
             /* Wrappers for task functions. */
-            
+
             ALWAYS_INLINE bool IsInternetConnectionAvailable(void)
             {
                 return this->status_info_task->IsInternetConnectionAvailable();
             }
-            
+
             ALWAYS_INLINE const nxdt::tasks::TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system)
             {
                 return this->title_task->GetApplicationMetadata(is_system);
             }
-            
+
             EVENT_SUBSCRIPTION(StatusInfoTask, StatusInfoEvent, status_info_task);
             EVENT_SUBSCRIPTION(GameCardTask, GameCardStatusEvent, gc_status_task);
             EVENT_SUBSCRIPTION(TitleTask, TitleEvent, title_task);

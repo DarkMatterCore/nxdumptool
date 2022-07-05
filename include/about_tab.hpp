@@ -38,16 +38,16 @@ namespace nxdt::views
                 if (center) this->setHorizontalAlign(NVG_ALIGN_CENTER);
             }
     };
-    
+
     class AboutTab: public brls::List
     {
         private:
             brls::Image *logo = nullptr;
-        
+
         protected:
             void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
             void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
-        
+
         public:
             AboutTab(void);
             ~AboutTab(void);

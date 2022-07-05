@@ -95,12 +95,12 @@ NXDT_ASSERT(UsbCommandSendFileProperties, 0x320);
 typedef enum {
     ///< Expected response code.
     UsbStatusType_Success               = 0,
-    
+
     ///< Internal usage.
     UsbStatusType_InvalidCommandSize    = 1,
     UsbStatusType_WriteCommandFailed    = 2,
     UsbStatusType_ReadStatusFailed      = 3,
-    
+
     ///< These can be returned by the host device.
     UsbStatusType_InvalidMagicWord      = 4,
     UsbStatusType_UnsupportedCommand    = 5,
@@ -228,26 +228,26 @@ static bool usbTransferData(void *buf, size_t size, UsbDsEndpoint *endpoint);
 bool usbInitialize(void)
 {
     bool ret = false;
-    
+
     SCOPED_LOCK(&g_usbInterfaceMutex)
     {
         ret = g_usbInterfaceInit;
         if (ret) break;
-        
+
         /* Allocate USB transfer buffer. */
         if (!usbAllocateTransferBuffer())
         {
             LOG_MSG("Failed to allocate memory for the USB transfer buffer!");
             break;
         }
-        
+
         /* Initialize USB device interface. */
         if (!usbInitializeComms())
         {
             LOG_MSG("Failed to initialize USB device interface!");
             break;
         }
-        
+
         /* Retrieve USB state change kernel event. */
         g_usbStateChangeEvent = usbDsGetStateChangeEvent();
         if (!g_usbStateChangeEvent)
@@ -255,21 +255,21 @@ bool usbInitialize(void)
             LOG_MSG("Failed to retrieve USB state change kernel event!");
             break;
         }
-        
+
         /* Create user-mode exit event. */
         ueventCreate(&g_usbDetectionThreadExitEvent, true);
-        
+
         /* Create user-mode USB timeout event. */
         ueventCreate(&g_usbTimeoutEvent, true);
-        
+
         /* Create USB detection thread. */
         atomic_store(&g_usbDetectionThreadCreated, usbCreateDetectionThread());
         if (!atomic_load(&g_usbDetectionThreadCreated)) break;
-        
+
         /* Update flags. */
         ret = g_usbInterfaceInit = true;
     }
-    
+
     return ret;
 }
 
@@ -281,19 +281,19 @@ void usbExit(void)
         usbDestroyDetectionThread();
         atomic_store(&g_usbDetectionThreadCreated, false);
     }
-    
+
     /* Now we can safely lock. */
     SCOPED_LOCK(&g_usbInterfaceMutex)
     {
         /* Clear USB state change kernel event. */
         g_usbStateChangeEvent = NULL;
-        
+
         /* Close USB device interface. */
         usbCloseComms();
-        
+
         /* Free USB transfer buffer. */
         usbFreeTransferBuffer();
-        
+
         /* Update flag. */
         g_usbInterfaceInit = false;
     }
@@ -308,11 +308,11 @@ void *usbAllocatePageAlignedBuffer(size_t size)
 u8 usbIsReady(void)
 {
     u8 ret = UsbHostSpeed_None;
-    
+
     SCOPED_TRY_LOCK(&g_usbInterfaceMutex)
     {
         if (!g_usbHostAvailable || !g_usbSessionStarted) break;
-        
+
         switch(g_usbEndpointMaxPacketSize)
         {
             case USB_FS_EP_MAX_PACKET_SIZE: /* USB 1.x. */
@@ -328,68 +328,68 @@ u8 usbIsReady(void)
                 break;
         }
     }
-    
+
     return ret;
 }
 
 bool usbSendFileProperties(u64 file_size, const char *filename, u32 nsp_header_size)
 {
     bool ret = false;
-    
+
     SCOPED_LOCK(&g_usbInterfaceMutex)
     {
         size_t filename_length = 0;
-        
+
         if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || !filename || !(filename_length = strlen(filename)) || filename_length >= FS_MAX_PATH || \
             (!g_nspTransferMode && ((file_size && nsp_header_size >= file_size) || g_usbTransferRemainingSize)) || (g_nspTransferMode && nsp_header_size))
         {
             LOG_MSG("Invalid parameters!");
             goto end;
         }
-        
+
         /* Prepare command data. */
         usbPrepareCommandHeader(UsbCommandType_SendFileProperties, (u32)sizeof(UsbCommandSendFileProperties));
-        
+
         UsbCommandSendFileProperties *cmd_block = (UsbCommandSendFileProperties*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
         memset(cmd_block, 0, sizeof(UsbCommandSendFileProperties));
-        
+
         cmd_block->file_size = file_size;
         cmd_block->filename_length = (u32)filename_length;
         cmd_block->nsp_header_size = nsp_header_size;
         snprintf(cmd_block->filename, sizeof(cmd_block->filename), "%s", filename);
-        
+
         /* Send command. */
         ret = usbSendCommand();
         if (!ret) goto end;
-        
+
         /* Update variables. */
         g_usbTransferRemainingSize = file_size;
         g_usbTransferWrittenSize = 0;
         if (!g_nspTransferMode) g_nspTransferMode = (file_size && nsp_header_size);
-        
+
 end:
         if (!ret && g_nspTransferMode) g_nspTransferMode = false;
     }
-    
+
     return ret;
 }
 
 bool usbSendFileData(void *data, u64 data_size)
 {
     bool ret = false;
-    
+
     SCOPED_LOCK(&g_usbInterfaceMutex)
     {
         void *buf = NULL;
         bool zlt_required = false;
-        
+
         if (!g_usbTransferBuffer || !g_usbInterfaceInit || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize || !data || !data_size || data_size > USB_TRANSFER_BUFFER_SIZE || \
             data_size > g_usbTransferRemainingSize)
         {
             LOG_MSG("Invalid parameters!");
             goto end;
         }
-        
+
         /* Optimization for buffers that already are page aligned. */
         if (IS_ALIGNED((u64)data, USB_TRANSFER_ALIGNMENT))
         {
@@ -398,7 +398,7 @@ bool usbSendFileData(void *data, u64 data_size)
             buf = g_usbTransferBuffer;
             memcpy(buf, data, data_size);
         }
-        
+
         /* Determine if we'll need to set a Zero Length Termination (ZLT) packet. */
         /* This is automatically handled by usbDsEndpoint_PostBufferAsync(), depending on the ZLT setting from the input (write) endpoint. */
         /* First, check if this is the last data chunk for this file. */
@@ -419,7 +419,7 @@ bool usbSendFileData(void *data, u64 data_size)
                 //LOG_MSG("ZLT disabled (first chunk).");
             }
         }
-        
+
         /* Send data chunk. */
         if (!(ret = usbWrite(buf, data_size)))
         {
@@ -427,10 +427,10 @@ bool usbSendFileData(void *data, u64 data_size)
                     g_usbTransferRemainingSize + g_usbTransferWrittenSize);
             goto end;
         }
-        
+
         g_usbTransferRemainingSize -= data_size;
         g_usbTransferWrittenSize += data_size;
-        
+
         /* Check if this is the last chunk. */
         if (!g_usbTransferRemainingSize)
         {
@@ -440,22 +440,22 @@ bool usbSendFileData(void *data, u64 data_size)
                 LOG_MSG("Failed to read 0x%lX bytes long status block!", sizeof(UsbStatus));
                 goto end;
             }
-            
+
             UsbStatus *cmd_status = (UsbStatus*)g_usbTransferBuffer;
-            
+
             if (!(ret = (cmd_status->magic == __builtin_bswap32(USB_CMD_HEADER_MAGIC))))
             {
                 LOG_MSG("Invalid status block magic word!");
                 goto end;
             }
-            
+
             if (!(ret = (cmd_status->status == UsbStatusType_Success))) usbLogStatusDetail(cmd_status->status);
         }
-        
+
 end:
         /* Disable ZLT if it was previously enabled. */
         if (zlt_required) usbSetZltPacket(false);
-        
+
         /* Reset variables in case of errors. */
         if (!ret)
         {
@@ -463,7 +463,7 @@ end:
             g_nspTransferMode = false;
         }
     }
-    
+
     return ret;
 }
 
@@ -472,14 +472,14 @@ void usbCancelFileTransfer(void)
     SCOPED_LOCK(&g_usbInterfaceMutex)
     {
         if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || (!g_usbTransferRemainingSize && !g_nspTransferMode)) break;
-        
+
         /* Reset variables right away. */
         g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
         g_nspTransferMode = false;
-        
+
         /* Prepare command data. */
         usbPrepareCommandHeader(UsbCommandType_CancelFileTransfer, 0);
-        
+
         /* Send command. We don't care about the result here. */
         usbSendCommand();
     }
@@ -488,7 +488,7 @@ void usbCancelFileTransfer(void)
 bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size)
 {
     bool ret = false;
-    
+
     SCOPED_LOCK(&g_usbInterfaceMutex)
     {
         if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || !g_nspTransferMode || !nsp_header || !nsp_header_size || \
@@ -497,18 +497,18 @@ bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size)
             LOG_MSG("Invalid parameters!");
             break;
         }
-        
+
         /* Disable NSP transfer mode right away. */
         g_nspTransferMode = false;
-        
+
         /* Prepare command data. */
         usbPrepareCommandHeader(UsbCommandType_SendNspHeader, nsp_header_size);
         memcpy(g_usbTransferBuffer + sizeof(UsbCommandHeader), nsp_header, nsp_header_size);
-        
+
         /* Send command. */
         ret = usbSendCommand();
     }
-    
+
     return ret;
 }
 
@@ -519,7 +519,7 @@ static bool usbCreateDetectionThread(void)
         LOG_MSG("Failed to create USB detection thread!");
         return false;
     }
-    
+
     return true;
 }
 
@@ -527,7 +527,7 @@ static void usbDestroyDetectionThread(void)
 {
     /* Signal the exit event to terminate the USB detection thread */
     ueventSignal(&g_usbDetectionThreadExitEvent);
-    
+
     /* Wait for the USB detection thread to exit. */
     utilsJoinThread(&g_usbDetectionThread);
 }
@@ -535,25 +535,25 @@ static void usbDestroyDetectionThread(void)
 static void usbDetectionThreadFunc(void *arg)
 {
     (void)arg;
-    
+
     Result rc = 0;
     int idx = 0;
-    
+
     Waiter usb_change_event_waiter = waiterForEvent(g_usbStateChangeEvent);
     Waiter usb_timeout_event_waiter = waiterForUEvent(&g_usbTimeoutEvent);
     Waiter exit_event_waiter = waiterForUEvent(&g_usbDetectionThreadExitEvent);
-    
+
     bool exit_flag = false;
-    
+
     while(true)
     {
         /* Wait until an event is triggered. */
         rc = waitMulti(&idx, -1, usb_change_event_waiter, usb_timeout_event_waiter, exit_event_waiter);
         if (R_FAILED(rc)) continue;
-        
+
         /* Exit event triggered. */
         if (idx == 2) break;
-        
+
         SCOPED_LOCK(&g_usbInterfaceMutex)
         {
             /* Retrieve current USB connection status. */
@@ -562,7 +562,7 @@ static void usbDetectionThreadFunc(void *arg)
             g_usbSessionStarted = false;
             g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
             g_usbEndpointMaxPacketSize = 0;
-            
+
             /* Start a USB session if we're connected to a host device. */
             /* This will essentially hang this thread and all other threads that call USB-related functions until: */
             /* a) A session is successfully established. */
@@ -581,11 +581,11 @@ static void usbDetectionThreadFunc(void *arg)
                 }
             }
         }
-        
+
         /* Check if the exit event was triggered while waiting for a session to be established. */
         if (exit_flag) break;
     }
-    
+
     SCOPED_LOCK(&g_usbInterfaceMutex)
     {
         /* Close USB session if needed. */
@@ -594,7 +594,7 @@ static void usbDetectionThreadFunc(void *arg)
         g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
         g_usbEndpointMaxPacketSize = 0;
     }
-    
+
     threadExit();
 }
 
@@ -602,24 +602,24 @@ static bool usbStartSession(void)
 {
     UsbCommandStartSession *cmd_block = NULL;
     bool ret = false;
-    
+
     if (!g_usbInterfaceInit || !g_usbTransferBuffer)
     {
         LOG_MSG("Invalid parameters!");
         goto end;
     }
-    
+
     usbPrepareCommandHeader(UsbCommandType_StartSession, (u32)sizeof(UsbCommandStartSession));
-    
+
     cmd_block = (UsbCommandStartSession*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
     memset(cmd_block, 0, sizeof(UsbCommandStartSession));
-    
+
     cmd_block->app_ver_major = VERSION_MAJOR;
     cmd_block->app_ver_minor = VERSION_MINOR;
     cmd_block->app_ver_micro = VERSION_MICRO;
     cmd_block->abi_version = USB_ABI_VERSION;
     snprintf(cmd_block->git_commit, sizeof(cmd_block->git_commit), GIT_COMMIT);
-    
+
     ret = usbSendCommand();
     if (ret)
     {
@@ -630,13 +630,13 @@ static bool usbStartSession(void)
         if (g_usbEndpointMaxPacketSize != USB_FS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_HS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_SS_EP_MAX_PACKET_SIZE)
         {
             LOG_MSG("Invalid endpoint max packet size value received from USB host: 0x%04X.", g_usbEndpointMaxPacketSize);
-            
+
             /* Reset flags. */
             ret = false;
             g_usbEndpointMaxPacketSize = 0;
         }
     }
-    
+
 end:
     return ret;
 }
@@ -648,10 +648,10 @@ static void usbEndSession(void)
         LOG_MSG("Invalid parameters!");
         return;
     }
-    
+
     /* Prepare command data. */
     usbPrepareCommandHeader(UsbCommandType_EndSession, 0);
-    
+
     /* Send command. We don't care about the result here. */
     usbSendCommand();
 }
@@ -670,19 +670,19 @@ static bool usbSendCommand(void)
 {
     UsbCommandHeader *cmd_header = (UsbCommandHeader*)g_usbTransferBuffer;
     u32 cmd = cmd_header->cmd, cmd_block_size = cmd_header->cmd_block_size;
-    
+
     UsbStatus *cmd_status = (UsbStatus*)g_usbTransferBuffer;
     u32 status = UsbStatusType_Success;
-    
+
     bool ret = false, zlt_required = false, cmd_block_written = false;
-    
+
     if ((sizeof(UsbCommandHeader) + cmd_block_size) > USB_TRANSFER_BUFFER_SIZE)
     {
         LOG_MSG("Invalid command size!");
         status = UsbStatusType_InvalidCommandSize;
         goto end;
     }
-    
+
     /* Write command header first. */
     if (!usbWrite(cmd_header, sizeof(UsbCommandHeader)))
     {
@@ -690,17 +690,17 @@ static bool usbSendCommand(void)
         status = UsbStatusType_WriteCommandFailed;
         goto end;
     }
-    
+
     /* Check if we need to transfer a command block. */
     if (cmd_block_size)
     {
         /* Move command block data within the transfer buffer to guarantee we'll work with proper alignment. */
         memmove(g_usbTransferBuffer, g_usbTransferBuffer + sizeof(UsbCommandHeader), cmd_block_size);
-        
+
         /* Determine if we'll need to set a Zero Length Termination (ZLT) packet after sending the command block. */
         zlt_required = IS_ALIGNED(cmd_block_size, g_usbEndpointMaxPacketSize);
         if (zlt_required) usbSetZltPacket(true);
-        
+
         /* Write command block. */
         cmd_block_written = usbWrite(g_usbTransferBuffer, cmd_block_size);
         if (!cmd_block_written)
@@ -708,14 +708,14 @@ static bool usbSendCommand(void)
             LOG_MSG("Failed to write command block for type 0x%X command!", cmd);
             status = UsbStatusType_WriteCommandFailed;
         }
-        
+
         /* Disable ZLT if it was previously enabled. */
         if (zlt_required) usbSetZltPacket(false);
-        
+
         /* Bail out if we failed to write the command block. */
         if (!cmd_block_written) goto end;
     }
-    
+
     /* Read status block. */
     if (!usbRead(cmd_status, sizeof(UsbStatus)))
     {
@@ -723,20 +723,20 @@ static bool usbSendCommand(void)
         status = UsbStatusType_ReadStatusFailed;
         goto end;
     }
-    
+
     /* Verify magic word in status block. */
     if (cmd_status->magic != __builtin_bswap32(USB_CMD_HEADER_MAGIC))
     {
         status = UsbStatusType_InvalidMagicWord;
         goto end;
     }
-    
+
     /* Update return value. */
     ret = ((status = cmd_status->status) == UsbStatusType_Success);
-    
+
 end:
     if (!ret) usbLogStatusDetail(status);
-    
+
     return ret;
 }
 
@@ -788,7 +788,7 @@ static bool usbInitializeComms(void)
 {
     Result rc = 0;
     bool ret = false, init_dev_if = false;
-    
+
     /* Used on HOS >= 5.0.0. */
     struct usb_device_descriptor device_descriptor = {
         .bLength = USB_DT_DEVICE_SIZE,
@@ -806,26 +806,26 @@ static bool usbInitializeComms(void)
         .iSerialNumber = 0,                             /* Filled at a later time. */
         .bNumConfigurations = 1
     };
-    
+
     static const u16 supported_langs[] = { USB_LANGID_ENUS };
     static const u16 num_supported_langs = (u16)MAX_ELEMENTS(supported_langs);
-    
+
     u8 bos[USB_BOS_SIZE] = {0};
-    
+
     struct usb_bos_descriptor *bos_desc = (struct usb_bos_descriptor*)bos;
     struct usb_2_0_extension_descriptor *usb2_ext_desc = (struct usb_2_0_extension_descriptor*)(bos + sizeof(struct usb_bos_descriptor));
     struct usb_ss_usb_device_capability_descriptor *usb3_devcap_desc = (struct usb_ss_usb_device_capability_descriptor*)((u8*)usb2_ext_desc + sizeof(struct usb_2_0_extension_descriptor));
-    
+
     bos_desc->bLength = sizeof(struct usb_bos_descriptor);
     bos_desc->bDescriptorType = USB_DT_BOS;
     bos_desc->wTotalLength = USB_BOS_SIZE;
     bos_desc->bNumDeviceCaps = 2;   /* USB 2.0 + USB 3.0. No extra capabilities for USB 1.x. */
-    
+
     usb2_ext_desc->bLength = sizeof(struct usb_2_0_extension_descriptor);
     usb2_ext_desc->bDescriptorType = USB_DT_DEVICE_CAPABILITY;
     usb2_ext_desc->bDevCapabilityType = USB_BT_USB_2_0_EXTENSION;
     usb2_ext_desc->bmAttributes = USB_BM_LPM_SUPPORT;
-    
+
     usb3_devcap_desc->bLength = sizeof(struct usb_ss_usb_device_capability_descriptor);
     usb3_devcap_desc->bDescriptorType = USB_DT_DEVICE_CAPABILITY;
     usb3_devcap_desc->bDevCapabilityType = USB_BT_SS_USB_DEVICE_CAPABILITY;
@@ -834,7 +834,7 @@ static bool usbInitializeComms(void)
     usb3_devcap_desc->bFunctionalitySupport = 1;    /* We can fully work under USB 1.x. */
     usb3_devcap_desc->bU1DevExitLat = 0;
     usb3_devcap_desc->bU2DevExitLat = 0;
-    
+
     /* Used on HOS < 5.0.0. */
     static const UsbDsDeviceInfo device_info = {
         .idVendor = USB_DEV_VID,
@@ -844,68 +844,68 @@ static bool usbInitializeComms(void)
         .Product = APP_TITLE,
         .SerialNumber = APP_VERSION
     };
-    
+
     rc = usbDsInitialize();
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInitialize failed! (0x%08X).", rc);
         goto end;
     }
-    
+
     if (hosversionAtLeast(5, 0, 0))
     {
         /* Set language string descriptor. */
         rc = usbDsAddUsbLanguageStringDescriptor(NULL, supported_langs, num_supported_langs);
         if (R_FAILED(rc)) LOG_MSG("usbDsAddUsbLanguageStringDescriptor failed! (0x%08X).", rc);
-        
+
         /* Set manufacturer string descriptor. */
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iManufacturer), APP_AUTHOR);
             if (R_FAILED(rc)) LOG_MSG("usbDsAddUsbStringDescriptor failed! (0x%08X) (manufacturer).", rc);
         }
-        
+
         /* Set product string descriptor. */
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iProduct), APP_TITLE);
             if (R_FAILED(rc)) LOG_MSG("usbDsAddUsbStringDescriptor failed! (0x%08X) (product).", rc);
         }
-        
+
         /* Set serial number string descriptor. */
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iSerialNumber), APP_VERSION);
             if (R_FAILED(rc)) LOG_MSG("usbDsAddUsbStringDescriptor failed! (0x%08X) (serial number).", rc);
         }
-        
+
         /* Set device descriptors. */
-        
+
         if (R_SUCCEEDED(rc))
         {
             rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Full, &device_descriptor);  /* Full Speed is USB 1.1. */
             if (R_FAILED(rc)) LOG_MSG("usbDsSetUsbDeviceDescriptor failed! (0x%08X) (USB 1.1).", rc);
         }
-        
+
         if (R_SUCCEEDED(rc))
         {
             /* Update USB revision before proceeding. */
             device_descriptor.bcdUSB = USB_HS_BCD_REVISION;
-            
+
             rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_High, &device_descriptor);  /* High Speed is USB 2.0. */
             if (R_FAILED(rc)) LOG_MSG("usbDsSetUsbDeviceDescriptor failed! (0x%08X) (USB 2.0).", rc);
         }
-        
+
         if (R_SUCCEEDED(rc))
         {
             /* Update USB revision and upgrade control endpoint packet size before proceeding. */
             device_descriptor.bcdUSB = USB_SS_BCD_REVISION;
             device_descriptor.bMaxPacketSize0 = USB_SS_EP0_MAX_PACKET_SIZE;
-            
+
             rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Super, &device_descriptor); /* Super Speed is USB 3.0. */
             if (R_FAILED(rc)) LOG_MSG("usbDsSetUsbDeviceDescriptor failed! (0x%08X) (USB 3.0).", rc);
         }
-        
+
         /* Set Binary Object Store. */
         if (R_SUCCEEDED(rc))
         {
@@ -917,9 +917,9 @@ static bool usbInitializeComms(void)
         rc = usbDsSetVidPidBcd(&device_info);
         if (R_FAILED(rc)) LOG_MSG("usbDsSetVidPidBcd failed! (0x%08X).", rc);
     }
-    
+
     if (R_FAILED(rc)) goto end;
-    
+
     /* Initialize USB device interface. */
     init_dev_if = (hosversionAtLeast(5, 0, 0) ? usbInitializeDeviceInterface5x() : usbInitializeDeviceInterface1x());
     if (!init_dev_if)
@@ -927,7 +927,7 @@ static bool usbInitializeComms(void)
         LOG_MSG("Failed to initialize USB device interface!");
         goto end;
     }
-    
+
     if (hosversionAtLeast(5, 0, 0))
     {
         rc = usbDsEnable();
@@ -937,19 +937,19 @@ static bool usbInitializeComms(void)
             goto end;
         }
     }
-    
+
     ret = true;
-    
+
 end:
     if (!ret) usbCloseComms();
-    
+
     return ret;
 }
 
 static void usbCloseComms(void)
 {
     usbDsExit();
-    
+
     g_usbInterface = NULL;
     g_usbEndpointIn = NULL;
     g_usbEndpointOut = NULL;
@@ -958,7 +958,7 @@ static void usbCloseComms(void)
 static bool usbInitializeDeviceInterface5x(void)
 {
     Result rc = 0;
-    
+
     struct usb_interface_descriptor interface_descriptor = {
         .bLength = USB_DT_INTERFACE_SIZE,
         .bDescriptorType = USB_DT_INTERFACE,
@@ -970,7 +970,7 @@ static bool usbInitializeDeviceInterface5x(void)
         .bInterfaceProtocol = USB_CLASS_VENDOR_SPEC,
         .iInterface = 0
     };
-    
+
     struct usb_endpoint_descriptor endpoint_descriptor_in = {
         .bLength = USB_DT_ENDPOINT_SIZE,
         .bDescriptorType = USB_DT_ENDPOINT,
@@ -979,7 +979,7 @@ static bool usbInitializeDeviceInterface5x(void)
         .wMaxPacketSize = USB_FS_EP_MAX_PACKET_SIZE,    /* Updated before setting new device descriptors for USB 2.0 and 3.0. */
         .bInterval = 0
     };
-    
+
     struct usb_endpoint_descriptor endpoint_descriptor_out = {
         .bLength = USB_DT_ENDPOINT_SIZE,
         .bDescriptorType = USB_DT_ENDPOINT,
@@ -988,7 +988,7 @@ static bool usbInitializeDeviceInterface5x(void)
         .wMaxPacketSize = USB_FS_EP_MAX_PACKET_SIZE,    /* Updated before setting new device descriptors for USB 2.0 and 3.0. */
         .bInterval = 0
     };
-    
+
     struct usb_ss_endpoint_companion_descriptor endpoint_companion = {
         .bLength = sizeof(struct usb_ss_endpoint_companion_descriptor),
         .bDescriptorType = USB_DT_SS_ENDPOINT_COMPANION,
@@ -996,7 +996,7 @@ static bool usbInitializeDeviceInterface5x(void)
         .bmAttributes = 0,
         .wBytesPerInterval = 0
     };
-    
+
     /* Setup interface. */
     rc = usbDsRegisterInterface(&g_usbInterface);
     if (R_FAILED(rc))
@@ -1004,11 +1004,11 @@ static bool usbInitializeDeviceInterface5x(void)
         LOG_MSG("usbDsRegisterInterface failed! (0x%08X).", rc);
         return false;
     }
-    
+
     interface_descriptor.bInterfaceNumber = g_usbInterface->interface_index;
     endpoint_descriptor_in.bEndpointAddress += (interface_descriptor.bInterfaceNumber + 1);
     endpoint_descriptor_out.bEndpointAddress += (interface_descriptor.bInterfaceNumber + 1);
-    
+
     /* Full Speed config (USB 1.1). */
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Full, &interface_descriptor, USB_DT_INTERFACE_SIZE);
     if (R_FAILED(rc))
@@ -1016,85 +1016,85 @@ static bool usbInitializeDeviceInterface5x(void)
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 1.1) (interface).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Full, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 1.1) (in endpoint).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Full, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 1.1) (out endpoint).", rc);
         return false;
     }
-    
+
     /* High Speed config (USB 2.0). */
     endpoint_descriptor_in.wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE;
     endpoint_descriptor_out.wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE;
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_High, &interface_descriptor, USB_DT_INTERFACE_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 2.0) (interface).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_High, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 2.0) (in endpoint).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_High, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 2.0) (out endpoint).", rc);
         return false;
     }
-    
+
     /* Super Speed config (USB 3.0). */
     endpoint_descriptor_in.wMaxPacketSize = USB_SS_EP_MAX_PACKET_SIZE;
     endpoint_descriptor_out.wMaxPacketSize = USB_SS_EP_MAX_PACKET_SIZE;
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &interface_descriptor, USB_DT_INTERFACE_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 3.0) (interface).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 3.0) (in endpoint).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &endpoint_companion, USB_DT_SS_ENDPOINT_COMPANION_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 3.0) (in endpoint companion).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 3.0) (out endpoint).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &endpoint_companion, USB_DT_SS_ENDPOINT_COMPANION_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_AppendConfigurationData failed! (0x%08X) (USB 3.0) (out endpoint companion).", rc);
         return false;
     }
-    
+
     /* Setup endpoints. */
     rc = usbDsInterface_RegisterEndpoint(g_usbInterface, &g_usbEndpointIn, endpoint_descriptor_in.bEndpointAddress);
     if (R_FAILED(rc))
@@ -1102,28 +1102,28 @@ static bool usbInitializeDeviceInterface5x(void)
         LOG_MSG("usbDsInterface_RegisterEndpoint failed! (0x%08X) (in endpoint).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_RegisterEndpoint(g_usbInterface, &g_usbEndpointOut, endpoint_descriptor_out.bEndpointAddress);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_RegisterEndpoint failed! (0x%08X) (out endpoint).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_EnableInterface(g_usbInterface);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_EnableInterface failed! (0x%08X).", rc);
         return false;
     }
-    
+
     return true;
 }
 
 static bool usbInitializeDeviceInterface1x(void)
 {
     Result rc = 0;
-    
+
     struct usb_interface_descriptor interface_descriptor = {
         .bLength = USB_DT_INTERFACE_SIZE,
         .bDescriptorType = USB_DT_INTERFACE,
@@ -1134,7 +1134,7 @@ static bool usbInitializeDeviceInterface1x(void)
         .bInterfaceProtocol = USB_CLASS_VENDOR_SPEC,
         .iInterface = 0
     };
-    
+
     struct usb_endpoint_descriptor endpoint_descriptor_in = {
         .bLength = USB_DT_ENDPOINT_SIZE,
         .bDescriptorType = USB_DT_ENDPOINT,
@@ -1143,7 +1143,7 @@ static bool usbInitializeDeviceInterface1x(void)
         .wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE,
         .bInterval = 0
     };
-    
+
     struct usb_endpoint_descriptor endpoint_descriptor_out = {
         .bLength = USB_DT_ENDPOINT_SIZE,
         .bDescriptorType = USB_DT_ENDPOINT,
@@ -1152,7 +1152,7 @@ static bool usbInitializeDeviceInterface1x(void)
         .wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE,
         .bInterval = 0
     };
-    
+
     /* Setup interface. */
     rc = usbDsGetDsInterface(&g_usbInterface, &interface_descriptor, "usb");
     if (R_FAILED(rc))
@@ -1160,7 +1160,7 @@ static bool usbInitializeDeviceInterface1x(void)
         LOG_MSG("usbDsGetDsInterface failed! (0x%08X).", rc);
         return false;
     }
-    
+
     /* Setup endpoints. */
     rc = usbDsInterface_GetDsEndpoint(g_usbInterface, &g_usbEndpointIn, &endpoint_descriptor_in);
     if (R_FAILED(rc))
@@ -1168,21 +1168,21 @@ static bool usbInitializeDeviceInterface1x(void)
         LOG_MSG("usbDsInterface_GetDsEndpoint failed! (0x%08X) (in endpoint).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_GetDsEndpoint(g_usbInterface, &g_usbEndpointOut, &endpoint_descriptor_out);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_GetDsEndpoint failed! (0x%08X) (out endpoint).", rc);
         return false;
     }
-    
+
     rc = usbDsInterface_EnableInterface(g_usbInterface);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsInterface_EnableInterface failed! (0x%08X).", rc);
         return false;
     }
-    
+
     return true;
 }
 
@@ -1215,18 +1215,18 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         LOG_MSG("Invalid parameters!");
         return false;
     }
-    
+
     if (!usbIsHostAvailable())
     {
         LOG_MSG("USB host unavailable!");
         return false;
     }
-    
+
     Result rc = 0;
     UsbDsReportData report_data = {0};
     u32 urb_id = 0, transferred_size = 0;
     bool thread_exit = false;
-    
+
     /* Start a USB transfer using the provided endpoint. */
     rc = usbDsEndpoint_PostBufferAsync(endpoint, buf, size, &urb_id);
     if (R_FAILED(rc))
@@ -1234,7 +1234,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         LOG_MSG("usbDsEndpoint_PostBufferAsync failed! (0x%08X) (URB ID %u).", rc, urb_id);
         return false;
     }
-    
+
     /* Wait for the transfer to finish. */
     if (g_usbSessionStarted)
     {
@@ -1245,7 +1245,7 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
         int idx = 0;
         Waiter completion_event_waiter = waiterForEvent(&(endpoint->CompletionEvent));
         Waiter exit_event_waiter = waiterForUEvent(&g_usbDetectionThreadExitEvent);
-        
+
         rc = waitMulti(&idx, -1, completion_event_waiter, exit_event_waiter);
         if (R_SUCCEEDED(rc) && idx == 1)
         {
@@ -1254,47 +1254,47 @@ static bool usbTransferData(void *buf, u64 size, UsbDsEndpoint *endpoint)
             g_usbDetectionThreadExitFlag = thread_exit = true;
         }
     }
-    
+
     /* Clear the endpoint completion event. */
     if (!thread_exit) eventClear(&(endpoint->CompletionEvent));
-    
+
     if (R_FAILED(rc))
     {
         /* Cancel transfer. */
         usbDsEndpoint_Cancel(endpoint);
-        
+
         /* Safety measure: wait until the completion event is triggered again before proceeding. */
         eventWait(&(endpoint->CompletionEvent), UINT64_MAX);
         eventClear(&(endpoint->CompletionEvent));
-        
+
         /* Signal user-mode USB timeout event if needed. */
         /* This will "reset" the USB connection by making the background thread wait until a new session is established. */
         if (g_usbSessionStarted) ueventSignal(&g_usbTimeoutEvent);
-        
+
         if (!thread_exit) LOG_MSG("eventWait failed! (0x%08X) (URB ID %u).", rc, urb_id);
-        
+
         return false;
     }
-    
+
     rc = usbDsEndpoint_GetReportData(endpoint, &report_data);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsEndpoint_GetReportData failed! (0x%08X) (URB ID %u).", rc, urb_id);
         return false;
     }
-    
+
     rc = usbDsParseReportData(&report_data, urb_id, NULL, &transferred_size);
     if (R_FAILED(rc))
     {
         LOG_MSG("usbDsParseReportData failed! (0x%08X) (URB ID %u).", rc, urb_id);
         return false;
     }
-    
+
     if (transferred_size != size)
     {
         LOG_MSG("USB transfer failed! Expected 0x%lX bytes, got 0x%X bytes (URB ID %u).", size, transferred_size, urb_id);
         return false;
     }
-    
+
     return true;
 }

@@ -50,7 +50,7 @@ typedef enum {
     NacpUserAccountSwitchLock_Disable = 0,
     NacpUserAccountSwitchLock_Enable  = 1,
     NacpUserAccountSwitchLock_Count   = 2,  ///< Total values supported by this enum.
-    
+
     // Old.
     NacpTouchScreenUsage_None         = 0,
     NacpTouchScreenUsage_Supported    = 1,
@@ -89,7 +89,7 @@ typedef enum {
     NacpLanguage_SimplifiedChinese    = 14,
     NacpLanguage_BrazilianPortuguese  = 15,
     NacpLanguage_Count                = 16,                                 ///< Total values supported by this enum.
-    
+
     /// Old.
     NacpLanguage_Taiwanese            = NacpLanguage_TraditionalChinese,
     NacpLanguage_Chinese              = NacpLanguage_SimplifiedChinese
@@ -113,7 +113,7 @@ typedef enum {
     NacpSupportedLanguage_SimplifiedChinese    = BIT(14),
     NacpSupportedLanguage_BrazilianPortuguese  = BIT(15),
     NacpSupportedLanguage_Count                = 16,                                        ///< Total values supported by this enum. Should always match NacpLanguage_Count.
-    
+
     ///< Old.
     NacpSupportedLanguage_Taiwanese            = NacpSupportedLanguage_TraditionalChinese,
     NacpSupportedLanguage_Chinese              = NacpSupportedLanguage_SimplifiedChinese
@@ -135,7 +135,7 @@ typedef enum {
     NacpVideoCapture_Manual  = 1,
     NacpVideoCapture_Enable  = 2,
     NacpVideoCapture_Count   = 3,                           ///< Total values supported by this enum.
-    
+
     /// Old.
     NacpVideoCapture_Deny    = NacpVideoCapture_Disable,
     NacpVideoCapture_Allow   = NacpVideoCapture_Manual
@@ -153,7 +153,7 @@ typedef enum {
     NacpPlayLogPolicy_None    = 2,
     NacpPlayLogPolicy_Closed  = 3,
     NacpPlayLogPolicy_Count   = 4,                      ///< Total values supported by this enum.
-    
+
     /// Old.
     NacpPlayLogPolicy_All     = NacpPlayLogPolicy_Open
 } NacpPlayLogPolicy;
@@ -333,7 +333,7 @@ typedef enum {
     NacpContentsAvailabilityTransitionPolicy_Stable     = 1,
     NacpContentsAvailabilityTransitionPolicy_Changeable = 2,
     NacpContentsAvailabilityTransitionPolicy_Count      = 3,                                                    ///< Total values supported by this enum.
-    
+
     // Old.
     NacpContentsAvailabilityTransitionPolicy_Legacy     = NacpContentsAvailabilityTransitionPolicy_NoPolicy
 } NacpContentsAvailabilityTransitionPolicy;
@@ -429,7 +429,7 @@ typedef struct {
     u8 data_hash[SHA256_HASH_SIZE];             ///< SHA-256 checksum calculated over the whole NACP. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
     u8 icon_count;                              ///< NACP icon count. May be zero if no icons are available.
     NacpIconContext *icon_ctx;                  ///< Pointer to a dynamically allocated buffer that holds 'icon_count' NACP icon contexts. May be NULL if no icons are available.
-    char *authoring_tool_xml;                   ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
+    char *authoring_tool_xml;                   ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data.
                                                 ///< This is always NULL unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
     u64 authoring_tool_xml_size;                ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
                                                 ///< This is always 0 unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
@@ -494,21 +494,21 @@ const char *nacpGetContentsAvailabilityTransitionPolicyString(u8 contents_availa
 NX_INLINE void nacpFreeContext(NacpContext *nacp_ctx)
 {
     if (!nacp_ctx) return;
-    
+
     romfsFreeContext(&(nacp_ctx->romfs_ctx));
     romfsFreeFileEntryPatch(&(nacp_ctx->nca_patch));
     if (nacp_ctx->data) free(nacp_ctx->data);
-    
+
     if (nacp_ctx->icon_ctx)
     {
         for(u8 i = 0; i < nacp_ctx->icon_count; i++)
         {
             if (nacp_ctx->icon_ctx[i].icon_data) free(nacp_ctx->icon_ctx[i].icon_data);
         }
-        
+
         free(nacp_ctx->icon_ctx);
     }
-    
+
     if (nacp_ctx->authoring_tool_xml) free(nacp_ctx->authoring_tool_xml);
     memset(nacp_ctx, 0, sizeof(NacpContext));
 }
@@ -521,12 +521,12 @@ NX_INLINE bool nacpIsValidIconContext(NacpIconContext *icon_ctx)
 NX_INLINE bool nacpIsValidContext(NacpContext *nacp_ctx)
 {
     if (!nacp_ctx || !nacp_ctx->nca_ctx || !nacp_ctx->romfs_file_entry || !nacp_ctx->data || (!nacp_ctx->icon_count && nacp_ctx->icon_ctx) || (nacp_ctx->icon_count && !nacp_ctx->icon_ctx)) return false;
-    
+
     for(u8 i = 0; i < nacp_ctx->icon_count; i++)
     {
         if (!nacpIsValidIconContext(&(nacp_ctx->icon_ctx[i]))) return false;
     }
-    
+
     return true;
 }
 

@@ -269,7 +269,7 @@ typedef struct {
     u8 *extended_data;                                      ///< Pointer to the extended data block within 'raw_data', if available.
     u32 extended_data_size;                                 ///< Size of the extended data block within 'raw_data', if available. Kept here for convenience - this is part of the header in 'extended_data'.
     u8 *digest;                                             ///< Pointer to the digest within 'raw_data'.
-    char *authoring_tool_xml;                               ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
+    char *authoring_tool_xml;                               ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data.
                                                             ///< This is always NULL unless cnmtGenerateAuthoringToolXml() is used on this ContentMetaContext.
     u64 authoring_tool_xml_size;                            ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
                                                             ///< This is always 0 unless cnmtGenerateAuthoringToolXml() is used on this ContentMetaContext.

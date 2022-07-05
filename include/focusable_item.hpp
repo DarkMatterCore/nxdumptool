@@ -33,18 +33,18 @@ namespace nxdt::views
     {
         private:
             bool highlight, highlight_bg;
-        
+
         protected:
             brls::View* getDefaultFocus(void) override
             {
                 return this;
             }
-            
+
             bool isHighlightBackgroundEnabled(void) override
             {
                 return this->highlight_bg;
             }
-            
+
             void onFocusGained(void) override
             {
                 if (this->highlight)
@@ -58,21 +58,21 @@ namespace nxdt::views
                     if (this->hasParent()) this->getParent()->onChildFocusGained(this);
                 }
             }
-        
+
         public:
             template<typename... Types>
             FocusableItem(bool highlight, bool highlight_bg, Types... args) : ViewType(args...), highlight(highlight), highlight_bg(highlight_bg) { }
     };
-    
+
     /* Define templated classes for the focusable items we're gonna use. */
-    
+
     class FocusableLabel: public FocusableItem<brls::Label>
     {
         public:
             template<typename... Types>
             FocusableLabel(Types... args) : FocusableItem<brls::Label>(false, false, args...) { }
     };
-    
+
     class FocusableTable: public FocusableItem<brls::Table>
     {
         public:

@@ -193,16 +193,16 @@ NX_INLINE TikCommonBlock *tikGetCommonBlock(void *buf)
 NX_INLINE u64 tikGetTicketSectionRecordsBlockSize(TikCommonBlock *tik_common_block)
 {
     if (!tik_common_block) return 0;
-    
+
     u64 offset = sizeof(TikCommonBlock), out_size = 0;
-    
+
     for(u32 i = 0; i < tik_common_block->sect_hdr_count; i++)
     {
         TikESV2SectionRecord *rec = (TikESV2SectionRecord*)((u8*)tik_common_block + offset);
         offset += (sizeof(TikESV2SectionRecord) + ((u64)rec->record_count * (u64)rec->record_size));
         out_size += offset;
     }
-    
+
     return out_size;
 }
 

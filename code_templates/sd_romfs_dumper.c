@@ -66,7 +66,7 @@ static void utilsWaitForButtonPress(u64 flag)
     /* Don't consider stick movement as button inputs. */
     if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
                         HidNpadButton_StickRUp | HidNpadButton_StickRDown);
-    
+
     while(appletMainLoop())
     {
         utilsScanPads();
@@ -91,21 +91,21 @@ static void read_thread_func(void *arg)
         shared_data->read_error = true;
         goto end;
     }
-    
+
     u8 *buf = malloc(BLOCK_SIZE);
     if (!buf)
     {
         shared_data->read_error = true;
         goto end;
     }
-    
+
     u64 file_table_offset = 0;
     u64 file_table_size = shared_data->romfs_ctx->file_table_size;
     RomFileSystemFileEntry *file_entry = NULL;
-    
+
     char path[FS_MAX_PATH] = {0};
     sprintf(path, "sdmc:/romfs");
-    
+
     while(file_table_offset < file_table_size)
     {
         /* Check if the transfer has been cancelled by the user. */
@@ -114,20 +114,20 @@ static void read_thread_func(void *arg)
             condvarWakeAll(&g_writeCondvar);
             break;
         }
-        
+
         /* Wait until the previous file data chunk has been written. */
         mutexLock(&g_fileMutex);
         if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
         mutexUnlock(&g_fileMutex);
         if (shared_data->write_error) break;
-        
+
         /* Close file. */
         if (shared_data->fd)
         {
             fclose(shared_data->fd);
             shared_data->fd = NULL;
         }
-        
+
         /* Retrieve RomFS file entry information. */
         shared_data->read_error = (!(file_entry = romfsGetFileEntryByOffset(shared_data->romfs_ctx, file_table_offset)) || \
                                     !romfsGeneratePathFromFileEntry(shared_data->romfs_ctx, file_entry, path + 11, FS_MAX_PATH - 11, RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly));
@@ -136,10 +136,10 @@ static void read_thread_func(void *arg)
             condvarWakeAll(&g_writeCondvar);
             break;
         }
-        
+
         /* Create directory tree. */
         utilsCreateDirectoryTree(path, false);
-        
+
         /* Create file. */
         shared_data->read_error = ((shared_data->fd = fopen(path, "wb")) == NULL);
         if (shared_data->read_error)
@@ -147,18 +147,18 @@ static void read_thread_func(void *arg)
             condvarWakeAll(&g_writeCondvar);
             break;
         }
-        
+
         for(u64 offset = 0, blksize = BLOCK_SIZE; offset < file_entry->size; offset += blksize)
         {
             if (blksize > (file_entry->size - offset)) blksize = (file_entry->size - offset);
-            
+
             /* Check if the transfer has been cancelled by the user. */
             if (shared_data->transfer_cancelled)
             {
                 condvarWakeAll(&g_writeCondvar);
                 break;
             }
-            
+
             /* Read current file data chunk. */
             shared_data->read_error = !romfsReadFileEntryData(shared_data->romfs_ctx, file_entry, buf, blksize, offset);
             if (shared_data->read_error)
@@ -166,47 +166,47 @@ static void read_thread_func(void *arg)
                 condvarWakeAll(&g_writeCondvar);
                 break;
             }
-            
+
             /* Wait until the previous file data chunk has been written. */
             mutexLock(&g_fileMutex);
-            
+
             if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
-            
+
             if (shared_data->write_error)
             {
                 mutexUnlock(&g_fileMutex);
                 break;
             }
-            
+
             /* Copy current file data chunk to the shared buffer. */
             memcpy(shared_data->data, buf, blksize);
             shared_data->data_size = blksize;
-            
+
             /* Wake up the write thread to continue writing data. */
             mutexUnlock(&g_fileMutex);
             condvarWakeAll(&g_writeCondvar);
         }
-        
+
         if (shared_data->read_error || shared_data->write_error || shared_data->transfer_cancelled) break;
-        
+
         file_table_offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + file_entry->name_length, 4);
     }
-    
+
     /* Wait until the previous file data chunk has been written. */
     mutexLock(&g_fileMutex);
     if (shared_data->data_size && !shared_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
     mutexUnlock(&g_fileMutex);
-    
+
     if (shared_data->fd)
     {
         fclose(shared_data->fd);
         shared_data->fd = NULL;
     }
-    
+
     if ((shared_data->read_error || shared_data->write_error || shared_data->transfer_cancelled) && *path) remove(path);
-    
+
     free(buf);
-    
+
 end:
     threadExit();
 }
@@ -219,20 +219,20 @@ static void write_thread_func(void *arg)
         shared_data->write_error = true;
         goto end;
     }
-    
+
     while(shared_data->data_written < shared_data->total_size)
     {
         /* Wait until the current file data chunk has been read */
         mutexLock(&g_fileMutex);
-        
+
         if (!shared_data->data_size && !shared_data->read_error) condvarWait(&g_writeCondvar, &g_fileMutex);
-        
+
         if (shared_data->read_error || shared_data->transfer_cancelled || !shared_data->fd)
         {
             mutexUnlock(&g_fileMutex);
             break;
         }
-        
+
         /* Write current file data chunk */
         shared_data->write_error = (fwrite(shared_data->data, 1, shared_data->data_size, shared_data->fd) != shared_data->data_size);
         if (!shared_data->write_error)
@@ -240,14 +240,14 @@ static void write_thread_func(void *arg)
             shared_data->data_written += shared_data->data_size;
             shared_data->data_size = 0;
         }
-        
+
         /* Wake up the read thread to continue reading data */
         mutexUnlock(&g_fileMutex);
         condvarWakeAll(&g_readCondvar);
-        
+
         if (shared_data->write_error) break;
     }
-    
+
 end:
     threadExit();
 }
@@ -255,37 +255,37 @@ end:
 u8 get_program_id_offset(TitleInfo *info, u32 program_count)
 {
     if (program_count <= 1) return 0;
-    
+
     u8 id_offset = 0;
     u32 selected_idx = 0, page_size = 30, scroll = 0;
     char nca_id_str[0x21] = {0};
     bool applet_status = true;
-    
+
     NcmContentInfo **content_infos = calloc(program_count, sizeof(NcmContentInfo*));
     if (!content_infos) return 0;
-    
+
     for(u32 i = 0, j = 0; i < info->content_count && j < program_count; i++)
     {
         if (info->content_infos[i].content_type != NcmContentType_Program) continue;
         content_infos[j++] = &(info->content_infos[i]);
     }
-    
+
     while((applet_status = appletMainLoop()))
     {
         consoleClear();
         printf("select a program nca to dump the romfs from.\n\n");
-        
+
         for(u32 i = scroll; i < program_count; i++)
         {
             if (i >= (scroll + page_size)) break;
             utilsGenerateHexStringFromData(nca_id_str, sizeof(nca_id_str), content_infos[i]->content_id.c, sizeof(content_infos[i]->content_id.c), false);
             printf("%s%s.nca (ID offset #%u)\n", i == selected_idx ? " -> " : "    ", nca_id_str, content_infos[i]->id_offset);
         }
-        
+
         printf("\n");
-        
+
         consoleUpdate(NULL);
-        
+
         u64 btn_down = 0, btn_held = 0;
         while((applet_status = appletMainLoop()))
         {
@@ -294,9 +294,9 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
             btn_held = utilsGetButtonsHeld();
             if (btn_down || btn_held) break;
         }
-        
+
         if (!applet_status) break;
-        
+
         if (btn_down & HidNpadButton_A)
         {
             id_offset = content_infos[selected_idx]->id_offset;
@@ -305,7 +305,7 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
         if ((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown)))
         {
             selected_idx++;
-            
+
             if (selected_idx >= program_count)
             {
                 if (btn_down & HidNpadButton_Down)
@@ -323,7 +323,7 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
         if ((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp)))
         {
             selected_idx--;
-            
+
             if (selected_idx == UINT32_MAX)
             {
                 if (btn_down & HidNpadButton_Up)
@@ -339,22 +339,22 @@ u8 get_program_id_offset(TitleInfo *info, u32 program_count)
                 scroll--;
             }
         }
-        
+
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
-    
+
     free(content_infos);
-    
+
     return (applet_status ? id_offset : (u8)program_count);
 }
 
 static TitleInfo *get_latest_patch_info(TitleInfo *patch_info)
 {
     if (!patch_info || patch_info->meta_key.type != NcmContentMetaType_Patch) return NULL;
-    
+
     TitleInfo *output = patch_info, *tmp = patch_info;
     u32 highest_version = patch_info->version.value;
-    
+
     while((tmp = tmp->next) != NULL)
     {
         if (tmp->version.value > highest_version)
@@ -363,131 +363,131 @@ static TitleInfo *get_latest_patch_info(TitleInfo *patch_info)
             highest_version = output->version.value;
         }
     }
-    
+
     return output;
 }
 
 int main(int argc, char *argv[])
 {
     int ret = 0;
-    
+
     if (!utilsInitializeResources(argc, (const char**)argv))
     {
         ret = -1;
         goto out;
     }
-    
+
     /* Configure input. */
     /* Up to 8 different, full controller inputs. */
     /* Individual Joy-Cons not supported. */
     padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
     padInitializeWithMask(&g_padState, 0x1000000FFUL);
-    
+
     consoleInit(NULL);
-    
+
     u32 app_count = 0;
     TitleApplicationMetadata **app_metadata = NULL;
     TitleUserApplicationData user_app_data = {0};
-    
+
     u32 selected_idx = 0, page_size = 30, scroll = 0;
     bool applet_status = true, exit_prompt = true;
-    
+
     u8 *buf = NULL;
-    
+
     NcaContext *base_nca_ctx = NULL, *update_nca_ctx = NULL;
-    
+
     RomFileSystemContext romfs_ctx = {0};
-    
+
     ThreadSharedData shared_data = {0};
     Thread read_thread = {0}, write_thread = {0};
-    
+
     app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
     if (!app_metadata || !app_count)
     {
         consolePrint("app metadata failed\n");
         goto out2;
     }
-    
+
     consolePrint("app metadata succeeded\n");
-    
+
     buf = malloc(BLOCK_SIZE);
     if (!buf)
     {
         consolePrint("buf failed\n");
         goto out2;
     }
-    
+
     consolePrint("buf succeeded\n");
-    
+
     base_nca_ctx = calloc(1, sizeof(NcaContext));
     if (!base_nca_ctx)
     {
         consolePrint("base nca ctx buf failed\n");
         goto out2;
     }
-    
+
     consolePrint("base nca ctx buf succeeded\n");
-    
+
     update_nca_ctx = calloc(1, sizeof(NcaContext));
     if (!update_nca_ctx)
     {
         consolePrint("update nca ctx buf failed\n");
         goto out2;
     }
-    
+
     consolePrint("update nca ctx buf succeeded\n");
-    
+
     utilsSleep(1);
-    
+
     while((applet_status = appletMainLoop()))
     {
         consoleClear();
         printf("select a user application to dump its romfs.\nif an update is available, patch romfs data will be dumped instead.\ndata will be saved to \"sdmc:/romfs\".\npress b to exit.\n\n");
         printf("title: %u / %u\n", selected_idx + 1, app_count);
         printf("selected title: %016lX - %s\n\n", app_metadata[selected_idx]->title_id, app_metadata[selected_idx]->lang_entry.name);
-        
+
         for(u32 i = scroll; i < app_count; i++)
         {
             if (i >= (scroll + page_size)) break;
             printf("%s%016lX - %s\n", i == selected_idx ? " -> " : "    ", app_metadata[i]->title_id, app_metadata[i]->lang_entry.name);
         }
-        
+
         printf("\n");
-        
+
         consoleUpdate(NULL);
-        
+
         bool gc_update = false;
         u64 btn_down = 0, btn_held = 0;
-        
+
         while((applet_status = appletMainLoop()))
         {
             utilsScanPads();
             btn_down = utilsGetButtonsDown();
             btn_held = utilsGetButtonsHeld();
             if (btn_down || btn_held) break;
-            
+
             if (titleIsGameCardInfoUpdated())
             {
                 free(app_metadata);
-                
+
                 app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
                 if (!app_metadata)
                 {
                     consolePrint("\napp metadata failed\n");
                     goto out2;
                 }
-                
+
                 selected_idx = scroll = 0;
                 gc_update = true;
-                
+
                 break;
             }
         }
-        
+
         if (!applet_status) break;
-        
+
         if (gc_update) continue;
-        
+
         if (btn_down & HidNpadButton_A)
         {
             if (!titleGetUserApplicationData(app_metadata[selected_idx]->title_id, &user_app_data) || !user_app_data.app_info)
@@ -497,13 +497,13 @@ int main(int argc, char *argv[])
                 titleFreeUserApplicationData(&user_app_data);
                 continue;
             }
-            
+
             break;
         } else
         if ((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown)))
         {
             selected_idx++;
-            
+
             if (selected_idx >= app_count)
             {
                 if (btn_down & HidNpadButton_Down)
@@ -521,7 +521,7 @@ int main(int argc, char *argv[])
         if ((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp)))
         {
             selected_idx--;
-            
+
             if (selected_idx == UINT32_MAX)
             {
                 if (btn_down & HidNpadButton_Up)
@@ -542,60 +542,60 @@ int main(int argc, char *argv[])
             exit_prompt = false;
             goto out2;
         }
-        
+
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
-    
+
     if (!applet_status)
     {
         exit_prompt = false;
         goto out2;
     }
-    
+
     u32 program_count = titleGetContentCountByType(user_app_data.app_info, NcmContentType_Program);
     if (!program_count)
     {
         consolePrint("base app has no program ncas!\n");
         goto out2;
     }
-    
+
     u8 program_id_offset = get_program_id_offset(user_app_data.app_info, program_count);
     if (program_id_offset >= program_count)
     {
         exit_prompt = false;
         goto out2;
     }
-    
+
     consoleClear();
     consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[selected_idx]->lang_entry.name, app_metadata[selected_idx]->title_id + program_id_offset);
-    
+
     if (!ncaInitializeContext(base_nca_ctx, user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
         titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Program, program_id_offset), user_app_data.app_info->version.value, NULL))
     {
         consolePrint("nca initialize base ctx failed\n");
         goto out2;
     }
-    
+
     TitleInfo *latest_patch = NULL;
     if (user_app_data.patch_info) latest_patch = get_latest_patch_info(user_app_data.patch_info);
-    
+
     if (base_nca_ctx->fs_ctx[1].has_sparse_layer && (!latest_patch || latest_patch->version.value < user_app_data.app_info->version.value))
     {
         consolePrint("base app is a sparse title and no v%u or greater update could be found\n", user_app_data.app_info->version.value);
         goto out2;
     }
-    
+
     if (latest_patch)
     {
         consolePrint("using patch romfs with update v%u\n", latest_patch->version.value);
-        
+
         if (!ncaInitializeContext(update_nca_ctx, latest_patch->storage_id, (latest_patch->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
             titleGetContentInfoByTypeAndIdOffset(latest_patch, NcmContentType_Program, program_id_offset), latest_patch->version.value, NULL))
         {
             consolePrint("nca initialize update ctx failed\n");
             goto out2;
         }
-        
+
         if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1]), &(update_nca_ctx->fs_ctx[1])))
         {
             consolePrint("romfs initialize ctx failed (update)\n");
@@ -603,54 +603,54 @@ int main(int argc, char *argv[])
         }
     } else {
         consolePrint("using base romfs only\n");
-        
+
         if (!romfsInitializeContext(&romfs_ctx, &(base_nca_ctx->fs_ctx[1]), NULL))
         {
             consolePrint("romfs initialize ctx failed (base)\n");
             goto out2;
         }
     }
-    
+
     shared_data.romfs_ctx = &romfs_ctx;
     romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
-    
+
     consolePrint("romfs initialize ctx succeeded\n");
-    
+
     shared_data.fd = NULL;
     shared_data.data = buf;
     shared_data.data_size = 0;
     shared_data.data_written = 0;
-    
+
     consolePrint("creating threads\n");
     utilsCreateThread(&read_thread, read_thread_func, &shared_data, 2);
     utilsCreateThread(&write_thread, write_thread_func, &shared_data, 2);
-    
+
     u8 prev_time = 0;
     u64 prev_size = 0;
     u8 percent = 0;
-    
+
     time_t btn_cancel_start_tmr = 0, btn_cancel_end_tmr = 0;
     bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
-    
+
     utilsSetLongRunningProcessState(true);
-    
+
     consolePrint("hold b to cancel\n\n");
-    
+
     time_t start = time(NULL);
-    
+
     while(shared_data.data_written < shared_data.total_size)
     {
         if (shared_data.read_error || shared_data.write_error) break;
-        
+
         struct tm ts = {0};
         time_t now = time(NULL);
         localtime_r(&now, &ts);
-        
+
         size_t size = shared_data.data_written;
-        
+
         utilsScanPads();
         btn_cancel_cur_state = (utilsGetButtonsHeld() & HidNpadButton_B);
-        
+
         if (btn_cancel_cur_state && btn_cancel_cur_state != btn_cancel_prev_state)
         {
             btn_cancel_start_tmr = now;
@@ -668,67 +668,67 @@ int main(int argc, char *argv[])
         } else {
             btn_cancel_start_tmr = btn_cancel_end_tmr = 0;
         }
-        
+
         btn_cancel_prev_state = btn_cancel_cur_state;
-        
+
         if (prev_time == ts.tm_sec || prev_size == size) continue;
-        
+
         percent = (u8)((size * 100) / shared_data.total_size);
-        
+
         prev_time = ts.tm_sec;
         prev_size = size;
-        
+
         printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));
         consoleUpdate(NULL);
     }
-    
+
     start = (time(NULL) - start);
-    
+
     consolePrint("\nwaiting for threads to join\n");
     utilsJoinThread(&read_thread);
     consolePrint("read_thread done: %lu\n", time(NULL));
     utilsJoinThread(&write_thread);
     consolePrint("write_thread done: %lu\n", time(NULL));
-    
+
     utilsSetLongRunningProcessState(false);
-    
+
     if (shared_data.read_error || shared_data.write_error)
     {
         consolePrint("i/o error\n");
         goto out2;
     }
-    
+
     if (shared_data.transfer_cancelled)
     {
         consolePrint("process cancelled\n");
         goto out2;
     }
-    
+
     consolePrint("process completed in %lu seconds\n", start);
-    
+
 out2:
     if (exit_prompt)
     {
         consolePrint("press any button to exit\n");
         utilsWaitForButtonPress(0);
     }
-    
+
     romfsFreeContext(&romfs_ctx);
-    
+
     if (update_nca_ctx) free(update_nca_ctx);
-    
+
     if (base_nca_ctx) free(base_nca_ctx);
-    
+
     titleFreeUserApplicationData(&user_app_data);
-    
+
     if (buf) free(buf);
-    
+
     if (app_metadata) free(app_metadata);
-    
+
 out:
     utilsCloseResources();
-    
+
     consoleExit(NULL);
-    
+
     return ret;
 }

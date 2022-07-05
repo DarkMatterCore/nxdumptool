@@ -29,7 +29,7 @@ Result fsOpenGameCardStorage(FsStorage *out, const FsGameCardHandle *handle, u32
         FsGameCardHandle handle;
         u32 partition;
     } in = { *handle, partition };
-    
+
     return serviceDispatchIn(fsGetServiceSession(), 30, in,
         .out_num_objects = 1,
         .out_objects = &out->s
@@ -50,17 +50,17 @@ Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCard
     struct {
         FsGameCardHandle handle;
     } in = { *handle };
-    
+
     struct {
         u32 title_version;
         u64 title_id;
     } out;
-    
+
     Result rc = serviceDispatchInOut(&d->s, 203, in, out);
-    
+
     if (R_SUCCEEDED(rc) && out_title_version) *out_title_version = out.title_version;
     if (R_SUCCEEDED(rc) && out_title_id) *out_title_id = out.title_id;
-    
+
     return rc;
 }
 
@@ -70,12 +70,12 @@ Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const F
         FsGameCardHandle handle;
         u64 buf_size;
     } in = { *handle, sizeof(FsGameCardCertificate) };
-    
+
     Result rc = serviceDispatchIn(&d->s, 206, in,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
         .buffers = { { out, sizeof(FsGameCardCertificate) } }
     );
-    
+
     return rc;
 }
 
@@ -84,11 +84,11 @@ Result fsDeviceOperatorGetGameCardIdSet(FsDeviceOperator *d, FsGameCardIdSet *ou
     struct {
         u64 buf_size;
     } in = { sizeof(FsGameCardIdSet) };
-    
+
     Result rc = serviceDispatchIn(&d->s, 208, in,
         .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
         .buffers = { { out, sizeof(FsGameCardIdSet) } }
     );
-    
+
     return rc;
 }

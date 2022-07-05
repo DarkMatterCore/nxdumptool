@@ -1,16 +1,16 @@
 {
     "__comment__": "Comments about how specific fields work use keys that follow the '__{field}_comment__' format. These don't have to be replicated in your translation files.",
-    
+
     "unknown": "Unknown",
-    
+
     "applet_mode_warning": "\uE8B2  Warning: the application is running under Applet Mode!  \uE8B2\nThis mode severely limits the amount of usable RAM. If you consistently reproduce any crashes, please consider running the application via title override (hold R while launching a game).",
-    
+
     "time_format": "12",
     "__time_format_comment__": "Use 12 for a 12-hour clock, or 24 for a 24-hour clock",
-    
+
     "date": "{1:02d}/{2:02d}/{0} {3:02d}:{4:02d}:{5:02d} {6}",
     "__date_comment__": "{0} = Year, {1} = Month, {2} = Day, {3} = Hour, {4} = Minute, {5} = Second, {6} = AM/PM (if time_format is set to 12)",
-    
+
     "libnx_abort": "Fatal error triggered in libnx!\nError code: 0x{:08X}.",
     "exception_triggered": "Fatal exception triggered!\nReason: {} (0x{:X})."
 }

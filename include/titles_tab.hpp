@@ -35,46 +35,46 @@ namespace nxdt::views
         private:
             const TitleApplicationMetadata *app_metadata = nullptr;
             bool is_system = false;
-            
+
             TitleUserApplicationData user_app_data = {0};
             TitleInfo *system_title_info = NULL;
-        
+
         public:
             TitlesTabPopup(const TitleApplicationMetadata *app_metadata, bool is_system);
             ~TitlesTabPopup(void);
     };
-    
+
     /* Expanded ListItem class to hold application metadata. */
     class TitlesTabItem: public brls::ListItem
     {
         private:
             const TitleApplicationMetadata *app_metadata = nullptr;
             bool is_system = false;
-        
+
         public:
             TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system);
-            
+
             ALWAYS_INLINE const TitleApplicationMetadata *GetApplicationMetadata(void)
             {
                 return this->app_metadata;
             }
-            
+
             ALWAYS_INLINE bool IsSystemTitle(void)
             {
                 return this->is_system;
             }
     };
-    
+
     class TitlesTab: public LayeredErrorFrame
     {
         private:
             RootView *root_view = nullptr;
-            
+
             nxdt::tasks::TitleEvent::Subscription title_task_sub;
             bool is_system = false;
-            
+
             void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* app_metadata);
-        
+
         public:
             TitlesTab(RootView *root_view, bool is_system);
             ~TitlesTab(void);

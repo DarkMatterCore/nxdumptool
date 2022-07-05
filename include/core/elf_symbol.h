@@ -64,7 +64,7 @@
 #define SHN_ABS                 0xFFF1      /* The symbol has an absolute value that will not change because of relocation. */
 #define SHN_COMMON              0xFFF2      /* Labels a common block that has not yet been allocated. */
 #define SHN_XINDEX              0xFFFF      /* The symbol refers to a specific location within a section, but the section header index is too large to be represented directly. */
-#define SHN_HIRESERVE           0xFFFF      
+#define SHN_HIRESERVE           0xFFFF
 
 /* Macros. */
 #define ELF_ST_BIND(x)          ((x) >> 4)  /* Extracts binding value from a st_info field. */

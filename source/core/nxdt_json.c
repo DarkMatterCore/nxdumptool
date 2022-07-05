@@ -48,14 +48,14 @@ struct json_object *jsonParseFromString(const char *str, size_t size)
         LOG_MSG("Invalid parameters!");
         return false;
     }
-    
+
     /* Calculate string size if it wasn't provided. */
     if (!size) size = (strlen(str) + 1);
-    
+
     struct json_tokener *tok = NULL;
     struct json_object *obj = NULL;
     enum json_tokener_error jerr = json_tokener_success;
-    
+
     /* Allocate tokener. */
     tok = json_tokener_new();
     if (!tok)
@@ -63,23 +63,23 @@ struct json_object *jsonParseFromString(const char *str, size_t size)
         LOG_MSG("json_tokener_new failed!");
         goto end;
     }
-    
+
     /* Parse JSON buffer. */
     obj = json_tokener_parse_ex(tok, str, (int)size);
     if ((jerr = json_tokener_get_error(tok)) != json_tokener_success)
     {
         LOG_MSG("json_tokener_parse_ex failed! Reason: \"%s\".", json_tokener_error_desc(jerr));
-        
+
         if (obj)
         {
             json_object_put(obj);
             obj = NULL;
         }
     }
-    
+
 end:
     if (tok) json_tokener_free(tok);
-    
+
     return obj;
 }
 
@@ -88,20 +88,20 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
     const struct json_object *parent_obj = obj;
     struct json_object *child_obj = NULL;
     char *path_dup = NULL, *pch = NULL, *state = NULL, *prev_pch = NULL;
-    
+
     if (!jsonValidateObject(obj) || !path || !*path)
     {
         LOG_MSG("Invalid parameters!");
         return NULL;
     }
-    
+
     /* Duplicate path to avoid problems with strtok_r(). */
     if (!(path_dup = strdup(path)))
     {
         LOG_MSG("Unable to duplicate input path! (\"%s\").", path);
         return NULL;
     }
-    
+
     /* Tokenize input path. */
     pch = strtok_r(path_dup, "/", &state);
     if (!pch)
@@ -109,11 +109,11 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
         LOG_MSG("Failed to tokenize input path! (\"%s\").", path);
         goto end;
     }
-    
+
     while(pch)
     {
         prev_pch = pch;
-        
+
         pch = strtok_r(NULL, "/", &state);
         if (pch || !out_last_element)
         {
@@ -123,7 +123,7 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
                 LOG_MSG("Failed to retrieve JSON object by key for \"%s\"! (\"%s\").", prev_pch, path);
                 break;
             }
-            
+
             /* Update parent and child pointers if we can still proceed. */
             if (pch)
             {
@@ -134,7 +134,7 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
             /* No additional path elements can be found + the user wants the string for the last path element. */
             /* Let's start by setting the last parent object as the return value. */
             child_obj = (struct json_object*)parent_obj; /* Drop the const. */
-            
+
             /* Duplicate last path element string. */
             *out_last_element = strdup(prev_pch);
             if (!*out_last_element)
@@ -144,10 +144,10 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
             }
         }
     }
-    
+
 end:
     if (path_dup) free(path_dup);
-    
+
     return child_obj;
 }
 
@@ -156,11 +156,11 @@ void jsonLogLastError(void)
     size_t str_len = 0;
     char *str = (char*)json_util_get_last_err(); /* Drop the const. */
     if (!str || !(str_len = strlen(str))) return;
-    
+
     /* Remove line breaks. */
     if (str[str_len - 1] == '\n') str[--str_len] = '\0';
     if (str[str_len - 1] == '\r') str[--str_len] = '\0';
-    
+
     /* Log error message. */
     LOG_MSG("%s", str);
 }
@@ -190,11 +190,11 @@ bool jsonSetArray(const struct json_object *obj, const char *path, struct json_o
         LOG_MSG("Invalid parameters!");
         return false;
     }
-    
+
     bool ret = false;
     struct json_object *parent_obj = NULL;
     char *key = NULL;
-    
+
     /* Get parent JSON object. */
     parent_obj = jsonGetObjectByPath(obj, path, &key);
     if (!parent_obj)
@@ -202,19 +202,19 @@ bool jsonSetArray(const struct json_object *obj, const char *path, struct json_o
         LOG_MSG("Failed to retrieve parent JSON object! (\"%s\").", path);
         return false;
     }
-    
+
     /* Set new JSON array. */
     if (json_object_object_add(parent_obj, key, value) != 0)
     {
         LOG_MSG("json_object_object_add failed! (\"%s\").", path);
         goto end;
     }
-    
+
     /* Update return value. */
     ret = true;
-    
+
 end:
     if (key) free(key);
-    
+
     return ret;
 }

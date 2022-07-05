@@ -37,7 +37,7 @@ typedef struct {
     NpdmContext npdm_ctx;               ///< NpdmContext for the NPDM stored in Program NCA ExeFS.
     u32 nso_count;                      ///< Number of NSOs stored in Program NCA FS section #0.
     NsoContext *nso_ctx;                ///< Pointer to a dynamically allocated buffer that holds 'nso_count' NSO contexts.
-    char *authoring_tool_xml;           ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data. 
+    char *authoring_tool_xml;           ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data.
                                         ///< This is always NULL unless programInfoGenerateAuthoringToolXml() is used on this ProgramInfoContext.
     u64 authoring_tool_xml_size;        ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
                                         ///< This is always 0 unless programInfoGenerateAuthoringToolXml() is used on this ProgramInfoContext.
@@ -55,16 +55,16 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx);
 NX_INLINE void programInfoFreeContext(ProgramInfoContext *program_info_ctx)
 {
     if (!program_info_ctx) return;
-    
+
     pfsFreeContext(&(program_info_ctx->pfs_ctx));
     npdmFreeContext(&(program_info_ctx->npdm_ctx));
-    
+
     if (program_info_ctx->nso_ctx)
     {
         for(u32 i = 0; i < program_info_ctx->nso_count; i++) nsoFreeContext(&(program_info_ctx->nso_ctx[i]));
         free(program_info_ctx->nso_ctx);
     }
-    
+
     if (program_info_ctx->authoring_tool_xml) free(program_info_ctx->authoring_tool_xml);
     memset(program_info_ctx, 0, sizeof(ProgramInfoContext));
 }

@@ -47,20 +47,20 @@ namespace nxdt::tasks
         NifmInternetConnectionType connection_type;
         char *ip_addr;
     } StatusInfoData;
-    
+
     /* Used to hold pointers to application metadata entries. */
     typedef std::vector<TitleApplicationMetadata*> TitleApplicationMetadataVector;
-    
+
     /* Used to hold UMS devices. */
     typedef std::vector<UsbHsFsDevice> UmsDeviceVector;
-    
+
     /* Custom event types. */
     typedef brls::Event<const StatusInfoData*> StatusInfoEvent;
     typedef brls::Event<GameCardStatus> GameCardStatusEvent;
     typedef brls::Event<const TitleApplicationMetadataVector*> TitleEvent;
     typedef brls::Event<const UmsDeviceVector*> UmsEvent;
     typedef brls::Event<UsbHostSpeed> UsbHostEvent;
-    
+
     /* Status info task. */
     /* Its event returns a pointer to a StatusInfoData struct. */
     class StatusInfoTask: public brls::RepeatingTask
@@ -68,19 +68,19 @@ namespace nxdt::tasks
         private:
             StatusInfoEvent status_info_event;
             StatusInfoData status_info_data = {0};
-        
+
         protected:
             void run(retro_time_t current_time) override;
-        
+
         public:
             StatusInfoTask(void);
             ~StatusInfoTask(void);
-            
+
             bool IsInternetConnectionAvailable(void);
-            
+
             EVENT_SUBSCRIPTION(StatusInfoEvent, status_info_event);
     };
-    
+
     /* Gamecard task. */
     /* Its event returns a GameCardStatus value. */
     class GameCardTask: public brls::RepeatingTask
@@ -90,42 +90,42 @@ namespace nxdt::tasks
             GameCardStatus cur_gc_status = GameCardStatus_NotInserted;
             GameCardStatus prev_gc_status = GameCardStatus_NotInserted;
             bool first_notification = true;
-        
+
         protected:
             void run(retro_time_t current_time) override;
-        
+
         public:
             GameCardTask(void);
             ~GameCardTask(void);
-            
+
             EVENT_SUBSCRIPTION(GameCardStatusEvent, gc_status_event);
     };
-    
+
     /* Title task. */
     /* Its event returns a pointer to a TitleApplicationMetadataVector with metadata for user titles (system titles don't change at runtime). */
     class TitleTask: public brls::RepeatingTask
     {
         private:
             TitleEvent title_event;
-            
+
             TitleApplicationMetadataVector system_metadata;
             TitleApplicationMetadataVector user_metadata;
-            
+
             void PopulateApplicationMetadataVector(bool is_system);
-        
+
         protected:
             void run(retro_time_t current_time) override;
-        
+
         public:
             TitleTask(void);
             ~TitleTask(void);
-            
+
             /* Intentionally left here to let system titles views retrieve metadata. */
             const TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
-            
+
             EVENT_SUBSCRIPTION(TitleEvent, title_event);
     };
-    
+
     /* USB Mass Storage task. */
     /* Its event returns a pointer to a UmsDeviceVector. */
     class UmsTask: public brls::RepeatingTask
@@ -133,19 +133,19 @@ namespace nxdt::tasks
         private:
             UmsEvent ums_event;
             UmsDeviceVector ums_devices;
-            
+
             void PopulateUmsDeviceVector(void);
-        
+
         protected:
             void run(retro_time_t current_time) override;
-        
+
         public:
             UmsTask(void);
             ~UmsTask(void);
-            
+
             EVENT_SUBSCRIPTION(UmsEvent, ums_event);
     };
-    
+
     /* USB host device connection task. */
     class UsbHostTask: public brls::RepeatingTask
     {
@@ -153,14 +153,14 @@ namespace nxdt::tasks
             UsbHostEvent usb_host_event;
             UsbHostSpeed cur_usb_host_speed = UsbHostSpeed_None;
             UsbHostSpeed prev_usb_host_speed = UsbHostSpeed_None;
-        
+
         protected:
             void run(retro_time_t current_time) override;
-        
+
         public:
             UsbHostTask(void);
             ~UsbHostTask(void);
-            
+
             EVENT_SUBSCRIPTION(UsbHostEvent, usb_host_event);
     };
 }

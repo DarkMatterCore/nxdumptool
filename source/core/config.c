@@ -77,23 +77,23 @@ static bool configValidateJsonNcaFsObject(const struct json_object *obj);
 bool configInitialize(void)
 {
     bool ret = false;
-    
+
     SCOPED_LOCK(&g_configMutex)
     {
         ret = g_configInterfaceInit;
         if (ret) break;
-        
+
         /* Parse JSON config. */
         if (!configParseConfigJson())
         {
             LOG_MSG("Failed to parse JSON configuration!");
             break;
         }
-        
+
         /* Update flags. */
         ret = g_configInterfaceInit = true;
     }
-    
+
     return ret;
 }
 
@@ -104,7 +104,7 @@ void configExit(void)
         /* Free JSON object. */
         /* We don't need to write it back to the SD card - setter functions do that on their own. */
         configFreeConfigJson();
-        
+
         /* Update flag. */
         g_configInterfaceInit = false;
     }
@@ -119,7 +119,7 @@ CONFIG_SETTER(Integer, int);
 static bool configParseConfigJson(void)
 {
     bool use_default_config = true, ret = false;
-    
+
     /* Read config JSON. */
     g_configJson = json_object_from_file(CONFIG_PATH);
     if (!g_configJson)
@@ -127,19 +127,19 @@ static bool configParseConfigJson(void)
         jsonLogLastError();
         goto end;
     }
-    
+
     /* Validate configuration. */
     ret = configValidateJsonRootObject(g_configJson);
     use_default_config = !ret;
-    
+
 end:
     if (use_default_config)
     {
         LOG_MSG("Loading default configuration.");
-        
+
         /* Free config JSON. */
         configFreeConfigJson();
-        
+
         /* Read default config JSON. */
         g_configJson = json_object_from_file(DEFAULT_CONFIG_PATH);
         if (g_configJson)
@@ -150,7 +150,7 @@ end:
             jsonLogLastError();
         }
     }
-    
+
     return ret;
 }
 
@@ -171,9 +171,9 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
 {
     bool ret = false, overclock_found = false, naming_convention_found = false, dump_destination_found = false, gamecard_found = false;
     bool nsp_found = false, ticket_found = false, nca_fs_found = false;
-    
+
     if (!jsonValidateObject(obj)) goto end;
-    
+
     json_object_object_foreach(obj, key, val)
     {
         CONFIG_VALIDATE_FIELD(Boolean, overclock);
@@ -185,9 +185,9 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
         CONFIG_VALIDATE_OBJECT(NcaFs, nca_fs);
         goto end;
     }
-    
+
     ret = (overclock_found && naming_convention_found && dump_destination_found && gamecard_found && nsp_found && ticket_found && nca_fs_found);
-    
+
 end:
     return ret;
 }
@@ -195,9 +195,9 @@ end:
 static bool configValidateJsonGameCardObject(const struct json_object *obj)
 {
     bool ret = false, append_key_area_found = false, keep_certificate_found = false, trim_dump_found = false, calculate_checksum_found = false, checksum_lookup_method_found = false;
-    
+
     if (!jsonValidateObject(obj)) goto end;
-    
+
     json_object_object_foreach(obj, key, val)
     {
         CONFIG_VALIDATE_FIELD(Boolean, append_key_area);
@@ -207,9 +207,9 @@ static bool configValidateJsonGameCardObject(const struct json_object *obj)
         CONFIG_VALIDATE_FIELD(Integer, checksum_lookup_method, ConfigChecksumLookupMethod_None, ConfigChecksumLookupMethod_Count - 1);
         goto end;
     }
-    
+
     ret = (append_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && checksum_lookup_method_found);
-    
+
 end:
     return ret;
 }
@@ -218,9 +218,9 @@ static bool configValidateJsonNspObject(const struct json_object *obj)
 {
     bool ret = false, set_download_distribution_found = false, remove_console_data_found = false, remove_titlekey_crypto_found = false;
     bool disable_linked_account_requirement_found = false, enable_screenshots_found = false, enable_video_capture_found = false, disable_hdcp_found = false, append_authoringtool_data_found = false, lookup_checksum_found = false;
-    
+
     if (!jsonValidateObject(obj)) goto end;
-    
+
     json_object_object_foreach(obj, key, val)
     {
         CONFIG_VALIDATE_FIELD(Boolean, set_download_distribution);
@@ -234,10 +234,10 @@ static bool configValidateJsonNspObject(const struct json_object *obj)
         CONFIG_VALIDATE_FIELD(Boolean, append_authoringtool_data);
         goto end;
     }
-    
+
     ret = (set_download_distribution_found && remove_console_data_found && remove_titlekey_crypto_found && disable_linked_account_requirement_found && \
            enable_screenshots_found && enable_video_capture_found && disable_hdcp_found && append_authoringtool_data_found && lookup_checksum_found);
-    
+
 end:
     return ret;
 }
@@ -245,17 +245,17 @@ end:
 static bool configValidateJsonTicketObject(const struct json_object *obj)
 {
     bool ret = false, remove_console_data_found = false;
-    
+
     if (!jsonValidateObject(obj)) goto end;
-    
+
     json_object_object_foreach(obj, key, val)
     {
         CONFIG_VALIDATE_FIELD(Boolean, remove_console_data);
         goto end;
     }
-    
+
     ret = remove_console_data_found;
-    
+
 end:
     return ret;
 }
@@ -263,17 +263,17 @@ end:
 static bool configValidateJsonNcaFsObject(const struct json_object *obj)
 {
     bool ret = false, use_layeredfs_dir_found = false;
-    
+
     if (!jsonValidateObject(obj)) goto end;
-    
+
     json_object_object_foreach(obj, key, val)
     {
         CONFIG_VALIDATE_FIELD(Boolean, use_layeredfs_dir);
         goto end;
     }
-    
+
     ret = use_layeredfs_dir_found;
-    
+
 end:
     return ret;
 }

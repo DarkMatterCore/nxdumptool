@@ -17,26 +17,26 @@ make clean_all
 for f in ./code_templates/*.c; do
     basename="$(basename "$f")"
     filename="${basename%.*}"
-    
+
     if [[ $filename == "dump_title_infos" ]]; then
         continue
     fi
-    
+
     echo $filename
-    
+
     rm -f ./source/main.c
     cp $f ./source/main.c
-    
+
     cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$filename.jpg
-    
+
     make BUILD_TYPE="$filename" -j$(nproc)
-    
+
     rm -f ./romfs/icon/$filename.jpg
-    
+
     mkdir ./code_templates/tmp/$filename
     cp ./$filename.nro ./code_templates/tmp/$filename/$filename.nro
     cp ./$filename.elf ./code_templates/tmp/$filename/$filename.elf
-    
+
     make BUILD_TYPE="$filename" clean
 done
 

@@ -18,4 +18,3 @@ host/nxdumptool
 *.exe
 main.cpp
 /code_templates/tmp/*
-/galgun

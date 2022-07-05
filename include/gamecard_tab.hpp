@@ -33,13 +33,13 @@ namespace nxdt::views
     class GameCardTab: public LayeredErrorFrame
     {
         typedef bool (*GameCardSizeFunc)(u64 *out_size);
-        
+
         private:
             RootView *root_view = nullptr;
-            
+
             nxdt::tasks::GameCardStatusEvent::Subscription gc_status_task_sub;
             GameCardStatus gc_status = GameCardStatus_NotInserted;
-            
+
             FocusableTable *properties_table = nullptr;
             brls::TableRow *capacity = nullptr;
             brls::TableRow *total_size = nullptr;
@@ -48,16 +48,16 @@ namespace nxdt::views
             brls::TableRow *lafw_version = nullptr;
             brls::TableRow *sdk_version = nullptr;
             brls::TableRow *compatibility_type = nullptr;
-            
+
             brls::ListItem *dump_card_image = nullptr;
             brls::ListItem *dump_certificate = nullptr;
             brls::ListItem *dump_header = nullptr;
             brls::ListItem *dump_decrypted_cardinfo = nullptr;
             brls::ListItem *dump_initial_data = nullptr;
             brls::ListItem *dump_hfs_partitions = nullptr;
-            
+
             std::string GetFormattedSizeString(GameCardSizeFunc func);
-        
+
         public:
             GameCardTab(RootView *root_view);
             ~GameCardTab(void);

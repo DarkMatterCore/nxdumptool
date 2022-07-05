@@ -28,13 +28,13 @@ size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src,
         LOG_MSG("Invalid parameters!");
         return 0;
     }
-    
+
     size_t i, crypt_res = 0;
     u64 cur_sector = sector;
-    
+
     u8 *dst_u8 = (u8*)dst;
     const u8 *src_u8 = (const u8*)src;
-    
+
     for(i = 0; i < size; i += sector_size, cur_sector++)
     {
         /* We have to force a sector reset on each new sector to actually enable Nintendo AES-XTS cipher tweak. */
@@ -42,6 +42,6 @@ size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src,
         crypt_res = (encrypt ? aes128XtsEncrypt(ctx, dst_u8 + i, src_u8 + i, sector_size) : aes128XtsDecrypt(ctx, dst_u8 + i, src_u8 + i, sector_size));
         if (crypt_res != sector_size) break;
     }
-    
+
     return i;
 }
