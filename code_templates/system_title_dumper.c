@@ -160,7 +160,6 @@ static void dumpRomFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
 {
     if (!buf || !info || !nca_fs_ctx) return;
 
-    u64 romfs_file_table_offset = 0;
     RomFileSystemContext romfs_ctx = {0};
     RomFileSystemFileEntry *romfs_file_entry = NULL;
 
@@ -178,12 +177,12 @@ static void dumpRomFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
     utilsCreateDirectoryTree(path, true);
     path_len = strlen(path);
 
-    while(romfs_file_table_offset < romfs_ctx.file_table_size)
+    while(romfsCanMoveToNextFileEntry(&romfs_ctx))
     {
-        if (!(romfs_file_entry = romfsGetFileEntryByOffset(&romfs_ctx, romfs_file_table_offset)) || \
+        if (!(romfs_file_entry = romfsGetCurrentFileEntry(&romfs_ctx)) || \
             !romfsGeneratePathFromFileEntry(&romfs_ctx, romfs_file_entry, path + path_len, sizeof(path) - path_len, RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly))
         {
-            consolePrint("romfs get entry / generate path failed for 0x%lX!\n", romfs_file_table_offset);
+            consolePrint("romfs get entry / generate path failed for 0x%lX!\n", romfs_ctx.cur_file_offset);
             goto end;
         }
 
@@ -215,7 +214,11 @@ static void dumpRomFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
         fclose(filefd);
         filefd = NULL;
 
-        romfs_file_table_offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + romfs_file_entry->name_length, 4);
+        if (!romfsMoveToNextFileEntry(&romfs_ctx))
+        {
+            consolePrint("failed to move to next file entry!\n");
+            goto end;
+        }
     }
 
     consolePrint("romfs dump complete\n");

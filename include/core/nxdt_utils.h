@@ -109,7 +109,7 @@ void utilsJoinThread(Thread *thread);
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
 /// Replaces illegal FAT characters in the provided UTF-8 string with underscores.
-/// If 'ascii_only' is set to true, all codepoints outside the (0x20,0x7E] range will also be replaced with underscores.
+/// If 'ascii_only' is set to true, all codepoints outside the [0x20,0x7F) range will also be replaced with underscores.
 /// Replacements are performed on a per-codepoint basis, which means the string length can be reduced by this function.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 

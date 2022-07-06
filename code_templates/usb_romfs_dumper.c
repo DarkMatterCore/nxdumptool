@@ -100,12 +100,14 @@ static void read_thread_func(void *arg)
         goto end;
     }
 
-    u64 file_table_offset = 0;
-    u64 file_table_size = shared_data->romfs_ctx->file_table_size;
     RomFileSystemFileEntry *file_entry = NULL;
     char path[FS_MAX_PATH] = {0};
 
-    while(file_table_offset < file_table_size)
+    /* Reset current file table offset. */
+    romfsResetFileTableOffset(shared_data->romfs_ctx);
+
+    /* Loop through all file entries. */
+    while(romfsCanMoveToNextFileEntry(shared_data->romfs_ctx))
     {
         /* Check if the transfer has been cancelled by the user */
         if (shared_data->transfer_cancelled)
@@ -115,7 +117,7 @@ static void read_thread_func(void *arg)
         }
 
         /* Retrieve RomFS file entry information */
-        shared_data->read_error = (!(file_entry = romfsGetFileEntryByOffset(shared_data->romfs_ctx, file_table_offset)) || \
+        shared_data->read_error = (!(file_entry = romfsGetCurrentFileEntry(shared_data->romfs_ctx)) || \
                                     !romfsGeneratePathFromFileEntry(shared_data->romfs_ctx, file_entry, path, FS_MAX_PATH, RomFileSystemPathIllegalCharReplaceType_IllegalFsChars));
         if (shared_data->read_error)
         {
@@ -178,7 +180,13 @@ static void read_thread_func(void *arg)
 
         if (shared_data->read_error || shared_data->write_error || shared_data->transfer_cancelled) break;
 
-        file_table_offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + file_entry->name_length, 4);
+        /* Move to the next file entry. */
+        shared_data->read_error = !romfsMoveToNextFileEntry(shared_data->romfs_ctx);
+        if (shared_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
     }
 
     free(buf);
