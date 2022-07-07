@@ -151,13 +151,13 @@ typedef enum {
 
 typedef enum {
     BucketTreeSubStorageType_Regular    = 0,    ///< Body storage with None, XTS or CTR crypto. Most common substorage type, used in all title types.
-                                                ///< May be used as substorage for all BucketTreeStorage types.
-    BucketTreeSubStorageType_Indirect   = 1,    ///< Indirect storage from patch NCAs. May be used as substorage for BucketTreeStorageType_Compressed only.
-    BucketTreeSubStorageType_AesCtrEx   = 2,    ///< AesCtrEx storage from patch NCAs. May be used as substorage for BucketTreeStorageType_Indirect only.
-    BucketTreeSubStorageType_Compressed = 3,    ///< Compressed storage. If available, this is always the outmost storage type for any NCA. May be used by all title types.
-                                                ///< May be used as substorage for BucketTreeStorageType_Indirect only.
-    BucketTreeSubStorageType_Sparse     = 4,    ///< Sparse storage with CTR crypto, using virtual offsets as lower CTR IVs. Used in base applications only.
-                                                ///< May be used as substorage for BucketTreeStorageType_Compressed or BucketTreeStorageType_Indirect.
+                                                ///< May be used as substorage for all other BucketTreeStorage types.
+    BucketTreeSubStorageType_Indirect   = 1,    ///< Indirect storage. Only used in patches. This is always the outmost storage type.
+    BucketTreeSubStorageType_AesCtrEx   = 2,    ///< AesCtrEx storage. Only used in patches. Must be used as substorage #1 for BucketTreeStorageType_Indirect.
+    BucketTreeSubStorageType_Compressed = 3,    ///< Compressed storage. Only used in base applications. If available, this is always the outmost storage type.
+                                                ///< May be used as substorage #0 for BucketTreeStorageType_Indirect only.
+    BucketTreeSubStorageType_Sparse     = 4,    ///< Sparse storage with CTR crypto, using virtual offsets as lower CTR IVs. Only used in base applications.
+                                                ///< May be used as substorage for BucketTreeStorageType_Compressed or BucketTreeStorageType_Indirect (#0).
     BucketTreeSubStorageType_Count      = 5     ///< Total values supported by this enum.
 } BucketTreeSubStorageType;
 
@@ -194,6 +194,9 @@ bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContex
 
 /// Reads data from a Bucket Tree storage using a previously initialized BucketTreeContext.
 bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offset);
+
+/// Checks if the provided block extents are within the provided BucketTreeContext's Indirect Storage.
+bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u64 size, bool *out);
 
 /// Helper inline functions.
 

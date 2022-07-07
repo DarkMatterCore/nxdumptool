@@ -107,7 +107,7 @@ static void read_thread_func(void *arg)
     romfsResetFileTableOffset(shared_data->romfs_ctx);
 
     /* Loop through all file entries. */
-    while(romfsCanMoveToNextFileEntry(shared_data->romfs_ctx))
+    while(shared_data->data_written < shared_data->total_size && romfsCanMoveToNextFileEntry(shared_data->romfs_ctx))
     {
         /* Check if the transfer has been cancelled by the user */
         if (shared_data->transfer_cancelled)
@@ -117,6 +117,28 @@ static void read_thread_func(void *arg)
         }
 
         /* Retrieve RomFS file entry information */
+        /*shared_data->read_error = (!(file_entry = romfsGetCurrentFileEntry(shared_data->romfs_ctx)));
+        if (shared_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        bool updated = false;
+        if (!romfsIsFileEntryUpdated(shared_data->romfs_ctx, file_entry, &updated) || !updated)
+        {
+            shared_data->read_error = !romfsMoveToNextFileEntry(shared_data->romfs_ctx);
+            if (shared_data->read_error)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+
+            continue;
+        }
+
+        shared_data->read_error = !romfsGeneratePathFromFileEntry(shared_data->romfs_ctx, file_entry, path, FS_MAX_PATH, RomFileSystemPathIllegalCharReplaceType_IllegalFsChars);*/
+
         shared_data->read_error = (!(file_entry = romfsGetCurrentFileEntry(shared_data->romfs_ctx)) || \
                                     !romfsGeneratePathFromFileEntry(shared_data->romfs_ctx, file_entry, path, FS_MAX_PATH, RomFileSystemPathIllegalCharReplaceType_IllegalFsChars));
         if (shared_data->read_error)
@@ -599,7 +621,12 @@ int main(int argc, char *argv[])
     }
 
     shared_data.romfs_ctx = &romfs_ctx;
-    romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
+    //if (!romfsGetTotalDataSize(&romfs_ctx, true, &(shared_data.total_size)) || !shared_data.total_size)
+    if (!romfsGetTotalDataSize(&romfs_ctx, false, &(shared_data.total_size)) || !shared_data.total_size)
+    {
+        consolePrint("failed to retrieve total romfs size\n");
+        goto out2;
+    }
 
     consolePrint("romfs initialize ctx succeeded\n");
 

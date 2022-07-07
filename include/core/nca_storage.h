@@ -63,6 +63,9 @@ bool ncaStorageGetHashTargetExtents(NcaStorageContext *ctx, u64 *out_offset, u64
 /// Reads data from the NCA storage using a previously initialized NcaStorageContext.
 bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset);
 
+/// Checks if the provided block extents are within the provided Patch NcaStorageContext's Indirect Storage.
+bool ncaStorageIsBlockWithinPatchStorageRange(NcaStorageContext *ctx, u64 offset, u64 size, bool *out);
+
 /// Frees a previously initialized NCA storage context.
 void ncaStorageFreeContext(NcaStorageContext *ctx);
 

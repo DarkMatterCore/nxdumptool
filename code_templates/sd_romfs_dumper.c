@@ -108,7 +108,7 @@ static void read_thread_func(void *arg)
     romfsResetFileTableOffset(shared_data->romfs_ctx);
 
     /* Loop through all file entries. */
-    while(romfsCanMoveToNextFileEntry(shared_data->romfs_ctx))
+    while(shared_data->data_written < shared_data->total_size && romfsCanMoveToNextFileEntry(shared_data->romfs_ctx))
     {
         /* Check if the transfer has been cancelled by the user. */
         if (shared_data->transfer_cancelled)
@@ -634,7 +634,11 @@ int main(int argc, char *argv[])
     }
 
     shared_data.romfs_ctx = &romfs_ctx;
-    romfsGetTotalDataSize(&romfs_ctx, &(shared_data.total_size));
+    if (!romfsGetTotalDataSize(&romfs_ctx, false, &(shared_data.total_size)) || !shared_data.total_size)
+    {
+        consolePrint("failed to retrieve total romfs size\n");
+        goto out2;
+    }
 
     consolePrint("romfs initialize ctx succeeded\n");
 

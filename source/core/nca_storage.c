@@ -29,8 +29,8 @@ NX_INLINE bool ncaStorageIsValidContext(NcaStorageContext *ctx);
 
 bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
-    /* TODO: allow patches with sparse layers? */
-    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || (nca_fs_ctx->has_sparse_layer && nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs))
+    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || (nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs && \
+        (!nca_fs_ctx->has_patch_indirect_layer || !nca_fs_ctx->has_patch_aes_ctr_ex_layer || nca_fs_ctx->has_sparse_layer || nca_fs_ctx->has_compression_layer)))
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -89,9 +89,6 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
                 break;
             case NcaStorageBaseStorageType_Sparse:
                 if (!bktrSetBucketTreeSubStorage(out->compressed_storage, out->sparse_storage, 0)) goto end;
-                break;
-            case NcaStorageBaseStorageType_Indirect:
-                if (!bktrSetBucketTreeSubStorage(out->compressed_storage, out->indirect_storage, 0)) goto end;
                 break;
         }
 
@@ -226,6 +223,22 @@ bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset
     }
 
     if (!success) LOG_MSG("Failed to read 0x%lX-byte long block from offset 0x%lX in base storage! (type: %u).", read_size, offset, ctx->base_storage_type);
+
+    return success;
+}
+
+bool ncaStorageIsBlockWithinPatchStorageRange(NcaStorageContext *ctx, u64 offset, u64 size, bool *out)
+{
+    if (!ncaStorageIsValidContext(ctx) || ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || !ctx->indirect_storage || \
+        ctx->base_storage_type != NcaStorageBaseStorageType_Indirect || !out)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+
+    /* Check if the provided block extents are within the Indirect Storage's range. */
+    bool success = bktrIsBlockWithinIndirectStorageRange(ctx->indirect_storage, offset, size, out);
+    if (!success) LOG_MSG("Failed to determine if block extents are within the Indirect Storage's range!");
 
     return success;
 }

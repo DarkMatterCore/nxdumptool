@@ -217,9 +217,9 @@ bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *f
     return true;
 }
 
-bool romfsGetTotalDataSize(RomFileSystemContext *ctx, u64 *out_size)
+bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *out_size)
 {
-    if (!romfsIsValidContext(ctx) || !out_size)
+    if (!romfsIsValidContext(ctx) || !out_size || (only_updated && (!ctx->is_patch || ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs)))
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -242,8 +242,9 @@ bool romfsGetTotalDataSize(RomFileSystemContext *ctx, u64 *out_size)
             goto end;
         }
 
-        /* Update total data size. */
-        total_size += file_entry->size;
+        /* Update total data size, taking into account the only_updated flag. */
+        bool updated = false;
+        if (!only_updated || (only_updated && romfsIsFileEntryUpdated(ctx, file_entry, &updated) && updated)) total_size += file_entry->size;
 
         /* Move to the next file entry. */
         if (!romfsMoveToNextFileEntry(ctx))
@@ -602,6 +603,39 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
 
     /* Replace illegal characters within the file name, if needed. */
     if (illegal_char_replace_type) utilsReplaceIllegalCharacters(out_path + path_len, illegal_char_replace_type == RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly);
+
+    /* Update return value. */
+    success = true;
+
+end:
+    return success;
+}
+
+bool romfsIsFileEntryUpdated(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, bool *out)
+{
+    if (!romfsIsValidContext(ctx) || !ctx->is_patch || ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || \
+        !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !out)
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+
+    u64 file_offset = (ctx->offset + ctx->body_offset + file_entry->offset);
+    bool success = false;
+
+    /* Short-circuit: check if we're dealing with a Patch RomFS with a missing base RomFS. */
+    if (!ncaStorageIsValidContext(&(ctx->storage_ctx[0])))
+    {
+        *out = success = true;
+        goto end;
+    }
+
+    /* Check if any sections from this block belong to the Patch storage. */
+    if (!ncaStorageIsBlockWithinPatchStorageRange(ctx->default_storage_ctx, file_offset, file_entry->size, out))
+    {
+        LOG_MSG("Failed to determine if file entry is within Patch storage range!");
+        goto end;
+    }
 
     /* Update return value. */
     success = true;

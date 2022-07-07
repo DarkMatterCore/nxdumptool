@@ -151,7 +151,8 @@ bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size
 bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, void *out, u64 read_size, u64 offset);
 
 /// Calculates the extracted RomFS size.
-bool romfsGetTotalDataSize(RomFileSystemContext *ctx, u64 *out_size);
+/// If 'only_updated' is set to true and the provided RomFS context was initialized as a Patch RomFS context, only files modified by the update will be considered.
+bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *out_size);
 
 /// Calculates the extracted size from a RomFS directory.
 bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, u64 *out_size);
@@ -169,6 +170,10 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
 
 /// Generates a path string from a RomFS file entry.
 bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type);
+
+/// Checks if a RomFS file entry is updated by the Patch RomFS.
+/// Only works if the provided RomFileSystemContext was initialized as a Patch RomFS context.
+bool romfsIsFileEntryUpdated(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, bool *out);
 
 /// Generates HierarchicalSha256 (NCA0) / HierarchicalIntegrity (NCA2/NCA3) FS section patch data using a RomFS context + file entry, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the RomFS file entry data.
