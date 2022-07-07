@@ -148,7 +148,7 @@ NX_INLINE void gamecardCloseHandle(void);
 
 static bool gamecardOpenStorageArea(u8 area);
 static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset);
-static void gamecardCloseStorageArea(bool switch_to_normal);
+static void gamecardCloseStorageArea(void);
 
 static bool gamecardGetStorageAreasSizes(void);
 NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
@@ -838,8 +838,6 @@ end:
 
 static void gamecardFreeInfo(bool clear_status)
 {
-    gamecardCloseStorageArea(true);
-
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
 
     memset(&g_gameCardInfoArea, 0, sizeof(GameCardInfo));
@@ -865,6 +863,8 @@ static void gamecardFreeInfo(bool clear_status)
     }
 
     g_gameCardHfsCount = 0;
+
+    gamecardCloseStorageArea();
 
     if (clear_status) g_gameCardStatus = GameCardStatus_NotInserted;
 }
@@ -1047,7 +1047,7 @@ static bool gamecardOpenStorageArea(u8 area)
     if (g_gameCardHandle.value && serviceIsActive(&(g_gameCardStorage.s)) && g_gameCardCurrentStorageArea == area) return true;
 
     /* Close both gamecard handle and open storage area. */
-    gamecardCloseStorageArea(false);
+    gamecardCloseStorageArea();
 
     /* Retrieve both a new gamecard handle and a storage area handle. */
     if (!gamecardGetHandleAndStorage(area - 1)) /* Zero-based index. */
@@ -1139,21 +1139,9 @@ end:
     return success;
 }
 
-static void gamecardCloseStorageArea(bool switch_to_normal)
+static void gamecardCloseStorageArea(void)
 {
     if (g_gameCardCurrentStorageArea == GameCardStorageArea_None) return;
-
-    /* Workaround: try to reset the Lotus driver by switching to the normal storage area before closing all gamecard comms. */
-    if (switch_to_normal && g_gameCardCurrentStorageArea == GameCardStorageArea_Secure)
-    {
-        LOG_MSG("Switching to normal area before shutting down.");
-        if (gamecardOpenStorageArea(GameCardStorageArea_Normal))
-        {
-            /* Perform a bogus read (just one page). */
-            u8 bogus[GAMECARD_PAGE_SIZE] = {0};
-            gamecardReadStorageArea(bogus, sizeof(bogus), 0);
-        }
-    }
 
     if (serviceIsActive(&(g_gameCardStorage.s)))
     {
@@ -1182,7 +1170,7 @@ static bool gamecardGetStorageAreasSizes(void)
 
         rc = fsStorageGetSize(&g_gameCardStorage, (s64*)&area_size);
 
-        gamecardCloseStorageArea(false);
+        gamecardCloseStorageArea();
 
         if (R_FAILED(rc) || !area_size)
         {
