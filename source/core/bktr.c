@@ -274,7 +274,6 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
 
     BucketTreeIndirectStorageEntry *start_entry = NULL, *end_entry = NULL;
     BucketTreeVisitor visitor = {0};
-    u64 end_offset = 0;
     bool updated = false, success = false;
 
     /* Find storage entry. */
@@ -292,10 +291,19 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
         goto end;
     }
 
-    /* Move visitor until we reach the end entry node. */
-    while(end_entry->virtual_offset < (offset + size) && bktrVisitorCanMoveNext(&visitor))
-    {
-        /* Retrieve the next entry. */
+    /* Loop through adjacent Indirect Storage entry nodes and check if at least one of them uses the Patch storage index. */
+    do {
+        /* Break out of the loop immediately if the current entry node's storage index matches Patch. */
+        if (end_entry->storage_index == BucketTreeIndirectStorageIndex_Patch)
+        {
+            updated = true;
+            break;
+        }
+
+        /* Don't proceed if we can't move any further. */
+        if (!bktrVisitorCanMoveNext(&visitor)) break;
+
+        /* Retrieve the next entry node. */
         if (!bktrVisitorMoveNext(&visitor))
         {
             LOG_MSG("Failed to retrieve next Indirect Storage entry!");
@@ -304,40 +312,12 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
 
         /* Validate current entry node. */
         end_entry = (BucketTreeIndirectStorageEntry*)visitor.entry;
-        if (!bktrIsOffsetWithinStorageRange(ctx, end_entry->virtual_offset))
+        if (!bktrIsOffsetWithinStorageRange(ctx, end_entry->virtual_offset) || end_entry->virtual_offset <= start_entry->virtual_offset)
         {
             LOG_MSG("Invalid Indirect Storage entry! (0x%lX) (#2).", end_entry->virtual_offset);
             goto end;
         }
-    }
-
-    /* Verify end entry virtual offset. */
-    end_offset = (end_entry == start_entry ? ctx->end_offset : end_entry->virtual_offset);
-    if (end_offset <= start_entry->virtual_offset || offset >= end_offset)
-    {
-        LOG_MSG("Invalid virtual offset for the Indirect Storage's next entry! (0x%lX).", end_offset);
-        goto end;
-    }
-
-    /* Short-circuit: check if the block is contained within a single Indirect Storage entry node. */
-    if (end_entry == start_entry)
-    {
-        updated = (start_entry->storage_index == BucketTreeIndirectStorageIndex_Patch);
-        success = true;
-        goto end;
-    }
-
-    /* Loop through adjacent Indirect Storage entry nodes and check if at least one of them uses the Patch storage index. */
-    while(start_entry < end_entry)
-    {
-        if (start_entry->storage_index == BucketTreeIndirectStorageIndex_Patch)
-        {
-            updated = true;
-            break;
-        }
-
-        start_entry++;
-    }
+    } while(end_entry->virtual_offset < (offset + size));
 
     /* Update output values. */
     *out = updated;
