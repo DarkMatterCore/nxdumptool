@@ -152,9 +152,9 @@ typedef enum {
 typedef enum {
     BucketTreeSubStorageType_Regular    = 0,    ///< Body storage with None, XTS or CTR crypto. Most common substorage type, used in all title types.
                                                 ///< May be used as substorage for all other BucketTreeStorage types.
-    BucketTreeSubStorageType_Indirect   = 1,    ///< Indirect storage. Only used in patches. This is always the outmost storage type.
+    BucketTreeSubStorageType_Indirect   = 1,    ///< Indirect storage. Only used in patches. May be used as substorage for BucketTreeStorageType_Compressed only.
     BucketTreeSubStorageType_AesCtrEx   = 2,    ///< AesCtrEx storage. Only used in patches. Must be used as substorage #1 for BucketTreeStorageType_Indirect.
-    BucketTreeSubStorageType_Compressed = 3,    ///< Compressed storage. Only used in base applications. If available, this is always the outmost storage type.
+    BucketTreeSubStorageType_Compressed = 3,    ///< Compressed storage. If available, this is always the outmost storage type for any NCA. May be used by all title types.
                                                 ///< May be used as substorage #0 for BucketTreeStorageType_Indirect only.
     BucketTreeSubStorageType_Sparse     = 4,    ///< Sparse storage with CTR crypto, using virtual offsets as lower CTR IVs. Only used in base applications.
                                                 ///< May be used as substorage for BucketTreeStorageType_Compressed or BucketTreeStorageType_Indirect (#0).
@@ -184,12 +184,19 @@ typedef struct {
 } BucketTreeContext;
 
 /// Initializes a Bucket Tree context using the provided NCA FS section context and a storage type.
+/// 'storage_type' may only be BucketTreeStorageType_Indirect, BucketTreeStorageType_AesCtrEx or BucketTreeStorageType_Sparse.
 bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type);
 
-/// Sets a BucketTreeSubStorageType_Regular substorage at index 0.
+/// Initializes a Bucket Tree context with type BucketTreeStorageType_Compressed using the provided BucketTreeSubStorage.
+bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSubStorage *substorage);
+
+/// Sets a BucketTreeSubStorageType_Regular substorage at index 0 in the provided BucketTreeContext.
+/// The storage type from the provided BucketTreeContext may only be BucketTreeStorageType_Indirect, BucketTreeStorageType_AesCtrEx or BucketTreeStorageType_Sparse.
 bool bktrSetRegularSubStorage(BucketTreeContext *ctx, NcaFsSectionContext *nca_fs_ctx);
 
 /// Sets a substorage with type >= BucketTreeStorageType_Indirect and <= BucketTreeStorageType_Compressed at the provided index using a previously initialized BucketTreeContext.
+/// The storage type from the provided parent BucketTreeContext may only be BucketTreeStorageType_Indirect.
+/// The storage type from the provided child BucketTreeContext may only be BucketTreeStorageType_AesCtrEx, BucketTreeStorageType_Compressed, BucketTreeStorageType_Sparse.
 bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContext *child_ctx, u8 substorage_index);
 
 /// Reads data from a Bucket Tree storage using a previously initialized BucketTreeContext.

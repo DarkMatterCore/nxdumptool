@@ -244,7 +244,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
         if ((lz4_res = LZ4_decompress_safe((char*)rodata_read_ptr, (char*)rodata_buf, (int)nso_ctx->nso_header.rodata_file_size, (int)rodata_buf_size)) != \
             (int)nso_ctx->nso_header.rodata_segment_info.size)
         {
-            LOG_MSG("LZ4 decompression failed for NRO \"%s\"! (0x%08X).", nso_ctx->nso_filename, (u32)lz4_res);
+            LOG_MSG("LZ4 decompression failed for NRO \"%s\"! (%d).", nso_ctx->nso_filename, lz4_res);
             goto end;
         }
     }

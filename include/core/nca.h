@@ -384,7 +384,6 @@ typedef struct {
 
     ///< CompressionInfo-related fields.
     bool has_compression_layer;         ///< Set to true if this NCA FS section has a compression layer.
-    u64 compression_table_offset;       ///< hash_target_offset + header.compression_info.bucket.offset. Relative to the start of the FS section. Placed here for convenience.
 
     ///< Hash-layer-related fields.
     bool skip_hash_layer_crypto;        ///< Set to true if hash layer crypto should be skipped while reading section data.
@@ -495,12 +494,12 @@ bool ncaGetFsSectionHashTargetExtents(NcaFsSectionContext *ctx, u64 *out_offset,
 
 /// Reads decrypted data from a NCA FS section using an input context.
 /// Input offset must be relative to the start of the NCA FS section.
-/// If dealing with Patch RomFS sections, this function should only be used when *not* reading BKTR AesCtrEx storage data. Use ncaReadAesCtrExStorageFromBktrSection() for that.
+/// If dealing with Patch RomFS sections, this function should only be used when *not* reading AesCtrEx storage data. Use ncaReadAesCtrExStorage() for that.
 bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Reads plaintext AesCtrEx storage data from a NCA Patch RomFS section using an input context and an AesCtrEx CTR value.
 /// Input offset must be relative to the start of the NCA FS section.
-bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt);
+bool ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt);
 
 /// Generates HierarchicalSha256 FS section patch data, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the last HierarchicalSha256 hash region (actual underlying FS).

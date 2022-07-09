@@ -63,7 +63,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx);
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
 static bool ncaFsSectionCheckHashRegionAccess(NcaFsSectionContext *ctx, u64 offset, u64 size, u64 *out_chunk_size);
 
-static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt);
+static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt);
 
 static void ncaCalculateLayerHash(void *dst, const void *src, size_t size, bool use_sha3);
 static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data, u64 data_size, u64 data_offset, void *out, bool is_integrity_patch);
@@ -257,10 +257,10 @@ bool ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 of
     return ret;
 }
 
-bool ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt)
+bool ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt)
 {
     bool ret = false;
-    SCOPED_LOCK(&g_ncaCryptoBufferMutex) ret = _ncaReadAesCtrExStorageFromBktrSection(ctx, out, read_size, offset, ctr_val, decrypt);
+    SCOPED_LOCK(&g_ncaCryptoBufferMutex) ret = _ncaReadAesCtrExStorage(ctx, out, read_size, offset, ctr_val, decrypt);
     return ret;
 }
 
@@ -858,35 +858,6 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         fs_ctx->section_size = raw_storage_size;
     }
 
-    /* Check if we're dealing with a compression layer. */
-    if (fs_ctx->has_compression_layer)
-    {
-        u64 raw_storage_offset = 0;
-        u64 raw_storage_size = compression_bucket->size;
-
-        /* Get target hash layer offset. */
-        if (!ncaGetFsSectionHashTargetExtents(fs_ctx, &raw_storage_offset, NULL))
-        {
-            LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
-            goto end;
-        }
-
-        /* Update compression layer offset. */
-        raw_storage_offset += compression_bucket->offset;
-
-        /* Check if the compression bucket is valid. */
-        if (!ncaVerifyBucketInfo(compression_bucket) || !compression_bucket->header.entry_count || raw_storage_offset < sizeof(NcaHeader) || \
-            (raw_storage_offset + raw_storage_size) > fs_ctx->section_size || (fs_ctx->section_offset + raw_storage_offset + raw_storage_size) > nca_ctx->content_size)
-        {
-            LOG_DATA(compression_bucket, sizeof(NcaBucketInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. CompressionInfo dump:", \
-                     section_idx, nca_ctx->content_id_str, nca_ctx->content_size);
-            goto end;
-        }
-
-        /* Update context. */
-        fs_ctx->compression_table_offset = raw_storage_offset;
-    }
-
     /* Check if we're within boundaries. */
     if ((fs_ctx->section_offset + fs_ctx->section_size) > nca_ctx->content_size)
     {
@@ -967,6 +938,35 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     {
         LOG_MSG("NcaHashType_None used with SkipLayerHash crypto for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
+    }
+
+    /* Check if we're dealing with a compression layer. */
+    if (fs_ctx->has_compression_layer)
+    {
+        u64 raw_storage_offset = 0;
+        u64 raw_storage_size = compression_bucket->size;
+
+        if (fs_ctx->section_type != NcaFsSectionType_PatchRomFs)
+        {
+            /* Get target hash layer offset. */
+            if (!ncaGetFsSectionHashTargetExtents(fs_ctx, &raw_storage_offset, NULL))
+            {
+                LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
+                goto end;
+            }
+
+            /* Update compression layer offset. */
+            raw_storage_offset += compression_bucket->offset;
+        }
+
+        /* Check if the compression bucket is valid. Don't verify extents if we're dealing with a Patch RomFS. */
+        if (!ncaVerifyBucketInfo(compression_bucket) || !compression_bucket->header.entry_count || (raw_storage_offset && (raw_storage_offset < sizeof(NcaHeader) || \
+            (raw_storage_offset + raw_storage_size) > fs_ctx->section_size || (fs_ctx->section_offset + raw_storage_offset + raw_storage_size) > nca_ctx->content_size)))
+        {
+            LOG_DATA(compression_bucket, sizeof(NcaBucketInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. CompressionInfo dump:", \
+                     section_idx, nca_ctx->content_id_str, nca_ctx->content_size);
+            goto end;
+        }
     }
 
     /* Initialize crypto data. */
@@ -1273,7 +1273,7 @@ static bool ncaFsSectionCheckHashRegionAccess(NcaFsSectionContext *ctx, u64 offs
     }
 }
 
-static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt)
+static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt)
 {
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_idx >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
         ctx->section_type != NcaFsSectionType_PatchRomFs || (ctx->encryption_type != NcaEncryptionType_None && ctx->encryption_type != NcaEncryptionType_AesCtrEx && \
@@ -1345,7 +1345,7 @@ static bool _ncaReadAesCtrExStorageFromBktrSection(NcaFsSectionContext *ctx, voi
     /* Copy decrypted data. */
     memcpy(out, g_ncaCryptoBuffer + data_start_offset, out_chunk_size);
 
-    ret = (block_size > NCA_CRYPTO_BUFFER_SIZE ? _ncaReadAesCtrExStorageFromBktrSection(ctx, (u8*)out + out_chunk_size, read_size - out_chunk_size, offset + out_chunk_size, ctr_val, decrypt) : true);
+    ret = (block_size > NCA_CRYPTO_BUFFER_SIZE ? _ncaReadAesCtrExStorage(ctx, (u8*)out + out_chunk_size, read_size - out_chunk_size, offset + out_chunk_size, ctr_val, decrypt) : true);
 
 end:
     return ret;

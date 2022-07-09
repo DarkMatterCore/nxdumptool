@@ -25,12 +25,12 @@
 /* Function prototypes. */
 
 static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type);
-NX_INLINE bool ncaStorageIsValidContext(NcaStorageContext *ctx);
+static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx);
 
 bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
     if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || (nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs && \
-        (!nca_fs_ctx->has_patch_indirect_layer || !nca_fs_ctx->has_patch_aes_ctr_ex_layer || nca_fs_ctx->has_sparse_layer || nca_fs_ctx->has_compression_layer)))
+        (!nca_fs_ctx->has_patch_indirect_layer || !nca_fs_ctx->has_patch_aes_ctr_ex_layer || nca_fs_ctx->has_sparse_layer)))
     {
         LOG_MSG("Invalid parameters!");
         return false;
@@ -68,33 +68,15 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
         if (!bktrSetRegularSubStorage(out->aes_ctr_ex_storage, nca_fs_ctx)) goto end;
 
         /* Set Indirect layer's AesCtrEx substorage. */
-        /* Base substorage must be manually set at a later time. */
+        /* Original substorage (index 0) must be manually set at a later time. */
         if (!bktrSetBucketTreeSubStorage(out->indirect_storage, out->aes_ctr_ex_storage, 1)) goto end;
 
         /* Update base storage type. */
         out->base_storage_type = NcaStorageBaseStorageType_Indirect;
     }
 
-    /* Check if a compression layer is available. */
-    if (nca_fs_ctx->has_compression_layer)
-    {
-        /* Initialize compression layer. */
-        if (!ncaStorageInitializeBucketTreeContext(&(out->compressed_storage), nca_fs_ctx, BucketTreeStorageType_Compressed)) goto end;
-
-        /* Set compression layer's substorage. */
-        switch(out->base_storage_type)
-        {
-            case NcaStorageBaseStorageType_Regular:
-                if (!bktrSetRegularSubStorage(out->compressed_storage, nca_fs_ctx)) goto end;
-                break;
-            case NcaStorageBaseStorageType_Sparse:
-                if (!bktrSetBucketTreeSubStorage(out->compressed_storage, out->sparse_storage, 0)) goto end;
-                break;
-        }
-
-        /* Update base storage type. */
-        out->base_storage_type = NcaStorageBaseStorageType_Compressed;
-    }
+    /* Initialize compression layer if it's available. */
+    if (nca_fs_ctx->has_compression_layer && !ncaStorageInitializeCompressedStorageBucketTreeContext(out, nca_fs_ctx)) goto end;
 
     /* Update output context. */
     out->nca_fs_ctx = nca_fs_ctx;
@@ -229,15 +211,19 @@ bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset
 
 bool ncaStorageIsBlockWithinPatchStorageRange(NcaStorageContext *ctx, u64 offset, u64 size, bool *out)
 {
-    if (!ncaStorageIsValidContext(ctx) || ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || !ctx->indirect_storage || \
-        ctx->base_storage_type != NcaStorageBaseStorageType_Indirect || !out)
+    if (!ncaStorageIsValidContext(ctx) || ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || (ctx->base_storage_type != NcaStorageBaseStorageType_Indirect && \
+        ctx->base_storage_type != NcaStorageBaseStorageType_Compressed) || (ctx->base_storage_type == NcaStorageBaseStorageType_Indirect && !ctx->indirect_storage) || \
+        (ctx->base_storage_type == NcaStorageBaseStorageType_Compressed && !ctx->compressed_storage))
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
 
+    /* Get base storage. */
+    BucketTreeContext *bktr_ctx = (ctx->base_storage_type == NcaStorageBaseStorageType_Indirect ? ctx->indirect_storage : ctx->compressed_storage);
+
     /* Check if the provided block extents are within the Indirect Storage's range. */
-    bool success = bktrIsBlockWithinIndirectStorageRange(ctx->indirect_storage, offset, size, out);
+    bool success = bktrIsBlockWithinIndirectStorageRange(bktr_ctx, offset, size, out);
     if (!success) LOG_MSG("Failed to determine if block extents are within the Indirect Storage's range!");
 
     return success;
@@ -303,6 +289,68 @@ static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFs
 
     /* Update output context pointer. */
     *out = bktr_ctx;
+
+end:
+    if (!success && bktr_ctx) free(bktr_ctx);
+
+    return success;
+}
+
+static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx)
+{
+    if (!out || out->base_storage_type < NcaStorageBaseStorageType_Regular || out->base_storage_type > NcaStorageBaseStorageType_Indirect || !nca_fs_ctx || \
+        !nca_fs_ctx->has_compression_layer || (out->base_storage_type == NcaStorageBaseStorageType_Sparse && !out->sparse_storage) || \
+        (out->base_storage_type == NcaStorageBaseStorageType_Indirect && !out->indirect_storage))
+    {
+        LOG_MSG("Invalid parameters!");
+        return false;
+    }
+
+    BucketTreeContext *bktr_ctx = NULL;
+    BucketTreeSubStorage bktr_substorage = {0};
+    bool success = false;
+
+    /* Allocate memory for the Bucket Tree context. */
+    bktr_ctx = calloc(1, sizeof(BucketTreeContext));
+    if (!bktr_ctx)
+    {
+        LOG_MSG("Unable to allocate memory for Bucket Tree context!");
+        goto end;
+    }
+
+    /* Prepare compression layer's substorage. */
+    bktr_substorage.index = 0;
+    bktr_substorage.nca_fs_ctx = nca_fs_ctx;
+
+    switch(out->base_storage_type)
+    {
+        case NcaStorageBaseStorageType_Regular:
+            bktr_substorage.type = BucketTreeSubStorageType_Regular;
+            bktr_substorage.bktr_ctx = NULL;
+            break;
+        case NcaStorageBaseStorageType_Sparse:
+            bktr_substorage.type = BucketTreeSubStorageType_Sparse;
+            bktr_substorage.bktr_ctx = out->sparse_storage;
+            break;
+        case NcaStorageBaseStorageType_Indirect:
+            bktr_substorage.type = BucketTreeSubStorageType_Indirect;
+            bktr_substorage.bktr_ctx = out->indirect_storage;
+            break;
+        default:
+            break;
+    }
+
+    /* Initialize Bucket Tree context. */
+    success = bktrInitializeCompressedStorageContext(bktr_ctx, &bktr_substorage);
+    if (!success)
+    {
+        LOG_MSG("Failed to initialize Bucket Tree context!");
+        goto end;
+    }
+
+    /* Update output context. */
+    out->compressed_storage = bktr_ctx;
+    out->base_storage_type = NcaStorageBaseStorageType_Compressed;
 
 end:
     if (!success && bktr_ctx) free(bktr_ctx);
