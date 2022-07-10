@@ -340,13 +340,13 @@ end:
 
 bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u64 size, bool *out)
 {
-    if (!bktrIsBlockWithinStorageRange(ctx, size, offset) || ctx->storage_type != BucketTreeStorageType_Indirect || !out)
+    if (!bktrIsBlockWithinStorageRange(ctx, size, offset) || (ctx->storage_type != BucketTreeStorageType_Indirect && ctx->storage_type != BucketTreeStorageType_Compressed) || \
+        (ctx->storage_type == BucketTreeStorageType_Compressed && ctx->substorages[0].type != BucketTreeSubStorageType_Indirect) || !out)
     {
         LOG_MSG("Invalid parameters!");
         return false;
     }
 
-    BucketTreeIndirectStorageEntry *start_entry = NULL, *end_entry = NULL;
     BucketTreeVisitor visitor = {0};
     bool updated = false, success = false;
 
@@ -356,6 +356,95 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
         LOG_MSG("Unable to find %s storage entry for offset 0x%lX!", bktrGetStorageTypeName(ctx->storage_type), offset);
         goto end;
     }
+
+    /* Check if we're dealing with a Compressed storage. */
+    if (ctx->storage_type == BucketTreeStorageType_Compressed)
+    {
+        BucketTreeContext *indirect_storage = (BucketTreeContext*)ctx->substorages[0].bktr_ctx;
+        const u64 compressed_storage_base_offset = ctx->nca_fs_ctx->hash_region.size;
+        BucketTreeCompressedStorageEntry *start_entry = NULL, *end_entry = NULL;
+
+        /* Validate start entry node. */
+        start_entry = end_entry = (BucketTreeCompressedStorageEntry*)visitor.entry;
+        if (!bktrIsOffsetWithinStorageRange(ctx, (u64)start_entry->virtual_offset) || (u64)start_entry->virtual_offset > offset)
+        {
+            LOG_MSG("Invalid Compressed Storage entry! (0x%lX) (#1).", start_entry->virtual_offset);
+            goto end;
+        }
+
+        /* Loop until we reach the upper bound of the requested block or find a match. */
+        do {
+            u64 cur_entry_offset = 0;
+
+            /* Check if we can move any further. */
+            if (bktrVisitorCanMoveNext(&visitor))
+            {
+                BucketTreeCompressedStorageEntry *tmp = end_entry;
+
+                /* Retrieve next entry node. */
+                if (!bktrVisitorMoveNext(&visitor))
+                {
+                    LOG_MSG("Failed to retrieve next Compressed Storage entry!");
+                    goto end;
+                }
+
+                /* Validate next entry node. */
+                end_entry = (BucketTreeCompressedStorageEntry*)visitor.entry;
+                if (!bktrIsOffsetWithinStorageRange(ctx, (u64)end_entry->virtual_offset) || (u64)end_entry->virtual_offset <= (u64)tmp->virtual_offset)
+                {
+                    LOG_MSG("Invalid Indirect Storage entry! (0x%lX) (#2).", (u64)end_entry->virtual_offset);
+                    goto end;
+                }
+
+                /* Update current entry offset. */
+                cur_entry_offset = (u64)end_entry->virtual_offset;
+
+                /* Update start entry node. */
+                start_entry = tmp;
+            } else {
+                /* Update current entry offset. */
+                cur_entry_offset = ctx->end_offset;
+
+                /* Update entry nodes. */
+                start_entry = end_entry;
+                end_entry = NULL;
+            }
+
+            /* Calculate indirect block extents. */
+            u64 indirect_block_offset = compressed_storage_base_offset;
+            u64 indirect_block_size = (cur_entry_offset - (u64)start_entry->virtual_offset);
+
+            if ((u64)start_entry->virtual_offset <= offset)
+            {
+                indirect_block_offset += ((offset - (u64)start_entry->virtual_offset) + (u64)start_entry->physical_offset);
+                indirect_block_size -= (offset - (u64)start_entry->virtual_offset);
+            } else {
+                indirect_block_offset += (u64)start_entry->physical_offset;
+            }
+
+            if ((offset + size) <= cur_entry_offset)
+            {
+                indirect_block_size -= (cur_entry_offset - (offset + size));
+                end_entry = NULL;   /* Don't proceed any further, we have found our upper bound. */
+            }
+
+            /* Check if the current Compressed Storage entry node points to one or more Indirect Storage entry nodes with Patch storage index. */
+            if (!bktrIsBlockWithinIndirectStorageRange(indirect_storage, indirect_block_offset, indirect_block_size, &updated))
+            {
+                LOG_MSG("Failed to determine if 0x%lX-byte long Compressed storage block at offset 0x%lX is within Indirect Storage!", indirect_block_offset, indirect_block_size);
+                goto end;
+            }
+        } while(!updated && end_entry && (u64)end_entry->virtual_offset < (offset + size));
+
+        /* Update output values. */
+        *out = updated;
+        success = true;
+
+        goto end;
+    }
+
+    /* Check the Indirect Storage. */
+    BucketTreeIndirectStorageEntry *start_entry = NULL, *end_entry = NULL;
 
     /* Validate start entry node. */
     start_entry = end_entry = (BucketTreeIndirectStorageEntry*)visitor.entry;

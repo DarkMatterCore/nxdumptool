@@ -203,6 +203,7 @@ bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContex
 bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Checks if the provided block extents are within the provided BucketTreeContext's Indirect Storage.
+/// The storage type from the provided BucketTreeContext may only be BucketTreeStorageType_Indirect or BucketTreeStorageType_Compressed (with an underlying Indirect substorage).
 bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u64 size, bool *out);
 
 /// Helper inline functions.

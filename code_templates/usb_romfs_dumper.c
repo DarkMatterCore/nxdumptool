@@ -125,7 +125,14 @@ static void read_thread_func(void *arg)
         }
 
         bool updated = false;
-        if (!romfsIsFileEntryUpdated(shared_data->romfs_ctx, file_entry, &updated) || !updated)
+        shared_data->read_error = !romfsIsFileEntryUpdated(shared_data->romfs_ctx, file_entry, &updated);
+        if (shared_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        if (!updated)
         {
             shared_data->read_error = !romfsMoveToNextFileEntry(shared_data->romfs_ctx);
             if (shared_data->read_error)

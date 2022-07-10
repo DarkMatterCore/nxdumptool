@@ -235,6 +235,8 @@ bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *ou
     /* Loop through all file entries. */
     while(romfsCanMoveToNextFileEntry(ctx))
     {
+        bool updated = false;
+
         /* Get current file entry. */
         if (!(file_entry = romfsGetCurrentFileEntry(ctx)))
         {
@@ -243,8 +245,13 @@ bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *ou
         }
 
         /* Update total data size, taking into account the only_updated flag. */
-        bool updated = false;
-        if (!only_updated || (only_updated && romfsIsFileEntryUpdated(ctx, file_entry, &updated) && updated)) total_size += file_entry->size;
+        if (only_updated && !romfsIsFileEntryUpdated(ctx, file_entry, &updated))
+        {
+            LOG_MSG("Failed to determine if file entry is updated or not! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
+            goto end;
+        }
+
+        if (!only_updated || (only_updated && updated)) total_size += file_entry->size;
 
         /* Move to the next file entry. */
         if (!romfsMoveToNextFileEntry(ctx))
