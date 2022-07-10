@@ -66,7 +66,7 @@ static options_t options[] = {
     { "enable screenshots", 0 },
     { "enable video capture", 0 },
     { "disable hdcp", 0 },
-    { "append authoringtool data", 0 },
+    { "append authoringtool data", 1 },
     { "output device", 0 }
 };
 

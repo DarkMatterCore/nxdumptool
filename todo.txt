@@ -1,6 +1,5 @@
 todo:
 
-    nca / nca_storage / bktr: re-test support for all section types
     nca: add function to retrieve a pointer to a nca fs ctx based on section type? (e.g. like titleGetContentInfoByTypeAndIdOffset)
 
     log: verbosity levels
