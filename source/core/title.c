@@ -543,14 +543,14 @@ bool titleInitialize(void)
         g_nsAppControlData = calloc(1, sizeof(NsApplicationControlData));
         if (!g_nsAppControlData)
         {
-            LOG_MSG("Failed to allocate memory for the ns application control data!");
+            LOG_MSG_ERROR("Failed to allocate memory for the ns application control data!");
             break;
         }
 
         /* Generate application metadata entries from hardcoded system titles, since we can't retrieve their names via ns. */
         if (!titleGenerateMetadataEntriesFromSystemTitles())
         {
-            LOG_MSG("Failed to generate application metadata from hardcoded system titles!");
+            LOG_MSG_ERROR("Failed to generate application metadata from hardcoded system titles!");
             break;
         }
 
@@ -559,7 +559,7 @@ bool titleInitialize(void)
         /* However, if any new gamecard is inserted while the application is running, we *will* have to retrieve the metadata from its application(s). */
         if (!titleGenerateMetadataEntriesFromNsRecords())
         {
-            LOG_MSG("Failed to generate application metadata from ns records!");
+            LOG_MSG_ERROR("Failed to generate application metadata from ns records!");
             break;
         }
 
@@ -567,7 +567,7 @@ bool titleInitialize(void)
         /* The background gamecard title thread will take care of initializing the gamecard title storage. */
         if (!titleInitializePersistentTitleStorages())
         {
-            LOG_MSG("Failed to initialize persistent title storages!");
+            LOG_MSG_ERROR("Failed to initialize persistent title storages!");
             break;
         }
 
@@ -578,7 +578,7 @@ bool titleInitialize(void)
         g_titleGameCardStatusChangeUserEvent = gamecardGetStatusChangeUserEvent();
         if (!g_titleGameCardStatusChangeUserEvent)
         {
-            LOG_MSG("Failed to retrieve gamecard status change user event!");
+            LOG_MSG_ERROR("Failed to retrieve gamecard status change user event!");
             break;
         }
 
@@ -644,7 +644,7 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
     {
         if (!g_titleInterfaceInit || (is_system && (!g_systemMetadata || !g_systemMetadataCount)) || (!is_system && (!g_userMetadata || !g_userMetadataCount)) || !out_count)
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             break;
         }
 
@@ -665,7 +665,7 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
             tmp_app_metadata = realloc(app_metadata, (app_count + 1) * sizeof(TitleApplicationMetadata*));
             if (!tmp_app_metadata)
             {
-                LOG_MSG("Failed to reallocate application metadata pointer array!");
+                LOG_MSG_ERROR("Failed to reallocate application metadata pointer array!");
                 if (app_metadata) free(app_metadata);
                 app_metadata = NULL;
                 error = true;
@@ -684,7 +684,7 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
         /* Update output counter. */
         *out_count = app_count;
 
-        if (!app_metadata || !app_count) LOG_MSG("No content data found for %s!", is_system ? "system titles" : "user applications");
+        if (!app_metadata || !app_count) LOG_MSG_ERROR("No content data found for %s!", is_system ? "system titles" : "user applications");
     }
 
     return app_metadata;
@@ -700,7 +700,7 @@ TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
         if (title_info)
         {
             ret = titleDuplicateTitleInfo(title_info, NULL, NULL, NULL);
-            if (!ret) LOG_MSG("Failed to duplicate title info for %016lX!", title_id);
+            if (!ret) LOG_MSG_ERROR("Failed to duplicate title info for %016lX!", title_id);
         }
     }
 
@@ -750,7 +750,7 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
     {
         if (!g_titleInterfaceInit || !app_id || !out)
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             break;
         }
 
@@ -766,7 +766,7 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
             out->app_info = titleDuplicateTitleInfo(app_info, NULL, NULL, NULL);
             if (!out->app_info)
             {
-                LOG_MSG("Failed to duplicate user application info for %016lX!", app_id);
+                LOG_MSG_ERROR("Failed to duplicate user application info for %016lX!", app_id);
                 break;
             }
         }
@@ -778,7 +778,7 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
             out->patch_info = titleDuplicateTitleInfo(patch_info, out->app_info, NULL, NULL);
             if (!out->patch_info)
             {
-                LOG_MSG("Failed to duplicate patch info for %016lX!", app_id);
+                LOG_MSG_ERROR("Failed to duplicate patch info for %016lX!", app_id);
                 break;
             }
         }
@@ -809,14 +809,14 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
             out->aoc_info = titleDuplicateTitleInfo(aoc_info, out->app_info, NULL, NULL);
             if (!out->aoc_info)
             {
-                LOG_MSG("Failed to duplicate add-on content info for %016lX!", app_id);
+                LOG_MSG_ERROR("Failed to duplicate add-on content info for %016lX!", app_id);
                 break;
             }
         }
 
         /* Check retrieved title info. */
         ret = (app_info || patch_info || aoc_info);
-        if (!ret) LOG_MSG("Failed to retrieve user application data for ID \"%016lX\"!", app_id);
+        if (!ret) LOG_MSG_ERROR("Failed to retrieve user application data for ID \"%016lX\"!", app_id);
     }
 
     /* Clear output. */
@@ -872,7 +872,7 @@ TitleInfo **titleGetOrphanTitles(u32 *out_count)
     {
         if (!g_titleInterfaceInit || !g_orphanTitleInfo || !*g_orphanTitleInfo || !g_orphanTitleInfoCount || !out_count)
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             break;
         }
 
@@ -880,7 +880,7 @@ TitleInfo **titleGetOrphanTitles(u32 *out_count)
         orphan_info = calloc(g_orphanTitleInfoCount + 1, sizeof(TitleInfo*));
         if (!orphan_info)
         {
-            LOG_MSG("Failed to allocate memory for orphan title info pointer array!");
+            LOG_MSG_ERROR("Failed to allocate memory for orphan title info pointer array!");
             break;
         }
 
@@ -890,7 +890,7 @@ TitleInfo **titleGetOrphanTitles(u32 *out_count)
             orphan_info[i] = titleDuplicateTitleInfo(g_orphanTitleInfo[i], NULL, NULL, NULL);
             if (!orphan_info[i])
             {
-                LOG_MSG("Failed to duplicate info for orphan title %016lX!", g_orphanTitleInfo[i]->meta_key.id);
+                LOG_MSG_ERROR("Failed to duplicate info for orphan title %016lX!", g_orphanTitleInfo[i]->meta_key.id);
                 titleFreeOrphanTitles(&orphan_info);
                 break;
             }
@@ -938,7 +938,7 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
     if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_Delta || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
         (naming_convention == TitleNamingConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -972,7 +972,7 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
 
     /* Duplicate generated filename. */
     filename = strdup(title_name);
-    if (!filename) LOG_MSG("Failed to duplicate generated filename!");
+    if (!filename) LOG_MSG_ERROR("Failed to duplicate generated filename!");
 
     return filename;
 }
@@ -995,7 +995,7 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
         if (!g_titleInterfaceInit || !g_titleGameCardAvailable || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
             (naming_convention == TitleNamingConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             break;
         }
 
@@ -1061,7 +1061,7 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
             char *tmp_filename = realloc(filename, (cur_filename_len + app_name_len + 1) * sizeof(char));
             if (!tmp_filename)
             {
-                LOG_MSG("Failed to reallocate filename buffer!");
+                LOG_MSG_ERROR("Failed to reallocate filename buffer!");
                 if (filename) free(filename);
                 filename = NULL;
                 error = true;
@@ -1080,7 +1080,7 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
 fallback:
         if (!filename && !error)
         {
-            LOG_MSG("Error: the inserted gamecard doesn't hold any user applications!");
+            LOG_MSG_ERROR("Error: the inserted gamecard doesn't hold any user applications!");
 
             /* Fallback string if no applications can be found. */
             sprintf(app_name, "gamecard");
@@ -1093,7 +1093,7 @@ fallback:
             }
 
             filename = strdup(app_name);
-            if (!filename) LOG_MSG("Failed to duplicate fallback filename!");
+            if (!filename) LOG_MSG_ERROR("Failed to duplicate fallback filename!");
         }
     }
 
@@ -1154,7 +1154,7 @@ static bool titleReallocateApplicationMetadata(u32 extra_app_count, bool is_syst
     {
         if (!cached_app_metadata)
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             goto end;
         }
 
@@ -1184,7 +1184,7 @@ static bool titleReallocateApplicationMetadata(u32 extra_app_count, bool is_syst
             /* Clear new application metadata pointer array area (if needed). */
             if (!free_entries && extra_app_count) memset(cached_app_metadata + cached_app_metadata_count, 0, extra_app_count * sizeof(TitleApplicationMetadata*));
         } else {
-            LOG_MSG("Failed to reallocate application metadata pointer array! (%u element[s]).", realloc_app_count);
+            LOG_MSG_ERROR("Failed to reallocate application metadata pointer array! (%u element[s]).", realloc_app_count);
             goto end;
         }
     } else
@@ -1216,7 +1216,7 @@ NX_INLINE bool titleInitializePersistentTitleStorages(void)
     {
         if (!titleInitializeTitleStorage(i))
         {
-            LOG_MSG("Failed to initialize title storage with ID %u!", i);
+            LOG_MSG_ERROR("Failed to initialize title storage with ID %u!", i);
             return false;
         }
     }
@@ -1233,7 +1233,7 @@ static bool titleInitializeTitleStorage(u8 storage_id)
 {
     if (storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_SdCard)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1256,7 +1256,7 @@ static bool titleInitializeTitleStorage(u8 storage_id)
     {
         /* If the SD card is mounted, but it isn't currently being used by HOS, 0x21005 will be returned, so we'll just filter this particular error and continue. */
         /* This can occur when using the "Nintendo" directory from a different console, or when the "sdmc:/Nintendo/Contents/private" file is corrupted. */
-        LOG_MSG("ncmOpenContentMetaDatabase failed for storage ID %u! (0x%08X).", storage_id, rc);
+        LOG_MSG_ERROR("ncmOpenContentMetaDatabase failed for %s! (0x%X).", titleGetNcmStorageIdName(storage_id), rc);
         if (storage_id == NcmStorageId_SdCard && rc == 0x21005) success = true;
         goto end;
     }
@@ -1267,7 +1267,7 @@ static bool titleInitializeTitleStorage(u8 storage_id)
     {
         /* If the SD card is mounted, but it isn't currently being used by HOS, 0x21005 will be returned, so we'll just filter this particular error and continue. */
         /* This can occur when using the "Nintendo" directory from a different console, or when the "sdmc:/Nintendo/Contents/private" file is corrupted. */
-        LOG_MSG("ncmOpenContentStorage failed for storage ID %u! (0x%08X).", storage_id, rc);
+        LOG_MSG_ERROR("ncmOpenContentStorage failed for %s! (0x%X).", titleGetNcmStorageIdName(storage_id), rc);
         if (storage_id == NcmStorageId_SdCard && rc == 0x21005) success = true;
         goto end;
     }
@@ -1275,11 +1275,11 @@ static bool titleInitializeTitleStorage(u8 storage_id)
     /* Generate title info entries for this storage. */
     if (!titleGenerateTitleInfoEntriesForTitleStorage(title_storage))
     {
-        LOG_MSG("Failed to generate title info entries for storage ID %u!", storage_id);
+        LOG_MSG_ERROR("Failed to generate title info entries for %s!", titleGetNcmStorageIdName(storage_id));
         goto end;
     }
 
-    LOG_MSG("Loaded %u title info %s from %s.", title_storage->title_count, (title_storage->title_count == 1 ? "entry" : "entries"), titleGetNcmStorageIdName(storage_id));
+    LOG_MSG_INFO("Loaded %u title info %s from %s.", title_storage->title_count, (title_storage->title_count == 1 ? "entry" : "entries"), titleGetNcmStorageIdName(storage_id));
 
     /* Update flag. */
     success = true;
@@ -1330,7 +1330,7 @@ static bool titleReallocateTitleInfoFromStorage(TitleStorage *title_storage, u32
 {
     if (!title_storage)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1343,7 +1343,7 @@ static bool titleReallocateTitleInfoFromStorage(TitleStorage *title_storage, u32
     {
         if (!title_info)
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             goto end;
         }
 
@@ -1373,7 +1373,7 @@ static bool titleReallocateTitleInfoFromStorage(TitleStorage *title_storage, u32
             /* Clear new title info pointer array area (if needed). */
             if (!free_entries && extra_title_count) memset(title_info + title_count, 0, extra_title_count * sizeof(TitleInfo*));
         } else {
-            LOG_MSG("Failed to reallocate title info pointer array! (%u element[s]).", realloc_title_count);
+            LOG_MSG_ERROR("Failed to reallocate title info pointer array! (%u element[s]).", realloc_title_count);
             goto end;
         }
     } else
@@ -1413,7 +1413,7 @@ static void titleAddOrphanTitleInfoEntry(TitleInfo *orphan_title)
     TitleInfo **tmp_orphan_info = realloc(g_orphanTitleInfo, (g_orphanTitleInfoCount + 1) * sizeof(TitleInfo*));
     if (!tmp_orphan_info)
     {
-        LOG_MSG("Failed to reallocate orphan title info pointer array!");
+        LOG_MSG_ERROR("Failed to reallocate orphan title info pointer array!");
         return;
     }
 
@@ -1435,7 +1435,7 @@ static bool titleGenerateMetadataEntriesFromSystemTitles(void)
     /* Reallocate application metadata pointer array. */
     if (!titleReallocateApplicationMetadata(g_systemTitlesCount, true, false))
     {
-        LOG_MSG("Failed to reallocate application metadata pointer array for system titles!");
+        LOG_MSG_ERROR("Failed to reallocate application metadata pointer array for system titles!");
         return false;
     }
 
@@ -1446,7 +1446,7 @@ static bool titleGenerateMetadataEntriesFromSystemTitles(void)
         TitleApplicationMetadata *cur_app_metadata = calloc(1, sizeof(TitleApplicationMetadata));
         if (!cur_app_metadata)
         {
-            LOG_MSG("Failed to allocate memory for application metadata entry #%u!", extra_app_count);
+            LOG_MSG_ERROR("Failed to allocate memory for application metadata entry #%u!", extra_app_count);
             goto end;
         }
 
@@ -1491,7 +1491,7 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void)
         tmp_app_records = realloc(app_records, app_records_size + app_records_block_size);
         if (!tmp_app_records)
         {
-            LOG_MSG("Failed to reallocate NS application records buffer! (%u)", app_records_count);
+            LOG_MSG_ERROR("Failed to reallocate NS application records buffer! (%u)", app_records_count);
             goto end;
         }
 
@@ -1507,7 +1507,7 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void)
         rc = nsListApplicationRecord(app_records_block, NS_APPLICATION_RECORD_BLOCK_SIZE, (s32)app_records_count, (s32*)&app_records_block_count);
         if (R_FAILED(rc))
         {
-            LOG_MSG("nsListApplicationRecord failed! (0x%08X) (%u).", rc, app_records_count);
+            LOG_MSG_ERROR("nsListApplicationRecord failed! (0x%X) (%u).", rc, app_records_count);
             if (!app_records_count) goto end;
             break; /* Gotta work with what we have. */
         }
@@ -1525,7 +1525,7 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void)
     /* Reallocate application metadata pointer array. */
     if (!titleReallocateApplicationMetadata(app_records_count, false, false))
     {
-        LOG_MSG("Failed to reallocate application metadata pointer array for NS records!");
+        LOG_MSG_ERROR("Failed to reallocate application metadata pointer array for NS records!");
         goto end;
     }
 
@@ -1541,7 +1541,7 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void)
             cur_app_metadata = calloc(1, sizeof(TitleApplicationMetadata));
             if (!cur_app_metadata)
             {
-                LOG_MSG("Failed to allocate memory for application metadata entry #%u! (%u / %u).", extra_app_count, i + 1, app_records_count);
+                LOG_MSG_ERROR("Failed to allocate memory for application metadata entry #%u! (%u / %u).", extra_app_count, i + 1, app_records_count);
                 goto end;
             }
 
@@ -1559,7 +1559,7 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void)
     /* Check retrieved application metadata count. */
     if (!extra_app_count)
     {
-        LOG_MSG("Unable to retrieve application metadata from NS application records! (%u element[s]).", app_records_count);
+        LOG_MSG_ERROR("Unable to retrieve application metadata from NS application records! (%u element[s]).", app_records_count);
         goto end;
     }
 
@@ -1588,7 +1588,7 @@ static TitleApplicationMetadata *titleGenerateDummySystemMetadataEntry(u64 title
 {
     if (!title_id)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -1598,7 +1598,7 @@ static TitleApplicationMetadata *titleGenerateDummySystemMetadataEntry(u64 title
     /* Reallocate application metadata pointer array. */
     if (!titleReallocateApplicationMetadata(1, true, false))
     {
-        LOG_MSG("Failed to reallocate application metadata pointer array for %016lX!", title_id);
+        LOG_MSG_ERROR("Failed to reallocate application metadata pointer array for %016lX!", title_id);
         goto end;
     }
 
@@ -1608,7 +1608,7 @@ static TitleApplicationMetadata *titleGenerateDummySystemMetadataEntry(u64 title
     cur_app_metadata = calloc(1, sizeof(TitleApplicationMetadata));
     if (!cur_app_metadata)
     {
-        LOG_MSG("Failed to allocate memory for application metadata %016lX!", title_id);
+        LOG_MSG_ERROR("Failed to allocate memory for application metadata %016lX!", title_id);
         goto end;
     }
 
@@ -1633,7 +1633,7 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
 {
     if (!g_nsAppControlData || !title_id || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1648,13 +1648,13 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
     rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, title_id, g_nsAppControlData, sizeof(NsApplicationControlData), &write_size);
     if (R_FAILED(rc))
     {
-        LOG_MSG("nsGetApplicationControlData failed for title ID \"%016lX\"! (0x%08X).", title_id, rc);
+        LOG_MSG_ERROR("nsGetApplicationControlData failed for title ID \"%016lX\"! (0x%X).", title_id, rc);
         return false;
     }
 
     if (write_size < sizeof(NacpStruct))
     {
-        LOG_MSG("Retrieved application control data buffer is too small! (0x%lX).", write_size);
+        LOG_MSG_ERROR("Retrieved application control data buffer is too small! (0x%lX).", write_size);
         return false;
     }
 
@@ -1662,7 +1662,7 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
     rc = nacpGetLanguageEntry(&(g_nsAppControlData->nacp), &lang_entry);
     if (R_FAILED(rc))
     {
-        LOG_MSG("nacpGetLanguageEntry failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("nacpGetLanguageEntry failed! (0x%X).", rc);
         return false;
     }
 
@@ -1673,7 +1673,7 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
         icon = malloc(icon_size);
         if (!icon)
         {
-            LOG_MSG("Error allocating memory for the icon buffer! (0x%X).", icon_size);
+            LOG_MSG_ERROR("Error allocating memory for the icon buffer! (0x%X).", icon_size);
             return false;
         }
 
@@ -1713,7 +1713,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
 {
     if (!title_storage || title_storage->storage_id < NcmStorageId_GameCard || title_storage->storage_id > NcmStorageId_SdCard || !serviceIsActive(&(title_storage->ncm_db.s)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1753,7 +1753,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
             cur_title_info = calloc(1, sizeof(TitleInfo));
             if (!cur_title_info)
             {
-                LOG_MSG("Failed to allocate memory for title info entry #%u! (%u / %u).", extra_title_count, i + 1, total);
+                LOG_MSG_ERROR("Failed to allocate memory for title info entry #%u! (%u / %u).", extra_title_count, i + 1, total);
                 goto end;
             }
 
@@ -1764,7 +1764,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
         /* Get content infos. */
         if (!titleGetContentInfosForMetaKey(ncm_db, cur_meta_key, &(cur_title_info->content_infos), &(cur_title_info->content_count)))
         {
-            LOG_MSG("Failed to get content infos for title ID %016lX!", cur_meta_key->id);
+            LOG_MSG_ERROR("Failed to get content infos for title ID %016lX!", cur_meta_key->id);
             continue;
         }
 
@@ -1801,7 +1801,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
     /* Check retrieved title info count. */
     if (!extra_title_count)
     {
-        LOG_MSG("Unable to generate title info entries! (%u element[s]).", total);
+        LOG_MSG_ERROR("Unable to generate title info entries! (%u element[s]).", total);
         goto end;
     }
 
@@ -1831,7 +1831,7 @@ static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, 
 {
     if (!ncm_db || !serviceIsActive(&(ncm_db->s)) || !out_meta_keys || !out_meta_key_count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1845,7 +1845,7 @@ static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, 
     meta_keys = calloc(1, meta_keys_size);
     if (!meta_keys)
     {
-        LOG_MSG("Unable to allocate memory for the ncm application meta keys!");
+        LOG_MSG_ERROR("Unable to allocate memory for the ncm application meta keys!");
         goto end;
     }
 
@@ -1854,7 +1854,7 @@ static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, 
     rc = ncmContentMetaDatabaseList(ncm_db, (s32*)&total, (s32*)&written, meta_keys, 1, 0, 0, 0, UINT64_MAX, NcmContentInstallType_Full);
     if (R_FAILED(rc))
     {
-        LOG_MSG("ncmContentMetaDatabaseList failed! (0x%08X) (first entry).", rc);
+        LOG_MSG_ERROR("ncmContentMetaDatabaseList failed! (0x%X) (first entry).", rc);
         goto end;
     }
 
@@ -1877,7 +1877,7 @@ static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, 
         meta_keys_tmp = realloc(meta_keys, meta_keys_size);
         if (!meta_keys_tmp)
         {
-            LOG_MSG("Unable to reallocate application meta keys buffer! (%u entries).", total);
+            LOG_MSG_ERROR("Unable to reallocate application meta keys buffer! (%u entries).", total);
             goto end;
         }
 
@@ -1888,14 +1888,14 @@ static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, 
         rc = ncmContentMetaDatabaseList(ncm_db, (s32*)&total, (s32*)&written, meta_keys, (s32)total, 0, 0, 0, UINT64_MAX, NcmContentInstallType_Full);
         if (R_FAILED(rc))
         {
-            LOG_MSG("ncmContentMetaDatabaseList failed! (0x%08X) (%u %s).", rc, total, total > 1 ? "entries" : "entry");
+            LOG_MSG_ERROR("ncmContentMetaDatabaseList failed! (0x%X) (%u %s).", rc, total, total > 1 ? "entries" : "entry");
             goto end;
         }
 
         /* Safety check. */
         if (written != total)
         {
-            LOG_MSG("Application meta key count mismatch! (%u != %u).", written, total);
+            LOG_MSG_ERROR("Application meta key count mismatch! (%u != %u).", written, total);
             goto end;
         }
     }
@@ -1916,7 +1916,7 @@ static bool titleGetContentInfosForMetaKey(NcmContentMetaDatabase *ncm_db, const
 {
     if (!ncm_db || !serviceIsActive(&(ncm_db->s)) || !meta_key || !out_content_infos || !out_content_count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1934,13 +1934,13 @@ static bool titleGetContentInfosForMetaKey(NcmContentMetaDatabase *ncm_db, const
     rc = ncmContentMetaDatabaseGet(ncm_db, meta_key, &content_meta_header_read_size, &content_meta_header, sizeof(NcmContentMetaHeader));
     if (R_FAILED(rc))
     {
-        LOG_MSG("ncmContentMetaDatabaseGet failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("ncmContentMetaDatabaseGet failed! (0x%X).", rc);
         goto end;
     }
 
     if (content_meta_header_read_size != sizeof(NcmContentMetaHeader))
     {
-        LOG_MSG("Content meta header size mismatch! (0x%lX != 0x%lX).", content_meta_header_read_size, sizeof(NcmContentMetaHeader));
+        LOG_MSG_ERROR("Content meta header size mismatch! (0x%lX != 0x%lX).", content_meta_header_read_size, sizeof(NcmContentMetaHeader));
         goto end;
     }
 
@@ -1948,7 +1948,7 @@ static bool titleGetContentInfosForMetaKey(NcmContentMetaDatabase *ncm_db, const
     content_count = (u32)content_meta_header.content_count;
     if (!content_count)
     {
-        LOG_MSG("Content count is zero!");
+        LOG_MSG_ERROR("Content count is zero!");
         goto end;
     }
 
@@ -1956,7 +1956,7 @@ static bool titleGetContentInfosForMetaKey(NcmContentMetaDatabase *ncm_db, const
     content_infos = calloc(content_count, sizeof(NcmContentInfo));
     if (!content_infos)
     {
-        LOG_MSG("Unable to allocate memory for the content infos buffer! (%u content[s]).", content_count);
+        LOG_MSG_ERROR("Unable to allocate memory for the content infos buffer! (%u content[s]).", content_count);
         goto end;
     }
 
@@ -1964,13 +1964,13 @@ static bool titleGetContentInfosForMetaKey(NcmContentMetaDatabase *ncm_db, const
     rc = ncmContentMetaDatabaseListContentInfo(ncm_db, (s32*)&written, content_infos, (s32)content_count, meta_key, 0);
     if (R_FAILED(rc))
     {
-        LOG_MSG("ncmContentMetaDatabaseListContentInfo failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("ncmContentMetaDatabaseListContentInfo failed! (0x%X).", rc);
         goto end;
     }
 
     if (written != content_count)
     {
-        LOG_MSG("Content count mismatch! (%u != %u).", written, content_count);
+        LOG_MSG_ERROR("Content count mismatch! (%u != %u).", written, content_count);
         goto end;
     }
 
@@ -2072,7 +2072,7 @@ static bool titleCreateGameCardInfoThread(void)
 {
     if (!utilsCreateThread(&g_titleGameCardInfoThread, titleGameCardInfoThreadFunc, NULL, 1))
     {
-        LOG_MSG("Failed to create gamecard title info thread!");
+        LOG_MSG_ERROR("Failed to create gamecard title info thread!");
         return false;
     }
 
@@ -2135,7 +2135,7 @@ static bool titleRefreshGameCardTitleInfo(void)
     /* Initialize gamecard title storage. */
     if (!titleInitializeTitleStorage(NcmStorageId_GameCard))
     {
-        LOG_MSG("Failed to initialize gamecard title storage!");
+        LOG_MSG_ERROR("Failed to initialize gamecard title storage!");
         goto end;
     }
 
@@ -2147,7 +2147,7 @@ static bool titleRefreshGameCardTitleInfo(void)
     /* Verify title count. */
     if (!title_count)
     {
-        LOG_MSG("Gamecard title count is zero!");
+        LOG_MSG_ERROR("Gamecard title count is zero!");
         goto end;
     }
 
@@ -2169,7 +2169,7 @@ static bool titleRefreshGameCardTitleInfo(void)
     /* Reallocate application metadata pointer array. */
     if (!titleReallocateApplicationMetadata(gamecard_app_count, false, false))
     {
-        LOG_MSG("Failed to reallocate application metadata pointer array for gamecard user applications!");
+        LOG_MSG_ERROR("Failed to reallocate application metadata pointer array for gamecard user applications!");
         goto end;
     }
 
@@ -2197,7 +2197,7 @@ static bool titleRefreshGameCardTitleInfo(void)
             cur_app_metadata = calloc(1, sizeof(TitleApplicationMetadata));
             if (!cur_app_metadata)
             {
-                LOG_MSG("Failed to allocate memory for application metadata entry #%u!", extra_app_count);
+                LOG_MSG_ERROR("Failed to allocate memory for application metadata entry #%u!", extra_app_count);
                 goto end;
             }
 
@@ -2289,7 +2289,7 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
 {
     if (storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_Any || !title_id)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -2316,7 +2316,7 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
         if (out) break;
     }
 
-    //if (!info) LOG_MSG("Unable to find title info entry with ID \"%016lX\"! (storage ID %u).", title_id, storage_id);
+    if (!out) LOG_MSG_INFO("Unable to find title info entry with ID \"%016lX\" in %s.", title_id, titleGetNcmStorageIdName(storage_id));
 
     return out;
 }
@@ -2327,7 +2327,7 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
         (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || title_info->meta_key.type > NcmContentMetaType_Delta || \
         !title_info->content_count || !title_info->content_infos)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -2339,7 +2339,7 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
     title_info_dup = calloc(1, sizeof(TitleInfo));
     if (!title_info_dup)
     {
-        LOG_MSG("Failed to allocate memory for TitleInfo duplicate!");
+        LOG_MSG_ERROR("Failed to allocate memory for TitleInfo duplicate!");
         return NULL;
     }
 
@@ -2351,7 +2351,7 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
     content_infos_dup = calloc(title_info->content_count, sizeof(NcmContentInfo));
     if (!content_infos_dup)
     {
-        LOG_MSG("Failed to allocate memory for NcmContentInfo duplicates!");
+        LOG_MSG_ERROR("Failed to allocate memory for NcmContentInfo duplicates!");
         goto end;
     }
 
@@ -2511,7 +2511,7 @@ static char *titleGetPatchVersionString(TitleInfo *title_info)
 
     if (!title_info || title_info->meta_key.type != NcmContentMetaType_Patch || !(nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         goto end;
     }
 
@@ -2523,21 +2523,21 @@ static char *titleGetPatchVersionString(TitleInfo *title_info)
     nca_ctx = calloc(1, sizeof(NcaContext));
     if (!nca_ctx)
     {
-        LOG_MSG("Failed to allocate memory for NCA context!");
+        LOG_MSG_ERROR("Failed to allocate memory for NCA context!");
         goto end;
     }
 
     /* Initialize NCA context. */
     if (!ncaInitializeContext(nca_ctx, storage_id, hfs_partition_type, nacp_content, title_info->version.value, NULL))
     {
-        LOG_MSG("Failed to initialize NCA context for Control NCA from %016lX!", title_info->meta_key.id);
+        LOG_MSG_ERROR("Failed to initialize NCA context for Control NCA from %016lX!", title_info->meta_key.id);
         goto end;
     }
 
     /* Initialize NACP context. */
     if (!nacpInitializeContext(&nacp_ctx, nca_ctx))
     {
-        LOG_MSG("Failed to initialize NACP context for %016lX!", title_info->meta_key.id);
+        LOG_MSG_ERROR("Failed to initialize NACP context for %016lX!", title_info->meta_key.id);
         goto end;
     }
 
@@ -2548,13 +2548,13 @@ static char *titleGetPatchVersionString(TitleInfo *title_info)
     /* Check version string length. */
     if (!*display_version)
     {
-        LOG_MSG("Display version string from %016lX is empty!", title_info->meta_key.id);
+        LOG_MSG_ERROR("Display version string from %016lX is empty!", title_info->meta_key.id);
         goto end;
     }
 
     /* Duplicate version string. */
     str = strdup(display_version);
-    if (!str) LOG_MSG("Failed to duplicate version string from %016lX!", title_info->meta_key.id);
+    if (!str) LOG_MSG_ERROR("Failed to duplicate version string from %016lX!", title_info->meta_key.id);
 
 end:
     nacpFreeContext(&nacp_ctx);

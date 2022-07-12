@@ -40,7 +40,7 @@ bool httpInitialize(void)
         CURLcode res = curl_global_init(CURL_GLOBAL_ALL);
         if (res != CURLE_OK)
         {
-            LOG_MSG("%s", curl_easy_strerror(res));
+            LOG_MSG_ERROR("%s", curl_easy_strerror(res));
             break;
         }
 
@@ -96,7 +96,7 @@ bool httpPerformGetRequest(const char *url, bool force_https, size_t *outsize, H
     {
         if (!g_httpInterfaceInit || !url || !*url)
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             break;
         }
 
@@ -111,7 +111,7 @@ bool httpPerformGetRequest(const char *url, bool force_https, size_t *outsize, H
         curl = curl_easy_init();
         if (!curl)
         {
-            LOG_MSG("Failed to start CURL session for \"%s\"!", url);
+            LOG_MSG_ERROR("Failed to start CURL session for \"%s\"!", url);
             break;
         }
 
@@ -159,7 +159,7 @@ bool httpPerformGetRequest(const char *url, bool force_https, size_t *outsize, H
             /* Update output size. */
             if (outsize) *outsize = (size_t)download_size;
         } else {
-            LOG_MSG("curl_easy_perform failed for \"%s\"! (res %d, HTTP code %ld, download %ld, length %ld).", url, res, http_code, download_size, content_length);
+            LOG_MSG_ERROR("curl_easy_perform failed for \"%s\"! (res %d, HTTP code %ld, download %ld, length %ld).", url, res, http_code, download_size, content_length);
             if (res != CURLE_OK)
             {
                 /* Log CURL error info. */
@@ -175,7 +175,7 @@ bool httpPerformGetRequest(const char *url, bool force_https, size_t *outsize, H
                     error_str = curl_easy_strerror(res);
                 }
 
-                if (error_str) LOG_MSG("CURL error info: \"%s\".", error_str);
+                if (error_str) LOG_MSG_INFO("CURL error info: \"%s\".", error_str);
             }
         }
     }
@@ -187,7 +187,7 @@ bool httpDownloadFile(const char *path, const char *url, bool force_https, HttpP
 {
     if (!path || !*path)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -198,7 +198,7 @@ bool httpDownloadFile(const char *path, const char *url, bool force_https, HttpP
     fd = fopen(path, "wb");
     if (!fd)
     {
-        LOG_MSG("Failed to open \"%s\" for writing!", path);
+        LOG_MSG_ERROR("Failed to open \"%s\" for writing!", path);
         return false;
     }
 
@@ -221,7 +221,7 @@ char *httpDownloadData(size_t *outsize, const char *url, bool force_https, HttpP
 {
     if (!outsize)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 

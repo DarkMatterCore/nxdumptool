@@ -82,7 +82,7 @@ void sha3ContextUpdate(Sha3Context *ctx, const void *src, size_t size)
 {
     if (!ctx || !src || !size || ctx->finalized)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return;
     }
 
@@ -138,7 +138,7 @@ void sha3ContextGetHash(Sha3Context *ctx, void *dst)
 {
     if (!ctx || !dst)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return;
     }
 
@@ -200,7 +200,7 @@ static void sha3ContextCreate(Sha3Context *out, u32 hash_size)
 {
     if (!out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return;
     }
 

@@ -49,7 +49,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         nca_ctx->header.content_type != NcaContentType_Meta || nca_ctx->content_type_ctx || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -67,14 +67,14 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     /* Initialize Partition FS context. */
     if (!pfsInitializeContext(&(out->pfs_ctx), &(nca_ctx->fs_ctx[0])))
     {
-        LOG_MSG("Failed to initialize Partition FS context!");
+        LOG_MSG_ERROR("Failed to initialize Partition FS context!");
         goto end;
     }
 
     /* Get Partition FS entry count. Edge case, we should never trigger this. */
     if (!(pfs_entry_count = pfsGetEntryCount(&(out->pfs_ctx))))
     {
-        LOG_MSG("Partition FS has no file entries!");
+        LOG_MSG_ERROR("Partition FS has no file entries!");
         goto end;
     }
 
@@ -87,11 +87,11 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
 
     if (i >= pfs_entry_count)
     {
-        LOG_MSG("'.cnmt' entry unavailable in Partition FS!");
+        LOG_MSG_ERROR("'.cnmt' entry unavailable in Partition FS!");
         goto end;
     }
 
-    //LOG_MSG("Found '.cnmt' entry \"%s\" in Meta NCA \"%s\".", out->cnmt_filename, nca_ctx->content_id_str);
+    LOG_MSG_INFO("Found '.cnmt' entry \"%s\" in Meta NCA \"%s\".", out->cnmt_filename, nca_ctx->content_id_str);
 
     /* Retrieve content meta type and title ID from the '.cnmt' filename. */
     if (!cnmtGetContentMetaTypeAndTitleIdFromFileName(out->cnmt_filename, cnmt_filename_len, &content_meta_type, &title_id)) goto end;
@@ -99,14 +99,14 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     /* Get '.cnmt' file entry. */
     if (!(out->pfs_entry = pfsGetEntryByIndex(&(out->pfs_ctx), i)))
     {
-        LOG_MSG("Failed to get '.cnmt' entry from Partition FS!");
+        LOG_MSG_ERROR("Failed to get '.cnmt' entry from Partition FS!");
         goto end;
     }
 
     /* Check raw CNMT size. */
     if (!out->pfs_entry->size)
     {
-        LOG_DATA(out->pfs_entry, sizeof(PartitionFileSystemEntry), "Invalid raw CNMT size! Partition FS entry dump:");
+        LOG_DATA_ERROR(out->pfs_entry, sizeof(PartitionFileSystemEntry), "Invalid raw CNMT size! Partition FS entry dump:");
         goto end;
     }
 
@@ -114,14 +114,14 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     out->raw_data_size = out->pfs_entry->size;
     if (!(out->raw_data = malloc(out->raw_data_size)))
     {
-        LOG_MSG("Failed to allocate memory for the raw CNMT data!");
+        LOG_MSG_ERROR("Failed to allocate memory for the raw CNMT data!");
         goto end;
     }
 
     /* Read raw CNMT data into memory buffer. */
     if (!pfsReadEntryData(&(out->pfs_ctx), out->pfs_entry, out->raw_data, out->raw_data_size, 0))
     {
-        LOG_MSG("Failed to read raw CNMT data!");
+        LOG_MSG_ERROR("Failed to read raw CNMT data!");
         goto end;
     }
 
@@ -134,21 +134,21 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
 
     if (out->packaged_header->title_id != title_id)
     {
-        LOG_MSG("CNMT title ID mismatch! (%016lX != %016lX).", out->packaged_header->title_id, title_id);
+        LOG_MSG_ERROR("CNMT title ID mismatch! (%016lX != %016lX).", out->packaged_header->title_id, title_id);
         dump_packaged_header = true;
         goto end;
     }
 
     if (out->packaged_header->content_meta_type != content_meta_type)
     {
-        LOG_MSG("CNMT content meta type mismatch! (0x%02X != 0x%02X).", out->packaged_header->content_meta_type, content_meta_type);
+        LOG_MSG_ERROR("CNMT content meta type mismatch! (0x%02X != 0x%02X).", out->packaged_header->content_meta_type, content_meta_type);
         dump_packaged_header = true;
         goto end;
     }
 
     if (!out->packaged_header->content_count && out->packaged_header->content_meta_type != NcmContentMetaType_SystemUpdate)
     {
-        LOG_MSG("Invalid content count!");
+        LOG_MSG_ERROR("Invalid content count!");
         dump_packaged_header = true;
         goto end;
     }
@@ -156,7 +156,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     if ((out->packaged_header->content_meta_type == NcmContentMetaType_SystemUpdate && !out->packaged_header->content_meta_count) || \
         (out->packaged_header->content_meta_type != NcmContentMetaType_SystemUpdate && out->packaged_header->content_meta_count))
     {
-        LOG_MSG("Invalid content meta count!");
+        LOG_MSG_ERROR("Invalid content meta count!");
         dump_packaged_header = true;
         goto end;
     }
@@ -197,14 +197,14 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
 
         if (invalid_ext_header_size)
         {
-            LOG_MSG("Invalid extended header size!");
+            LOG_MSG_ERROR("Invalid extended header size!");
             dump_packaged_header = true;
             goto end;
         }
 
         if (invalid_ext_data_size)
         {
-            LOG_DATA(out->extended_header, out->packaged_header->extended_header_size, "Invalid extended data size! CNMT Extended Header dump:");
+            LOG_DATA_ERROR(out->extended_header, out->packaged_header->extended_header_size, "Invalid extended data size! CNMT Extended Header dump:");
             dump_packaged_header = true;
             goto end;
         }
@@ -238,7 +238,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     /* Safety check: verify raw CNMT size. */
     if (cur_offset != out->raw_data_size)
     {
-        LOG_MSG("Raw CNMT size mismatch! (0x%lX != 0x%lX).", cur_offset, out->raw_data_size);
+        LOG_MSG_ERROR("Raw CNMT size mismatch! (0x%lX != 0x%lX).", cur_offset, out->raw_data_size);
         goto end;
     }
 
@@ -254,8 +254,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
 end:
     if (!success)
     {
-        if (dump_packaged_header) LOG_DATA(out->packaged_header, sizeof(ContentMetaPackagedContentMetaHeader), "CNMT Packaged Header dump:");
-
+        if (dump_packaged_header) LOG_DATA_DEBUG(out->packaged_header, sizeof(ContentMetaPackagedContentMetaHeader), "CNMT Packaged Header dump:");
         cnmtFreeContext(out);
     }
 
@@ -266,7 +265,7 @@ bool cnmtUpdateContentInfo(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx)
 {
     if (!cnmtIsValidContext(cnmt_ctx) || !nca_ctx || !*(nca_ctx->content_id_str) || !*(nca_ctx->hash_str) || nca_ctx->content_type > NcmContentType_DeltaFragment || !nca_ctx->content_size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -288,14 +287,14 @@ bool cnmtUpdateContentInfo(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx)
             /* Jackpot. Copy content ID and hash to our raw CNMT. */
             memcpy(packaged_content_info->hash, nca_ctx->hash, sizeof(nca_ctx->hash));
             memcpy(&(content_info->content_id), &(nca_ctx->content_id), sizeof(NcmContentId));
-            LOG_MSG("Updated CNMT content record #%u (title ID %016lX, size 0x%lX, type 0x%02X, ID offset 0x%02X).", i, cnmt_ctx->packaged_header->title_id, content_size, content_info->content_type, \
-                    content_info->id_offset);
+            LOG_MSG_INFO("Updated CNMT content record #%u (title ID %016lX, size 0x%lX, type 0x%02X, ID offset 0x%02X).", i, cnmt_ctx->packaged_header->title_id, content_size, content_info->content_type, \
+                         content_info->id_offset);
             success = true;
             break;
         }
     }
 
-    if (!success) LOG_MSG("Unable to find CNMT content info entry for \"%s\" NCA! (Title ID %016lX, size 0x%lX, type 0x%02X, ID offset 0x%02X).", nca_ctx->content_id_str, \
+    if (!success) LOG_MSG_ERROR("Unable to find CNMT content info entry for \"%s\" NCA! (Title ID %016lX, size 0x%lX, type 0x%02X, ID offset 0x%02X).", nca_ctx->content_id_str, \
                           cnmt_ctx->packaged_header->title_id, nca_ctx->content_size, nca_ctx->content_type, nca_ctx->id_offset);
 
     return success;
@@ -305,7 +304,7 @@ bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx)
 {
     if (!cnmtIsValidContext(cnmt_ctx))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -314,14 +313,14 @@ bool cnmtGenerateNcaPatch(ContentMetaContext *cnmt_ctx)
     sha256CalculateHash(cnmt_hash, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size);
     if (!memcmp(cnmt_hash, cnmt_ctx->raw_data_hash, sizeof(cnmt_hash)))
     {
-        LOG_MSG("Skipping CNMT patching - no content records have been changed.");
+        LOG_MSG_INFO("Skipping CNMT patching - no content records have been changed.");
         return true;
     }
 
     /* Generate Partition FS entry patch. */
     if (!pfsGenerateEntryPatch(&(cnmt_ctx->pfs_ctx), cnmt_ctx->pfs_entry, cnmt_ctx->raw_data, cnmt_ctx->raw_data_size, 0, &(cnmt_ctx->nca_patch)))
     {
-        LOG_MSG("Failed to generate Partition FS entry patch!");
+        LOG_MSG_ERROR("Failed to generate Partition FS entry patch!");
         return false;
     }
 
@@ -346,7 +345,7 @@ void cnmtWriteNcaPatch(ContentMetaContext *cnmt_ctx, void *buf, u64 buf_size, u6
     if (nca_patch->written)
     {
         nca_ctx->content_type_ctx_patch = false;
-        LOG_MSG("CNMT Partition FS entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
+        LOG_MSG_INFO("CNMT Partition FS entry patch successfully written to NCA \"%s\"!", nca_ctx->content_id_str);
     }
 }
 
@@ -354,7 +353,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
 {
     if (!cnmtIsValidContext(cnmt_ctx) || !nca_ctx || !nca_ctx_count || nca_ctx_count > ((u32)cnmt_ctx->packaged_header->content_count + 1))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -418,7 +417,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
 
         if (invalid_nca)
         {
-            LOG_MSG("NCA \"%s\" isn't referenced by this CNMT!", cur_nca_ctx->content_id_str);
+            LOG_MSG_ERROR("NCA \"%s\" isn't referenced by this CNMT!", cur_nca_ctx->content_id_str);
             goto end;
         }
 
@@ -483,7 +482,7 @@ end:
     if (!success)
     {
         if (xml_buf) free(xml_buf);
-        LOG_MSG("Failed to generate CNMT AuthoringTool XML!");
+        LOG_MSG_ERROR("Failed to generate CNMT AuthoringTool XML!");
     }
 
     return success;
@@ -493,7 +492,7 @@ static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filena
 {
     if (!cnmt_filename || cnmt_filename_len < CNMT_MINIMUM_FILENAME_LENGTH || !out_content_meta_type || !out_title_id)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -506,7 +505,7 @@ static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filena
 
     if (!pch1 || !(content_meta_type_str_len = (pch1 - cnmt_filename)) || (pch2 - ++pch1) != 16)
     {
-        LOG_MSG("Invalid '.cnmt' filename in Partition FS! (\"%s\").", cnmt_filename);
+        LOG_MSG_ERROR("Invalid '.cnmt' filename in Partition FS! (\"%s\").", cnmt_filename);
         return false;
     }
 
@@ -528,13 +527,13 @@ static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filena
 
     if (i > NcmContentMetaType_Delta)
     {
-        LOG_MSG("Invalid content meta type \"%.*s\" in '.cnmt' filename! (\"%s\").", (int)content_meta_type_str_len, cnmt_filename, cnmt_filename);
+        LOG_MSG_ERROR("Invalid content meta type \"%.*s\" in '.cnmt' filename! (\"%s\").", (int)content_meta_type_str_len, cnmt_filename, cnmt_filename);
         return false;
     }
 
     if (!(*out_title_id = strtoull(pch1, NULL, 16)))
     {
-        LOG_MSG("Invalid title ID in '.cnmt' filename! (\"%s\").", cnmt_filename);
+        LOG_MSG_ERROR("Invalid title ID in '.cnmt' filename! (\"%s\").", cnmt_filename);
         return false;
     }
 

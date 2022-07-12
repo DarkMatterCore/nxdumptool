@@ -36,7 +36,7 @@ bool jsonSet##functype(const struct json_object *obj, const char *path, vartype 
     struct json_object *child = jsonGetObjectByPath(obj, path, NULL); \
     if (child && jsonValidate##functype(child, ##__VA_ARGS__)) { \
         ret = (json_object_set_##jsontype(child, value) == 1); \
-        if (!ret) LOG_MSG("Failed to update \"%s\"!", path); \
+        if (!ret) LOG_MSG_ERROR("Failed to update \"%s\"!", path); \
     } \
     return ret; \
 }
@@ -45,7 +45,7 @@ struct json_object *jsonParseFromString(const char *str, size_t size)
 {
     if (!str || !*str)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -60,7 +60,7 @@ struct json_object *jsonParseFromString(const char *str, size_t size)
     tok = json_tokener_new();
     if (!tok)
     {
-        LOG_MSG("json_tokener_new failed!");
+        LOG_MSG_ERROR("json_tokener_new failed!");
         goto end;
     }
 
@@ -68,7 +68,7 @@ struct json_object *jsonParseFromString(const char *str, size_t size)
     obj = json_tokener_parse_ex(tok, str, (int)size);
     if ((jerr = json_tokener_get_error(tok)) != json_tokener_success)
     {
-        LOG_MSG("json_tokener_parse_ex failed! Reason: \"%s\".", json_tokener_error_desc(jerr));
+        LOG_MSG_ERROR("json_tokener_parse_ex failed! Reason: \"%s\".", json_tokener_error_desc(jerr));
 
         if (obj)
         {
@@ -91,14 +91,14 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
 
     if (!jsonValidateObject(obj) || !path || !*path)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
     /* Duplicate path to avoid problems with strtok_r(). */
     if (!(path_dup = strdup(path)))
     {
-        LOG_MSG("Unable to duplicate input path! (\"%s\").", path);
+        LOG_MSG_ERROR("Unable to duplicate input path! (\"%s\").", path);
         return NULL;
     }
 
@@ -106,7 +106,7 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
     pch = strtok_r(path_dup, "/", &state);
     if (!pch)
     {
-        LOG_MSG("Failed to tokenize input path! (\"%s\").", path);
+        LOG_MSG_ERROR("Failed to tokenize input path! (\"%s\").", path);
         goto end;
     }
 
@@ -120,7 +120,7 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
             /* Retrieve JSON object using the current path element. */
             if (!json_object_object_get_ex(parent_obj, prev_pch, &child_obj))
             {
-                LOG_MSG("Failed to retrieve JSON object by key for \"%s\"! (\"%s\").", prev_pch, path);
+                LOG_MSG_ERROR("Failed to retrieve JSON object by key for \"%s\"! (\"%s\").", prev_pch, path);
                 break;
             }
 
@@ -139,7 +139,7 @@ struct json_object *jsonGetObjectByPath(const struct json_object *obj, const cha
             *out_last_element = strdup(prev_pch);
             if (!*out_last_element)
             {
-                LOG_MSG("Failed to duplicate last path element \"%s\"! (\"%s\").", prev_pch, path);
+                LOG_MSG_ERROR("Failed to duplicate last path element \"%s\"! (\"%s\").", prev_pch, path);
                 child_obj = NULL;
             }
         }
@@ -162,7 +162,7 @@ void jsonLogLastError(void)
     if (str[str_len - 1] == '\r') str[--str_len] = '\0';
 
     /* Log error message. */
-    LOG_MSG("%s", str);
+    LOG_MSG_ERROR("%s", str);
 }
 
 JSON_GETTER(Boolean, bool, boolean);
@@ -187,7 +187,7 @@ bool jsonSetArray(const struct json_object *obj, const char *path, struct json_o
 {
     if (!obj || !path || !*path || !jsonValidateArray(value))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -199,14 +199,14 @@ bool jsonSetArray(const struct json_object *obj, const char *path, struct json_o
     parent_obj = jsonGetObjectByPath(obj, path, &key);
     if (!parent_obj)
     {
-        LOG_MSG("Failed to retrieve parent JSON object! (\"%s\").", path);
+        LOG_MSG_ERROR("Failed to retrieve parent JSON object! (\"%s\").", path);
         return false;
     }
 
     /* Set new JSON array. */
     if (json_object_object_add(parent_obj, key, value) != 0)
     {
-        LOG_MSG("json_object_object_add failed! (\"%s\").", path);
+        LOG_MSG_ERROR("json_object_object_add failed! (\"%s\").", path);
         goto end;
     }
 

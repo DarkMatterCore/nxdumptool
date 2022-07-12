@@ -170,7 +170,7 @@ bool gamecardInitialize(void)
         g_gameCardReadBuf = malloc(GAMECARD_READ_BUFFER_SIZE);
         if (!g_gameCardReadBuf)
         {
-            LOG_MSG("Unable to allocate memory for the gamecard read buffer!");
+            LOG_MSG_ERROR("Unable to allocate memory for the gamecard read buffer!");
             break;
         }
 
@@ -178,7 +178,7 @@ bool gamecardInitialize(void)
         rc = fsOpenDeviceOperator(&g_deviceOperator);
         if (R_FAILED(rc))
         {
-            LOG_MSG("fsOpenDeviceOperator failed! (0x%08X).", rc);
+            LOG_MSG_ERROR("fsOpenDeviceOperator failed! (0x%X).", rc);
             break;
         }
 
@@ -188,7 +188,7 @@ bool gamecardInitialize(void)
         rc = fsOpenGameCardDetectionEventNotifier(&g_gameCardEventNotifier);
         if (R_FAILED(rc))
         {
-            LOG_MSG("fsOpenGameCardDetectionEventNotifier failed! (0x%08X)", rc);
+            LOG_MSG_ERROR("fsOpenGameCardDetectionEventNotifier failed! (0x%X)", rc);
             break;
         }
 
@@ -198,7 +198,7 @@ bool gamecardInitialize(void)
         rc = fsEventNotifierGetEventHandle(&g_gameCardEventNotifier, &g_gameCardKernelEvent, true);
         if (R_FAILED(rc))
         {
-            LOG_MSG("fsEventNotifierGetEventHandle failed! (0x%08X)", rc);
+            LOG_MSG_ERROR("fsEventNotifierGetEventHandle failed! (0x%X)", rc);
             break;
         }
 
@@ -316,7 +316,7 @@ bool gamecardGetIdSet(FsGameCardIdSet *out)
         if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !out) break;
 
         Result rc = fsDeviceOperatorGetGameCardIdSet(&g_deviceOperator, out);
-        if (R_FAILED(rc)) LOG_MSG("fsDeviceOperatorGetGameCardIdSet failed! (0x%08X)", rc);
+        if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardIdSet failed! (0x%X)", rc);
 
         ret = R_SUCCEEDED(rc);
     }
@@ -387,7 +387,7 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
 
         /* Read the gamecard certificate using the official IPC call. */
         Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out);
-        if (R_FAILED(rc)) LOG_MSG("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%08X)", rc);
+        if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%X)", rc);
 
         ret = R_SUCCEEDED(rc);
     }
@@ -446,7 +446,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(Version *out)
         u32 update_version = 0;
 
         Result rc = fsDeviceOperatorUpdatePartitionInfo(&g_deviceOperator, &g_gameCardHandle, &update_version, &update_id);
-        if (R_FAILED(rc)) LOG_MSG("fsDeviceOperatorUpdatePartitionInfo failed! (0x%08X)", rc);
+        if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorUpdatePartitionInfo failed! (0x%X)", rc);
 
         ret = (R_SUCCEEDED(rc) && update_id == GAMECARD_UPDATE_TID);
         if (ret) out->value = update_version;
@@ -459,7 +459,7 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
 {
     if (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -478,7 +478,7 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
         out->name = strdup(fs_ctx->name);
         if (!out->name)
         {
-            LOG_MSG("Failed to duplicate Hash FS partition name! (%s).", fs_ctx->name);
+            LOG_MSG_ERROR("Failed to duplicate Hash FS partition name! (%s).", fs_ctx->name);
             break;
         }
 
@@ -490,7 +490,7 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
         out->header = calloc(fs_ctx->header_size, sizeof(u8));
         if (!out->header)
         {
-            LOG_MSG("Failed to duplicate Hash FS partition header! (%s).", fs_ctx->name);
+            LOG_MSG_ERROR("Failed to duplicate Hash FS partition header! (%s).", fs_ctx->name);
             break;
         }
 
@@ -509,7 +509,7 @@ bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char 
 {
     if (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count || !entry_name || !*entry_name || (!out_offset && !out_size))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -585,7 +585,7 @@ static bool gamecardReadLotusAsicFirmwareBlob(void)
     g_lafwBlob = calloc(1, sizeof(LotusAsicFirmwareBlob));
     if (!g_lafwBlob)
     {
-        LOG_MSG("Failed to allocate memory for LAFW blob!");
+        LOG_MSG_ERROR("Failed to allocate memory for LAFW blob!");
         goto end;
     }
 
@@ -600,7 +600,7 @@ static bool gamecardReadLotusAsicFirmwareBlob(void)
 
     if (!ret)
     {
-        LOG_MSG("Failed to retrieve FS .data segment dump!");
+        LOG_MSG_ERROR("Failed to retrieve FS .data segment dump!");
         goto end;
     }
 
@@ -624,7 +624,7 @@ static bool gamecardReadLotusAsicFirmwareBlob(void)
 
     if (!found)
     {
-        LOG_MSG("Unable to locate Lotus %s blob in FS .data segment!", dev_unit ? "ReadDevFw" : "ReadFw");
+        LOG_MSG_ERROR("Unable to locate Lotus %s blob in FS .data segment!", dev_unit ? "ReadDevFw" : "ReadFw");
         goto end;
     }
 
@@ -637,7 +637,7 @@ static bool gamecardReadLotusAsicFirmwareBlob(void)
         fw_version >>= 1;
     }
 
-    LOG_MSG("LAFW version: %lu.", g_lafwVersion);
+    LOG_MSG_INFO("LAFW version: %lu.", g_lafwVersion);
 
     /* Update flag. */
     ret = true;
@@ -652,7 +652,7 @@ static bool gamecardCreateDetectionThread(void)
 {
     if (!utilsCreateThread(&g_gameCardDetectionThread, gamecardDetectionThreadFunc, NULL, 1))
     {
-        LOG_MSG("Failed to create gamecard detection thread!");
+        LOG_MSG_ERROR("Failed to create gamecard detection thread!");
         return false;
     }
 
@@ -726,7 +726,7 @@ NX_INLINE bool gamecardIsInserted(void)
 {
     bool inserted = false;
     Result rc = fsDeviceOperatorIsGameCardInserted(&g_deviceOperator, &inserted);
-    if (R_FAILED(rc)) LOG_MSG("fsDeviceOperatorIsGameCardInserted failed! (0x%08X)", rc);
+    if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorIsGameCardInserted failed! (0x%X)", rc);
     return (R_SUCCEEDED(rc) && inserted);
 }
 
@@ -752,7 +752,7 @@ static void gamecardLoadInfo(void)
     /* Check if we meet the Lotus ASIC firmware (LAFW) version requirement. */
     if (g_lafwVersion < g_gameCardInfoArea.fw_version)
     {
-        LOG_MSG("LAFW version doesn't meet gamecard requirement! (%lu < %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
+        LOG_MSG_ERROR("LAFW version doesn't meet gamecard requirement! (%lu < %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
         g_gameCardStatus = GameCardStatus_LotusAsicFirmwareUpdateRequired;
         goto end;
     }
@@ -761,7 +761,7 @@ static void gamecardLoadInfo(void)
     /* gamecardReadStorageArea() actually checks if the storage area sizes are greater than zero, so we must perform this step. */
     if (!gamecardGetStorageAreasSizes())
     {
-        LOG_MSG("Failed to retrieve gamecard storage area sizes!");
+        LOG_MSG_ERROR("Failed to retrieve gamecard storage area sizes!");
         goto end;
     }
 
@@ -769,7 +769,7 @@ static void gamecardLoadInfo(void)
     g_gameCardCapacity = gamecardGetCapacityFromRomSizeValue(g_gameCardHeader.rom_size);
     if (!g_gameCardCapacity)
     {
-        LOG_MSG("Invalid gamecard capacity value! (0x%02X).", g_gameCardHeader.rom_size);
+        LOG_MSG_ERROR("Invalid gamecard capacity value! (0x%02X).", g_gameCardHeader.rom_size);
         goto end;
     }
 
@@ -792,7 +792,7 @@ static void gamecardLoadInfo(void)
     g_gameCardHfsCtx = calloc(g_gameCardHfsCount, sizeof(HashFileSystemContext*));
     if (!g_gameCardHfsCtx)
     {
-        LOG_MSG("Unable to allocate Hash FS context pointer array! (%u).", g_gameCardHfsCount);
+        LOG_MSG_ERROR("Unable to allocate Hash FS context pointer array! (%u).", g_gameCardHfsCount);
         goto end;
     }
 
@@ -812,7 +812,7 @@ static void gamecardLoadInfo(void)
 
         if (fs_entry->name_offset >= root_fs_name_table_size || !*fs_entry_name)
         {
-            LOG_MSG("Invalid name for root Hash FS partition entry #%u!", i);
+            LOG_MSG_ERROR("Invalid name for root Hash FS partition entry #%u!", i);
             goto end;
         }
 
@@ -874,7 +874,7 @@ static bool gamecardReadHeader(void)
     /* Open normal storage area. */
     if (!gamecardOpenStorageArea(GameCardStorageArea_Normal))
     {
-        LOG_MSG("Failed to open normal storage area!");
+        LOG_MSG_ERROR("Failed to open normal storage area!");
         return false;
     }
 
@@ -883,16 +883,16 @@ static bool gamecardReadHeader(void)
     Result rc = fsStorageRead(&g_gameCardStorage, 0, &g_gameCardHeader, sizeof(GameCardHeader));
     if (R_FAILED(rc))
     {
-        LOG_MSG("fsStorageRead failed to read gamecard header! (0x%08X).", rc);
+        LOG_MSG_ERROR("fsStorageRead failed to read gamecard header! (0x%X).", rc);
         return false;
     }
 
-    //LOG_DATA(&g_gameCardHeader, sizeof(GameCardHeader), "Gamecard header dump:");
+    LOG_DATA_DEBUG(&g_gameCardHeader, sizeof(GameCardHeader), "Gamecard header dump:");
 
     /* Check magic word from gamecard header. */
     if (__builtin_bswap32(g_gameCardHeader.magic) != GAMECARD_HEAD_MAGIC)
     {
-        LOG_MSG("Invalid gamecard header magic word! (0x%08X).", __builtin_bswap32(g_gameCardHeader.magic));
+        LOG_MSG_ERROR("Invalid gamecard header magic word! (0x%08X).", __builtin_bswap32(g_gameCardHeader.magic));
         return false;
     }
 
@@ -909,7 +909,7 @@ static bool _gamecardGetDecryptedCardInfoArea(void)
     card_info_key = keysGetGameCardInfoKey();
     if (!card_info_key)
     {
-        LOG_MSG("Failed to retrieve CardInfo area key!");
+        LOG_MSG_ERROR("Failed to retrieve CardInfo area key!");
         return false;
     }
 
@@ -922,7 +922,7 @@ static bool _gamecardGetDecryptedCardInfoArea(void)
     /* Decrypt CardInfo area. */
     aes128CbcDecrypt(&aes_ctx, &g_gameCardInfoArea, &(g_gameCardHeader.card_info), sizeof(GameCardInfo));
 
-    //LOG_DATA(&g_gameCardInfoArea, sizeof(GameCardInfo), "Gamecard CardInfo area dump:");
+    LOG_DATA_DEBUG(&g_gameCardInfoArea, sizeof(GameCardInfo), "Gamecard CardInfo area dump:");
 
     return true;
 }
@@ -931,7 +931,7 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
 {
     if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -941,7 +941,7 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
     /* Open secure storage area. */
     if (!gamecardOpenStorageArea(GameCardStorageArea_Secure))
     {
-        LOG_MSG("Failed to open secure storage area!");
+        LOG_MSG_ERROR("Failed to open secure storage area!");
         return false;
     }
 
@@ -951,7 +951,7 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
     /* Retrieve full FS program memory dump. */
     if (!memRetrieveFullProgramMemory(&g_fsProgramMemory))
     {
-        LOG_MSG("Failed to retrieve full FS program memory dump!");
+        LOG_MSG_ERROR("Failed to retrieve full FS program memory dump!");
         return false;
     }
 
@@ -987,7 +987,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
 {
     if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || partition > 1)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1004,7 +1004,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         rc = fsDeviceOperatorGetGameCardHandle(&g_deviceOperator, &g_gameCardHandle);
         if (R_FAILED(rc))
         {
-            //LOG_MSG("fsDeviceOperatorGetGameCardHandle failed on try #%u! (0x%08X).", i + 1, rc);
+            LOG_MSG_DEBUG("fsDeviceOperatorGetGameCardHandle failed on try #%u! (0x%X).", i + 1, rc);
             continue;
         }
 
@@ -1013,7 +1013,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         if (R_FAILED(rc))
         {
             gamecardCloseHandle(); /* Close invalid gamecard handle. */
-            //LOG_MSG("fsOpenGameCardStorage failed to open %s storage area on try #%u! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(partition + 1), i + 1, rc);
+            LOG_MSG_DEBUG("fsOpenGameCardStorage failed to open %s storage area on try #%u! (0x%X).", GAMECARD_STORAGE_AREA_NAME(partition + 1), i + 1, rc);
             continue;
         }
 
@@ -1023,7 +1023,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
 
     if (R_FAILED(rc))
     {
-        LOG_MSG("fsDeviceOperatorGetGameCardHandle / fsOpenGameCardStorage failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("fsDeviceOperatorGetGameCardHandle / fsOpenGameCardStorage failed! (0x%X).", rc);
         if (g_gameCardStatus == GameCardStatus_InsertedAndInfoNotLoaded && partition == 0) g_gameCardStatus = GameCardStatus_NoGameCardPatchEnabled;
     }
 
@@ -1039,7 +1039,7 @@ static bool gamecardOpenStorageArea(u8 area)
 {
     if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || (area != GameCardStorageArea_Normal && area != GameCardStorageArea_Secure))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1052,7 +1052,7 @@ static bool gamecardOpenStorageArea(u8 area)
     /* Retrieve both a new gamecard handle and a storage area handle. */
     if (!gamecardGetHandleAndStorage(area - 1)) /* Zero-based index. */
     {
-        LOG_MSG("Failed to retrieve gamecard handle and storage area handle! (%s).", GAMECARD_STORAGE_AREA_NAME(area));
+        LOG_MSG_ERROR("Failed to retrieve gamecard handle and storage area handle! (%s).", GAMECARD_STORAGE_AREA_NAME(area));
         return false;
     }
 
@@ -1066,7 +1066,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
 {
     if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || !g_gameCardNormalAreaSize || !g_gameCardSecureAreaSize || !out || !read_size || (offset + read_size) > g_gameCardTotalSize)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1095,7 +1095,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
     /* If the right storage area has already been opened, this will return true. */
     if (!gamecardOpenStorageArea(area))
     {
-        LOG_MSG("Failed to open %s storage area!", GAMECARD_STORAGE_AREA_NAME(area));
+        LOG_MSG_ERROR("Failed to open %s storage area!", GAMECARD_STORAGE_AREA_NAME(area));
         goto end;
     }
 
@@ -1108,7 +1108,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
         rc = fsStorageRead(&g_gameCardStorage, base_offset, out_u8, read_size);
         if (R_FAILED(rc))
         {
-            LOG_MSG("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (aligned).", read_size, base_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
+            LOG_MSG_ERROR("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%X) (aligned).", read_size, base_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
             goto end;
         }
 
@@ -1126,7 +1126,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
         rc = fsStorageRead(&g_gameCardStorage, block_start_offset, g_gameCardReadBuf, chunk_size);
         if (R_FAILED(rc))
         {
-            LOG_MSG("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%08X) (unaligned).", chunk_size, block_start_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
+            LOG_MSG_ERROR("fsStorageRead failed to read 0x%lX bytes at offset 0x%lX from %s storage area! (0x%X) (unaligned).", chunk_size, block_start_offset, GAMECARD_STORAGE_AREA_NAME(area), rc);
             goto end;
         }
 
@@ -1164,7 +1164,7 @@ static bool gamecardGetStorageAreasSizes(void)
 
         if (!gamecardOpenStorageArea(area))
         {
-            LOG_MSG("Failed to open %s storage area!", GAMECARD_STORAGE_AREA_NAME(area));
+            LOG_MSG_ERROR("Failed to open %s storage area!", GAMECARD_STORAGE_AREA_NAME(area));
             return false;
         }
 
@@ -1174,7 +1174,7 @@ static bool gamecardGetStorageAreasSizes(void)
 
         if (R_FAILED(rc) || !area_size)
         {
-            LOG_MSG("fsStorageGetSize failed to retrieve %s storage area size! (0x%08X).", GAMECARD_STORAGE_AREA_NAME(area), rc);
+            LOG_MSG_ERROR("fsStorageGetSize failed to retrieve %s storage area size! (0x%X).", GAMECARD_STORAGE_AREA_NAME(area), rc);
             return false;
         }
 
@@ -1234,7 +1234,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     if ((name && !*name) || offset < (GAMECARD_CERTIFICATE_OFFSET + sizeof(FsGameCardCertificate)) || !IS_ALIGNED(offset, GAMECARD_PAGE_SIZE) || \
         (size && (!IS_ALIGNED(size, GAMECARD_PAGE_SIZE) || (offset + size) > g_gameCardTotalSize)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         goto end;
     }
 
@@ -1242,7 +1242,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     fs_ctx = calloc(1, sizeof(HashFileSystemContext));
     if (!fs_ctx)
     {
-        LOG_MSG("Unable to allocate memory for Hash FS context! (offset 0x%lX).", offset);
+        LOG_MSG_ERROR("Unable to allocate memory for Hash FS context! (offset 0x%lX).", offset);
         goto end;
     }
 
@@ -1250,7 +1250,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     fs_ctx->name = (name ? strdup(name) : strdup(g_gameCardHfsPartitionNames[GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Root)]));
     if (!fs_ctx->name)
     {
-        LOG_MSG("Failed to duplicate Hash FS partition name! (offset 0x%lX).", offset);
+        LOG_MSG_ERROR("Failed to duplicate Hash FS partition name! (offset 0x%lX).", offset);
         goto end;
     }
 
@@ -1262,7 +1262,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
 
     if (i >= GameCardHashFileSystemPartitionType_Count)
     {
-        LOG_MSG("Failed to find a matching Hash FS partition type for \"%s\"! (offset 0x%lX).", fs_ctx->name, offset);
+        LOG_MSG_ERROR("Failed to find a matching Hash FS partition type for \"%s\"! (offset 0x%lX).", fs_ctx->name, offset);
         goto end;
     }
 
@@ -1271,14 +1271,14 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     /* Read partial Hash FS header. */
     if (!gamecardReadStorageArea(&fs_header, sizeof(HashFileSystemHeader), offset))
     {
-        LOG_MSG("Failed to read partial Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
+        LOG_MSG_ERROR("Failed to read partial Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
         goto end;
     }
 
     magic = __builtin_bswap32(fs_header.magic);
     if (magic != HFS0_MAGIC)
     {
-        LOG_MSG("Invalid Hash FS magic word! (0x%08X) (\"%s\", offset 0x%lX).", magic, fs_ctx->name, offset);
+        LOG_MSG_ERROR("Invalid Hash FS magic word! (0x%08X) (\"%s\", offset 0x%lX).", magic, fs_ctx->name, offset);
         dump_fs_header = true;
         goto end;
     }
@@ -1287,7 +1287,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     /* Only allow a zero entry count if we're not dealing with the root partition. Never allow a zero-sized name table. */
     if ((!name && !fs_header.entry_count) || !fs_header.name_table_size)
     {
-        LOG_MSG("Invalid Hash FS entry count / name table size! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
+        LOG_MSG_ERROR("Invalid Hash FS entry count / name table size! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
         dump_fs_header = true;
         goto end;
     }
@@ -1300,14 +1300,14 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     fs_ctx->header = calloc(fs_ctx->header_size, sizeof(u8));
     if (!fs_ctx->header)
     {
-        LOG_MSG("Unable to allocate 0x%lX bytes buffer for the full Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->header_size, fs_ctx->name, offset);
+        LOG_MSG_ERROR("Unable to allocate 0x%lX bytes buffer for the full Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->header_size, fs_ctx->name, offset);
         goto end;
     }
 
     /* Read full Hash FS header. */
     if (!gamecardReadStorageArea(fs_ctx->header, fs_ctx->header_size, offset))
     {
-        LOG_MSG("Failed to read full Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
+        LOG_MSG_ERROR("Failed to read full Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
         goto end;
     }
 
@@ -1317,7 +1317,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
         sha256CalculateHash(fs_header_hash, fs_ctx->header + hash_target_offset, hash_target_size);
         if (memcmp(fs_header_hash, hash, SHA256_HASH_SIZE) != 0)
         {
-            LOG_MSG("Hash FS header doesn't match expected SHA-256 hash! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
+            LOG_MSG_ERROR("Hash FS header doesn't match expected SHA-256 hash! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
             goto end;
         }
     }
@@ -1341,7 +1341,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
 end:
     if (!success && fs_ctx)
     {
-        if (dump_fs_header) LOG_DATA(&fs_header, sizeof(HashFileSystemHeader), "Partial Hash FS header dump (\"%s\", offset 0x%lX):", fs_ctx->name, offset);
+        if (dump_fs_header) LOG_DATA_DEBUG(&fs_header, sizeof(HashFileSystemHeader), "Partial Hash FS header dump (\"%s\", offset 0x%lX):", fs_ctx->name, offset);
 
         if (fs_ctx->header) free(fs_ctx->header);
 
@@ -1361,7 +1361,7 @@ static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition
     if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || !hfs_partition_type || \
         hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         goto end;
     }
 
@@ -1380,7 +1380,7 @@ static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition
         fs_ctx = NULL;
     }
 
-    if (!fs_ctx) LOG_MSG("Failed to locate Hash FS partition with type %u!", hfs_partition_type);
+    if (!fs_ctx) LOG_MSG_ERROR("Failed to locate Hash FS partition with type %u!", hfs_partition_type);
 
 end:
     return fs_ctx;

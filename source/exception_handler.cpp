@@ -58,7 +58,7 @@ namespace nxdt::utils {
         /* Find the memory region in which this function is stored. */
         /* The start of it will be the base address the homebrew was mapped to. */
         rc = svcQueryMemory(out, &p, static_cast<u64>(reinterpret_cast<uintptr_t>(&GetHomebrewMemoryInfo)));
-        if (R_FAILED(rc)) LOG_MSG_ERROR("svcQueryMemory failed! (0x%08X).", rc);
+        if (R_FAILED(rc)) LOG_MSG_ERROR("svcQueryMemory failed! (0x%X).", rc);
     }
 
 #if LOG_LEVEL == LOG_LEVEL_DEBUG
@@ -120,7 +120,7 @@ extern "C" {
     void diagAbortWithResult(Result res)
     {
         /* Log error. */
-        LOG_MSG_ERROR("*** libnx aborted with error code: 0x%08X ***", res);
+        LOG_MSG_ERROR("*** libnx aborted with error code: 0x%X ***", res);
 
         /* Abort program execution. */
         std::string crash_str = (g_borealisInitialized ? i18n::getStr("generic/libnx_abort"_i18n, res) : fmt::format("Fatal error triggered in libnx!\nError code: 0x{:08X}.", res));

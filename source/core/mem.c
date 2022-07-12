@@ -88,7 +88,7 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
           envIsSyscallHinted(0x69) &&   /* svcQueryDebugProcessMemory. */
           envIsSyscallHinted(0x6A)))    /* svcReadDebugProcessMemory. */
     {
-        LOG_MSG("Debug SVC permissions not available!");
+        LOG_MSG_ERROR("Debug SVC permissions not available!");
         return false;
     }
 
@@ -149,7 +149,7 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
         rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
         if (R_FAILED(rc))
         {
-            MEMLOG_ERROR("svcQueryDebugProcessMemory failed for program %016lX! (0x%08X).", location->program_id, rc);
+            MEMLOG_ERROR("svcQueryDebugProcessMemory failed for program %016lX! (0x%X).", location->program_id, rc);
             success = false;
             break;
         }
@@ -183,7 +183,7 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
             rc = svcReadDebugProcessMemory(location->data + location->data_size, debug_handle, mem_info.addr, mem_info.size);
             if (R_FAILED(rc))
             {
-                MEMLOG_ERROR("svcReadDebugProcessMemory failed for program %016lX! (0x%08X).", location->program_id, rc);
+                MEMLOG_ERROR("svcReadDebugProcessMemory failed for program %016lX! (0x%X).", location->program_id, rc);
                 success = false;
                 break;
             }
@@ -249,7 +249,7 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
         rc = pmdmntGetProcessId(&pid, program_id);
         if (R_FAILED(rc))
         {
-            MEMLOG_ERROR("pmdmntGetProcessId failed for program %016lX! (0x%08X).", program_id, rc);
+            MEMLOG_ERROR("pmdmntGetProcessId failed for program %016lX! (0x%X).", program_id, rc);
             return false;
         }
 
@@ -259,7 +259,7 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
         rc = svcDebugActiveProcess(&debug_handle, pid);
         if (R_FAILED(rc))
         {
-            MEMLOG_ERROR("svcDebugActiveProcess failed for program %016lX! (0x%08X).", program_id, rc);
+            MEMLOG_ERROR("svcDebugActiveProcess failed for program %016lX! (0x%X).", program_id, rc);
             return false;
         }
     } else {
@@ -276,7 +276,7 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
         rc = svcGetProcessList((s32*)&num_processes, pids, 300);
         if (R_FAILED(rc))
         {
-            MEMLOG_ERROR("svcGetProcessList failed! (0x%08X).", rc);
+            MEMLOG_ERROR("svcGetProcessList failed! (0x%X).", rc);
             free(pids);
             return false;
         }
@@ -314,7 +314,7 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
 
         if (i == num_processes)
         {
-            MEMLOG_ERROR("Unable to find program %016lX in kernel process list! (0x%08X).", program_id, rc);
+            MEMLOG_ERROR("Unable to find program %016lX in kernel process list! (0x%X).", program_id, rc);
             return false;
         }
     }

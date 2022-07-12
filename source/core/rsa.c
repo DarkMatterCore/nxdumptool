@@ -32,7 +32,7 @@ bool rsa2048VerifySha256BasedPssSignature(const void *data, size_t data_size, co
 {
     if (!data || !data_size || !signature || !modulus || !public_exponent || !public_exponent_size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -48,7 +48,7 @@ bool rsa2048VerifySha256BasedPssSignature(const void *data, size_t data_size, co
     mbedtls_ret = mbedtls_rsa_import_raw(&rsa, (const u8*)modulus, RSA2048_BYTES, NULL, 0, NULL, 0, NULL, 0, (const u8*)public_exponent, public_exponent_size);
     if (mbedtls_ret != 0)
     {
-        LOG_MSG("mbedtls_rsa_import_raw failed! (%d).", mbedtls_ret);
+        LOG_MSG_ERROR("mbedtls_rsa_import_raw failed! (%d).", mbedtls_ret);
         goto end;
     }
 
@@ -59,7 +59,7 @@ bool rsa2048VerifySha256BasedPssSignature(const void *data, size_t data_size, co
     mbedtls_ret = mbedtls_rsa_rsassa_pss_verify(&rsa, NULL, NULL, MBEDTLS_RSA_PUBLIC, MBEDTLS_MD_SHA256, SHA256_HASH_SIZE, hash, (const u8*)signature);
     if (mbedtls_ret != 0)
     {
-        LOG_MSG("mbedtls_rsa_rsassa_pss_verify failed! (%d).", mbedtls_ret);
+        LOG_MSG_ERROR("mbedtls_rsa_rsassa_pss_verify failed! (%d).", mbedtls_ret);
         goto end;
     }
 
@@ -77,7 +77,7 @@ bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const
     if (!dst || !dst_size || !signature || !modulus || !public_exponent || !public_exponent_size || !private_exponent || !private_exponent_size || (!label && label_size) || (label && !label_size) || \
         !out_size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -98,7 +98,7 @@ bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const
     mbedtls_ret = mbedtls_ctr_drbg_seed(&ctr_drbg, mbedtls_entropy_func, &entropy, (const u8*)pers, strlen(pers));
     if (mbedtls_ret != 0)
     {
-        LOG_MSG("mbedtls_ctr_drbg_seed failed! (%d).", mbedtls_ret);
+        LOG_MSG_ERROR("mbedtls_ctr_drbg_seed failed! (%d).", mbedtls_ret);
         goto end;
     }
 
@@ -106,7 +106,7 @@ bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const
     mbedtls_ret = mbedtls_rsa_import_raw(&rsa, (const u8*)modulus, RSA2048_BYTES, NULL, 0, NULL, 0, (const u8*)private_exponent, private_exponent_size, (const u8*)public_exponent, public_exponent_size);
     if (mbedtls_ret != 0)
     {
-        LOG_MSG("mbedtls_rsa_import_raw failed! (%d).", mbedtls_ret);
+        LOG_MSG_ERROR("mbedtls_rsa_import_raw failed! (%d).", mbedtls_ret);
         goto end;
     }
 
@@ -114,7 +114,7 @@ bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const
     mbedtls_ret = mbedtls_rsa_complete(&rsa);
     if (mbedtls_ret != 0)
     {
-        LOG_MSG("mbedtls_rsa_complete failed! (%d).", mbedtls_ret);
+        LOG_MSG_ERROR("mbedtls_rsa_complete failed! (%d).", mbedtls_ret);
         goto end;
     }
 
@@ -122,7 +122,7 @@ bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const
     mbedtls_ret = mbedtls_rsa_rsaes_oaep_decrypt(&rsa, mbedtls_ctr_drbg_random, &ctr_drbg, MBEDTLS_RSA_PRIVATE, (const u8*)label, label_size, out_size, (const u8*)signature, (u8*)dst, dst_size);
     if (mbedtls_ret != 0)
     {
-        LOG_MSG("mbedtls_rsa_rsaes_oaep_decrypt failed! (%d).", mbedtls_ret);
+        LOG_MSG_ERROR("mbedtls_rsa_rsaes_oaep_decrypt failed! (%d).", mbedtls_ret);
         goto end;
     }
 

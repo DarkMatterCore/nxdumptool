@@ -128,7 +128,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Retrieve pointer to the SD card FsFileSystem element. */
         if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem(DEVOPTAB_SDMC_DEVICE)))
         {
-            LOG_MSG("Failed to retrieve FsFileSystem object for the SD card!");
+            LOG_MSG_ERROR("Failed to retrieve FsFileSystem object for the SD card!");
             break;
         }
 
@@ -193,14 +193,14 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Load keyset. */
         if (!keysLoadKeyset())
         {
-            LOG_MSG("Failed to load keyset!\nUpdate your keys file with Lockpick_RCM:\n" LOCKPICK_RCM_URL);
+            LOG_MSG_ERROR("Failed to load keyset!\nUpdate your keys file with Lockpick_RCM:\n" LOCKPICK_RCM_URL);
             break;
         }
 
         /* Allocate NCA crypto buffer. */
         if (!ncaAllocateCryptoBuffer())
         {
-            LOG_MSG("Unable to allocate memory for NCA crypto buffer!");
+            LOG_MSG_ERROR("Unable to allocate memory for NCA crypto buffer!");
             break;
         }
 
@@ -223,7 +223,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         rc = romfsInit();
         if (R_FAILED(rc))
         {
-            LOG_MSG("Failed to mount RomFS container!");
+            LOG_MSG_ERROR("Failed to mount " APP_TITLE "'s RomFS container!");
             break;
         }
 
@@ -410,7 +410,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     /* -2 can be provided to use the default process core. */
     if (!out_thread || !func || (cpu_id < 0 && cpu_id != -2) || cpu_id > 2)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -425,7 +425,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     rc = svcGetInfo(&core_mask, InfoType_CoreMask, CUR_PROCESS_HANDLE, 0);
     if (R_FAILED(rc))
     {
-        LOG_MSG("svcGetInfo failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("svcGetInfo failed! (0x%X).", rc);
         goto end;
     }
 
@@ -434,7 +434,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     rc = threadCreate(out_thread, func, arg, NULL, stack_size, 0x3B, cpu_id);
     if (R_FAILED(rc))
     {
-        LOG_MSG("threadCreate failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("threadCreate failed! (0x%X).", rc);
         goto end;
     }
 
@@ -442,7 +442,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     rc = svcSetThreadCoreMask(out_thread->handle, cpu_id == -2 ? -1 : cpu_id, core_mask);
     if (R_FAILED(rc))
     {
-        LOG_MSG("svcSetThreadCoreMask failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("svcSetThreadCoreMask failed! (0x%X).", rc);
         goto end;
     }
 
@@ -450,7 +450,7 @@ bool utilsCreateThread(Thread *out_thread, ThreadFunc func, void *arg, int cpu_i
     rc = threadStart(out_thread);
     if (R_FAILED(rc))
     {
-        LOG_MSG("threadStart failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("threadStart failed! (0x%X).", rc);
         goto end;
     }
 
@@ -466,14 +466,14 @@ void utilsJoinThread(Thread *thread)
 {
     if (!thread || thread->handle == INVALID_HANDLE)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return;
     }
 
     Result rc = threadWaitForExit(thread);
     if (R_FAILED(rc))
     {
-        LOG_MSG("threadWaitForExit failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("threadWaitForExit failed! (0x%X).", rc);
         return;
     }
 
@@ -486,7 +486,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
 {
     if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || !fmt || !*fmt)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -502,7 +502,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
 
     if (dst_cur_size && dst_str_len >= dst_cur_size)
     {
-        LOG_MSG("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
+        LOG_MSG_ERROR("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
         return false;
     }
 
@@ -512,7 +512,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
     formatted_str_len = vsnprintf(NULL, 0, fmt, args);
     if (formatted_str_len <= 0)
     {
-        LOG_MSG("Failed to retrieve formatted string length!");
+        LOG_MSG_ERROR("Failed to retrieve formatted string length!");
         goto end;
     }
 
@@ -527,7 +527,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
         tmp_str = realloc(dst_ptr, dst_cur_size);
         if (!tmp_str)
         {
-            LOG_MSG("Failed to resize buffer to 0x%lX byte(s).", dst_cur_size);
+            LOG_MSG_ERROR("Failed to resize buffer to 0x%lX byte(s).", dst_cur_size);
             goto end;
         }
 
@@ -647,7 +647,7 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
 
     if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || (!out_total && !out_free))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -656,7 +656,7 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
 
     if ((ret = statvfs(stat_path, &info)) != 0)
     {
-        LOG_MSG("statvfs failed for \"%s\"! (%d) (errno: %d).", stat_path, ret, errno);
+        LOG_MSG_ERROR("statvfs failed for \"%s\"! (%d) (errno: %d).", stat_path, ret, errno);
         return false;
     }
 
@@ -673,7 +673,7 @@ void utilsCreateOutputDirectories(const char *device)
 
     if (device && (!(device_len = strlen(device)) || device[device_len - 1] != ':'))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return;
     }
 
@@ -709,7 +709,7 @@ bool utilsCreateConcatenationFile(const char *path)
 {
     if (!path || !*path)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -719,7 +719,7 @@ bool utilsCreateConcatenationFile(const char *path)
     /* Create ConcatenationFile. */
     /* If the call succeeds, the caller function will be able to operate on this file using stdio calls. */
     Result rc = fsdevCreateFile(path, 0, FsCreateOption_BigFile);
-    if (R_FAILED(rc)) LOG_MSG("fsdevCreateFile failed for \"%s\"! (0x%08X).", path, rc);
+    if (R_FAILED(rc)) LOG_MSG_ERROR("fsdevCreateFile failed for \"%s\"! (0x%X).", path, rc);
 
     return R_SUCCEEDED(rc);
 }
@@ -751,7 +751,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
 {
     if (!filename || !*filename)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -771,7 +771,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     /* Allocate memory for the output path. */
     if (!(path = calloc(path_len + 1, sizeof(char))))
     {
-        LOG_MSG("Failed to allocate 0x%lX bytes for output path!", path_len);
+        LOG_MSG_ERROR("Failed to allocate 0x%lX bytes for output path!", path_len);
         goto end;
     }
 
@@ -823,7 +823,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
                 /* Truncate last element. Make sure to preserve the provided file extension. */
                 if (extension_len >= last_cp_pos)
                 {
-                    LOG_MSG("File extension length is >= truncated filename length! (0x%lX >= 0x%lX).", extension_len, last_cp_pos);
+                    LOG_MSG_ERROR("File extension length is >= truncated filename length! (0x%lX >= 0x%lX).", extension_len, last_cp_pos);
                     goto end;
                 }
 
@@ -840,7 +840,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     /* Check if the full length for the generated path is >= FS_MAX_PATH. */
     if (path_len >= FS_MAX_PATH)
     {
-        LOG_MSG("Generated path length is >= FS_MAX_PATH! (0x%lX).", path_len);
+        LOG_MSG_ERROR("Generated path length is >= FS_MAX_PATH! (0x%lX).", path_len);
         goto end;
     }
 
@@ -912,7 +912,7 @@ bool utilsParseGitHubReleaseJsonData(const char *json_buf, size_t json_buf_size,
 {
     if (!json_buf || !json_buf_size || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -927,7 +927,7 @@ bool utilsParseGitHubReleaseJsonData(const char *json_buf, size_t json_buf_size,
     out->obj = jsonParseFromString(json_buf, json_buf_size);
     if (!out->obj)
     {
-        LOG_MSG("Failed to parse JSON object!");
+        LOG_MSG_ERROR("Failed to parse JSON object!");
         return false;
     }
 
@@ -940,14 +940,14 @@ bool utilsParseGitHubReleaseJsonData(const char *json_buf, size_t json_buf_size,
 
     if (!out->version || !out->commit_hash || !published_at || !out->changelog || !assets)
     {
-        LOG_MSG("Failed to retrieve required elements from the provided JSON!");
+        LOG_MSG_ERROR("Failed to retrieve required elements from the provided JSON!");
         goto end;
     }
 
     /* Parse release date. */
     if (!strptime(published_at, "%Y-%m-%dT%H:%M:%SZ", &(out->date)))
     {
-        LOG_MSG("Failed to parse release date \"%s\"!", published_at);
+        LOG_MSG_ERROR("Failed to parse release date \"%s\"!", published_at);
         goto end;
     }
 
@@ -973,7 +973,7 @@ bool utilsParseGitHubReleaseJsonData(const char *json_buf, size_t json_buf_size,
 
     if (!out->download_url)
     {
-        LOG_MSG("Failed to retrieve required elements from the provided JSON!");
+        LOG_MSG_ERROR("Failed to retrieve required elements from the provided JSON!");
         goto end;
     }
 
@@ -990,7 +990,7 @@ bool utilsIsApplicationUpdatable(const char *version, const char *commit_hash)
 {
     if (!version || !*version || *version != 'v' || !commit_hash || !*commit_hash)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1060,7 +1060,7 @@ static bool _utilsIsDevelopmentUnit(void)
     {
         g_isDevUnit = tmp;
     } else {
-        LOG_MSG("splIsDevelopment failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("splIsDevelopment failed! (0x%X).", rc);
     }
 
     return R_SUCCEEDED(rc);
@@ -1079,21 +1079,21 @@ static bool utilsMountEmmcBisSystemPartitionStorage(void)
     rc = fsOpenBisStorage(&g_emmcBisSystemPartitionStorage, FsBisPartitionId_System);
     if (R_FAILED(rc))
     {
-        LOG_MSG("Failed to open eMMC BIS System partition storage! (0x%08X).", rc);
+        LOG_MSG_ERROR("Failed to open eMMC BIS System partition storage! (0x%X).", rc);
         return false;
     }
 
     g_emmcBisSystemPartitionFatFsObj = calloc(1, sizeof(FATFS));
     if (!g_emmcBisSystemPartitionFatFsObj)
     {
-        LOG_MSG("Unable to allocate memory for FatFs element!");
+        LOG_MSG_ERROR("Unable to allocate memory for FatFs element!");
         return false;
     }
 
     fr = f_mount(g_emmcBisSystemPartitionFatFsObj, BIS_SYSTEM_PARTITION_MOUNT_NAME, 1);
     if (fr != FR_OK)
     {
-        LOG_MSG("Failed to mount eMMC BIS System partition! (%u).", fr);
+        LOG_MSG_ERROR("Failed to mount eMMC BIS System partition! (%u).", fr);
         return false;
     }
 

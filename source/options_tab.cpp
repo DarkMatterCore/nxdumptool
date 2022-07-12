@@ -237,7 +237,7 @@ namespace nxdt::views
                 }
             } else {
                 /* Log downloaded data. */
-                LOG_DATA(this->json_buf, this->json_buf_size, "Failed to parse GitHub release JSON. Downloaded data:");
+                LOG_DATA_ERROR(this->json_buf, this->json_buf_size, "Failed to parse GitHub release JSON. Downloaded data:");
 
                 /* Update flag. */
                 pop_view = true;

@@ -86,7 +86,7 @@ bool configInitialize(void)
         /* Parse JSON config. */
         if (!configParseConfigJson())
         {
-            LOG_MSG("Failed to parse JSON configuration!");
+            LOG_MSG_ERROR("Failed to parse JSON configuration!");
             break;
         }
 
@@ -122,20 +122,18 @@ static bool configParseConfigJson(void)
 
     /* Read config JSON. */
     g_configJson = json_object_from_file(CONFIG_PATH);
-    if (!g_configJson)
+    if (g_configJson)
     {
+        /* Validate configuration. */
+        ret = configValidateJsonRootObject(g_configJson);
+        use_default_config = !ret;
+    } else {
         jsonLogLastError();
-        goto end;
     }
 
-    /* Validate configuration. */
-    ret = configValidateJsonRootObject(g_configJson);
-    use_default_config = !ret;
-
-end:
     if (use_default_config)
     {
-        LOG_MSG("Loading default configuration.");
+        LOG_MSG_INFO("Loading default configuration.");
 
         /* Free config JSON. */
         configFreeConfigJson();
@@ -150,6 +148,8 @@ end:
             jsonLogLastError();
         }
     }
+
+    if (!ret) LOG_MSG_ERROR("Failed to parse both current and default JSON configuration files!");
 
     return ret;
 }

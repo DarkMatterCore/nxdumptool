@@ -48,15 +48,6 @@ extern "C" {
 #define LOG_MSG_BUF_GENERIC(dst, dst_size, level, fmt, ...) logWriteFormattedStringToBuffer(dst, dst_size, level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define LOG_DATA_GENERIC(data, data_size, level, fmt, ...)  logWriteBinaryDataToLogFile(data, data_size, level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
-
-
-/* TODO: delete these macros after migrating all log calls to the new verbosity-level-based system. */
-#define LOG_MSG(fmt, ...)                                   LOG_MSG_GENERIC(LOG_LEVEL, fmt, ##__VA_ARGS__)
-#define LOG_MSG_BUF(dst, dst_size, fmt, ...)                LOG_MSG_BUF_GENERIC(dst, dst_size, LOG_LEVEL, fmt, ##__VA_ARGS__)
-#define LOG_DATA(data, data_size, fmt, ...)                 LOG_DATA_GENERIC(data, data_size, LOG_LEVEL, fmt, ##__VA_ARGS__)
-
-
-
 #if LOG_LEVEL == LOG_LEVEL_DEBUG
 #define LOG_MSG_DEBUG(fmt, ...)                             LOG_MSG_GENERIC(LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
 #define LOG_MSG_BUF_DEBUG(dst, dst_size, fmt, ...)          LOG_MSG_BUF_GENERIC(dst, dst_size, LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
@@ -129,15 +120,6 @@ void logControlMutex(bool lock);
 #else   /* (LOG_LEVEL >= LOG_LEVEL_DEBUG) && (LOG_LEVEL < LOG_LEVEL_NONE) */
 
 /// Helper macros.
-
-
-
-/* TODO: delete these macros after migrating all log calls to the new verbosity-level-based system. */
-#define LOG_MSG(fmt, ...)                                   do {} while(0)
-#define LOG_MSG_BUF(dst, dst_size, fmt, ...)                do {} while(0)
-#define LOG_DATA(data, data_size, fmt, ...)                 do {} while(0)
-
-
 
 #define LOG_MSG_GENERIC(level, fmt, ...)                    do {} while(0)
 #define LOG_MSG_BUF_GENERIC(dst, dst_size, level, fmt, ...) do {} while(0)

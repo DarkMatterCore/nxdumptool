@@ -32,7 +32,7 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
     if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || (nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs && \
         (!nca_fs_ctx->has_patch_indirect_layer || !nca_fs_ctx->has_patch_aes_ctr_ex_layer || nca_fs_ctx->has_sparse_layer)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -102,7 +102,7 @@ bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStora
         (patch_ctx->base_storage_type != NcaStorageBaseStorageType_Indirect && patch_ctx->base_storage_type != NcaStorageBaseStorageType_Compressed) || \
         !patch_ctx->indirect_storage || !patch_ctx->aes_ctr_ex_storage)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -135,7 +135,7 @@ bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStora
             break;
     }
 
-    if (!success) LOG_MSG("Failed to set base storage to patch storage!");
+    if (!success) LOG_MSG_ERROR("Failed to set base storage to patch storage!");
 
     return success;
 }
@@ -144,7 +144,7 @@ bool ncaStorageGetHashTargetExtents(NcaStorageContext *ctx, u64 *out_offset, u64
 {
     if (!ncaStorageIsValidContext(ctx) || (!out_offset && !out_size))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -154,7 +154,7 @@ bool ncaStorageGetHashTargetExtents(NcaStorageContext *ctx, u64 *out_offset, u64
     /* Get hash target extents from the NCA FS section. */
     if (!ncaGetFsSectionHashTargetExtents(ctx->nca_fs_ctx, &hash_target_offset, &hash_target_size))
     {
-        LOG_MSG("Failed to retrieve NCA FS section's hash target extents!");
+        LOG_MSG_ERROR("Failed to retrieve NCA FS section's hash target extents!");
         goto end;
     }
 
@@ -193,7 +193,7 @@ bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset
 {
     if (!ncaStorageIsValidContext(ctx) || !out || !read_size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -217,7 +217,7 @@ bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset
             break;
     }
 
-    if (!success) LOG_MSG("Failed to read 0x%lX-byte long block from offset 0x%lX in base storage! (type: %u).", read_size, offset, ctx->base_storage_type);
+    if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long block from offset 0x%lX in base storage! (type: %u).", read_size, offset, ctx->base_storage_type);
 
     return success;
 }
@@ -228,7 +228,7 @@ bool ncaStorageIsBlockWithinPatchStorageRange(NcaStorageContext *ctx, u64 offset
         ctx->base_storage_type != NcaStorageBaseStorageType_Compressed) || (ctx->base_storage_type == NcaStorageBaseStorageType_Indirect && !ctx->indirect_storage) || \
         (ctx->base_storage_type == NcaStorageBaseStorageType_Compressed && !ctx->compressed_storage))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -237,7 +237,7 @@ bool ncaStorageIsBlockWithinPatchStorageRange(NcaStorageContext *ctx, u64 offset
 
     /* Check if the provided block extents are within the Indirect Storage's range. */
     bool success = bktrIsBlockWithinIndirectStorageRange(bktr_ctx, offset, size, out);
-    if (!success) LOG_MSG("Failed to determine if block extents are within the Indirect Storage's range!");
+    if (!success) LOG_MSG_ERROR("Failed to determine if block extents are within the Indirect Storage's range!");
 
     return success;
 }
@@ -277,7 +277,7 @@ static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFs
 {
     if (!out || !nca_fs_ctx || storage_type >= BucketTreeStorageType_Count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -288,7 +288,7 @@ static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFs
     bktr_ctx = calloc(1, sizeof(BucketTreeContext));
     if (!bktr_ctx)
     {
-        LOG_MSG("Unable to allocate memory for Bucket Tree context! (%u).", storage_type);
+        LOG_MSG_ERROR("Unable to allocate memory for Bucket Tree context! (%u).", storage_type);
         goto end;
     }
 
@@ -296,7 +296,7 @@ static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFs
     success = bktrInitializeContext(bktr_ctx, nca_fs_ctx, storage_type);
     if (!success)
     {
-        LOG_MSG("Failed to initialize Bucket Tree context! (%u).", storage_type);
+        LOG_MSG_ERROR("Failed to initialize Bucket Tree context! (%u).", storage_type);
         goto end;
     }
 
@@ -315,7 +315,7 @@ static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageCon
         !nca_fs_ctx->has_compression_layer || (out->base_storage_type == NcaStorageBaseStorageType_Sparse && !out->sparse_storage) || \
         (out->base_storage_type == NcaStorageBaseStorageType_Indirect && !out->indirect_storage))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -327,7 +327,7 @@ static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageCon
     bktr_ctx = calloc(1, sizeof(BucketTreeContext));
     if (!bktr_ctx)
     {
-        LOG_MSG("Unable to allocate memory for Bucket Tree context!");
+        LOG_MSG_ERROR("Unable to allocate memory for Bucket Tree context!");
         goto end;
     }
 
@@ -357,7 +357,7 @@ static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageCon
     success = bktrInitializeCompressedStorageContext(bktr_ctx, &bktr_substorage);
     if (!success)
     {
-        LOG_MSG("Failed to initialize Bucket Tree context!");
+        LOG_MSG_ERROR("Failed to initialize Bucket Tree context!");
         goto end;
     }
 

@@ -26,14 +26,14 @@ bool hfsReadPartitionData(HashFileSystemContext *ctx, void *out, u64 read_size, 
 {
     if (!ctx || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     /* Read partition data. */
     if (!gamecardReadStorage(out, read_size, ctx->offset + offset))
     {
-        LOG_MSG("Failed to read Hash FS partition data!");
+        LOG_MSG_ERROR("Failed to read Hash FS partition data!");
         return false;
     }
 
@@ -44,14 +44,14 @@ bool hfsReadEntryData(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry,
 {
     if (!ctx || !fs_entry || !fs_entry->size || (fs_entry->offset + fs_entry->size) > ctx->size || !out || !read_size || (offset + read_size) > fs_entry->size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     /* Read entry data. */
     if (!hfsReadPartitionData(ctx, out, read_size, ctx->header_size + fs_entry->offset + offset))
     {
-        LOG_MSG("Failed to read Partition FS entry data!");
+        LOG_MSG_ERROR("Failed to read Partition FS entry data!");
         return false;
     }
 
@@ -66,7 +66,7 @@ bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size)
 
     if (!entry_count || !out_size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -74,7 +74,7 @@ bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size)
     {
         if (!(fs_entry = hfsGetEntryByIndex(ctx, i)))
         {
-            LOG_MSG("Failed to retrieve Hash FS entry #%u!", i);
+            LOG_MSG_ERROR("Failed to retrieve Hash FS entry #%u!", i);
             return false;
         }
 
@@ -94,7 +94,7 @@ bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *o
 
     if (!entry_count || !name_table || !name || !*name || !out_idx)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -104,13 +104,13 @@ bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *o
     {
         if (!(fs_entry = hfsGetEntryByIndex(ctx, i)))
         {
-            LOG_MSG("Failed to retrieve Hash FS entry #%u!", i);
+            LOG_MSG_ERROR("Failed to retrieve Hash FS entry #%u!", i);
             break;
         }
 
         if (fs_entry->name_offset >= name_table_size)
         {
-            LOG_MSG("Name offset from Hash FS entry #%u exceeds name table size!", i);
+            LOG_MSG_ERROR("Name offset from Hash FS entry #%u exceeds name table size!", i);
             break;
         }
 

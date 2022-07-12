@@ -42,7 +42,7 @@ static bool save_duplex_storage_init(duplex_storage_ctx_t *ctx, duplex_fs_layer_
 {
     if (!ctx || !layer || !layer->data_a || !layer->data_b || !layer->info.block_size_power || !bitmap || !bitmap_size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -55,7 +55,7 @@ static bool save_duplex_storage_init(duplex_storage_ctx_t *ctx, duplex_fs_layer_
     ctx->bitmap.bitmap = calloc(1, bitmap_size >> 3);
     if (!ctx->bitmap.bitmap)
     {
-        LOG_MSG("Failed to allocate memory for duplex bitmap!");
+        LOG_MSG_ERROR("Failed to allocate memory for duplex bitmap!");
         return false;
     }
 
@@ -92,7 +92,7 @@ static u32 save_duplex_storage_read(duplex_storage_ctx_t *ctx, void *buffer, u64
 {
     if (!ctx || !ctx->block_size || !ctx->bitmap.bitmap || !buffer || !count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
@@ -121,14 +121,14 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
 {
     if (!header || !header->map_segment_count || !map_entries || !num_map_entries)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
     remap_segment_ctx_t *segments = calloc(header->map_segment_count, sizeof(remap_segment_ctx_t));
     if (!segments)
     {
-        LOG_MSG("Failed to allocate initial memory for remap segments!");
+        LOG_MSG_ERROR("Failed to allocate initial memory for remap segments!");
         return NULL;
     }
 
@@ -144,7 +144,7 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
         seg->entries = calloc(1, sizeof(remap_entry_ctx_t*));
         if (!seg->entries)
         {
-            LOG_MSG("Failed to allocate memory for remap segment entry #%u!", entry_idx);
+            LOG_MSG_ERROR("Failed to allocate memory for remap segment entry #%u!", entry_idx);
             goto end;
         }
 
@@ -160,7 +160,7 @@ static remap_segment_ctx_t *save_remap_init_segments(remap_header_t *header, rem
             remap_entry_ctx_t **ptr = calloc(sizeof(remap_entry_ctx_t*), seg->entry_count + 1);
             if (!ptr)
             {
-                LOG_MSG("Failed to allocate memory for remap segment entry #%u!", entry_idx);
+                LOG_MSG_ERROR("Failed to allocate memory for remap segment entry #%u!", entry_idx);
                 goto end;
             }
 
@@ -219,7 +219,7 @@ static remap_entry_ctx_t *save_remap_get_map_entry(remap_storage_ctx_t *ctx, u64
 {
     if (!ctx || !ctx->header || !ctx->segments)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -233,7 +233,7 @@ static remap_entry_ctx_t *save_remap_get_map_entry(remap_storage_ctx_t *ctx, u64
         }
     }
 
-    LOG_MSG("Unable to find map entry for offset 0x%lX!", offset);
+    LOG_MSG_ERROR("Unable to find map entry for offset 0x%lX!", offset);
     return NULL;
 }
 
@@ -241,14 +241,14 @@ static u32 save_remap_read(remap_storage_ctx_t *ctx, void *buffer, u64 offset, s
 {
     if (!ctx || (ctx->type == STORAGE_BYTES && !ctx->file) || (ctx->type == STORAGE_DUPLEX && !ctx->duplex) || (ctx->type != STORAGE_BYTES && ctx->type != STORAGE_DUPLEX) || !buffer || !count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
     remap_entry_ctx_t *entry = save_remap_get_map_entry(ctx, offset);
     if (!entry)
     {
-        LOG_MSG("Failed to retrieve map entry!");
+        LOG_MSG_ERROR("Failed to retrieve map entry!");
         return 0;
     }
 
@@ -270,14 +270,14 @@ static u32 save_remap_read(remap_storage_ctx_t *ctx, void *buffer, u64 offset, s
                 fr = f_lseek(ctx->file, ctx->base_storage_offset + entry->physical_offset + entry_pos);
                 if (fr || f_tell(ctx->file) != (ctx->base_storage_offset + entry->physical_offset + entry_pos))
                 {
-                    LOG_MSG("Failed to seek to offset 0x%lX in savefile! (%u).", ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
+                    LOG_MSG_ERROR("Failed to seek to offset 0x%lX in savefile! (%u).", ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
                     return out_pos;
                 }
 
                 fr = f_read(ctx->file, (u8*)buffer + out_pos, bytes_to_read, &br);
                 if (fr || br != bytes_to_read)
                 {
-                    LOG_MSG("Failed to read %u bytes chunk from offset 0x%lX in savefile! (%u).", bytes_to_read, ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
+                    LOG_MSG_ERROR("Failed to read %u bytes chunk from offset 0x%lX in savefile! (%u).", bytes_to_read, ctx->base_storage_offset + entry->physical_offset + entry_pos, fr);
                     return (out_pos + br);
                 }
 
@@ -286,7 +286,7 @@ static u32 save_remap_read(remap_storage_ctx_t *ctx, void *buffer, u64 offset, s
                 br = save_duplex_storage_read(ctx->duplex, (u8*)buffer + out_pos, ctx->base_storage_offset + entry->physical_offset + entry_pos, bytes_to_read);
                 if (br != bytes_to_read)
                 {
-                    LOG_MSG("Failed to read remap data from duplex storage!");
+                    LOG_MSG_ERROR("Failed to read remap data from duplex storage!");
                     return (out_pos + br);
                 }
                 break;
@@ -308,7 +308,7 @@ static u32 save_journal_storage_read(journal_storage_ctx_t *ctx, remap_storage_c
 {
     if (!ctx || !ctx->block_size || !remap || !buffer || !count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
@@ -327,7 +327,7 @@ static u32 save_journal_storage_read(journal_storage_ctx_t *ctx, remap_storage_c
         br = save_remap_read(remap, (u8*)buffer + out_pos, ctx->journal_data_offset + physical_offset, bytes_to_read);
         if (br != bytes_to_read)
         {
-            LOG_MSG("Failed to read journal storage data!");
+            LOG_MSG_ERROR("Failed to read journal storage data!");
             return (out_pos + br);
         }
 
@@ -343,7 +343,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
 {
     if (!ctx || !ivfc || !ivfc->num_levels)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -400,7 +400,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
     ctx->level_validities = calloc(sizeof(validity_t*), (ivfc->num_levels - 1));
     if (!ctx->level_validities)
     {
-        LOG_MSG("Failed to allocate memory for level validities!");
+        LOG_MSG_ERROR("Failed to allocate memory for level validities!");
         goto end;
     }
 
@@ -417,7 +417,7 @@ static bool save_ivfc_storage_init(hierarchical_integrity_verification_storage_c
         level_data->block_validities = calloc(sizeof(validity_t), level_data->sector_count);
         if (!level_data->block_validities)
         {
-            LOG_MSG("Failed to allocate memory for block validities in IVFC level #%u!", i);
+            LOG_MSG_ERROR("Failed to allocate memory for block validities in IVFC level #%u!", i);
             goto end;
         }
 
@@ -458,7 +458,7 @@ static size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u6
 {
     if (!ctx || (ctx->type == STORAGE_BYTES && !ctx->save_ctx->file) || (ctx->type != STORAGE_BYTES && ctx->type != STORAGE_REMAP && ctx->type != STORAGE_JOURNAL) || !buffer || !count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
@@ -471,14 +471,14 @@ static size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u6
             fr = f_lseek(ctx->save_ctx->file, ctx->hash_offset + offset);
             if (fr || f_tell(ctx->save_ctx->file) != (ctx->hash_offset + offset))
             {
-                LOG_MSG("Failed to seek to offset 0x%lX in savefile! (%u).", ctx->hash_offset + offset, fr);
+                LOG_MSG_ERROR("Failed to seek to offset 0x%lX in savefile! (%u).", ctx->hash_offset + offset, fr);
                 return (size_t)br;
             }
 
             fr = f_read(ctx->save_ctx->file, buffer, count, &br);
             if (fr || br != count)
             {
-                LOG_MSG("Failed to read IVFC level data from offset 0x%lX in savefile! (%u).", ctx->hash_offset + offset, fr);
+                LOG_MSG_ERROR("Failed to read IVFC level data from offset 0x%lX in savefile! (%u).", ctx->hash_offset + offset, fr);
                 return (size_t)br;
             }
 
@@ -487,7 +487,7 @@ static size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u6
             br = save_remap_read(&ctx->save_ctx->meta_remap_storage, buffer, ctx->data_offset + offset, count);
             if (br != count)
             {
-                LOG_MSG("Failed to read IVFC level data from remap storage!");
+                LOG_MSG_ERROR("Failed to read IVFC level data from remap storage!");
                 return (size_t)br;
             }
 
@@ -496,7 +496,7 @@ static size_t save_ivfc_level_fread(ivfc_level_save_ctx_t *ctx, void *buffer, u6
             br = save_journal_storage_read(&ctx->save_ctx->journal_storage, &ctx->save_ctx->data_remap_storage, buffer, ctx->data_offset + offset, count);
             if (br != count)
             {
-                LOG_MSG("Failed to read IVFC level data from journal storage!");
+                LOG_MSG_ERROR("Failed to read IVFC level data from journal storage!");
                 return (size_t)br;
             }
 
@@ -512,13 +512,13 @@ static bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, vo
 {
     if (!ctx || !ctx->sector_size || (!ctx->next_level && !ctx->hash_storage && !ctx->base_storage) || !buffer || !count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     if (count > ctx->sector_size)
     {
-        LOG_MSG("IVFC read exceeds sector size!");
+        LOG_MSG_ERROR("IVFC read exceeds sector size!");
         return false;
     }
 
@@ -526,7 +526,7 @@ static bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, vo
 
     if (ctx->block_validities[block_index] == VALIDITY_INVALID && verify)
     {
-        LOG_MSG("Hash error from previous check found at offset 0x%lX, count 0x%lX!", offset, count);
+        LOG_MSG_ERROR("Hash error from previous check found at offset 0x%lX, count 0x%lX!", offset, count);
         return false;
     }
 
@@ -538,13 +538,13 @@ static bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, vo
     {
         if (!save_ivfc_storage_read(ctx->next_level, hash_buffer, hash_pos, 0x20, verify))
         {
-            LOG_MSG("Failed to read hash from next IVFC level!");
+            LOG_MSG_ERROR("Failed to read hash from next IVFC level!");
             return false;
         }
     } else {
         if (save_ivfc_level_fread(ctx->hash_storage, hash_buffer, hash_pos, 0x20) != 0x20)
         {
-            LOG_MSG("Failed to read hash from hash storage!");
+            LOG_MSG_ERROR("Failed to read hash from hash storage!");
             return false;
         }
     }
@@ -558,7 +558,7 @@ static bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, vo
 
     if (save_ivfc_level_fread(ctx->base_storage, buffer, offset, count) != count)
     {
-        LOG_MSG("Failed to read IVFC level from base storage!");
+        LOG_MSG_ERROR("Failed to read IVFC level from base storage!");
         return false;
     }
 
@@ -569,7 +569,7 @@ static bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, vo
     u8 *data_buffer = calloc(1, ctx->sector_size + 0x20);
     if (!data_buffer)
     {
-        LOG_MSG("Failed to allocate memory for data buffer!");
+        LOG_MSG_ERROR("Failed to allocate memory for data buffer!");
         return false;
     }
 
@@ -585,7 +585,7 @@ static bool save_ivfc_storage_read(integrity_verification_storage_ctx_t *ctx, vo
 
     if (ctx->block_validities[block_index] == VALIDITY_INVALID && verify)
     {
-        LOG_MSG("Hash error from current check found at offset 0x%lX, count 0x%lX!", offset, count);
+        LOG_MSG_ERROR("Hash error from current check found at offset 0x%lX, count 0x%lX!", offset, count);
         return false;
     }
 
@@ -596,7 +596,7 @@ static u32 save_allocation_table_read_entry_with_length(allocation_table_ctx_t *
 {
     if (!ctx || !ctx->base_storage || !entry)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
@@ -609,7 +609,7 @@ static u32 save_allocation_table_read_entry_with_length(allocation_table_ctx_t *
     {
         if ((entries[0].prev & 0x80000000) && entries[0].prev != 0x80000000)
         {
-            LOG_MSG("Invalid range entry in allocation table!");
+            LOG_MSG_ERROR("Invalid range entry in allocation table!");
             return 0;
         }
     } else {
@@ -637,7 +637,7 @@ static u32 save_allocation_table_get_list_length(allocation_table_ctx_t *ctx, u3
 {
     if (!ctx || !ctx->header->allocation_table_block_count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
@@ -652,7 +652,7 @@ static u32 save_allocation_table_get_list_length(allocation_table_ctx_t *ctx, u3
         u32 entry_length = save_allocation_table_read_entry_with_length(ctx, &entry);
         if (!entry_length)
         {
-            LOG_MSG("Failed to retrieve FAT entry length!");
+            LOG_MSG_ERROR("Failed to retrieve FAT entry length!");
             return 0;
         }
 
@@ -661,7 +661,7 @@ static u32 save_allocation_table_get_list_length(allocation_table_ctx_t *ctx, u3
 
         if (nodes_iterated > table_size)
         {
-            LOG_MSG("Cycle detected in allocation table!");
+            LOG_MSG_ERROR("Cycle detected in allocation table!");
             return 0;
         }
     }
@@ -673,7 +673,7 @@ static bool save_allocation_table_iterator_begin(allocation_table_iterator_ctx_t
 {
     if (!ctx || !table)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -687,7 +687,7 @@ static bool save_allocation_table_iterator_begin(allocation_table_iterator_ctx_t
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
     if (!ctx->current_segment_size)
     {
-        LOG_MSG("Failed to retrieve FAT entry length!");
+        LOG_MSG_ERROR("Failed to retrieve FAT entry length!");
         return false;
     }
 
@@ -696,7 +696,7 @@ static bool save_allocation_table_iterator_begin(allocation_table_iterator_ctx_t
 
     if (ctx->prev_block != 0xFFFFFFFF)
     {
-        LOG_MSG("Attempted to start FAT iteration from invalid block 0x%08X!", initial_block);
+        LOG_MSG_ERROR("Attempted to start FAT iteration from invalid block 0x%X!", initial_block);
         return false;
     }
 
@@ -707,7 +707,7 @@ static bool save_allocation_table_iterator_move_next(allocation_table_iterator_c
 {
     if (!ctx || ctx->next_block == 0xFFFFFFFF)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -720,7 +720,7 @@ static bool save_allocation_table_iterator_move_next(allocation_table_iterator_c
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
     if (!ctx->current_segment_size)
     {
-        LOG_MSG("Failed to retrieve current segment size!");
+        LOG_MSG_ERROR("Failed to retrieve current segment size!");
         return false;
     }
 
@@ -734,7 +734,7 @@ static bool save_allocation_table_iterator_move_prev(allocation_table_iterator_c
 {
     if (!ctx || ctx->prev_block == 0xFFFFFFFF)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -746,7 +746,7 @@ static bool save_allocation_table_iterator_move_prev(allocation_table_iterator_c
     ctx->current_segment_size = save_allocation_table_read_entry_with_length(ctx->fat, &entry);
     if (!ctx->current_segment_size)
     {
-        LOG_MSG("Failed to retrieve current segment size!");
+        LOG_MSG_ERROR("Failed to retrieve current segment size!");
         return false;
     }
 
@@ -779,14 +779,14 @@ u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void
 {
     if (!ctx || !ctx->fat || !ctx->block_size || !buffer || !count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
     allocation_table_iterator_ctx_t iterator;
     if (!save_allocation_table_iterator_begin(&iterator, ctx->fat, ctx->initial_block))
     {
-        LOG_MSG("Failed to initialize FAT interator!");
+        LOG_MSG_ERROR("Failed to initialize FAT interator!");
         return 0;
     }
 
@@ -799,7 +799,7 @@ u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void
         u32 block_num = (u32)(in_pos / ctx->block_size);
         if (!save_allocation_table_iterator_seek(&iterator, block_num))
         {
-            LOG_MSG("Failed to seek to block #%u within offset 0x%lX!", block_num, offset);
+            LOG_MSG_ERROR("Failed to seek to block #%u within offset 0x%lX!", block_num, offset);
             return out_pos;
         }
 
@@ -819,7 +819,7 @@ u32 save_allocation_table_storage_read(allocation_table_storage_ctx_t *ctx, void
             if (!save_ivfc_storage_read(&ctx->base_storage->integrity_storages[3], (u8*)buffer + out_pos + i, physical_offset + i, bytes_to_request, \
                                         ctx->base_storage->data_level->save_ctx->tool_ctx.action & ACTION_VERIFY))
             {
-                LOG_MSG("Failed to read %u bytes chunk from IVFC storage at physical offset 0x%lX!", bytes_to_request, physical_offset + i);
+                LOG_MSG_ERROR("Failed to read %u bytes chunk from IVFC storage at physical offset 0x%lX!", bytes_to_request, physical_offset + i);
                 return (out_pos + bytes_to_read - chunk_remaining);
             }
 
@@ -838,7 +838,7 @@ static u32 save_fs_list_get_capacity(save_filesystem_list_ctx_t *ctx)
 {
     if (!ctx)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
@@ -846,7 +846,7 @@ static u32 save_fs_list_get_capacity(save_filesystem_list_ctx_t *ctx)
     {
         if (save_allocation_table_storage_read(&ctx->storage, &ctx->capacity, 4, 4) != 4)
         {
-            LOG_MSG("Failed to read FS capacity from FAT storage!");
+            LOG_MSG_ERROR("Failed to read FS capacity from FAT storage!");
             return 0;
         }
     }
@@ -858,14 +858,14 @@ static u32 save_fs_list_read_entry(save_filesystem_list_ctx_t *ctx, u32 index, s
 {
     if (!ctx || !entry)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 
     u32 ret = save_allocation_table_storage_read(&ctx->storage, entry, index * SAVE_FS_LIST_ENTRY_SIZE, SAVE_FS_LIST_ENTRY_SIZE);
     if (ret != SAVE_FS_LIST_ENTRY_SIZE)
     {
-        LOG_MSG("Failed to read FS entry from FAT storage!");
+        LOG_MSG_ERROR("Failed to read FS entry from FAT storage!");
         return 0;
     }
 
@@ -876,26 +876,26 @@ bool save_fs_list_get_value(save_filesystem_list_ctx_t *ctx, u32 index, save_fs_
 {
     if (!ctx || !value)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     u32 capacity = save_fs_list_get_capacity(ctx);
     if (!capacity)
     {
-        LOG_MSG("Failed to retrieve FS capacity!");
+        LOG_MSG_ERROR("Failed to retrieve FS capacity!");
         return false;
     }
 
     if (index >= capacity)
     {
-        LOG_MSG("Provided index exceeds FS capacity!");
+        LOG_MSG_ERROR("Provided index exceeds FS capacity!");
         return false;
     }
 
     if (!save_fs_list_read_entry(ctx, index, value))
     {
-        LOG_MSG("Failed to read FS entry!");
+        LOG_MSG_ERROR("Failed to read FS entry!");
         return false;
     }
 
@@ -909,21 +909,21 @@ u32 save_fs_list_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_
 
     if (!ctx || !key)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         goto end;
     }
 
     u32 capacity = save_fs_list_get_capacity(ctx);
     if (!capacity)
     {
-        LOG_MSG("Failed to retrieve FS capacity!");
+        LOG_MSG_ERROR("Failed to retrieve FS capacity!");
         goto end;
     }
 
     save_fs_list_entry_t entry;
     if (!save_fs_list_read_entry(ctx, ctx->used_list_head_index, &entry))
     {
-        LOG_MSG("Failed to read FS entry for initial index %u!", ctx->used_list_head_index);
+        LOG_MSG_ERROR("Failed to read FS entry for initial index %u!", ctx->used_list_head_index);
         goto end;
     }
 
@@ -934,13 +934,13 @@ u32 save_fs_list_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_
     {
         if (index > capacity)
         {
-            LOG_MSG("Save entry index %d out of range!", index);
+            LOG_MSG_ERROR("Save entry index %d out of range!", index);
             break;
         }
 
         if (!save_fs_list_read_entry(ctx, index, &entry))
         {
-            LOG_MSG("Failed to read FS entry for index %u!", index);
+            LOG_MSG_ERROR("Failed to read FS entry for index %u!", index);
             break;
         }
 
@@ -950,7 +950,7 @@ u32 save_fs_list_get_index_from_key(save_filesystem_list_ctx_t *ctx, save_entry_
         index = entry.next;
     }
 
-    if (!index) LOG_MSG("Unable to find FS index from key!");
+    if (!index) LOG_MSG_ERROR("Unable to find FS index from key!");
 
 end:
     *prev_index = 0xFFFFFFFF;
@@ -961,7 +961,7 @@ bool save_hierarchical_file_table_find_path_recursive(hierarchical_save_file_tab
 {
     if (!ctx || !key || !path || !*path)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -994,27 +994,27 @@ bool save_hierarchical_file_table_get_file_entry_by_path(hierarchical_save_file_
 {
     if (!ctx || !path || !*path || !entry)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     save_entry_key_t key;
     if (!save_hierarchical_file_table_find_path_recursive(ctx, &key, path))
     {
-        LOG_MSG("Unable to locate file \"%s\"!", path);
+        LOG_MSG_ERROR("Unable to locate file \"%s\"!", path);
         return false;
     }
 
     u32 index = save_fs_list_get_index_from_key(&ctx->file_table, &key, NULL);
     if (index == 0xFFFFFFFF)
     {
-        LOG_MSG("Unable to get table index for file \"%s\"!", path);
+        LOG_MSG_ERROR("Unable to get table index for file \"%s\"!", path);
         return false;
     }
 
     if (!save_fs_list_get_value(&ctx->file_table, index, entry))
     {
-        LOG_MSG("Unable to get file entry for \"%s\" from index!", path);
+        LOG_MSG_ERROR("Unable to get file entry for \"%s\" from index!", path);
         return false;
     }
 
@@ -1025,7 +1025,7 @@ bool save_open_fat_storage(save_filesystem_ctx_t *ctx, allocation_table_storage_
 {
     if (!ctx || !ctx->base_storage || !storage_ctx)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1041,7 +1041,7 @@ bool save_open_fat_storage(save_filesystem_ctx_t *ctx, allocation_table_storage_
         u32 fat_list_length = save_allocation_table_get_list_length(storage_ctx->fat, block_index);
         if (!fat_list_length)
         {
-            LOG_MSG("Failed to retrieve FAT list length!");
+            LOG_MSG_ERROR("Failed to retrieve FAT list length!");
             return false;
         }
 
@@ -1055,7 +1055,7 @@ static bool save_filesystem_init(save_filesystem_ctx_t *ctx, void *fat, save_fs_
 {
     if (!ctx || !fat || !save_fs_header || !fat_header)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1066,13 +1066,13 @@ static bool save_filesystem_init(save_filesystem_ctx_t *ctx, void *fat, save_fs_
 
     if (!save_open_fat_storage(ctx, &ctx->file_table.directory_table.storage, fat_header->directory_table_block))
     {
-        LOG_MSG("Failed to open FAT directory storage!");
+        LOG_MSG_ERROR("Failed to open FAT directory storage!");
         return false;
     }
 
     if (!save_open_fat_storage(ctx, &ctx->file_table.file_table.storage, fat_header->file_table_block))
     {
-        LOG_MSG("Failed to open FAT file storage!");
+        LOG_MSG_ERROR("Failed to open FAT file storage!");
         return false;
     }
 
@@ -1088,7 +1088,7 @@ static validity_t save_ivfc_validate(hierarchical_integrity_verification_storage
 {
     if (!ctx || !ivfc || !ivfc->num_levels)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return VALIDITY_INVALID;
     }
 
@@ -1104,7 +1104,7 @@ static validity_t save_ivfc_validate(hierarchical_integrity_verification_storage
         u8 *buffer = calloc(1, block_size);
         if (!buffer)
         {
-            LOG_MSG("Failed to allocate memory for input buffer!");
+            LOG_MSG_ERROR("Failed to allocate memory for input buffer!");
             result = VALIDITY_INVALID;
             break;
         }
@@ -1116,7 +1116,7 @@ static validity_t save_ivfc_validate(hierarchical_integrity_verification_storage
                 u32 to_read = ((storage->_length - (block_size * j)) < block_size ? (storage->_length - (block_size * j)) : block_size);
                 if (!save_ivfc_storage_read(storage, buffer, block_size * j, to_read, 1))
                 {
-                    LOG_MSG("Failed to read IVFC storage data!");
+                    LOG_MSG_ERROR("Failed to read IVFC storage data!");
                     result = VALIDITY_INVALID;
                     break;
                 }
@@ -1141,7 +1141,7 @@ static bool save_ivfc_set_level_validities(hierarchical_integrity_verification_s
 {
     if (!ctx || !ivfc || !ivfc->num_levels)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1167,7 +1167,7 @@ static bool save_ivfc_set_level_validities(hierarchical_integrity_verification_s
         if (success && level_validity == VALIDITY_INVALID) success = false;
     }
 
-    if (!success) LOG_MSG("Invalid IVFC level!");
+    if (!success) LOG_MSG_ERROR("Invalid IVFC level!");
 
     return success;
 }
@@ -1176,20 +1176,20 @@ static validity_t save_filesystem_verify(save_ctx_t *ctx)
 {
     if (!ctx)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return VALIDITY_INVALID;
     }
 
     validity_t journal_validity = save_ivfc_validate(&ctx->core_data_ivfc_storage, &ctx->header.data_ivfc_header);
     if (journal_validity == VALIDITY_INVALID)
     {
-        LOG_MSG("Invalid core IVFC storage!");
+        LOG_MSG_ERROR("Invalid core IVFC storage!");
         return journal_validity;
     }
 
     if (!save_ivfc_set_level_validities(&ctx->core_data_ivfc_storage, &ctx->header.data_ivfc_header))
     {
-        LOG_MSG("Invalid IVFC level in core IVFC storage!");
+        LOG_MSG_ERROR("Invalid IVFC level in core IVFC storage!");
         journal_validity = VALIDITY_INVALID;
         return journal_validity;
     }
@@ -1199,13 +1199,13 @@ static validity_t save_filesystem_verify(save_ctx_t *ctx)
     validity_t fat_validity = save_ivfc_validate(&ctx->fat_ivfc_storage, &ctx->header.fat_ivfc_header);
     if (fat_validity == VALIDITY_INVALID)
     {
-        LOG_MSG("Invalid FAT IVFC storage!");
+        LOG_MSG_ERROR("Invalid FAT IVFC storage!");
         return fat_validity;
     }
 
     if (!save_ivfc_set_level_validities(&ctx->fat_ivfc_storage, &ctx->header.fat_ivfc_header))
     {
-        LOG_MSG("Invalid IVFC level in FAT IVFC storage!");
+        LOG_MSG_ERROR("Invalid IVFC level in FAT IVFC storage!");
         fat_validity = VALIDITY_INVALID;
         return fat_validity;
     }
@@ -1220,7 +1220,7 @@ bool save_process(save_ctx_t *ctx)
 {
     if (!ctx || !ctx->file)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1234,7 +1234,7 @@ bool save_process(save_ctx_t *ctx)
     fr = f_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
     if (fr || br != sizeof(ctx->header))
     {
-        LOG_MSG("Failed to read savefile header A! (%u).", fr);
+        LOG_MSG_ERROR("Failed to read savefile header A! (%u).", fr);
         return success;
     }
 
@@ -1244,20 +1244,20 @@ bool save_process(save_ctx_t *ctx)
         fr = f_lseek(ctx->file, 0x4000);
         if (fr || f_tell(ctx->file) != 0x4000)
         {
-            LOG_MSG("Failed to seek to offset 0x4000 in savefile! (%u).", fr);
+            LOG_MSG_ERROR("Failed to seek to offset 0x4000 in savefile! (%u).", fr);
             return success;
         }
 
         fr = f_read(ctx->file, &ctx->header, sizeof(ctx->header), &br);
         if (fr || br != sizeof(ctx->header))
         {
-            LOG_MSG("Failed to read savefile header B! (%u).", fr);
+            LOG_MSG_ERROR("Failed to read savefile header B! (%u).", fr);
             return success;
         }
 
         if (!save_process_header(ctx) || ctx->header_hash_validity == VALIDITY_INVALID)
         {
-            LOG_MSG("Savefile header is invalid!");
+            LOG_MSG_ERROR("Savefile header is invalid!");
             return success;
         }
     }
@@ -1276,14 +1276,14 @@ bool save_process(save_ctx_t *ctx)
     ctx->data_remap_storage.map_entries = calloc(sizeof(remap_entry_ctx_t), ctx->data_remap_storage.header->map_entry_count);
     if (!ctx->data_remap_storage.map_entries)
     {
-        LOG_MSG("Failed to allocate memory for data remap storage entries!");
+        LOG_MSG_ERROR("Failed to allocate memory for data remap storage entries!");
         return success;
     }
 
     fr = f_lseek(ctx->file, ctx->header.layout.file_map_entry_offset);
     if (fr || f_tell(ctx->file) != ctx->header.layout.file_map_entry_offset)
     {
-        LOG_MSG("Failed to seek to file map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.file_map_entry_offset, fr);
+        LOG_MSG_ERROR("Failed to seek to file map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.file_map_entry_offset, fr);
         return success;
     }
 
@@ -1292,7 +1292,7 @@ bool save_process(save_ctx_t *ctx)
         fr = f_read(ctx->file, &ctx->data_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
         {
-            LOG_MSG("Failed to read data remap storage entry #%u! (%u).", i, fr);
+            LOG_MSG_ERROR("Failed to read data remap storage entry #%u! (%u).", i, fr);
             goto end;
         }
 
@@ -1304,7 +1304,7 @@ bool save_process(save_ctx_t *ctx)
     ctx->data_remap_storage.segments = save_remap_init_segments(ctx->data_remap_storage.header, ctx->data_remap_storage.map_entries, ctx->data_remap_storage.header->map_entry_count);
     if (!ctx->data_remap_storage.segments)
     {
-        LOG_MSG("Failed to retrieve data remap storage segments!");
+        LOG_MSG_ERROR("Failed to retrieve data remap storage segments!");
         goto end;
     }
 
@@ -1316,26 +1316,26 @@ bool save_process(save_ctx_t *ctx)
     ctx->duplex_layers[1].data_a = calloc(1, ctx->header.layout.duplex_l1_size);
     if (!ctx->duplex_layers[1].data_a)
     {
-        LOG_MSG("Failed to allocate memory for data_a block in duplex layer #1!");
+        LOG_MSG_ERROR("Failed to allocate memory for data_a block in duplex layer #1!");
         goto end;
     }
 
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[1].data_a, ctx->header.layout.duplex_l1_offset_a, ctx->header.layout.duplex_l1_size) != ctx->header.layout.duplex_l1_size)
     {
-        LOG_MSG("Failed to read data_a block from duplex layer #1 in data remap storage!");
+        LOG_MSG_ERROR("Failed to read data_a block from duplex layer #1 in data remap storage!");
         goto end;
     }
 
     ctx->duplex_layers[1].data_b = calloc(1, ctx->header.layout.duplex_l1_size);
     if (!ctx->duplex_layers[1].data_b)
     {
-        LOG_MSG("Failed to allocate memory for data_b block in duplex layer #1!");
+        LOG_MSG_ERROR("Failed to allocate memory for data_b block in duplex layer #1!");
         goto end;
     }
 
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[1].data_b, ctx->header.layout.duplex_l1_offset_b, ctx->header.layout.duplex_l1_size) != ctx->header.layout.duplex_l1_size)
     {
-        LOG_MSG("Failed to read data_b block from duplex layer #1 in data remap storage!");
+        LOG_MSG_ERROR("Failed to read data_b block from duplex layer #1 in data remap storage!");
         goto end;
     }
 
@@ -1344,26 +1344,26 @@ bool save_process(save_ctx_t *ctx)
     ctx->duplex_layers[2].data_a = calloc(1, ctx->header.layout.duplex_data_size);
     if (!ctx->duplex_layers[2].data_a)
     {
-        LOG_MSG("Failed to allocate memory for data_a block in duplex layer #2!");
+        LOG_MSG_ERROR("Failed to allocate memory for data_a block in duplex layer #2!");
         goto end;
     }
 
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[2].data_a, ctx->header.layout.duplex_data_offset_a, ctx->header.layout.duplex_data_size) != ctx->header.layout.duplex_data_size)
     {
-        LOG_MSG("Failed to read data_a block from duplex layer #2 in data remap storage!");
+        LOG_MSG_ERROR("Failed to read data_a block from duplex layer #2 in data remap storage!");
         goto end;
     }
 
     ctx->duplex_layers[2].data_b = calloc(1, ctx->header.layout.duplex_data_size);
     if (!ctx->duplex_layers[2].data_b)
     {
-        LOG_MSG("Failed to allocate memory for data_b block in duplex layer #2!");
+        LOG_MSG_ERROR("Failed to allocate memory for data_b block in duplex layer #2!");
         goto end;
     }
 
     if (save_remap_read(&ctx->data_remap_storage, ctx->duplex_layers[2].data_b, ctx->header.layout.duplex_data_offset_b, ctx->header.layout.duplex_data_size) != ctx->header.layout.duplex_data_size)
     {
-        LOG_MSG("Failed to read data_b block from duplex layer #2 in data remap storage!");
+        LOG_MSG_ERROR("Failed to read data_b block from duplex layer #2 in data remap storage!");
         goto end;
     }
 
@@ -1374,7 +1374,7 @@ bool save_process(save_ctx_t *ctx)
 
     if (!save_duplex_storage_init(&ctx->duplex_storage.layers[0], &ctx->duplex_layers[1], bitmap, ctx->header.layout.duplex_master_size))
     {
-        LOG_MSG("Failed to initialize duplex storage layer #0!");
+        LOG_MSG_ERROR("Failed to initialize duplex storage layer #0!");
         goto end;
     }
 
@@ -1383,20 +1383,20 @@ bool save_process(save_ctx_t *ctx)
     bitmap = calloc(1, ctx->duplex_storage.layers[0]._length);
     if (!bitmap)
     {
-        LOG_MSG("Failed to allocate memory for duplex storage layer #0 bitmap!");
+        LOG_MSG_ERROR("Failed to allocate memory for duplex storage layer #0 bitmap!");
         goto end;
     }
 
     if (save_duplex_storage_read(&ctx->duplex_storage.layers[0], bitmap, 0, ctx->duplex_storage.layers[0]._length) != ctx->duplex_storage.layers[0]._length)
     {
-        LOG_MSG("Failed to read duplex storage layer #0 bitmap!");
+        LOG_MSG_ERROR("Failed to read duplex storage layer #0 bitmap!");
         free(bitmap);
         goto end;
     }
 
     if (!save_duplex_storage_init(&ctx->duplex_storage.layers[1], &ctx->duplex_layers[2], bitmap, ctx->duplex_storage.layers[0]._length))
     {
-        LOG_MSG("Failed to initialize duplex storage layer #1!");
+        LOG_MSG_ERROR("Failed to initialize duplex storage layer #1!");
         goto end;
     }
 
@@ -1413,14 +1413,14 @@ bool save_process(save_ctx_t *ctx)
     ctx->meta_remap_storage.map_entries = calloc(sizeof(remap_entry_ctx_t), ctx->meta_remap_storage.header->map_entry_count);
     if (!ctx->meta_remap_storage.map_entries)
     {
-        LOG_MSG("Failed to allocate memory for meta remap storage entries!");
+        LOG_MSG_ERROR("Failed to allocate memory for meta remap storage entries!");
         goto end;
     }
 
     fr = f_lseek(ctx->file, ctx->header.layout.meta_map_entry_offset);
     if (fr || f_tell(ctx->file) != ctx->header.layout.meta_map_entry_offset)
     {
-        LOG_MSG("Failed to seek to meta map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.meta_map_entry_offset, fr);
+        LOG_MSG_ERROR("Failed to seek to meta map entry offset 0x%lX in savefile! (%u).", ctx->header.layout.meta_map_entry_offset, fr);
         goto end;
     }
 
@@ -1429,7 +1429,7 @@ bool save_process(save_ctx_t *ctx)
         fr = f_read(ctx->file, &ctx->meta_remap_storage.map_entries[i], 0x20, &br);
         if (fr || br != 0x20)
         {
-            LOG_MSG("Failed to read meta remap storage entry #%u! (%u).", i, fr);
+            LOG_MSG_ERROR("Failed to read meta remap storage entry #%u! (%u).", i, fr);
             goto end;
         }
 
@@ -1440,7 +1440,7 @@ bool save_process(save_ctx_t *ctx)
     ctx->meta_remap_storage.segments = save_remap_init_segments(ctx->meta_remap_storage.header, ctx->meta_remap_storage.map_entries, ctx->meta_remap_storage.header->map_entry_count);
     if (!ctx->meta_remap_storage.segments)
     {
-        LOG_MSG("Failed to retrieve meta remap storage segments!");
+        LOG_MSG_ERROR("Failed to retrieve meta remap storage segments!");
         goto end;
     }
 
@@ -1448,13 +1448,13 @@ bool save_process(save_ctx_t *ctx)
     ctx->journal_map_info.map_storage = calloc(1, ctx->header.layout.journal_map_table_size);
     if (!ctx->journal_map_info.map_storage)
     {
-        LOG_MSG("Failed to allocate memory for journal map info!");
+        LOG_MSG_ERROR("Failed to allocate memory for journal map info!");
         goto end;
     }
 
     if (save_remap_read(&ctx->meta_remap_storage, ctx->journal_map_info.map_storage, ctx->header.layout.journal_map_table_offset, ctx->header.layout.journal_map_table_size) != ctx->header.layout.journal_map_table_size)
     {
-        LOG_MSG("Failed to read map storage from journal map info in meta remap storage!");
+        LOG_MSG_ERROR("Failed to read map storage from journal map info in meta remap storage!");
         goto end;
     }
 
@@ -1469,7 +1469,7 @@ bool save_process(save_ctx_t *ctx)
     ctx->journal_storage.map.entries = calloc(sizeof(journal_map_entry_t), ctx->journal_storage.map.header->main_data_block_count);
     if (!ctx->journal_storage.map.entries)
     {
-        LOG_MSG("Failed to allocate memory for journal map storage entries!");
+        LOG_MSG_ERROR("Failed to allocate memory for journal map storage entries!");
         goto end;
     }
 
@@ -1490,7 +1490,7 @@ bool save_process(save_ctx_t *ctx)
 
     if (!save_ivfc_storage_init(&ctx->core_data_ivfc_storage, ctx->header.layout.ivfc_master_hash_offset_a, &ctx->header.data_ivfc_header))
     {
-        LOG_MSG("Failed to initialize core IVFC storage!");
+        LOG_MSG_ERROR("Failed to initialize core IVFC storage!");
         goto end;
     }
 
@@ -1500,13 +1500,13 @@ bool save_process(save_ctx_t *ctx)
         ctx->fat_storage = calloc(1, ctx->header.layout.fat_size);
         if (!ctx->fat_storage)
         {
-            LOG_MSG("Failed to allocate memory for FAT storage!");
+            LOG_MSG_ERROR("Failed to allocate memory for FAT storage!");
             goto end;
         }
 
         if (save_remap_read(&ctx->meta_remap_storage, ctx->fat_storage, ctx->header.layout.fat_offset, ctx->header.layout.fat_size) != ctx->header.layout.fat_size)
         {
-            LOG_MSG("Failed to read FAT storage from meta remap storage!");
+            LOG_MSG_ERROR("Failed to read FAT storage from meta remap storage!");
             goto end;
         }
     } else {
@@ -1514,20 +1514,20 @@ bool save_process(save_ctx_t *ctx)
 
         if (!save_ivfc_storage_init(&ctx->fat_ivfc_storage, ctx->header.layout.fat_ivfc_master_hash_a, &ctx->header.fat_ivfc_header))
         {
-            LOG_MSG("Failed to initialize FAT storage! (IVFC).");
+            LOG_MSG_ERROR("Failed to initialize FAT storage! (IVFC).");
             goto end;
         }
 
         ctx->fat_storage = calloc(1, ctx->fat_ivfc_storage._length);
         if (!ctx->fat_storage)
         {
-            LOG_MSG("Failed to allocate memory for FAT storage! (IVFC).");
+            LOG_MSG_ERROR("Failed to allocate memory for FAT storage! (IVFC).");
             goto end;
         }
 
         if (save_remap_read(&ctx->meta_remap_storage, ctx->fat_storage, ctx->header.fat_ivfc_header.level_headers[ctx->header.fat_ivfc_header.num_levels - 2].logical_offset, ctx->fat_ivfc_storage._length) != ctx->fat_ivfc_storage._length)
         {
-            LOG_MSG("Failed to read FAT storage from meta remap storage! (IVFC).");
+            LOG_MSG_ERROR("Failed to read FAT storage from meta remap storage! (IVFC).");
             goto end;
         }
     }
@@ -1536,7 +1536,7 @@ bool save_process(save_ctx_t *ctx)
     {
         if (save_filesystem_verify(ctx) == VALIDITY_INVALID)
         {
-            LOG_MSG("Savefile FS verification failed!");
+            LOG_MSG_ERROR("Savefile FS verification failed!");
             goto end;
         }
     }
@@ -1545,7 +1545,7 @@ bool save_process(save_ctx_t *ctx)
     ctx->save_filesystem_core.base_storage = &ctx->core_data_ivfc_storage;
     if (!save_filesystem_init(&ctx->save_filesystem_core, ctx->fat_storage, &ctx->header.save_header, &ctx->header.fat_header))
     {
-        LOG_MSG("Failed to initialize savefile FS!");
+        LOG_MSG_ERROR("Failed to initialize savefile FS!");
         goto end;
     }
 
@@ -1561,7 +1561,7 @@ bool save_process_header(save_ctx_t *ctx)
 {
     if (!ctx)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1570,7 +1570,7 @@ bool save_process_header(save_ctx_t *ctx)
         ctx->header.save_header.magic != MAGIC_SAVE || ctx->header.main_remap_header.magic != MAGIC_RMAP || \
         ctx->header.meta_remap_header.magic != MAGIC_RMAP)
     {
-        LOG_MSG("Save header is corrupt!");
+        LOG_MSG_ERROR("Save header is corrupt!");
         return false;
     }
 
@@ -1722,7 +1722,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
 {
     if (!path || !*path)
     {
-        LOG_MSG("Invalid savefile path!");
+        LOG_MSG_ERROR("Invalid savefile path!");
         return NULL;
     }
 
@@ -1734,14 +1734,14 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     save_fd = calloc(1, sizeof(FIL));
     if (!save_fd)
     {
-        LOG_MSG("Unable to allocate memory for FatFs file descriptor!");
+        LOG_MSG_ERROR("Unable to allocate memory for FatFs file descriptor!");
         return NULL;
     }
 
     fr = f_open(save_fd, path, FA_READ | FA_OPEN_EXISTING);
     if (fr != FR_OK)
     {
-        LOG_MSG("Failed to open \"%s\" savefile from BIS System partition! (%u).", path, fr);
+        LOG_MSG_ERROR("Failed to open \"%s\" savefile from BIS System partition! (%u).", path, fr);
         goto end;
     }
 
@@ -1781,7 +1781,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     save_ctx = calloc(1, sizeof(save_ctx_t));
     if (!save_ctx)
     {
-        LOG_MSG("Unable to allocate memory for savefile \"%s\" context!", path);
+        LOG_MSG_ERROR("Unable to allocate memory for savefile \"%s\" context!", path);
         goto end;
     }
 
@@ -1789,7 +1789,7 @@ save_ctx_t *save_open_savefile(const char *path, u32 action)
     save_ctx->tool_ctx.action = action;
 
     success = save_process(save_ctx);
-    if (!success) LOG_MSG("Failed to process savefile \"%s\"!", path);
+    if (!success) LOG_MSG_ERROR("Failed to process savefile \"%s\"!", path);
 
 end:
     if (!success)
@@ -1829,7 +1829,7 @@ bool save_get_fat_storage_from_file_entry_by_path(save_ctx_t *ctx, const char *p
 {
     if (!ctx || !path || !*path || !out_fat_storage || !out_file_entry_size)
     {
-        LOG_MSG("Invalid file entry path!");
+        LOG_MSG_ERROR("Invalid file entry path!");
         return false;
     }
 
@@ -1837,13 +1837,13 @@ bool save_get_fat_storage_from_file_entry_by_path(save_ctx_t *ctx, const char *p
 
     if (!save_hierarchical_file_table_get_file_entry_by_path(&(ctx->save_filesystem_core.file_table), path, &entry))
     {
-        LOG_MSG("Failed to get file entry for \"%s\" in savefile!", path);
+        LOG_MSG_ERROR("Failed to get file entry for \"%s\" in savefile!", path);
         return false;
     }
 
     if (!save_open_fat_storage(&(ctx->save_filesystem_core), out_fat_storage, entry.value.save_file_info.start_block))
     {
-        LOG_MSG("Failed to open FAT storage at block 0x%X for \"%s\" in savefile!", entry.value.save_file_info.start_block, path);
+        LOG_MSG_ERROR("Failed to open FAT storage at block 0x%X for \"%s\" in savefile!", entry.value.save_file_info.start_block, path);
         return false;
     }
 

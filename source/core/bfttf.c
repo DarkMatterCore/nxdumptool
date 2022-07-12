@@ -74,7 +74,7 @@ bool bfttfInitialize(void)
         nca_ctx = calloc(1, sizeof(NcaContext));
         if (!nca_ctx)
         {
-            LOG_MSG("Failed to allocate memory for temporary NCA context!");
+            LOG_MSG_ERROR("Failed to allocate memory for temporary NCA context!");
             break;
         }
 
@@ -92,7 +92,7 @@ bool bfttfInitialize(void)
                 /* Get title info. */
                 if (!(title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, font_info->title_id)))
                 {
-                    LOG_MSG("Failed to get title info for %016lX!", font_info->title_id);
+                    LOG_MSG_ERROR("Failed to get title info for %016lX!", font_info->title_id);
                     continue;
                 }
 
@@ -107,7 +107,7 @@ bool bfttfInitialize(void)
                 /* Check if NCA context initialization succeeded. */
                 if (!nca_ctx_init)
                 {
-                    LOG_MSG("Failed to initialize Data NCA context for %016lX!", font_info->title_id);
+                    LOG_MSG_ERROR("Failed to initialize Data NCA context for %016lX!", font_info->title_id);
                     continue;
                 }
 
@@ -115,7 +115,7 @@ bool bfttfInitialize(void)
                 /* This will also free a previous RomFS context, if available. */
                 if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[0]), NULL))
                 {
-                    LOG_MSG("Failed to initialize RomFS context for Data NCA from %016lX!", font_info->title_id);
+                    LOG_MSG_ERROR("Failed to initialize RomFS context for Data NCA from %016lX!", font_info->title_id);
                     continue;
                 }
 
@@ -126,28 +126,28 @@ bool bfttfInitialize(void)
             /* Get RomFS file entry. */
             if (!(romfs_file_entry = romfsGetFileEntryByPath(&romfs_ctx, font_info->path)))
             {
-                LOG_MSG("Failed to retrieve RomFS file entry in %016lX!", font_info->title_id);
+                LOG_MSG_ERROR("Failed to retrieve RomFS file entry in %016lX!", font_info->title_id);
                 continue;
             }
 
             /* Check file size. */
             if (!romfs_file_entry->size)
             {
-                LOG_MSG("File size for \"%s\" in %016lX is zero!", font_info->path, font_info->title_id);
+                LOG_MSG_ERROR("File size for \"%s\" in %016lX is zero!", font_info->path, font_info->title_id);
                 continue;
             }
 
             /* Allocate memory for BFTTF data. */
             if (!(font_info->data = malloc(romfs_file_entry->size)))
             {
-                LOG_MSG("Failed to allocate 0x%lX bytes for \"%s\" in %016lX!", romfs_file_entry->size, font_info->path, font_info->title_id);
+                LOG_MSG_ERROR("Failed to allocate 0x%lX bytes for \"%s\" in %016lX!", romfs_file_entry->size, font_info->path, font_info->title_id);
                 continue;
             }
 
             /* Read BFTFF data. */
             if (!romfsReadFileEntryData(&romfs_ctx, romfs_file_entry, font_info->data, romfs_file_entry->size, 0))
             {
-                LOG_MSG("Failed to read 0x%lX bytes long \"%s\" in %016lX!", romfs_file_entry->size, font_info->path, font_info->title_id);
+                LOG_MSG_ERROR("Failed to read 0x%lX bytes long \"%s\" in %016lX!", romfs_file_entry->size, font_info->path, font_info->title_id);
                 free(font_info->data);
                 font_info->data = NULL;
                 continue;
@@ -159,7 +159,7 @@ bool bfttfInitialize(void)
             /* Decode BFTTF data. */
             if (!bfttfDecodeFont(font_info))
             {
-                LOG_MSG("Failed to decode 0x%lX bytes long \"%s\" in %016lX!", romfs_file_entry->size, font_info->path, font_info->title_id);
+                LOG_MSG_ERROR("Failed to decode 0x%lX bytes long \"%s\" in %016lX!", romfs_file_entry->size, font_info->path, font_info->title_id);
                 free(font_info->data);
                 font_info->data = NULL;
                 font_info->size = 0;
@@ -172,7 +172,7 @@ bool bfttfInitialize(void)
 
         /* Update flags. */
         ret = g_bfttfInterfaceInit = (count > 0);
-        if (!ret) LOG_MSG("No BFTTF fonts retrieved!");
+        if (!ret) LOG_MSG_ERROR("No BFTTF fonts retrieved!");
     }
 
     romfsFreeContext(&romfs_ctx);
@@ -208,7 +208,7 @@ bool bfttfGetFontByType(BfttfFontData *font_data, u8 font_type)
 {
     if (!font_data || font_type >= BfttfFontType_Total)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -219,7 +219,7 @@ bool bfttfGetFontByType(BfttfFontData *font_data, u8 font_type)
         BfttfFontInfo *font_info = &(g_fontInfo[font_type]);
         if (font_info->size <= 8 || !font_info->data)
         {
-            LOG_MSG("BFTTF font data unavailable for type 0x%02X!", font_type);
+            LOG_MSG_ERROR("BFTTF font data unavailable for type 0x%02X!", font_type);
             break;
         }
 
@@ -237,7 +237,7 @@ static bool bfttfDecodeFont(BfttfFontInfo *font_info)
 {
     if (!font_info || font_info->size <= 8 || !IS_ALIGNED(font_info->size, 4) || !font_info->data)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 

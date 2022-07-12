@@ -46,7 +46,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
         !(patch_nca_ctx = (NcaContext*)patch_nca_fs_ctx->nca_ctx) || (!missing_base_romfs && patch_nca_ctx->format_version != base_nca_ctx->format_version) || \
         patch_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || (patch_nca_ctx->rights_id_available && !patch_nca_ctx->titlekey_retrieved))))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -59,7 +59,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     /* Initialize base NCA storage context. */
     if (!missing_base_romfs && !ncaStorageInitializeContext(base_storage_ctx, base_nca_fs_ctx))
     {
-        LOG_MSG("Failed to initialize base NCA storage context!");
+        LOG_MSG_ERROR("Failed to initialize base NCA storage context!");
         goto end;
     }
 
@@ -68,14 +68,14 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
         /* Initialize base NCA storage context. */
         if (!ncaStorageInitializeContext(patch_storage_ctx, patch_nca_fs_ctx))
         {
-            LOG_MSG("Failed to initialize patch NCA storage context!");
+            LOG_MSG_ERROR("Failed to initialize patch NCA storage context!");
             goto end;
         }
 
         /* Set patch NCA storage original substorage, if available. */
         if (!missing_base_romfs && !ncaStorageSetPatchOriginalSubStorage(patch_storage_ctx, base_storage_ctx))
         {
-            LOG_MSG("Failed to set patch NCA storage context's original substorage!");
+            LOG_MSG_ERROR("Failed to set patch NCA storage context's original substorage!");
             goto end;
         }
 
@@ -91,20 +91,20 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     /* Get RomFS offset and size. */
     if (!ncaStorageGetHashTargetExtents(out->default_storage_ctx, &(out->offset), &(out->size)))
     {
-        LOG_MSG("Failed to get target hash layer extents!");
+        LOG_MSG_ERROR("Failed to get target hash layer extents!");
         goto end;
     }
 
     /* Read RomFS header. */
     if (!ncaStorageRead(out->default_storage_ctx, &(out->header), sizeof(RomFileSystemHeader), out->offset))
     {
-        LOG_MSG("Failed to read RomFS header!");
+        LOG_MSG_ERROR("Failed to read RomFS header!");
         goto end;
     }
 
     if ((is_nca0_romfs && out->header.old_format.header_size != ROMFS_OLD_HEADER_SIZE) || (!is_nca0_romfs && out->header.cur_format.header_size != ROMFS_HEADER_SIZE))
     {
-        LOG_MSG("Invalid RomFS header size!");
+        LOG_MSG_ERROR("Invalid RomFS header size!");
         dump_fs_header = true;
         goto end;
     }
@@ -115,7 +115,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
 
     if (!out->dir_table_size || (dir_table_offset + out->dir_table_size) > out->size)
     {
-        LOG_MSG("Invalid RomFS directory entries table!");
+        LOG_MSG_ERROR("Invalid RomFS directory entries table!");
         dump_fs_header = true;
         goto end;
     }
@@ -123,13 +123,13 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     out->dir_table = malloc(out->dir_table_size);
     if (!out->dir_table)
     {
-        LOG_MSG("Unable to allocate memory for RomFS directory entries table!");
+        LOG_MSG_ERROR("Unable to allocate memory for RomFS directory entries table!");
         goto end;
     }
 
     if (!ncaStorageRead(out->default_storage_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
     {
-        LOG_MSG("Failed to read RomFS directory entries table!");
+        LOG_MSG_ERROR("Failed to read RomFS directory entries table!");
         goto end;
     }
 
@@ -139,7 +139,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
 
     if (!out->file_table_size || (file_table_offset + out->file_table_size) > out->size)
     {
-        LOG_MSG("Invalid RomFS file entries table!");
+        LOG_MSG_ERROR("Invalid RomFS file entries table!");
         dump_fs_header = true;
         goto end;
     }
@@ -147,13 +147,13 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     out->file_table = malloc(out->file_table_size);
     if (!out->file_table)
     {
-        LOG_MSG("Unable to allocate memory for RomFS file entries table!");
+        LOG_MSG_ERROR("Unable to allocate memory for RomFS file entries table!");
         goto end;
     }
 
     if (!ncaStorageRead(out->default_storage_ctx, out->file_table, out->file_table_size, out->offset + file_table_offset))
     {
-        LOG_MSG("Failed to read RomFS file entries table!");
+        LOG_MSG_ERROR("Failed to read RomFS file entries table!");
         goto end;
     }
 
@@ -161,7 +161,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     out->body_offset = (is_nca0_romfs ? (u64)out->header.old_format.body_offset : out->header.cur_format.body_offset);
     if (out->body_offset >= out->size)
     {
-        LOG_MSG("Invalid RomFS file data body!");
+        LOG_MSG_ERROR("Invalid RomFS file data body!");
         dump_fs_header = true;
         goto end;
     }
@@ -172,7 +172,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
 end:
     if (!success)
     {
-        if (dump_fs_header) LOG_DATA(&(out->header), sizeof(RomFileSystemHeader), "RomFS header dump:");
+        if (dump_fs_header) LOG_DATA_DEBUG(&(out->header), sizeof(RomFileSystemHeader), "RomFS header dump:");
 
         romfsFreeContext(out);
     }
@@ -184,14 +184,14 @@ bool romfsReadFileSystemData(RomFileSystemContext *ctx, void *out, u64 read_size
 {
     if (!romfsIsValidContext(ctx) || !out || !read_size || (offset + read_size) > ctx->size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     /* Read filesystem data. */
     if (!ncaStorageRead(ctx->default_storage_ctx, out, read_size, ctx->offset + offset))
     {
-        LOG_MSG("Failed to read RomFS data!");
+        LOG_MSG_ERROR("Failed to read RomFS data!");
         return false;
     }
 
@@ -203,14 +203,14 @@ bool romfsReadFileEntryData(RomFileSystemContext *ctx, RomFileSystemFileEntry *f
     if (!romfsIsValidContext(ctx) || !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !out || !read_size || \
         (offset + read_size) > file_entry->size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     /* Read entry data. */
     if (!romfsReadFileSystemData(ctx, out, read_size, ctx->body_offset + file_entry->offset + offset))
     {
-        LOG_MSG("Failed to read RomFS file entry data!");
+        LOG_MSG_ERROR("Failed to read RomFS file entry data!");
         return false;
     }
 
@@ -221,7 +221,7 @@ bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *ou
 {
     if (!romfsIsValidContext(ctx) || !out_size || (only_updated && (!ctx->is_patch || ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -240,14 +240,14 @@ bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *ou
         /* Get current file entry. */
         if (!(file_entry = romfsGetCurrentFileEntry(ctx)))
         {
-            LOG_MSG("Failed to retrieve current file entry! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
+            LOG_MSG_ERROR("Failed to retrieve current file entry! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
             goto end;
         }
 
         /* Update total data size, taking into account the only_updated flag. */
         if (only_updated && !romfsIsFileEntryUpdated(ctx, file_entry, &updated))
         {
-            LOG_MSG("Failed to determine if file entry is updated or not! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
+            LOG_MSG_ERROR("Failed to determine if file entry is updated or not! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
             goto end;
         }
 
@@ -256,7 +256,7 @@ bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *ou
         /* Move to the next file entry. */
         if (!romfsMoveToNextFileEntry(ctx))
         {
-            LOG_MSG("Failed to move to the next file entry! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
+            LOG_MSG_ERROR("Failed to move to the next file entry! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
             goto end;
         }
     }
@@ -276,7 +276,7 @@ bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectory
 {
     if (!romfsIsValidContext(ctx) || !dir_entry || !out_size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -299,7 +299,7 @@ bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectory
         /* Get current file entry. */
         if (!(cur_file_entry = romfsGetFileEntryByOffset(ctx, cur_entry_offset)))
         {
-            LOG_MSG("Failed to retrieve file entry! (0x%lX, 0x%lX).", cur_entry_offset, ctx->file_table_size);
+            LOG_MSG_ERROR("Failed to retrieve file entry! (0x%lX, 0x%lX).", cur_entry_offset, ctx->file_table_size);
             goto end;
         }
 
@@ -317,14 +317,14 @@ bool romfsGetDirectoryDataSize(RomFileSystemContext *ctx, RomFileSystemDirectory
         /* Get current directory entry. */
         if (!(cur_dir_entry = romfsGetDirectoryEntryByOffset(ctx, cur_entry_offset)))
         {
-            LOG_MSG("Failed to retrieve directory entry! (0x%lX, 0x%lX).", cur_entry_offset, ctx->dir_table_size);
+            LOG_MSG_ERROR("Failed to retrieve directory entry! (0x%lX, 0x%lX).", cur_entry_offset, ctx->dir_table_size);
             goto end;
         }
 
         /* Calculate directory size. */
         if (!romfsGetDirectoryDataSize(ctx, cur_dir_entry, &child_dir_size))
         {
-            LOG_MSG("Failed to get size for directory entry! (0x%lX, 0x%lX).", cur_entry_offset, ctx->dir_table_size);
+            LOG_MSG_ERROR("Failed to get size for directory entry! (0x%lX, 0x%lX).", cur_entry_offset, ctx->dir_table_size);
             goto end;
         }
 
@@ -351,7 +351,7 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
 
     if (!romfsIsValidContext(ctx) || !path || *path != '/' || !(dir_entry = romfsGetDirectoryEntryByOffset(ctx, 0)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -364,7 +364,7 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
     /* Duplicate path to avoid problems with strtok_r(). */
     if (!(path_dup = strdup(path)))
     {
-        LOG_MSG("Unable to duplicate input path! (\"%s\").", path);
+        LOG_MSG_ERROR("Unable to duplicate input path! (\"%s\").", path);
         dir_entry = NULL;
         goto end;
     }
@@ -373,7 +373,7 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
     pch = strtok_r(path_dup, "/", &state);
     if (!pch)
     {
-        LOG_MSG("Failed to tokenize input path! (\"%s\").", path);
+        LOG_MSG_ERROR("Failed to tokenize input path! (\"%s\").", path);
         dir_entry = NULL;
         goto end;
     }
@@ -384,7 +384,7 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
         /* Get child directory entry using the current token. */
         if (!(dir_entry = romfsGetChildDirectoryEntryByName(ctx, dir_entry, pch)))
         {
-            LOG_MSG("Failed to retrieve directory entry by name for \"%s\"! (\"%s\").", pch, path);
+            LOG_MSG_ERROR("Failed to retrieve directory entry by name for \"%s\"! (\"%s\").", pch, path);
             break;
         }
 
@@ -401,28 +401,23 @@ end:
 RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const char *path)
 {
     size_t path_len = 0;
-    u8 content_type = 0;
     char *path_dup = NULL, *filename = NULL;
     RomFileSystemFileEntry *file_entry = NULL;
     RomFileSystemDirectoryEntry *dir_entry = NULL;
-    NcaContext *nca_ctx = NULL;
 
-    if (!romfsIsValidContext(ctx) || !(nca_ctx = (NcaContext*)ctx->default_storage_ctx->nca_fs_ctx->nca_ctx) || !path || *path != '/')
+    if (!romfsIsValidContext(ctx) || !path || *path != '/')
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
     /* Retrieve path length. */
     path_len = strlen(path);
 
-    /* Retrieve NCA content type. */
-    content_type = nca_ctx->content_type;
-
     /* Duplicate path. */
     if (!(path_dup = strdup(path)))
     {
-        LOG_MSG("Unable to duplicate input path! (\"%s\").", path);
+        LOG_MSG_ERROR("Unable to duplicate input path! (\"%s\").", path);
         goto end;
     }
 
@@ -436,7 +431,7 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     /* Safety check. */
     if (!path_len || !(filename = strrchr(path_dup, '/')))
     {
-        LOG_MSG("Invalid input path! (\"%s\").", path);
+        LOG_MSG_ERROR("Invalid input path! (\"%s\").", path);
         goto end;
     }
 
@@ -447,17 +442,12 @@ RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const
     /* If the first character is NULL, then just retrieve the root directory entry. */
     if (!(dir_entry = (*path_dup ? romfsGetDirectoryEntryByPath(ctx, path_dup) : romfsGetDirectoryEntryByOffset(ctx, 0))))
     {
-        LOG_MSG("Failed to retrieve directory entry for \"%s\"! (\"%s\").", *path_dup ? path_dup : "/", path);
+        LOG_MSG_ERROR("Failed to retrieve directory entry for \"%s\"! (\"%s\").", *path_dup ? path_dup : "/", path);
         goto end;
     }
 
     /* Retrieve file entry. */
-    if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename)))
-    {
-        /* Only log error if we're not dealing with NACP icons or a LegalInformation XML. */
-        bool skip_log = ((!strncmp(path, "/icon_", 6) && content_type == NcmContentType_Control) || (!strcmp(path, "/legalinfo.xml") && content_type == NcmContentType_LegalInformation));
-        if (!skip_log) LOG_MSG("Failed to retrieve file entry by name for \"%s\"! (\"%s\").", filename, path);
-    }
+    if (!(file_entry = romfsGetChildFileEntryByName(ctx, dir_entry, filename))) LOG_MSG_ERROR("Failed to retrieve file entry by name for \"%s\"! (\"%s\").", filename, path);
 
 end:
     if (path_dup) free(path_dup);
@@ -476,7 +466,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
     if (!romfsIsValidContext(ctx) || !dir_entry || (!dir_entry->name_length && dir_entry->parent_offset) || !out_path || out_path_size < 2 || \
         illegal_char_replace_type > RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -491,7 +481,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
     dir_entries = calloc(1, sizeof(RomFileSystemDirectoryEntry*));
     if (!dir_entries)
     {
-        LOG_MSG("Unable to allocate memory for directory entries!");
+        LOG_MSG_ERROR("Unable to allocate memory for directory entries!");
         goto end;
     }
 
@@ -509,7 +499,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
         /* Reallocate directory entries pointer array. */
         if (!(tmp_dir_entries = realloc(dir_entries, (dir_entries_count + 1) * sizeof(RomFileSystemDirectoryEntry*))))
         {
-            LOG_MSG("Unable to reallocate directory entries buffer!");
+            LOG_MSG_ERROR("Unable to reallocate directory entries buffer!");
             goto end;
         }
 
@@ -520,7 +510,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
         RomFileSystemDirectoryEntry **cur_dir_entry = &(dir_entries[dir_entries_count]);
         if (!(*cur_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset)) || !(*cur_dir_entry)->name_length)
         {
-            LOG_MSG("Failed to retrieve directory entry!");
+            LOG_MSG_ERROR("Failed to retrieve directory entry!");
             goto end;
         }
 
@@ -532,7 +522,7 @@ bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSyste
     /* Make sure the output buffer is big enough to hold the full path + NULL terminator. */
     if (path_len >= out_path_size)
     {
-        LOG_MSG("Output path length exceeds output buffer size! (%lu >= %lu).", path_len, out_path_size);
+        LOG_MSG_ERROR("Output path length exceeds output buffer size! (%lu >= %lu).", path_len, out_path_size);
         goto end;
     }
 
@@ -579,14 +569,14 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
     if (!romfsIsValidContext(ctx) || !file_entry || !file_entry->name_length || !out_path || out_path_size < 2 || \
         !(dir_entry = romfsGetDirectoryEntryByOffset(ctx, file_entry->parent_offset)) || illegal_char_replace_type > RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     /* Retrieve full RomFS path up to the file entry name. */
     if (!romfsGeneratePathFromDirectoryEntry(ctx, dir_entry, out_path, out_path_size, illegal_char_replace_type))
     {
-        LOG_MSG("Failed to retrieve RomFS directory path!");
+        LOG_MSG_ERROR("Failed to retrieve RomFS directory path!");
         goto end;
     }
 
@@ -594,7 +584,7 @@ bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFile
     path_len = strlen(out_path);
     if ((path_len + 1 + file_entry->name_length) >= out_path_size)
     {
-        LOG_MSG("Output path length exceeds output buffer size! (%lu >= %lu).", path_len + 1 + file_entry->name_length, out_path_size);
+        LOG_MSG_ERROR("Output path length exceeds output buffer size! (%lu >= %lu).", path_len + 1 + file_entry->name_length, out_path_size);
         goto end;
     }
 
@@ -623,7 +613,7 @@ bool romfsIsFileEntryUpdated(RomFileSystemContext *ctx, RomFileSystemFileEntry *
     if (!romfsIsValidContext(ctx) || !ctx->is_patch || ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || \
         !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -640,7 +630,7 @@ bool romfsIsFileEntryUpdated(RomFileSystemContext *ctx, RomFileSystemFileEntry *
     /* Check if any sections from this block belong to the Patch storage. */
     if (!ncaStorageIsBlockWithinPatchStorageRange(ctx->default_storage_ctx, file_offset, file_entry->size, out))
     {
-        LOG_MSG("Failed to determine if file entry is within Patch storage range!");
+        LOG_MSG_ERROR("Failed to determine if file entry is within Patch storage range!");
         goto end;
     }
 
@@ -657,7 +647,7 @@ bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEnt
         (ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs && ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || \
         !file_entry || !file_entry->size || (file_entry->offset + file_entry->size) > ctx->size || !data || !data_size || (data_offset + data_size) > file_entry->size || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -676,8 +666,8 @@ bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEnt
 
     out->written = false;
 
-    if (!success) LOG_MSG("Failed to generate 0x%lX bytes Hierarchical%s patch at offset 0x%lX for RomFS file entry!", data_size, \
-                          nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? "Sha256" : "Integrity", fs_offset);
+    if (!success) LOG_MSG_ERROR("Failed to generate 0x%lX bytes Hierarchical%s patch at offset 0x%lX for RomFS file entry!", data_size, \
+                                nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs ? "Sha256" : "Integrity", fs_offset);
 
     return success;
 }
@@ -690,7 +680,7 @@ static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSys
 
     if (!dir_entry || (dir_offset = dir_entry->directory_offset) == ROMFS_VOID_ENTRY || !name || !(name_len = strlen(name)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -700,7 +690,7 @@ static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSys
         /* Get current directory entry. */
         if (!(child_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset)))
         {
-            LOG_MSG("Failed to retrieve directory entry! (0x%lX, 0x%lX).", dir_offset, ctx->dir_table_size);
+            LOG_MSG_ERROR("Failed to retrieve directory entry! (0x%lX, 0x%lX).", dir_offset, ctx->dir_table_size);
             break;
         }
 
@@ -724,7 +714,7 @@ static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext
 
     if (!dir_entry || (file_offset = dir_entry->file_offset) == ROMFS_VOID_ENTRY || !name || !(name_len = strlen(name)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
@@ -734,7 +724,7 @@ static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext
         /* Get current file entry. */
         if (!(child_file_entry = romfsGetFileEntryByOffset(ctx, file_offset)))
         {
-            LOG_MSG("Failed to retrieve file entry! (0x%lX, 0x%lX).", file_offset, ctx->file_table_size);
+            LOG_MSG_ERROR("Failed to retrieve file entry! (0x%lX, 0x%lX).", file_offset, ctx->file_table_size);
             break;
         }
 

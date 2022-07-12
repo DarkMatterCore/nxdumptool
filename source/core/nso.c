@@ -39,7 +39,7 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
         nca_ctx->content_type != NcmContentType_Program || !pfs_ctx->offset || !pfs_ctx->size || !pfs_ctx->is_exefs || \
         pfs_ctx->header_size <= sizeof(PartitionFileSystemHeader) || !pfs_ctx->header || !pfs_entry)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -53,21 +53,21 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
     /* Get entry filename. */
     if (!(out->nso_filename = pfsGetEntryName(pfs_ctx, pfs_entry)) || !*(out->nso_filename))
     {
-        LOG_MSG("Invalid Partition FS entry filename!");
+        LOG_MSG_ERROR("Invalid Partition FS entry filename!");
         goto end;
     }
 
     /* Read NSO header. */
     if (!pfsReadEntryData(pfs_ctx, pfs_entry, &(out->nso_header), sizeof(NsoHeader), 0))
     {
-        LOG_MSG("Failed to read NSO \"%s\" header!", out->nso_filename);;
+        LOG_MSG_ERROR("Failed to read NSO \"%s\" header!", out->nso_filename);;
         goto end;
     }
 
     /* Verify NSO header. */
     if (__builtin_bswap32(out->nso_header.magic) != NSO_HEADER_MAGIC)
     {
-        LOG_MSG("Invalid NSO \"%s\" header magic word! (0x%08X != 0x%08X).", out->nso_filename, __builtin_bswap32(out->nso_header.magic), __builtin_bswap32(NSO_HEADER_MAGIC));
+        LOG_MSG_ERROR("Invalid NSO \"%s\" header magic word! (0x%08X != 0x%08X).", out->nso_filename, __builtin_bswap32(out->nso_header.magic), __builtin_bswap32(NSO_HEADER_MAGIC));
         dump_nso_header = true;
         goto end;
     }
@@ -77,8 +77,8 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
         (!(out->nso_header.flags & NsoFlags_TextCompress) && out->nso_header.text_file_size != out->nso_header.text_segment_info.size) || \
         (out->nso_header.text_segment_info.file_offset + out->nso_header.text_file_size) > pfs_entry->size)
     {
-        LOG_MSG("Invalid .text segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.text_segment_info.file_offset, out->nso_header.text_file_size, \
-                out->nso_header.text_segment_info.size);
+        LOG_MSG_ERROR("Invalid .text segment offset/size for NSO \"%s\"! (0x%X, 0x%X, 0x%X).", out->nso_filename, out->nso_header.text_segment_info.file_offset, \
+                      out->nso_header.text_file_size, out->nso_header.text_segment_info.size);
         dump_nso_header = true;
         goto end;
     }
@@ -88,8 +88,8 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
         (!(out->nso_header.flags & NsoFlags_RoCompress) && out->nso_header.rodata_file_size != out->nso_header.rodata_segment_info.size) || \
         (out->nso_header.rodata_segment_info.file_offset + out->nso_header.rodata_file_size) > pfs_entry->size)
     {
-        LOG_MSG("Invalid .rodata segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.rodata_segment_info.file_offset, out->nso_header.rodata_file_size, \
-                out->nso_header.rodata_segment_info.size);
+        LOG_MSG_ERROR("Invalid .rodata segment offset/size for NSO \"%s\"! (0x%X, 0x%X, 0x%X).", out->nso_filename, out->nso_header.rodata_segment_info.file_offset, \
+                      out->nso_header.rodata_file_size, out->nso_header.rodata_segment_info.size);
         dump_nso_header = true;
         goto end;
     }
@@ -99,36 +99,36 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
         (!(out->nso_header.flags & NsoFlags_DataCompress) && out->nso_header.data_file_size != out->nso_header.data_segment_info.size) || \
         (out->nso_header.data_segment_info.file_offset + out->nso_header.data_file_size) > pfs_entry->size)
     {
-        LOG_MSG("Invalid .data segment offset/size for NSO \"%s\"! (0x%08X, 0x%08X, 0x%08X).", out->nso_filename, out->nso_header.data_segment_info.file_offset, out->nso_header.data_file_size, \
-                out->nso_header.data_segment_info.size);
+        LOG_MSG_ERROR("Invalid .data segment offset/size for NSO \"%s\"! (0x%X, 0x%X, 0x%X).", out->nso_filename, out->nso_header.data_segment_info.file_offset, \
+                      out->nso_header.data_file_size, out->nso_header.data_segment_info.size);
         dump_nso_header = true;
         goto end;
     }
 
     if (out->nso_header.module_name_size > 1 && (out->nso_header.module_name_offset < sizeof(NsoHeader) || (out->nso_header.module_name_offset + out->nso_header.module_name_size) > pfs_entry->size))
     {
-        LOG_MSG("Invalid module name offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.module_name_offset, out->nso_header.module_name_size);
+        LOG_MSG_ERROR("Invalid module name offset/size for NSO \"%s\"! (0x%X, 0x%X).", out->nso_filename, out->nso_header.module_name_offset, out->nso_header.module_name_size);
         dump_nso_header = true;
         goto end;
     }
 
     if (out->nso_header.api_info_section_info.size && (out->nso_header.api_info_section_info.offset + out->nso_header.api_info_section_info.size) > out->nso_header.rodata_segment_info.size)
     {
-        LOG_MSG("Invalid .api_info section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.api_info_section_info.offset, out->nso_header.api_info_section_info.size);
+        LOG_MSG_ERROR("Invalid .api_info section offset/size for NSO \"%s\"! (0x%X, 0x%X).", out->nso_filename, out->nso_header.api_info_section_info.offset, out->nso_header.api_info_section_info.size);
         dump_nso_header = true;
         goto end;
     }
 
     if (out->nso_header.dynstr_section_info.size && (out->nso_header.dynstr_section_info.offset + out->nso_header.dynstr_section_info.size) > out->nso_header.rodata_segment_info.size)
     {
-        LOG_MSG("Invalid .dynstr section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.dynstr_section_info.offset, out->nso_header.dynstr_section_info.size);
+        LOG_MSG_ERROR("Invalid .dynstr section offset/size for NSO \"%s\"! (0x%X, 0x%X).", out->nso_filename, out->nso_header.dynstr_section_info.offset, out->nso_header.dynstr_section_info.size);
         dump_nso_header = true;
         goto end;
     }
 
     if (out->nso_header.dynsym_section_info.size && (out->nso_header.dynsym_section_info.offset + out->nso_header.dynsym_section_info.size) > out->nso_header.rodata_segment_info.size)
     {
-        LOG_MSG("Invalid .dynsym section offset/size for NSO \"%s\"! (0x%08X, 0x%08X).", out->nso_filename, out->nso_header.dynsym_section_info.offset, out->nso_header.dynsym_section_info.size);
+        LOG_MSG_ERROR("Invalid .dynsym section offset/size for NSO \"%s\"! (0x%X, 0x%X).", out->nso_filename, out->nso_header.dynsym_section_info.offset, out->nso_header.dynsym_section_info.size);
         dump_nso_header = true;
         goto end;
     }
@@ -161,7 +161,7 @@ end:
 
     if (!success)
     {
-        if (dump_nso_header) LOG_DATA(&(out->nso_header), sizeof(NsoHeader), "NSO header dump:");
+        if (dump_nso_header) LOG_DATA_DEBUG(&(out->nso_header), sizeof(NsoHeader), "NSO header dump:");
 
         nsoFreeContext(out);
     }
@@ -178,14 +178,14 @@ static bool nsoGetModuleName(NsoContext *nso_ctx)
     /* Get module name. */
     if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, &module_name, sizeof(NsoModuleName), nso_ctx->nso_header.module_name_offset))
     {
-        LOG_MSG("Failed to read NSO \"%s\" module name length!", nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to read NSO \"%s\" module name length!", nso_ctx->nso_filename);
         return false;
     }
 
     /* Verify module name length. */
     if (module_name.name_length != ((u8)nso_ctx->nso_header.module_name_size - 1))
     {
-        LOG_MSG("NSO \"%s\" module name length mismatch! (0x%02X != 0x%02X).", nso_ctx->nso_filename, module_name.name_length, (u8)nso_ctx->nso_header.module_name_size - 1);
+        LOG_MSG_ERROR("NSO \"%s\" module name length mismatch! (0x%02X != 0x%02X).", nso_ctx->nso_filename, module_name.name_length, (u8)nso_ctx->nso_header.module_name_size - 1);
         return false;
     }
 
@@ -193,14 +193,14 @@ static bool nsoGetModuleName(NsoContext *nso_ctx)
     nso_ctx->module_name = calloc(nso_ctx->nso_header.module_name_size, sizeof(char));
     if (!nso_ctx->module_name)
     {
-        LOG_MSG("Failed to allocate memory for NSO \"%s\" module name!", nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to allocate memory for NSO \"%s\" module name!", nso_ctx->nso_filename);
         return false;
     }
 
     /* Read module name string. */
     if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, nso_ctx->module_name, module_name.name_length, nso_ctx->nso_header.module_name_offset + 1))
     {
-        LOG_MSG("Failed to read NSO \"%s\" module name string!", nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to read NSO \"%s\" module name string!", nso_ctx->nso_filename);
         return false;
     }
 
@@ -225,7 +225,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     /* Allocate memory for the .rodata buffer. */
     if (!(rodata_buf = calloc(rodata_buf_size, sizeof(u8))))
     {
-        LOG_MSG("Failed to allocate 0x%lX bytes for the .rodata segment in NSO \"%s\"!", rodata_buf_size, nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to allocate 0x%lX bytes for the .rodata segment in NSO \"%s\"!", rodata_buf_size, nso_ctx->nso_filename);
         return NULL;
     }
 
@@ -234,7 +234,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     /* Read .rodata segment data. */
     if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, rodata_read_ptr, rodata_read_size, nso_ctx->nso_header.rodata_segment_info.file_offset))
     {
-        LOG_MSG("Failed to read .rodata segment in NRO \"%s\"!", nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to read .rodata segment in NRO \"%s\"!", nso_ctx->nso_filename);
         goto end;
     }
 
@@ -244,7 +244,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
         if ((lz4_res = LZ4_decompress_safe((char*)rodata_read_ptr, (char*)rodata_buf, (int)nso_ctx->nso_header.rodata_file_size, (int)rodata_buf_size)) != \
             (int)nso_ctx->nso_header.rodata_segment_info.size)
         {
-            LOG_MSG("LZ4 decompression failed for NRO \"%s\"! (%d).", nso_ctx->nso_filename, lz4_res);
+            LOG_MSG_ERROR("LZ4 decompression failed for NRO \"%s\"! (%d).", nso_ctx->nso_filename, lz4_res);
             goto end;
         }
     }
@@ -255,7 +255,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
         sha256CalculateHash(rodata_hash, rodata_buf, nso_ctx->nso_header.rodata_segment_info.size);
         if (memcmp(rodata_hash, nso_ctx->nso_header.rodata_segment_hash, SHA256_HASH_SIZE) != 0)
         {
-            LOG_MSG(".rodata segment checksum mismatch for NRO \"%s\"!", nso_ctx->nso_filename);
+            LOG_MSG_ERROR(".rodata segment checksum mismatch for NRO \"%s\"!", nso_ctx->nso_filename);
             goto end;
         }
     }
@@ -281,7 +281,7 @@ static bool nsoGetModuleInfoName(NsoContext *nso_ctx, u8 *rodata_buf)
     nso_ctx->module_info_name = calloc(module_info->name_length + 1, sizeof(char));
     if (!nso_ctx->module_info_name)
     {
-        LOG_MSG("Failed to allocate memory for NSO \"%s\" module info name!", nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to allocate memory for NSO \"%s\" module info name!", nso_ctx->nso_filename);
         return false;
     }
 
@@ -298,7 +298,7 @@ static bool nsoGetSectionFromRodataSegment(NsoContext *nso_ctx, u8 *rodata_buf, 
     /* Allocate memory for the desired .rodata section. */
     if (!(*section_ptr = malloc(section_size)))
     {
-        LOG_MSG("Failed to allocate 0x%lX bytes for section at .rodata offset 0x%lX in NSO \"%s\"!", section_size, section_offset, nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to allocate 0x%lX bytes for section at .rodata offset 0x%lX in NSO \"%s\"!", section_size, section_offset, nso_ctx->nso_filename);
         return false;
     }
 

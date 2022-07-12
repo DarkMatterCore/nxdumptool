@@ -64,7 +64,7 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
         (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         nca_ctx->header.content_type != NcaContentType_Program || nca_ctx->content_type_ctx || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -79,28 +79,28 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
     /* Initialize Partition FS context. */
     if (!pfsInitializeContext(&(out->pfs_ctx), &(nca_ctx->fs_ctx[0])))
     {
-        LOG_MSG("Failed to initialize Partition FS context!");
+        LOG_MSG_ERROR("Failed to initialize Partition FS context!");
         goto end;
     }
 
     /* Check if we're indeed dealing with an ExeFS. */
     if (!out->pfs_ctx.is_exefs)
     {
-        LOG_MSG("Initialized Partition FS is not an ExeFS!");
+        LOG_MSG_ERROR("Initialized Partition FS is not an ExeFS!");
         goto end;
     }
 
     /* Get ExeFS entry count. Edge case, we should never trigger this. */
     if (!(pfs_entry_count = pfsGetEntryCount(&(out->pfs_ctx))))
     {
-        LOG_MSG("ExeFS has no file entries!");
+        LOG_MSG_ERROR("ExeFS has no file entries!");
         goto end;
     }
 
     /* Initialize NPDM context. */
     if (!npdmInitializeContext(&(out->npdm_ctx), &(out->pfs_ctx)))
     {
-        LOG_MSG("Failed to initialize NPDM context!");
+        LOG_MSG_ERROR("Failed to initialize NPDM context!");
         goto end;
     }
 
@@ -116,7 +116,7 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
         /* Reallocate NSO context buffer. */
         if (!(tmp_nso_ctx = realloc(out->nso_ctx, (out->nso_count + 1) * sizeof(NsoContext))))
         {
-            LOG_MSG("Failed to reallocate NSO context buffer for NSO \"%s\"! (entry #%u).", pfs_entry_name, i);
+            LOG_MSG_ERROR("Failed to reallocate NSO context buffer for NSO \"%s\"! (entry #%u).", pfs_entry_name, i);
             goto end;
         }
 
@@ -128,7 +128,7 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
         /* Initialize NSO context. */
         if (!nsoInitializeContext(&(out->nso_ctx[out->nso_count]), &(out->pfs_ctx), pfs_entry))
         {
-            LOG_MSG("Failed to initialize context for NSO \"%s\"! (entry #%u).", pfs_entry_name, i);
+            LOG_MSG_ERROR("Failed to initialize context for NSO \"%s\"! (entry #%u).", pfs_entry_name, i);
             goto end;
         }
 
@@ -139,7 +139,7 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx)
     /* Safety check. */
     if (!out->nso_count)
     {
-        LOG_MSG("ExeFS has no NSOs!");
+        LOG_MSG_ERROR("ExeFS has no NSOs!");
         goto end;
     }
 
@@ -162,7 +162,7 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
 {
     if (!programInfoIsValidContext(program_info_ctx))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -187,21 +187,21 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     mbedtls_base64_encode(NULL, 0, &npdm_acid_b64_size, npdm_acid, npdm_acid_size);
     if (npdm_acid_b64_size <= npdm_acid_size)
     {
-        LOG_MSG("Invalid Base64 conversion length for the NPDM ACID section! (0x%lX, 0x%lX).", npdm_acid_b64_size, npdm_acid_size);
+        LOG_MSG_ERROR("Invalid Base64 conversion length for the NPDM ACID section! (0x%lX, 0x%lX).", npdm_acid_b64_size, npdm_acid_size);
         goto end;
     }
 
     /* Allocate memory for the NPDM ACID Base64 string. */
     if (!(npdm_acid_b64 = calloc(npdm_acid_b64_size + 1, sizeof(char))))
     {
-        LOG_MSG("Failed to allocate 0x%lX bytes for the NPDM ACID section Base64 string!", npdm_acid_b64_size);
+        LOG_MSG_ERROR("Failed to allocate 0x%lX bytes for the NPDM ACID section Base64 string!", npdm_acid_b64_size);
         goto end;
     }
 
     /* Convert NPDM ACID section to a Base64 string. */
     if (mbedtls_base64_encode((u8*)npdm_acid_b64, npdm_acid_b64_size + 1, &npdm_acid_b64_size, npdm_acid, npdm_acid_size) != 0)
     {
-        LOG_MSG("Base64 conversion failed for the NPDM ACID section!");
+        LOG_MSG_ERROR("Base64 conversion failed for the NPDM ACID section!");
         goto end;
     }
 
@@ -276,7 +276,7 @@ end:
     if (!success)
     {
         if (xml_buf) free(xml_buf);
-        LOG_MSG("Failed to generate ProgramInfo AuthoringTool XML!");
+        LOG_MSG_ERROR("Failed to generate ProgramInfo AuthoringTool XML!");
     }
 
     return success;
@@ -286,7 +286,7 @@ static bool programInfoGetSdkVersionAndBuildTypeFromSdkNso(ProgramInfoContext *p
 {
     if (!program_info_ctx || !program_info_ctx->nso_count || !program_info_ctx->nso_ctx || !sdk_version || !build_type)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -337,7 +337,7 @@ static bool programInfoGetSdkVersionAndBuildTypeFromSdkNso(ProgramInfoContext *p
     /* Duplicate strings. */
     if (!(*sdk_version = strndup(sdk_entry_version, sdk_entry_version_len)) || !(*build_type = strdup(sdk_entry_build_type)))
     {
-        LOG_MSG("Failed to allocate memory for output strings!");
+        LOG_MSG_ERROR("Failed to allocate memory for output strings!");
 
         if (*sdk_version)
         {
@@ -369,7 +369,7 @@ static bool programInfoAddNsoApiListToAuthoringToolXml(char **xml_buf, u64 *xml_
     if (!xml_buf || !xml_buf_size || !program_info_ctx || !program_info_ctx->nso_count || !program_info_ctx->nso_ctx || !api_list_tag || !*api_list_tag || !api_entry_prefix || \
         !*api_entry_prefix || !sdk_prefix || !(sdk_prefix_len = strlen(sdk_prefix)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -462,7 +462,7 @@ static bool programInfoAddStringFieldToAuthoringToolXml(char **xml_buf, u64 *xml
 {
     if (!xml_buf || !xml_buf_size || !tag_name || !*tag_name)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -473,7 +473,7 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
 {
     if (!xml_buf || !xml_buf_size || !program_info_ctx || !program_info_ctx->npdm_ctx.meta_header || !program_info_ctx->nso_count || !program_info_ctx->nso_ctx)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -570,7 +570,7 @@ static bool programInfoAddFsAccessControlDataToAuthoringToolXml(char **xml_buf, 
 
     if (!xml_buf || !xml_buf_size || !program_info_ctx || !(aci_fac_data = program_info_ctx->npdm_ctx.aci_fac_data))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 

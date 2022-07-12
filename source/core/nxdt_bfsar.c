@@ -75,7 +75,7 @@ bool bfsarInitialize(void)
         /* Create BFSAR file in the SD card root directory. */
         if (use_root) sprintf(g_bfsarPath, "/" BFSAR_FILENAME);
 
-        LOG_MSG("BFSAR path: \"%s\".", g_bfsarPath);
+        LOG_MSG_DEBUG("BFSAR path: \"%s\".", g_bfsarPath);
 
         /* Check if the BFSAR file is already available and not empty. */
         bfsar_file = fopen(g_bfsarPath, "rb");
@@ -93,7 +93,7 @@ bool bfsarInitialize(void)
         /* Get title info. */
         if (!(title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, QLAUNCH_TID)))
         {
-            LOG_MSG("Failed to get title info for qlaunch!");
+            LOG_MSG_ERROR("Failed to get title info for qlaunch!");
             break;
         }
 
@@ -101,28 +101,28 @@ bool bfsarInitialize(void)
         nca_ctx = calloc(1, sizeof(NcaContext));
         if (!nca_ctx)
         {
-            LOG_MSG("Failed to allocate memory for temporary NCA context!");
+            LOG_MSG_ERROR("Failed to allocate memory for temporary NCA context!");
             break;
         }
 
         /* Initialize NCA context. */
         if (!ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Program, 0), title_info->version.value, NULL))
         {
-            LOG_MSG("Failed to initialize qlaunch Program NCA context!");
+            LOG_MSG_ERROR("Failed to initialize qlaunch Program NCA context!");
             break;
         }
 
         /* Initialize RomFS context. */
         if (!romfsInitializeContext(&romfs_ctx, &(nca_ctx->fs_ctx[1]), NULL))
         {
-            LOG_MSG("Failed to initialize RomFS context for qlaunch Program NCA!");
+            LOG_MSG_ERROR("Failed to initialize RomFS context for qlaunch Program NCA!");
             break;
         }
 
         /* Get RomFS file entry. */
         if (!(romfs_file_entry = romfsGetFileEntryByPath(&romfs_ctx, BFSAR_ROMFS_PATH)))
         {
-            LOG_MSG("Failed to retrieve RomFS file entry for \"" BFSAR_ROMFS_PATH "\"!");
+            LOG_MSG_ERROR("Failed to retrieve RomFS file entry for \"" BFSAR_ROMFS_PATH "\"!");
             break;
         }
 
@@ -130,21 +130,21 @@ bool bfsarInitialize(void)
         bfsar_size = romfs_file_entry->size;
         if (!bfsar_size)
         {
-            LOG_MSG("File size for qlaunch's \"" BFSAR_ROMFS_PATH "\" is zero!");
+            LOG_MSG_ERROR("File size for qlaunch's \"" BFSAR_ROMFS_PATH "\" is zero!");
             break;
         }
 
         /* Allocate memory for BFSAR data. */
         if (!(bfsar_data = malloc(bfsar_size)))
         {
-            LOG_MSG("Failed to allocate 0x%lX bytes for qlaunch's \"" BFSAR_ROMFS_PATH "\"!", bfsar_size);
+            LOG_MSG_ERROR("Failed to allocate 0x%lX bytes for qlaunch's \"" BFSAR_ROMFS_PATH "\"!", bfsar_size);
             break;
         }
 
         /* Read BFSAR data. */
         if (!romfsReadFileEntryData(&romfs_ctx, romfs_file_entry, bfsar_data, bfsar_size, 0))
         {
-            LOG_MSG("Failed to read 0x%lX bytes long \"" BFSAR_ROMFS_PATH "\" from qlaunch!", bfsar_size);
+            LOG_MSG_ERROR("Failed to read 0x%lX bytes long \"" BFSAR_ROMFS_PATH "\" from qlaunch!", bfsar_size);
             break;
         }
 
@@ -152,7 +152,7 @@ bool bfsarInitialize(void)
         bfsar_file = fopen(g_bfsarPath, "wb");
         if (!bfsar_file)
         {
-            LOG_MSG("Failed to open \"%s\" for writing!", g_bfsarPath);
+            LOG_MSG_ERROR("Failed to open \"%s\" for writing!", g_bfsarPath);
             break;
         }
 
@@ -160,7 +160,7 @@ bool bfsarInitialize(void)
         wr = fwrite(bfsar_data, 1, bfsar_size, bfsar_file);
         if (wr != bfsar_size)
         {
-            LOG_MSG("Failed to write 0x%lX bytes block to \"%s\"!", bfsar_size, g_bfsarPath);
+            LOG_MSG_ERROR("Failed to write 0x%lX bytes block to \"%s\"!", bfsar_size, g_bfsarPath);
             break;
         }
 

@@ -263,28 +263,28 @@ bool keysLoadKeyset(void)
         /* Retrieve FS .rodata keys. */
         if (!keysRetrieveKeysFromProgramMemory(&g_fsRodataMemoryInfo))
         {
-            LOG_MSG("Unable to retrieve keys from FS .rodata segment!");
+            LOG_MSG_ERROR("Unable to retrieve keys from FS .rodata segment!");
             break;
         }
 
         /* Retrieve FS .data keys. */
         if (!keysRetrieveKeysFromProgramMemory(&g_fsDataMemoryInfo))
         {
-            LOG_MSG("Unable to retrieve keys from FS .data segment!");
+            LOG_MSG_ERROR("Unable to retrieve keys from FS .data segment!");
             break;
         }
 
         /* Derive NCA header key. */
         if (!keysDeriveNcaHeaderKey())
         {
-            LOG_MSG("Unable to derive NCA header key!");
+            LOG_MSG_ERROR("Unable to derive NCA header key!");
             break;
         }
 
         /* Derive sealed NCA KAEKs. */
         if (!keysDeriveSealedNcaKeyAreaEncryptionKeys())
         {
-            LOG_MSG("Unable to derive sealed NCA KAEKs!");
+            LOG_MSG_ERROR("Unable to derive sealed NCA KAEKs!");
             break;
         }
 
@@ -301,12 +301,14 @@ bool keysLoadKeyset(void)
         ret = g_keysetLoaded = true;
     }
 
-    /*if (ret)
+#if LOG_LEVEL == LOG_LEVEL_DEBUG
+    if (ret)
     {
-        LOG_DATA(&g_ncaKeyset, sizeof(KeysNcaKeyset), "NCA keyset dump:");
-        LOG_DATA(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
-        LOG_DATA(&g_gameCardKeyset, sizeof(KeysGameCardKeyset), "Gamecard keyset dump:");
-    }*/
+        LOG_DATA_DEBUG(&g_ncaKeyset, sizeof(KeysNcaKeyset), "NCA keyset dump:");
+        LOG_DATA_DEBUG(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
+        LOG_DATA_DEBUG(&g_gameCardKeyset, sizeof(KeysGameCardKeyset), "Gamecard keyset dump:");
+    }
+#endif
 
     return ret;
 }
@@ -327,7 +329,7 @@ const u8 *keysGetNcaMainSignatureModulus(u8 key_generation)
 {
     if (key_generation > NcaSignatureKeyGeneration_Current)
     {
-        LOG_MSG("Unsupported key generation value! (0x%02X).", key_generation);
+        LOG_MSG_ERROR("Unsupported key generation value! (0x%02X).", key_generation);
         return NULL;
     }
 
@@ -342,7 +344,7 @@ const u8 *keysGetNcaMainSignatureModulus(u8 key_generation)
 
         if (!memcmp(ret, null_modulus, RSA2048_PUBKEY_SIZE))
         {
-            LOG_MSG("%s NCA header main signature modulus 0x%02X unavailable.", dev_unit ? "Development" : "Retail", key_generation);
+            LOG_MSG_ERROR("%s NCA header main signature modulus 0x%02X unavailable.", dev_unit ? "Development" : "Retail", key_generation);
             ret = NULL;
         }
     }
@@ -357,19 +359,19 @@ bool keysDecryptNcaKeyAreaEntry(u8 kaek_index, u8 key_generation, void *dst, con
 
     if (kaek_index >= NcaKeyAreaEncryptionKeyIndex_Count)
     {
-        LOG_MSG("Invalid KAEK index! (0x%02X).", kaek_index);
+        LOG_MSG_ERROR("Invalid KAEK index! (0x%02X).", kaek_index);
         goto end;
     }
 
     if (key_gen_val >= NcaKeyGeneration_Max)
     {
-        LOG_MSG("Invalid key generation value! (0x%02X).", key_gen_val);
+        LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_gen_val);
         goto end;
     }
 
     if (!dst || !src)
     {
-        LOG_MSG("Invalid destination/source pointer.");
+        LOG_MSG_ERROR("Invalid destination/source pointer.");
         goto end;
     }
 
@@ -377,7 +379,7 @@ bool keysDecryptNcaKeyAreaEntry(u8 kaek_index, u8 key_generation, void *dst, con
     {
         if (!g_keysetLoaded) break;
         Result rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_kaek_sealed[kaek_index][key_gen_val], src, dst);
-        if (!(ret = R_SUCCEEDED(rc))) LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X).", rc);
+        if (!(ret = R_SUCCEEDED(rc))) LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X).", rc);
     }
 
 end:
@@ -391,13 +393,13 @@ const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
 
     if (kaek_index >= NcaKeyAreaEncryptionKeyIndex_Count)
     {
-        LOG_MSG("Invalid KAEK index! (0x%02X).", kaek_index);
+        LOG_MSG_ERROR("Invalid KAEK index! (0x%02X).", kaek_index);
         goto end;
     }
 
     if (key_gen_val >= NcaKeyGeneration_Max)
     {
-        LOG_MSG("Invalid key generation value! (0x%02X).", key_gen_val);
+        LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_gen_val);
         goto end;
     }
 
@@ -414,7 +416,7 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
 {
     if (!rsa_wrapped_titlekey || !out_titlekey)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -439,7 +441,7 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
             /* Copy RSA-OAEP unwrapped titlekey. */
             memcpy(out_titlekey, out_keydata, AES_128_KEY_SIZE);
         } else {
-            LOG_MSG("RSA-OAEP titlekey decryption failed!");
+            LOG_MSG_ERROR("RSA-OAEP titlekey decryption failed!");
         }
     }
 
@@ -453,7 +455,7 @@ const u8 *keysGetTicketCommonKey(u8 key_generation)
 
     if (key_gen_val >= NcaKeyGeneration_Max)
     {
-        LOG_MSG("Invalid key generation value! (0x%02X).", key_gen_val);
+        LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_gen_val);
         goto end;
     }
 
@@ -502,7 +504,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
 {
     if (!info || !info->key_count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -522,7 +524,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
         /* Check destination pointer. */
         if (!key->dst)
         {
-            LOG_MSG("Invalid destination pointer for key \"%s\" in program %016lX!", key->name, info->location.program_id);
+            LOG_MSG_ERROR("Invalid destination pointer for key \"%s\" in program %016lX!", key->name, info->location.program_id);
             goto end;
         }
 
@@ -543,7 +545,7 @@ static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
 
         if (!found)
         {
-            LOG_MSG("Unable to locate key \"%s\" in process memory from program %016lX!", key->name, info->location.program_id);
+            LOG_MSG_ERROR("Unable to locate key \"%s\" in process memory from program %016lX!", key->name, info->location.program_id);
             goto end;
         }
     }
@@ -564,7 +566,7 @@ static bool keysDeriveNcaHeaderKey(void)
     rc = splCryptoGenerateAesKek(g_ncaKeyset.nca_header_kek_source, 0, 0, g_ncaKeyset.nca_header_kek_sealed);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splCryptoGenerateAesKek failed! (0x%08X) (nca_header_kek_sealed).", rc);
+        LOG_MSG_ERROR("splCryptoGenerateAesKek failed! (0x%X) (nca_header_kek_sealed).", rc);
         return false;
     }
 
@@ -572,14 +574,14 @@ static bool keysDeriveNcaHeaderKey(void)
     rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_header_kek_sealed, g_ncaKeyset.nca_header_key_source, g_ncaKeyset.nca_header_key);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (nca_header_key) (#1).", rc);
+        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X) (nca_header_key) (#1).", rc);
         return false;
     }
 
     rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_header_kek_sealed, g_ncaKeyset.nca_header_key_source + AES_128_KEY_SIZE, g_ncaKeyset.nca_header_key + AES_128_KEY_SIZE);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (nca_header_key) (#2).", rc);
+        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X) (nca_header_key) (#2).", rc);
         return false;
     }
 
@@ -608,7 +610,7 @@ static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void)
             rc = splCryptoGenerateAesKek(nca_kaek_source, j, 0, nca_kaek_sealed);
             if (R_FAILED(rc))
             {
-                //LOG_MSG("splCryptoGenerateAesKek failed for KAEK index %u and key generation %u! (0x%08X).", i, (j <= 1 ? 0 : j), rc);
+                LOG_MSG_DEBUG("splCryptoGenerateAesKek failed for KAEK index %u and key generation %u! (0x%X).", i, (j <= 1 ? 0 : j), rc);
                 break;
             }
 
@@ -619,7 +621,7 @@ static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void)
     }
 
     success = (key_cnt > 0);
-    if (success) LOG_MSG("Derived %u sealed NCA KAEK(s) (%u key generation[s]).", key_cnt, highest_key_gen + 1);
+    if (success) LOG_MSG_INFO("Derived %u sealed NCA KAEK(s) (%u key generation[s]).", key_cnt, highest_key_gen + 1);
 
     return success;
 }
@@ -663,7 +665,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
 {
     if (!f || !line || !key || !value)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return -2;
     }
 
@@ -682,7 +684,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
     if (errno != 0 || read <= 0)
     {
         ret = ((errno == 0 && (read == 0 || feof(f))) ? 1 : -2);
-        if (ret != 1) LOG_MSG("__getline failed! (0x%lX, %ld, %d, %d).", ftell(f), read, errno, ret);
+        if (ret != 1) LOG_MSG_ERROR("__getline failed! (0x%lX, %ld, %d, %d).", ftell(f), read, errno, ret);
         goto end;
     }
 
@@ -692,7 +694,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
     l = *line;
     if (*l == '\n' || *l == '\r' || *l == '\0')
     {
-        LOG_MSG("Empty line detected! (0x%lX, 0x%lX).", n, read);
+        LOG_MSG_WARNING("Empty line detected! (0x%lX, 0x%lX).", n, read);
         goto end;
     }
 
@@ -722,7 +724,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
         /* Bail out if we reached the end of string. */
         if (*p == '\0')
         {
-            LOG_MSG("End of string reached while validating key name string! (#1) (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
+            LOG_MSG_ERROR("End of string reached while validating key name string! (#1) (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
             goto end;
         }
 
@@ -736,7 +738,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
         /* Handle unsupported characters. */
         if (*p != '_' && (*p < '0' || *p > '9') && (*p < 'a' || *p > 'z'))
         {
-            LOG_MSG("Unsupported character detected in key name string! (0x%lX, 0x%lX, 0x%lX, 0x%02X).", n, read, (size_t)(p - l), *p);
+            LOG_MSG_ERROR("Unsupported character detected in key name string! (0x%lX, 0x%lX, 0x%lX, 0x%02X).", n, read, (size_t)(p - l), *p);
             goto end;
         }
     }
@@ -744,7 +746,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
     /* Bail if the final ++p put us at the end of string. */
     if (*p == '\0')
     {
-        LOG_MSG("End of string reached while validating key name string! (#2) (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
+        LOG_MSG_ERROR("End of string reached while validating key name string! (#2) (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
         goto end;
     }
 
@@ -759,7 +761,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
 
         if (*p != '=' && *p != ',')
         {
-            LOG_MSG("Unable to find expected [,=]! (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
+            LOG_MSG_ERROR("Unable to find expected [,=]! (0x%lX, 0x%lX, 0x%lX).", n, read, (size_t)(p - l));
             goto end;
         }
 
@@ -769,7 +771,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
     /* Empty key name string is an error. */
     if (*k == '\0')
     {
-        LOG_MSG("Key name string empty! (0x%lX, 0x%lX).", n, read);
+        LOG_MSG_ERROR("Key name string empty! (0x%lX, 0x%lX).", n, read);
         goto end;
     }
 
@@ -785,7 +787,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
         /* Bail out if we reached the end of string. */
         if (*p == '\0')
         {
-            LOG_MSG("End of string reached while validating value string! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(p - l), k);
+            LOG_MSG_ERROR("End of string reached while validating value string! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(p - l), k);
             goto end;
         }
 
@@ -799,7 +801,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
         /* Handle unsupported characters. */
         if ((*p < '0' || *p > '9') && (*p < 'a' || *p > 'f'))
         {
-            LOG_MSG("Unsupported character detected in value string! (0x%lX, 0x%lX, 0x%lX, 0x%02X, %s).", n, read, (size_t)(p - l), *p, k);
+            LOG_MSG_ERROR("Unsupported character detected in value string! (0x%lX, 0x%lX, 0x%lX, 0x%02X, %s).", n, read, (size_t)(p - l), *p, k);
             goto end;
         }
     }
@@ -815,7 +817,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
 
         if (p < e)
         {
-            LOG_MSG("Additional data detected after value string and before line end! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(p - *line), k);
+            LOG_MSG_ERROR("Additional data detected after value string and before line end! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(p - *line), k);
             goto end;
         }
     }
@@ -823,7 +825,7 @@ static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **v
     /* Empty value string and value string length not being a multiple of 2 are both errors. */
     if (*v == '\0' || ((l - v) % 2) != 0)
     {
-        LOG_MSG("Invalid value string length! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(l - v), k);
+        LOG_MSG_ERROR("Invalid value string length! (0x%lX, 0x%lX, 0x%lX, %s).", n, read, (size_t)(l - v), k);
         goto end;
     }
 
@@ -859,13 +861,13 @@ static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 siz
 
     if (!out || !key || !*key || !value || !(value_len = strlen(value)) || !size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
     if (value_len != hex_str_len)
     {
-        LOG_MSG("Key \"%s\" must be %u hex digits long!", key, hex_str_len);
+        LOG_MSG_ERROR("Key \"%s\" must be %u hex digits long!", key, hex_str_len);
         return false;
     }
 
@@ -876,7 +878,7 @@ static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 siz
         char val = keysConvertHexDigitToBinary(value[i]);
         if (val == 'z')
         {
-            LOG_MSG("Invalid hex character in key \"%s\" at position %u!", key, i);
+            LOG_MSG_ERROR("Invalid hex character in key \"%s\" at position %u!", key, i);
             return false;
         }
 
@@ -900,7 +902,7 @@ static bool keysReadKeysFromFile(void)
     keys_file = fopen(keys_file_path, "rb");
     if (!keys_file)
     {
-        LOG_MSG("Unable to open \"%s\" to retrieve keys!", keys_file_path);
+        LOG_MSG_ERROR("Unable to open \"%s\" to retrieve keys!", keys_file_path);
         return false;
     }
 
@@ -951,15 +953,15 @@ static bool keysReadKeysFromFile(void)
 
     if (key_count)
     {
-        LOG_MSG("Loaded %u key(s) from \"%s\".", key_count, keys_file_path);
+        LOG_MSG_INFO("Loaded %u key(s) from \"%s\".", key_count, keys_file_path);
     } else {
-        LOG_MSG("Unable to parse keys from \"%s\"! (keys file empty?).", keys_file_path);
+        LOG_MSG_ERROR("Unable to parse keys from \"%s\"! (keys file empty?).", keys_file_path);
         return false;
     }
 
     if (!eticket_rsa_kek_available)
     {
-        LOG_MSG("\"eticket_rsa_kek\" unavailable in \"%s\"!", keys_file_path);
+        LOG_MSG_ERROR("\"eticket_rsa_kek\" unavailable in \"%s\"!", keys_file_path);
         return false;
     }
 
@@ -978,7 +980,7 @@ static bool keysGetDecryptedEticketRsaDeviceKey(void)
     rc = setcalGetEticketDeviceKey(&g_eTicketRsaDeviceKey);
     if (R_FAILED(rc))
     {
-        LOG_MSG("setcalGetEticketDeviceKey failed! (0x%08X).", rc);
+        LOG_MSG_ERROR("setcalGetEticketDeviceKey failed! (0x%X).", rc);
         return false;
     }
 
@@ -995,14 +997,14 @@ static bool keysGetDecryptedEticketRsaDeviceKey(void)
     public_exponent = __builtin_bswap32(eticket_rsa_key->public_exponent);
     if (public_exponent != ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT)
     {
-        LOG_MSG("Invalid public exponent for decrypted eTicket RSA device key! Wrong keys? (0x%08X).", public_exponent);
+        LOG_MSG_ERROR("Invalid public exponent for decrypted eTicket RSA device key! Wrong keys? (0x%X).", public_exponent);
         return false;
     }
 
     /* Test RSA key pair. */
     if (!keysTestEticketRsaDeviceKey(&(eticket_rsa_key->public_exponent), eticket_rsa_key->private_exponent, eticket_rsa_key->modulus))
     {
-        LOG_MSG("eTicket RSA device key test failed! Wrong keys?");
+        LOG_MSG_ERROR("eTicket RSA device key test failed! Wrong keys?");
         return false;
     }
 
@@ -1013,7 +1015,7 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
 {
     if (!e || !d || !n)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1029,20 +1031,20 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
     rc = splUserExpMod(x, n, d, RSA2048_BYTES, y);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splUserExpMod failed! (#1) (0x%08X).", rc);
+        LOG_MSG_ERROR("splUserExpMod failed! (#1) (0x%X).", rc);
         return false;
     }
 
     rc = splUserExpMod(y, n, e, 4, z);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splUserExpMod failed! (#2) (0x%08X).", rc);
+        LOG_MSG_ERROR("splUserExpMod failed! (#2) (0x%X).", rc);
         return false;
     }
 
     if (memcmp(x, z, RSA2048_BYTES) != 0)
     {
-        LOG_MSG("Invalid RSA key pair!");
+        LOG_MSG_ERROR("Invalid RSA key pair!");
         return false;
     }
 
@@ -1057,7 +1059,7 @@ static bool keysDeriveGameCardKeys(void)
     rc = splCryptoGenerateAesKek(g_gameCardKeyset.gc_cardinfo_kek_source, 0, 0, g_gameCardKeyset.gc_cardinfo_kek_sealed);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splCryptoGenerateAesKek failed! (0x%08X) (gc_cardinfo_kek_sealed).", rc);
+        LOG_MSG_ERROR("splCryptoGenerateAesKek failed! (0x%X) (gc_cardinfo_kek_sealed).", rc);
         return false;
     }
 
@@ -1065,7 +1067,7 @@ static bool keysDeriveGameCardKeys(void)
     rc = splCryptoGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_sealed, g_gameCardKeyset.gc_cardinfo_key_prod_source, g_gameCardKeyset.gc_cardinfo_key_prod);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (gc_cardinfo_key_prod).", rc);
+        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X) (gc_cardinfo_key_prod).", rc);
         return false;
     }
 
@@ -1073,7 +1075,7 @@ static bool keysDeriveGameCardKeys(void)
     rc = splCryptoGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_sealed, g_gameCardKeyset.gc_cardinfo_key_dev_source, g_gameCardKeyset.gc_cardinfo_key_dev);
     if (R_FAILED(rc))
     {
-        LOG_MSG("splCryptoGenerateAesKey failed! (0x%08X) (gc_cardinfo_key_dev).", rc);
+        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X) (gc_cardinfo_key_dev).", rc);
         return false;
     }
 

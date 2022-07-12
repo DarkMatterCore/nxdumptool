@@ -25,7 +25,7 @@ size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src,
 {
     if (!ctx || !dst || !src || !size || !sector_size || (size % sector_size) != 0)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return 0;
     }
 

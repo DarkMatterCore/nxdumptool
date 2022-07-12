@@ -103,7 +103,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         (storage_id == NcmStorageId_GameCard && (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)) || !content_info || \
         content_info->content_type >= NcmContentType_DeltaFragment)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -126,7 +126,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     titleConvertNcmContentSizeToU64(content_info->size, &(out->content_size));
     if (out->content_size < NCA_FULL_HEADER_LENGTH)
     {
-        LOG_MSG("Invalid size for NCA \"%s\"!", out->content_id_str);
+        LOG_MSG_ERROR("Invalid size for NCA \"%s\"!", out->content_id_str);
         return false;
     }
 
@@ -139,7 +139,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         /* Retrieve gamecard NCA offset. */
         if (!gamecardGetHashFileSystemEntryInfoByName(hfs_partition_type, nca_filename, &(out->gamecard_offset), NULL))
         {
-            LOG_MSG("Error retrieving offset for \"%s\" entry in secure hash FS partition!", nca_filename);
+            LOG_MSG_ERROR("Error retrieving offset for \"%s\" entry in secure hash FS partition!", nca_filename);
             return false;
         }
     }
@@ -147,7 +147,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     /* Read decrypted NCA header and NCA FS section headers. */
     if (!ncaReadDecryptedHeader(out))
     {
-        LOG_MSG("Failed to read decrypted NCA \"%s\" header!", out->content_id_str);
+        LOG_MSG_ERROR("Failed to read decrypted NCA \"%s\" header!", out->content_id_str);
         return false;
     }
 
@@ -164,7 +164,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
             memcpy(out->titlekey, usable_tik->dec_titlekey, 0x10);
             out->titlekey_retrieved = true;
         } else {
-            LOG_MSG("Error retrieving ticket for NCA \"%s\"!", out->content_id_str);
+            LOG_MSG_ERROR("Error retrieving ticket for NCA \"%s\"!", out->content_id_str);
         }
     }
 
@@ -175,7 +175,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         if (ncaInitializeFsSectionContext(out, i)) valid_fs_section_cnt++;
     }
 
-    if (!valid_fs_section_cnt) LOG_MSG("Unable to identify any valid FS sections in NCA \"%s\"!", out->content_id_str);
+    if (!valid_fs_section_cnt) LOG_MSG_ERROR("Unable to identify any valid FS sections in NCA \"%s\"!", out->content_id_str);
 
     return (valid_fs_section_cnt > 0);
 }
@@ -185,7 +185,7 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
     if (!ctx || !*(ctx->content_id_str) || (ctx->storage_id != NcmStorageId_GameCard && !ctx->ncm_storage) || (ctx->storage_id == NcmStorageId_GameCard && !ctx->gamecard_offset) || !out || \
         !read_size || (offset + read_size) > ctx->content_size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -198,12 +198,12 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
         /* This strips NAX0 crypto from SD card NCAs (not used on eMMC NCAs). */
         rc = ncmContentStorageReadContentIdFile(ctx->ncm_storage, out, read_size, &(ctx->content_id), offset);
         ret = R_SUCCEEDED(rc);
-        if (!ret) LOG_MSG("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (0x%08X) (ncm).", read_size, offset, ctx->content_id_str, rc);
+        if (!ret) LOG_MSG_ERROR("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (0x%X) (ncm).", read_size, offset, ctx->content_id_str, rc);
     } else {
         /* Retrieve NCA data using raw gamecard reads. */
         /* Fixes NCA read issues with gamecards under HOS < 4.0.0 when using ncmContentStorageReadContentIdFile(). */
         ret = gamecardReadStorage(out, read_size, ctx->gamecard_offset + offset);
-        if (!ret) LOG_MSG("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (gamecard).", read_size, offset, ctx->content_id_str);
+        if (!ret) LOG_MSG_ERROR("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (gamecard).", read_size, offset, ctx->content_id_str);
     }
 
     return ret;
@@ -213,7 +213,7 @@ bool ncaGetFsSectionHashTargetExtents(NcaFsSectionContext *ctx, u64 *out_offset,
 {
     if (!ctx || (!out_offset && !out_size))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -317,14 +317,14 @@ void ncaSetDownloadDistributionType(NcaContext *ctx)
     if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !*(ctx->content_id_str) || ctx->content_type > NcmContentType_DeltaFragment || \
         ctx->header.distribution_type == NcaDistributionType_Download) return;
     ctx->header.distribution_type = NcaDistributionType_Download;
-    LOG_MSG("Set download distribution type to %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
+    LOG_MSG_INFO("Set download distribution type to %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
 }
 
 bool ncaRemoveTitleKeyCrypto(NcaContext *ctx)
 {
     if (!ctx || ctx->content_size < NCA_FULL_HEADER_LENGTH || !*(ctx->content_id_str) || ctx->content_type > NcmContentType_DeltaFragment)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -339,7 +339,7 @@ bool ncaRemoveTitleKeyCrypto(NcaContext *ctx)
     /* Encrypt NCA key area. */
     if (!ncaEncryptKeyArea(ctx))
     {
-        LOG_MSG("Error encrypting %s NCA \"%s\" key area!", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
+        LOG_MSG_ERROR("Error encrypting %s NCA \"%s\" key area!", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
         return false;
     }
 
@@ -349,7 +349,7 @@ bool ncaRemoveTitleKeyCrypto(NcaContext *ctx)
     /* Update context flags. */
     ctx->rights_id_available = false;
 
-    LOG_MSG("Removed titlekey crypto from %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
+    LOG_MSG_INFO("Removed titlekey crypto from %s NCA \"%s\".", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str);
 
     return true;
 }
@@ -358,7 +358,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
 {
     if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
     {
-        LOG_MSG("Invalid NCA context!");
+        LOG_MSG_ERROR("Invalid NCA context!");
         return false;
     }
 
@@ -371,7 +371,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
 
     if (!header_key)
     {
-        LOG_MSG("Failed to retrieve NCA header key!");
+        LOG_MSG_ERROR("Failed to retrieve NCA header key!");
         return false;
     }
 
@@ -383,7 +383,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
     crypt_res = aes128XtsNintendoCrypt(&hdr_aes_ctx, &(ctx->encrypted_header), &(ctx->header), sizeof(NcaHeader), 0, NCA_AES_XTS_SECTOR_SIZE, true);
     if (crypt_res != sizeof(NcaHeader))
     {
-        LOG_MSG("Error encrypting NCA \"%s\" header!", ctx->content_id_str);
+        LOG_MSG_ERROR("Error encrypting NCA \"%s\" header!", ctx->content_id_str);
         return false;
     }
 
@@ -407,7 +407,7 @@ bool ncaEncryptHeader(NcaContext *ctx)
         crypt_res = aes128XtsNintendoCrypt(aes_xts_ctx, &(fs_ctx->encrypted_header), &(fs_ctx->header), sizeof(NcaFsHeader), sector, NCA_AES_XTS_SECTOR_SIZE, true);
         if (crypt_res != sizeof(NcaFsHeader))
         {
-            LOG_MSG("Error encrypting NCA%u \"%s\" FS section header #%u!", ctx->format_version, ctx->content_id_str, i);
+            LOG_MSG_ERROR("Error encrypting NCA%u \"%s\" FS section header #%u!", ctx->format_version, ctx->content_id_str, i);
             return false;
         }
     }
@@ -498,7 +498,7 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
 {
     if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH)
     {
-        LOG_MSG("Invalid NCA context!");
+        LOG_MSG_ERROR("Invalid NCA context!");
         return false;
     }
 
@@ -509,14 +509,14 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
 
     if (!header_key)
     {
-        LOG_MSG("Failed to retrieve NCA header key!");
+        LOG_MSG_ERROR("Failed to retrieve NCA header key!");
         return false;
     }
 
     /* Read NCA header. */
     if (!ncaReadContentFile(ctx, &(ctx->encrypted_header), sizeof(NcaHeader), 0))
     {
-        LOG_MSG("Failed to read NCA \"%s\" header!", ctx->content_id_str);
+        LOG_MSG_ERROR("Failed to read NCA \"%s\" header!", ctx->content_id_str);
         return false;
     }
 
@@ -529,7 +529,7 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
 
     if (crypt_res != sizeof(NcaHeader) || (magic != NCA_NCA3_MAGIC && magic != NCA_NCA2_MAGIC && magic != NCA_NCA0_MAGIC) || ctx->header.content_size != ctx->content_size)
     {
-        LOG_MSG("Error decrypting NCA \"%s\" header!", ctx->content_id_str);
+        LOG_MSG_ERROR("Error decrypting NCA \"%s\" header!", ctx->content_id_str);
         return false;
     }
 
@@ -543,7 +543,7 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
     /* Decrypt NCA key area (if needed). */
     if (!ctx->rights_id_available && !ncaDecryptKeyArea(ctx))
     {
-        LOG_MSG("Error decrypting NCA \"%s\" key area!", ctx->content_id_str);
+        LOG_MSG_ERROR("Error decrypting NCA \"%s\" key area!", ctx->content_id_str);
         return false;
     }
 
@@ -564,7 +564,7 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
         u64 fs_header_offset = (ctx->format_version != NcaVersion_Nca0 ? (sizeof(NcaHeader) + (i * sizeof(NcaFsHeader))) : NCA_FS_SECTOR_OFFSET(fs_info->start_sector));
         if (!ncaReadContentFile(ctx, &(fs_ctx->encrypted_header), sizeof(NcaFsHeader), fs_header_offset))
         {
-            LOG_MSG("Failed to read NCA%u \"%s\" FS section header #%u at offset 0x%lX!", ctx->format_version, ctx->content_id_str, i, fs_header_offset);
+            LOG_MSG_ERROR("Failed to read NCA%u \"%s\" FS section header #%u at offset 0x%lX!", ctx->format_version, ctx->content_id_str, i, fs_header_offset);
             return false;
         }
 
@@ -578,7 +578,7 @@ static bool ncaReadDecryptedHeader(NcaContext *ctx)
         crypt_res = aes128XtsNintendoCrypt(aes_xts_ctx, &(fs_ctx->header), &(fs_ctx->encrypted_header), sizeof(NcaFsHeader), sector, NCA_AES_XTS_SECTOR_SIZE, false);
         if (crypt_res != sizeof(NcaFsHeader))
         {
-            LOG_MSG("Error decrypting NCA%u \"%s\" FS section header #%u!", ctx->format_version, ctx->content_id_str, i);
+            LOG_MSG_ERROR("Error decrypting NCA%u \"%s\" FS section header #%u!", ctx->format_version, ctx->content_id_str, i);
             return false;
         }
     }
@@ -590,7 +590,7 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
 {
     if (!ctx)
     {
-        LOG_MSG("Invalid NCA context!");
+        LOG_MSG_ERROR("Invalid NCA context!");
         return false;
     }
 
@@ -621,7 +621,7 @@ static bool ncaDecryptKeyArea(NcaContext *ctx)
         /* Decrypt current key area entry. */
         if (!keysDecryptNcaKeyAreaEntry(ctx->header.kaek_index, ctx->key_generation, dst_key, src_key))
         {
-            LOG_MSG("Failed to decrypt NCA key area entry #%u!", i);
+            LOG_MSG_ERROR("Failed to decrypt NCA key area entry #%u!", i);
             return false;
         }
     }
@@ -633,7 +633,7 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
 {
     if (!ctx)
     {
-        LOG_MSG("Invalid NCA context!");
+        LOG_MSG_ERROR("Invalid NCA context!");
         return false;
     }
 
@@ -654,7 +654,7 @@ static bool ncaEncryptKeyArea(NcaContext *ctx)
     kaek = keysGetNcaKeyAreaEncryptionKey(ctx->header.kaek_index, ctx->key_generation);
     if (!kaek)
     {
-        LOG_MSG("Unable to retrieve KAEK for KAEK index 0x%02X and key generation 0x%02X!", ctx->header.kaek_index, ctx->key_generation);
+        LOG_MSG_ERROR("Unable to retrieve KAEK for KAEK index 0x%02X and key generation 0x%02X!", ctx->header.kaek_index, ctx->key_generation);
         return false;
     }
 
@@ -684,7 +684,7 @@ static bool ncaVerifyMainSignature(NcaContext *ctx)
 {
     if (!ctx)
     {
-        LOG_MSG("Invalid NCA context!");
+        LOG_MSG_ERROR("Invalid NCA context!");
         return false;
     }
 
@@ -693,8 +693,12 @@ static bool ncaVerifyMainSignature(NcaContext *ctx)
     if (!modulus) return false;
 
     /* Verify NCA signature. */
-    return rsa2048VerifySha256BasedPssSignature(&(ctx->header.magic), NCA_SIGNATURE_AREA_SIZE, ctx->header.main_signature, modulus, g_ncaHeaderMainSignaturePublicExponent, \
-                                                sizeof(g_ncaHeaderMainSignaturePublicExponent));
+    bool ret = rsa2048VerifySha256BasedPssSignature(&(ctx->header.magic), NCA_SIGNATURE_AREA_SIZE, ctx->header.main_signature, modulus, g_ncaHeaderMainSignaturePublicExponent, \
+                                                    sizeof(g_ncaHeaderMainSignaturePublicExponent));
+
+    LOG_MSG_INFO("Header signature for %s NCA \"%s\" is %s.", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str, ret ? "valid" : "invalid");
+
+    return ret;
 }
 
 NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx)
@@ -728,7 +732,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
 {
     if (!nca_ctx || section_idx >= NCA_FS_HEADER_COUNT)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -759,7 +763,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     /* Don't proceed if this NCA FS section isn't populated. */
     if (!ncaIsFsInfoEntryValid(fs_info))
     {
-        //LOG_MSG("Invalid FsInfo entry for section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        LOG_MSG_INFO("Invalid FsInfo entry for section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
 
@@ -767,7 +771,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     sha256CalculateHash(fs_header_hash_calc, &(fs_ctx->header), sizeof(NcaFsHeader));
     if (memcmp(fs_header_hash_calc, fs_header_hash, SHA256_HASH_SIZE) != 0)
     {
-        LOG_MSG("Checksum mismatch for FS section header #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        LOG_MSG_ERROR("Checksum mismatch for FS section header #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
 
@@ -778,7 +782,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     /* Check if we're dealing with an invalid start offset or an empty size. */
     if (fs_ctx->section_offset < sizeof(NcaHeader) || !fs_ctx->section_size)
     {
-        LOG_MSG("Invalid offset/size for FS section #%u in \"%s\" (0x%lX, 0x%lX). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->section_offset, \
+        LOG_MSG_ERROR("Invalid offset/size for FS section #%u in \"%s\" (0x%lX, 0x%lX). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->section_offset, \
                 fs_ctx->section_size);
         goto end;
     }
@@ -803,7 +807,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
 
     if (fs_ctx->hash_type == NcaHashType_Auto || fs_ctx->hash_type == NcaHashType_AutoSha3 || fs_ctx->hash_type > NcaHashType_HierarchicalIntegritySha3)
     {
-        LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
+        LOG_MSG_ERROR("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
         goto end;
     }
 
@@ -827,7 +831,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
 
     if (fs_ctx->encryption_type == NcaEncryptionType_Auto || fs_ctx->encryption_type > NcaEncryptionType_AesCtrExSkipLayerHash)
     {
-        LOG_MSG("Invalid encryption type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->encryption_type);
+        LOG_MSG_ERROR("Invalid encryption type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->encryption_type);
         goto end;
     }
 
@@ -840,15 +844,15 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
 
         if (!ncaVerifyBucketInfo(sparse_bucket) || raw_storage_offset < sizeof(NcaHeader) || (raw_storage_offset + raw_storage_size) > nca_ctx->content_size)
         {
-            LOG_DATA(sparse_info, sizeof(NcaSparseInfo), "Invalid SparseInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. SparseInfo dump:", section_idx, \
-                     nca_ctx->content_id_str, nca_ctx->content_size);
+            LOG_DATA_ERROR(sparse_info, sizeof(NcaSparseInfo), "Invalid SparseInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. SparseInfo dump:", section_idx, \
+                           nca_ctx->content_id_str, nca_ctx->content_size);
             goto end;
         }
 
         if (!raw_storage_size || !sparse_bucket->header.entry_count)
         {
             /* Return true but don't set this FS section as enabled, since we can't really use it. */
-            LOG_MSG("Empty SparseInfo data detected for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+            LOG_MSG_ERROR("Empty SparseInfo data detected for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
             success = true;
             goto end;
         }
@@ -861,7 +865,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     /* Check if we're within boundaries. */
     if ((fs_ctx->section_offset + fs_ctx->section_size) > nca_ctx->content_size)
     {
-        LOG_MSG("FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        LOG_MSG_ERROR("FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
 
@@ -909,8 +913,8 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
 
     if (fs_ctx->section_type >= NcaFsSectionType_Invalid)
     {
-        LOG_DATA(&(fs_ctx->header), sizeof(NcaFsHeader), "Unable to determine section type for FS section #%u in \"%s\" (0x%02X, 0x%02X). Skipping FS section. FS header dump:", \
-                 section_idx, nca_ctx->content_id_str, fs_ctx->hash_type, fs_ctx->encryption_type);
+        LOG_DATA_ERROR(&(fs_ctx->header), sizeof(NcaFsHeader), "Unable to determine section type for FS section #%u in \"%s\" (0x%02X, 0x%02X). Skipping FS section. FS header dump:", \
+                       section_idx, nca_ctx->content_id_str, fs_ctx->hash_type, fs_ctx->encryption_type);
         goto end;
     }
 
@@ -921,14 +925,14 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     fs_ctx->hash_region.offset = 0;
     if (!ncaGetFsSectionHashTargetExtents(fs_ctx, &(fs_ctx->hash_region.size), NULL))
     {
-        LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
+        LOG_MSG_ERROR("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
         goto end;
     }
 
     /* Check if we're within boundaries. */
     if (fs_ctx->hash_region.size > fs_ctx->section_size || (fs_ctx->section_offset + fs_ctx->hash_region.size) > nca_ctx->content_size)
     {
-        LOG_MSG("Hash layer region for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        LOG_MSG_ERROR("Hash layer region for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
 
@@ -936,7 +940,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     fs_ctx->skip_hash_layer_crypto = (fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash || fs_ctx->encryption_type == NcaEncryptionType_AesCtrExSkipLayerHash);
     if (fs_ctx->skip_hash_layer_crypto && fs_ctx->hash_type == NcaHashType_None)
     {
-        LOG_MSG("NcaHashType_None used with SkipLayerHash crypto for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        LOG_MSG_ERROR("NcaHashType_None used with SkipLayerHash crypto for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
 
@@ -951,7 +955,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
             /* Get target hash layer offset. */
             if (!ncaGetFsSectionHashTargetExtents(fs_ctx, &raw_storage_offset, NULL))
             {
-                LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
+                LOG_MSG_ERROR("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
                 goto end;
             }
 
@@ -963,8 +967,8 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         if (!ncaVerifyBucketInfo(compression_bucket) || !compression_bucket->header.entry_count || (raw_storage_offset && (raw_storage_offset < sizeof(NcaHeader) || \
             (raw_storage_offset + raw_storage_size) > fs_ctx->section_size || (fs_ctx->section_offset + raw_storage_offset + raw_storage_size) > nca_ctx->content_size)))
         {
-            LOG_DATA(compression_bucket, sizeof(NcaBucketInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. CompressionInfo dump:", \
-                     section_idx, nca_ctx->content_id_str, nca_ctx->content_size);
+            LOG_DATA_ERROR(compression_bucket, sizeof(NcaBucketInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. CompressionInfo dump:", \
+                           section_idx, nca_ctx->content_id_str, nca_ctx->content_size);
             goto end;
         }
     }
@@ -1095,7 +1099,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_AesCtrExSkipLayerHash || \
         !out || !read_size || (offset + read_size) > ctx->section_size)
     {
-        LOG_MSG("Invalid NCA FS section header parameters!");
+        LOG_MSG_ERROR("Invalid NCA FS section header parameters!");
         return false;
     }
 
@@ -1118,7 +1122,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         (nca_ctx->format_version != NcaVersion_Nca0 && nca_ctx->format_version != NcaVersion_Nca2 && nca_ctx->format_version != NcaVersion_Nca3) || \
         (content_offset + read_size) > nca_ctx->content_size)
     {
-        LOG_MSG("Invalid NCA header parameters!");
+        LOG_MSG_ERROR("Invalid NCA header parameters!");
         goto end;
     }
 
@@ -1128,7 +1132,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         /* Read plaintext area. Use NCA-relative offset. */
         if (!ncaReadContentFile(nca_ctx, out, block_size, content_offset))
         {
-            LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash region) (#1).", block_size, content_offset, \
+            LOG_MSG_ERROR("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash region) (#1).", block_size, content_offset, \
                     nca_ctx->content_id_str, ctx->section_idx);
             goto end;
         }
@@ -1149,7 +1153,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
 
         /* Read remaining plaintext data. Use NCA-relative offset. */
         ret = ncaReadContentFile(nca_ctx, (u8*)out + block_size, read_size, content_offset);
-        if (!ret) LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash region) (#2).", read_size, content_offset, \
+        if (!ret) LOG_MSG_ERROR("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash region) (#2).", read_size, content_offset, \
                           nca_ctx->content_id_str, ctx->section_idx);
         goto end;
     }
@@ -1162,7 +1166,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         /* Read data. */
         if (!ncaReadContentFile(nca_ctx, out, read_size, content_offset))
         {
-            LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", read_size, content_offset, nca_ctx->content_id_str, ctx->section_idx);
+            LOG_MSG_ERROR("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", read_size, content_offset, nca_ctx->content_id_str, ctx->section_idx);
             goto end;
         }
 
@@ -1181,7 +1185,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
             crypt_res = aes128XtsNintendoCrypt(&(ctx->xts_decrypt_ctx), out, out, read_size, sector_num, NCA_AES_XTS_SECTOR_SIZE, false);
             if (crypt_res != read_size)
             {
-                LOG_MSG("Failed to AES-XTS decrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", read_size, content_offset, nca_ctx->content_id_str, \
+                LOG_MSG_ERROR("Failed to AES-XTS decrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", read_size, content_offset, nca_ctx->content_id_str, \
                         ctx->section_idx);
                 goto end;
             }
@@ -1209,7 +1213,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     /* Read data. */
     if (!ncaReadContentFile(nca_ctx, g_ncaCryptoBuffer, chunk_size, block_start_offset))
     {
-        LOG_MSG("Failed to read 0x%lX bytes encrypted data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
+        LOG_MSG_ERROR("Failed to read 0x%lX bytes encrypted data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
                 ctx->section_idx);
         goto end;
     }
@@ -1222,7 +1226,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         crypt_res = aes128XtsNintendoCrypt(&(ctx->xts_decrypt_ctx), g_ncaCryptoBuffer, g_ncaCryptoBuffer, chunk_size, sector_num, NCA_AES_XTS_SECTOR_SIZE, false);
         if (crypt_res != chunk_size)
         {
-            LOG_MSG("Failed to AES-XTS decrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
+            LOG_MSG_ERROR("Failed to AES-XTS decrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
                     ctx->section_idx);
             goto end;
         }
@@ -1282,7 +1286,7 @@ static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 rea
         ctx->section_type != NcaFsSectionType_PatchRomFs || (ctx->encryption_type != NcaEncryptionType_None && ctx->encryption_type != NcaEncryptionType_AesCtrEx && \
         ctx->encryption_type != NcaEncryptionType_AesCtrExSkipLayerHash) || !out || !read_size || (offset + read_size) > ctx->section_size)
     {
-        LOG_MSG("Invalid NCA FS section header parameters!");
+        LOG_MSG_ERROR("Invalid NCA FS section header parameters!");
         return false;
     }
 
@@ -1297,7 +1301,7 @@ static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 rea
     if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         (content_offset + read_size) > nca_ctx->content_size)
     {
-        LOG_MSG("Invalid NCA header parameters!");
+        LOG_MSG_ERROR("Invalid NCA header parameters!");
         goto end;
     }
 
@@ -1307,7 +1311,7 @@ static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 rea
         /* Read data. */
         if (!ncaReadContentFile(nca_ctx, out, read_size, content_offset))
         {
-            LOG_MSG("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", read_size, content_offset, nca_ctx->content_id_str, ctx->section_idx);
+            LOG_MSG_ERROR("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", read_size, content_offset, nca_ctx->content_id_str, ctx->section_idx);
             goto end;
         }
 
@@ -1335,7 +1339,7 @@ static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 rea
     /* Read data. */
     if (!ncaReadContentFile(nca_ctx, g_ncaCryptoBuffer, chunk_size, block_start_offset))
     {
-        LOG_MSG("Failed to read 0x%lX bytes encrypted data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
+        LOG_MSG_ERROR("Failed to read 0x%lX bytes encrypted data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
                 ctx->section_idx);
         goto end;
     }
@@ -1391,7 +1395,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
         (data_offset + data_size) > last_layer_size || !out || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type == NcaEncryptionType_AesCtrEx || \
         ctx->encryption_type >= NcaEncryptionType_AesCtrExSkipLayerHash)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         goto end;
     }
 
@@ -1444,7 +1448,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
         if (hash_block_size <= 1 || !cur_layer_size || (cur_layer_offset + cur_layer_size) > ctx->section_size || (i > 1 && (!parent_layer_size || \
             (parent_layer_offset + parent_layer_size) > ctx->section_size)))
         {
-            LOG_MSG("Invalid hierarchical parent/child layer!");
+            LOG_MSG_ERROR("Invalid hierarchical parent/child layer! (%u).", i - 1);
             goto end;
         }
 
@@ -1475,7 +1479,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
         cur_layer_block = calloc(cur_layer_read_size, sizeof(u8));
         if (!cur_layer_block)
         {
-            LOG_MSG("Unable to allocate 0x%lX bytes for hierarchical layer #%u data block! (current).", cur_layer_read_size, i - 1);
+            LOG_MSG_ERROR("Unable to allocate 0x%lX bytes for hierarchical layer #%u data block! (current).", cur_layer_read_size, i - 1);
             goto end;
         }
 
@@ -1489,7 +1493,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
         /* Read current layer block. */
         if (!_ncaReadFsSection(ctx, cur_layer_block, cur_layer_read_size, cur_layer_read_start_offset))
         {
-            LOG_MSG("Failed to read 0x%lX bytes long hierarchical layer #%u data block from offset 0x%lX! (current).", cur_layer_read_size, i - 1, cur_layer_read_start_offset);
+            LOG_MSG_ERROR("Failed to read 0x%lX bytes long hierarchical layer #%u data block from offset 0x%lX! (current).", cur_layer_read_size, i - 1, cur_layer_read_start_offset);
             goto end;
         }
 
@@ -1503,14 +1507,14 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
             parent_layer_block = calloc(parent_layer_read_size, sizeof(u8));
             if (!parent_layer_block)
             {
-                LOG_MSG("Unable to allocate 0x%lX bytes for hierarchical layer #%u data block! (parent).", parent_layer_read_size, i - 2);
+                LOG_MSG_ERROR("Unable to allocate 0x%lX bytes for hierarchical layer #%u data block! (parent).", parent_layer_read_size, i - 2);
                 goto end;
             }
 
             /* Read parent layer block. */
             if (!_ncaReadFsSection(ctx, parent_layer_block, parent_layer_read_size, parent_layer_offset + parent_layer_read_start_offset))
             {
-                LOG_MSG("Failed to read 0x%lX bytes long hierarchical layer #%u data block from offset 0x%lX! (parent).", parent_layer_read_size, i - 2, parent_layer_read_start_offset);
+                LOG_MSG_ERROR("Failed to read 0x%lX bytes long hierarchical layer #%u data block from offset 0x%lX! (parent).", parent_layer_read_size, i - 2, parent_layer_read_start_offset);
                 goto end;
             }
 
@@ -1535,7 +1539,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
                                                                         &(cur_layer_patch->size), &(cur_layer_patch->offset));
             if (!cur_layer_patch->data)
             {
-                LOG_MSG("Failed to generate encrypted 0x%lX bytes long hierarchical layer #%u data block!", cur_data_size, i - 1);
+                LOG_MSG_ERROR("Failed to generate encrypted 0x%lX bytes long hierarchical layer #%u data block!", cur_data_size, i - 1);
                 goto end;
             }
         } else {
@@ -1543,7 +1547,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
             cur_layer_patch->data = malloc(cur_data_size);
             if (!cur_layer_patch->data)
             {
-                LOG_MSG("Failed to allocate 0x%lX bytes long buffer for hierarchical layer #%u data block!", cur_data_size, i - 1);
+                LOG_MSG_ERROR("Failed to allocate 0x%lX bytes long buffer for hierarchical layer #%u data block!", cur_data_size, i - 1);
                 goto end;
             }
 
@@ -1615,8 +1619,8 @@ static bool ncaWritePatchToMemoryBuffer(NcaContext *ctx, const void *patch, u64 
 
     memcpy((u8*)buf + buf_block_offset, (const u8*)patch + patch_block_offset, buf_block_size);
 
-    LOG_MSG("Overwrote 0x%lX bytes block at offset 0x%lX from raw %s NCA \"%s\" buffer (size 0x%lX, NCA offset 0x%lX).", buf_block_size, buf_block_offset, titleGetNcmContentTypeName(ctx->content_type), \
-            ctx->content_id_str, buf_size, buf_offset);
+    LOG_MSG_INFO("Overwrote 0x%lX bytes block at offset 0x%lX from raw %s NCA \"%s\" buffer (size 0x%lX, NCA offset 0x%lX).", buf_block_size, buf_block_offset, titleGetNcmContentTypeName(ctx->content_type), \
+                 ctx->content_id_str, buf_size, buf_offset);
 
     return ((patch_block_offset + buf_block_size) == patch_size);
 }
@@ -1636,7 +1640,7 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
         ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type == NcaEncryptionType_AesCtrEx || ctx->encryption_type >= NcaEncryptionType_AesCtrExSkipLayerHash || \
         ctx->section_type >= NcaFsSectionType_Invalid || !data || !data_size || (data_offset + data_size) > ctx->section_size || !out_block_size || !out_block_offset)
     {
-        LOG_MSG("Invalid NCA FS section header parameters!");
+        LOG_MSG_ERROR("Invalid NCA FS section header parameters!");
         goto end;
     }
 
@@ -1652,7 +1656,7 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
     if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || (nca_ctx->storage_id == NcmStorageId_GameCard && !nca_ctx->gamecard_offset) || \
         (nca_ctx->format_version != NcaVersion_Nca0 && nca_ctx->format_version != NcaVersion_Nca2 && nca_ctx->format_version != NcaVersion_Nca3) || (content_offset + data_size) > nca_ctx->content_size)
     {
-        LOG_MSG("Invalid NCA header parameters!");
+        LOG_MSG_ERROR("Invalid NCA header parameters!");
         goto end;
     }
 
@@ -1665,7 +1669,7 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
         out = malloc(data_size);
         if (!out)
         {
-            LOG_MSG("Unable to allocate 0x%lX bytes buffer! (aligned).", data_size);
+            LOG_MSG_ERROR("Unable to allocate 0x%lX bytes buffer! (aligned).", data_size);
             goto end;
         }
 
@@ -1680,7 +1684,7 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
             crypt_res = aes128XtsNintendoCrypt(&(ctx->xts_encrypt_ctx), out, out, data_size, sector_num, NCA_AES_XTS_SECTOR_SIZE, true);
             if (crypt_res != data_size)
             {
-                LOG_MSG("Failed to AES-XTS encrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", data_size, content_offset, nca_ctx->content_id_str, ctx->section_idx);
+                LOG_MSG_ERROR("Failed to AES-XTS encrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", data_size, content_offset, nca_ctx->content_id_str, ctx->section_idx);
                 goto end;
             }
         } else
@@ -1710,14 +1714,14 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
     out = malloc(block_size);
     if (!out)
     {
-        LOG_MSG("Unable to allocate 0x%lX bytes buffer! (unaligned).", block_size);
+        LOG_MSG_ERROR("Unable to allocate 0x%lX bytes buffer! (unaligned).", block_size);
         goto end;
     }
 
     /* Read decrypted data using aligned offset and size. */
     if (!_ncaReadFsSection(ctx, out, block_size, block_start_offset))
     {
-        LOG_MSG("Failed to read decrypted NCA \"%s\" FS section #%u data block!", nca_ctx->content_id_str, ctx->section_idx);
+        LOG_MSG_ERROR("Failed to read decrypted NCA \"%s\" FS section #%u data block!", nca_ctx->content_id_str, ctx->section_idx);
         goto end;
     }
 
@@ -1732,7 +1736,7 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
         crypt_res = aes128XtsNintendoCrypt(&(ctx->xts_encrypt_ctx), out, out, block_size, sector_num, NCA_AES_XTS_SECTOR_SIZE, true);
         if (crypt_res != block_size)
         {
-            LOG_MSG("Failed to AES-XTS encrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", block_size, content_offset, nca_ctx->content_id_str, ctx->section_idx);
+            LOG_MSG_ERROR("Failed to AES-XTS encrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", block_size, content_offset, nca_ctx->content_id_str, ctx->section_idx);
             goto end;
         }
     } else

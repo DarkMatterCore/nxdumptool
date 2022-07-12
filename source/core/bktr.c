@@ -142,7 +142,7 @@ bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_c
     if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || \
         (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved) || storage_type == BucketTreeStorageType_Compressed || storage_type >= BucketTreeStorageType_Count)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -181,7 +181,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
         substorage->type == BucketTreeSubStorageType_AesCtrEx || substorage->type == BucketTreeSubStorageType_Compressed || substorage->type >= BucketTreeSubStorageType_Count || \
         (substorage->type == BucketTreeSubStorageType_Regular && substorage->bktr_ctx) || (substorage->type != BucketTreeSubStorageType_Regular && !substorage->bktr_ctx))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -197,7 +197,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
     /* Verify bucket info. */
     if (!bktrVerifyBucketInfo(compressed_bucket, BKTR_NODE_SIZE, BKTR_COMPRESSED_ENTRY_SIZE, &node_storage_size, &entry_storage_size))
     {
-        LOG_MSG("Compressed Storage BucketInfo verification failed!");
+        LOG_MSG_ERROR("Compressed Storage BucketInfo verification failed!");
         goto end;
     }
 
@@ -205,7 +205,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
     compressed_table = calloc(1, compressed_bucket->size);
     if (!compressed_table)
     {
-        LOG_MSG("Unable to allocate memory for the Compressed Storage Table!");
+        LOG_MSG_ERROR("Unable to allocate memory for the Compressed Storage Table!");
         goto end;
     }
 
@@ -215,7 +215,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
 
     if (!bktrReadSubStorage(substorage, &params))
     {
-        LOG_MSG("Failed to read Compressed Storage Table data!");
+        LOG_MSG_ERROR("Failed to read Compressed Storage Table data!");
         goto end;
     }
 
@@ -223,7 +223,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
     u64 start_offset = 0, end_offset = 0;
     if (!bktrValidateTableOffsetNode(compressed_table, BKTR_NODE_SIZE, BKTR_COMPRESSED_ENTRY_SIZE, compressed_bucket->header.entry_count, &start_offset, &end_offset))
     {
-        LOG_MSG("Compressed Storage Table Offset Node validation failed!");
+        LOG_MSG_ERROR("Compressed Storage Table Offset Node validation failed!");
         goto end;
     }
 
@@ -261,7 +261,7 @@ bool bktrSetRegularSubStorage(BucketTreeContext *ctx, NcaFsSectionContext *nca_f
         (ctx->storage_type == BucketTreeStorageType_Indirect && ctx->nca_fs_ctx == nca_fs_ctx) || \
         ((ctx->storage_type == BucketTreeStorageType_AesCtrEx || ctx->storage_type == BucketTreeStorageType_Sparse) && ctx->nca_fs_ctx != nca_fs_ctx))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -285,7 +285,7 @@ bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContex
         parent_ctx->nca_fs_ctx != child_ctx->nca_fs_ctx)) || ((child_ctx->storage_type == BucketTreeStorageType_Compressed || \
         child_ctx->storage_type == BucketTreeStorageType_Sparse) && (substorage_index != 0 || parent_ctx->nca_fs_ctx == child_ctx->nca_fs_ctx)))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -305,7 +305,7 @@ bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offse
 {
     if (!bktrIsBlockWithinStorageRange(ctx, read_size, offset) || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -347,7 +347,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
     if (!bktrIsBlockWithinStorageRange(ctx, size, offset) || (ctx->storage_type != BucketTreeStorageType_Indirect && ctx->storage_type != BucketTreeStorageType_Compressed) || \
         (ctx->storage_type == BucketTreeStorageType_Compressed && ctx->substorages[0].type != BucketTreeSubStorageType_Indirect) || !out)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -372,7 +372,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
         start_entry = end_entry = (BucketTreeCompressedStorageEntry*)visitor.entry;
         if (!bktrIsOffsetWithinStorageRange(ctx, (u64)start_entry->virtual_offset) || (u64)start_entry->virtual_offset > offset)
         {
-            LOG_MSG("Invalid Compressed Storage entry! (0x%lX) (#1).", start_entry->virtual_offset);
+            LOG_MSG_ERROR("Invalid Compressed Storage entry! (0x%lX) (#1).", start_entry->virtual_offset);
             goto end;
         }
 
@@ -388,7 +388,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
                 /* Retrieve next entry node. */
                 if (!bktrVisitorMoveNext(&visitor))
                 {
-                    LOG_MSG("Failed to retrieve next Compressed Storage entry!");
+                    LOG_MSG_ERROR("Failed to retrieve next Compressed Storage entry!");
                     goto end;
                 }
 
@@ -396,7 +396,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
                 end_entry = (BucketTreeCompressedStorageEntry*)visitor.entry;
                 if (!bktrIsOffsetWithinStorageRange(ctx, (u64)end_entry->virtual_offset) || (u64)end_entry->virtual_offset <= (u64)tmp->virtual_offset)
                 {
-                    LOG_MSG("Invalid Indirect Storage entry! (0x%lX) (#2).", (u64)end_entry->virtual_offset);
+                    LOG_MSG_ERROR("Invalid Indirect Storage entry! (0x%lX) (#2).", (u64)end_entry->virtual_offset);
                     goto end;
                 }
 
@@ -435,7 +435,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
             /* Check if the current Compressed Storage entry node points to one or more Indirect Storage entry nodes with Patch storage index. */
             if (!bktrIsBlockWithinIndirectStorageRange(indirect_storage, indirect_block_offset, indirect_block_size, &updated))
             {
-                LOG_MSG("Failed to determine if 0x%lX-byte long Compressed storage block at offset 0x%lX is within Indirect Storage!", indirect_block_offset, indirect_block_size);
+                LOG_MSG_ERROR("Failed to determine if 0x%lX-byte long Compressed storage block at offset 0x%lX is within Indirect Storage!", indirect_block_offset, indirect_block_size);
                 goto end;
             }
         } while(!updated && end_entry && (u64)end_entry->virtual_offset < (offset + size));
@@ -454,7 +454,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
     start_entry = end_entry = (BucketTreeIndirectStorageEntry*)visitor.entry;
     if (!bktrIsOffsetWithinStorageRange(ctx, start_entry->virtual_offset) || start_entry->virtual_offset > offset)
     {
-        LOG_MSG("Invalid Indirect Storage entry! (0x%lX) (#1).", start_entry->virtual_offset);
+        LOG_MSG_ERROR("Invalid Indirect Storage entry! (0x%lX) (#1).", start_entry->virtual_offset);
         goto end;
     }
 
@@ -473,7 +473,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
         /* Retrieve the next entry node. */
         if (!bktrVisitorMoveNext(&visitor))
         {
-            LOG_MSG("Failed to retrieve next Indirect Storage entry!");
+            LOG_MSG_ERROR("Failed to retrieve next Indirect Storage entry!");
             goto end;
         }
 
@@ -481,7 +481,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
         end_entry = (BucketTreeIndirectStorageEntry*)visitor.entry;
         if (!bktrIsOffsetWithinStorageRange(ctx, end_entry->virtual_offset) || end_entry->virtual_offset <= start_entry->virtual_offset)
         {
-            LOG_MSG("Invalid Indirect Storage entry! (0x%lX) (#2).", end_entry->virtual_offset);
+            LOG_MSG_ERROR("Invalid Indirect Storage entry! (0x%lX) (#2).", end_entry->virtual_offset);
             goto end;
         }
     } while(end_entry->virtual_offset < (offset + size));
@@ -505,7 +505,7 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
 {
     if ((!is_sparse && nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs) || (is_sparse && !nca_fs_ctx->has_sparse_layer))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -518,7 +518,7 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
     /* Verify bucket info. */
     if (!bktrVerifyBucketInfo(indirect_bucket, BKTR_NODE_SIZE, BKTR_INDIRECT_ENTRY_SIZE, &node_storage_size, &entry_storage_size))
     {
-        LOG_MSG("Indirect Storage BucketInfo verification failed! (%s).", is_sparse ? "sparse" : "patch");
+        LOG_MSG_ERROR("Indirect Storage BucketInfo verification failed! (%s).", is_sparse ? "sparse" : "patch");
         goto end;
     }
 
@@ -526,7 +526,7 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
     indirect_table = calloc(1, indirect_bucket->size);
     if (!indirect_table)
     {
-        LOG_MSG("Unable to allocate memory for the Indirect Storage Table! (%s).", is_sparse ? "sparse" : "patch");
+        LOG_MSG_ERROR("Unable to allocate memory for the Indirect Storage Table! (%s).", is_sparse ? "sparse" : "patch");
         goto end;
     }
 
@@ -534,7 +534,7 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
     if ((!is_sparse && !ncaReadFsSection(nca_fs_ctx, indirect_table, indirect_bucket->size, indirect_bucket->offset)) || \
         (is_sparse && !ncaReadContentFile((NcaContext*)nca_fs_ctx->nca_ctx, indirect_table, indirect_bucket->size, nca_fs_ctx->sparse_table_offset)))
     {
-        LOG_MSG("Failed to read Indirect Storage Table data! (%s).", is_sparse ? "sparse" : "patch");
+        LOG_MSG_ERROR("Failed to read Indirect Storage Table data! (%s).", is_sparse ? "sparse" : "patch");
         goto end;
     }
 
@@ -565,7 +565,7 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
     u64 start_offset = 0, end_offset = 0;
     if (!bktrValidateTableOffsetNode(indirect_table, BKTR_NODE_SIZE, BKTR_INDIRECT_ENTRY_SIZE, indirect_bucket->header.entry_count, &start_offset, &end_offset))
     {
-        LOG_MSG("Indirect Storage Table Offset Node validation failed! (%s).", is_sparse ? "sparse" : "patch");
+        LOG_MSG_ERROR("Indirect Storage Table Offset Node validation failed! (%s).", is_sparse ? "sparse" : "patch");
         goto end;
     }
 
@@ -602,7 +602,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
         (!missing_original_storage && (ctx->substorages[0].type == BucketTreeSubStorageType_Indirect || ctx->substorages[0].type == BucketTreeSubStorageType_AesCtrEx || \
         ctx->substorages[0].type >= BucketTreeSubStorageType_Count)))) || (offset + read_size) > ctx->end_offset)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -612,7 +612,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
 
     if (!bktrIsOffsetWithinStorageRange(ctx, cur_entry.virtual_offset) || cur_entry.virtual_offset > offset || cur_entry.storage_index > BucketTreeIndirectStorageIndex_Patch)
     {
-        LOG_MSG("Invalid Indirect Storage entry! (0x%lX) (#1).", cur_entry.virtual_offset);
+        LOG_MSG_ERROR("Invalid Indirect Storage entry! (0x%lX) (#1).", cur_entry.virtual_offset);
         return false;
     }
 
@@ -625,7 +625,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
         /* Retrieve the next entry. */
         if (!bktrVisitorMoveNext(visitor))
         {
-            LOG_MSG("Failed to retrieve next Indirect Storage entry!");
+            LOG_MSG_ERROR("Failed to retrieve next Indirect Storage entry!");
             goto end;
         }
 
@@ -633,7 +633,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
         BucketTreeIndirectStorageEntry *next_entry = (BucketTreeIndirectStorageEntry*)visitor->entry;
         if (!bktrIsOffsetWithinStorageRange(ctx, next_entry->virtual_offset) || next_entry->storage_index > BucketTreeIndirectStorageIndex_Patch)
         {
-            LOG_MSG("Invalid Indirect Storage entry! (0x%lX) (#2).", next_entry->virtual_offset);
+            LOG_MSG_ERROR("Invalid Indirect Storage entry! (0x%lX) (#2).", next_entry->virtual_offset);
             goto end;
         }
 
@@ -650,7 +650,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
     /* Verify next entry offset. */
     if (next_entry_offset <= cur_entry_offset || offset >= next_entry_offset)
     {
-        LOG_MSG("Invalid virtual offset for the Indirect Storage's next entry! (0x%lX).", next_entry_offset);
+        LOG_MSG_ERROR("Invalid virtual offset for the Indirect Storage's next entry! (0x%lX).", next_entry_offset);
         goto end;
     }
 
@@ -669,9 +669,9 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
                 /* Retrieve data from the original data storage. */
                 /* This may either be a Regular/Sparse/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
                 success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
-                if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in original data storage!", read_size, data_offset);
+                if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk from offset 0x%lX in original data storage!", read_size, data_offset);
             } else {
-                LOG_MSG("Error: attempting to read 0x%lX-byte long chunk from missing original data storage at offset 0x%lX!", read_size, data_offset);
+                LOG_MSG_ERROR("Error: attempting to read 0x%lX-byte long chunk from missing original data storage at offset 0x%lX!", read_size, data_offset);
             }
         } else {
             if (!is_sparse)
@@ -679,7 +679,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
                 /* Retrieve data from the indirect data storage. */
                 /* This must always be the AesCtrEx storage within this very same NCA (Indirect). */
                 success = bktrReadSubStorage(&(ctx->substorages[1]), &params);
-                if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in AesCtrEx storage!", read_size, data_offset);
+                if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk from offset 0x%lX in AesCtrEx storage!", read_size, data_offset);
             } else {
                 /* Fill output buffer with zeroes (SparseStorage's ZeroStorage). */
                 memset(out, 0, read_size);
@@ -695,7 +695,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
         success = (bktrReadIndirectStorage(visitor, out, indirect_block_size, offset) && \
                    bktrReadIndirectStorage(visitor, (u8*)out + indirect_block_size, read_size - indirect_block_size, offset + indirect_block_size));
 
-        if (!success) LOG_MSG("Failed to read 0x%lX bytes block from multiple Indirect Storage entries at offset 0x%lX!", read_size, offset);
+        if (!success) LOG_MSG_ERROR("Failed to read 0x%lX bytes block from multiple Indirect Storage entries at offset 0x%lX!", read_size, offset);
     }
 
 end:
@@ -706,7 +706,7 @@ static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSe
 {
     if (nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || !nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -718,7 +718,7 @@ static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSe
     /* Verify bucket info. */
     if (!bktrVerifyBucketInfo(aes_ctr_ex_bucket, BKTR_NODE_SIZE, BKTR_AES_CTR_EX_ENTRY_SIZE, &node_storage_size, &entry_storage_size))
     {
-        LOG_MSG("AesCtrEx Storage BucketInfo verification failed!");
+        LOG_MSG_ERROR("AesCtrEx Storage BucketInfo verification failed!");
         goto end;
     }
 
@@ -726,14 +726,14 @@ static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSe
     aes_ctr_ex_table = calloc(1, aes_ctr_ex_bucket->size);
     if (!aes_ctr_ex_table)
     {
-        LOG_MSG("Unable to allocate memory for the AesCtrEx Storage Table!");
+        LOG_MSG_ERROR("Unable to allocate memory for the AesCtrEx Storage Table!");
         goto end;
     }
 
     /* Read AesCtrEx storage table data. */
     if (!ncaReadFsSection(nca_fs_ctx, aes_ctr_ex_table, aes_ctr_ex_bucket->size, aes_ctr_ex_bucket->offset))
     {
-        LOG_MSG("Failed to read AesCtrEx Storage Table data!");
+        LOG_MSG_ERROR("Failed to read AesCtrEx Storage Table data!");
         goto end;
     }
 
@@ -741,7 +741,7 @@ static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSe
     u64 start_offset = 0, end_offset = 0;
     if (!bktrValidateTableOffsetNode(aes_ctr_ex_table, BKTR_NODE_SIZE, BKTR_AES_CTR_EX_ENTRY_SIZE, aes_ctr_ex_bucket->header.entry_count, &start_offset, &end_offset))
     {
-        LOG_MSG("AesCtrEx Storage Table Offset Node validation failed!");
+        LOG_MSG_ERROR("AesCtrEx Storage Table Offset Node validation failed!");
         goto end;
     }
 
@@ -773,7 +773,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
 
     if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || ctx->substorages[0].type != BucketTreeSubStorageType_Regular || (offset + read_size) > ctx->end_offset)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -783,7 +783,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
 
     if (!bktrIsOffsetWithinStorageRange(ctx, cur_entry.offset) || cur_entry.offset > offset || !IS_ALIGNED(cur_entry.offset, AES_BLOCK_SIZE))
     {
-        LOG_MSG("Invalid AesCtrEx Storage entry! (0x%lX) (#1).", cur_entry.offset);
+        LOG_MSG_ERROR("Invalid AesCtrEx Storage entry! (0x%lX) (#1).", cur_entry.offset);
         return false;
     }
 
@@ -796,7 +796,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
         /* Retrieve the next entry. */
         if (!bktrVisitorMoveNext(visitor))
         {
-            LOG_MSG("Failed to retrieve next AesCtrEx Storage entry!");
+            LOG_MSG_ERROR("Failed to retrieve next AesCtrEx Storage entry!");
             goto end;
         }
 
@@ -804,7 +804,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
         BucketTreeAesCtrExStorageEntry *next_entry = (BucketTreeAesCtrExStorageEntry*)visitor->entry;
         if (!bktrIsOffsetWithinStorageRange(ctx, next_entry->offset))
         {
-            LOG_MSG("Invalid AesCtrEx Storage entry! (0x%lX) (#2).", next_entry->offset);
+            LOG_MSG_ERROR("Invalid AesCtrEx Storage entry! (0x%lX) (#2).", next_entry->offset);
             goto end;
         }
 
@@ -821,7 +821,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
     /* Verify next entry offset. */
     if (!IS_ALIGNED(next_entry_offset, AES_BLOCK_SIZE) || next_entry_offset <= cur_entry_offset || offset >= next_entry_offset)
     {
-        LOG_MSG("Invalid offset for the AesCtrEx Storage's next entry! (0x%lX).", next_entry_offset);
+        LOG_MSG_ERROR("Invalid offset for the AesCtrEx Storage's next entry! (0x%lX).", next_entry_offset);
         goto end;
     }
 
@@ -833,7 +833,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
         bktrBucketInitializeSubStorageReadParams(&params, out, offset, read_size, 0, cur_entry.generation, cur_entry.encryption == BucketTreeAesCtrExStorageEncryption_Enabled, ctx->storage_type);
 
         success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
-        if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk at offset 0x%lX from AesCtrEx storage!", read_size, offset);
+        if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk at offset 0x%lX from AesCtrEx storage!", read_size, offset);
     } else {
         /* Handle reads that span multiple AesCtrEx storage entries. */
         if (moved) bktrVisitorMovePrevious(visitor);
@@ -843,7 +843,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
         success = (bktrReadAesCtrExStorage(visitor, out, aes_ctr_ex_block_size, offset) && \
                    bktrReadAesCtrExStorage(visitor, (u8*)out + aes_ctr_ex_block_size, read_size - aes_ctr_ex_block_size, offset + aes_ctr_ex_block_size));
 
-        if (!success) LOG_MSG("Failed to read 0x%lX bytes block from multiple AesCtrEx Storage entries at offset 0x%lX!", read_size, offset);
+        if (!success) LOG_MSG_ERROR("Failed to read 0x%lX bytes block from multiple AesCtrEx Storage entries at offset 0x%lX!", read_size, offset);
     }
 
 end:
@@ -858,7 +858,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
 
     if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || ctx->substorages[0].type >= BucketTreeSubStorageType_AesCtrEx || (offset + read_size) > ctx->end_offset)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -873,7 +873,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
         (cur_entry.compression_type == BucketTreeCompressedStorageCompressionType_LZ4 && (cur_entry.compression_level < BKTR_COMPRESSION_LEVEL_MIN || \
         cur_entry.compression_level > BKTR_COMPRESSION_LEVEL_MAX || !IS_ALIGNED(cur_entry.physical_offset, BKTR_COMPRESSION_PHYS_ALIGNMENT))))
     {
-        LOG_DATA(&cur_entry, sizeof(BucketTreeCompressedStorageEntry), "Invalid Compressed Storage entry! (#1). Entry dump:");
+        LOG_DATA_ERROR(&cur_entry, sizeof(BucketTreeCompressedStorageEntry), "Invalid Compressed Storage entry! (#1). Entry dump:");
         return false;
     }
 
@@ -886,7 +886,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
         /* Retrieve the next entry. */
         if (!bktrVisitorMoveNext(visitor))
         {
-            LOG_MSG("Failed to retrieve next Compressed Storage entry!");
+            LOG_MSG_ERROR("Failed to retrieve next Compressed Storage entry!");
             goto end;
         }
 
@@ -900,7 +900,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
             (next_entry->compression_type == BucketTreeCompressedStorageCompressionType_LZ4 && (next_entry->compression_level < BKTR_COMPRESSION_LEVEL_MIN || \
             next_entry->compression_level > BKTR_COMPRESSION_LEVEL_MAX || !IS_ALIGNED(next_entry->physical_offset, BKTR_COMPRESSION_PHYS_ALIGNMENT))))
         {
-            LOG_DATA(next_entry, sizeof(BucketTreeCompressedStorageEntry), "Invalid Compressed Storage entry! (#2). Entry dump:");
+            LOG_DATA_ERROR(next_entry, sizeof(BucketTreeCompressedStorageEntry), "Invalid Compressed Storage entry! (#2). Entry dump:");
             goto end;
         }
 
@@ -917,7 +917,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
     /* Verify next entry offset. */
     if (next_entry_offset <= cur_entry_offset || offset >= next_entry_offset)
     {
-        LOG_MSG("Invalid virtual offset for the Compressed Storage's next entry! (0x%lX).", next_entry_offset);
+        LOG_MSG_ERROR("Invalid virtual offset for the Compressed Storage's next entry! (0x%lX).", next_entry_offset);
         goto end;
     }
 
@@ -937,7 +937,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
                 bktrBucketInitializeSubStorageReadParams(&params, out, data_offset, read_size, 0, 0, false, ctx->storage_type);
 
                 success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
-                if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX in non-compressed entry!", read_size, data_offset);
+                if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk from offset 0x%lX in non-compressed entry!", read_size, data_offset);
 
                 break;
             }
@@ -961,7 +961,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
                 buffer = calloc(1, buffer_size);
                 if (!buffer)
                 {
-                    LOG_MSG("Failed to allocate 0x%lX-byte long buffer for data decompression! (0x%lX).", buffer_size, decompressed_data_size);
+                    LOG_MSG_ERROR("Failed to allocate 0x%lX-byte long buffer for data decompression! (0x%lX).", buffer_size, decompressed_data_size);
                     break;
                 }
 
@@ -972,7 +972,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
                 /* Read compressed LZ4 block. */
                 if (!bktrReadSubStorage(&(ctx->substorages[0]), &params))
                 {
-                    LOG_MSG("Failed to read 0x%lX-byte long compressed block from offset 0x%lX!", compressed_data_size, data_offset);
+                    LOG_MSG_ERROR("Failed to read 0x%lX-byte long compressed block from offset 0x%lX!", compressed_data_size, data_offset);
                     free(buffer);
                     break;
                 }
@@ -981,7 +981,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
                 int lz4_res = 0;
                 if ((lz4_res = LZ4_decompress_safe((char*)read_ptr, (char*)buffer, (int)compressed_data_size, (int)buffer_size)) != (int)decompressed_data_size)
                 {
-                    LOG_MSG("Failed to decompress 0x%lX-byte long compressed block! (%d).", compressed_data_size, lz4_res);
+                    LOG_MSG_ERROR("Failed to decompress 0x%lX-byte long compressed block! (%d).", compressed_data_size, lz4_res);
                     free(buffer);
                     break;
                 }
@@ -1007,7 +1007,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
         success = (bktrReadCompressedStorage(visitor, out, compressed_block_size, offset) && \
                    bktrReadCompressedStorage(visitor, (u8*)out + compressed_block_size, read_size - compressed_block_size, offset + compressed_block_size));
 
-        if (!success) LOG_MSG("Failed to read 0x%lX bytes block from multiple Compressed Storage entries at offset 0x%lX!", read_size, offset);
+        if (!success) LOG_MSG_ERROR("Failed to read 0x%lX bytes block from multiple Compressed Storage entries at offset 0x%lX!", read_size, offset);
     }
 
 end:
@@ -1018,7 +1018,7 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
 {
     if (!bktrIsValidSubstorage(substorage) || !params || !params->buffer || !params->size)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1045,7 +1045,7 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
         success = bktrReadStorage(ctx, params->buffer, params->size, params->offset);
     }
 
-    if (!success) LOG_MSG("Failed to read 0x%lX-byte long chunk from offset 0x%lX!", params->size, params->offset);
+    if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk from offset 0x%lX!", params->size, params->offset);
 
     return success;
 }
@@ -1077,7 +1077,7 @@ static bool bktrVerifyBucketInfo(NcaBucketInfo *bucket, u64 node_size, u64 entry
         if (out_node_storage_size) *out_node_storage_size = node_storage_size;
         if (out_entry_storage_size) *out_entry_storage_size = entry_storage_size;
     } else {
-        LOG_MSG("Calculated table size exceeds the provided bucket's table size! (0x%lX > 0x%lX).", calc_table_size, bucket->size);
+        LOG_MSG_ERROR("Calculated table size exceeds the provided bucket's table size! (0x%lX > 0x%lX).", calc_table_size, bucket->size);
     }
 
     return success;
@@ -1091,7 +1091,7 @@ static bool bktrValidateTableOffsetNode(const BucketTreeTable *table, u64 node_s
     /* Verify offset node header. */
     if (!bktrVerifyNodeHeader(node_header, 0, node_size, sizeof(u64)))
     {
-        LOG_MSG("Bucket Tree Offset Node header verification failed!");
+        LOG_MSG_ERROR("Bucket Tree Offset Node header verification failed!");
         return false;
     }
 
@@ -1104,7 +1104,7 @@ static bool bktrValidateTableOffsetNode(const BucketTreeTable *table, u64 node_s
 
     if (start_offset > *bktrGetOffsetNodeBegin(offset_node) || start_offset >= end_offset || node_header->count != entry_set_count)
     {
-        LOG_MSG("Invalid Bucket Tree Offset Node!");
+        LOG_MSG_ERROR("Invalid Bucket Tree Offset Node!");
         return false;
     }
 
@@ -1190,7 +1190,7 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
 {
     if (!ctx || virtual_offset >= ctx->storage_table->offset_node.header.offset || !out_visitor)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1209,7 +1209,7 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
 
         if (!bktrGetTreeNodeEntryIndex(start_ptr, end_ptr, virtual_offset, &entry_set_index))
         {
-            LOG_MSG("Failed to retrieve Bucket Tree Node entry index for virtual offset 0x%lX! (#1).", virtual_offset);
+            LOG_MSG_ERROR("Failed to retrieve Bucket Tree Node entry index for virtual offset 0x%lX! (#1).", virtual_offset);
             goto end;
         }
     } else {
@@ -1218,7 +1218,7 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
 
         if (!bktrGetTreeNodeEntryIndex(start_ptr, end_ptr, virtual_offset, &entry_set_index))
         {
-            LOG_MSG("Failed to retrieve Bucket Tree Node entry index for virtual offset 0x%lX! (#2).", virtual_offset);
+            LOG_MSG_ERROR("Failed to retrieve Bucket Tree Node entry index for virtual offset 0x%lX! (#2).", virtual_offset);
             goto end;
         }
 
@@ -1227,7 +1227,7 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
             u32 node_index = entry_set_index;
             if (node_index >= ctx->offset_count || !bktrFindEntrySet(ctx, &entry_set_index, virtual_offset, node_index))
             {
-                LOG_MSG("Invalid L2 Bucket Tree Node index!");
+                LOG_MSG_ERROR("Invalid L2 Bucket Tree Node index!");
                 goto end;
             }
         }
@@ -1236,13 +1236,13 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
     /* Validate the entry set index. */
     if (entry_set_index >= ctx->entry_set_count)
     {
-        LOG_MSG("Invalid Bucket Tree Node offset!");
+        LOG_MSG_ERROR("Invalid Bucket Tree Node offset!");
         goto end;
     }
 
     /* Find the entry. */
     success = bktrFindEntry(ctx, out_visitor, virtual_offset, entry_set_index);
-    if (!success) LOG_MSG("Failed to retrieve storage entry!");
+    if (!success) LOG_MSG_ERROR("Failed to retrieve storage entry!");
 
 end:
     return success;
@@ -1252,7 +1252,7 @@ static bool bktrGetTreeNodeEntryIndex(const u64 *start_ptr, const u64 *end_ptr, 
 {
     if (!start_ptr || !end_ptr || start_ptr >= end_ptr || !out_index)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1284,7 +1284,7 @@ static bool bktrGetEntryNodeEntryIndex(const BucketTreeNodeHeader *node_header, 
 {
     if (!node_header || !out_index)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1296,7 +1296,7 @@ static bool bktrGetEntryNodeEntryIndex(const BucketTreeNodeHeader *node_header, 
     /* Validate index. */
     if (storage_node.index == UINT32_MAX)
     {
-        LOG_MSG("Unable to find index for virtual offset 0x%lX!", virtual_offset);
+        LOG_MSG_ERROR("Unable to find index for virtual offset 0x%lX!", virtual_offset);
         return false;
     }
 
@@ -1312,7 +1312,7 @@ static bool bktrFindEntrySet(BucketTreeContext *ctx, u32 *out_index, u64 virtual
     const BucketTreeNodeHeader *node_header = bktrGetTreeNodeHeader(ctx, node_index);
     if (!node_header)
     {
-        LOG_MSG("Failed to retrieve offset node header at index 0x%X!", node_index);
+        LOG_MSG_ERROR("Failed to retrieve offset node header at index 0x%X!", node_index);
         return false;
     }
 
@@ -1320,7 +1320,7 @@ static bool bktrFindEntrySet(BucketTreeContext *ctx, u32 *out_index, u64 virtual
     u32 offset_index = 0;
     if (!bktrGetEntryNodeEntryIndex(node_header, sizeof(u64), virtual_offset, &offset_index))
     {
-        LOG_MSG("Failed to get offset node entry index!");
+        LOG_MSG_ERROR("Failed to get offset node entry index!");
         return false;
     }
 
@@ -1338,7 +1338,7 @@ static const BucketTreeNodeHeader *bktrGetTreeNodeHeader(BucketTreeContext *ctx,
 
     if ((node_offset + BKTR_NODE_HEADER_SIZE) > ctx->node_storage_size)
     {
-        LOG_MSG("Invalid Bucket Tree Offset Node offset!");
+        LOG_MSG_ERROR("Invalid Bucket Tree Offset Node offset!");
         return NULL;
     }
 
@@ -1348,7 +1348,7 @@ static const BucketTreeNodeHeader *bktrGetTreeNodeHeader(BucketTreeContext *ctx,
     /* Validate offset node header. */
     if (!bktrVerifyNodeHeader(node_header, node_index, node_size, sizeof(u64)))
     {
-        LOG_MSG("Bucket Tree Offset Node header verification failed!");
+        LOG_MSG_ERROR("Bucket Tree Offset Node header verification failed!");
         return NULL;
     }
 
@@ -1366,7 +1366,7 @@ static bool bktrFindEntry(BucketTreeContext *ctx, BucketTreeVisitor *out_visitor
     const BucketTreeNodeHeader *entry_set_header = bktrGetEntryNodeHeader(ctx, entry_set_index);
     if (!entry_set_header)
     {
-        LOG_MSG("Failed to retrieve entry node header at index 0x%X!", entry_set_index);
+        LOG_MSG_ERROR("Failed to retrieve entry node header at index 0x%X!", entry_set_index);
         return false;
     }
 
@@ -1379,7 +1379,7 @@ static bool bktrFindEntry(BucketTreeContext *ctx, BucketTreeVisitor *out_visitor
     u32 entry_index = 0;
     if (!bktrGetEntryNodeEntryIndex(entry_set_header, entry_size, virtual_offset, &entry_index))
     {
-        LOG_MSG("Failed to get entry node entry index!");
+        LOG_MSG_ERROR("Failed to get entry node entry index!");
         return false;
     }
 
@@ -1387,7 +1387,7 @@ static bool bktrFindEntry(BucketTreeContext *ctx, BucketTreeVisitor *out_visitor
     u64 entry_offset = bktrGetEntryNodeEntryOffset(entry_set_offset, entry_size, entry_index);
     if ((entry_offset + entry_size) > (ctx->node_storage_size + ctx->entry_storage_size))
     {
-        LOG_MSG("Invalid Bucket Tree Entry Node entry offset!");
+        LOG_MSG_ERROR("Invalid Bucket Tree Entry Node entry offset!");
         return false;
     }
 
@@ -1411,7 +1411,7 @@ static const BucketTreeNodeHeader *bktrGetEntryNodeHeader(BucketTreeContext *ctx
 
     if ((entry_set_offset + BKTR_NODE_HEADER_SIZE) > (ctx->node_storage_size + ctx->entry_storage_size))
     {
-        LOG_MSG("Invalid Bucket Tree Entry Node offset!");
+        LOG_MSG_ERROR("Invalid Bucket Tree Entry Node offset!");
         return NULL;
     }
 
@@ -1421,7 +1421,7 @@ static const BucketTreeNodeHeader *bktrGetEntryNodeHeader(BucketTreeContext *ctx
     /* Validate entry node header. */
     if (!bktrVerifyNodeHeader(entry_set_header, entry_set_index, entry_set_size, entry_size))
     {
-        LOG_MSG("Bucket Tree Entry Node header verification failed!");
+        LOG_MSG_ERROR("Bucket Tree Entry Node header verification failed!");
         return NULL;
     }
 
@@ -1525,7 +1525,7 @@ static bool bktrVisitorMoveNext(BucketTreeVisitor *visitor)
 {
     if (!bktrVisitorIsValid(visitor))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1543,7 +1543,7 @@ static bool bktrVisitorMoveNext(BucketTreeVisitor *visitor)
         const u32 entry_set_index = (entry_set->header.index + 1);
         if (entry_set_index >= ctx->entry_set_count)
         {
-            LOG_MSG("Error: attempting to move visitor into non-existing Bucket Tree Entry Node!");
+            LOG_MSG_ERROR("Error: attempting to move visitor into non-existing Bucket Tree Entry Node!");
             goto end;
         }
 
@@ -1554,7 +1554,7 @@ static bool bktrVisitorMoveNext(BucketTreeVisitor *visitor)
 
         if ((entry_set_offset + sizeof(BucketTreeEntrySetHeader)) > (ctx->node_storage_size + ctx->entry_storage_size))
         {
-            LOG_MSG("Invalid Bucket Tree Entry Node offset!");
+            LOG_MSG_ERROR("Invalid Bucket Tree Entry Node offset!");
             goto end;
         }
 
@@ -1564,7 +1564,7 @@ static bool bktrVisitorMoveNext(BucketTreeVisitor *visitor)
         if (!bktrVerifyNodeHeader(&(entry_set->header), entry_set_index, entry_set_size, ctx->entry_size) || entry_set->start != end_offset || \
             entry_set->start >= entry_set->header.offset)
         {
-            LOG_MSG("Bucket Tree Entry Node header verification failed!");
+            LOG_MSG_ERROR("Bucket Tree Entry Node header verification failed!");
             goto end;
         }
 
@@ -1578,7 +1578,7 @@ static bool bktrVisitorMoveNext(BucketTreeVisitor *visitor)
 
     if ((entry_offset + entry_size) > (ctx->node_storage_size + ctx->entry_storage_size))
     {
-        LOG_MSG("Invalid Bucket Tree Entry Node entry offset!");
+        LOG_MSG_ERROR("Invalid Bucket Tree Entry Node entry offset!");
         goto end;
     }
 
@@ -1597,7 +1597,7 @@ static bool bktrVisitorMovePrevious(BucketTreeVisitor *visitor)
 {
     if (!bktrVisitorIsValid(visitor))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -1614,7 +1614,7 @@ static bool bktrVisitorMovePrevious(BucketTreeVisitor *visitor)
         /* We have reached the start of this entry node. Let's try to retrieve the last entry from the previous one. */
         if (!entry_set->header.index)
         {
-            LOG_MSG("Error: attempting to move visitor into non-existing Bucket Tree Entry Node!");
+            LOG_MSG_ERROR("Error: attempting to move visitor into non-existing Bucket Tree Entry Node!");
             goto end;
         }
 
@@ -1626,7 +1626,7 @@ static bool bktrVisitorMovePrevious(BucketTreeVisitor *visitor)
 
         if ((entry_set_offset + sizeof(BucketTreeEntrySetHeader)) > (ctx->node_storage_size + ctx->entry_storage_size))
         {
-            LOG_MSG("Invalid Bucket Tree Entry Node offset!");
+            LOG_MSG_ERROR("Invalid Bucket Tree Entry Node offset!");
             goto end;
         }
 
@@ -1636,7 +1636,7 @@ static bool bktrVisitorMovePrevious(BucketTreeVisitor *visitor)
         if (!bktrVerifyNodeHeader(&(entry_set->header), entry_set_index, entry_set_size, ctx->entry_size) || entry_set->header.offset != start_offset || \
             entry_set->start >= entry_set->header.offset)
         {
-            LOG_MSG("Bucket Tree Entry Node header verification failed!");
+            LOG_MSG_ERROR("Bucket Tree Entry Node header verification failed!");
             goto end;
         }
 
@@ -1652,7 +1652,7 @@ static bool bktrVisitorMovePrevious(BucketTreeVisitor *visitor)
 
     if ((entry_offset + entry_size) > (ctx->node_storage_size + ctx->entry_storage_size))
     {
-        LOG_MSG("Invalid Bucket Tree Entry Node entry offset!");
+        LOG_MSG_ERROR("Invalid Bucket Tree Entry Node entry offset!");
         goto end;
     }
 
