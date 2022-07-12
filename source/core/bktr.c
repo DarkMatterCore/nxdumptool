@@ -63,16 +63,20 @@ typedef struct {
 
 /* Global variables. */
 
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
 static const char *g_bktrStorageTypeNames[] = {
     [BucketTreeStorageType_Indirect]   = "Indirect",
     [BucketTreeStorageType_AesCtrEx]   = "AesCtrEx",
     [BucketTreeStorageType_Compressed] = "Compressed",
     [BucketTreeStorageType_Sparse]     = "Sparse"
 };
+#endif
 
 /* Function prototypes. */
 
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
 static const char *bktrGetStorageTypeName(u8 storage_type);
+#endif
 
 static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, bool is_sparse);
 static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset);
@@ -161,8 +165,8 @@ bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_c
             break;
     }
 
-    if (!success) LOG_MSG("Failed to initialize Bucket Tree %s storage for FS section #%u in \"%s\".", bktrGetStorageTypeName(storage_type), nca_fs_ctx->section_idx, \
-                          nca_ctx->content_id_str);
+    if (!success) LOG_MSG_ERROR("Failed to initialize Bucket Tree %s storage for FS section #%u in \"%s\".", bktrGetStorageTypeName(storage_type), nca_fs_ctx->section_idx, \
+                                nca_ctx->content_id_str);
 
     return success;
 }
@@ -311,7 +315,7 @@ bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offse
     /* Find storage entry. */
     if (!bktrFindStorageEntry(ctx, offset, &visitor))
     {
-        LOG_MSG("Unable to find %s storage entry for offset 0x%lX!", bktrGetStorageTypeName(ctx->storage_type), offset);
+        LOG_MSG_ERROR("Unable to find %s storage entry for offset 0x%lX!", bktrGetStorageTypeName(ctx->storage_type), offset);
         goto end;
     }
 
@@ -332,7 +336,7 @@ bool bktrReadStorage(BucketTreeContext *ctx, void *out, u64 read_size, u64 offse
             break;
     }
 
-    if (!success) LOG_MSG("Failed to read 0x%lX-byte long block at offset 0x%lX from %s storage!", read_size, offset, bktrGetStorageTypeName(ctx->storage_type));
+    if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long block at offset 0x%lX from %s storage!", read_size, offset, bktrGetStorageTypeName(ctx->storage_type));
 
 end:
     return success;
@@ -353,7 +357,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
     /* Find storage entry. */
     if (!bktrFindStorageEntry(ctx, offset, &visitor))
     {
-        LOG_MSG("Unable to find %s storage entry for offset 0x%lX!", bktrGetStorageTypeName(ctx->storage_type), offset);
+        LOG_MSG_ERROR("Unable to find %s storage entry for offset 0x%lX!", bktrGetStorageTypeName(ctx->storage_type), offset);
         goto end;
     }
 
@@ -490,10 +494,12 @@ end:
     return success;
 }
 
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
 static const char *bktrGetStorageTypeName(u8 storage_type)
 {
     return (storage_type < BucketTreeStorageType_Count ? g_bktrStorageTypeNames[storage_type] : NULL);
 }
+#endif
 
 static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, bool is_sparse)
 {

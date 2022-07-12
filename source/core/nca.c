@@ -1005,7 +1005,10 @@ end:
 
 static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
 {
+#if LOG_LEVEL <= LOG_LEVEL_WARNING
     NcaContext *nca_ctx = (NcaContext*)ctx->nca_ctx;
+#endif
+
     bool success = false, valid = true;
     u64 accum = 0;
 
@@ -1021,8 +1024,8 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                 NcaHierarchicalSha256Data *hash_data = &(ctx->header.hash_data.hierarchical_sha256_data);
                 if (!hash_data->hash_block_size || !hash_data->hash_region_count || hash_data->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT)
                 {
-                    LOG_DATA(hash_data, sizeof(NcaHierarchicalSha256Data), "Invalid HierarchicalSha256 data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
-                             ctx->section_idx, nca_ctx->content_id_str);
+                    LOG_DATA_WARNING(hash_data, sizeof(NcaHierarchicalSha256Data), "Invalid HierarchicalSha256 data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
+                                     ctx->section_idx, nca_ctx->content_id_str);
                     break;
                 }
 
@@ -1033,8 +1036,8 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                     if (hash_region->offset < accum || !hash_region->size || \
                         ((i < (hash_data->hash_region_count - 1) || !ctx->has_sparse_layer) && (hash_region->offset + hash_region->size) > ctx->section_size))
                     {
-                        LOG_MSG("HierarchicalSha256 region #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
-                                i, ctx->section_idx, nca_ctx->content_id_str);
+                        LOG_MSG_WARNING("HierarchicalSha256 region #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
+                                        i, ctx->section_idx, nca_ctx->content_id_str);
                         valid = false;
                         break;
                     }
@@ -1053,8 +1056,8 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                 if (__builtin_bswap32(hash_data->magic) != NCA_IVFC_MAGIC || hash_data->master_hash_size != SHA256_HASH_SIZE || \
                     hash_data->info_level_hash.max_level_count != NCA_IVFC_MAX_LEVEL_COUNT)
                 {
-                    LOG_DATA(hash_data, sizeof(NcaIntegrityMetaInfo), "Invalid HierarchicalIntegrity data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
-                             ctx->section_idx, nca_ctx->content_id_str);
+                    LOG_DATA_WARNING(hash_data, sizeof(NcaIntegrityMetaInfo), "Invalid HierarchicalIntegrity data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
+                                     ctx->section_idx, nca_ctx->content_id_str);
                     break;
                 }
 
@@ -1065,8 +1068,8 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                     if (lvl_info->offset < accum || !lvl_info->size || !lvl_info->block_order || ((i < (NCA_IVFC_LEVEL_COUNT - 1) || \
                         (!ctx->has_sparse_layer && ctx->section_type != NcaFsSectionType_PatchRomFs)) && (lvl_info->offset + lvl_info->size) > ctx->section_size))
                     {
-                        LOG_MSG("HierarchicalIntegrity level #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
-                                i, ctx->section_idx, nca_ctx->content_id_str);
+                        LOG_MSG_WARNING("HierarchicalIntegrity level #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
+                                        i, ctx->section_idx, nca_ctx->content_id_str);
                         valid = false;
                         break;
                     }
@@ -1079,7 +1082,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
 
             break;
         default:
-            LOG_MSG("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", ctx->section_idx, nca_ctx->content_id_str, ctx->hash_type);
+            LOG_MSG_WARNING("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", ctx->section_idx, nca_ctx->content_id_str, ctx->hash_type);
             break;
     }
 

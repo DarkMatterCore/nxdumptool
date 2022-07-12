@@ -72,7 +72,7 @@ __attribute__((format(printf, 5, 6))) void logWriteFormattedStringToLogFile(u8 l
 
 __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, ...)
 {
-    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || level > LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
+    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || level < LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
 
     va_list args;
 
@@ -137,7 +137,7 @@ end:
 
 __attribute__((format(printf, 7, 8))) void logWriteBinaryDataToLogFile(const void *data, size_t data_size, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, ...)
 {
-    if (!data || !data_size || level > LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
+    if (!data || !data_size || level < LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
 
     va_list args;
     size_t data_str_size = ((data_size * 2) + 3);
@@ -279,7 +279,7 @@ static void _logWriteStringToLogFile(const char *src)
 static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, va_list args)
 {
     /* Make sure we have allocated memory for the log buffer and opened the logfile. */
-    if (level > LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt || !logAllocateLogBuffer() || !logOpenLogFile()) return;
+    if (level < LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt || !logAllocateLogBuffer() || !logOpenLogFile()) return;
 
     Result rc = 0;
 

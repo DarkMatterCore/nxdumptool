@@ -38,7 +38,7 @@ extern "C" {
 /// Defines the log level used throughout the application.
 /// Log messages with a log value lower than this one won't be compiled into the binary.
 /// If a value lower than LOG_LEVEL_DEBUG or equal to/greater than LOG_LEVEL_NONE is used, logfile output will be entirely disabled.
-#define LOG_LEVEL           LOG_LEVEL_DEBUG /* TODO: change before release. */
+#define LOG_LEVEL           LOG_LEVEL_DEBUG /* TODO: change before release (warning?). */
 
 #if (LOG_LEVEL >= LOG_LEVEL_DEBUG) && (LOG_LEVEL < LOG_LEVEL_NONE)
 
@@ -48,16 +48,26 @@ extern "C" {
 #define LOG_MSG_BUF_GENERIC(dst, dst_size, level, fmt, ...) logWriteFormattedStringToBuffer(dst, dst_size, level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 #define LOG_DATA_GENERIC(data, data_size, level, fmt, ...)  logWriteBinaryDataToLogFile(data, data_size, level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
+
+
+/* TODO: delete these macros after migrating all log calls to the new verbosity-level-based system. */
+#define LOG_MSG(fmt, ...)                                   LOG_MSG_GENERIC(LOG_LEVEL, fmt, ##__VA_ARGS__)
+#define LOG_MSG_BUF(dst, dst_size, fmt, ...)                LOG_MSG_BUF_GENERIC(dst, dst_size, LOG_LEVEL, fmt, ##__VA_ARGS__)
+#define LOG_DATA(data, data_size, fmt, ...)                 LOG_DATA_GENERIC(data, data_size, LOG_LEVEL, fmt, ##__VA_ARGS__)
+
+
+
+#if LOG_LEVEL == LOG_LEVEL_DEBUG
 #define LOG_MSG_DEBUG(fmt, ...)                             LOG_MSG_GENERIC(LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
 #define LOG_MSG_BUF_DEBUG(dst, dst_size, fmt, ...)          LOG_MSG_BUF_GENERIC(dst, dst_size, LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
 #define LOG_DATA_DEBUG(data, data_size, fmt, ...)           LOG_DATA_GENERIC(data, data_size, LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)
+#else
+#define LOG_MSG_DEBUG(fmt, ...)                             do {} while(0)
+#define LOG_MSG_BUF_DEBUG(dst, dst_size, fmt, ...)          do {} while(0)
+#define LOG_DATA_DEBUG(data, data_size, fmt, ...)           do {} while(0)
+#endif  /* LOG_LEVEL == LOG_LEVEL_DEBUG */
 
-/* TODO: delete these macros after migrating all log calls to the new verbosity-level-based system. */
-#define LOG_MSG(fmt, ...)                                   LOG_MSG_DEBUG(fmt, ##__VA_ARGS__)
-#define LOG_MSG_BUF(dst, dst_size, fmt, ...)                LOG_MSG_BUF_DEBUG(dst, dst_size, fmt, ##__VA_ARGS__)
-#define LOG_DATA(data, data_size, fmt, ...)                 LOG_DATA_DEBUG(data, data_size, fmt, ##__VA_ARGS__)
-
-#if LOG_LEVEL >= LOG_LEVEL_INFO
+#if LOG_LEVEL <= LOG_LEVEL_INFO
 #define LOG_MSG_INFO(fmt, ...)                              LOG_MSG_GENERIC(LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
 #define LOG_MSG_BUF_INFO(dst, dst_size, fmt, ...)           LOG_MSG_BUF_GENERIC(dst, dst_size, LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
 #define LOG_DATA_INFO(data, data_size, fmt, ...)            LOG_DATA_GENERIC(data, data_size, LOG_LEVEL_INFO, fmt, ##__VA_ARGS__)
@@ -65,9 +75,9 @@ extern "C" {
 #define LOG_MSG_INFO(fmt, ...)                              do {} while(0)
 #define LOG_MSG_BUF_INFO(dst, dst_size, fmt, ...)           do {} while(0)
 #define LOG_DATA_INFO(data, data_size, fmt, ...)            do {} while(0)
-#endif  /* LOG_LEVEL >= LOG_LEVEL_INFO */
+#endif  /* LOG_LEVEL <= LOG_LEVEL_INFO */
 
-#if LOG_LEVEL >= LOG_LEVEL_WARNING
+#if LOG_LEVEL <= LOG_LEVEL_WARNING
 #define LOG_MSG_WARNING(fmt, ...)                           LOG_MSG_GENERIC(LOG_LEVEL_WARNING, fmt, ##__VA_ARGS__)
 #define LOG_MSG_BUF_WARNING(dst, dst_size, fmt, ...)        LOG_MSG_BUF_GENERIC(dst, dst_size, LOG_LEVEL_WARNING, fmt, ##__VA_ARGS__)
 #define LOG_DATA_WARNING(data, data_size, fmt, ...)         LOG_DATA_GENERIC(data, data_size, LOG_LEVEL_WARNING, fmt, ##__VA_ARGS__)
@@ -75,9 +85,9 @@ extern "C" {
 #define LOG_MSG_WARNING(fmt, ...)                           do {} while(0)
 #define LOG_MSG_BUF_WARNING(dst, dst_size, fmt, ...)        do {} while(0)
 #define LOG_DATA_WARNING(data, data_size, fmt, ...)         do {} while(0)
-#endif  /* LOG_LEVEL >= LOG_LEVEL_WARNING */
+#endif  /* LOG_LEVEL <= LOG_LEVEL_WARNING */
 
-#if LOG_LEVEL >= LOG_LEVEL_ERROR
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
 #define LOG_MSG_ERROR(fmt, ...)                             LOG_MSG_GENERIC(LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
 #define LOG_MSG_BUF_ERROR(dst, dst_size, fmt, ...)          LOG_MSG_BUF_GENERIC(dst, dst_size, LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
 #define LOG_DATA_ERROR(data, data_size, fmt, ...)           LOG_DATA_GENERIC(data, data_size, LOG_LEVEL_ERROR, fmt, ##__VA_ARGS__)
@@ -85,7 +95,7 @@ extern "C" {
 #define LOG_MSG_ERROR(fmt, ...)                             do {} while(0)
 #define LOG_MSG_BUF_ERROR(dst, dst_size, fmt, ...)          do {} while(0)
 #define LOG_DATA_ERROR(data, data_size, fmt, ...)           do {} while(0)
-#endif  /* LOG_LEVEL >= LOG_LEVEL_ERROR */
+#endif  /* LOG_LEVEL <= LOG_LEVEL_ERROR */
 
 /// Writes the provided string to the logfile.
 /// If the logfile hasn't been created and/or opened, this function takes care of it.
@@ -120,7 +130,15 @@ void logControlMutex(bool lock);
 
 /// Helper macros.
 
-#define LOG_STR(src)                                        do {} while(0)
+
+
+/* TODO: delete these macros after migrating all log calls to the new verbosity-level-based system. */
+#define LOG_MSG(fmt, ...)                                   do {} while(0)
+#define LOG_MSG_BUF(dst, dst_size, fmt, ...)                do {} while(0)
+#define LOG_DATA(data, data_size, fmt, ...)                 do {} while(0)
+
+
+
 #define LOG_MSG_GENERIC(level, fmt, ...)                    do {} while(0)
 #define LOG_MSG_BUF_GENERIC(dst, dst_size, level, fmt, ...) do {} while(0)
 #define LOG_DATA_GENERIC(data, data_size, level, fmt, ...)  do {} while(0)

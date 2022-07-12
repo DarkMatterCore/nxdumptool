@@ -139,24 +139,26 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* If so, initialize nxlink connection without redirecting stdout and/or stderr. */
         if (__nxlink_host.s_addr != 0 && __nxlink_host.s_addr != INADDR_NONE) g_nxLinkSocketFd = nxlinkConnectToHost(false, false);
 
+#if LOG_LEVEL <= LOG_LEVEL_INFO
         /* Log info messages. */
         u32 hos_version = hosversionGet();
-        LOG_MSG(APP_TITLE " v" APP_VERSION " starting (" GIT_REV "). Built on " BUILD_TIMESTAMP ".");
-        if (g_nxLinkSocketFd >= 0) LOG_MSG("nxlink enabled! Host IP address: %s.", inet_ntoa(__nxlink_host));
-        LOG_MSG("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
+        LOG_MSG_INFO(APP_TITLE " v" APP_VERSION " starting (" GIT_REV "). Built on " BUILD_TIMESTAMP ".");
+        if (g_nxLinkSocketFd >= 0) LOG_MSG_INFO("nxlink enabled! Host IP address: %s.", inet_ntoa(__nxlink_host));
+        LOG_MSG_INFO("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
+#endif
 
         /* Retrieve custom firmware type. */
         _utilsGetCustomFirmwareType();
-        if (g_customFirmwareType != UtilsCustomFirmwareType_Unknown) LOG_MSG("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : \
-                                                                                                 (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
+        if (g_customFirmwareType != UtilsCustomFirmwareType_Unknown) LOG_MSG_INFO("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : \
+                                                                                  (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
 
         /* Check if we're not running under a development unit. */
         if (!_utilsIsDevelopmentUnit()) break;
-        LOG_MSG("Running under %s unit.", g_isDevUnit ? "development" : "retail");
+        LOG_MSG_INFO("Running under %s unit.", g_isDevUnit ? "development" : "retail");
 
         /* Get applet type. */
         g_programAppletType = appletGetAppletType();
-        LOG_MSG("Running under %s mode.", _utilsAppletModeCheck() ? "applet" : "title override");
+        LOG_MSG_INFO("Running under %s mode.", _utilsAppletModeCheck() ? "applet" : "title override");
 
         /* Create output directories (SD card only). */
         /* TODO: remove the APP_TITLE check whenever we're ready for a release. */
@@ -164,7 +166,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
 
         if (g_appLaunchPath)
         {
-            LOG_MSG("Launch path: \"%s\".", g_appLaunchPath);
+            LOG_MSG_INFO("Launch path: \"%s\".", g_appLaunchPath);
 
             /* Move NRO if the launch path isn't the right one, then return. */
             /* TODO: uncomment this block whenever we are ready for a release. */
@@ -173,7 +175,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
                 remove(NRO_PATH);
                 rename(g_appLaunchPath, NRO_PATH);
 
-                LOG_MSG("Moved NRO to \"%s\". Please reload the application.", NRO_PATH);
+                LOG_MSG_INFO("Moved NRO to \"%s\". Please reload the application.", NRO_PATH);
                 break;
             }*/
         }
@@ -245,15 +247,18 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
 
     if (!ret)
     {
+        char *msg = NULL;
         size_t msg_size = 0;
-        char log_msg[0x100] = {0}, *msg = NULL;
-
-        /* Get last log message. */
-        logGetLastMessage(log_msg, sizeof(log_msg));
 
         /* Generate error message. */
         utilsAppendFormattedStringToBuffer(&msg, &msg_size, "An error occurred while initializing resources.");
+
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
+        /* Get last log message. */
+        char log_msg[0x100] = {0};
+        logGetLastMessage(log_msg, sizeof(log_msg));
         if (*log_msg) utilsAppendFormattedStringToBuffer(&msg, &msg_size, "\n\n%s", log_msg);
+#endif
 
         /* Print error message. */
         utilsPrintConsoleError(msg);
@@ -326,8 +331,10 @@ void utilsCloseResources(void)
             rename(NRO_TMP_PATH, NRO_PATH);
         }*/
 
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
         /* Close logfile. */
         logCloseLogFile();
+#endif
 
         /* Unlock applet exit. */
         appletUnlockExit();

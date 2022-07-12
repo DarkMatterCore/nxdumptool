@@ -23,14 +23,18 @@
 #include "nxdt_utils.h"
 #include "mem.h"
 
-#define MEMLOG(fmt, ...)    LOG_MSG_BUF(&g_memLogBuf, &g_memLogBufSize, fmt, ##__VA_ARGS__)
+#define MEMLOG_DEBUG(fmt, ...)  LOG_MSG_BUF_DEBUG(&g_memLogBuf, &g_memLogBufSize, fmt, ##__VA_ARGS__)
+#define MEMLOG_ERROR(fmt, ...)  LOG_MSG_BUF_ERROR(&g_memLogBuf, &g_memLogBufSize, fmt, ##__VA_ARGS__)
 
 /* Global variables. */
 
 static Mutex g_memMutex = 0;
+static u64 g_fsTextSegmentAddr = 0;
 
+#if LOG_LEVEL < LOG_LEVEL_NONE
 static char *g_memLogBuf = NULL;
 static size_t g_memLogBufSize = 0;
+#endif
 
 /* Function prototypes. */
 
@@ -41,7 +45,7 @@ bool memRetrieveProgramMemorySegment(MemoryLocation *location)
 {
     if (!location || !location->program_id || !location->mask || location->mask >= BIT(3))
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -54,7 +58,7 @@ bool memRetrieveFullProgramMemory(MemoryLocation *location)
 {
     if (!location || !location->program_id)
     {
-        LOG_MSG("Invalid parameters!");
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -91,48 +95,71 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
     /* Clear output MemoryLocation element. */
     memFreeMemoryLocation(location);
 
-    /* LOG_MSG() will be useless if the target program is the FS sysmodule. */
+#if LOG_LEVEL < LOG_LEVEL_NONE
+    /* LOG_*() macros will be useless if the target program is the FS sysmodule. */
     /* This is because any FS I/O operation *will* lock up the console while FS itself is being debugged. */
-    /* So we'll just temporarily log data to a char array using LOG_MSG_BUF(), then write it all out after calling svcCloseHandle(). */
+    /* So we'll just temporarily log data to a char array using LOG_MSG_BUF_*() macros, then write it all out after calling svcCloseHandle(). */
     /* However, we must prevent other threads from logging data as well in order to avoid a lock up, so we'll temporarily lock the logfile mutex. */
     logControlMutex(true);
+#endif
 
     /* Retrieve debug handle by program ID. */
     if (!memRetrieveDebugHandleFromProgramById(&debug_handle, location->program_id))
     {
-        MEMLOG("Unable to retrieve debug handle for program %016lX!", location->program_id);
+        MEMLOG_ERROR("Unable to retrieve debug handle for program %016lX!", location->program_id);
         goto end;
     }
 
     if (is_segment && location->program_id == FS_SYSMODULE_TID)
     {
-        /* If dealing with FS, locate the "real" .text segment, since Atmosphère emuMMC has two. */
-        do {
-            rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
-            if (R_FAILED(rc))
-            {
-                MEMLOG("svcQueryDebugProcessMemory failed for program %016lX! (0x%08X).", location->program_id, rc);
-                success = false;
-                goto end;
-            }
+        /* Only look for the FS .text segment address if we haven't previously retrieved it. */
+        if (!g_fsTextSegmentAddr)
+        {
+            /* Locate the "real" FS .text segment, since Atmosphère emuMMC has two. */
+            do {
+                rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
+                if (R_FAILED(rc))
+                {
+                    MEMLOG_ERROR("svcQueryDebugProcessMemory failed for program %016lX! (0x%X).", location->program_id, rc);
+                    success = false;
+                    goto end;
+                }
 
-            mem_type = (u8)(mem_info.type & 0xFF);
-            if ((mem_info.perm & Perm_X) && (mem_type == MemType_CodeStatic || mem_type == MemType_CodeMutable)) last_text_addr = mem_info.addr;
+#if LOG_LEVEL == LOG_LEVEL_DEBUG
+                MEMLOG_DEBUG("svcQueryDebugProcessMemory info (#1) (program %016lX, page 0x%X, debug handle 0x%X, address 0x%lX):\r\n" \
+                             "- addr: 0x%lX\r\n- size: 0x%lX\r\n- type: 0x%X\r\n- attr: 0x%X\r\n- perm: 0x%X\r\n- ipc_refcount: 0x%X\r\n- device_refcount: 0x%X", \
+                             location->program_id, page_info, debug_handle, addr, \
+                             mem_info.addr, mem_info.size, mem_info.type, mem_info.attr, mem_info.perm, mem_info.ipc_refcount, mem_info.device_refcount);
+#endif
 
-            addr = (mem_info.addr + mem_info.size);
-        } while(addr != 0);
+                mem_type = (u8)(mem_info.type & 0xFF);
+                if ((mem_info.perm & Perm_X) && (mem_type == MemType_CodeStatic || mem_type == MemType_CodeMutable)) last_text_addr = mem_info.addr;
 
-        addr = last_text_addr;
+                addr = (mem_info.addr + mem_info.size);
+            } while(addr != 0);
+
+            g_fsTextSegmentAddr = last_text_addr;
+            MEMLOG_DEBUG("FS .text segment address: 0x%lX.", g_fsTextSegmentAddr);
+        }
+
+        addr = g_fsTextSegmentAddr;
     }
 
     do {
         rc = svcQueryDebugProcessMemory(&mem_info, &page_info, debug_handle, addr);
         if (R_FAILED(rc))
         {
-            MEMLOG("svcQueryDebugProcessMemory failed for program %016lX! (0x%08X).", location->program_id, rc);
+            MEMLOG_ERROR("svcQueryDebugProcessMemory failed for program %016lX! (0x%08X).", location->program_id, rc);
             success = false;
             break;
         }
+
+#if LOG_LEVEL == LOG_LEVEL_DEBUG
+        MEMLOG_DEBUG("svcQueryDebugProcessMemory info (#2) (program %016lX, page 0x%X, debug handle 0x%X, address 0x%lX):\r\n" \
+                     "- addr: 0x%lX\r\n- size: 0x%lX\r\n- type: 0x%X\r\n- attr: 0x%X\r\n- perm: 0x%X\r\n- ipc_refcount: 0x%X\r\n- device_refcount: 0x%X", \
+                     location->program_id, page_info, debug_handle, addr, \
+                     mem_info.addr, mem_info.size, mem_info.type, mem_info.attr, mem_info.perm, mem_info.ipc_refcount, mem_info.device_refcount);
+#endif
 
         mem_type = (u8)(mem_info.type & 0xFF);
 
@@ -145,7 +172,7 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
             tmp = realloc(location->data, location->data_size + mem_info.size);
             if (!tmp)
             {
-                MEMLOG("Failed to resize segment data buffer to 0x%lX bytes for program %016lX!", location->data_size + mem_info.size, location->program_id);
+                MEMLOG_ERROR("Failed to resize segment data buffer to 0x%lX bytes for program %016lX!", location->data_size + mem_info.size, location->program_id);
                 success = false;
                 break;
             }
@@ -156,7 +183,7 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
             rc = svcReadDebugProcessMemory(location->data + location->data_size, debug_handle, mem_info.addr, mem_info.size);
             if (R_FAILED(rc))
             {
-                MEMLOG("svcReadDebugProcessMemory failed for program %016lX! (0x%08X).", location->program_id, rc);
+                MEMLOG_ERROR("svcReadDebugProcessMemory failed for program %016lX! (0x%08X).", location->program_id, rc);
                 success = false;
                 break;
             }
@@ -171,17 +198,20 @@ end:
     /* Close debug handle. */
     if (debug_handle != INVALID_HANDLE) svcCloseHandle(debug_handle);
 
+#if LOG_LEVEL < LOG_LEVEL_NONE
     /* Unlock logfile mutex. */
     logControlMutex(false);
+#endif
 
     if (success && (!location->data || !location->data_size))
     {
-        MEMLOG("Unable to locate readable program memory pages for %016lX that match the required criteria!", location->program_id);
+        MEMLOG_ERROR("Unable to locate readable program memory pages for %016lX that match the required criteria!", location->program_id);
         success = false;
     }
 
     if (!success) memFreeMemoryLocation(location);
 
+#if LOG_LEVEL < LOG_LEVEL_NONE
     /* Write log buffer data. This will do nothing if the log buffer length is zero. */
     logWriteStringToLogFile(g_memLogBuf);
 
@@ -193,6 +223,7 @@ end:
     }
 
     g_memLogBufSize = 0;
+#endif
 
     return success;
 }
@@ -201,7 +232,7 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
 {
     if (!out || !program_id)
     {
-        MEMLOG("Invalid parameters!");
+        MEMLOG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -214,19 +245,21 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
 
     if (program_id > BOOT_SYSMODULE_TID && program_id != SPL_SYSMODULE_TID)
     {
-        /* If not a kernel process, get PID from pm:dmnt. */
+        /* If not a kernel process, get process ID from pm:dmnt. */
         rc = pmdmntGetProcessId(&pid, program_id);
         if (R_FAILED(rc))
         {
-            MEMLOG("pmdmntGetProcessId failed for program %016lX! (0x%08X).", program_id, rc);
+            MEMLOG_ERROR("pmdmntGetProcessId failed for program %016lX! (0x%08X).", program_id, rc);
             return false;
         }
+
+        MEMLOG_DEBUG("Process ID (%016lX): 0x%lX.", program_id, pid);
 
         /* Retrieve debug handle right away. */
         rc = svcDebugActiveProcess(&debug_handle, pid);
         if (R_FAILED(rc))
         {
-            MEMLOG("svcDebugActiveProcess failed for program %016lX! (0x%08X).", program_id, rc);
+            MEMLOG_ERROR("svcDebugActiveProcess failed for program %016lX! (0x%08X).", program_id, rc);
             return false;
         }
     } else {
@@ -234,14 +267,16 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
         pids = calloc(300, sizeof(u64));
         if (!pids)
         {
-            MEMLOG("Failed to allocate memory for PID list!");
+            MEMLOG_ERROR("Failed to allocate memory for PID list!");
             return false;
         }
+
+        MEMLOG_DEBUG("svcDebugActiveProcess returned %u process IDs.", num_processes);
 
         rc = svcGetProcessList((s32*)&num_processes, pids, 300);
         if (R_FAILED(rc))
         {
-            MEMLOG("svcGetProcessList failed! (0x%08X).", rc);
+            MEMLOG_ERROR("svcGetProcessList failed! (0x%08X).", rc);
             free(pids);
             return false;
         }
@@ -249,14 +284,26 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
         /* Perform a lookup using the retrieved process list. */
         for(i = 0; i < num_processes; i++)
         {
-            /* Retrieve debug handle for the current PID. */
+            /* Retrieve debug handle for the current process ID. */
             rc = svcDebugActiveProcess(&debug_handle, pids[i]);
-            if (R_FAILED(rc)) continue;
+            if (R_FAILED(rc))
+            {
+                MEMLOG_DEBUG("svcDebugActiveProcess failed for process ID 0x%lX! (0x%X).", pids[i], rc);
+                continue;
+            }
+
+            MEMLOG_DEBUG("Debug handle (process 0x%lX): 0x%X.", pids[i], debug_handle);
 
             /* Get debug event using the debug handle. */
-            /* This will let us know the program ID from the current PID. */
+            /* This will let us know the program ID from the current process ID. */
             rc = svcGetDebugEvent((u8*)&d, debug_handle);
-            if (R_SUCCEEDED(rc) && d[2] == program_id) break;
+            if (R_SUCCEEDED(rc))
+            {
+                /* Jackpot. */
+                if (d[2] == program_id) break;
+            } else {
+                MEMLOG_DEBUG("svcGetDebugEvent failed for debug handle 0x%X! (0x%X).", debug_handle, rc);
+            }
 
             /* No match. Close debug handle and keep looking for our program. */
             svcCloseHandle(debug_handle);
@@ -267,10 +314,12 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
 
         if (i == num_processes)
         {
-            MEMLOG("Unable to find program %016lX in kernel process list! (0x%08X).", program_id, rc);
+            MEMLOG_ERROR("Unable to find program %016lX in kernel process list! (0x%08X).", program_id, rc);
             return false;
         }
     }
+
+    MEMLOG_DEBUG("Debug handle (%016lX): 0x%X.", program_id, debug_handle);
 
     /* Set output debug handle. */
     *out = debug_handle;

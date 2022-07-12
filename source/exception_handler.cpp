@@ -48,7 +48,7 @@ namespace nxdt::utils {
     {
         if (!out)
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             return;
         }
 
@@ -58,14 +58,15 @@ namespace nxdt::utils {
         /* Find the memory region in which this function is stored. */
         /* The start of it will be the base address the homebrew was mapped to. */
         rc = svcQueryMemory(out, &p, static_cast<u64>(reinterpret_cast<uintptr_t>(&GetHomebrewMemoryInfo)));
-        if (R_FAILED(rc)) LOG_MSG("svcQueryMemory failed! (0x%08X).", rc);
+        if (R_FAILED(rc)) LOG_MSG_ERROR("svcQueryMemory failed! (0x%08X).", rc);
     }
 
+#if LOG_LEVEL == LOG_LEVEL_DEBUG
     static bool UnwindStack(u64 *out_stack_trace, u32 *out_stack_trace_size, size_t max_stack_trace_size, u64 cur_fp)
     {
         if (!out_stack_trace || !out_stack_trace_size || !max_stack_trace_size || !cur_fp)
         {
-            LOG_MSG("Invalid parameters!");
+            LOG_MSG_ERROR("Invalid parameters!");
             return false;
         }
 
@@ -89,6 +90,7 @@ namespace nxdt::utils {
 
         return (*out_stack_trace_size > 0);
     }
+#endif  /* LOG_LEVEL == LOG_LEVEL_DEBUG */
 
     static void NORETURN AbortProgramExecution(std::string str)
     {
@@ -118,7 +120,7 @@ extern "C" {
     void diagAbortWithResult(Result res)
     {
         /* Log error. */
-        LOG_MSG("*** libnx aborted with error code: 0x%08X ***", res);
+        LOG_MSG_ERROR("*** libnx aborted with error code: 0x%08X ***", res);
 
         /* Abort program execution. */
         std::string crash_str = (g_borealisInitialized ? i18n::getStr("generic/libnx_abort"_i18n, res) : fmt::format("Fatal error triggered in libnx!\nError code: 0x{:08X}.", res));
@@ -129,19 +131,10 @@ extern "C" {
     void __libnx_exception_handler(ThreadExceptionDump *ctx)
     {
         MemoryInfo info = {0};
-        u32 stack_trace_size = 0;
-        u64 stack_trace[STACK_TRACE_SIZE] = {0};
-
-        char *exception_str = NULL;
-        size_t exception_str_size = 0;
-
         std::string error_desc_str, crash_str;
 
         /* Get homebrew memory info. */
         nxdt::utils::GetHomebrewMemoryInfo(&info);
-
-        /* Log exception type. */
-        LOG_MSG("*** Exception Triggered ***");
 
         switch(ctx->error_desc)
         {
@@ -170,6 +163,16 @@ extern "C" {
                 error_desc_str = "Unknown";
                 break;
         }
+
+#if LOG_LEVEL == LOG_LEVEL_DEBUG
+        char *exception_str = NULL;
+        size_t exception_str_size = 0;
+
+        u32 stack_trace_size = 0;
+        u64 stack_trace[STACK_TRACE_SIZE] = {0};
+
+        /* Log exception type. */
+        LOG_MSG_DEBUG("*** Exception Triggered ***");
 
         EH_ADD_FMT_STR("Type: %s (0x%X)\r\n", error_desc_str.c_str(), ctx->error_desc);
 
@@ -217,6 +220,7 @@ extern "C" {
 
         /* Free exception info string. */
         if (exception_str) free(exception_str);
+#endif  /* LOG_LEVEL == LOG_LEVEL_DEBUG */
 
         /* Abort program execution. */
         crash_str = (g_borealisInitialized ? i18n::getStr("generic/exception_triggered"_i18n, error_desc_str, ctx->error_desc) : \

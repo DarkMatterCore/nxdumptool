@@ -72,10 +72,12 @@ NXDT_ASSERT(TikEsCtrKeyPattern9x, 0x28);
 
 /* Global variables. */
 
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
 static const char *g_tikTitleKeyTypeStrings[] = {
     [TikTitleKeyType_Common] = "common",
     [TikTitleKeyType_Personalized] = "personalized"
 };
+#endif
 
 static MemoryLocation g_esMemoryLocation = {
     .program_id = ES_SYSMODULE_TID,
@@ -454,7 +456,10 @@ static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count,
     Result rc = 0;
     u32 count = 0, ids_written = 0;
     FsRightsId *rights_ids = NULL;
+
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
     u8 str_idx = (personalized ? TikTitleKeyType_Personalized : TikTitleKeyType_Common);
+#endif
 
     *out = NULL;
     *out_count = 0;

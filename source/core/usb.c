@@ -669,7 +669,11 @@ NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size)
 static bool usbSendCommand(void)
 {
     UsbCommandHeader *cmd_header = (UsbCommandHeader*)g_usbTransferBuffer;
-    u32 cmd = cmd_header->cmd, cmd_block_size = cmd_header->cmd_block_size;
+    u32 cmd_block_size = cmd_header->cmd_block_size;
+
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
+    u32 cmd = cmd_header->cmd;
+#endif
 
     UsbStatus *cmd_status = (UsbStatus*)g_usbTransferBuffer;
     u32 status = UsbStatusType_Success;
