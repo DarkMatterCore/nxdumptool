@@ -21,7 +21,6 @@
 
 #include <nxdt_includes.h>
 #include <tasks.hpp>
-#include <arpa/inet.h>
 
 #define NXDT_TASK_INTERVAL  250 /* 250 ms. */
 
@@ -70,9 +69,9 @@ namespace nxdt::tasks
         {
             if (status_info_data->connection_type && connection_status == NifmInternetConnectionStatus_Connected)
             {
-                struct in_addr addr = { .s_addr = 0 };
+                struct in_addr addr = { .s_addr = INADDR_NONE };
                 nifmGetCurrentIpAddress(&(addr.s_addr));
-                status_info_data->ip_addr = inet_ntoa(addr);
+                status_info_data->ip_addr = (addr.s_addr != INADDR_NONE ? inet_ntoa(addr) : NULL);
             } else {
                 status_info_data->ip_addr = NULL;
             }

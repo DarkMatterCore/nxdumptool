@@ -62,6 +62,16 @@ static TitleStorage g_titleStorage[TITLE_STORAGE_COUNT] = {0};
 static TitleInfo **g_orphanTitleInfo = NULL;
 static u32 g_orphanTitleInfoCount = 0;
 
+static const char *g_titleNcmStorageIdNames[] = {
+    [NcmStorageId_None]          = "None",
+    [NcmStorageId_Host]          = "Host",
+    [NcmStorageId_GameCard]      = "Gamecard",
+    [NcmStorageId_BuiltInSystem] = "eMMC (system)",
+    [NcmStorageId_BuiltInUser]   = "eMMC (user)",
+    [NcmStorageId_SdCard]        = "SD card",
+    [NcmStorageId_Any]           = "Any"
+};
+
 static const char *g_titleNcmContentTypeNames[] = {
     [NcmContentType_Meta]              = "Meta",
     [NcmContentType_Program]           = "Program",
@@ -1090,6 +1100,11 @@ fallback:
     return filename;
 }
 
+const char *titleGetNcmStorageIdName(u8 storage_id)
+{
+    return (storage_id <= NcmStorageId_Any ? g_titleNcmStorageIdNames[storage_id] : NULL);
+}
+
 const char *titleGetNcmContentTypeName(u8 content_type)
 {
     return (content_type <= NcmContentType_DeltaFragment ? g_titleNcmContentTypeNames[content_type] : NULL);
@@ -1264,7 +1279,7 @@ static bool titleInitializeTitleStorage(u8 storage_id)
         goto end;
     }
 
-    LOG_MSG("Loaded %u title info %s from storage ID %u.", title_storage->title_count, (title_storage->title_count == 1 ? "entry" : "entries"), storage_id);
+    LOG_MSG("Loaded %u title info %s from %s.", title_storage->title_count, (title_storage->title_count == 1 ? "entry" : "entries"), titleGetNcmStorageIdName(storage_id));
 
     /* Update flag. */
     success = true;

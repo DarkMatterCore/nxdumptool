@@ -137,6 +137,9 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
 /// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.
 char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replace_type);
 
+/// Returns a pointer to a string holding a user-friendly name for the provided NcmStorageId value. Returns NULL if the provided value is invalid.
+const char *titleGetNcmStorageIdName(u8 storage_id);
+
 /// Returns a pointer to a string holding the name of the provided NcmContentType value. Returns NULL if the provided value is invalid.
 const char *titleGetNcmContentTypeName(u8 content_type);
 

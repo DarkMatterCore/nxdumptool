@@ -1,10 +1,5 @@
 todo:
 
-    nca: add function to retrieve a pointer to a nca fs ctx based on section type? (e.g. like titleGetContentInfoByTypeAndIdOffset)
-
-    log: verbosity levels
-    log: nxlink output for advanced users
-
     title: always retrieve names from unpacked nacps? (e.g. if an update changes the name of a title, like deltarune)
     title: use dlc index as part of the output dump filename?
     title: more functions for title lookup? (filters, patches / aoc, etc.)

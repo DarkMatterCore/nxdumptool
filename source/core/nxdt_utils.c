@@ -48,9 +48,11 @@ typedef struct {
 static bool g_resourcesInit = false;
 static Mutex g_resourcesMutex = 0;
 
+static const char *g_appLaunchPath = NULL;
+
 static FsFileSystem *g_sdCardFileSystem = NULL;
 
-static const char *g_appLaunchPath = NULL;
+static int g_nxLinkSocketFd = -1;
 
 static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
@@ -64,8 +66,6 @@ static FATFS *g_emmcBisSystemPartitionFatFsObj = NULL;
 static AppletHookCookie g_systemOverclockCookie = {0};
 
 static bool g_longRunningProcess = false;
-
-static int g_stdoutFd = -1, g_stderrFd = -1, g_nxLinkSocketFd = -1;
 
 static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB" };
 static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
@@ -102,12 +102,10 @@ static bool _utilsAppletModeCheck(void);
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
 
+static void utilsOverclockSystem(bool overclock);
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
 static void utilsChangeHomeButtonBlockStatus(bool block);
-
-NX_INLINE void utilsCloseFileDescriptor(int *fd);
-static void utilsRestoreConsoleOutput(void);
 
 static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos);
 
@@ -134,16 +132,18 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
             break;
         }
 
-        /* Create logfile. */
-        logWriteStringToLogFile("________________________________________________________________\r\n");
-        LOG_MSG(APP_TITLE " v" APP_VERSION " starting (" GIT_REV "). Built on " BUILD_TIMESTAMP ".");
-
-        /* Log Horizon OS version. */
-        u32 hos_version = hosversionGet();
-        LOG_MSG("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
-
         /* Initialize needed services. */
         if (!servicesInitialize()) break;
+
+        /* Check if a valid nxlink host IP address was set by libnx. */
+        /* If so, initialize nxlink connection without redirecting stdout and/or stderr. */
+        if (__nxlink_host.s_addr != 0 && __nxlink_host.s_addr != INADDR_NONE) g_nxLinkSocketFd = nxlinkConnectToHost(false, false);
+
+        /* Log info messages. */
+        u32 hos_version = hosversionGet();
+        LOG_MSG(APP_TITLE " v" APP_VERSION " starting (" GIT_REV "). Built on " BUILD_TIMESTAMP ".");
+        if (g_nxLinkSocketFd >= 0) LOG_MSG("nxlink enabled! Host IP address: %s.", inet_ntoa(__nxlink_host));
+        LOG_MSG("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
 
         /* Retrieve custom firmware type. */
         _utilsGetCustomFirmwareType();
@@ -228,9 +228,6 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Initialize configuration interface. */
         if (!configInitialize()) break;
 
-        /* Overclock system. */
-        utilsOverclockSystem(configGetBoolean("overclock"));
-
         /* Setup an applet hook to change the hardware clocks after a system mode change (docked <-> undocked). */
         appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
 
@@ -241,11 +238,6 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
             rc = appletIsGamePlayRecordingSupported(&flag);
             if (R_SUCCEEDED(rc) && flag) appletInitializeGamePlayRecording();
         }
-
-        /* Duplicate the stdout and stderr file handles, then redirect stdout and stderr over network to nxlink. */
-        g_stdoutFd = dup(STDOUT_FILENO);
-        g_stderrFd = dup(STDERR_FILENO);
-        g_nxLinkSocketFd = nxlinkConnectToHost(true, true);
 
         /* Update flags. */
         ret = g_resourcesInit = true;
@@ -277,17 +269,11 @@ void utilsCloseResources(void)
 {
     SCOPED_LOCK(&g_resourcesMutex)
     {
-        /* Restore console output. */
-        utilsRestoreConsoleOutput();
-
         /* Unset long running process state. */
         utilsSetLongRunningProcessState(false);
 
         /* Unset our overclock applet hook. */
         appletUnhook(&g_systemOverclockCookie);
-
-        /* Restore hardware clocks. */
-        utilsOverclockSystem(false);
 
         /* Close configuration interface. */
         configExit();
@@ -322,6 +308,13 @@ void utilsCloseResources(void)
         /* Close HTTP interface. */
         httpExit();
 
+        /* Close nxlink socket. */
+        if (g_nxLinkSocketFd >= 0)
+        {
+            close(g_nxLinkSocketFd);
+            g_nxLinkSocketFd = -1;
+        }
+
         /* Close initialized services. */
         servicesClose();
 
@@ -346,6 +339,11 @@ void utilsCloseResources(void)
 const char *utilsGetLaunchPath(void)
 {
     return g_appLaunchPath;
+}
+
+int utilsGetNxLinkFileDescriptor(void)
+{
+    return g_nxLinkSocketFd;
 }
 
 FsFileSystem *utilsGetSdCardFileSystemObject(void)
@@ -378,25 +376,21 @@ FsStorage *utilsGetEmmcBisSystemPartitionStorage(void)
     return &g_emmcBisSystemPartitionStorage;
 }
 
-void utilsOverclockSystem(bool overclock)
-{
-    u32 cpu_rate = ((overclock ? CPU_CLKRT_OVERCLOCKED : CPU_CLKRT_NORMAL) * 1000000);
-    u32 mem_rate = ((overclock ? MEM_CLKRT_OVERCLOCKED : MEM_CLKRT_NORMAL) * 1000000);
-    servicesChangeHardwareClockRates(cpu_rate, mem_rate);
-}
-
 void utilsSetLongRunningProcessState(bool state)
 {
     SCOPED_LOCK(&g_resourcesMutex)
     {
-        /* Don't proceed if the requested state matches the current one. */
-        if (state == g_longRunningProcess) break;
+        /* Don't proceed if resources haven't been initialized, or if the requested state matches the current one. */
+        if (!g_resourcesInit || state == g_longRunningProcess) break;
 
         /* Change HOME button block status. */
         utilsChangeHomeButtonBlockStatus(state);
 
-        /* (Un)set screen dimming and auto sleep. */
+        /* Enable/disable screen dimming and auto sleep. */
         appletSetMediaPlaybackState(state);
+
+        /* Enable/disable system overclock. */
+        utilsOverclockSystem(configGetBoolean("overclock") & state);
 
         /* Update flag. */
         g_longRunningProcess = state;
@@ -870,9 +864,6 @@ void utilsPrintConsoleError(const char *msg)
     padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
     padInitializeWithMask(&pad, 0x1000000FFUL);
 
-    /* Restore console output. */
-    utilsRestoreConsoleOutput();
-
     /* Initialize console output. */
     consoleInit(NULL);
 
@@ -1118,13 +1109,22 @@ static void utilsUnmountEmmcBisSystemPartitionStorage(void)
     }
 }
 
+static void utilsOverclockSystem(bool overclock)
+{
+    u32 cpu_rate = ((overclock ? CPU_CLKRT_OVERCLOCKED : CPU_CLKRT_NORMAL) * 1000000);
+    u32 mem_rate = ((overclock ? MEM_CLKRT_OVERCLOCKED : MEM_CLKRT_NORMAL) * 1000000);
+    servicesChangeHardwareClockRates(cpu_rate, mem_rate);
+}
+
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
 {
     (void)param;
 
+    /* Don't proceed if we're not dealing with a desired hook type. */
     if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;
 
-    utilsOverclockSystem(configGetBoolean("overclock"));
+    /* Overclock the system based on the overclock setting and the current long running state value. */
+    SCOPED_LOCK(&g_resourcesMutex) utilsOverclockSystem(configGetBoolean("overclock") & g_longRunningProcess);
 }
 
 static void utilsChangeHomeButtonBlockStatus(bool block)
@@ -1145,26 +1145,6 @@ NX_INLINE void utilsCloseFileDescriptor(int *fd)
     if (!fd || *fd < 0) return;
     close(*fd);
     *fd = -1;
-}
-
-static void utilsRestoreConsoleOutput(void)
-{
-    SCOPED_LOCK(&g_resourcesMutex)
-    {
-        if (g_nxLinkSocketFd >= 0) utilsCloseFileDescriptor(&g_nxLinkSocketFd);
-
-        if (g_stdoutFd >= 0)
-        {
-            dup2(g_stdoutFd, STDOUT_FILENO);
-            utilsCloseFileDescriptor(&g_stdoutFd);
-        }
-
-        if (g_stderrFd >= 0)
-        {
-            dup2(g_stderrFd, STDERR_FILENO);
-            utilsCloseFileDescriptor(&g_stderrFd);
-        }
-    }
 }
 
 static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos)

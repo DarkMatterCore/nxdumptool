@@ -74,6 +74,9 @@ void utilsCloseResources(void);
 /// Returns a pointer to the application launch path.
 const char *utilsGetLaunchPath(void);
 
+/// Returns the nxlink socket descriptor, or -1 if an nxlink connection couldn't be established.
+int utilsGetNxLinkFileDescriptor(void);
+
 /// Returns a pointer to the FsFileSystem object for the SD card.
 FsFileSystem *utilsGetSdCardFileSystemObject(void);
 
@@ -93,11 +96,9 @@ bool utilsAppletModeCheck(void);
 /// Returns a pointer to the FsStorage object for the eMMC BIS System partition.
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);
 
-/// Enables/disables CPU/MEM overclocking.
-void utilsOverclockSystem(bool overclock);
-
-/// (Un)blocks HOME button presses and (un)sets screen dimming and auto sleep.
+/// Blocks HOME button presses, disables screen dimming and auto sleep and overclocks system CPU/MEM.
 /// Must be called before starting long-running processes.
+/// If state is set to false, regular system behavior is restored.
 void utilsSetLongRunningProcessState(bool state);
 
 /// Thread management functions.

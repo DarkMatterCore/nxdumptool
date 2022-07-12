@@ -414,13 +414,9 @@ namespace nxdt::views
                                                                    "options_tab/overclock/value_disabled"_i18n);
 
         overclock->getClickEvent()->subscribe([](brls::View* view) {
-            brls::ToggleListItem *item = static_cast<brls::ToggleListItem*>(view);
-
             /* Get current value. */
+            brls::ToggleListItem *item = static_cast<brls::ToggleListItem*>(view);
             bool value = item->getToggleState();
-
-            /* Change hardware clocks based on the current value. */
-            utilsOverclockSystem(value);
 
             /* Update configuration. */
             configSetBoolean("overclock", value);

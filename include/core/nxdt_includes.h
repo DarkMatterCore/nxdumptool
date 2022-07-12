@@ -50,6 +50,9 @@
 /* libnx header. */
 #include <switch.h>
 
+/* Internet operations. */
+#include <arpa/inet.h>
+
 /* Global defines. */
 #include "../defines.h"
 

@@ -21,6 +21,8 @@
 
 #include "nxdt_utils.h"
 
+#if (LOG_LEVEL >= LOG_LEVEL_DEBUG) && (LOG_LEVEL < LOG_LEVEL_NONE)
+
 /* Global variables. */
 
 static Mutex g_logMutex = 0;
@@ -33,34 +35,44 @@ static s64 g_logFileOffset = 0;
 static char *g_logBuffer = NULL;
 static size_t g_logBufferLength = 0;
 
-static const char *g_logStrFormat = "[%d-%02d-%02d %02d:%02d:%02d.%09lu] %s -> ";
+static const char *g_logStrFormat = "[%d-%02d-%02d %02d:%02d:%02d.%09lu] [%s] %s:%d:%s -> ";
+static const char *g_logSessionSeparator = "________________________________________________________________\r\n";
+
+static const char *g_logLevelNames[] = {
+    [LOG_LEVEL_DEBUG]   = "DEBUG",
+    [LOG_LEVEL_INFO]    = "INFO",
+    [LOG_LEVEL_WARNING] = "WARNING",
+    [LOG_LEVEL_ERROR]   = "ERROR"
+};
 
 /* Function prototypes. */
 
 static void _logWriteStringToLogFile(const char *src);
-static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, const char *fmt, va_list args);
+static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, va_list args);
 
 static void _logFlushLogFile(void);
 
 static bool logAllocateLogBuffer(void);
 static bool logOpenLogFile(void);
 
+static void logWriteStringToNxLink(const char *str);
+
 void logWriteStringToLogFile(const char *src)
 {
     SCOPED_LOCK(&g_logMutex) _logWriteStringToLogFile(src);
 }
 
-__attribute__((format(printf, 2, 3))) void logWriteFormattedStringToLogFile(const char *func_name, const char *fmt, ...)
+__attribute__((format(printf, 5, 6))) void logWriteFormattedStringToLogFile(u8 level, const char *file_name, int line, const char *func_name, const char *fmt, ...)
 {
     va_list args;
     va_start(args, fmt);
-    SCOPED_LOCK(&g_logMutex) _logWriteFormattedStringToLogFile(true, func_name, fmt, args);
+    SCOPED_LOCK(&g_logMutex) _logWriteFormattedStringToLogFile(true, level, file_name, line, func_name, fmt, args);
     va_end(args);
 }
 
-__attribute__((format(printf, 4, 5))) void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, const char *func_name, const char *fmt, ...)
+__attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, ...)
 {
-    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || !func_name || !*func_name || !fmt || !*fmt) return;
+    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || level > LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
 
     va_list args;
 
@@ -86,7 +98,7 @@ __attribute__((format(printf, 4, 5))) void logWriteFormattedStringToBuffer(char 
     ts.tm_mon++;
 
     /* Get formatted string length. */
-    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
+    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
     if (str1_len <= 0) goto end;
 
     str2_len = vsnprintf(NULL, 0, fmt, args);
@@ -115,7 +127,7 @@ __attribute__((format(printf, 4, 5))) void logWriteFormattedStringToBuffer(char 
     }
 
     /* Generate formatted string. */
-    sprintf(dst_ptr + dst_str_len, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
+    sprintf(dst_ptr + dst_str_len, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
     vsprintf(dst_ptr + dst_str_len + (size_t)str1_len, fmt, args);
     strcat(dst_ptr, CRLF);
 
@@ -123,9 +135,9 @@ end:
     va_end(args);
 }
 
-__attribute__((format(printf, 4, 5))) void logWriteBinaryDataToLogFile(const void *data, size_t data_size, const char *func_name, const char *fmt, ...)
+__attribute__((format(printf, 7, 8))) void logWriteBinaryDataToLogFile(const void *data, size_t data_size, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, ...)
 {
-    if (!data || !data_size || !func_name || !*func_name || !fmt || !*fmt) return;
+    if (!data || !data_size || level > LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
 
     va_list args;
     size_t data_str_size = ((data_size * 2) + 3);
@@ -143,7 +155,7 @@ __attribute__((format(printf, 4, 5))) void logWriteBinaryDataToLogFile(const voi
     {
         /* Write formatted string. */
         va_start(args, fmt);
-        _logWriteFormattedStringToLogFile(false, func_name, fmt, args);
+        _logWriteFormattedStringToLogFile(false, level, file_name, line, func_name, fmt, args);
         va_end(args);
 
         /* Write hex string representation. */
@@ -255,16 +267,19 @@ static void _logWriteStringToLogFile(const char *src)
         }
     }
 
+    /* Write data to nxlink. */
+    logWriteStringToNxLink(src);
+
 #if LOG_FORCE_FLUSH == 1
     /* Flush log buffer. */
     _logFlushLogFile();
 #endif
 }
 
-static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, const char *fmt, va_list args)
+static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, va_list args)
 {
     /* Make sure we have allocated memory for the log buffer and opened the logfile. */
-    if (!func_name || !*func_name || !fmt || !*fmt || !logAllocateLogBuffer() || !logOpenLogFile()) return;
+    if (level > LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt || !logAllocateLogBuffer() || !logOpenLogFile()) return;
 
     Result rc = 0;
 
@@ -286,7 +301,7 @@ static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, 
     ts.tm_mon++;
 
     /* Get formatted string length. */
-    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
+    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
     if (str1_len <= 0) return;
 
     str2_len = vsnprintf(NULL, 0, fmt, args);
@@ -318,9 +333,14 @@ static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, 
         }
 
         /* Nice and easy string formatting using the log buffer. */
-        sprintf(g_logBuffer + g_logBufferLength, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
+        sprintf(g_logBuffer + g_logBufferLength, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
         vsprintf(g_logBuffer + g_logBufferLength + (size_t)str1_len, fmt, args);
         strcat(g_logBuffer, CRLF);
+
+        /* Write data to nxlink. */
+        logWriteStringToNxLink(g_logBuffer + g_logBufferLength);
+
+        /* Update log buffer length. */
         g_logBufferLength += log_str_len;
     } else {
         /* Flush log buffer. */
@@ -332,9 +352,12 @@ static void _logWriteFormattedStringToLogFile(bool save, const char *func_name, 
         if (!tmp_str) return;
 
         /* Generate formatted string. */
-        sprintf(tmp_str, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, func_name);
+        sprintf(tmp_str, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
         vsprintf(tmp_str + (size_t)str1_len, fmt, args);
         strcat(tmp_str, CRLF);
+
+        /* Write data to nxlink. */
+        logWriteStringToNxLink(tmp_str);
 
         /* Write formatted string data until it no longer exceeds the log buffer size. */
         while(log_str_len >= LOG_BUF_SIZE)
@@ -427,17 +450,41 @@ static bool logOpenLogFile(void)
         rc = fsFileGetSize(&g_logFile, &g_logFileOffset);
         if (R_SUCCEEDED(rc))
         {
+            size_t len = 0;
+
             /* Write UTF-8 BOM right away (if needed). */
             if (!g_logFileOffset)
             {
-                size_t utf8_bom_len = strlen(UTF8_BOM);
-                fsFileWrite(&g_logFile, g_logFileOffset, UTF8_BOM, utf8_bom_len, FsWriteOption_Flush);
-                g_logFileOffset += (s64)utf8_bom_len;
+                len = strlen(UTF8_BOM);
+                fsFileWrite(&g_logFile, g_logFileOffset, UTF8_BOM, len, FsWriteOption_Flush);
+                g_logFileOffset += (s64)len;
             }
-        } else {
-            fsFileClose(&g_logFile);
+
+            /* Write session separator right away. */
+            len = strlen(g_logSessionSeparator);
+            rc = fsFileWrite(&g_logFile, g_logFileOffset, g_logSessionSeparator, len, FsWriteOption_Flush);
+            if (R_SUCCEEDED(rc)) g_logFileOffset += (s64)len;
         }
+    }
+
+    /* Close file if we successfully opened it, but an error occurred afterwards. */
+    if (R_FAILED(rc) && serviceIsActive(&(g_logFile.s)))
+    {
+        fsFileClose(&g_logFile);
+        memset(&g_logFile, 0, sizeof(FsFile));
     }
 
     return R_SUCCEEDED(rc);
 }
+
+static void logWriteStringToNxLink(const char *str)
+{
+    int fd = utilsGetNxLinkFileDescriptor();
+    if (fd >= 0)
+    {
+        dprintf(fd, "%s", str);
+        fsync(fd);
+    }
+}
+
+#endif  /* (LOG_LEVEL >= LOG_LEVEL_DEBUG) && (LOG_LEVEL < LOG_LEVEL_NONE) */
