@@ -696,7 +696,7 @@ static bool ncaVerifyMainSignature(NcaContext *ctx)
     bool ret = rsa2048VerifySha256BasedPssSignature(&(ctx->header.magic), NCA_SIGNATURE_AREA_SIZE, ctx->header.main_signature, modulus, g_ncaHeaderMainSignaturePublicExponent, \
                                                     sizeof(g_ncaHeaderMainSignaturePublicExponent));
 
-    LOG_MSG_INFO("Header signature for %s NCA \"%s\" is %s.", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str, ret ? "valid" : "invalid");
+    LOG_MSG_DEBUG("Header signature for %s NCA \"%s\" is %s.", titleGetNcmContentTypeName(ctx->content_type), ctx->content_id_str, ret ? "valid" : "invalid");
 
     return ret;
 }
@@ -763,7 +763,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     /* Don't proceed if this NCA FS section isn't populated. */
     if (!ncaIsFsInfoEntryValid(fs_info))
     {
-        LOG_MSG_INFO("Invalid FsInfo entry for section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        LOG_MSG_DEBUG("Invalid FsInfo entry for section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
 
