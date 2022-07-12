@@ -131,7 +131,7 @@ namespace nxdt::views
                 try {
                     popup = new TitlesTabPopup(app_metadata, is_system);
                 } catch(const std::string& msg) {
-                    brls::Logger::debug(msg);
+                    LOG_MSG_DEBUG(msg.c_str());
                     if (popup) delete popup;
                     return;
                 }

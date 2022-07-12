@@ -56,7 +56,7 @@
 /* Global defines. */
 #include "../defines.h"
 
-/* File-based logger. */
+/* File/socket based logger. */
 #include "nxdt_log.h"
 
 /* Configuration handler. */

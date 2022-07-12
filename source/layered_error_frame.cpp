@@ -86,7 +86,7 @@ namespace nxdt::views
         if (index >= static_cast<int>(focus_stack_size)) return false;
 
         focus_stack->at(index) = view;
-        brls::Logger::debug("Focus stack updated");
+        LOG_MSG_DEBUG("Focus stack updated");
 
         return true;
     }

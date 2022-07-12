@@ -33,12 +33,12 @@ namespace nxdt::tasks
     StatusInfoTask::StatusInfoTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
-        brls::Logger::debug("Status info task started.");
+        LOG_MSG_DEBUG("Status info task started.");
     }
 
     StatusInfoTask::~StatusInfoTask(void)
     {
-        brls::Logger::debug("Status info task stopped.");
+        LOG_MSG_DEBUG("Status info task stopped.");
     }
 
     bool StatusInfoTask::IsInternetConnectionAvailable(void)
@@ -89,14 +89,14 @@ namespace nxdt::tasks
     GameCardTask::GameCardTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
-        brls::Logger::debug("Gamecard task started.");
+        LOG_MSG_DEBUG("Gamecard task started.");
 
         this->first_notification = (gamecardGetStatus() >= GameCardStatus_Processing);
     }
 
     GameCardTask::~GameCardTask(void)
     {
-        brls::Logger::debug("Gamecard task stopped.");
+        LOG_MSG_DEBUG("Gamecard task stopped.");
     }
 
     void GameCardTask::run(retro_time_t current_time)
@@ -106,7 +106,7 @@ namespace nxdt::tasks
         this->cur_gc_status = static_cast<GameCardStatus>(gamecardGetStatus());
         if (this->cur_gc_status != this->prev_gc_status)
         {
-            brls::Logger::debug("Gamecard status change triggered: {}.", this->cur_gc_status);
+            LOG_MSG_DEBUG("Gamecard status change triggered: %u.", this->cur_gc_status);
 
             if (!this->first_notification)
             {
@@ -146,7 +146,7 @@ namespace nxdt::tasks
 
         /* Start task. */
         brls::RepeatingTask::start();
-        brls::Logger::debug("Title task started.");
+        LOG_MSG_DEBUG("Title task started.");
     }
 
     TitleTask::~TitleTask(void)
@@ -155,7 +155,7 @@ namespace nxdt::tasks
         this->system_metadata.clear();
         this->user_metadata.clear();
 
-        brls::Logger::debug("Title task stopped.");
+        LOG_MSG_DEBUG("Title task stopped.");
     }
 
     void TitleTask::run(retro_time_t current_time)
@@ -164,7 +164,7 @@ namespace nxdt::tasks
 
         if (titleIsGameCardInfoUpdated())
         {
-            brls::Logger::debug("Title info updated.");
+            LOG_MSG_DEBUG("Title info updated.");
             //brls::Application::notify("tasks/notifications/user_titles"_i18n);
 
             /* Update user metadata vector. */
@@ -200,7 +200,7 @@ namespace nxdt::tasks
             free(app_metadata);
         }
 
-        brls::Logger::debug("Retrieved {} {} metadata {}.", app_metadata_count, is_system ? "system" : "user", app_metadata_count == 1 ? "entry" : "entries");
+        LOG_MSG_DEBUG("Retrieved %u %s metadata %s.", app_metadata_count, is_system ? "system" : "user", app_metadata_count == 1 ? "entry" : "entries");
     }
 
     /* USB Mass Storage task. */
@@ -208,7 +208,7 @@ namespace nxdt::tasks
     UmsTask::UmsTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
-        brls::Logger::debug("UMS task started.");
+        LOG_MSG_DEBUG("UMS task started.");
     }
 
     UmsTask::~UmsTask(void)
@@ -216,7 +216,7 @@ namespace nxdt::tasks
         /* Clear UMS device vector. */
         this->ums_devices.clear();
 
-        brls::Logger::debug("UMS task stopped.");
+        LOG_MSG_DEBUG("UMS task stopped.");
     }
 
     void UmsTask::run(retro_time_t current_time)
@@ -225,7 +225,7 @@ namespace nxdt::tasks
 
         if (umsIsDeviceInfoUpdated())
         {
-            brls::Logger::debug("UMS device info updated.");
+            LOG_MSG_DEBUG("UMS device info updated.");
             brls::Application::notify("tasks/notifications/ums_device"_i18n);
 
             /* Update UMS device vector. */
@@ -255,7 +255,7 @@ namespace nxdt::tasks
             free(ums_devices);
         }
 
-        brls::Logger::debug("Retrieved info for {} UMS {}.", ums_device_count, ums_device_count == 1 ? "device" : "devices");
+        LOG_MSG_DEBUG("Retrieved info for %u UMS %s.", ums_device_count, ums_device_count == 1 ? "device" : "devices");
     }
 
     /* USB host device connection task. */
@@ -263,12 +263,12 @@ namespace nxdt::tasks
     UsbHostTask::UsbHostTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
-        brls::Logger::debug("USB host task started.");
+        LOG_MSG_DEBUG("USB host task started.");
     }
 
     UsbHostTask::~UsbHostTask(void)
     {
-        brls::Logger::debug("USB host task stopped.");
+        LOG_MSG_DEBUG("USB host task stopped.");
     }
 
     void UsbHostTask::run(retro_time_t current_time)
@@ -278,7 +278,7 @@ namespace nxdt::tasks
         this->cur_usb_host_speed = static_cast<UsbHostSpeed>(usbIsReady());
         if (this->cur_usb_host_speed != this->prev_usb_host_speed)
         {
-            brls::Logger::debug("USB host speed changed: {}.", this->cur_usb_host_speed);
+            LOG_MSG_DEBUG("USB host speed changed: %u.", this->cur_usb_host_speed);
             brls::Application::notify(this->cur_usb_host_speed ? "tasks/notifications/usb_host_connected"_i18n : "tasks/notifications/usb_host_disconnected"_i18n);
 
             /* Update previous USB host speed. */

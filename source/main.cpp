@@ -35,10 +35,6 @@ int main(int argc, char *argv[])
     /* Initialize application resources. */
     if (!utilsInitializeResources(argc, (const char**)argv)) return EXIT_FAILURE;
 
-    /* Set Borealis log level. */
-    /* TODO: rework this before release. */
-    brls::Logger::setLogLevel(brls::LogLevel::DEBUG);
-
     /* Load Borealis translation files. */
     brls::i18n::loadTranslations();
 

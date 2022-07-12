@@ -421,7 +421,7 @@ namespace nxdt::views
             /* Update configuration. */
             configSetBoolean("overclock", value);
 
-            brls::Logger::debug("Overclock setting changed by user.");
+            LOG_MSG_DEBUG("Overclock setting changed by user.");
         });
 
         this->addView(overclock);
@@ -440,7 +440,7 @@ namespace nxdt::views
             /* Update configuration. */
             configSetInteger("naming_convention", selected);
 
-            brls::Logger::debug("Naming convention setting changed by user.");
+            LOG_MSG_DEBUG("Naming convention setting changed by user.");
         });
 
         this->addView(naming_convention);
