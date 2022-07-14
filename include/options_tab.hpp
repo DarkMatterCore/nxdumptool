@@ -73,7 +73,7 @@ namespace nxdt::views
             size_t json_buf_size = 0;
             UtilsGitHubReleaseJsonData json_data = {0};
 
-            brls::Label *wait_lbl = nullptr;                      /// First stage.
+            brls::Label *wait_lbl = nullptr;                        /// First stage.
             brls::List *changelog_list = nullptr;                   /// Second stage.
             OptionsTabUpdateProgress *update_progress = nullptr;    /// Third stage.
 
