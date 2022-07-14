@@ -30,9 +30,6 @@
 
 #define MAX_ELEMENTS(x)                 ((sizeof((x))) / (sizeof((x)[0])))
 
-#define MIN(a, b)                       ((a) < (b) ? (a) : (b))
-#define MAX(a, b)                       ((a) > (b) ? (a) : (b))
-
 #define BIT_LONG(n)                     (1UL << (n))
 
 #define ALIGN_UP(x, y)                  (((x) + ((y) - 1)) & ~((y) - 1))

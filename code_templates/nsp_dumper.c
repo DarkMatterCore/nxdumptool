@@ -118,6 +118,7 @@ static void consolePrint(const char *text, ...)
 static void consoleRefresh(void)
 {
     mutexLock(&g_conMutex);
+    fflush(stdout);
     consoleUpdate(NULL);
     mutexUnlock(&g_conMutex);
 }
@@ -405,6 +406,8 @@ static void dump_thread_func(void *arg)
         j++;
     }
 
+    consoleRefresh();
+
     // generate cnmt xml right away even though we don't yet have all the data we need
     // This is because we need its size to calculate the full nsp size
     if (append_authoringtool_data && !cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, title_info->content_count))
@@ -545,6 +548,7 @@ static void dump_thread_func(void *arg)
 
     nsp_size = (nsp_header_size + pfs_file_ctx.fs_size);
     consolePrint("nsp header size: 0x%lX | nsp size: 0x%lX\n", nsp_header_size, nsp_size);
+    consoleRefresh();
 
     if (output_device != 1)
     {
@@ -586,6 +590,7 @@ static void dump_thread_func(void *arg)
     }
 
     consolePrint("dump process started, please wait. hold b to cancel.\n");
+    consoleRefresh();
 
     nsp_offset += nsp_header_size;
 
@@ -1009,6 +1014,8 @@ static void nspDump(TitleInfo *title_info)
             return;
         }
     }
+
+    consoleRefresh();
 
     // create dump thread
     shared_data.data = title_info;

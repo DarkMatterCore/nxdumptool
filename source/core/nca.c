@@ -852,7 +852,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         if (!raw_storage_size || !sparse_bucket->header.entry_count)
         {
             /* Return true but don't set this FS section as enabled, since we can't really use it. */
-            LOG_MSG_ERROR("Empty SparseInfo data detected for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+            LOG_MSG_WARNING("Empty SparseInfo data detected for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
             success = true;
             goto end;
         }
@@ -915,6 +915,15 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     {
         LOG_DATA_ERROR(&(fs_ctx->header), sizeof(NcaFsHeader), "Unable to determine section type for FS section #%u in \"%s\" (0x%02X, 0x%02X). Skipping FS section. FS header dump:", \
                        section_idx, nca_ctx->content_id_str, fs_ctx->hash_type, fs_ctx->encryption_type);
+        goto end;
+    }
+
+    /* Check if we're dealing with a bogus Patch RomFS (seem to be available in HtmlDocument NCAs). */
+    if (fs_ctx->section_type == NcaFsSectionType_PatchRomFs && fs_ctx->section_size <= (fs_ctx->header.patch_info.indirect_bucket.size + fs_ctx->header.patch_info.aes_ctr_ex_bucket.size))
+    {
+        /* Return true but don't set this FS section as enabled, since we can't really use it. */
+        LOG_MSG_WARNING("Empty Patch RomFS data detected for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        success = true;
         goto end;
     }
 
