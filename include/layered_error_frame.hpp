@@ -43,6 +43,8 @@ namespace nxdt::views
             int GetFocusStackViewIndex(void);
             bool UpdateFocusStackViewAtIndex(int index, brls::View *view);
 
+            brls::View *GetListFirstFocusableChild(void);
+
             void SwitchLayerView(bool use_error_frame, bool update_focused_view = false, bool update_focus_stack = true);
 
         public:

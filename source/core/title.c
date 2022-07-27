@@ -690,6 +690,58 @@ TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u3
     return app_metadata;
 }
 
+TitleApplicationMetadata **titleGetGameCardApplicationMetadataEntries(u32 *out_count)
+{
+    u32 app_count = 0;
+    TitleApplicationMetadata **app_metadata = NULL, **tmp_app_metadata = NULL;
+
+    SCOPED_LOCK(&g_titleMutex)
+    {
+        if (!g_titleInterfaceInit || !g_userMetadata || !g_userMetadataCount || !g_titleGameCardAvailable || !out_count)
+        {
+            LOG_MSG_ERROR("Invalid parameters!");
+            break;
+        }
+
+        bool error = false;
+
+        for(u32 i = 0; i < g_userMetadataCount; i++)
+        {
+            TitleApplicationMetadata *cur_app_metadata = g_userMetadata[i];
+            if (!cur_app_metadata) continue;
+
+            /* Skip current metadata entry if content data for this title isn't available on the inserted gamecard. */
+            if (!_titleGetInfoFromStorageByTitleId(NcmStorageId_GameCard, cur_app_metadata->title_id)) continue;
+
+            /* Reallocate application metadata pointer array. */
+            tmp_app_metadata = realloc(app_metadata, (app_count + 1) * sizeof(TitleApplicationMetadata*));
+            if (!tmp_app_metadata)
+            {
+                LOG_MSG_ERROR("Failed to reallocate application metadata pointer array!");
+                if (app_metadata) free(app_metadata);
+                app_metadata = NULL;
+                error = true;
+                break;
+            }
+
+            app_metadata = tmp_app_metadata;
+            tmp_app_metadata = NULL;
+
+            /* Set current pointer and increase counter. */
+            app_metadata[app_count++] = cur_app_metadata;
+        }
+
+        if (error) break;
+
+        /* Update output counter. */
+        *out_count = app_count;
+
+        if (!app_metadata || !app_count) LOG_MSG_ERROR("No gamecard content data found for user applications!");
+    }
+
+    return app_metadata;
+}
+
 TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
 {
     TitleInfo *ret = NULL;

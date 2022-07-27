@@ -80,15 +80,29 @@ namespace nxdt::views
     bool LayeredErrorFrame::UpdateFocusStackViewAtIndex(int index, brls::View *view)
     {
         std::vector<brls::View*> *focus_stack = brls::Application::getFocusStack();
-        if (!focus_stack || index < 0) return false;
+        if (!focus_stack || index < 0 || !view) return false;
 
         size_t focus_stack_size = focus_stack->size();
         if (index >= static_cast<int>(focus_stack_size)) return false;
 
         focus_stack->at(index) = view;
-        LOG_MSG_DEBUG("Focus stack updated");
+        LOG_MSG_DEBUG("Focus stack updated.");
 
         return true;
+    }
+
+    brls::View *LayeredErrorFrame::GetListFirstFocusableChild(void)
+    {
+        size_t cur_list_count = this->list->getViewsCount();
+        if (!cur_list_count) return nullptr;
+
+        for(size_t i = 0; i < cur_list_count; i++)
+        {
+            brls::View *cur_child = this->list->getChild(i);
+            if (cur_child && !cur_child->isHidden() && cur_child->getDefaultFocus() != nullptr) return cur_child;
+        }
+
+        return nullptr;
     }
 
     void LayeredErrorFrame::SwitchLayerView(bool use_error_frame, bool update_focused_view, bool update_focus_stack)
@@ -104,8 +118,10 @@ namespace nxdt::views
 
         if (cur_list_count)
         {
-            /* Get pointer to the first list item. */
-            first_child = this->list->getChild(0);
+            /* Get pointer to the first focusable/unhidden list item. */
+            /* Fallback to the sidebar item if there's none. */
+            first_child = this->GetListFirstFocusableChild();
+            if (!first_child) first_child = this->sidebar_item;
 
             /* Update focus stack information, if needed. */
             if (update_focus_stack && focus_stack_index > -1) focus_stack_updated = this->UpdateFocusStackViewAtIndex(focus_stack_index, use_error_frame ? this->sidebar_item : first_child);

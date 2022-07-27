@@ -11,6 +11,9 @@
     "date": "{1:02d}/{2:02d}/{0} {3:02d}:{4:02d}:{5:02d} {6}",
     "__date_comment__": "{0} = Year, {1} = Month, {2} = Day, {3} = Hour, {4} = Minute, {5} = Second, {6} = AM/PM (if time_format is set to 12)",
 
+    "exception_caught": "Exception caught! ({}).",
+    "unknown_exception": "unknown",
+
     "libnx_abort": "Fatal error triggered in libnx!\nError code: 0x{:08X}.",
     "exception_triggered": "Fatal exception triggered!\nReason: {} (0x{:X})."
 }

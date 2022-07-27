@@ -1356,6 +1356,7 @@ int main(int argc, char *argv[])
                 utilsSetLongRunningProcessState(true);
                 nspDump(title_info);
                 utilsSetLongRunningProcessState(false);
+                device_retrieved_size = false;
             }
 
             if (error || menu >= 3)

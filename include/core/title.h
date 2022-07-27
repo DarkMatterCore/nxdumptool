@@ -98,6 +98,10 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 /// The allocated buffer must be freed by the calling function using free().
 TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count);
 
+/// Returns a pointer to a dynamically allocated array of pointers to TitleApplicationMetadata entries with matching gamecard user titles, as well as their count. Returns NULL if an error occurs.
+/// The allocated buffer must be freed by the calling function using free().
+TitleApplicationMetadata **titleGetGameCardApplicationMetadataEntries(u32 *out_count);
+
 /// Returns a pointer to a dynamically allocated TitleInfo element with a matching storage ID and title ID. Returns NULL if an error occurs.
 /// If NcmStorageId_Any is used, the first entry with a matching title ID is returned.
 /// Use titleFreeTitleInfo() to free the returned data.

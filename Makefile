@@ -84,7 +84,7 @@ USBHSFS_PATH		:=	$(ROOTDIR)/libs/libusbhsfs
 #---------------------------------------------------------------------------------
 ARCH		:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS		:=	-g -gdwarf-4 -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
+CFLAGS		:=	-g -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
 CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
 CFLAGS		+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
 CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_REV=\"${GIT_REV}\"
@@ -92,8 +92,8 @@ CFLAGS		+=	-DBUILD_TIMESTAMP="\"${BUILD_TIMESTAMP}\"" -DBOREALIS_RESOURCES="\"${
 
 CXXFLAGS	:=	$(CFLAGS) -std=c++20 -Wno-volatile -Wno-unused-parameter
 
-ASFLAGS		:=	-g -gdwarf-4 $(ARCH)
-LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g -gdwarf-4 $(ARCH) -Wl,-Map,$(notdir $*.map)
+ASFLAGS		:=	-g $(ARCH)
+LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
 LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -ljson-c -lz -lusbhsfs -lntfs-3g -llwext4 -lnx
 

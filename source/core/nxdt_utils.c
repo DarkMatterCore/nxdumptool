@@ -33,6 +33,7 @@
 #include "fatfs/ff.h"
 
 /* Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits. */
+/* Actually expressed in bytes, not codepoints. */
 #define NT_MAX_FILENAME_LENGTH  255
 
 /* Type definitions. */
@@ -67,7 +68,7 @@ static AppletHookCookie g_systemOverclockCookie = {0};
 
 static bool g_longRunningProcess = false;
 
-static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB" };
+static const char *g_sizeSuffixes[] = { "B", "KiB", "MiB", "GiB", "TiB" };
 static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
 
 static const char g_illegalFileSystemChars[] = "\\/:*?\"<>|";
@@ -107,7 +108,7 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
 static void utilsChangeHomeButtonBlockStatus(bool block);
 
-static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos);
+static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t byte_limit);
 
 bool utilsInitializeResources(const int program_argc, const char **program_argv)
 {
@@ -804,11 +805,10 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
         /* Get current path element size. */
         size_t element_size = (ptr2 ? (size_t)(ptr2 - ptr1) : (path_len - (size_t)(ptr1 - path)));
 
-        /* Get UTF-8 codepoint count. */
-        /* Use NT_MAX_FILENAME_LENGTH as the codepoint count limit. */
-        size_t last_cp_pos = 0;
-        size_t cp_count = utilsGetUtf8CodepointCount(ptr1, element_size, NT_MAX_FILENAME_LENGTH, &last_cp_pos);
-        if (cp_count > NT_MAX_FILENAME_LENGTH)
+        /* Get UTF-8 string limit. */
+        /* Use NT_MAX_FILENAME_LENGTH as the byte count limit. */
+        size_t last_cp_pos = utilsGetUtf8StringLimit(ptr1, element_size, NT_MAX_FILENAME_LENGTH);
+        if (last_cp_pos < element_size)
         {
             if (ptr2)
             {
@@ -1154,25 +1154,26 @@ NX_INLINE void utilsCloseFileDescriptor(int *fd)
     *fd = -1;
 }
 
-static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos)
+static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t byte_limit)
 {
-    if (!str || !*str || !str_size || (!cp_limit && last_cp_pos) || (cp_limit && !last_cp_pos)) return 0;
+    if (!str || !*str || !str_size || !byte_limit) return 0;
+
+    if (byte_limit > str_size) return str_size;
 
     u32 code = 0;
     ssize_t units = 0;
-    size_t cur_pos = 0, cp_count = 0;
+    size_t cur_pos = 0, last_cp_pos = 0;
     const u8 *str_u8 = (const u8*)str;
 
-    while(cur_pos < str_size)
+    while(cur_pos < str_size && cur_pos < byte_limit)
     {
         units = decode_utf8(&code, str_u8 + cur_pos);
         size_t new_pos = (cur_pos + (size_t)units);
         if (units < 0 || !code || new_pos > str_size) break;
 
-        cp_count++;
         cur_pos = new_pos;
-        if (cp_limit && last_cp_pos && cp_count < cp_limit) *last_cp_pos = cur_pos;
+        if (cur_pos < byte_limit) last_cp_pos = cur_pos;
     }
 
-    return cp_count;
+    return last_cp_pos;
 }

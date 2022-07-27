@@ -131,7 +131,7 @@ namespace nxdt::views
                 try {
                     popup = new TitlesTabPopup(app_metadata, is_system);
                 } catch(const std::string& msg) {
-                    LOG_MSG_DEBUG(msg.c_str());
+                    LOG_MSG_DEBUG("%s", msg.c_str());
                     if (popup) delete popup;
                     return;
                 }
@@ -155,7 +155,7 @@ namespace nxdt::views
         }
 
         /* Update focus stack, if needed. */
-        if (focus_stack_index > -1) this->UpdateFocusStackViewAtIndex(focus_stack_index, this->list->getChild(0));
+        if (focus_stack_index > -1) this->UpdateFocusStackViewAtIndex(focus_stack_index, this->GetListFirstFocusableChild());
 
         /* Switch to the list. */
         this->list->invalidate(true);
