@@ -11,8 +11,8 @@
         "launch_error_info": "Please take out the gamecard and reinsert it into the console after exiting nxdumptool to mitigate launch errors.",
 
         "user_titles": {
-            "header": "Applications available on the inserted gamecard",
-            "info": "To perform operations on the user titles available on this gamecard, please go to the \"{0}\" menu."
+            "header": "Applications available in the inserted gamecard",
+            "info": "To perform operations on the user titles available in this gamecard, please go to the \"{0}\" menu."
         },
 
         "properties_table": {

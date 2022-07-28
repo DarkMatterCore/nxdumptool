@@ -61,9 +61,10 @@ namespace nxdt::views
         }
     }
 
-    TitlesTabItem::TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system) : brls::ListItem(std::string(app_metadata->lang_entry.name), "", ""), \
-                                                                                                 app_metadata(app_metadata),
-                                                                                                 is_system(is_system)
+    TitlesTabItem::TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system, bool click_anim) : brls::ListItem(std::string(app_metadata->lang_entry.name), "", ""), \
+                                                                                                                  app_metadata(app_metadata), \
+                                                                                                                  is_system(is_system), \
+                                                                                                                  click_anim(click_anim)
     {
         /* Set sublabel. */
         if (!this->is_system) this->setSubLabel(std::string(app_metadata->lang_entry.author));
@@ -73,6 +74,11 @@ namespace nxdt::views
 
         /* Set value. */
         this->setValue(fmt::format("{:016X}", this->app_metadata->title_id), false, false);
+    }
+
+    void TitlesTabItem::playClickAnimation(void)
+    {
+        if (this->click_anim) brls::View::playClickAnimation();
     }
 
     TitlesTab::TitlesTab(RootView *root_view, bool is_system) : LayeredErrorFrame("titles_tab/no_titles_available"_i18n), root_view(root_view), is_system(is_system)

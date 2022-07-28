@@ -124,7 +124,7 @@ namespace nxdt::views
             /* Populate list. */
             for(u32 i = 0; i < app_metadata_count; i++)
             {
-                TitlesTabItem *title = new TitlesTabItem(app_metadata[i], false);
+                TitlesTabItem *title = new TitlesTabItem(app_metadata[i], false, false);
                 title->unregisterAction(brls::Key::A);
                 this->list->addView(title);
             }

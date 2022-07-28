@@ -50,9 +50,12 @@ namespace nxdt::views
         private:
             const TitleApplicationMetadata *app_metadata = nullptr;
             bool is_system = false;
+            bool click_anim;
 
         public:
-            TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system);
+            TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system, bool click_anim = true);
+
+            void playClickAnimation(void) override;
 
             ALWAYS_INLINE const TitleApplicationMetadata *GetApplicationMetadata(void)
             {
