@@ -293,6 +293,7 @@ namespace nxdt::views
 
     void OptionsTabUpdateApplicationFrame::DisplayChangelog(void)
     {
+        int line = 0;
         std::string item;
         std::stringstream ss(std::string(this->json_data.changelog));
 
@@ -329,7 +330,14 @@ namespace nxdt::views
             }
 
             /* Add line to the changelog view. */
-            this->changelog_list->addView(new FocusableLabel(brls::LabelStyle::SMALL, item, true));
+            if (!(line % 2))
+            {
+                this->changelog_list->addView(new FocusableLabel(brls::LabelStyle::SMALL, item, true));
+            } else {
+                this->changelog_list->addView(new brls::Label(brls::LabelStyle::SMALL, item, true));
+            }
+
+            line++;
         }
 
         /* Register update action. */
