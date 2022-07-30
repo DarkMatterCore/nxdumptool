@@ -202,11 +202,6 @@ namespace nxdt::views
             return this->onCancel();
         });
 
-        /* Subscribe to the global focus change event so we can rebuild hints as soon as this frame is pushed to the view stack. */
-        this->focus_event_sub = brls::Application::getGlobalFocusChangeEvent()->subscribe([this](brls::View* view) {
-            this->rebuildHints();
-        });
-
         /* Subscribe to the JSON task. */
         this->json_task.RegisterListener([this](const nxdt::tasks::DownloadTaskProgress& progress) {
             /* Return immediately if the JSON task hasn't finished. */
@@ -268,9 +263,6 @@ namespace nxdt::views
 
         /* Free JSON buffer. */
         if (this->json_buf) free(this->json_buf);
-
-        /* Unsubscribe focus event listener. */
-        brls::Application::getGlobalFocusChangeEvent()->unsubscribe(this->focus_event_sub);
     }
 
     void OptionsTabUpdateApplicationFrame::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
@@ -348,27 +340,17 @@ namespace nxdt::views
             return true;
         });
 
-        /* Rebuild action hints. */
-        this->rebuildHints();
-
         /* Go to the next stage. */
         this->nextStage();
     }
 
     void OptionsTabUpdateApplicationFrame::DisplayUpdateProgress(void)
     {
-        /* Remove update action. */
-        this->registerAction("options_tab/update_app/frame/update_action"_i18n, brls::Key::PLUS, [](void) {
-            return true;
-        }, true);
+        /* Unregister update action. */
+        this->unregisterAction(brls::Key::PLUS);
 
-        /* Register cancel action once more, using a different label. */
-        this->registerAction("options_tab/update_dialog/cancel"_i18n, brls::Key::B, [this](void) {
-            return this->onCancel();
-        });
-
-        /* Rebuild action hints. */
-        this->rebuildHints();
+        /* Update cancel action label. */
+        this->updateActionHint(brls::Key::B, "options_tab/update_dialog/cancel"_i18n);
 
         /* Subscribe to the NRO task. */
         this->nro_task.RegisterListener([this](const nxdt::tasks::DownloadTaskProgress& progress) {

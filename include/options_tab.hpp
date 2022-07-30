@@ -79,8 +79,6 @@ namespace nxdt::views
 
             nxdt::tasks::DownloadFileTask nro_task;
 
-            brls::GenericEvent::Subscription focus_event_sub;
-
             void DisplayChangelog(void);
             void DisplayUpdateProgress(void);
 

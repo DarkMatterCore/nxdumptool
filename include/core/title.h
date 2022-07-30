@@ -68,7 +68,7 @@ typedef struct {
 
 typedef enum {
     TitleNamingConvention_Full             = 0, ///< Individual titles: "{Name} [{Id}][v{Version}][{Type}]".
-                                                ///< Gamecards: "[{Name1}] [{Id1}][v{Version1}] + ... + [{NameN}] [{IdN}][v{VersionN}]".
+                                                ///< Gamecards: "{Name1} [{Id1}][v{Version1}] + ... + {NameN} [{IdN}][v{VersionN}]".
     TitleNamingConvention_IdAndVersionOnly = 1, ///< Individual titles: "{Id}_v{Version}_{Type}".
                                                 ///< Gamecards: "{TitleId1}_v{TitleVersion1}_{TitleType1} + ... + {TitleIdN}_v{TitleVersionN}_{TitleTypeN}".
     TitleNamingConvention_Count            = 2
