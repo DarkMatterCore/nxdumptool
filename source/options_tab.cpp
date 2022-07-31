@@ -197,11 +197,6 @@ namespace nxdt::views
         this->update_progress = new OptionsTabUpdateProgress();
         this->addStage(this->update_progress);
 
-        /* Register cancel action. */
-        this->registerAction("brls/hints/back"_i18n, brls::Key::B, [this](void) {
-            return this->onCancel();
-        });
-
         /* Subscribe to the JSON task. */
         this->json_task.RegisterListener([this](const nxdt::tasks::DownloadTaskProgress& progress) {
             /* Return immediately if the JSON task hasn't finished. */
