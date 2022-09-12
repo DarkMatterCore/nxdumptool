@@ -281,7 +281,7 @@ NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx,
         (!patch->use_old_format_patch && ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs) || \
         (patch->use_old_format_patch && ctx->default_storage_ctx->nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)) return;
 
-    NcaContext *nca_ctx = (NcaContext*)ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
+    NcaContext *nca_ctx = ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
 
     if (patch->use_old_format_patch)
     {

@@ -95,7 +95,7 @@ bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStora
     NcaContext *patch_nca_ctx = NULL, *base_nca_ctx = NULL;
 
     if (!ncaStorageIsValidContext(patch_ctx) || !ncaStorageIsValidContext(base_ctx) || patch_ctx->nca_fs_ctx == base_ctx->nca_fs_ctx || \
-        !(patch_nca_ctx = (NcaContext*)patch_ctx->nca_fs_ctx->nca_ctx) || !(base_nca_ctx = (NcaContext*)base_ctx->nca_fs_ctx->nca_ctx) || \
+        !(patch_nca_ctx = patch_ctx->nca_fs_ctx->nca_ctx) || !(base_nca_ctx = base_ctx->nca_fs_ctx->nca_ctx) || \
         patch_ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || base_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
         patch_nca_ctx->header.program_id != base_nca_ctx->header.program_id || patch_nca_ctx->header.content_type != base_nca_ctx->header.content_type || \
         patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version < base_nca_ctx->title_version || \

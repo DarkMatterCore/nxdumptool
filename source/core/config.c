@@ -169,7 +169,7 @@ static void configFreeConfigJson(void)
 
 static bool configValidateJsonRootObject(const struct json_object *obj)
 {
-    bool ret = false, overclock_found = false, naming_convention_found = false, dump_destination_found = false, gamecard_found = false;
+    bool ret = false, overclock_found = false, naming_convention_found = false, output_storage_found = false, gamecard_found = false;
     bool nsp_found = false, ticket_found = false, nca_fs_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
@@ -178,7 +178,7 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
     {
         CONFIG_VALIDATE_FIELD(Boolean, overclock);
         CONFIG_VALIDATE_FIELD(Integer, naming_convention, TitleNamingConvention_Full, TitleNamingConvention_Count - 1);
-        CONFIG_VALIDATE_FIELD(Integer, dump_destination, ConfigDumpDestination_SdCard, ConfigDumpDestination_Count - 1);
+        CONFIG_VALIDATE_FIELD(Integer, output_storage, ConfigOutputStorage_SdCard, ConfigOutputStorage_Count - 1);
         CONFIG_VALIDATE_OBJECT(GameCard, gamecard);
         CONFIG_VALIDATE_OBJECT(Nsp, nsp);
         CONFIG_VALIDATE_OBJECT(Ticket, ticket);
@@ -186,7 +186,7 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
         goto end;
     }
 
-    ret = (overclock_found && naming_convention_found && dump_destination_found && gamecard_found && nsp_found && ticket_found && nca_fs_found);
+    ret = (overclock_found && naming_convention_found && output_storage_found && gamecard_found && nsp_found && ticket_found && nca_fs_found);
 
 end:
     return ret;
@@ -194,13 +194,13 @@ end:
 
 static bool configValidateJsonGameCardObject(const struct json_object *obj)
 {
-    bool ret = false, append_key_area_found = false, keep_certificate_found = false, trim_dump_found = false, calculate_checksum_found = false, checksum_lookup_method_found = false;
+    bool ret = false, prepend_key_area_found = false, keep_certificate_found = false, trim_dump_found = false, calculate_checksum_found = false, checksum_lookup_method_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 
     json_object_object_foreach(obj, key, val)
     {
-        CONFIG_VALIDATE_FIELD(Boolean, append_key_area);
+        CONFIG_VALIDATE_FIELD(Boolean, prepend_key_area);
         CONFIG_VALIDATE_FIELD(Boolean, keep_certificate);
         CONFIG_VALIDATE_FIELD(Boolean, trim_dump);
         CONFIG_VALIDATE_FIELD(Boolean, calculate_checksum);
@@ -208,7 +208,7 @@ static bool configValidateJsonGameCardObject(const struct json_object *obj)
         goto end;
     }
 
-    ret = (append_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && checksum_lookup_method_found);
+    ret = (prepend_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && checksum_lookup_method_found);
 
 end:
     return ret;

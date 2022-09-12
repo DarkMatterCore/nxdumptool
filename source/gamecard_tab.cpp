@@ -22,6 +22,7 @@
 #include <nxdt_utils.h>
 #include <gamecard_tab.hpp>
 #include <titles_tab.hpp>
+#include <dump_options_frame.hpp>
 
 namespace i18n = brls::i18n;    /* For getStr(). */
 using namespace i18n::literals; /* For _i18n. */
@@ -34,7 +35,7 @@ namespace nxdt::views
         this->list->setSpacing(this->list->getSpacing() / 2);
         this->list->setMarginBottom(20);
 
-        /* Subscribe to gamecard status event. */
+        /* Subscribe to the gamecard status event. */
         this->gc_status_task_sub = this->root_view->RegisterGameCardTaskListener([this](GameCardStatus gc_status) {
             /* Process gamecard status. */
             this->ProcessGameCardStatus(gc_status);
@@ -179,9 +180,16 @@ namespace nxdt::views
 
         brls::ListItem *dump_card_image = new brls::ListItem("gamecard_tab/list/dump_card_image/label"_i18n, "gamecard_tab/list/dump_card_image/description"_i18n);
 
-        /*dump_card_image->getClickEvent()->subscribe([](brls::View *view) {
+        dump_card_image->getClickEvent()->subscribe([this](brls::View *view) {
+            char *raw_filename = titleGenerateGameCardFileName(configGetInteger("naming_convention"), TitleFileNameIllegalCharReplaceType_None);
+            if (!raw_filename) return;
 
-        });*/
+            brls::Image *icon = new brls::Image();
+            icon->setImage(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
+            icon->setScaleType(brls::ImageScaleType::SCALE);
+
+            brls::Application::pushView(new DumpOptionsFrame(this->root_view, "gamecard_tab/list/dump_card_image/label"_i18n, icon, raw_filename, ".xci"), brls::ViewAnimation::SLIDE_LEFT);
+        });
 
         this->list->addView(dump_card_image);
 

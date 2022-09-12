@@ -120,7 +120,7 @@ namespace nxdt::views
         if (!app_metadata_count) return;
 
         /* Populate list. */
-        for(TitleApplicationMetadata *cur_app_metadata : *app_metadata)
+        for(const TitleApplicationMetadata *cur_app_metadata : *app_metadata)
         {
             /* Create list item. */
             TitlesTabItem *title = new TitlesTabItem(cur_app_metadata, this->is_system);

@@ -15,5 +15,8 @@
     "unknown_exception": "unknown",
 
     "libnx_abort": "Fatal error triggered in libnx!\nError code: 0x{:08X}.",
-    "exception_triggered": "Fatal exception triggered!\nReason: {} (0x{:X})."
+    "exception_triggered": "Fatal exception triggered!\nReason: {} (0x{:X}).",
+
+    "value_enabled": "Yes",
+    "value_disabled": "No"
 }

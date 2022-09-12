@@ -81,7 +81,18 @@ namespace nxdt::views
         this->usb_icon->setVerticalAlign(NVG_ALIGN_TOP);
         this->usb_icon->setParent(this);
 
-        this->usb_host_speed_lbl = new brls::Label(brls::LabelStyle::SMALL, "root_view/not_connected"_i18n);
+        this->ums_counter_lbl = new brls::Label(brls::LabelStyle::SMALL, i18n::getStr("root_view/ums_counter"_i18n, usbHsFsGetPhysicalDeviceCount()));
+        this->ums_counter_lbl->setHorizontalAlign(NVG_ALIGN_RIGHT);
+        this->ums_counter_lbl->setVerticalAlign(NVG_ALIGN_TOP);
+        this->ums_counter_lbl->setParent(this);
+
+        this->cable_icon = new brls::Label(brls::LabelStyle::SMALL, "\uEFE6");
+        this->cable_icon->setFont(material);
+        this->cable_icon->setHorizontalAlign(NVG_ALIGN_RIGHT);
+        this->cable_icon->setVerticalAlign(NVG_ALIGN_TOP);
+        this->cable_icon->setParent(this);
+
+        this->usb_host_speed_lbl = new brls::Label(brls::LabelStyle::SMALL, "root_view/usb_host_not_connected"_i18n);
         this->usb_host_speed_lbl->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->usb_host_speed_lbl->setVerticalAlign(NVG_ALIGN_TOP);
         this->usb_host_speed_lbl->setParent(this);
@@ -128,8 +139,13 @@ namespace nxdt::views
             this->time_lbl->setText(this->GetFormattedDateString(status_info_data->timeinfo));
 
             /* Update battery labels. */
-            this->battery_icon->setText(charger_type != PsmChargerType_Unconnected ? "\uE1A3" : (charge_percentage <= 15 ? "\uE19C" : "\uE1A4"));
-            this->battery_icon->setColor(charger_type != PsmChargerType_Unconnected ? nvgRGB(0, 255, 0) : (charge_percentage <= 15 ? nvgRGB(255, 0, 0) : brls::Application::getTheme()->textColor));
+            this->battery_icon->setText(charger_type != PsmChargerType_Unconnected ? "\uE1A3" : (charge_percentage >= 100 ? "\uE1A4" : (charge_percentage >= 83 ? "\uEBD2" : \
+                                                                                                (charge_percentage >=  67 ? "\uEBD4" : (charge_percentage >= 50 ? "\uEBE2" : \
+                                                                                                (charge_percentage >=  33 ? "\uEBDD" : (charge_percentage >= 17 ? "\uEBE0" : \
+                                                                                                (charge_percentage >    0 ? "\uEBD9" : "\uEBDC"))))))));
+
+            this->battery_icon->setColor(charger_type != PsmChargerType_Unconnected ? nvgRGB(0, 255, 0) : (charge_percentage <= 15 ? nvgRGB(255, 0, 0) : \
+                                                                                                           brls::Application::getTheme()->textColor));
 
             this->battery_percentage->setText(fmt::format("{}%", charge_percentage));
 
@@ -138,19 +154,24 @@ namespace nxdt::views
             this->connection_status_lbl->setText(ip_addr ? std::string(ip_addr) : "root_view/not_connected"_i18n);
         });
 
+        /* Subscribe to UMS event. */
+        this->ums_task_sub = this->ums_task->RegisterListener([this](const nxdt::tasks::UmsDeviceVector* ums_devices) {
+            /* Update UMS counter label. */
+            this->ums_counter_lbl->setText(i18n::getStr("root_view/ums_counter"_i18n, usbHsFsGetPhysicalDeviceCount()));
+        });
+
         /* Subscribe to USB host event. */
         this->usb_host_task_sub = this->usb_host_task->RegisterListener([this](UsbHostSpeed usb_host_speed) {
             /* Update USB host speed label. */
-            this->usb_host_speed_lbl->setText(usb_host_speed ? fmt::format("USB {}.0", usb_host_speed) : "root_view/not_connected"_i18n);
+            this->usb_host_speed_lbl->setText(usb_host_speed ? i18n::getStr("root_view/usb_host_speed"_i18n, usb_host_speed) : "root_view/usb_host_not_connected"_i18n);
         });
     }
 
     RootView::~RootView(void)
     {
-        /* Unregister USB host task listener. */
+        /* Unregister task listeners. */
         this->usb_host_task->UnregisterListener(this->usb_host_task_sub);
-
-        /* Unregister status info task listener. */
+        this->ums_task->UnregisterListener(this->ums_task_sub);
         this->status_info_task->UnregisterListener(this->status_info_task_sub);
 
         /* Stop background tasks. */
@@ -168,6 +189,8 @@ namespace nxdt::views
         delete this->connection_icon;
         delete this->connection_status_lbl;
         delete this->usb_icon;
+        delete this->ums_counter_lbl;
+        delete this->cable_icon;
         delete this->usb_host_speed_lbl;
     }
 
@@ -212,12 +235,15 @@ namespace nxdt::views
         this->connection_status_lbl->frame(ctx);
 
         this->usb_icon->frame(ctx);
+        this->ums_counter_lbl->frame(ctx);
+
+        this->cable_icon->frame(ctx);
         this->usb_host_speed_lbl->frame(ctx);
     }
 
     void RootView::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
     {
-        int x_pos = 0, y_pos = 0;
+        int x_orig = 0, x_pos = 0, y_pos = 0;
 
         brls::AppletFrame::layout(vg, style, stash);
 
@@ -232,7 +258,7 @@ namespace nxdt::views
         }
 
         /* Time label. */
-        x_pos = (this->x + this->width - style->AppletFrame.separatorSpacing - style->AppletFrame.footerTextSpacing);
+        x_orig = x_pos = (this->x + this->width - style->AppletFrame.separatorSpacing - style->AppletFrame.footerTextSpacing);
         y_pos = this->y + style->AppletFrame.imageTopPadding;
 
         this->time_lbl->setBoundaries(x_pos, y_pos, 0, 0);
@@ -259,14 +285,24 @@ namespace nxdt::views
         this->battery_icon->setBoundaries(x_pos, y_pos, 0, 0);
         this->battery_icon->invalidate();
 
-        /* USB host speed labels. */
-        x_pos = (this->x + this->width - style->AppletFrame.separatorSpacing - style->AppletFrame.footerTextSpacing);
+        /* UMS device counter and USB host speed labels. */
+        x_pos = x_orig;
         y_pos += (this->connection_status_lbl->getTextHeight() + 5);
 
         this->usb_host_speed_lbl->setBoundaries(x_pos, y_pos, 0, 0);
         this->usb_host_speed_lbl->invalidate();
 
         x_pos -= (5 + this->usb_host_speed_lbl->getTextWidth());
+
+        this->cable_icon->setBoundaries(x_pos, y_pos, 0, 0);
+        this->cable_icon->invalidate();
+
+        x_pos -= (10 + this->cable_icon->getTextWidth());
+
+        this->ums_counter_lbl->setBoundaries(x_pos, y_pos, 0, 0);
+        this->ums_counter_lbl->invalidate();
+
+        x_pos -= (5 + this->ums_counter_lbl->getTextWidth());
 
         this->usb_icon->setBoundaries(x_pos, y_pos, 0, 0);
         this->usb_icon->invalidate();

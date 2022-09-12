@@ -120,7 +120,7 @@ namespace nxdt::tasks
             TitleTask(void);
             ~TitleTask(void);
 
-            /* Intentionally left here to let system titles views retrieve metadata. */
+            /* Intentionally left here to let views retrieve title metadata. */
             const TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
 
             EVENT_SUBSCRIPTION(TitleEvent, title_event);
@@ -142,6 +142,9 @@ namespace nxdt::tasks
         public:
             UmsTask(void);
             ~UmsTask(void);
+
+            /* Intentionally left here to let views retrieve UMS device info. */
+            const UmsDeviceVector* GetUmsDevices(void);
 
             EVENT_SUBSCRIPTION(UmsEvent, ums_event);
     };

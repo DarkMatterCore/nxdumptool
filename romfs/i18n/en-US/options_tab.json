@@ -3,9 +3,7 @@
 
     "overclock": {
         "label": "Overclock",
-        "description": "Overclocks both CPU and MEM to 1785 MHz and 1600 MHz, respectively, in order to speed up dump operations. This is considered a relatively safe action.\n\nIf the application is running under title override mode, and sys-clk is active, and a clock profile has been created for the overridden title, this setting has no effect at all.",
-        "value_enabled": "Yes",
-        "value_disabled": "No"
+        "description": "Overclocks both CPU and MEM to 1785 MHz and 1600 MHz, respectively, in order to speed up dump operations. This is considered a relatively safe action.\n\nIf the application is running under title override mode, and sys-clk is active, and a clock profile has been created for the overridden title, this setting has no effect at all."
     },
 
     "naming_convention": {

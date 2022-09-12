@@ -273,8 +273,9 @@ bool ncaGenerateHierarchicalSha256Patch(NcaFsSectionContext *ctx, const void *da
 
 void ncaWriteHierarchicalSha256PatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || \
-        !patch->hash_region_count || patch->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || \
+        memcmp(patch->content_id.c, ctx->content_id.c, sizeof(NcmContentId)) != 0 || !patch->hash_region_count || \
+        patch->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
 
     patch->written = true;
 
@@ -297,8 +298,8 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 
 void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || memcmp(patch->content_id.c, ctx->content_id.c, 0x10) != 0 || \
-        !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
+    if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || \
+        memcmp(patch->content_id.c, ctx->content_id.c, sizeof(NcmContentId)) != 0 || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
 
     patch->written = true;
 
@@ -458,13 +459,12 @@ void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE])
 
 const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
 {
-    NcaContext *nca_ctx = NULL;
     const char *str = "Invalid";
     bool is_exefs = false;
 
-    if (!ctx || !(nca_ctx = (NcaContext*)ctx->nca_ctx)) return str;
+    if (!ctx || !ctx->nca_ctx) return str;
 
-    is_exefs = (nca_ctx->content_type == NcmContentType_Program && ctx->section_idx == 0);
+    is_exefs = (ctx->nca_ctx->content_type == NcmContentType_Program && ctx->section_idx == 0);
 
     switch(ctx->section_type)
     {
@@ -1019,7 +1019,7 @@ end:
 static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
 {
 #if LOG_LEVEL <= LOG_LEVEL_WARNING
-    NcaContext *nca_ctx = (NcaContext*)ctx->nca_ctx;
+    const char *content_id_str = ctx->nca_ctx->content_id_str;
 #endif
 
     bool success = false, valid = true;
@@ -1038,7 +1038,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                 if (!hash_data->hash_block_size || !hash_data->hash_region_count || hash_data->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT)
                 {
                     LOG_DATA_WARNING(hash_data, sizeof(NcaHierarchicalSha256Data), "Invalid HierarchicalSha256 data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
-                                     ctx->section_idx, nca_ctx->content_id_str);
+                                     ctx->section_idx, content_id_str);
                     break;
                 }
 
@@ -1050,7 +1050,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                         ((i < (hash_data->hash_region_count - 1) || !ctx->has_sparse_layer) && (hash_region->offset + hash_region->size) > ctx->section_size))
                     {
                         LOG_MSG_WARNING("HierarchicalSha256 region #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
-                                        i, ctx->section_idx, nca_ctx->content_id_str);
+                                        i, ctx->section_idx, content_id_str);
                         valid = false;
                         break;
                     }
@@ -1070,7 +1070,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                     hash_data->info_level_hash.max_level_count != NCA_IVFC_MAX_LEVEL_COUNT)
                 {
                     LOG_DATA_WARNING(hash_data, sizeof(NcaIntegrityMetaInfo), "Invalid HierarchicalIntegrity data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
-                                     ctx->section_idx, nca_ctx->content_id_str);
+                                     ctx->section_idx, content_id_str);
                     break;
                 }
 
@@ -1082,7 +1082,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
                         (!ctx->has_sparse_layer && ctx->section_type != NcaFsSectionType_PatchRomFs)) && (lvl_info->offset + lvl_info->size) > ctx->section_size))
                     {
                         LOG_MSG_WARNING("HierarchicalIntegrity level #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
-                                        i, ctx->section_idx, nca_ctx->content_id_str);
+                                        i, ctx->section_idx, content_id_str);
                         valid = false;
                         break;
                     }
@@ -1095,7 +1095,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
 
             break;
         default:
-            LOG_MSG_WARNING("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", ctx->section_idx, nca_ctx->content_id_str, ctx->hash_type);
+            LOG_MSG_WARNING("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", ctx->section_idx, content_id_str, ctx->hash_type);
             break;
     }
 
@@ -1115,7 +1115,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     size_t crypt_res = 0;
     u64 sector_num = 0;
 
-    NcaContext *nca_ctx = (NcaContext*)ctx->nca_ctx;
+    NcaContext *nca_ctx = ctx->nca_ctx;
     u64 content_offset = (ctx->section_offset + offset);
 
     u64 sparse_virtual_offset = ((ctx->has_sparse_layer && ctx->cur_sparse_virtual_offset) ? (ctx->section_offset + ctx->cur_sparse_virtual_offset) : 0);
@@ -1299,7 +1299,7 @@ static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 rea
         return false;
     }
 
-    NcaContext *nca_ctx = (NcaContext*)ctx->nca_ctx;
+    NcaContext *nca_ctx = ctx->nca_ctx;
     u64 content_offset = (ctx->section_offset + offset);
 
     u64 block_start_offset = 0, block_end_offset = 0, block_size = 0;
@@ -1394,7 +1394,7 @@ static bool ncaGenerateHashDataPatch(NcaFsSectionContext *ctx, const void *data,
 
     bool use_sha3 = false, success = false;
 
-    if (!ctx || !ctx->enabled || ctx->has_sparse_layer || ctx->has_compression_layer || !(nca_ctx = (NcaContext*)ctx->nca_ctx) || \
+    if (!ctx || !ctx->enabled || ctx->has_sparse_layer || ctx->has_compression_layer || !(nca_ctx = ctx->nca_ctx) || \
         (!is_integrity_patch && ((ctx->hash_type != NcaHashType_HierarchicalSha256 && ctx->hash_type != NcaHashType_HierarchicalSha3256) || \
         !ctx->header.hash_data.hierarchical_sha256_data.hash_block_size || !(layer_count = ctx->header.hash_data.hierarchical_sha256_data.hash_region_count) || \
         layer_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !(last_layer_size = ctx->header.hash_data.hierarchical_sha256_data.hash_region[layer_count - 1].size))) || \
@@ -1656,7 +1656,7 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
     size_t crypt_res = 0;
     u64 sector_num = 0;
 
-    NcaContext *nca_ctx = (NcaContext*)ctx->nca_ctx;
+    NcaContext *nca_ctx = ctx->nca_ctx;
     u64 content_offset = (ctx->section_offset + data_offset);
 
     u64 block_start_offset = 0, block_end_offset = 0, block_size = 0;

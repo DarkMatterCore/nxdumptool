@@ -31,10 +31,10 @@ extern "C" {
 #endif
 
 typedef enum {
-    ConfigDumpDestination_SdCard  = 0,
-    ConfigDumpDestination_UsbHost = 1,
-    ConfigDumpDestination_Count   = 2
-} ConfigDumpDestination;
+    ConfigOutputStorage_SdCard  = 0,
+    ConfigOutputStorage_UsbHost = 1,
+    ConfigOutputStorage_Count   = 2
+} ConfigOutputStorage;
 
 typedef enum {
     ConfigChecksumLookupMethod_None    = 0,

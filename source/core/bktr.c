@@ -137,10 +137,9 @@ static bool bktrVisitorMovePrevious(BucketTreeVisitor *visitor);
 
 bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type)
 {
-    NcaContext *nca_ctx = NULL;
-
-    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || \
-        (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved) || storage_type == BucketTreeStorageType_Compressed || storage_type >= BucketTreeStorageType_Count)
+    if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || !nca_fs_ctx->nca_ctx || \
+        (nca_fs_ctx->nca_ctx->rights_id_available && !nca_fs_ctx->nca_ctx->titlekey_retrieved) || storage_type == BucketTreeStorageType_Compressed || \
+        storage_type >= BucketTreeStorageType_Count)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -166,20 +165,17 @@ bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_c
     }
 
     if (!success) LOG_MSG_ERROR("Failed to initialize Bucket Tree %s storage for FS section #%u in \"%s\".", bktrGetStorageTypeName(storage_type), nca_fs_ctx->section_idx, \
-                                nca_ctx->content_id_str);
+                                nca_fs_ctx->nca_ctx->content_id_str);
 
     return success;
 }
 
 bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSubStorage *substorage)
 {
-    NcaFsSectionContext *nca_fs_ctx = NULL;
-    NcaContext *nca_ctx = NULL;
-
-    if (!out || !substorage || substorage->index != 0 || !(nca_fs_ctx = substorage->nca_fs_ctx) || !nca_fs_ctx->enabled || !nca_fs_ctx->has_compression_layer || \
-        nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved) || \
-        substorage->type == BucketTreeSubStorageType_AesCtrEx || substorage->type == BucketTreeSubStorageType_Compressed || substorage->type >= BucketTreeSubStorageType_Count || \
-        (substorage->type == BucketTreeSubStorageType_Regular && substorage->bktr_ctx) || (substorage->type != BucketTreeSubStorageType_Regular && !substorage->bktr_ctx))
+    if (!out || !bktrIsValidSubStorage(substorage) || substorage->index != 0 || !substorage->nca_fs_ctx->enabled || !substorage->nca_fs_ctx->has_compression_layer || \
+        substorage->nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || !substorage->nca_fs_ctx->nca_ctx || \
+        (substorage->nca_fs_ctx->nca_ctx->rights_id_available && !substorage->nca_fs_ctx->nca_ctx->titlekey_retrieved) || \
+        substorage->type == BucketTreeSubStorageType_AesCtrEx || substorage->type == BucketTreeSubStorageType_Compressed || substorage->type >= BucketTreeSubStorageType_Count)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -188,6 +184,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
     /* Free output context beforehand. */
     bktrFreeContext(out);
 
+    NcaFsSectionContext *nca_fs_ctx = substorage->nca_fs_ctx;
     NcaBucketInfo *compressed_bucket = &(nca_fs_ctx->header.compression_info.bucket);
     BucketTreeTable *compressed_table = NULL;
     u64 node_storage_size = 0, entry_storage_size = 0;
@@ -253,10 +250,8 @@ end:
 
 bool bktrSetRegularSubStorage(BucketTreeContext *ctx, NcaFsSectionContext *nca_fs_ctx)
 {
-    NcaContext *nca_ctx = NULL;
-
     if (!bktrIsValidContext(ctx) || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || \
-        !(nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx) || (nca_ctx->rights_id_available && !nca_ctx->titlekey_retrieved) || \
+        !nca_fs_ctx->nca_ctx || (nca_fs_ctx->nca_ctx->rights_id_available && !nca_fs_ctx->nca_ctx->titlekey_retrieved) || \
         ctx->storage_type == BucketTreeStorageType_Compressed || ctx->storage_type >= BucketTreeStorageType_Count || \
         (ctx->storage_type == BucketTreeStorageType_Indirect && ctx->nca_fs_ctx == nca_fs_ctx) || \
         ((ctx->storage_type == BucketTreeStorageType_AesCtrEx || ctx->storage_type == BucketTreeStorageType_Sparse) && ctx->nca_fs_ctx != nca_fs_ctx))
@@ -364,7 +359,7 @@ bool bktrIsBlockWithinIndirectStorageRange(BucketTreeContext *ctx, u64 offset, u
     /* Check if we're dealing with a Compressed storage. */
     if (ctx->storage_type == BucketTreeStorageType_Compressed)
     {
-        BucketTreeContext *indirect_storage = (BucketTreeContext*)ctx->substorages[0].bktr_ctx;
+        BucketTreeContext *indirect_storage = ctx->substorages[0].bktr_ctx;
         const u64 compressed_storage_base_offset = ctx->nca_fs_ctx->hash_region.size;
         BucketTreeCompressedStorageEntry *start_entry = NULL, *end_entry = NULL;
 
@@ -509,7 +504,7 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
         return false;
     }
 
-    NcaContext *nca_ctx = (NcaContext*)nca_fs_ctx->nca_ctx;
+    NcaContext *nca_ctx = nca_fs_ctx->nca_ctx;
     NcaBucketInfo *indirect_bucket = (is_sparse ? &(nca_fs_ctx->header.sparse_info.bucket) : &(nca_fs_ctx->header.patch_info.indirect_bucket));
     BucketTreeTable *indirect_table = NULL;
     u64 node_storage_size = 0, entry_storage_size = 0;
@@ -532,7 +527,7 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
 
     /* Read indirect storage table data. */
     if ((!is_sparse && !ncaReadFsSection(nca_fs_ctx, indirect_table, indirect_bucket->size, indirect_bucket->offset)) || \
-        (is_sparse && !ncaReadContentFile((NcaContext*)nca_fs_ctx->nca_ctx, indirect_table, indirect_bucket->size, nca_fs_ctx->sparse_table_offset)))
+        (is_sparse && !ncaReadContentFile(nca_ctx, indirect_table, indirect_bucket->size, nca_fs_ctx->sparse_table_offset)))
     {
         LOG_MSG_ERROR("Failed to read Indirect Storage Table data! (%s).", is_sparse ? "sparse" : "patch");
         goto end;
@@ -595,10 +590,10 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
 {
     BucketTreeContext *ctx = visitor->bktr_ctx;
     bool is_sparse = (ctx->storage_type == BucketTreeStorageType_Sparse);
-    bool missing_original_storage = !bktrIsValidSubstorage(&(ctx->substorages[0]));
+    bool missing_original_storage = !bktrIsValidSubStorage(&(ctx->substorages[0]));
 
     if (!out || (is_sparse && (missing_original_storage || ctx->substorages[0].type != BucketTreeSubStorageType_Regular)) || \
-        (!is_sparse && (!bktrIsValidSubstorage(&(ctx->substorages[1])) || ctx->substorages[1].type != BucketTreeSubStorageType_AesCtrEx || \
+        (!is_sparse && (!bktrIsValidSubStorage(&(ctx->substorages[1])) || ctx->substorages[1].type != BucketTreeSubStorageType_AesCtrEx || \
         (!missing_original_storage && (ctx->substorages[0].type == BucketTreeSubStorageType_Indirect || ctx->substorages[0].type == BucketTreeSubStorageType_AesCtrEx || \
         ctx->substorages[0].type >= BucketTreeSubStorageType_Count)))) || (offset + read_size) > ctx->end_offset)
     {
@@ -771,7 +766,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
 {
     BucketTreeContext *ctx = visitor->bktr_ctx;
 
-    if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || ctx->substorages[0].type != BucketTreeSubStorageType_Regular || (offset + read_size) > ctx->end_offset)
+    if (!out || !bktrIsValidSubStorage(&(ctx->substorages[0])) || ctx->substorages[0].type != BucketTreeSubStorageType_Regular || (offset + read_size) > ctx->end_offset)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -856,7 +851,8 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
     NcaFsSectionContext *nca_fs_ctx = ctx->nca_fs_ctx;
     u64 compressed_storage_base_offset = nca_fs_ctx->hash_region.size;
 
-    if (!out || !bktrIsValidSubstorage(&(ctx->substorages[0])) || ctx->substorages[0].type >= BucketTreeSubStorageType_AesCtrEx || (offset + read_size) > ctx->end_offset)
+    if (!out || !bktrIsValidSubStorage(&(ctx->substorages[0])) || ctx->substorages[0].type == BucketTreeSubStorageType_AesCtrEx || \
+        ctx->substorages[0].type == BucketTreeSubStorageType_Compressed || ctx->substorages[0].type >= BucketTreeSubStorageType_Count || (offset + read_size) > ctx->end_offset)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -1016,7 +1012,7 @@ end:
 
 static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubStorageReadParams *params)
 {
-    if (!bktrIsValidSubstorage(substorage) || !params || !params->buffer || !params->size)
+    if (!bktrIsValidSubStorage(substorage) || !params || !params->buffer || !params->size)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -1041,8 +1037,7 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
         }
     } else {
         /* Perform a read on the target BucketTree storage. */
-        BucketTreeContext *ctx = (BucketTreeContext*)substorage->bktr_ctx;
-        success = bktrReadStorage(ctx, params->buffer, params->size, params->offset);
+        success = bktrReadStorage(substorage->bktr_ctx, params->buffer, params->size, params->offset);
     }
 
     if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk from offset 0x%lX!", params->size, params->offset);

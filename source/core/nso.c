@@ -31,12 +31,11 @@ static bool nsoGetSectionFromRodataSegment(NsoContext *nso_ctx, u8 *rodata_buf, 
 
 bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, PartitionFileSystemEntry *pfs_entry)
 {
-    NcaContext *nca_ctx = NULL;
     u8 *rodata_buf = NULL;
     bool success = false, dump_nso_header = false;
 
-    if (!out || !pfs_ctx || !ncaStorageIsValidContext(&(pfs_ctx->storage_ctx)) || !(nca_ctx = (NcaContext*)pfs_ctx->nca_fs_ctx->nca_ctx) || \
-        nca_ctx->content_type != NcmContentType_Program || !pfs_ctx->offset || !pfs_ctx->size || !pfs_ctx->is_exefs || \
+    if (!out || !pfs_ctx || !ncaStorageIsValidContext(&(pfs_ctx->storage_ctx)) || !pfs_ctx->nca_fs_ctx->nca_ctx || \
+        pfs_ctx->nca_fs_ctx->nca_ctx->content_type != NcmContentType_Program || !pfs_ctx->offset || !pfs_ctx->size || !pfs_ctx->is_exefs || \
         pfs_ctx->header_size <= sizeof(PartitionFileSystemHeader) || !pfs_ctx->header || !pfs_entry)
     {
         LOG_MSG_ERROR("Invalid parameters!");

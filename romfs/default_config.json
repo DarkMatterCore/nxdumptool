@@ -1,9 +1,9 @@
 {
     "overclock": true,
     "naming_convention": 0,
-    "dump_destination": 0,
+    "output_storage": 0,
     "gamecard": {
-        "append_key_area": false,
+        "prepend_key_area": false,
         "keep_certificate": false,
         "trim_dump": false,
         "calculate_checksum": true,

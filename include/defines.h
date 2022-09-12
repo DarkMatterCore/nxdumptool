@@ -121,7 +121,8 @@
 #define GITHUB_API_RELEASE_URL          GITHUB_API_URL "/repos/" GITHUB_REPOSITORY "/releases/latest"
 
 #define NSWDB_XML_URL                   "http://nswdb.com/xml.php"
-#define NSWDB_XML_PATH                  APP_BASE_PATH "NSWreleases.xml"
+#define NSWDB_XML_NAME                  "NSWreleases.xml"
+#define NSWDB_XML_PATH                  APP_BASE_PATH NSWDB_XML_NAME
 
 #define BOREALIS_URL                    "https://github.com/natinusala/borealis"
 #define LIBUSBHSFS_URL                  "https://github.com/DarkMatterCore/libusbhsfs"

@@ -236,6 +236,11 @@ namespace nxdt::tasks
         }
     }
 
+    const UmsDeviceVector* UmsTask::GetUmsDevices(void)
+    {
+        return &(this->ums_devices);
+    }
+
     void UmsTask::PopulateUmsDeviceVector(void)
     {
         UsbHsFsDevice *ums_devices = NULL;
