@@ -62,25 +62,16 @@ typedef struct {
     u8 nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Count][AES_128_KEY_SIZE];                      ///< Retrieved from the .rodata segment in the FS sysmodule.
     u8 nca_kaek_sealed[NcaKeyAreaEncryptionKeyIndex_Count][NcaKeyGeneration_Max][AES_128_KEY_SIZE]; ///< Generated from nca_kaek_sources. Sealed by the SMC AES engine.
     u8 nca_kaek[NcaKeyAreaEncryptionKeyIndex_Count][NcaKeyGeneration_Max][AES_128_KEY_SIZE];        ///< Unsealed key area encryption keys. Retrieved from the Lockpick_RCM keys file.
+                                                                                                    ///< Verified using a hardcoded hash.
 
     ///< AES-128-CTR key needed to decrypt the console-specific eTicket RSA device key stored in PRODINFO.
+    ///< Verified by decrypting the eTicket RSA device key.
     u8 eticket_rsa_kek[AES_128_KEY_SIZE];                                                           ///< eTicket RSA key encryption key (generic). Retrieved from the Lockpick_RCM keys file.
     u8 eticket_rsa_kek_personalized[AES_128_KEY_SIZE];                                              ///< eTicket RSA key encryption key (console-specific). Retrieved from the Lockpick_RCM keys file.
 
     ///< AES-128-ECB keys needed to decrypt titlekeys.
-    u8 ticket_common_keys[NcaKeyGeneration_Max][AES_128_KEY_SIZE];                                  ///< Retrieved from the Lockpick_RCM keys file.
+    u8 ticket_common_keys[NcaKeyGeneration_Max][AES_128_KEY_SIZE];                                  ///< Retrieved from the Lockpick_RCM keys file. Verified using a hardcoded hash.
 } KeysNcaKeyset;
-
-typedef struct {
-    /// AES-128-CBC keys needed to decrypt the CardInfo area from gamecard headers.
-    const u8 gc_cardinfo_kek_source[AES_128_KEY_SIZE];      ///< Randomly generated KEK source to decrypt official CardInfo area keys.
-    const u8 gc_cardinfo_key_prod_source[AES_128_KEY_SIZE]; ///< CardInfo area key used in retail units. Obfuscated using the above KEK source and SMC AES engine keydata.
-    const u8 gc_cardinfo_key_dev_source[AES_128_KEY_SIZE];  ///< CardInfo area key used in development units. Obfuscated using the above KEK source and SMC AES engine keydata.
-
-    u8 gc_cardinfo_kek_sealed[AES_128_KEY_SIZE];            ///< Generated from gc_cardinfo_kek_source. Sealed by the SMC AES engine.
-    u8 gc_cardinfo_key_prod[AES_128_KEY_SIZE];              ///< Generated from gc_cardinfo_kek_sealed and gc_cardinfo_key_prod_source.
-    u8 gc_cardinfo_key_dev[AES_128_KEY_SIZE];               ///< Generated from gc_cardinfo_kek_sealed and gc_cardinfo_key_dev_source.
-} KeysGameCardKeyset;
 
 /// Used to parse the eTicket RSA device key retrieved from PRODINFO via setcalGetEticketDeviceKey().
 /// Everything after the AES CTR is encrypted using the eTicket RSA device key encryption key.
@@ -95,6 +86,17 @@ typedef struct {
 } EticketRsaDeviceKey;
 
 NXDT_ASSERT(EticketRsaDeviceKey, 0x240);
+
+/// AES-128-CBC keys needed to decrypt the CardInfo area from gamecard headers.
+typedef struct {
+    const u8 gc_cardinfo_kek_source[AES_128_KEY_SIZE];      ///< Randomly generated KEK source to decrypt official CardInfo area keys.
+    const u8 gc_cardinfo_key_prod_source[AES_128_KEY_SIZE]; ///< CardInfo area key used in retail units. Obfuscated using the above KEK source and SMC AES engine keydata.
+    const u8 gc_cardinfo_key_dev_source[AES_128_KEY_SIZE];  ///< CardInfo area key used in development units. Obfuscated using the above KEK source and SMC AES engine keydata.
+
+    u8 gc_cardinfo_kek_sealed[AES_128_KEY_SIZE];            ///< Generated from gc_cardinfo_kek_source. Sealed by the SMC AES engine.
+    u8 gc_cardinfo_key_prod[AES_128_KEY_SIZE];              ///< Generated from gc_cardinfo_kek_sealed and gc_cardinfo_key_prod_source.
+    u8 gc_cardinfo_key_dev[AES_128_KEY_SIZE];               ///< Generated from gc_cardinfo_kek_sealed and gc_cardinfo_key_dev_source.
+} KeysGameCardKeyset;
 
 /* Function prototypes. */
 
@@ -114,6 +116,8 @@ static char keysConvertHexDigitToBinary(char c);
 static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 size);
 static bool keysReadKeysFromFile(void);
 
+static bool keysVerifyLockpickRcmData(void);
+
 static bool keysGetDecryptedEticketRsaDeviceKey(void);
 static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void *n);
 
@@ -121,19 +125,64 @@ static bool keysDeriveGameCardKeys(void);
 
 /* Global variables. */
 
-static KeysNcaKeyset g_ncaKeyset = {0};
-
-static KeysGameCardKeyset g_gameCardKeyset = {
-    .gc_cardinfo_kek_source      = { 0xDE, 0xC6, 0x3F, 0x6A, 0xBF, 0x37, 0x72, 0x0B, 0x7E, 0x54, 0x67, 0x6A, 0x2D, 0xEF, 0xDD, 0x97 },
-    .gc_cardinfo_key_prod_source = { 0xF4, 0x92, 0x06, 0x52, 0xD6, 0x37, 0x70, 0xAF, 0xB1, 0x9C, 0x6F, 0x63, 0x09, 0x01, 0xF6, 0x29 },
-    .gc_cardinfo_key_dev_source  = { 0x0B, 0x7D, 0xBB, 0x2C, 0xCF, 0x64, 0x1A, 0xF4, 0xD7, 0x38, 0x81, 0x3F, 0x0C, 0x33, 0xF4, 0x1C },
-    .gc_cardinfo_kek_sealed      = {0},
-    .gc_cardinfo_key_prod        = {0},
-    .gc_cardinfo_key_dev         = {0}
-};
-
 static bool g_keysetLoaded = false;
 static Mutex g_keysetMutex = 0;
+
+static KeysNcaKeyset g_ncaKeyset = {0};
+
+/// TODO: update on master key changes.
+static const u8 g_ncaKaekBlockHashes[2][NcaKeyAreaEncryptionKeyIndex_Count][SHA256_HASH_SIZE] = {
+    /* Production. */
+    {
+        /* Application. */
+        {
+            0x25, 0xDB, 0xC7, 0xB0, 0x55, 0x05, 0x46, 0xAF, 0xDA, 0xA0, 0xEE, 0xA8, 0x85, 0x3D, 0x7E, 0x3D,
+            0x33, 0xD3, 0x5D, 0x86, 0x2C, 0xA7, 0x18, 0x2C, 0x83, 0xBB, 0x81, 0x79, 0xFC, 0x47, 0x91, 0x63
+        },
+        /* Ocean. */
+        {
+            0x58, 0x00, 0x85, 0xA9, 0xE5, 0x2B, 0x3C, 0x50, 0xDB, 0x3A, 0x9F, 0xF2, 0x56, 0x61, 0xC2, 0x35,
+            0x0C, 0xAB, 0xE8, 0xC2, 0x9B, 0x03, 0x0E, 0x2E, 0xDD, 0xF4, 0xC7, 0x5E, 0x7E, 0x1B, 0x7D, 0x06
+        },
+        /* System. */
+        {
+            0xB4, 0x11, 0x6E, 0x5D, 0xF6, 0x09, 0x72, 0x04, 0x0D, 0xCD, 0xEE, 0x8D, 0x74, 0x2D, 0x51, 0x1A,
+            0xA1, 0x10, 0xA4, 0xFC, 0x0E, 0x2D, 0x6C, 0x0C, 0x85, 0x98, 0x62, 0x1F, 0x7A, 0x6F, 0x31, 0xD6
+        }
+    },
+    /* Development. */
+    {
+        /* Application. */
+        {
+            0xD9, 0xBC, 0x7E, 0x09, 0xFD, 0x46, 0x43, 0xB7, 0x05, 0x5E, 0xAD, 0x60, 0x2A, 0xE4, 0x5B, 0xBC,
+            0xA1, 0x6E, 0xB0, 0x93, 0x8C, 0x51, 0x0E, 0x93, 0x19, 0xE7, 0xD6, 0x00, 0x82, 0xEF, 0xCA, 0x85
+        },
+        /* Ocean. */
+        {
+            0x0F, 0xF6, 0x5E, 0xEC, 0xB9, 0x21, 0x7C, 0x66, 0x27, 0xBA, 0xBA, 0x18, 0xAF, 0x95, 0x3A, 0xEA,
+            0x77, 0xA7, 0x43, 0x8F, 0xA3, 0x2B, 0x40, 0x85, 0xE8, 0x67, 0x4A, 0x28, 0xFF, 0xAE, 0x1D, 0xD5
+        },
+        /* System. */
+        {
+            0x49, 0x63, 0x92, 0xE4, 0x97, 0x34, 0x9B, 0x78, 0x33, 0x73, 0x71, 0x84, 0xC4, 0x96, 0xBB, 0xE6,
+            0x78, 0xD7, 0x4B, 0x31, 0xC1, 0x01, 0xA6, 0xB5, 0x8B, 0xC2, 0x26, 0x2D, 0xD0, 0x5E, 0xB5, 0xEE
+        }
+    }
+};
+
+/// TODO: update on master key changes.
+static const u8 g_ticketCommonKeysBlockHashes[2][SHA256_HASH_SIZE] = {
+    /* Production. */
+    {
+        0x26, 0xBC, 0x1F, 0x28, 0x06, 0x7E, 0x38, 0xF0, 0xBA, 0x3F, 0xF4, 0xAF, 0x3C, 0x2C, 0x5A, 0x11,
+        0x62, 0x7E, 0x70, 0x30, 0x36, 0xED, 0xA9, 0xA7, 0xD7, 0xDB, 0x5F, 0x74, 0x1A, 0xB0, 0x7E, 0xB9
+    },
+    /* Development. */
+    {
+        0xF5, 0x77, 0x10, 0x17, 0x13, 0x4B, 0x4E, 0xD4, 0xBF, 0x24, 0x0B, 0xF4, 0xBB, 0x6E, 0x4D, 0x24,
+        0x6C, 0xC3, 0x0C, 0x60, 0x93, 0x96, 0x9F, 0xD5, 0xA9, 0xA9, 0xB4, 0xD5, 0xD5, 0x44, 0xA6, 0x39
+    }
+};
 
 static SetCalRsa2048DeviceKey g_eTicketRsaDeviceKey = {0};
 
@@ -251,6 +300,15 @@ static KeysMemoryInfo g_fsDataMemoryInfo = {
     }
 };
 
+static KeysGameCardKeyset g_gameCardKeyset = {
+    .gc_cardinfo_kek_source      = { 0xDE, 0xC6, 0x3F, 0x6A, 0xBF, 0x37, 0x72, 0x0B, 0x7E, 0x54, 0x67, 0x6A, 0x2D, 0xEF, 0xDD, 0x97 },
+    .gc_cardinfo_key_prod_source = { 0xF4, 0x92, 0x06, 0x52, 0xD6, 0x37, 0x70, 0xAF, 0xB1, 0x9C, 0x6F, 0x63, 0x09, 0x01, 0xF6, 0x29 },
+    .gc_cardinfo_key_dev_source  = { 0x0B, 0x7D, 0xBB, 0x2C, 0xCF, 0x64, 0x1A, 0xF4, 0xD7, 0x38, 0x81, 0x3F, 0x0C, 0x33, 0xF4, 0x1C },
+    .gc_cardinfo_kek_sealed      = {0},
+    .gc_cardinfo_key_prod        = {0},
+    .gc_cardinfo_key_dev         = {0}
+};
+
 bool keysLoadKeyset(void)
 {
     bool ret = false;
@@ -291,6 +349,9 @@ bool keysLoadKeyset(void)
         /* Read additional keys from the keys file. */
         if (!keysReadKeysFromFile()) break;
 
+        /* Verify loaded Lockpick_RCM data. */
+        if (!keysVerifyLockpickRcmData()) break;
+
         /* Get decrypted eTicket RSA device key. */
         if (!keysGetDecryptedEticketRsaDeviceKey()) break;
 
@@ -302,12 +363,9 @@ bool keysLoadKeyset(void)
     }
 
 #if LOG_LEVEL == LOG_LEVEL_DEBUG
-    if (ret)
-    {
-        LOG_DATA_DEBUG(&g_ncaKeyset, sizeof(KeysNcaKeyset), "NCA keyset dump:");
-        LOG_DATA_DEBUG(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
-        LOG_DATA_DEBUG(&g_gameCardKeyset, sizeof(KeysGameCardKeyset), "Gamecard keyset dump:");
-    }
+    LOG_DATA_DEBUG(&g_ncaKeyset, sizeof(KeysNcaKeyset), "NCA keyset dump:");
+    LOG_DATA_DEBUG(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
+    LOG_DATA_DEBUG(&g_gameCardKeyset, sizeof(KeysGameCardKeyset), "Gamecard keyset dump:");
 #endif
 
     return ret;
@@ -962,6 +1020,34 @@ static bool keysReadKeysFromFile(void)
     if (!eticket_rsa_kek_available)
     {
         LOG_MSG_ERROR("\"eticket_rsa_kek\" unavailable in \"%s\"!", keys_file_path);
+        return false;
+    }
+
+    return true;
+}
+
+static bool keysVerifyLockpickRcmData(void)
+{
+    u8 hash[SHA256_HASH_SIZE] = {0};
+    u8 dev_unit = (utilsIsDevelopmentUnit() ? 1 : 0);
+    size_t block_size = (NcaKeyGeneration_Current * AES_128_KEY_SIZE);
+
+    /* Verify loaded NCA key area encryption keys. */
+    for(u8 i = 0; i < NcaKeyAreaEncryptionKeyIndex_Count; i++)
+    {
+        sha256CalculateHash(hash, g_ncaKeyset.nca_kaek[i], block_size);
+        if (memcmp(hash, g_ncaKaekBlockHashes[dev_unit][i], SHA256_HASH_SIZE) != 0)
+        {
+            LOG_MSG_ERROR("NCA KAEK block #%u checksum mismatch! (%s, keygen %u).", i, dev_unit ? "dev" : "prod", NcaKeyGeneration_Current);
+            return false;
+        }
+    }
+
+    /* Verify loaded ticket common keys. */
+    sha256CalculateHash(hash, g_ncaKeyset.ticket_common_keys, block_size);
+    if (memcmp(hash, g_ticketCommonKeysBlockHashes[dev_unit], SHA256_HASH_SIZE) != 0)
+    {
+        LOG_MSG_ERROR("Ticket common keys block checksum mismatch! (%s, keygen %u).", dev_unit ? "dev" : "prod", NcaKeyGeneration_Current);
         return false;
     }
 

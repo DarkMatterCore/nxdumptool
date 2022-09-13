@@ -75,6 +75,7 @@ typedef enum {
 } NcaContentType;
 
 /// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
+/// TODO: update on master key changes.
 typedef enum {
     NcaKeyGeneration_Since100NUP  = 0,                              ///< 1.0.0 - 2.3.0.
     NcaKeyGeneration_Since300NUP  = 2,                              ///< 3.0.0.
