@@ -206,7 +206,9 @@ static void usbEndSession(void);
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size);
 static bool usbSendCommand(void);
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
 static void usbLogStatusDetail(u32 status);
+#endif
 
 NX_INLINE bool usbAllocateTransferBuffer(void);
 NX_INLINE void usbFreeTransferBuffer(void);
@@ -449,7 +451,10 @@ bool usbSendFileData(void *data, u64 data_size)
                 goto end;
             }
 
-            if (!(ret = (cmd_status->status == UsbStatusType_Success))) usbLogStatusDetail(cmd_status->status);
+            ret = (cmd_status->status == UsbStatusType_Success);
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
+            if (!ret) usbLogStatusDetail(cmd_status->status);
+#endif
         }
 
 end:
@@ -740,11 +745,14 @@ static bool usbSendCommand(void)
     ret = ((status = cmd_status->status) == UsbStatusType_Success);
 
 end:
+#if LOG_LEVEL <= LOG_LEVEL_ERROR
     if (!ret) usbLogStatusDetail(status);
+#endif
 
     return ret;
 }
 
+#if LOG_LEVEL <= LOG_LEVEL_INFO
 static void usbLogStatusDetail(u32 status)
 {
     switch(status)
@@ -774,6 +782,7 @@ static void usbLogStatusDetail(u32 status)
             break;
     }
 }
+#endif
 
 NX_INLINE bool usbAllocateTransferBuffer(void)
 {
