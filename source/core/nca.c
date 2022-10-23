@@ -61,7 +61,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx);
 static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx);
 
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset);
-static bool ncaFsSectionCheckHashRegionAccess(NcaFsSectionContext *ctx, u64 offset, u64 size, u64 *out_chunk_size);
+static bool ncaFsSectionCheckPlaintextHashRegionAccess(NcaFsSectionContext *ctx, u64 offset, u64 size, NcaRegion *out_region);
 
 static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt);
 
@@ -122,8 +122,8 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     out->content_type = content_info->content_type;
     out->id_offset = content_info->id_offset;
     out->title_version = title_version;
+    ncmContentInfoSizeToU64(content_info, &(out->content_size));
 
-    titleConvertNcmContentSizeToU64(content_info->size, &(out->content_size));
     if (out->content_size < NCA_FULL_HEADER_LENGTH)
     {
         LOG_MSG_ERROR("Invalid size for NCA \"%s\"!", out->content_id_str);
@@ -469,10 +469,10 @@ const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
     switch(ctx->section_type)
     {
         case NcaFsSectionType_PartitionFs:
-            str = (is_exefs ? "ExeFS" : "Partition FS");
+            str = (is_exefs ? (ctx->has_sparse_layer ? "ExeFS (sparse)" : "ExeFS") : (ctx->has_sparse_layer ? "PartitionFS (sparse)" : "PartitionFS"));
             break;
         case NcaFsSectionType_RomFs:
-            str = "RomFS";
+            str = (ctx->has_sparse_layer ? "RomFS (sparse)" : "RomFS");
             break;
         case NcaFsSectionType_PatchRomFs:
             str = "Patch RomFS";
@@ -783,7 +783,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     if (fs_ctx->section_offset < sizeof(NcaHeader) || !fs_ctx->section_size)
     {
         LOG_MSG_ERROR("Invalid offset/size for FS section #%u in \"%s\" (0x%lX, 0x%lX). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->section_offset, \
-                fs_ctx->section_size);
+                      fs_ctx->section_size);
         goto end;
     }
 
@@ -918,15 +918,6 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         goto end;
     }
 
-    /* Check if we're dealing with a bogus Patch RomFS (seem to be available in HtmlDocument NCAs). */
-    if (fs_ctx->section_type == NcaFsSectionType_PatchRomFs && fs_ctx->section_size <= (fs_ctx->header.patch_info.indirect_bucket.size + fs_ctx->header.patch_info.aes_ctr_ex_bucket.size))
-    {
-        /* Return true but don't set this FS section as enabled, since we can't really use it. */
-        LOG_MSG_WARNING("Empty Patch RomFS data detected for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
-        success = true;
-        goto end;
-    }
-
     /* Validate HashData boundaries. */
     if (!ncaFsSectionValidateHashDataBoundaries(fs_ctx)) goto end;
 
@@ -938,8 +929,10 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         goto end;
     }
 
-    /* Check if we're within boundaries. */
-    if (fs_ctx->hash_region.size > fs_ctx->section_size || (fs_ctx->section_offset + fs_ctx->hash_region.size) > nca_ctx->content_size)
+    /* Check if we're within physical boundaries, but only if we're not dealing with a Patch RomFS or a sparse layer. */
+    /* The hash layers before the target layer may exceed the section size. */
+    if (fs_ctx->section_type != NcaFsSectionType_PatchRomFs && !fs_ctx->has_sparse_layer && (fs_ctx->hash_region.size > fs_ctx->section_size || \
+        (fs_ctx->section_offset + fs_ctx->hash_region.size) > nca_ctx->content_size))
     {
         LOG_MSG_ERROR("Hash layer region for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
@@ -956,28 +949,18 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     /* Check if we're dealing with a compression layer. */
     if (fs_ctx->has_compression_layer)
     {
-        u64 raw_storage_offset = 0;
-        u64 raw_storage_size = compression_bucket->size;
+        u64 bucket_offset = 0;
+        u64 bucket_size = compression_bucket->size;
 
-        if (fs_ctx->section_type != NcaFsSectionType_PatchRomFs)
+        /* Calculate section-relative compression bucket offset, but only if we're not dealing with a Patch RomFS or a section with a sparse layer. */
+        if (fs_ctx->section_type != NcaFsSectionType_PatchRomFs && !fs_ctx->has_sparse_layer) bucket_offset = (fs_ctx->hash_region.size + compression_bucket->offset);
+
+        /* Check if the compression bucket is valid. Don't verify extents if we're dealing with a Patch RomFS or a section with a sparse layer. */
+        if (!ncaVerifyBucketInfo(compression_bucket) || !compression_bucket->header.entry_count || (bucket_offset && (bucket_offset < sizeof(NcaHeader) || \
+            (bucket_offset + bucket_size) > fs_ctx->section_size || (fs_ctx->section_offset + bucket_offset + bucket_size) > nca_ctx->content_size)))
         {
-            /* Get target hash layer offset. */
-            if (!ncaGetFsSectionHashTargetExtents(fs_ctx, &raw_storage_offset, NULL))
-            {
-                LOG_MSG_ERROR("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", fs_ctx->section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
-                goto end;
-            }
-
-            /* Update compression layer offset. */
-            raw_storage_offset += compression_bucket->offset;
-        }
-
-        /* Check if the compression bucket is valid. Don't verify extents if we're dealing with a Patch RomFS. */
-        if (!ncaVerifyBucketInfo(compression_bucket) || !compression_bucket->header.entry_count || (raw_storage_offset && (raw_storage_offset < sizeof(NcaHeader) || \
-            (raw_storage_offset + raw_storage_size) > fs_ctx->section_size || (fs_ctx->section_offset + raw_storage_offset + raw_storage_size) > nca_ctx->content_size)))
-        {
-            LOG_DATA_ERROR(compression_bucket, sizeof(NcaBucketInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX). Skipping FS section. CompressionInfo dump:", \
-                           section_idx, nca_ctx->content_id_str, nca_ctx->content_size);
+            LOG_DATA_ERROR(compression_bucket, sizeof(NcaBucketInfo), "Invalid CompressionInfo data for FS section #%u in \"%s\" (0x%lX, 0x%lX, 0x%lX). Skipping FS section. CompressionInfo dump:", \
+                           section_idx, nca_ctx->content_id_str, bucket_offset, fs_ctx->section_size, nca_ctx->content_size);
             goto end;
         }
     }
@@ -1018,6 +1001,10 @@ end:
 
 static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
 {
+    /* Return right away if we're dealing with a Patch RomFS or if a sparse layer is used. */
+    /* We can't validate what we don't fully have access to. */
+    if (ctx->section_type == NcaFsSectionType_PatchRomFs || ctx->has_sparse_layer) return true;
+
 #if LOG_LEVEL <= LOG_LEVEL_WARNING
     const char *content_id_str = ctx->nca_ctx->content_id_str;
 #endif
@@ -1033,67 +1020,62 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
             break;
         case NcaHashType_HierarchicalSha256:
         case NcaHashType_HierarchicalSha3256:
+        {
+            NcaHierarchicalSha256Data *hash_data = &(ctx->header.hash_data.hierarchical_sha256_data);
+            if (!hash_data->hash_block_size || !hash_data->hash_region_count || hash_data->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT)
             {
-                NcaHierarchicalSha256Data *hash_data = &(ctx->header.hash_data.hierarchical_sha256_data);
-                if (!hash_data->hash_block_size || !hash_data->hash_region_count || hash_data->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT)
+                LOG_DATA_WARNING(hash_data, sizeof(NcaHierarchicalSha256Data), "Invalid HierarchicalSha256 data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
+                                 ctx->section_idx, content_id_str);
+                break;
+            }
+
+            for(u32 i = 0; i < hash_data->hash_region_count; i++)
+            {
+                /* Validate all hash regions boundaries. */
+                NcaRegion *hash_region = &(hash_data->hash_region[i]);
+                if (hash_region->offset < accum || !hash_region->size || (i < (hash_data->hash_region_count - 1) && (hash_region->offset + hash_region->size) > ctx->section_size))
                 {
-                    LOG_DATA_WARNING(hash_data, sizeof(NcaHierarchicalSha256Data), "Invalid HierarchicalSha256 data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
-                                     ctx->section_idx, content_id_str);
+                    LOG_DATA_WARNING(hash_data, sizeof(NcaHierarchicalSha256Data), "HierarchicalSha256 region #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section. Hash data dump:", \
+                                     i, ctx->section_idx, content_id_str);
+                    valid = false;
                     break;
                 }
 
-                for(u32 i = 0; i < hash_data->hash_region_count; i++)
-                {
-                    /* Validate all hash regions boundaries. Skip the last one if a sparse layer is used. */
-                    NcaRegion *hash_region = &(hash_data->hash_region[i]);
-                    if (hash_region->offset < accum || !hash_region->size || \
-                        ((i < (hash_data->hash_region_count - 1) || !ctx->has_sparse_layer) && (hash_region->offset + hash_region->size) > ctx->section_size))
-                    {
-                        LOG_MSG_WARNING("HierarchicalSha256 region #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
-                                        i, ctx->section_idx, content_id_str);
-                        valid = false;
-                        break;
-                    }
-
-                    accum = (hash_region->offset + hash_region->size);
-                }
-
-                success = valid;
+                accum = (hash_region->offset + hash_region->size);
             }
 
+            success = valid;
             break;
+        }
         case NcaHashType_HierarchicalIntegrity:
         case NcaHashType_HierarchicalIntegritySha3:
+        {
+            NcaIntegrityMetaInfo *hash_data = &(ctx->header.hash_data.integrity_meta_info);
+            if (__builtin_bswap32(hash_data->magic) != NCA_IVFC_MAGIC || hash_data->master_hash_size != SHA256_HASH_SIZE || hash_data->info_level_hash.max_level_count != NCA_IVFC_MAX_LEVEL_COUNT)
             {
-                NcaIntegrityMetaInfo *hash_data = &(ctx->header.hash_data.integrity_meta_info);
-                if (__builtin_bswap32(hash_data->magic) != NCA_IVFC_MAGIC || hash_data->master_hash_size != SHA256_HASH_SIZE || \
-                    hash_data->info_level_hash.max_level_count != NCA_IVFC_MAX_LEVEL_COUNT)
+                LOG_DATA_WARNING(hash_data, sizeof(NcaIntegrityMetaInfo), "Invalid HierarchicalIntegrity data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
+                                 ctx->section_idx, content_id_str);
+                break;
+            }
+
+            for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
+            {
+                /* Validate all level informations boundaries. */
+                NcaHierarchicalIntegrityVerificationLevelInformation *lvl_info = &(hash_data->info_level_hash.level_information[i]);
+                if (lvl_info->offset < accum || !lvl_info->size || !lvl_info->block_order || (i < (NCA_IVFC_LEVEL_COUNT - 1) && (lvl_info->offset + lvl_info->size) > ctx->section_size))
                 {
-                    LOG_DATA_WARNING(hash_data, sizeof(NcaIntegrityMetaInfo), "Invalid HierarchicalIntegrity data for FS section #%u in \"%s\". Skipping FS section. Hash data dump:", \
-                                     ctx->section_idx, content_id_str);
+                    LOG_DATA_WARNING(hash_data, sizeof(NcaIntegrityMetaInfo), "HierarchicalIntegrity level #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section. Hash data dump:", \
+                                     i, ctx->section_idx, content_id_str);
+                    valid = false;
                     break;
                 }
 
-                for(u32 i = 0; i < NCA_IVFC_LEVEL_COUNT; i++)
-                {
-                    /* Validate all level informations boundaries. Skip the last one if we're dealing with a Patch RomFS, or if a sparse layer is used. */
-                    NcaHierarchicalIntegrityVerificationLevelInformation *lvl_info = &(hash_data->info_level_hash.level_information[i]);
-                    if (lvl_info->offset < accum || !lvl_info->size || !lvl_info->block_order || ((i < (NCA_IVFC_LEVEL_COUNT - 1) || \
-                        (!ctx->has_sparse_layer && ctx->section_type != NcaFsSectionType_PatchRomFs)) && (lvl_info->offset + lvl_info->size) > ctx->section_size))
-                    {
-                        LOG_MSG_WARNING("HierarchicalIntegrity level #%u for FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", \
-                                        i, ctx->section_idx, content_id_str);
-                        valid = false;
-                        break;
-                    }
-
-                    accum = (lvl_info->offset + lvl_info->size);
-                }
-
-                success = valid;
+                accum = (lvl_info->offset + lvl_info->size);
             }
 
+            success = valid;
             break;
+        }
         default:
             LOG_MSG_WARNING("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", ctx->section_idx, content_id_str, ctx->hash_type);
             break;
@@ -1124,6 +1106,8 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     u64 block_start_offset = 0, block_end_offset = 0, block_size = 0;
     u64 data_start_offset = 0, chunk_size = 0, out_chunk_size = 0;
 
+    NcaRegion plaintext_area = {0};
+
     bool ret = false;
 
     if (!*(nca_ctx->content_id_str) || (nca_ctx->storage_id != NcmStorageId_GameCard && !nca_ctx->ncm_storage) || \
@@ -1135,35 +1119,40 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         goto end;
     }
 
-    /* Check if we're supposed to read a hash layer without encryption. */
-    if (ncaFsSectionCheckHashRegionAccess(ctx, offset, read_size, &block_size))
+    /* Check if we're about to read a plaintext hash layer. */
+    if (ncaFsSectionCheckPlaintextHashRegionAccess(ctx, offset, read_size, &plaintext_area))
     {
-        /* Read plaintext area. Use NCA-relative offset. */
-        if (!ncaReadContentFile(nca_ctx, out, block_size, content_offset))
+        bool plaintext_first = (plaintext_area.offset == offset);
+
+        /* Read first chunk. */
+        /* It may be plaintext or not depending on the returned hash region properties. */
+        block_size = (plaintext_first ? plaintext_area.size : (plaintext_area.offset - offset));
+
+        if ((plaintext_first && !ncaReadContentFile(nca_ctx, out, block_size, content_offset)) || (!plaintext_first && !_ncaReadFsSection(ctx, out, block_size, offset)))
         {
             LOG_MSG_ERROR("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash region) (#1).", block_size, content_offset, \
-                    nca_ctx->content_id_str, ctx->section_idx);
+                          nca_ctx->content_id_str, ctx->section_idx);
             goto end;
         }
 
-        /* Read remaining encrypted data, if needed. Use FS-section-relative offset. */
-        if (sparse_virtual_offset) ctx->cur_sparse_virtual_offset += block_size;
-        ret = (read_size ? _ncaReadFsSection(ctx, (u8*)out + block_size, read_size - block_size, offset + block_size) : true);
-        goto end;
-    } else
-    if (block_size && block_size < read_size)
-    {
-        /* Read encrypted area. Use FS-section-relative offset. */
-        if (!_ncaReadFsSection(ctx, out, block_size, offset)) goto end;
-
         /* Update parameters. */
         read_size -= block_size;
+        offset += block_size;
         content_offset += block_size;
+        if (sparse_virtual_offset) ctx->cur_sparse_virtual_offset += block_size;
 
-        /* Read remaining plaintext data. Use NCA-relative offset. */
-        ret = ncaReadContentFile(nca_ctx, (u8*)out + block_size, read_size, content_offset);
-        if (!ret) LOG_MSG_ERROR("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash region) (#2).", read_size, content_offset, \
+        /* Read second chunk. */
+        /* It may be plaintext or not depending on the returned hash region properties. */
+        if (read_size && ((plaintext_first && !_ncaReadFsSection(ctx, (u8*)out + block_size, read_size, offset)) || \
+            (!plaintext_first && !ncaReadContentFile(nca_ctx, (u8*)out + block_size, read_size, content_offset))))
+        {
+            LOG_MSG_ERROR("Failed to read 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (plaintext hash region) (#2).", read_size, content_offset, \
                           nca_ctx->content_id_str, ctx->section_idx);
+            goto end;
+        }
+
+        ret = true;
+
         goto end;
     }
 
@@ -1195,7 +1184,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
             if (crypt_res != read_size)
             {
                 LOG_MSG_ERROR("Failed to AES-XTS decrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (aligned).", read_size, content_offset, nca_ctx->content_id_str, \
-                        ctx->section_idx);
+                              ctx->section_idx);
                 goto end;
             }
         } else
@@ -1223,7 +1212,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
     if (!ncaReadContentFile(nca_ctx, g_ncaCryptoBuffer, chunk_size, block_start_offset))
     {
         LOG_MSG_ERROR("Failed to read 0x%lX bytes encrypted data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
-                ctx->section_idx);
+                      ctx->section_idx);
         goto end;
     }
 
@@ -1236,7 +1225,7 @@ static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size
         if (crypt_res != chunk_size)
         {
             LOG_MSG_ERROR("Failed to AES-XTS decrypt 0x%lX bytes data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
-                    ctx->section_idx);
+                          ctx->section_idx);
             goto end;
         }
     } else
@@ -1260,33 +1249,34 @@ end:
     return ret;
 }
 
-static bool ncaFsSectionCheckHashRegionAccess(NcaFsSectionContext *ctx, u64 offset, u64 size, u64 *out_chunk_size)
+static bool ncaFsSectionCheckPlaintextHashRegionAccess(NcaFsSectionContext *ctx, u64 offset, u64 size, NcaRegion *out_region)
 {
     if (!ctx->skip_hash_layer_crypto) return false;
 
     NcaRegion *hash_region = &(ctx->hash_region);
+    bool ret = false;
+
+    memset(out_region, 0, sizeof(NcaRegion));
 
     /* Check if our region contains the access. */
     if (hash_region->offset <= offset)
     {
         if (offset < (hash_region->offset + hash_region->size))
         {
-            if ((hash_region->offset + hash_region->size) <= (offset + size))
-            {
-                *out_chunk_size = ((hash_region->offset + hash_region->size) - offset);
-            } else {
-                *out_chunk_size = size;
-            }
-
-            return true;
-        } else {
-            return false;
+            out_region->offset = offset;
+            out_region->size = ((hash_region->offset + hash_region->size) <= (offset + size) ? ((hash_region->offset + hash_region->size) - offset) : size);
+            ret = true;
         }
     } else {
-        if (hash_region->offset <= (offset + size)) *out_chunk_size = (hash_region->offset - offset);
-
-        return false;
+        if (hash_region->offset < (offset + size))
+        {
+            out_region->offset = hash_region->offset;
+            out_region->size = ((offset + size) <= (hash_region->offset + hash_region->size) ? ((offset + size) - hash_region->offset) : hash_region->size);
+            ret = true;
+        }
     }
+
+    return ret;
 }
 
 static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset, u32 ctr_val, bool decrypt)
@@ -1349,7 +1339,7 @@ static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 rea
     if (!ncaReadContentFile(nca_ctx, g_ncaCryptoBuffer, chunk_size, block_start_offset))
     {
         LOG_MSG_ERROR("Failed to read 0x%lX bytes encrypted data block at offset 0x%lX from NCA \"%s\" FS section #%u! (unaligned).", chunk_size, block_start_offset, nca_ctx->content_id_str, \
-                ctx->section_idx);
+                      ctx->section_idx);
         goto end;
     }
 

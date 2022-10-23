@@ -87,7 +87,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
 static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset);
 
 static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubStorageReadParams *params);
-NX_INLINE void bktrBucketInitializeSubStorageReadParams(BucketTreeSubStorageReadParams *out, void *buffer, u64 offset, u64 size, u64 virtual_offset, u32 ctr_val, bool aes_ctr_ex_crypt, u8 parent_storage_type);
+NX_INLINE void bktrInitializeSubStorageReadParams(BucketTreeSubStorageReadParams *out, void *buffer, u64 offset, u64 size, u64 virtual_offset, u32 ctr_val, bool aes_ctr_ex_crypt, u8 parent_storage_type);
 
 static bool bktrVerifyBucketInfo(NcaBucketInfo *bucket, u64 node_size, u64 entry_size, u64 *out_node_storage_size, u64 *out_entry_storage_size);
 static bool bktrValidateTableOffsetNode(const BucketTreeTable *table, u64 node_size, u64 entry_size, u32 entry_count, u64 *out_start_offset, u64 *out_end_offset);
@@ -189,7 +189,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
     BucketTreeTable *compressed_table = NULL;
     u64 node_storage_size = 0, entry_storage_size = 0;
     BucketTreeSubStorageReadParams params = {0};
-    bool success = false;
+    bool dump_table = false, success = false;
 
     /* Verify bucket info. */
     if (!bktrVerifyBucketInfo(compressed_bucket, BKTR_NODE_SIZE, BKTR_COMPRESSED_ENTRY_SIZE, &node_storage_size, &entry_storage_size))
@@ -208,13 +208,15 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
 
     /* Read Compressed storage table data. */
     const u64 compression_table_offset = (nca_fs_ctx->hash_region.size + compressed_bucket->offset);
-    bktrBucketInitializeSubStorageReadParams(&params, compressed_table, compression_table_offset, compressed_bucket->size, 0, 0, false, BucketTreeSubStorageType_Compressed);
+    bktrInitializeSubStorageReadParams(&params, compressed_table, compression_table_offset, compressed_bucket->size, 0, 0, false, BucketTreeSubStorageType_Compressed);
 
     if (!bktrReadSubStorage(substorage, &params))
     {
         LOG_MSG_ERROR("Failed to read Compressed Storage Table data!");
         goto end;
     }
+
+    dump_table = true;
 
     /* Validate table offset node. */
     u64 start_offset = 0, end_offset = 0;
@@ -243,7 +245,16 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
     success = true;
 
 end:
-    if (!success && compressed_table) free(compressed_table);
+    if (!success)
+    {
+        LOG_DATA_DEBUG(compressed_bucket, sizeof(NcaBucketInfo), "Compressed Storage BucketInfo dump:");
+
+        if (compressed_table)
+        {
+            if (dump_table) LOG_DATA_DEBUG(compressed_table, compressed_bucket->size, "Compressed Storage Table dump:");
+            free(compressed_table);
+        }
+    }
 
     return success;
 }
@@ -508,7 +519,7 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
     NcaBucketInfo *indirect_bucket = (is_sparse ? &(nca_fs_ctx->header.sparse_info.bucket) : &(nca_fs_ctx->header.patch_info.indirect_bucket));
     BucketTreeTable *indirect_table = NULL;
     u64 node_storage_size = 0, entry_storage_size = 0;
-    bool success = false;
+    bool dump_table = false, success = false;
 
     /* Verify bucket info. */
     if (!bktrVerifyBucketInfo(indirect_bucket, BKTR_NODE_SIZE, BKTR_INDIRECT_ENTRY_SIZE, &node_storage_size, &entry_storage_size))
@@ -556,6 +567,8 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
         aes128CtrCrypt(&sparse_ctr_ctx, indirect_table, indirect_table, indirect_bucket->size);
     }
 
+    dump_table = true;
+
     /* Validate table offset node. */
     u64 start_offset = 0, end_offset = 0;
     if (!bktrValidateTableOffsetNode(indirect_table, BKTR_NODE_SIZE, BKTR_INDIRECT_ENTRY_SIZE, indirect_bucket->header.entry_count, &start_offset, &end_offset))
@@ -581,7 +594,16 @@ static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSe
     success = true;
 
 end:
-    if (!success && indirect_table) free(indirect_table);
+    if (!success)
+    {
+        LOG_DATA_DEBUG(indirect_bucket, sizeof(NcaBucketInfo), "Indirect Storage BucketInfo dump (%s):", is_sparse ? "sparse" : "patch");
+
+        if (indirect_table)
+        {
+            if (dump_table) LOG_DATA_DEBUG(indirect_table, indirect_bucket->size, "Indirect Storage Table dump (%s):", is_sparse ? "sparse" : "patch");
+            free(indirect_table);
+        }
+    }
 
     return success;
 }
@@ -655,14 +677,14 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
         /* Read only within the current indirect storage entry. */
         BucketTreeSubStorageReadParams params = {0};
         const u64 data_offset = (offset - cur_entry_offset + cur_entry.physical_offset);
-        bktrBucketInitializeSubStorageReadParams(&params, out, data_offset, read_size, offset, 0, false, ctx->storage_type);
+        bktrInitializeSubStorageReadParams(&params, out, data_offset, read_size, offset, 0, false, ctx->storage_type);
 
         if (cur_entry.storage_index == BucketTreeIndirectStorageIndex_Original)
         {
             if (!missing_original_storage)
             {
                 /* Retrieve data from the original data storage. */
-                /* This may either be a Regular/Sparse/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
+                /* This must either be a Regular/Sparse/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
                 success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
                 if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk from offset 0x%lX in original data storage!", read_size, data_offset);
             } else {
@@ -708,7 +730,7 @@ static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSe
     NcaBucketInfo *aes_ctr_ex_bucket = &(nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket);
     BucketTreeTable *aes_ctr_ex_table = NULL;
     u64 node_storage_size = 0, entry_storage_size = 0;
-    bool success = false;
+    bool dump_table = false, success = false;
 
     /* Verify bucket info. */
     if (!bktrVerifyBucketInfo(aes_ctr_ex_bucket, BKTR_NODE_SIZE, BKTR_AES_CTR_EX_ENTRY_SIZE, &node_storage_size, &entry_storage_size))
@@ -731,6 +753,8 @@ static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSe
         LOG_MSG_ERROR("Failed to read AesCtrEx Storage Table data!");
         goto end;
     }
+
+    dump_table = true;
 
     /* Validate table offset node. */
     u64 start_offset = 0, end_offset = 0;
@@ -757,7 +781,16 @@ static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSe
     success = true;
 
 end:
-    if (!success && aes_ctr_ex_table) free(aes_ctr_ex_table);
+    if (!success)
+    {
+        LOG_DATA_DEBUG(aes_ctr_ex_bucket, sizeof(NcaBucketInfo), "AesCtrEx Storage BucketInfo dump:");
+
+        if (aes_ctr_ex_table)
+        {
+            if (dump_table) LOG_DATA_DEBUG(aes_ctr_ex_table, aes_ctr_ex_bucket->size, "AesCtrEx Storage Table dump:");
+            free(aes_ctr_ex_table);
+        }
+    }
 
     return success;
 }
@@ -825,7 +858,7 @@ static bool bktrReadAesCtrExStorage(BucketTreeVisitor *visitor, void *out, u64 r
     {
         /* Read only within the current AesCtrEx storage entry. */
         BucketTreeSubStorageReadParams params = {0};
-        bktrBucketInitializeSubStorageReadParams(&params, out, offset, read_size, 0, cur_entry.generation, cur_entry.encryption == BucketTreeAesCtrExStorageEncryption_Enabled, ctx->storage_type);
+        bktrInitializeSubStorageReadParams(&params, out, offset, read_size, 0, cur_entry.generation, cur_entry.encryption == BucketTreeAesCtrExStorageEncryption_Enabled, ctx->storage_type);
 
         success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
         if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk at offset 0x%lX from AesCtrEx storage!", read_size, offset);
@@ -930,7 +963,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
                 /* We can randomly access data that's not compressed. */
                 /* Let's just read what we need. */
                 const u64 data_offset = (compressed_storage_base_offset + (offset - cur_entry_offset + (u64)cur_entry.physical_offset));
-                bktrBucketInitializeSubStorageReadParams(&params, out, data_offset, read_size, 0, 0, false, ctx->storage_type);
+                bktrInitializeSubStorageReadParams(&params, out, data_offset, read_size, 0, 0, false, ctx->storage_type);
 
                 success = bktrReadSubStorage(&(ctx->substorages[0]), &params);
                 if (!success) LOG_MSG_ERROR("Failed to read 0x%lX-byte long chunk from offset 0x%lX in non-compressed entry!", read_size, data_offset);
@@ -963,7 +996,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
 
                 /* Adjust read pointer. This will let us use the same buffer for storing read data and decompressing it. */
                 read_ptr = (buffer + (buffer_size - compressed_data_size));
-                bktrBucketInitializeSubStorageReadParams(&params, read_ptr, data_offset, compressed_data_size, 0, 0, false, ctx->storage_type);
+                bktrInitializeSubStorageReadParams(&params, read_ptr, data_offset, compressed_data_size, 0, 0, false, ctx->storage_type);
 
                 /* Read compressed LZ4 block. */
                 if (!bktrReadSubStorage(&(ctx->substorages[0]), &params))
@@ -1045,7 +1078,7 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
     return success;
 }
 
-NX_INLINE void bktrBucketInitializeSubStorageReadParams(BucketTreeSubStorageReadParams *out, void *buffer, u64 offset, u64 size, u64 virtual_offset, u32 ctr_val, bool aes_ctr_ex_crypt, u8 parent_storage_type)
+NX_INLINE void bktrInitializeSubStorageReadParams(BucketTreeSubStorageReadParams *out, void *buffer, u64 offset, u64 size, u64 virtual_offset, u32 ctr_val, bool aes_ctr_ex_crypt, u8 parent_storage_type)
 {
     out->buffer = buffer;
     out->offset = offset;

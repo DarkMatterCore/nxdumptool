@@ -26,7 +26,7 @@
                     utilsGenerateHexStringFromData(content_id_str, sizeof(content_id_str), g_titleInfo[i].content_infos[j].content_id.c, sizeof(g_titleInfo[i].content_infos[j].content_id.c), false);
 
                     u64 content_size = 0;
-                    titleConvertNcmContentSizeToU64(g_titleInfo[i].content_infos[j].size, &content_size);
+                    ncmContentInfoSizeToU64(&(g_titleInfo[i].content_infos[j]), &content_size);
 
                     char content_size_str[32] = {0};
                     utilsGenerateFormattedSizeString(content_size, content_size_str, sizeof(content_size_str));

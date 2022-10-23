@@ -46,6 +46,10 @@ typedef struct {
 } TitleApplicationMetadata;
 
 /// Generated using ncm calls.
+/// User applications: the parent pointer is always unused. The previous/next pointers reference other user applications with the same ID.
+/// Patches: the parent pointer always references the first corresponding user application. The previous/next pointers reference other patches with the same ID.
+/// Add-on contents: the parent pointer always references the first corresponding user application. The previous/next pointers reference sibling add-on contents.
+/// Add-on content patches: the parent pointer always references the first corresponding add-on content. The previous/next pointers reference other patches with the same ID.
 typedef struct _TitleInfo {
     u8 storage_id;                                  ///< NcmStorageId.
     NcmContentMetaKey meta_key;                     ///< Used with ncm calls.
@@ -55,7 +59,7 @@ typedef struct _TitleInfo {
     u64 size;                                       ///< Total title size.
     char size_str[32];                              ///< Total title size string.
     TitleApplicationMetadata *app_metadata;         ///< User application metadata.
-    struct _TitleInfo *parent, *previous, *next;    ///< Used with TitleInfo entries from user applications, patches and add-on contents. The parent pointer is unused in user applications.
+    struct _TitleInfo *parent, *previous, *next;    ///< Linked lists.
 } TitleInfo;
 
 /// Used to deal with user applications stored in the eMMC, SD card and/or gamecard.
@@ -152,18 +156,6 @@ const char *titleGetNcmContentMetaTypeName(u8 content_meta_type);
 
 /// Miscellaneous functions.
 
-NX_INLINE void titleConvertNcmContentSizeToU64(const u8 *size, u64 *out)
-{
-    if (!size || !out) return;
-    *out = 0;
-    memcpy(out, size, 6);
-}
-
-NX_INLINE void titleConvertU64ToNcmContentSize(const u64 *size, u8 *out)
-{
-    if (size && out) memcpy(out, size, 6);
-}
-
 NX_INLINE u64 titleGetPatchIdByApplicationId(u64 app_id)
 {
     return (app_id + TITLE_PATCH_TYPE_VALUE);
@@ -184,7 +176,7 @@ NX_INLINE u64 titleGetAddOnContentBaseIdByApplicationId(u64 app_id)
     return ((app_id & TITLE_ADDONCONTENT_CONVERSION_MASK) + TITLE_ADDONCONTENT_TYPE_VALUE);
 }
 
-NX_INLINE u64 titleGetAddOnContentIdWithIndexByApplicationId(u64 app_id, u16 idx)
+NX_INLINE u64 titleGetAddOnContentIdByApplicationIdAndIndex(u64 app_id, u16 idx)
 {
     return (titleGetAddOnContentBaseIdByApplicationId(app_id) + idx + 1);
 }
@@ -231,6 +223,31 @@ NX_INLINE u64 titleGetApplicationIdByDeltaId(u64 delta_id)
 NX_INLINE bool titleCheckIfDeltaIdBelongsToApplicationId(u64 app_id, u64 delta_id)
 {
     return (delta_id == titleGetDeltaIdByApplicationId(app_id));
+}
+
+NX_INLINE u64 titleGetDataPatchIdByAddOnContentId(u64 aoc_id)
+{
+    return (aoc_id + TITLE_PATCH_TYPE_VALUE);
+}
+
+NX_INLINE u64 titleGetAddOnContentIdByDataPatchId(u64 data_patch_id)
+{
+    return (data_patch_id - TITLE_PATCH_TYPE_VALUE);
+}
+
+NX_INLINE bool titleCheckIfDataPatchIdBelongsToAddOnContentId(u64 aoc_id, u64 data_patch_id)
+{
+    return (data_patch_id == titleGetDataPatchIdByAddOnContentId(aoc_id));
+}
+
+NX_INLINE u64 titleGetApplicationIdByDataPatchId(u64 data_patch_id)
+{
+    return titleGetApplicationIdByAddOnContentId(titleGetAddOnContentIdByDataPatchId(data_patch_id));
+}
+
+NX_INLINE bool titleCheckIfDataPatchIdBelongsToApplicationId(u64 app_id, u64 data_patch_id)
+{
+    return titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, titleGetAddOnContentIdByDataPatchId(data_patch_id));
 }
 
 NX_INLINE u32 titleGetContentCountByType(TitleInfo *info, u8 content_type)

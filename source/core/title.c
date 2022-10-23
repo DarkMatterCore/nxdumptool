@@ -92,14 +92,16 @@ static const char *g_titleNcmContentMetaTypeNames[] = {
     [NcmContentMetaType_Application - 0x7A]   = "Application",
     [NcmContentMetaType_Patch - 0x7A]         = "Patch",
     [NcmContentMetaType_AddOnContent - 0x7A]  = "AddOnContent",
-    [NcmContentMetaType_Delta - 0x7A]         = "Delta"
+    [NcmContentMetaType_Delta - 0x7A]         = "Delta",
+    [NcmContentMetaType_DataPatch - 0x7A]     = "DataPatch"
 };
 
 static const char *g_filenameTypeStrings[] = {
     [NcmContentMetaType_Application - 0x80]  = "BASE",
     [NcmContentMetaType_Patch - 0x80]        = "UPD",
     [NcmContentMetaType_AddOnContent - 0x80] = "DLC",
-    [NcmContentMetaType_Delta - 0x80]        = "DELTA"
+    [NcmContentMetaType_Delta - 0x80]        = "DELTA",
+    [NcmContentMetaType_DataPatch - 0x80]    = "DLCUPD"
 };
 
 /* Info retrieved from https://switchbrew.org/wiki/Title_list. */
@@ -175,6 +177,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000041, "ngct" },
     { 0x0100000000000042, "pgl" },
     { 0x0100000000000045, "omm" },
+    { 0x0100000000000046, "eth" },
 
     /* System data archives. */
     /* Meta + Data NCAs. */
@@ -525,7 +528,7 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
 
 static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *b);
 static int titleUserApplicationMetadataEntrySortFunction(const void *a, const void *b);
-static int titleOrphanTitleInfoSortFunction(const void *a, const void *b);
+static int titleInfoEntrySortFunction(const void *a, const void *b);
 
 static char *titleGetPatchVersionString(TitleInfo *title_info);
 
@@ -987,8 +990,9 @@ bool titleIsGameCardInfoUpdated(void)
 
 char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 illegal_char_replace_type)
 {
-    if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_Delta || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
-        (naming_convention == TitleNamingConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
+    if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_DataPatch || \
+        naming_convention > TitleNamingConvention_IdAndVersionOnly || (naming_convention == TitleNamingConvention_Full && \
+        illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
@@ -1164,7 +1168,7 @@ const char *titleGetNcmContentTypeName(u8 content_type)
 
 const char *titleGetNcmContentMetaTypeName(u8 content_meta_type)
 {
-    if ((content_meta_type > NcmContentMetaType_BootImagePackageSafe && content_meta_type < NcmContentMetaType_Application) || content_meta_type > NcmContentMetaType_Delta) return NULL;
+    if ((content_meta_type > NcmContentMetaType_BootImagePackageSafe && content_meta_type < NcmContentMetaType_Application) || content_meta_type > NcmContentMetaType_DataPatch) return NULL;
     return (content_meta_type <= NcmContentMetaType_BootImagePackageSafe ? g_titleNcmContentMetaTypeNames[content_meta_type] : g_titleNcmContentMetaTypeNames[content_meta_type - 0x7A]);
 }
 
@@ -1475,8 +1479,8 @@ static void titleAddOrphanTitleInfoEntry(TitleInfo *orphan_title)
     /* Set orphan title info entry pointer. */
     g_orphanTitleInfo[g_orphanTitleInfoCount++] = orphan_title;
 
-    /* Sort orphan title info entries by title ID. */
-    if (g_orphanTitleInfoCount > 1) qsort(g_orphanTitleInfo, g_orphanTitleInfoCount, sizeof(TitleInfo*), &titleOrphanTitleInfoSortFunction);
+    /* Sort orphan title info entries by title ID, version and storage ID. */
+    if (g_orphanTitleInfoCount > 1) qsort(g_orphanTitleInfo, g_orphanTitleInfoCount, sizeof(TitleInfo*), &titleInfoEntrySortFunction);
 }
 
 static bool titleGenerateMetadataEntriesFromSystemTitles(void)
@@ -1747,7 +1751,7 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
 
 NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system, u32 extra_app_count)
 {
-    if ((is_system && (!g_systemMetadata || !g_systemMetadataCount)) || (!is_system && (!g_userMetadata || !g_userMetadataCount)) || !title_id) return NULL;
+    if (!title_id || (is_system && (!g_systemMetadata || !g_systemMetadataCount)) || (!is_system && (!g_userMetadata || !g_userMetadataCount))) return NULL;
 
     TitleApplicationMetadata **cached_app_metadata = (is_system ? g_systemMetadata : g_userMetadata);
     u32 cached_app_metadata_count = ((is_system ? g_systemMetadataCount : g_userMetadataCount) + extra_app_count);
@@ -1823,7 +1827,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
         /* Calculate title size. */
         for(u32 j = 0; j < cur_title_info->content_count; j++)
         {
-            titleConvertNcmContentSizeToU64(cur_title_info->content_infos[j].size, &tmp_size);
+            ncmContentInfoSizeToU64(&(cur_title_info->content_infos[j]), &tmp_size);
             cur_title_info->size += tmp_size;
         }
 
@@ -1837,7 +1841,8 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
         u64 app_id = (cur_title_info->meta_key.type <= NcmContentMetaType_Application ? cur_title_info->meta_key.id : \
                      (cur_title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(cur_title_info->meta_key.id) : \
                      (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(cur_title_info->meta_key.id) : \
-                     titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id))));
+                     (cur_title_info->meta_key.type == NcmContentMetaType_Delta ? titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id) : \
+                     (cur_title_info->meta_key.type == NcmContentMetaType_DataPatch ? titleGetApplicationIdByDataPatchId(cur_title_info->meta_key.id) : 0)))));
 
         cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, storage_id == NcmStorageId_BuiltInSystem, 0);
         if (!cur_title_info->app_metadata && storage_id == NcmStorageId_BuiltInSystem)
@@ -1862,6 +1867,9 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
 
     /* Free extra allocated pointers if we didn't use them. */
     if (extra_title_count < total) titleReallocateTitleInfoFromStorage(title_storage, 0, false);
+
+    /* Sort title info entries by title ID, version and storage ID. */
+    qsort(title_storage->titles, title_storage->title_count, sizeof(TitleInfo*), &titleInfoEntrySortFunction);
 
     /* Update linked lists for user applications, patches and add-on contents. */
     /* This will also keep track of orphan titles - titles with no available application metadata. */
@@ -2060,21 +2068,42 @@ static void titleUpdateTitleInfoLinkedLists(void)
         for(u32 j = 0; j < title_count; j++)
         {
             /* Get pointer to the current title info and reset its linked list pointers. */
-            /* Don't proceed if we're dealing with a title that's not an user application, patch or add-on content. */
             TitleInfo *child_info = titles[j];
-            if (!child_info || child_info->meta_key.type < NcmContentMetaType_Application || child_info->meta_key.type > NcmContentMetaType_AddOnContent) continue;
+            if (!child_info) continue;
 
             child_info->parent = child_info->previous = child_info->next = NULL;
 
-            if (child_info->meta_key.type == NcmContentMetaType_Patch || child_info->meta_key.type == NcmContentMetaType_AddOnContent)
+            /* If we're dealing with a title that's not an user application, patch, add-on content or add-on content patch, flag it as orphan and proceed onto the next one. */
+            if (child_info->meta_key.type < NcmContentMetaType_Application || (child_info->meta_key.type > NcmContentMetaType_AddOnContent && \
+                child_info->meta_key.type != NcmContentMetaType_DataPatch))
             {
-                /* We're dealing with a patch or an add-on content. */
-                /* Retrieve pointer to the first parent user application entry for patches and add-on contents. */
+                titleAddOrphanTitleInfoEntry(child_info);
+                continue;
+            }
+
+            if (child_info->meta_key.type != NcmContentMetaType_Application)
+            {
+                /* We're dealing with a patch, an add-on content or an add-on content patch. */
+                /* Patch, AddOnContent: retrieve pointer to the first parent user application entry and set it as the parent title. */
+                /* DataPatch: retrieve pointer to the first parent add-on content entry and set it as the parent title. */
                 u64 app_id = (child_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(child_info->meta_key.id) : \
-                                                                                      titleGetApplicationIdByAddOnContentId(child_info->meta_key.id));
+                             (child_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(child_info->meta_key.id) : \
+                             titleGetAddOnContentIdByDataPatchId(child_info->meta_key.id)));
 
                 child_info->parent = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, app_id);
-                if (child_info->parent && !child_info->app_metadata) child_info->app_metadata = child_info->parent->app_metadata;
+
+                /* Set pointer to application metadata. */
+                if (child_info->parent && !child_info->app_metadata)
+                {
+                    if (child_info->meta_key.type != NcmContentMetaType_DataPatch || child_info->parent->app_metadata)
+                    {
+                        child_info->app_metadata = child_info->parent->app_metadata;
+                    } else {
+                        /* We may be dealing with a parent add-on content with a yet-to-be-assigned application metadata pointer. */
+                        TitleInfo *tmp_title_info = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, titleGetApplicationIdByDataPatchId(child_info->meta_key.id));
+                        if (tmp_title_info) child_info->parent->app_metadata = child_info->app_metadata = tmp_title_info->app_metadata;
+                    }
+                }
 
                 /* Add orphan title info entry if we have no application metadata. */
                 if (!child_info->app_metadata)
@@ -2084,7 +2113,7 @@ static void titleUpdateTitleInfoLinkedLists(void)
                 }
             }
 
-            /* Locate previous user application, patch or add-on content entry. */
+            /* Locate previous user application, patch, add-on content or add-on content patch entry. */
             /* If it's found, we will update both its next pointer and the previous pointer from the current entry. */
             for(u8 k = i; k >= NcmStorageId_GameCard; k--)
             {
@@ -2105,7 +2134,7 @@ static void titleUpdateTitleInfoLinkedLists(void)
                     if (!prev_info) continue;
 
                     if (prev_info->meta_key.type == child_info->meta_key.type && \
-                        (((child_info->meta_key.type == NcmContentMetaType_Application || child_info->meta_key.type == NcmContentMetaType_Patch) && prev_info->meta_key.id == child_info->meta_key.id) || \
+                        ((child_info->meta_key.type != NcmContentMetaType_AddOnContent && prev_info->meta_key.id == child_info->meta_key.id) || \
                         (child_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdsAreSiblings(prev_info->meta_key.id, child_info->meta_key.id))))
                     {
                         prev_info->next = child_info;
@@ -2236,10 +2265,11 @@ static bool titleRefreshGameCardTitleInfo(void)
         u64 app_id = (cur_title_info->meta_key.type <= NcmContentMetaType_Application ? cur_title_info->meta_key.id : \
                      (cur_title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(cur_title_info->meta_key.id) : \
                      (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(cur_title_info->meta_key.id) : \
-                     titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id))));
+                     (cur_title_info->meta_key.type == NcmContentMetaType_Delta ? titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id) : \
+                     (cur_title_info->meta_key.type == NcmContentMetaType_DataPatch ? titleGetApplicationIdByDataPatchId(cur_title_info->meta_key.id) : 0)))));
 
-        /* Do not proceed if application metadata has already been retrieved, or if we can successfully retrieve it. */
-        if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, extra_app_count)) != NULL) continue;
+        /* Do not proceed if we couldn't retrieve an application ID, if application metadata has already been retrieved, or if we can successfully retrieve it. */
+        if (!app_id || cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, extra_app_count)) != NULL) continue;
 
         /* Retrieve application metadata pointer. */
         TitleApplicationMetadata *cur_app_metadata = g_userMetadata[g_userMetadataCount + extra_app_count];
@@ -2330,7 +2360,8 @@ static bool titleIsUserApplicationContentAvailable(u64 app_id)
 
             if ((title_info->meta_key.type == NcmContentMetaType_Application && title_info->meta_key.id == app_id) || \
                 (title_info->meta_key.type == NcmContentMetaType_Patch && titleCheckIfPatchIdBelongsToApplicationId(app_id, title_info->meta_key.id)) || \
-                (title_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, title_info->meta_key.id))) return true;
+                (title_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, title_info->meta_key.id)) || \
+                (title_info->meta_key.type == NcmContentMetaType_DataPatch && titleCheckIfDataPatchIdBelongsToApplicationId(app_id, title_info->meta_key.id))) return true;
         }
     }
 
@@ -2376,8 +2407,8 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
 static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *parent, TitleInfo *previous, TitleInfo *next)
 {
     if (!title_info || title_info->storage_id < NcmStorageId_GameCard || title_info->storage_id > NcmStorageId_SdCard || !title_info->meta_key.id || \
-        (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || title_info->meta_key.type > NcmContentMetaType_Delta || \
-        !title_info->content_count || !title_info->content_infos)
+        (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || \
+        title_info->meta_key.type > NcmContentMetaType_DataPatch || !title_info->content_count || !title_info->content_infos)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
@@ -2413,45 +2444,39 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
     /* Update content infos pointer. */
     title_info_dup->content_infos = content_infos_dup;
 
-    /* Duplicate linked list data. */
-    if (title_info->parent)
-    {
-        if (parent)
-        {
-            title_info_dup->parent = parent;
-        } else {
-            title_info_dup->parent = titleDuplicateTitleInfo(title_info->parent, NULL, NULL, NULL);
-            if (!title_info_dup->parent) goto end;
-            dup_parent = true;
-        }
-
-        /* Update pointer to parent title info - this will be used while duplicating siblings. */
-        parent = title_info_dup->parent;
+#define TITLE_DUPLICATE_LINKED_LIST(elem, prnt, prv, nxt) \
+    if (title_info->elem) { \
+        if (elem) { \
+            title_info_dup->elem = elem; \
+        } else { \
+            title_info_dup->elem = titleDuplicateTitleInfo(title_info->elem, prnt, prv, nxt); \
+            if (!title_info_dup->elem) goto end; \
+            dup_##elem = true; \
+        } \
     }
 
-    if (title_info->previous)
-    {
-        if (previous)
-        {
-            title_info_dup->previous = previous;
-        } else {
-            title_info_dup->previous = titleDuplicateTitleInfo(title_info->previous, parent, NULL, title_info_dup);
-            if (!title_info_dup->previous) goto end;
-            dup_previous = true;
-        }
+#define TITLE_FREE_DUPLICATED_LINKED_LIST(elem) \
+    if (dup_##elem) { \
+        tmp1 = title_info_dup->elem; \
+        while(tmp1) { \
+            tmp2 = tmp1->elem; \
+            tmp1->parent = tmp1->previous = tmp1->next = NULL; \
+            titleFreeTitleInfo(&tmp1); \
+            tmp1 = tmp2; \
+        } \
     }
 
-    if (title_info->next)
-    {
-        if (next)
-        {
-            title_info_dup->next = next;
-        } else {
-            title_info_dup->next = titleDuplicateTitleInfo(title_info->next, parent, title_info_dup, NULL);
-            if (!title_info_dup->next) goto end;
-            dup_next = true;
-        }
-    }
+    /* Duplicate linked lists based on two different principles: */
+    /* 1) Linked list pointers will only be populated if their corresponding pointer is also populated in the TitleInfo element to duplicate. */
+    /* 2) Pointers passed into this function take precedence before actual data duplication. */
+
+    /* Duplicate parent linked list and update pointer to parent TitleInfo entry -- this will be used while duplicating siblings in the next linked lists. */
+    TITLE_DUPLICATE_LINKED_LIST(parent, NULL, NULL, NULL);
+    if (title_info->parent) parent = title_info_dup->parent;
+
+    /* Duplicate previous and next linked lists. */
+    TITLE_DUPLICATE_LINKED_LIST(previous, parent, NULL, title_info_dup);
+    TITLE_DUPLICATE_LINKED_LIST(next, parent, title_info_dup, NULL);
 
     /* Update flag. */
     success = true;
@@ -2461,52 +2486,29 @@ end:
     /* So we'll take care of freeing data the old fashioned way. */
     if (!success)
     {
-        if (content_infos_dup)
-        {
-            free(content_infos_dup);
-            content_infos_dup = NULL;
-        }
+        if (content_infos_dup) free(content_infos_dup);
 
         if (title_info_dup)
         {
             /* Free parent linked list (if duplicated). */
-            /* Parent title infos are user applications with no reference to child titles, so it should be safe to free them first with titleFreeTitleInfo(). */
+            /* Parent TitleInfo entries are user applications with no reference to child titles, so it's safe to free them first with titleFreeTitleInfo(). */
             if (dup_parent) titleFreeTitleInfo(&(title_info_dup->parent));
 
-            /* Free previous sibling(s) (if duplicated). */
-            /* We need to take care not to free the parent linked list, either because we may have already freed it, or because it may have been passed as an argument. */
-            /* Furthermore, the "next" pointer from the previous sibling points to our current duplicated entry, so we need to clear it. */
-            if (dup_previous)
-            {
-                tmp1 = title_info_dup->previous;
-                while(tmp1)
-                {
-                    tmp2 = tmp1->previous;
-                    tmp1->parent = tmp1->previous = tmp1->next = NULL;
-                    titleFreeTitleInfo(&tmp1);
-                    tmp1 = tmp2;
-                }
-            }
-
-            /* Free next sibling(s) (if duplicated). */
-            /* We need to take care not to free the parent linked list, either because we may have already freed it, or because it may have been passed as an argument. */
-            /* Furthermore, the "previous" pointer from the next sibling points to our current duplicated entry, so we need to clear it. */
-            if (dup_next)
-            {
-                tmp1 = title_info_dup->next;
-                while(tmp1)
-                {
-                    tmp2 = tmp1->next;
-                    tmp1->parent = tmp1->previous = tmp1->next = NULL;
-                    titleFreeTitleInfo(&tmp1);
-                    tmp1 = tmp2;
-                }
-            }
+            /* Free previous and next linked lists (if duplicated). */
+            /* We need to take care of not freeing the parent linked list, either because we may have already freed it, or because it may have been passed as an argument. */
+            /* Furthermore, both the next pointer from the previous sibling and the previous pointer from the next sibling reference our current duplicated entry. */
+            /* To avoid issues, we'll just clear all linked list pointers. */
+            TITLE_FREE_DUPLICATED_LINKED_LIST(previous);
+            TITLE_FREE_DUPLICATED_LINKED_LIST(next);
 
             free(title_info_dup);
             title_info_dup = NULL;
         }
     }
+
+#undef TITLE_DUPLICATE_LINKED_LIST
+
+#undef TITLE_FREE_DUPLICATED_LINKED_LIST
 
     return title_info_dup;
 }
@@ -2536,7 +2538,7 @@ static int titleUserApplicationMetadataEntrySortFunction(const void *a, const vo
     return strcasecmp(app_metadata_1->lang_entry.name, app_metadata_2->lang_entry.name);
 }
 
-static int titleOrphanTitleInfoSortFunction(const void *a, const void *b)
+static int titleInfoEntrySortFunction(const void *a, const void *b)
 {
     const TitleInfo *title_info_1 = *((const TitleInfo**)a);
     const TitleInfo *title_info_2 = *((const TitleInfo**)b);
@@ -2546,6 +2548,24 @@ static int titleOrphanTitleInfoSortFunction(const void *a, const void *b)
         return -1;
     } else
     if (title_info_1->meta_key.id > title_info_2->meta_key.id)
+    {
+        return 1;
+    }
+
+    if (title_info_1->version.value < title_info_2->version.value)
+    {
+        return -1;
+    } else
+    if (title_info_1->version.value > title_info_2->version.value)
+    {
+        return 1;
+    }
+
+    if (title_info_1->storage_id < title_info_2->storage_id)
+    {
+        return -1;
+    } else
+    if (title_info_1->storage_id > title_info_2->storage_id)
     {
         return 1;
     }

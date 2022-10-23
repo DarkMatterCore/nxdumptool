@@ -59,7 +59,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     u8 content_meta_type = 0;
     u64 title_id = 0, cur_offset = 0;
 
-    bool success = false, invalid_ext_header_size = false, invalid_ext_data_size = false, dump_packaged_header = false;
+    bool success = false, invalid_ext_header_size = false, invalid_ext_data_size = false, dump_cnmt = false;
 
     /* Free output context beforehand. */
     cnmtFreeContext(out);
@@ -125,6 +125,8 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         goto end;
     }
 
+    dump_cnmt = true;
+
     /* Calculate SHA-256 checksum for the whole raw CNMT. */
     sha256CalculateHash(out->raw_data_hash, out->raw_data, out->raw_data_size);
 
@@ -135,21 +137,18 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
     if (out->packaged_header->title_id != title_id)
     {
         LOG_MSG_ERROR("CNMT title ID mismatch! (%016lX != %016lX).", out->packaged_header->title_id, title_id);
-        dump_packaged_header = true;
         goto end;
     }
 
     if (out->packaged_header->content_meta_type != content_meta_type)
     {
         LOG_MSG_ERROR("CNMT content meta type mismatch! (0x%02X != 0x%02X).", out->packaged_header->content_meta_type, content_meta_type);
-        dump_packaged_header = true;
         goto end;
     }
 
     if (!out->packaged_header->content_count && out->packaged_header->content_meta_type != NcmContentMetaType_SystemUpdate)
     {
         LOG_MSG_ERROR("Invalid content count!");
-        dump_packaged_header = true;
         goto end;
     }
 
@@ -157,7 +156,6 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         (out->packaged_header->content_meta_type != NcmContentMetaType_SystemUpdate && out->packaged_header->content_meta_count))
     {
         LOG_MSG_ERROR("Invalid content meta count!");
-        dump_packaged_header = true;
         goto end;
     }
 
@@ -183,29 +181,33 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
                 invalid_ext_data_size = (out->extended_data_size <= sizeof(ContentMetaPatchMetaExtendedDataHeader));
                 break;
             case NcmContentMetaType_AddOnContent:
-                invalid_ext_header_size = (out->packaged_header->extended_header_size != (u16)sizeof(ContentMetaAddOnContentMetaExtendedHeader));
+                invalid_ext_header_size = (out->packaged_header->extended_header_size != (u16)sizeof(ContentMetaAddOnContentMetaExtendedHeader) && \
+                                           out->packaged_header->extended_header_size != (u16)sizeof(ContentMetaLegacyAddOnContentMetaExtendedHeader));
                 break;
             case NcmContentMetaType_Delta:
                 invalid_ext_header_size = (out->packaged_header->extended_header_size != (u16)sizeof(ContentMetaDeltaMetaExtendedHeader));
                 out->extended_data_size = (!invalid_ext_header_size ? ((ContentMetaDeltaMetaExtendedHeader*)out->extended_header)->extended_data_size : 0);
                 invalid_ext_data_size = (out->extended_data_size <= sizeof(ContentMetaDeltaMetaExtendedDataHeader));
                 break;
+            case NcmContentMetaType_DataPatch:
+                invalid_ext_header_size = (out->packaged_header->extended_header_size != (u16)sizeof(ContentMetaDataPatchMetaExtendedHeader));
+                out->extended_data_size = (!invalid_ext_header_size ? ((ContentMetaDataPatchMetaExtendedHeader*)out->extended_header)->extended_data_size : 0);
+                invalid_ext_data_size = (out->extended_data_size <= sizeof(ContentMetaPatchMetaExtendedDataHeader));
+                break;
             default:
-                invalid_ext_header_size = (out->packaged_header->extended_header_size > 0);
+                invalid_ext_header_size = (out->packaged_header->extended_header_size != 0);
                 break;
         }
 
         if (invalid_ext_header_size)
         {
             LOG_MSG_ERROR("Invalid extended header size!");
-            dump_packaged_header = true;
             goto end;
         }
 
         if (invalid_ext_data_size)
         {
             LOG_DATA_ERROR(out->extended_header, out->packaged_header->extended_header_size, "Invalid extended data size! CNMT Extended Header dump:");
-            dump_packaged_header = true;
             goto end;
         }
     }
@@ -254,7 +256,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
 end:
     if (!success)
     {
-        if (dump_packaged_header) LOG_DATA_DEBUG(out->packaged_header, sizeof(ContentMetaPackagedContentMetaHeader), "CNMT Packaged Header dump:");
+        if (dump_cnmt) LOG_DATA_DEBUG(out->raw_data, out->raw_data_size, "Raw CNMT dump:");
         cnmtFreeContext(out);
     }
 
@@ -280,7 +282,7 @@ bool cnmtUpdateContentInfo(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx)
         NcmContentInfo *content_info = &(packaged_content_info->info);
         u64 content_size = 0;
 
-        titleConvertNcmContentSizeToU64(content_info->size, &content_size);
+        ncmContentInfoSizeToU64(content_info, &content_size);
 
         if (content_size == nca_ctx->content_size && content_info->content_type == nca_ctx->content_type && content_info->id_offset == nca_ctx->id_offset)
         {
@@ -361,7 +363,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     char *xml_buf = NULL;
     u64 xml_buf_size = 0;
     char digest_str[0x41] = {0};
-    u8 count = 0;
+    u8 count = 0, content_meta_type = cnmt_ctx->packaged_header->content_meta_type;
     bool success = false, invalid_nca = false;
 
     /* Free AuthoringTool-like XML data if needed. */
@@ -376,7 +378,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
                           "  <Version>%u</Version>\n" \
                           "  <ReleaseVersion>%u</ReleaseVersion>\n" \
                           "  <PrivateVersion>%u</PrivateVersion>\n", \
-                          titleGetNcmContentMetaTypeName(cnmt_ctx->packaged_header->content_meta_type), \
+                          titleGetNcmContentMetaTypeName(content_meta_type), \
                           cnmt_ctx->packaged_header->title_id, \
                           cnmt_ctx->packaged_header->version.value, \
                           cnmt_ctx->packaged_header->version.application_version.release_ver, \
@@ -448,16 +450,16 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
                           digest_str, \
                           cnmt_ctx->nca_ctx->key_generation)) goto end;
 
-    /* RequiredSystemVersion (Application, Patch) / RequiredApplicationVersion (AddOnContent). */
-    /* PatchId (Application) / ApplicationId (Patch, AddOnContent). */
-    if (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application || cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Patch || \
-        cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_AddOnContent)
+    /* RequiredSystemVersion (Application, Patch) / RequiredApplicationVersion (AddOnContent, DataPatch). */
+    /* PatchId (Application) / ApplicationId (Patch, AddOnContent, DataPatch). */
+    if (content_meta_type == NcmContentMetaType_Application || content_meta_type == NcmContentMetaType_Patch || content_meta_type == NcmContentMetaType_AddOnContent || \
+        content_meta_type == NcmContentMetaType_DataPatch)
     {
         u32 required_title_version = cnmtGetRequiredTitleVersion(cnmt_ctx);
-        const char *required_title_version_str = cnmtGetRequiredTitleVersionString(cnmt_ctx->packaged_header->content_meta_type);
+        const char *required_title_version_str = cnmtGetRequiredTitleVersionString(content_meta_type);
 
         u64 required_title_id = cnmtGetRequiredTitleId(cnmt_ctx);
-        const char *required_title_type_str = cnmtGetRequiredTitleTypeString(cnmt_ctx->packaged_header->content_meta_type);
+        const char *required_title_type_str = cnmtGetRequiredTitleTypeString(content_meta_type);
 
         if (!CNMT_ADD_FMT_STR("  <%s>%u</%s>\n" \
                               "  <%s>0x%016lx</%s>\n", \
@@ -466,11 +468,18 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     }
 
     /* RequiredApplicationVersion (Application). */
-    if (cnmt_ctx->packaged_header->content_meta_type == NcmContentMetaType_Application)
-    {
-        if (!CNMT_ADD_FMT_STR("  <RequiredApplicationVersion>%u</RequiredApplicationVersion>\n", \
-                              ((ContentMetaApplicationMetaExtendedHeader*)cnmt_ctx->extended_header)->required_application_version.value)) goto end;
-    }
+    if (content_meta_type == NcmContentMetaType_Application && \
+        !CNMT_ADD_FMT_STR("  <RequiredApplicationVersion>%u</RequiredApplicationVersion>\n", \
+                          ((ContentMetaApplicationMetaExtendedHeader*)cnmt_ctx->extended_header)->required_application_version.value)) goto end;
+
+    /* DataPatchId (AddOnContent). */
+    if (content_meta_type == NcmContentMetaType_AddOnContent && \
+        cnmt_ctx->packaged_header->extended_header_size == (u16)sizeof(ContentMetaAddOnContentMetaExtendedHeader) && \
+        !CNMT_ADD_FMT_STR("  <DataPatchId>0x%016lx</DataPatchId>\n", ((ContentMetaAddOnContentMetaExtendedHeader*)cnmt_ctx->extended_header)->data_patch_id)) goto end;
+
+    /* DataId (DataPatch). */
+    if (content_meta_type == NcmContentMetaType_DataPatch && \
+        !CNMT_ADD_FMT_STR("  <DataId>0x%016lx</DataId>\n", ((ContentMetaDataPatchMetaExtendedHeader*)cnmt_ctx->extended_header)->data_id)) goto end;
 
     if (!(success = CNMT_ADD_FMT_STR("</ContentMeta>"))) goto end;
 
@@ -509,7 +518,7 @@ static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filena
         return false;
     }
 
-    for(i = NcmContentMetaType_SystemProgram; i <= NcmContentMetaType_Delta; i++)
+    for(i = NcmContentMetaType_SystemProgram; i <= NcmContentMetaType_DataPatch; i++)
     {
         /* Dirty loop hack, but whatever. */
         if (i > NcmContentMetaType_BootImagePackageSafe && i < NcmContentMetaType_Application)
@@ -525,7 +534,7 @@ static bool cnmtGetContentMetaTypeAndTitleIdFromFileName(const char *cnmt_filena
         }
     }
 
-    if (i > NcmContentMetaType_Delta)
+    if (i > NcmContentMetaType_DataPatch)
     {
         LOG_MSG_ERROR("Invalid content meta type \"%.*s\" in '.cnmt' filename! (\"%s\").", (int)content_meta_type_str_len, cnmt_filename, cnmt_filename);
         return false;
@@ -551,6 +560,7 @@ static const char *cnmtGetRequiredTitleVersionString(u8 content_meta_type)
             str = "RequiredSystemVersion";
             break;
         case NcmContentMetaType_AddOnContent:
+        case NcmContentMetaType_DataPatch:
             str = "RequiredApplicationVersion";
             break;
         default:
