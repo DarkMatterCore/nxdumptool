@@ -1,0 +1,18 @@
+{
+    "applet_mode": "\uE8B2  애플릿 모드  \uE8B2",
+
+    "not_connected": "연결되지 않음",
+
+    "ums_counter": "{} UMS 장치",
+
+    "usb_host_speed": "USB {}.0 호스트",
+    "usb_host_not_connected": "연결된 USB 호스트 없음",
+
+    "tabs": {
+        "gamecard": "게임카드",
+        "user_titles": "사용자 타이틀",
+        "system_titles": "시스템 타이틀",
+        "options": "옵션",
+        "about": "정보"
+    }
+}
