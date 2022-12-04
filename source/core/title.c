@@ -238,14 +238,14 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000001007, "playerSelect" },
     { 0x0100000000001008, "swkbd" },
     { 0x0100000000001009, "miiEdit" },
-    { 0x010000000000100A, "web" },
-    { 0x010000000000100B, "shop" },
+    { 0x010000000000100A, "LibAppletWeb" },
+    { 0x010000000000100B, "LibAppletShop" },
     { 0x010000000000100C, "overlayDisp" },
     { 0x010000000000100D, "photoViewer" },
     { 0x010000000000100E, "set" },
-    { 0x010000000000100F, "offlineWeb" },
-    { 0x0100000000001010, "loginShare" },
-    { 0x0100000000001011, "wifiWebAuth" },
+    { 0x010000000000100F, "LibAppletOff" },
+    { 0x0100000000001010, "LibAppletLns" },
+    { 0x0100000000001011, "LibAppletAuth" },
     { 0x0100000000001012, "starter" },
     { 0x0100000000001013, "myPage" },
     { 0x0100000000001014, "PlayReport" },
@@ -524,7 +524,7 @@ static bool titleRefreshGameCardTitleInfo(void);
 static bool titleIsUserApplicationContentAvailable(u64 app_id);
 static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
 
-static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *parent, TitleInfo *previous, TitleInfo *next);
+static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
 
 static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *b);
 static int titleUserApplicationMetadataEntrySortFunction(const void *a, const void *b);
@@ -754,7 +754,7 @@ TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
         TitleInfo *title_info = (g_titleInterfaceInit ? _titleGetInfoFromStorageByTitleId(storage_id, title_id) : NULL);
         if (title_info)
         {
-            ret = titleDuplicateTitleInfo(title_info, NULL, NULL, NULL);
+            ret = titleDuplicateTitleInfo(title_info, NULL, NULL);
             if (!ret) LOG_MSG_ERROR("Failed to duplicate title info for %016lX!", title_id);
         }
     }
@@ -770,15 +770,12 @@ void titleFreeTitleInfo(TitleInfo **info)
     /* Free content infos. */
     if (ptr->content_infos) free(ptr->content_infos);
 
-    /* Free parent linked list. */
-    titleFreeTitleInfo(&(ptr->parent));
-
     /* Free previous sibling(s). */
     tmp1 = ptr->previous;
     while(tmp1)
     {
         tmp2 = tmp1->previous;
-        tmp1->parent = tmp1->previous = tmp1->next = NULL;
+        tmp1->previous = tmp1->next = NULL;
         titleFreeTitleInfo(&tmp1);
         tmp1 = tmp2;
     }
@@ -788,7 +785,7 @@ void titleFreeTitleInfo(TitleInfo **info)
     while(tmp1)
     {
         tmp2 = tmp1->next;
-        tmp1->parent = tmp1->previous = tmp1->next = NULL;
+        tmp1->previous = tmp1->next = NULL;
         titleFreeTitleInfo(&tmp1);
         tmp1 = tmp2;
     }
@@ -809,36 +806,30 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
             break;
         }
 
-        TitleInfo *app_info = NULL, *patch_info = NULL, *aoc_info = NULL;
+        bool error = false;
+        TitleInfo *app_info = NULL, *patch_info = NULL, *aoc_info = NULL, *aoc_patch_info = NULL;
 
         /* Clear output. */
         titleFreeUserApplicationData(out);
 
+#define TITLE_ALLOCATE_USER_APP_DATA(elem, msg, decl) \
+    if (elem##_info && !out->elem##_info) { \
+        out->elem##_info = titleDuplicateTitleInfo(elem##_info, NULL, NULL); \
+        if (!out->elem##_info) { \
+            LOG_MSG_ERROR("Failed to duplicate %s info for %016lX!", msg, app_id); \
+            decl; \
+        } \
+    }
+
         /* Get info for the first user application title. */
         app_info = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, app_id);
-        if (app_info)
-        {
-            out->app_info = titleDuplicateTitleInfo(app_info, NULL, NULL, NULL);
-            if (!out->app_info)
-            {
-                LOG_MSG_ERROR("Failed to duplicate user application info for %016lX!", app_id);
-                break;
-            }
-        }
+        TITLE_ALLOCATE_USER_APP_DATA(app, "user application", break);
 
         /* Get info for the first patch title. */
         patch_info = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, titleGetPatchIdByApplicationId(app_id));
-        if (patch_info)
-        {
-            out->patch_info = titleDuplicateTitleInfo(patch_info, out->app_info, NULL, NULL);
-            if (!out->patch_info)
-            {
-                LOG_MSG_ERROR("Failed to duplicate patch info for %016lX!", app_id);
-                break;
-            }
-        }
+        TITLE_ALLOCATE_USER_APP_DATA(patch, "patch", break);
 
-        /* Get info for the first add-on content title. */
+        /* Get info for the first add-on content and add-on content patch titles. */
         for(u8 i = NcmStorageId_GameCard; i <= NcmStorageId_SdCard; i++)
         {
             if (i == NcmStorageId_BuiltInSystem) continue;
@@ -849,28 +840,33 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
             for(u32 j = 0; j < title_storage->title_count; j++)
             {
                 TitleInfo *title_info = title_storage->titles[j];
-                if (title_info && title_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, title_info->meta_key.id))
+                if (!title_info) continue;
+
+                if (title_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, title_info->meta_key.id))
                 {
                     aoc_info = title_info;
+                    break;
+                } else
+                if (title_info->meta_key.type == NcmContentMetaType_DataPatch && titleCheckIfDataPatchIdBelongsToApplicationId(app_id, title_info->meta_key.id))
+                {
+                    aoc_patch_info = title_info;
                     break;
                 }
             }
 
-            if (aoc_info) break;
+            TITLE_ALLOCATE_USER_APP_DATA(aoc, "add-on content", error = true; break);
+
+            TITLE_ALLOCATE_USER_APP_DATA(aoc_patch, "add-on content patch", error = true; break);
+
+            if (out->aoc_info && out->aoc_patch_info) break;
         }
 
-        if (aoc_info)
-        {
-            out->aoc_info = titleDuplicateTitleInfo(aoc_info, out->app_info, NULL, NULL);
-            if (!out->aoc_info)
-            {
-                LOG_MSG_ERROR("Failed to duplicate add-on content info for %016lX!", app_id);
-                break;
-            }
-        }
+        if (error) break;
+
+#undef TITLE_ALLOCATE_USER_APP_DATA
 
         /* Check retrieved title info. */
-        ret = (app_info || patch_info || aoc_info);
+        ret = (app_info || patch_info || aoc_info || aoc_patch_info);
         if (!ret) LOG_MSG_ERROR("Failed to retrieve user application data for ID \"%016lX\"!", app_id);
     }
 
@@ -884,32 +880,17 @@ void titleFreeUserApplicationData(TitleUserApplicationData *user_app_data)
 {
     if (!user_app_data) return;
 
-    TitleInfo *tmp = NULL;
-
     /* Free user application info. */
     titleFreeTitleInfo(&(user_app_data->app_info));
-
-    /* Make sure to clear all references to the parent linked list beforehand. */
-    /* Unlike titleDuplicateTitleInfo(), we don't need to traverse backwards because elements from TitleUserApplicationData always point to the first title info. */
-    tmp = user_app_data->patch_info;
-    while(tmp)
-    {
-        tmp->parent = NULL;
-        tmp = tmp->next;
-    }
-
-    tmp = user_app_data->aoc_info;
-    while(tmp)
-    {
-        tmp->parent = NULL;
-        tmp = tmp->next;
-    }
 
     /* Free patch info. */
     titleFreeTitleInfo(&(user_app_data->patch_info));
 
     /* Free add-on content info. */
     titleFreeTitleInfo(&(user_app_data->aoc_info));
+
+    /* Free add-on content patch info. */
+    titleFreeTitleInfo(&(user_app_data->aoc_patch_info));
 }
 
 bool titleAreOrphanTitlesAvailable(void)
@@ -942,7 +923,7 @@ TitleInfo **titleGetOrphanTitles(u32 *out_count)
         /* Duplicate orphan title info entries. */
         for(u32 i = 0; i < g_orphanTitleInfoCount; i++)
         {
-            orphan_info[i] = titleDuplicateTitleInfo(g_orphanTitleInfo[i], NULL, NULL, NULL);
+            orphan_info[i] = titleDuplicateTitleInfo(g_orphanTitleInfo[i], NULL, NULL);
             if (!orphan_info[i])
             {
                 LOG_MSG_ERROR("Failed to duplicate info for orphan title %016lX!", g_orphanTitleInfo[i]->meta_key.id);
@@ -2071,7 +2052,7 @@ static void titleUpdateTitleInfoLinkedLists(void)
             TitleInfo *child_info = titles[j];
             if (!child_info) continue;
 
-            child_info->parent = child_info->previous = child_info->next = NULL;
+            child_info->previous = child_info->next = NULL;
 
             /* If we're dealing with a title that's not an user application, patch, add-on content or add-on content patch, flag it as orphan and proceed onto the next one. */
             if (child_info->meta_key.type < NcmContentMetaType_Application || (child_info->meta_key.type > NcmContentMetaType_AddOnContent && \
@@ -2081,33 +2062,21 @@ static void titleUpdateTitleInfoLinkedLists(void)
                 continue;
             }
 
-            if (child_info->meta_key.type != NcmContentMetaType_Application)
+            if (child_info->meta_key.type != NcmContentMetaType_Application && !child_info->app_metadata)
             {
                 /* We're dealing with a patch, an add-on content or an add-on content patch. */
-                /* Patch, AddOnContent: retrieve pointer to the first parent user application entry and set it as the parent title. */
-                /* DataPatch: retrieve pointer to the first parent add-on content entry and set it as the parent title. */
+                /* We'll just retrieve a pointer to the first matching user application entry and use it to set a pointer to an application metadata entry. */
                 u64 app_id = (child_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(child_info->meta_key.id) : \
                              (child_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(child_info->meta_key.id) : \
-                             titleGetAddOnContentIdByDataPatchId(child_info->meta_key.id)));
+                             titleGetApplicationIdByDataPatchId(child_info->meta_key.id)));
 
-                child_info->parent = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, app_id);
-
-                /* Set pointer to application metadata. */
-                if (child_info->parent && !child_info->app_metadata)
+                TitleInfo *parent = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, app_id);
+                if (parent)
                 {
-                    if (child_info->meta_key.type != NcmContentMetaType_DataPatch || child_info->parent->app_metadata)
-                    {
-                        child_info->app_metadata = child_info->parent->app_metadata;
-                    } else {
-                        /* We may be dealing with a parent add-on content with a yet-to-be-assigned application metadata pointer. */
-                        TitleInfo *tmp_title_info = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, titleGetApplicationIdByDataPatchId(child_info->meta_key.id));
-                        if (tmp_title_info) child_info->parent->app_metadata = child_info->app_metadata = tmp_title_info->app_metadata;
-                    }
-                }
-
-                /* Add orphan title info entry if we have no application metadata. */
-                if (!child_info->app_metadata)
-                {
+                    /* Set pointer to application metadata. */
+                    child_info->app_metadata = parent->app_metadata;
+                } else {
+                    /* Add orphan title info entry since we have no application metadata. */
                     titleAddOrphanTitleInfoEntry(child_info);
                     continue;
                 }
@@ -2134,8 +2103,9 @@ static void titleUpdateTitleInfoLinkedLists(void)
                     if (!prev_info) continue;
 
                     if (prev_info->meta_key.type == child_info->meta_key.type && \
-                        ((child_info->meta_key.type != NcmContentMetaType_AddOnContent && prev_info->meta_key.id == child_info->meta_key.id) || \
-                        (child_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdsAreSiblings(prev_info->meta_key.id, child_info->meta_key.id))))
+                        (((child_info->meta_key.type == NcmContentMetaType_Application || child_info->meta_key.type == NcmContentMetaType_Patch) && prev_info->meta_key.id == child_info->meta_key.id) || \
+                        (child_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdsAreSiblings(prev_info->meta_key.id, child_info->meta_key.id)) || \
+                        (child_info->meta_key.type == NcmContentMetaType_DataPatch && titleCheckIfDataPatchIdsAreSiblings(prev_info->meta_key.id, child_info->meta_key.id))))
                     {
                         prev_info->next = child_info;
                         child_info->previous = prev_info;
@@ -2404,7 +2374,7 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
     return out;
 }
 
-static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *parent, TitleInfo *previous, TitleInfo *next)
+static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next)
 {
     if (!title_info || title_info->storage_id < NcmStorageId_GameCard || title_info->storage_id > NcmStorageId_SdCard || !title_info->meta_key.id || \
         (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || \
@@ -2416,7 +2386,7 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
 
     TitleInfo *title_info_dup = NULL, *tmp1 = NULL, *tmp2 = NULL;
     NcmContentInfo *content_infos_dup = NULL;
-    bool dup_parent = false, dup_previous = false, dup_next = false, success = false;
+    bool dup_previous = false, dup_next = false, success = false;
 
     /* Allocate memory for the new TitleInfo element. */
     title_info_dup = calloc(1, sizeof(TitleInfo));
@@ -2428,7 +2398,7 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
 
     /* Copy TitleInfo data. */
     memcpy(title_info_dup, title_info, sizeof(TitleInfo));
-    title_info_dup->parent = title_info_dup->previous = title_info_dup->next = NULL;
+    title_info_dup->previous = title_info_dup->next = NULL;
 
     /* Allocate memory for NcmContentInfo elements. */
     content_infos_dup = calloc(title_info->content_count, sizeof(NcmContentInfo));
@@ -2444,12 +2414,12 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
     /* Update content infos pointer. */
     title_info_dup->content_infos = content_infos_dup;
 
-#define TITLE_DUPLICATE_LINKED_LIST(elem, prnt, prv, nxt) \
+#define TITLE_DUPLICATE_LINKED_LIST(elem, prv, nxt) \
     if (title_info->elem) { \
         if (elem) { \
             title_info_dup->elem = elem; \
         } else { \
-            title_info_dup->elem = titleDuplicateTitleInfo(title_info->elem, prnt, prv, nxt); \
+            title_info_dup->elem = titleDuplicateTitleInfo(title_info->elem, prv, nxt); \
             if (!title_info_dup->elem) goto end; \
             dup_##elem = true; \
         } \
@@ -2460,7 +2430,7 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
         tmp1 = title_info_dup->elem; \
         while(tmp1) { \
             tmp2 = tmp1->elem; \
-            tmp1->parent = tmp1->previous = tmp1->next = NULL; \
+            tmp1->previous = tmp1->next = NULL; \
             titleFreeTitleInfo(&tmp1); \
             tmp1 = tmp2; \
         } \
@@ -2469,14 +2439,8 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *pare
     /* Duplicate linked lists based on two different principles: */
     /* 1) Linked list pointers will only be populated if their corresponding pointer is also populated in the TitleInfo element to duplicate. */
     /* 2) Pointers passed into this function take precedence before actual data duplication. */
-
-    /* Duplicate parent linked list and update pointer to parent TitleInfo entry -- this will be used while duplicating siblings in the next linked lists. */
-    TITLE_DUPLICATE_LINKED_LIST(parent, NULL, NULL, NULL);
-    if (title_info->parent) parent = title_info_dup->parent;
-
-    /* Duplicate previous and next linked lists. */
-    TITLE_DUPLICATE_LINKED_LIST(previous, parent, NULL, title_info_dup);
-    TITLE_DUPLICATE_LINKED_LIST(next, parent, title_info_dup, NULL);
+    TITLE_DUPLICATE_LINKED_LIST(previous, NULL, title_info_dup);
+    TITLE_DUPLICATE_LINKED_LIST(next, title_info_dup, NULL);
 
     /* Update flag. */
     success = true;
@@ -2490,17 +2454,14 @@ end:
 
         if (title_info_dup)
         {
-            /* Free parent linked list (if duplicated). */
-            /* Parent TitleInfo entries are user applications with no reference to child titles, so it's safe to free them first with titleFreeTitleInfo(). */
-            if (dup_parent) titleFreeTitleInfo(&(title_info_dup->parent));
-
             /* Free previous and next linked lists (if duplicated). */
-            /* We need to take care of not freeing the parent linked list, either because we may have already freed it, or because it may have been passed as an argument. */
+            /* We need to take care of not freeing the linked lists right away, either because we may have already freed them, or because they may have been passed as arguments. */
             /* Furthermore, both the next pointer from the previous sibling and the previous pointer from the next sibling reference our current duplicated entry. */
             /* To avoid issues, we'll just clear all linked list pointers. */
             TITLE_FREE_DUPLICATED_LINKED_LIST(previous);
             TITLE_FREE_DUPLICATED_LINKED_LIST(next);
 
+            /* Free allocated buffer and update return pointer. */
             free(title_info_dup);
             title_info_dup = NULL;
         }

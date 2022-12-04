@@ -91,7 +91,7 @@ typedef enum {
     NcaKeyGeneration_Since1210NUP = 12,                             ///< 12.1.0.
     NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
     NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.2.
-    NcaKeyGeneration_Since1500NUP = 15,                             ///< 15.0.0.
+    NcaKeyGeneration_Since1500NUP = 15,                             ///< 15.0.0 - 15.0.1.
     NcaKeyGeneration_Current      = NcaKeyGeneration_Since1500NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;

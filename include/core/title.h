@@ -46,10 +46,10 @@ typedef struct {
 } TitleApplicationMetadata;
 
 /// Generated using ncm calls.
-/// User applications: the parent pointer is always unused. The previous/next pointers reference other user applications with the same ID.
-/// Patches: the parent pointer always references the first corresponding user application. The previous/next pointers reference other patches with the same ID.
-/// Add-on contents: the parent pointer always references the first corresponding user application. The previous/next pointers reference sibling add-on contents.
-/// Add-on content patches: the parent pointer always references the first corresponding add-on content. The previous/next pointers reference other patches with the same ID.
+/// User applications: the previous/next pointers reference other user applications with the same ID.
+/// Patches: the previous/next pointers reference other patches with the same ID.
+/// Add-on contents: the previous/next pointers reference sibling add-on contents.
+/// Add-on content patches: the previous/next pointers reference other patches with the same ID and/or other patches for sibling add-on contents.
 typedef struct _TitleInfo {
     u8 storage_id;                                  ///< NcmStorageId.
     NcmContentMetaKey meta_key;                     ///< Used with ncm calls.
@@ -59,15 +59,16 @@ typedef struct _TitleInfo {
     u64 size;                                       ///< Total title size.
     char size_str[32];                              ///< Total title size string.
     TitleApplicationMetadata *app_metadata;         ///< User application metadata.
-    struct _TitleInfo *parent, *previous, *next;    ///< Linked lists.
+    struct _TitleInfo *previous, *next;             ///< Linked lists.
 } TitleInfo;
 
 /// Used to deal with user applications stored in the eMMC, SD card and/or gamecard.
-/// The parent, previous and next pointers from the TitleInfo elements are used to traverse through multiple user applications, patches and/or add-on contents.
+/// The previous and next pointers from the TitleInfo elements are used to traverse through multiple user applications, patches, add-on contents and or add-on content patches.
 typedef struct {
-    TitleInfo *app_info;    ///< Pointer to a TitleInfo element holding info for the first detected user application entry matching the provided application ID.
-    TitleInfo *patch_info;  ///< Pointer to a TitleInfo element holding info for the first detected patch entry matching the provided application ID.
-    TitleInfo *aoc_info;    ///< Pointer to a TitleInfo element holding info for the first detected add-on content entry matching the provided application ID.
+    TitleInfo *app_info;        ///< Pointer to a TitleInfo element for the first detected user application entry matching the provided application ID.
+    TitleInfo *patch_info;      ///< Pointer to a TitleInfo element for the first detected patch entry matching the provided application ID.
+    TitleInfo *aoc_info;        ///< Pointer to a TitleInfo element for the first detected add-on content entry matching the provided application ID.
+    TitleInfo *aoc_patch_info;  ///< Pointer to a TitleInfo element for the first detected add-on content patch entry matching the provided application ID.
 } TitleUserApplicationData;
 
 typedef enum {
@@ -248,6 +249,13 @@ NX_INLINE u64 titleGetApplicationIdByDataPatchId(u64 data_patch_id)
 NX_INLINE bool titleCheckIfDataPatchIdBelongsToApplicationId(u64 app_id, u64 data_patch_id)
 {
     return titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, titleGetAddOnContentIdByDataPatchId(data_patch_id));
+}
+
+NX_INLINE bool titleCheckIfDataPatchIdsAreSiblings(u64 data_patch_id_1, u64 data_patch_id_2)
+{
+    u64 app_id_1 = titleGetApplicationIdByDataPatchId(data_patch_id_1);
+    u64 app_id_2 = titleGetApplicationIdByDataPatchId(data_patch_id_2);
+    return (app_id_1 == app_id_2 && titleCheckIfDataPatchIdBelongsToApplicationId(app_id_1, data_patch_id_1) && titleCheckIfDataPatchIdBelongsToApplicationId(app_id_2, data_patch_id_2));
 }
 
 NX_INLINE u32 titleGetContentCountByType(TitleInfo *info, u8 content_type)

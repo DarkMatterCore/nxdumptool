@@ -48,7 +48,8 @@ typedef struct
 static const char *dump_type_strings[] = {
     "dump base application",
     "dump update",
-    "dump dlc"
+    "dump dlc",
+    "dump dlc update"
 };
 
 static const u32 dump_type_strings_count = MAX_ELEMENTS(dump_type_strings);
@@ -953,7 +954,8 @@ static void nspDump(TitleInfo *title_info)
     consoleClear();
 
     consolePrint("%s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
-                           (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : "dlc"));
+                                (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : \
+                                (title_info->meta_key.type == NcmContentMetaType_AddOnContent ? "dlc" : "dlc update")));
 
     if (app_metadata)
     {
@@ -1142,8 +1144,6 @@ int main(int argc, char *argv[])
 
     ums_devices = umsGetDevices(&ums_device_count);
 
-    utilsSleep(1);
-
     while((applet_status = appletMainLoop()))
     {
         consoleClear();
@@ -1174,7 +1174,8 @@ int main(int argc, char *argv[])
                 }
 
                 consolePrint("selected %s info:\n\n", title_info->meta_key.type == NcmContentMetaType_Application ? "base application" : \
-                                                (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : "dlc"));
+                                                     (title_info->meta_key.type == NcmContentMetaType_Patch ? "update" : \
+                                                     (title_info->meta_key.type == NcmContentMetaType_AddOnContent ? "dlc" : "dlc update")));
                 consolePrint("source storage: %s\n", titleGetNcmStorageIdName(title_info->storage_id));
                 if (title_info->meta_key.type != NcmContentMetaType_Application) consolePrint("title id: %016lX\n", title_info->meta_key.id);
                 consolePrint("version: %u (%u.%u.%u-%u.%u)\n", title_info->version.value, title_info->version.system_version.major, title_info->version.system_version.minor, \
@@ -1341,12 +1342,12 @@ int main(int argc, char *argv[])
             } else
             if (menu == 2)
             {
-                if ((type_idx == 0 && !user_app_data.app_info) || (type_idx == 1 && !user_app_data.patch_info) || (type_idx == 2 && !user_app_data.aoc_info))
+                if ((type_idx == 0 && !user_app_data.app_info) || (type_idx == 1 && !user_app_data.patch_info) || (type_idx == 2 && !user_app_data.aoc_info) || (type_idx == 3 && !user_app_data.aoc_patch_info))
                 {
-                    consolePrint("\nthe selected title doesn't have available %s data\n", type_idx == 0 ? "base application" : (type_idx == 1 ? "update" : "dlc"));
+                    consolePrint("\nthe selected title doesn't have available %s data\n", type_idx == 0 ? "base application" : (type_idx == 1 ? "update" : (type_idx == 2 ? "dlc" : "dlc update")));
                     error = true;
                 } else {
-                    title_info = (type_idx == 0 ? user_app_data.app_info : (type_idx == 1 ? user_app_data.patch_info : user_app_data.aoc_info));
+                    title_info = (type_idx == 0 ? user_app_data.app_info : (type_idx == 1 ? user_app_data.patch_info : (type_idx == 2 ? user_app_data.aoc_info : user_app_data.aoc_patch_info)));
                     list_count = titleGetCountFromInfoBlock(title_info);
                     list_idx = 1;
                 }

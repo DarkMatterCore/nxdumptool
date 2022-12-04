@@ -1,7 +1,7 @@
 /*
  * main.c
  *
- * Copyright (c) 2020, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -37,7 +37,7 @@ typedef void (*MenuElementOptionFunction)(u32 idx);
 typedef struct {
     u32 selected;                           ///< Used to keep track of the selected option.
     MenuElementOptionFunction options_func; ///< Pointer to a function to be called each time a new option is selected. Should be set to NULL if not used.
-    const char **options;                   ///< Pointer to multiple char pointers with strings representing options. Last element must be set to NULL.
+    char **options;                         ///< Pointer to multiple char pointers with strings representing options. Last element must be set to NULL.
 } MenuElementOption;
 
 typedef bool (*MenuElementFunction)(void);
@@ -70,9 +70,20 @@ typedef struct
 
 /* Function prototypes. */
 
+static void utilsScanPads(void);
+static u64 utilsGetButtonsDown(void);
+static u64 utilsGetButtonsHeld(void);
+static void utilsWaitForButtonPress(u64 flag);
+
 static void consolePrint(const char *text, ...);
+static void consoleRefresh(void);
 
 static u32 menuGetElementCount(const Menu *menu);
+
+void freeStorageList(void);
+void updateStorageList(void);
+
+NX_INLINE bool useUsbHost(void);
 
 static bool waitForGameCard(void);
 static bool waitForUsb(void);
@@ -89,7 +100,6 @@ static bool saveGameCardIdSet(void);
 static bool saveGameCardImage(void);
 static bool saveConsoleLafwBlob(void);
 
-static void changeStorageOption(u32 idx);
 static void changeKeyAreaOption(u32 idx);
 static void changeCertificateOption(u32 idx);
 static void changeTrimOption(u32 idx);
@@ -100,10 +110,9 @@ static void write_thread_func(void *arg);
 
 /* Global variables. */
 
-static bool g_useUsbHost = false, g_appendKeyArea = true, g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
+static bool g_appendKeyArea = true, g_keepCertificate = false, g_trimDump = false, g_calcCrc = false;
 
-static const char *g_storageOptions[] = { "sd card", "usb host", NULL };
-static const char *g_xciOptions[] = { "no", "yes", NULL };
+static char *g_xciOptions[] = { "no", "yes", NULL };
 
 static MenuElement *g_xciMenuElements[] = {
     &(MenuElement){
@@ -162,6 +171,12 @@ static Menu g_xciMenu = {
     .elements = g_xciMenuElements
 };
 
+static MenuElementOption g_storageMenuElementOption = {
+    .selected = 0,
+    .options_func = NULL,
+    .options = NULL
+};
+
 static MenuElement *g_rootMenuElements[] = {
     &(MenuElement){
         .str = "dump gamecard xci",
@@ -203,11 +218,7 @@ static MenuElement *g_rootMenuElements[] = {
         .str = "output storage",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 0,
-            .options_func = &changeStorageOption,
-            .options = g_storageOptions
-        }
+        .element_options = &g_storageMenuElementOption
     },
     NULL
 };
@@ -219,40 +230,16 @@ static Menu g_rootMenu = {
     .elements = g_rootMenuElements
 };
 
-static Mutex g_fileMutex = 0;
+static Mutex g_conMutex = 0, g_fileMutex = 0;
 static CondVar g_readCondvar = 0, g_writeCondvar = 0;
 
 static char path[FS_MAX_PATH] = {0}, txt_info[FS_MAX_PATH] = {0};
 
 static bool g_appletStatus = true;
 
-static void utilsScanPads(void)
-{
-    padUpdate(&g_padState);
-}
-
-static u64 utilsGetButtonsDown(void)
-{
-    return padGetButtonsDown(&g_padState);
-}
-
-static u64 utilsGetButtonsHeld(void)
-{
-    return padGetButtons(&g_padState);
-}
-
-static void utilsWaitForButtonPress(u64 flag)
-{
-    /* Don't consider stick movement as button inputs. */
-    if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
-                        HidNpadButton_StickRUp | HidNpadButton_StickRDown);
-
-    while(appletMainLoop())
-    {
-        utilsScanPads();
-        if (utilsGetButtonsDown() & flag) break;
-    }
-}
+static UsbHsFsDevice *g_umsDevices = NULL;
+static u32 g_umsDeviceCount = 0;
+static char **g_storageOptions = NULL;
 
 int main(int argc, char *argv[])
 {
@@ -275,12 +262,13 @@ int main(int argc, char *argv[])
 
     consoleInit(NULL);
 
-    chdir(DEVOPTAB_SDMC_DEVICE GAMECARD_PATH);
+    updateStorageList();
 
     while(appletMainLoop())
     {
         consoleClear();
-        printf("\npress b to %s.\n\n", cur_menu->parent ? "go back" : "exit");
+        consolePrint("\npress b to %s.\n", cur_menu->parent ? "go back" : "exit");
+        if (g_umsDeviceCount) consolePrint("press x to safely remove all ums devices.\n\n");
 
         u32 limit = (cur_menu->scroll + page_size);
         MenuElement *selected_element = cur_menu->elements[cur_menu->selected];
@@ -293,32 +281,43 @@ int main(int argc, char *argv[])
             MenuElement *cur_element = cur_menu->elements[i];
             MenuElementOption *cur_options = cur_menu->elements[i]->element_options;
 
-            printf("%s%s", i == cur_menu->selected ? " -> " : "    ", cur_element->str);
+            consolePrint("%s%s", i == cur_menu->selected ? " -> " : "    ", cur_element->str);
 
             if (cur_options)
             {
-                printf(": ");
-                if (cur_options->selected > 0) printf("< ");
-                printf("%s", cur_options->options[cur_options->selected]);
-                if (cur_options->options[cur_options->selected + 1]) printf(" >");
+                consolePrint(": ");
+                if (cur_options->selected > 0) consolePrint("< ");
+                consolePrint("%s", cur_options->options[cur_options->selected]);
+                if (cur_options->options[cur_options->selected + 1]) consolePrint(" >");
             }
 
-            printf("\n");
+            consolePrint("\n");
         }
 
-        printf("\n");
-        consoleUpdate(NULL);
+        consolePrint("\n");
+        consoleRefresh();
 
+        bool data_update = false;
         u64 btn_down = 0, btn_held = 0;
+
         while((g_appletStatus = appletMainLoop()))
         {
             utilsScanPads();
             btn_down = utilsGetButtonsDown();
             btn_held = utilsGetButtonsHeld();
             if (btn_down || btn_held) break;
+
+            if (umsIsDeviceInfoUpdated())
+            {
+                updateStorageList();
+                data_update = true;
+                break;
+            }
         }
 
         if (!g_appletStatus) break;
+
+        if (data_update) continue;
 
         if (btn_down & HidNpadButton_A)
         {
@@ -340,14 +339,20 @@ int main(int argc, char *argv[])
                 }
 
                 /* Wait for USB session. */
-                if (g_useUsbHost && !waitForUsb()) break;
+                if (useUsbHost() && !waitForUsb()) break;
 
                 /* Generate dump text. */
                 generateDumpTxt();
 
                 /* Run task. */
                 utilsSetLongRunningProcessState(true);
-                if (selected_element->task_func()) saveDumpTxt();
+
+                if (selected_element->task_func())
+                {
+                    saveDumpTxt();
+                    if (!useUsbHost()) updateStorageList(); // update free space
+                }
+
                 utilsSetLongRunningProcessState(false);
 
                 /* Display prompt. */
@@ -411,12 +416,20 @@ int main(int argc, char *argv[])
 
             cur_menu = cur_menu->parent;
             element_count = menuGetElementCount(cur_menu);
+        } else
+        if ((btn_down & HidNpadButton_X) && g_umsDeviceCount)
+        {
+            for(u32 i = 0; i < g_umsDeviceCount; i++) usbHsFsUnmountDevice(&(g_umsDevices[i]), false);
+
+            updateStorageList();
         }
 
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp)) svcSleepThread(50000000); // 50 ms
     }
 
 out:
+    freeStorageList();
+
     utilsCloseResources();
 
     consoleExit(NULL);
@@ -424,13 +437,52 @@ out:
     return ret;
 }
 
+static void utilsScanPads(void)
+{
+    padUpdate(&g_padState);
+}
+
+static u64 utilsGetButtonsDown(void)
+{
+    return padGetButtonsDown(&g_padState);
+}
+
+static u64 utilsGetButtonsHeld(void)
+{
+    return padGetButtons(&g_padState);
+}
+
+static void utilsWaitForButtonPress(u64 flag)
+{
+    /* Don't consider stick movement as button inputs. */
+    if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
+                        HidNpadButton_StickRUp | HidNpadButton_StickRDown);
+
+    consoleRefresh();
+
+    while(appletMainLoop())
+    {
+        utilsScanPads();
+        if (utilsGetButtonsDown() & flag) break;
+    }
+}
+
 static void consolePrint(const char *text, ...)
 {
+    mutexLock(&g_conMutex);
     va_list v;
     va_start(v, text);
     vfprintf(stdout, text, v);
     va_end(v);
+    mutexUnlock(&g_conMutex);
+}
+
+static void consoleRefresh(void)
+{
+    mutexLock(&g_conMutex);
+    fflush(stdout);
     consoleUpdate(NULL);
+    mutexUnlock(&g_conMutex);
 }
 
 static u32 menuGetElementCount(const Menu *menu)
@@ -442,10 +494,105 @@ static u32 menuGetElementCount(const Menu *menu)
     return cnt;
 }
 
+void freeStorageList(void)
+{
+    u32 elem_count = (2 + g_umsDeviceCount); // sd card, usb host, ums devices
+
+    /* Free all previously allocated data. */
+    if (g_storageOptions)
+    {
+        for(u32 i = 0; i < elem_count && g_storageOptions[i]; i++)
+        {
+            free(g_storageOptions[i]);
+            g_storageOptions[i] = NULL;
+        }
+
+        free(g_storageOptions);
+        g_storageOptions = NULL;
+    }
+
+    if (g_umsDevices)
+    {
+        free(g_umsDevices);
+        g_umsDevices = NULL;
+    }
+
+    g_umsDeviceCount = 0;
+}
+
+void updateStorageList(void)
+{
+    char **tmp = NULL;
+    u32 elem_count = 0, idx = 0;
+
+    /* Free all previously allocated data. */
+    freeStorageList();
+
+    /* Get UMS devices. */
+    g_umsDevices = umsGetDevices(&g_umsDeviceCount);
+    elem_count = (2 + g_umsDeviceCount); // sd card, usb host, ums devices
+
+    /* Reallocate buffer. */
+    tmp = realloc(g_storageOptions, (elem_count + 1) * sizeof(char*)); // NULL terminator
+
+    g_storageOptions = tmp;
+    tmp = NULL;
+
+    memset(g_storageOptions, 0, (elem_count + 1) * sizeof(char*)); // NULL terminator
+
+    /* Generate UMS device strings. */
+    for(u32 i = 0; i < elem_count; i++)
+    {
+        u64 total = 0, free = 0;
+        char total_str[36] = {0}, free_str[32] = {0};
+
+        g_storageOptions[idx] = calloc(sizeof(char), 0x300);
+        if (!g_storageOptions[idx]) continue;
+
+        if (i == 1)
+        {
+            sprintf(g_storageOptions[idx], "usb host (pc)");
+        } else {
+            sprintf(total_str, "%s/", i == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[i - 2].name);
+            utilsGetFileSystemStatsByPath(total_str, &total, &free);
+            utilsGenerateFormattedSizeString(total, total_str, sizeof(total_str));
+            utilsGenerateFormattedSizeString(free, free_str, sizeof(free_str));
+
+            if (i == 0)
+            {
+                sprintf(g_storageOptions[idx], DEVOPTAB_SDMC_DEVICE " (%s / %s)", free_str, total_str);
+            } else {
+                UsbHsFsDevice *ums_device = &(g_umsDevices[i]);
+
+                if (ums_device->product_name[0])
+                {
+                    sprintf(g_storageOptions[idx], "%s (%s, LUN %u, FS #%u, %s)", ums_device->name, ums_device->product_name, ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
+                } else {
+                    sprintf(g_storageOptions[idx], "%s (LUN %u, FS #%u, %s)", ums_device->name, ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
+                }
+
+                sprintf(g_storageOptions[idx] + strlen(g_storageOptions[idx]), " (%s / %s)", free_str, total_str);
+            }
+        }
+
+        idx++;
+    }
+
+    /* Update storage menu element options. */
+    if (g_storageMenuElementOption.selected >= elem_count) g_storageMenuElementOption.selected = 0;
+    g_storageMenuElementOption.options = g_storageOptions;
+}
+
+NX_INLINE bool useUsbHost(void)
+{
+    return (g_storageMenuElementOption.selected == 1);
+}
+
 static bool waitForGameCard(void)
 {
     consoleClear();
     consolePrint("waiting for gamecard...\n");
+    consoleRefresh();
 
     u8 status = GameCardStatus_NotInserted;
 
@@ -487,6 +634,7 @@ static bool waitForUsb(void)
     if (usbIsReady()) return true;
 
     consolePrint("waiting for usb session...\n");
+    consoleRefresh();
 
     while((g_appletStatus = appletMainLoop()))
     {
@@ -526,7 +674,7 @@ static bool saveFileData(const char *path, void *data, size_t data_size)
         return false;
     }
 
-    if (g_useUsbHost)
+    if (useUsbHost())
     {
         if (!usbSendFilePropertiesCommon(data_size, path))
         {
@@ -572,20 +720,36 @@ static bool saveDumpTxt(void)
 
 static char *generateOutputFileName(const char *extension)
 {
-    char *filename = NULL, *output = NULL;
+    char *filename = NULL, *prefix = NULL, *output = NULL;
 
-    if (!extension || !*extension || !(filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_useUsbHost ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
+    if (!extension || !*extension || !(filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_storageMenuElementOption.selected > 0 ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
     {
         consolePrint("failed to get gamecard filename!\n");
         return NULL;
     }
 
-    output = utilsGeneratePath(NULL, filename, extension);
+    if (!useUsbHost())
+    {
+        prefix = calloc(sizeof(char), 0x300);
+        if (!prefix)
+        {
+            consolePrint("failed to generate prefix!\n");
+            free(filename);
+            return NULL;
+        }
+
+        sprintf(prefix, "%s:/gamecard_data/", g_storageMenuElementOption.selected == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[g_storageMenuElementOption.selected - 2].name);
+    }
+
+    output = utilsGeneratePath(prefix, filename, extension);
+
+    if (prefix) free(prefix);
     free(filename);
 
     if (output)
     {
         snprintf(path, MAX_ELEMENTS(path), "%s", output);
+        utilsCreateDirectoryTree(path, false);
     } else {
         consolePrint("failed to generate output filename!\n");
     }
@@ -628,7 +792,7 @@ static bool saveGameCardSpecificData(void)
 
     if (!saveFileData(filename, &(gc_security_information.specific_data), sizeof(GameCardSpecificData))) goto end;
 
-    printf("successfully saved specific data as \"%s\"\n", filename);
+    consolePrint("successfully saved specific data as \"%s\"\n", filename);
     success = true;
 
 end:
@@ -660,7 +824,7 @@ static bool saveGameCardCertificate(void)
 
     if (!saveFileData(filename, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
 
-    printf("successfully saved certificate as \"%s\"\n", filename);
+    consolePrint("successfully saved certificate as \"%s\"\n", filename);
     success = true;
 
 end:
@@ -686,7 +850,7 @@ static bool saveGameCardInitialData(void)
 
     if (!saveFileData(filename, &(gc_security_information.initial_data), sizeof(GameCardInitialData))) goto end;
 
-    printf("successfully saved initial data as \"%s\"\n", filename);
+    consolePrint("successfully saved initial data as \"%s\"\n", filename);
     success = true;
 
 end:
@@ -712,7 +876,7 @@ static bool saveGameCardIdSet(void)
 
     if (!saveFileData(filename, &id_set, sizeof(FsGameCardIdSet))) goto end;
 
-    printf("successfully saved gamecard id set as \"%s\"\n", filename);
+    consolePrint("successfully saved gamecard id set as \"%s\"\n", filename);
     success = true;
 
 end:
@@ -723,7 +887,7 @@ end:
 
 static bool saveGameCardImage(void)
 {
-    u64 gc_size = 0;
+    u64 gc_size = 0, free_space = 0;
 
     u32 key_area_crc = 0;
     GameCardKeyArea gc_key_area = {0};
@@ -776,7 +940,7 @@ static bool saveGameCardImage(void)
     filename = generateOutputFileName(path);
     if (!filename) goto end;
 
-    if (g_useUsbHost)
+    if (useUsbHost())
     {
         if (!usbSendFilePropertiesCommon(gc_size, filename))
         {
@@ -790,10 +954,31 @@ static bool saveGameCardImage(void)
             goto end;
         }
     } else {
-        if (gc_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(filename))
+        if (!utilsGetFileSystemStatsByPath(path, NULL, &free_space))
         {
-            consolePrint("failed to create concatenation file for \"%s\"!\n", filename);
+            consolePrint("failed to retrieve free space from selected device\n");
             goto end;
+        }
+
+        if (gc_size >= free_space)
+        {
+            consolePrint("dump size exceeds free space\n");
+            goto end;
+        }
+
+        if (g_storageMenuElementOption.selected == 0)
+        {
+            if (gc_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(filename))
+            {
+                consolePrint("failed to create concatenation file for \"%s\"!\n", filename);
+                goto end;
+            }
+        } else {
+            if (g_umsDevices[g_storageMenuElementOption.selected - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && gc_size > FAT32_FILESIZE_LIMIT)
+            {
+                consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+                goto end;
+            }
         }
 
         shared_data.fp = fopen(filename, "wb");
@@ -822,6 +1007,7 @@ static bool saveGameCardImage(void)
     bool btn_cancel_cur_state = false, btn_cancel_prev_state = false;
 
     consolePrint("hold b to cancel\n\n");
+    consoleRefresh();
 
     start = time(NULL);
 
@@ -865,8 +1051,8 @@ static bool saveGameCardImage(void)
         prev_time = ts.tm_sec;
         prev_size = size;
 
-        printf("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));
-        consoleUpdate(NULL);
+        consolePrint("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_data.total_size, percent, (now - start));
+        consoleRefresh();
     }
 
     start = (time(NULL) - start);
@@ -889,25 +1075,27 @@ static bool saveGameCardImage(void)
         goto end;
     }
 
-    printf("process completed in %lu seconds\n", start);
+    consolePrint("process completed in %lu seconds\n", start);
     success = true;
 
     if (g_calcCrc)
     {
-        if (g_appendKeyArea) printf("key area crc: %08X | ", key_area_crc);
-        printf("xci crc: %08X", shared_data.xci_crc);
-        if (g_appendKeyArea) printf(" | xci crc (with key area): %08X", shared_data.full_xci_crc);
-        printf("\n");
+        if (g_appendKeyArea) consolePrint("key area crc: %08X | ", key_area_crc);
+        consolePrint("xci crc: %08X", shared_data.xci_crc);
+        if (g_appendKeyArea) consolePrint(" | xci crc (with key area): %08X", shared_data.full_xci_crc);
+        consolePrint("\n");
     }
 
 end:
+    consoleRefresh();
+
     if (shared_data.fp)
     {
         fclose(shared_data.fp);
         shared_data.fp = NULL;
     }
 
-    if (!success && !g_useUsbHost) utilsRemoveConcatenationFile(filename);
+    if (!success && !useUsbHost()) utilsRemoveConcatenationFile(filename);
 
     if (shared_data.data) free(shared_data.data);
 
@@ -942,16 +1130,11 @@ static bool saveConsoleLafwBlob(void)
 
     if (!saveFileData(path, &lafw_blob, sizeof(LotusAsicFirmwareBlob))) goto end;
 
-    printf("successfully saved lafw blob as \"%s\"\n", path);
+    consolePrint("successfully saved lafw blob as \"%s\"\n", path);
     success = true;
 
 end:
     return success;
-}
-
-static void changeStorageOption(u32 idx)
-{
-    g_useUsbHost = (idx > 0);
 }
 
 static void changeKeyAreaOption(u32 idx)
@@ -1063,13 +1246,13 @@ static void write_thread_func(void *arg)
 
         if (shared_data->read_error || shared_data->transfer_cancelled)
         {
-            if (shared_data->transfer_cancelled && g_useUsbHost) usbCancelFileTransfer();
+            if (shared_data->transfer_cancelled && useUsbHost()) usbCancelFileTransfer();
             mutexUnlock(&g_fileMutex);
             break;
         }
 
         /* Write current file data chunk */
-        if (g_useUsbHost)
+        if (useUsbHost())
         {
             shared_data->write_error = !usbSendFileData(shared_data->data, shared_data->data_size);
         } else {
