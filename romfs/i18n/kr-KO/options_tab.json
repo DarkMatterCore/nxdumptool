@@ -1,0 +1,47 @@
+{
+    "dump_options_info": "덤프 옵션은 편의를 위해 해당 메뉴에 표시됩니다.",
+
+    "overclock": {
+        "label": "오버클럭",
+        "description": "덤프 작업 속도를 높이기 위해 CPU와 MEM을 각각 1785 MHz와 1600 MHz로 오버클럭합니다. 이것은 상대적으로 안전한 작업으로 간주됩니다.\n\n응용 프로그램이 제목 재정의 모드에서 실행 중이고 sys-clk가 활성화되어 있고 재정의된 제목에 대한 시계 프로파일이 생성된 경우 이 설정은 전혀 영향을 미치지 않습니다."
+    },
+
+    "naming_convention": {
+        "label": "명명 규칙",
+        "description": "모든 출력 덤프에 사용되는 명명 규칙을 설정합니다.\n\n\uE016  전체: \"{Name} [{Id}][v{Version}][{Type}]\".\n\uE016  ID 및 버전만: \"{Id}_v{Version}_{Type}\".\n\n\"Full\" 를 선택하면 가능할 때마다 디스플레이 버전 문자열도 덤프된 업데이트에 추가됩니다.",
+        "value_00": "전체,
+        "value_01": "ID 및 버전만"
+    },
+
+    "update_nswdb_xml": {
+        "label": "Update NSWDB XML 업데이트",
+        "description": "게임 카드 덤프에서 체크섬을 확인하는 데 선택적으로 사용할 수 있는 최신 NSWDB XML을 검색합니다. 인터넷 연결이 필요합니다."
+    },
+
+    "update_app": {
+        "label": "응용 프로그램 업데이트",
+        "description": "nxdumptool의 GitHub 저장소에서 업데이트를 사용할 수 있는지 확인합니다. 인터넷 연결이 필요합니다.",
+        "frame": {
+            "please_wait": "잠시만 기다려 주세요...",
+            "release_details": "병합 해시: {0:.7}\n개정 날짜: {1} UTC+0",
+            "changelog_header": "변경로그",
+            "update_action": "업데이트"
+        }
+    },
+
+    "update_dialog": {
+        "cancel": "취소",
+        "close": "닫기"
+    },
+
+    "notifications": {
+        "no_internet_connection": "인터넷 연결을 사용할 수 없습니다. 업데이트할 수 없습니다.",
+        "update_failed": "업데이트가 실패하였습니다! 자세한 내용은 로그 파일을 확인하세요.",
+        "nswdb_xml_updated": "NSWDB XML이 성공적으로 업데이트되었습니다!",
+        "is_nso": "응용 프로그램이 NSO로 실행 중입니다. 업데이트할 수 없습니다.",
+        "already_updated": "응용 프로그램이 이미 업데이트되었습니다. 새로 고침하세요.",
+        "github_json_failed": "GitHub 릴리스 JSON을 다운로드하거나 구문 분석하지 못했습니다!",
+        "up_to_date": "응용 프로그램이 최신 상태입니다!",
+        "app_updated": "응용 프로그램이 성공적으로 업데이트되었습니다! 변경 사항을 적용하려면 새로 고침하세요.
+    }
+}
