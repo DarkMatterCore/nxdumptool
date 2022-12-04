@@ -1,0 +1,10 @@
+{
+    "notifications": {
+        "gamecard_status_updated": "게임카드 상태가 업데이트되었습니다.",
+        "gamecard_ejected": "게임카드를 꺼냈습니다.",
+        "user_titles": "사용자 타이틀이 업데이트되었습니다.",
+        "ums_device": "USB 대용량 저장 장치가 업데이트되었습니다.",
+        "usb_host_connected": "USB 호스트가 연결되었습니다.",
+        "usb_host_disconnected": "USB 호스트 연결  해제되었습니다."
+    }
+}
