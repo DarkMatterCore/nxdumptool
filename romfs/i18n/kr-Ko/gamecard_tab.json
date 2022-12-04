@@ -1,0 +1,62 @@
+{
+    "error_frame": {
+        "not_inserted": "삽입된 게임 카드가 없습니다.",
+        "processing": "게임 카드를 처리하는 중입니다. 잠시만 기다려 주세요...",
+        "nogc_enabled": "게임 카드가 삽입되었지만 \"nogc\" 패치가 활성화되었습니다.\n삽입된 게임 카드로는 아무 작업도 수행할 수 없습니다.\n이 패치를 비활성화하면 Lotus ASIC 펌웨어가 오래된 경우 *업데이트됩니다*.\n게임 카드 덤핑 기능을 사용하려면 이 패치를 비활성화하는 것을 고려하세요.",
+        "lafw_update_required": "게임 카드가 삽입되었지만 Lotus ASIC 펌웨어 업데이트가 필요합니다.\n삽입된 게임 카드를 사용하여 콘솔을 업데이트하고 다시 시도하세요.",
+        "info_not_loaded": "게임 카드가 삽입되었지만 예기치 않은 I/O 오류가 발생했습니다.\n\"{0}\"에서 이 문제를 보고하세요."
+    },
+
+    "list": {
+        "launch_error_info": "실행 오류를 완화하려면 nxdumptool을 종료한 후 게임 카드를 꺼냈다가 콘솔에 다시 삽입하세요.",
+
+        "user_titles": {
+            "header": "삽입된 게임 카드에서 사용 가능한 응용 프로그램",
+            "info": "이 게임 카드에서 사용할 수 있는 사용자 타이틀에 대한 작업을 수행하려면 \"{0}\" 메뉴로 이동하세요."
+        },
+
+        "properties_table": {
+            "header": "게임 카드 속성",
+            "capacity": "용량",
+            "total_size": "전체 크기",
+            "trimmed_size": "트림된 크기",
+            "update_version": "번들 업데이트 버전",
+            "lafw_version": "필요한 LAFW 버전",
+            "lafw_version_value": "%lu 이상 (%s)",
+            "sdk_version": "SDK 버전",
+            "compatibility_type": "호환성 유형"
+        },
+
+        "dump_options": "덤프 옵션",
+
+        "dump_card_image": {
+            "label": "게임 카드 이미지 덤프 (XCI)",
+            "description": "원본 게임 카드 이미지를 생성합니다. 이것은 대부분의 사람들이 사용하기를 원하는 옵션입니다."
+        },
+
+        "dump_certificate": {
+            "label": "게임 카드 인증서 덤프",
+            "description": "게임 카드 인증서는 각 개별 게임 카드를 명확하게 식별하는 데 사용됩니다.""
+        },
+
+        "dump_header": {
+            "label": "게임 카드 헤더 덤프",
+            "description": "게임 카드 헤더에는 루트 HFS 파티션의 위치 및 게임 카드 용량과 같은 정보가 들어 있습니다.\n개발자, 보호 전문가 및 고급 사용자에게만 유용합니다."
+        },
+
+        "dump_decrypted_cardinfo": {
+            "label": "해독된 카드정보 영역 덤프",
+            "description": "카드정보 영역에는 게임 카드에 필요한 번들 시스템 업데이트 버전 및 Lotus ASIC 펌웨어 버전과 같은 정보가 들어 있습니다.\n이 영역은 게임 카드 헤더의 일부이지만 항상 암호화됩니다.\n개발자, 보호 전문가 및 고급 사용자에게만 유용합니다."
+        },
+
+        "dump_initial_data": {
+            "label": "초기 데이터 영역 덤프",
+            "description": "초기데이터 영역은 게임 카드와 통신하기 위해 Lotus ASIC에서 사용하는 암호화 정보를 보유합니다.\n일반적인 수단을 통해 덤프할 수 없습니다. 게임 카드 이미지의 저장 영역의 일부가 아닙니다.\n개발자, 보호 전문가 및 고급 사용자에게만 유용합니다."
+        },
+
+        "dump_hfs_partitions": {
+            "label": "해시 파일 시스템 (HFS) 파티션 덤프",
+            "description": "게임 카드 저장 영역 내 HFS 파티션의 데이터를 원시 및 추출 형식 모두로 덤프합니다."
+        }
+    }
+}
