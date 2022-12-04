@@ -1,0 +1,34 @@
+{
+    "description": "닌텐도 스위치 덤프 도구",
+
+    "copyright": "GPLv3+ 라이센스\n\u00A9 2020 - 2022 {0}\n{1}",
+
+    "dependencies": {
+        "header":  "종속성",
+        "line_00": "\uE016  {0}은(는) 하드웨어 가속 UI 라이브러리인 Borealis에서 제공: {1}.",
+        "line_01": "\uE016  USB 대용량 저장 장치 지원은 libusbhsfs에 의해 제공: {0}.",
+        "line_02": "\uE016  FatFs는 eMMC 스토리지에서 FAT 볼륨을 마운트하는 데 사용: {0}.",
+        "line_03": "\uE016  LZ4는 NSO 바이너리를 압축 해제하는 데 사용: {0}.",
+        "line_04": "\uE016  json-c는 JSON 형식 데이터를 구문 분석하는 데 사용: {0}."
+    },
+
+    "acknowledgments": {
+        "header":  "감사",
+        "line_00": "\uE016  Switchbrew 및 libnx 기여자",
+        "line_01": "\uE016  SciresM, hactool, hac2l, Atmosphère-NX",
+        "line_02": "\uE016  shchmue, Lockpick 및 런타임 키 수집 알고리즘과 리버스 엔지니어링 작업을 지원합니다.",
+        "line_03": "\uE016  Adubbz, Tinfoil 및 해당 ES 서비스 바인딩",
+        "line_04": "\uE016  RattletraPM, 멋진 아이콘",
+        "line_05": "\uE016  Whovian9369, 많은 테스트와 멋진 아이디어를 제공하여 전체 개발 과정에서 핵심 부분이 되어 주셔서 감사",
+        "line_06": "\uE016  0Liam, Shadów and SimonTime, 닌텐도 스위치 파일 및 데이터 형식을 이해하는 데 큰 도움",
+        "line_07": "\uE016  NSWDB.COM 및 No-Intro.org의 사람들은 친절하게 온라인 체크섬 조회를 수행하기 위해 공개 API를 제공",
+        "line_08": "\uE016  nxdumptool Discord 서버의 사람들",
+        "line_09": "\uE016  The Comfy Boyes, 항상 훌륭하게 지원. 넌 네가 누구인지 암",
+        "line_10": "\uE016  그리고 마지막으로 중요한 것은 당신입니다! 제 작품을 이용해 주셔서 감사합니다!"
+    },
+
+    "links": {
+        "header":  "추가 링크 및 리소스",
+        "line_00": "\uE016  디스코드 서버: {0}."
+    }
+}
