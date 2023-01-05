@@ -954,7 +954,7 @@ static bool saveGameCardImage(void)
             goto end;
         }
     } else {
-        if (!utilsGetFileSystemStatsByPath(path, NULL, &free_space))
+        if (!utilsGetFileSystemStatsByPath(filename, NULL, &free_space))
         {
             consolePrint("failed to retrieve free space from selected device\n");
             goto end;
