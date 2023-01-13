@@ -666,9 +666,9 @@ static void generateDumpTxt(void)
                                                ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec);
 }
 
-static bool saveFileData(const char *path, void *data, size_t data_size)
+static bool saveFileData(const char *filepath, void *data, size_t data_size)
 {
-    if (!path || !*path || !data || !data_size)
+    if (!filepath || !*filepath || !data || !data_size)
     {
         consolePrint("invalid parameters to save file data!\n");
         return false;
@@ -676,22 +676,22 @@ static bool saveFileData(const char *path, void *data, size_t data_size)
 
     if (useUsbHost())
     {
-        if (!usbSendFilePropertiesCommon(data_size, path))
+        if (!usbSendFilePropertiesCommon(data_size, filepath))
         {
-            consolePrint("failed to send file properties for \"%s\"!\n", path);
+            consolePrint("failed to send file properties for \"%s\"!\n", filepath);
             return false;
         }
 
         if (!usbSendFileData(data, data_size))
         {
-            consolePrint("failed to send file data for \"%s\"!\n", path);
+            consolePrint("failed to send file data for \"%s\"!\n", filepath);
             return false;
         }
     } else {
-        FILE *fp = fopen(path, "wb");
+        FILE *fp = fopen(filepath, "wb");
         if (!fp)
         {
-            consolePrint("failed to open \"%s\" for writing!\n", path);
+            consolePrint("failed to open \"%s\" for writing!\n", filepath);
             return false;
         }
 
@@ -700,8 +700,8 @@ static bool saveFileData(const char *path, void *data, size_t data_size)
 
         if (ret != data_size)
         {
-            consolePrint("failed to write 0x%lX byte(s) to \"%s\"! (%d)\n", data_size, path, errno);
-            remove(path);
+            consolePrint("failed to write 0x%lX byte(s) to \"%s\"! (%d)\n", data_size, filepath, errno);
+            remove(filepath);
         }
     }
 
@@ -738,7 +738,7 @@ static char *generateOutputFileName(const char *extension)
             return NULL;
         }
 
-        sprintf(prefix, "%s:/gamecard_data/", g_storageMenuElementOption.selected == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[g_storageMenuElementOption.selected - 2].name);
+        sprintf(prefix, "%s/gamecard_data/", g_storageMenuElementOption.selected == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[g_storageMenuElementOption.selected - 2].name);
     }
 
     output = utilsGeneratePath(prefix, filename, extension);
