@@ -24,22 +24,16 @@
 /* Global variables. */
 
 static Mutex g_umsMutex = 0;
-static bool g_umsInterfaceInit = false;
-
-static Thread g_umsDetectionThread = {0};
-static UEvent *g_umsStatusChangeEvent = NULL, g_umsDetectionThreadExitEvent = {0};
-static bool g_umsDetectionThreadCreated = false, g_umsDeviceInfoUpdated = false;
+static bool g_umsInterfaceInit = false, g_umsDeviceInfoUpdated = false;
 
 static u32 g_umsDeviceCount = 0;
 static UsbHsFsDevice *g_umsDevices = NULL;
 
 /* Function prototypes. */
 
-static bool umsCreateDetectionThread(void);
-static void umsDestroyDetectionThread(void);
-static void umsDetectionThreadFunc(void *arg);
-
 static void umsFreeDeviceData(void);
+static void umsPopulateCallback(const UsbHsFsDevice *devices, u32 device_count, void *user_data);
+static bool umsDuplicateDeviceArray(const UsbHsFsDevice *in_devices, u32 in_device_count, UsbHsFsDevice **out_devices, u32 *out_device_count);
 
 bool umsInitialize(void)
 {
@@ -50,6 +44,9 @@ bool umsInitialize(void)
         ret = g_umsInterfaceInit;
         if (ret) break;
 
+        /* Set populate callback function. */
+        usbHsFsSetPopulateCallback(&umsPopulateCallback, NULL);
+
         /* Initialize USB Mass Storage Host interface. */
         Result rc = usbHsFsInitialize(0);
         if (R_FAILED(rc))
@@ -57,15 +54,6 @@ bool umsInitialize(void)
             LOG_MSG_ERROR("usbHsFsInitialize failed! (0x%X).", rc);
             break;
         }
-
-        /* Get USB Mass Storage status change event. */
-        g_umsStatusChangeEvent = usbHsFsGetStatusChangeUserEvent();
-
-        /* Create user-mode exit event. */
-        ueventCreate(&g_umsDetectionThreadExitEvent, true);
-
-        /* Create USB Mass Storage detection thread. */
-        if (!(g_umsDetectionThreadCreated = umsCreateDetectionThread())) break;
 
         /* Update flags. */
         ret = g_umsInterfaceInit = true;
@@ -78,18 +66,14 @@ void umsExit(void)
 {
     SCOPED_LOCK(&g_umsMutex)
     {
-        /* Destroy USB Mass Storage detection thread. */
-        if (g_umsDetectionThreadCreated)
-        {
-            umsDestroyDetectionThread();
-            g_umsDetectionThreadCreated = false;
-        }
-
         /* Close USB Mass Storage Host interface. */
         usbHsFsExit();
 
-        /* Update flag. */
-        g_umsInterfaceInit = false;
+        /* Free USB Mass Storage device data. */
+        umsFreeDeviceData();
+
+        /* Update flags. */
+        g_umsInterfaceInit = g_umsDeviceInfoUpdated = false;
     }
 }
 
@@ -99,8 +83,7 @@ bool umsIsDeviceInfoUpdated(void)
 
     SCOPED_TRY_LOCK(&g_umsMutex)
     {
-        if (!g_umsInterfaceInit || !g_umsDeviceInfoUpdated) break;
-        ret = true;
+        ret = (g_umsInterfaceInit && g_umsDeviceInfoUpdated);
         g_umsDeviceInfoUpdated = false;
     }
 
@@ -119,123 +102,11 @@ UsbHsFsDevice *umsGetDevices(u32 *out_count)
             break;
         }
 
-        if (!g_umsDeviceCount || !g_umsDevices)
-        {
-            /* Update output device count. */
-            *out_count = 0;
-            break;
-        }
-
-        /* Allocate memory for the output devices. */
-        devices = calloc(g_umsDeviceCount, sizeof(UsbHsFsDevice));
-        if (!devices)
-        {
-            LOG_MSG_ERROR("Failed to allocate memory for %u devices!", g_umsDeviceCount);
-            break;
-        }
-
-        /* Copy device data. */
-        memcpy(devices, g_umsDevices, g_umsDeviceCount * sizeof(UsbHsFsDevice));
-
-        /* Update output device count. */
-        *out_count = g_umsDeviceCount;
+        /* Duplicate device data. */
+        if (!umsDuplicateDeviceArray(g_umsDevices, g_umsDeviceCount, &devices, out_count)) LOG_MSG_ERROR("Failed to duplicate USB Mass Storage device data!");
     }
 
     return devices;
-}
-
-static bool umsCreateDetectionThread(void)
-{
-    if (!utilsCreateThread(&g_umsDetectionThread, umsDetectionThreadFunc, NULL, 1))
-    {
-        LOG_MSG_ERROR("Failed to create USB Mass Storage detection thread!");
-        return false;
-    }
-
-    return true;
-}
-
-static void umsDestroyDetectionThread(void)
-{
-    /* Signal the exit event to terminate the USB Mass Storage detection thread. */
-    ueventSignal(&g_umsDetectionThreadExitEvent);
-
-    /* Wait for the USB Mass Storage detection thread to exit. */
-    utilsJoinThread(&g_umsDetectionThread);
-}
-
-static void umsDetectionThreadFunc(void *arg)
-{
-    (void)arg;
-
-    Result rc = 0;
-    int idx = 0;
-    u32 listed_device_count = 0;
-
-    Waiter status_change_event_waiter = waiterForUEvent(g_umsStatusChangeEvent);
-    Waiter exit_event_waiter = waiterForUEvent(&g_umsDetectionThreadExitEvent);
-
-    while(true)
-    {
-        /* Wait until an event is triggered. */
-        rc = waitMulti(&idx, -1, status_change_event_waiter, exit_event_waiter);
-        if (R_FAILED(rc)) continue;
-
-        /* Exit event triggered. */
-        if (idx == 1) break;
-
-        SCOPED_LOCK(&g_umsMutex)
-        {
-            /* Free USB Mass Storage device data. */
-            umsFreeDeviceData();
-
-            /* Get mounted device count. */
-            g_umsDeviceCount = usbHsFsGetMountedDeviceCount();
-            LOG_MSG_INFO("USB Mass Storage status change event triggered! Mounted USB Mass Storage device count: %u.", g_umsDeviceCount);
-
-            if (g_umsDeviceCount)
-            {
-                bool fail = false;
-
-                /* Allocate mounted devices buffer. */
-                g_umsDevices = calloc(g_umsDeviceCount, sizeof(UsbHsFsDevice));
-                if (g_umsDevices)
-                {
-                    /* List mounted devices. */
-                    listed_device_count = usbHsFsListMountedDevices(g_umsDevices, g_umsDeviceCount);
-                    if (listed_device_count)
-                    {
-                        /* Check if we got as many devices as we expected. */
-                        if (listed_device_count == g_umsDeviceCount)
-                        {
-                            /* Update USB Mass Storage device info updated flag. */
-                            g_umsDeviceInfoUpdated = true;
-                        } else {
-                            LOG_MSG_ERROR("USB Mass Storage device count mismatch! (%u != %u).", listed_device_count, g_umsDeviceCount);
-                            fail = true;
-                        }
-                    } else {
-                        LOG_MSG_ERROR("Failed to list mounted USB Mass Storage devices!");
-                        fail = true;
-                    }
-                } else {
-                    LOG_MSG_ERROR("Failed to allocate memory for mounted USB Mass Storage devices buffer!");
-                    fail = true;
-                }
-
-                /* Free USB Mass Storage device data if something went wrong. */
-                if (fail) umsFreeDeviceData();
-            } else {
-                /* Update USB Mass Storage device info updated flag. */
-                g_umsDeviceInfoUpdated = true;
-            }
-        }
-    }
-
-    /* Free USB Mass Storage device data. */
-    umsFreeDeviceData();
-
-    threadExit();
 }
 
 static void umsFreeDeviceData(void)
@@ -249,4 +120,70 @@ static void umsFreeDeviceData(void)
 
     /* Reset device count. */
     g_umsDeviceCount = 0;
+}
+
+static void umsPopulateCallback(const UsbHsFsDevice *devices, u32 device_count, void *user_data)
+{
+    (void)user_data;
+
+    SCOPED_LOCK(&g_umsMutex)
+    {
+        /* Free USB Mass Storage device data. */
+        umsFreeDeviceData();
+
+        LOG_MSG_INFO("Mounted USB Mass Storage device count: %u.", device_count);
+
+        if (devices && device_count)
+        {
+            /* Duplicate device data. */
+            if (!umsDuplicateDeviceArray(devices, device_count, &g_umsDevices, &g_umsDeviceCount)) LOG_MSG_ERROR("Failed to duplicate USB Mass Storage device data!");
+        }
+
+        /* Update USB Mass Storage device info updated flag. */
+        g_umsDeviceInfoUpdated = true;
+    }
+}
+
+static bool umsDuplicateDeviceArray(const UsbHsFsDevice *in_devices, u32 in_device_count, UsbHsFsDevice **out_devices, u32 *out_device_count)
+{
+    if (!out_devices || !out_device_count)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    UsbHsFsDevice *tmp_devices = NULL;
+    bool ret = false;
+
+    /* Clear output. */
+    *out_devices = NULL;
+    *out_device_count = 0;
+
+    /* Short-circuit. */
+    if (!in_devices || !in_device_count)
+    {
+        ret = true;
+        goto end;
+    }
+
+    /* Duplicate input array. */
+    tmp_devices = calloc(in_device_count, sizeof(UsbHsFsDevice));
+    if (!tmp_devices)
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for %u devices!", in_device_count);
+        goto end;
+    }
+
+    /* Copy device data. */
+    memcpy(tmp_devices, in_devices, in_device_count * sizeof(UsbHsFsDevice));
+
+    /* Update output. */
+    *out_devices = tmp_devices;
+    *out_device_count = in_device_count;
+
+    /* Update return value. */
+    ret = true;
+
+end:
+    return ret;
 }

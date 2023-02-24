@@ -122,7 +122,7 @@ static MenuElement *g_xciMenuElements[] = {
         .element_options = NULL
     },
     &(MenuElement){
-        .str = "append key area",
+        .str = "prepend key area",
         .child_menu = NULL,
         .task_func = NULL,
         .element_options = &(MenuElementOption){
@@ -553,7 +553,9 @@ void updateStorageList(void)
         {
             sprintf(g_storageOptions[idx], "usb host (pc)");
         } else {
-            sprintf(total_str, "%s/", i == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[i - 2].name);
+            UsbHsFsDevice *ums_device = (i >= 2 ? &(g_umsDevices[i - 2]) : NULL);
+
+            sprintf(total_str, "%s/", i == 0 ? DEVOPTAB_SDMC_DEVICE : ums_device->name);
             utilsGetFileSystemStatsByPath(total_str, &total, &free);
             utilsGenerateFormattedSizeString(total, total_str, sizeof(total_str));
             utilsGenerateFormattedSizeString(free, free_str, sizeof(free_str));
@@ -562,8 +564,6 @@ void updateStorageList(void)
             {
                 sprintf(g_storageOptions[idx], DEVOPTAB_SDMC_DEVICE " (%s / %s)", free_str, total_str);
             } else {
-                UsbHsFsDevice *ums_device = &(g_umsDevices[i]);
-
                 if (ums_device->product_name[0])
                 {
                     sprintf(g_storageOptions[idx], "%s (%s, LUN %u, FS #%u, %s)", ums_device->name, ums_device->product_name, ums_device->lun, ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(ums_device->fs_type));
@@ -721,8 +721,9 @@ static bool saveDumpTxt(void)
 static char *generateOutputFileName(const char *extension)
 {
     char *filename = NULL, *prefix = NULL, *output = NULL;
+    u32 dev_idx = g_storageMenuElementOption.selected;
 
-    if (!extension || !*extension || !(filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, g_storageMenuElementOption.selected > 0 ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
+    if (!extension || !*extension || !(filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, dev_idx > 0 ? TitleFileNameIllegalCharReplaceType_IllegalFsChars : TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)))
     {
         consolePrint("failed to get gamecard filename!\n");
         return NULL;
@@ -738,7 +739,7 @@ static char *generateOutputFileName(const char *extension)
             return NULL;
         }
 
-        sprintf(prefix, "%s/gamecard_data/", g_storageMenuElementOption.selected == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[g_storageMenuElementOption.selected - 2].name);
+        sprintf(prefix, "%s/gamecard_data/", dev_idx == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[dev_idx - 2].name);
     }
 
     output = utilsGeneratePath(prefix, filename, extension);
@@ -897,6 +898,7 @@ static bool saveGameCardImage(void)
     Thread read_thread = {0}, write_thread = {0};
 
     char *filename = NULL;
+    u32 dev_idx = g_storageMenuElementOption.selected;
 
     bool success = false;
 
@@ -966,7 +968,7 @@ static bool saveGameCardImage(void)
             goto end;
         }
 
-        if (g_storageMenuElementOption.selected == 0)
+        if (dev_idx == 0)
         {
             if (gc_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(filename))
             {
@@ -974,7 +976,7 @@ static bool saveGameCardImage(void)
                 goto end;
             }
         } else {
-            if (g_umsDevices[g_storageMenuElementOption.selected - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && gc_size > FAT32_FILESIZE_LIMIT)
+            if (g_umsDevices[dev_idx - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && gc_size > FAT32_FILESIZE_LIMIT)
             {
                 consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
                 goto end;
@@ -1109,7 +1111,7 @@ static bool saveConsoleLafwBlob(void)
     u64 lafw_version = 0;
     LotusAsicFirmwareBlob lafw_blob = {0};
     bool success = false;
-    u32 crc = 0;
+    u32 crc = 0, dev_idx = g_storageMenuElementOption.selected;
 
     if (!gamecardGetLotusAsicFirmwareBlob(&lafw_blob, &lafw_version))
     {
@@ -1126,7 +1128,8 @@ static bool saveConsoleLafwBlob(void)
     consolePrint("get console lafw blob ok\n");
 
     crc = crc32Calculate(&lafw_blob, sizeof(LotusAsicFirmwareBlob));
-    snprintf(path, MAX_ELEMENTS(path), "LAFW (%s) (%s) (v%lu) (%08X).bin", fw_type_str, dev_type_str, lafw_version, crc);
+    snprintf(path, MAX_ELEMENTS(path), "%s/gamecard_data/LAFW (%s) (%s) (v%lu) (%08X).bin", dev_idx == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[dev_idx - 2].name, fw_type_str, dev_type_str, lafw_version, crc);
+    utilsCreateDirectoryTree(path, false);
 
     if (!saveFileData(path, &lafw_blob, sizeof(LotusAsicFirmwareBlob))) goto end;
 

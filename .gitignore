@@ -16,5 +16,7 @@ host/nxdumptool
 *.log
 *.spec
 *.exe
+
+# TODO: remove these entries when we're done using PoCs.
 main.cpp
 /code_templates/tmp/*
