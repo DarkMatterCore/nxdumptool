@@ -623,7 +623,7 @@ static bool usbStartSession(void)
     cmd_block->app_ver_minor = VERSION_MINOR;
     cmd_block->app_ver_micro = VERSION_MICRO;
     cmd_block->abi_version = USB_ABI_VERSION;
-    snprintf(cmd_block->git_commit, sizeof(cmd_block->git_commit), GIT_COMMIT);
+    snprintf(cmd_block->git_commit, sizeof(cmd_block->git_commit), "%s", GIT_COMMIT);
 
     ret = usbSendCommand();
     if (ret)

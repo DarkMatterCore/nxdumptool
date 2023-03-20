@@ -24,55 +24,47 @@ jobs:
           sudo -n apt-get upgrade -y patch autoconf automake tar bzip2 diffutils pkgconf fakeroot p7zip-full git
           sudo -n dkp-pacman -Syu --needed --noconfirm
 
-      - name: Checkout latest nxdumptool-rewrite commit
-        uses: actions/checkout@v3
-        with:
-          submodules: recursive
+      - name: Silence all git safe directory warnings
+        run: git config --global --add safe.directory '*'
 
-      # Workaround: manually use git instead of actions/checkout to overcome a 'missing token' error with act.
-      #- name: Checkout latest libnx commit
-      #  run: |
-      #    cd "$GITHUB_WORKSPACE/libs"
-      #    git clone --recurse-submodules https://github.com/switchbrew/libnx.git
+      # Workaround: manually use git instead of actions/checkout to parse repository properties (e.g. branch name, commit hash, etc.) on our own.
+      - name: Checkout latest nxdumptool-rewrite commit
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git clone --branch rewrite --recurse-submodules https://github.com/DarkMatterCore/nxdumptool.git
 
       - name: Checkout latest libnx commit
-        uses: actions/checkout@v3
-        with:
-          repository: switchbrew/libnx
-          submodules: recursive
-          path: libs/libnx
+        run: |
+          cd "$GITHUB_WORKSPACE"
+          git clone --recurse-submodules https://github.com/switchbrew/libnx.git
 
       - name: Set workspace permissions
         run: chmod 777 -R "$GITHUB_WORKSPACE"
 
       - name: Build and install libnx
         run: |
-          cd "$GITHUB_WORKSPACE/libs/libnx"
+          cd "$GITHUB_WORKSPACE/libnx"
           sudo --preserve-env=DEVKITPRO,DEVKITARM,DEVKITPPC -n make install -j$(nproc)
-
-      # Workaround for Docker image bug (see https://github.com/actions/checkout/issues/1169).
-      - name: "Workaround: add git safe directory (libusbhsfs)"
-        run: git config --system --add safe.directory "$GITHUB_WORKSPACE/libs/libusbhsfs"
 
       - name: Build libusbhsfs dependencies
         run: |
-          cd "$GITHUB_WORKSPACE/libs/libusbhsfs"
+          cd "$GITHUB_WORKSPACE/nxdumptool/libs/libusbhsfs"
           sudo --preserve-env=DEVKITPRO,DEVKITARM,DEVKITPPC -n make fs-libs -j$(nproc)
 
       - name: Build nxdumptool
         run: |
-          cd "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE/nxdumptool"
           export COMMIT=$(git rev-parse --short HEAD)
           ./build.sh
 
       - uses: actions/upload-artifact@v3
         with:
-          name: nxdumptool rewrite (NRO) - ${{ env.COMMIT }}.7z
+          name: nxdumptool-rewrite_poc_${{ env.COMMIT }}.7z
           path: nxdumptool-rewrite_poc_${{ env.COMMIT }}.7z
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v3
         with:
-          name: nxdumptool rewrite (Debug ELF) - ${{ env.COMMIT }}.7z
+          name: nxdumptool-rewrite_poc_${{ env.COMMIT }}-Debug_ELFs.7z
           path: nxdumptool-rewrite_poc_${{ env.COMMIT }}-Debug_ELFs.7z
           if-no-files-found: error
