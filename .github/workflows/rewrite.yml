@@ -18,11 +18,16 @@ jobs:
     container:
       image: devkitpro/devkita64
     steps:
+      # Workaround: avoid requesting data from devkitPro servers because they ban most CI/CD scripts.
       - name: Update packages
         run: |
           sudo -n apt-get update
           sudo -n apt-get upgrade -y patch autoconf automake tar bzip2 diffutils pkgconf fakeroot p7zip-full git
-          sudo -n dkp-pacman -Syu --needed --noconfirm
+          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/switch/switch-libjson-c-0.16-1-any.pkg.tar.xz"
+          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/switch/switch-libpng-1.6.39-1-any.pkg.tar.xz"
+          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/switch/switch-zlib-1.2.13-1-any.pkg.tar.xz"
+          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.2-1-any.pkg.tar.xz"
+          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/cmake/switch-cmake-1.5.0-1-any.pkg.tar.xz"
 
       - name: Silence all git safe directory warnings
         run: git config --global --add safe.directory '*'
@@ -54,17 +59,17 @@ jobs:
       - name: Build nxdumptool
         run: |
           cd "$GITHUB_WORKSPACE/nxdumptool"
-          export COMMIT=$(git rev-parse --short HEAD)
+          echo "nxdt_commit=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           ./build.sh
 
       - uses: actions/upload-artifact@v3
         with:
-          name: nxdumptool-rewrite_poc_${{ env.COMMIT }}.7z
-          path: nxdumptool-rewrite_poc_${{ env.COMMIT }}.7z
+          name: nxdumptool-rewrite_poc_${{ env.nxdt_commit }}.7z
+          path: nxdumptool/nxdumptool-rewrite_poc_${{ env.nxdt_commit }}.7z
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v3
         with:
-          name: nxdumptool-rewrite_poc_${{ env.COMMIT }}-Debug_ELFs.7z
-          path: nxdumptool-rewrite_poc_${{ env.COMMIT }}-Debug_ELFs.7z
+          name: nxdumptool-rewrite_poc_${{ env.nxdt_commit }}-Debug_ELFs.7z
+          path: nxdumptool/nxdumptool-rewrite_poc_${{ env.nxdt_commit }}-Debug_ELFs.7z
           if-no-files-found: error
