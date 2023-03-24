@@ -1,4 +1,4 @@
-name: Build nxdumptool 'rewrite' PoC binaries
+name: Build nxdumptool-rewrite binaries
 
 on:
   push:
@@ -56,11 +56,16 @@ jobs:
           cd "$GITHUB_WORKSPACE/nxdumptool/libs/libusbhsfs"
           sudo --preserve-env=DEVKITPRO,DEVKITARM,DEVKITPPC -n make fs-libs -j$(nproc)
 
-      - name: Build nxdumptool
+      - name: Build nxdumptool-rewrite PoC binaries
         run: |
           cd "$GITHUB_WORKSPACE/nxdumptool"
           echo "nxdt_commit=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
           ./build.sh
+
+      - name: Build nxdumptool-rewrite GUI binary
+        run: |
+          cd "$GITHUB_WORKSPACE/nxdumptool"
+          sudo --preserve-env=DEVKITPRO,DEVKITARM,DEVKITPPC -n make -j$(nproc)
 
       - uses: actions/upload-artifact@v3
         with:
@@ -72,4 +77,16 @@ jobs:
         with:
           name: nxdumptool-rewrite_poc_${{ env.nxdt_commit }}-Debug_ELFs.7z
           path: nxdumptool/nxdumptool-rewrite_poc_${{ env.nxdt_commit }}-Debug_ELFs.7z
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: nxdumptool-rewrite-${{ env.nxdt_commit }}.nro
+          path: nxdumptool/nxdumptool.nro
+          if-no-files-found: error
+
+      - uses: actions/upload-artifact@v3
+        with:
+          name: nxdumptool-rewrite-${{ env.nxdt_commit }}.elf
+          path: nxdumptool/nxdumptool.elf
           if-no-files-found: error
