@@ -23,11 +23,12 @@ jobs:
         run: |
           sudo -n apt-get update
           sudo -n apt-get upgrade -y patch autoconf automake tar bzip2 diffutils pkgconf fakeroot p7zip-full git
-          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/switch/switch-libjson-c-0.16-1-any.pkg.tar.xz"
-          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/switch/switch-libpng-1.6.39-1-any.pkg.tar.xz"
-          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/switch/switch-zlib-1.2.13-1-any.pkg.tar.xz"
-          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.2-1-any.pkg.tar.xz"
-          sudo -n dkp-pacman --noconfirm -U "https://wii.leseratte10.de/devkitPro/cmake/switch-cmake-1.5.0-1-any.pkg.tar.xz"
+          sudo -n dkp-pacman --noconfirm -U \
+            "https://wii.leseratte10.de/devkitPro/switch/switch-libjson-c-0.16-1-any.pkg.tar.xz" \
+            "https://wii.leseratte10.de/devkitPro/switch/switch-libpng-1.6.39-1-any.pkg.tar.xz" \
+            "https://wii.leseratte10.de/devkitPro/switch/switch-zlib-1.2.13-1-any.pkg.tar.xz" \
+            "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.2-1-any.pkg.tar.xz" \
+            "https://wii.leseratte10.de/devkitPro/cmake/switch-cmake-1.5.0-1-any.pkg.tar.xz"
 
       - name: Silence all git safe directory warnings
         run: git config --global --add safe.directory '*'
@@ -49,12 +50,12 @@ jobs:
       - name: Build and install libnx
         run: |
           cd "$GITHUB_WORKSPACE/libnx"
-          sudo --preserve-env=DEVKITPRO,DEVKITARM,DEVKITPPC -n make install -j$(nproc)
+          make install -j$(nproc)
 
       - name: Build libusbhsfs dependencies
         run: |
           cd "$GITHUB_WORKSPACE/nxdumptool/libs/libusbhsfs"
-          sudo --preserve-env=DEVKITPRO,DEVKITARM,DEVKITPPC -n make fs-libs -j$(nproc)
+          make fs-libs -j$(nproc)
 
       - name: Build nxdumptool-rewrite PoC binaries
         run: |
@@ -65,7 +66,7 @@ jobs:
       - name: Build nxdumptool-rewrite GUI binary
         run: |
           cd "$GITHUB_WORKSPACE/nxdumptool"
-          sudo --preserve-env=DEVKITPRO,DEVKITARM,DEVKITPPC -n make -j$(nproc)
+          make -j$(nproc)
 
       - uses: actions/upload-artifact@v3
         with:
