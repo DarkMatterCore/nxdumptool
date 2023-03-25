@@ -22,7 +22,7 @@ jobs:
       - name: Update packages
         run: |
           sudo -n apt-get update
-          sudo -n apt-get upgrade -y patch autoconf automake tar bzip2 diffutils pkgconf fakeroot p7zip-full git
+          sudo -n apt-get upgrade -y patch autoconf automake tar bzip2 diffutils pkgconf fakeroot p7zip-full git file
           sudo -n dkp-pacman --noconfirm -U \
             "https://wii.leseratte10.de/devkitPro/switch/switch-libjson-c-0.16-1-any.pkg.tar.xz" \
             "https://wii.leseratte10.de/devkitPro/switch/switch-libpng-1.6.39-1-any.pkg.tar.xz" \
@@ -31,7 +31,7 @@ jobs:
             "https://wii.leseratte10.de/devkitPro/cmake/switch-cmake-1.5.0-1-any.pkg.tar.xz"
 
       - name: Silence all git safe directory warnings
-        run: git config --global --add safe.directory '*'
+        run: git config --system --add safe.directory '*'
 
       # Workaround: manually use git instead of actions/checkout to parse repository properties (e.g. branch name, commit hash, etc.) on our own.
       - name: Checkout latest nxdumptool-rewrite commit
@@ -52,10 +52,14 @@ jobs:
           cd "$GITHUB_WORKSPACE/libnx"
           make install -j$(nproc)
 
+      # Workaround: dkp-makepkg's "-i" option fails because it tries to run pacman as root on its own using sudo, and a password must be interactively provided.
+      # We can't just provide root access to dkp-makepkg because it refuses to work at all if we do so.
+      # As much as I'd like to run "make fs-libs" and call it a day, it's just not possible.
       - name: Build libusbhsfs dependencies
         run: |
           cd "$GITHUB_WORKSPACE/nxdumptool/libs/libusbhsfs"
-          su -s /bin/bash nobody -c "make fs-libs -j$(nproc)"
+          cd libntfs-3g; su -s /bin/bash nobody -c "dkp-makepkg -c -C -f" > /dev/null; sudo -n dkp-pacman -U --needed --noconfirm *.pkg.tar.* > /dev/null; cd ..
+          cd liblwext4; su -s /bin/bash nobody -c "dkp-makepkg -c -C -f" > /dev/null; sudo -n dkp-pacman -U --needed --noconfirm *.pkg.tar.* > /dev/null; cd ..
 
       - name: Build nxdumptool-rewrite PoC binaries
         run: |
