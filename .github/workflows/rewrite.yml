@@ -55,7 +55,7 @@ jobs:
       - name: Build libusbhsfs dependencies
         run: |
           cd "$GITHUB_WORKSPACE/nxdumptool/libs/libusbhsfs"
-          make fs-libs -j$(nproc)
+          su -s /bin/bash nobody -c "make fs-libs -j$(nproc)"
 
       - name: Build nxdumptool-rewrite PoC binaries
         run: |
