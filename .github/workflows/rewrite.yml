@@ -86,12 +86,12 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: nxdumptool-rewrite-${{ env.nxdt_commit }}.nro
+          name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.nro
           path: nxdumptool/nxdumptool.nro
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v3
         with:
-          name: nxdumptool-rewrite-${{ env.nxdt_commit }}.elf
+          name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.elf
           path: nxdumptool/nxdumptool.elf
           if-no-files-found: error
