@@ -51,8 +51,7 @@ typedef struct {
     ///< AES-128-XTS key needed to handle NCA header crypto.
     u8 nca_header_kek_source[AES_128_KEY_SIZE];                                                     ///< Retrieved from the .rodata segment in the FS sysmodule.
     u8 nca_header_key_source[AES_128_KEY_SIZE * 2];                                                 ///< Retrieved from the .data segment in the FS sysmodule.
-    u8 nca_header_kek_sealed[AES_128_KEY_SIZE];                                                     ///< Generated from nca_header_kek_source. Sealed by the SMC AES engine.
-    u8 nca_header_key[AES_128_KEY_SIZE * 2];                                                        ///< Generated from nca_header_kek_sealed and nca_header_key_source.
+    u8 nca_header_key[AES_128_KEY_SIZE * 2];                                                        ///< Generated from nca_header_kek (sealed by the SMC AES engine) and nca_header_key_source.
 
     ///< RSA-2048-PSS moduli used to verify the main signature from NCA headers.
     u8 nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];          ///< Moduli used in retail units. Retrieved from the .rodata segment in the FS sysmodule.
@@ -92,10 +91,8 @@ typedef struct {
     const u8 gc_cardinfo_kek_source[AES_128_KEY_SIZE];      ///< Randomly generated KEK source to decrypt official CardInfo area keys.
     const u8 gc_cardinfo_key_prod_source[AES_128_KEY_SIZE]; ///< CardInfo area key used in retail units. Obfuscated using the above KEK source and SMC AES engine keydata.
     const u8 gc_cardinfo_key_dev_source[AES_128_KEY_SIZE];  ///< CardInfo area key used in development units. Obfuscated using the above KEK source and SMC AES engine keydata.
-
-    u8 gc_cardinfo_kek_sealed[AES_128_KEY_SIZE];            ///< Generated from gc_cardinfo_kek_source. Sealed by the SMC AES engine.
-    u8 gc_cardinfo_key_prod[AES_128_KEY_SIZE];              ///< Generated from gc_cardinfo_kek_sealed and gc_cardinfo_key_prod_source.
-    u8 gc_cardinfo_key_dev[AES_128_KEY_SIZE];               ///< Generated from gc_cardinfo_kek_sealed and gc_cardinfo_key_dev_source.
+    u8 gc_cardinfo_key_prod[AES_128_KEY_SIZE];              ///< Generated from gc_cardinfo_kek (sealed by the SMC AES engine) and gc_cardinfo_key_prod_source.
+    u8 gc_cardinfo_key_dev[AES_128_KEY_SIZE];               ///< Generated from gc_cardinfo_kek (sealed by the SMC AES engine) and gc_cardinfo_key_dev_source.
 } KeysGameCardKeyset;
 
 /* Function prototypes. */
@@ -123,6 +120,8 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
 
 static bool keysDeriveGameCardKeys(void);
 
+static bool keysGenerateAesKey(const u8 *kek_source, const u8 *key_source, u32 key_generation, u32 option, u8 *out_key);
+
 /* Global variables. */
 
 static bool g_keysetLoaded = false;
@@ -136,36 +135,36 @@ static const u8 g_ncaKaekBlockHashes[2][NcaKeyAreaEncryptionKeyIndex_Count][SHA2
     {
         /* Application. */
         {
-            0xBD, 0x19, 0x22, 0x4B, 0xC4, 0x72, 0x0E, 0xAD, 0x9D, 0x5D, 0x99, 0x69, 0xEF, 0xF4, 0x91, 0x34,
-            0x27, 0x73, 0xD6, 0x74, 0x62, 0xA3, 0xF9, 0x2D, 0x07, 0xB2, 0xAE, 0x6B, 0x19, 0xA9, 0xE2, 0x85
+            0xAE, 0x82, 0xD8, 0xE5, 0x1A, 0xC3, 0x5F, 0xC0, 0xBF, 0xE1, 0xC0, 0x88, 0x69, 0xB9, 0x69, 0xCE,
+            0x56, 0xD4, 0x99, 0xE6, 0x97, 0x80, 0xFE, 0x1C, 0x3D, 0xB7, 0xEA, 0x9C, 0xD8, 0xD7, 0xF2, 0x12
         },
         /* Ocean. */
         {
-            0xC7, 0xC7, 0x5B, 0xB0, 0x9D, 0x4D, 0x46, 0xAA, 0xE8, 0xDB, 0xF6, 0x6D, 0x24, 0xEA, 0x41, 0x61,
-            0x9F, 0x6D, 0x19, 0x2B, 0x3B, 0x79, 0x3F, 0x1B, 0x49, 0x60, 0x3D, 0xA9, 0x69, 0x84, 0xE5, 0x4D
+            0x6F, 0xE0, 0x38, 0xC2, 0xAF, 0xB8, 0xF7, 0xDC, 0xC4, 0x97, 0x0A, 0x19, 0xCC, 0xE7, 0xD3, 0x10,
+            0x03, 0x70, 0x2C, 0xF5, 0x51, 0xF1, 0x01, 0xDE, 0x88, 0x4E, 0x47, 0xD3, 0x8D, 0xC2, 0xFD, 0x8A
         },
         /* System. */
         {
-            0xFE, 0x02, 0x86, 0x80, 0x8F, 0x88, 0x86, 0x3D, 0x64, 0x53, 0xFB, 0x64, 0xED, 0x2B, 0x51, 0xDA,
-            0x5A, 0xE2, 0x22, 0x44, 0x00, 0x15, 0x33, 0xBA, 0xD1, 0xA4, 0xBE, 0xA2, 0xC0, 0x5E, 0x38, 0xF5
+            0x2F, 0xEB, 0xA2, 0x09, 0x42, 0x51, 0xB5, 0x88, 0x3D, 0x52, 0x3E, 0xE6, 0x47, 0x7F, 0xDD, 0xFD,
+            0x3F, 0xB2, 0x7B, 0xED, 0xBA, 0x8C, 0x98, 0x34, 0xA2, 0xF9, 0xA9, 0x5A, 0x81, 0x1A, 0x7E, 0xA9
         }
     },
     /* Development. */
     {
         /* Application. */
         {
-            0x6B, 0xD0, 0x5E, 0x57, 0x62, 0xD8, 0xD6, 0xBB, 0x00, 0xAD, 0xC0, 0xD7, 0x00, 0x94, 0x9F, 0xFF,
-            0xF9, 0x03, 0x45, 0xA3, 0x07, 0x93, 0xCB, 0xF3, 0x7B, 0xF1, 0x9E, 0xC3, 0x4B, 0xA2, 0x52, 0xAE
+            0xD5, 0x28, 0x5F, 0xDB, 0x38, 0x6D, 0x0E, 0x3C, 0xA1, 0x14, 0x6F, 0x4D, 0x32, 0xA6, 0x22, 0x23,
+            0x8D, 0xD7, 0x81, 0xAF, 0x68, 0x71, 0x76, 0x06, 0x8B, 0x71, 0xC3, 0x87, 0x83, 0x4B, 0x86, 0xC8
         },
         /* Ocean. */
         {
-            0x56, 0x00, 0xAD, 0x5E, 0x8F, 0xEA, 0xD3, 0x24, 0x23, 0xDC, 0x81, 0xDB, 0x0F, 0xF9, 0xDF, 0x18,
-            0xD8, 0x8E, 0xC4, 0xC9, 0x0B, 0x3F, 0x42, 0x64, 0xD2, 0xD4, 0x3D, 0xE0, 0x38, 0xFD, 0x53, 0xC1
+            0x76, 0xD4, 0xD7, 0x1C, 0xAA, 0x19, 0x97, 0x5B, 0x74, 0xAE, 0xFF, 0x2D, 0xEA, 0x27, 0x1B, 0xC6,
+            0xED, 0xF7, 0xB5, 0xD0, 0xA3, 0xFF, 0xE7, 0xEA, 0x1A, 0x99, 0xB3, 0x8C, 0xDD, 0x4F, 0xAB, 0x5C
         },
         /* System. */
         {
-            0x7B, 0x00, 0x0F, 0x31, 0x59, 0x36, 0x3A, 0x0E, 0xC5, 0x28, 0x4F, 0xE8, 0x73, 0x04, 0x4E, 0x7F,
-            0xDC, 0x8C, 0xA4, 0x30, 0x88, 0xFF, 0x1F, 0xDB, 0x6B, 0x58, 0x71, 0xDA, 0xF8, 0xF0, 0x0B, 0xD6
+            0x46, 0x5E, 0xB1, 0x43, 0x37, 0x83, 0x52, 0x84, 0x73, 0x08, 0xCA, 0x9D, 0xDE, 0x64, 0x8C, 0x76,
+            0x58, 0xB3, 0x9A, 0x42, 0xF1, 0xC5, 0xA9, 0x60, 0xA6, 0xED, 0xF3, 0xB8, 0xAA, 0x44, 0xEF, 0x41
         }
     }
 };
@@ -174,13 +173,13 @@ static const u8 g_ncaKaekBlockHashes[2][NcaKeyAreaEncryptionKeyIndex_Count][SHA2
 static const u8 g_ticketCommonKeysBlockHashes[2][SHA256_HASH_SIZE] = {
     /* Production. */
     {
-        0xF3, 0x0D, 0x51, 0x85, 0x9F, 0x70, 0x66, 0x75, 0x79, 0x53, 0x6B, 0x2B, 0xFD, 0x29, 0x53, 0xEC,
-        0x7A, 0x25, 0xF7, 0x41, 0x92, 0xE4, 0xC7, 0x21, 0x82, 0x73, 0x46, 0x74, 0x82, 0xB3, 0x48, 0x07
+        0x6F, 0x42, 0x8A, 0x53, 0x51, 0x61, 0xC7, 0x69, 0x90, 0x21, 0xC5, 0x71, 0xC6, 0x89, 0x2B, 0x33,
+        0xBB, 0x1D, 0xF6, 0xA8, 0x26, 0x12, 0x21, 0x7D, 0x81, 0x9B, 0xCC, 0x78, 0x3A, 0x2D, 0xD7, 0x6C
     },
     /* Development. */
     {
-        0x0A, 0x94, 0x77, 0x9F, 0xE2, 0x86, 0x33, 0xF4, 0x91, 0x84, 0xE9, 0x88, 0x56, 0xAA, 0xA4, 0x6C,
-        0x12, 0x55, 0x62, 0x64, 0x21, 0x2E, 0xAD, 0x41, 0x36, 0x22, 0xDC, 0x3A, 0xA7, 0x22, 0xFC, 0x3C
+        0x88, 0x61, 0x4D, 0x1E, 0xC3, 0xF0, 0x51, 0x94, 0xB7, 0x35, 0xAA, 0x2E, 0xFC, 0x4D, 0x7A, 0x7C,
+        0xFB, 0x25, 0x8A, 0x0C, 0x60, 0x68, 0x89, 0x04, 0x68, 0xAB, 0x21, 0xA0, 0x34, 0x29, 0x02, 0xE9
     }
 };
 
@@ -304,7 +303,6 @@ static KeysGameCardKeyset g_gameCardKeyset = {
     .gc_cardinfo_kek_source      = { 0xDE, 0xC6, 0x3F, 0x6A, 0xBF, 0x37, 0x72, 0x0B, 0x7E, 0x54, 0x67, 0x6A, 0x2D, 0xEF, 0xDD, 0x97 },
     .gc_cardinfo_key_prod_source = { 0xF4, 0x92, 0x06, 0x52, 0xD6, 0x37, 0x70, 0xAF, 0xB1, 0x9C, 0x6F, 0x63, 0x09, 0x01, 0xF6, 0x29 },
     .gc_cardinfo_key_dev_source  = { 0x0B, 0x7D, 0xBB, 0x2C, 0xCF, 0x64, 0x1A, 0xF4, 0xD7, 0x38, 0x81, 0x3F, 0x0C, 0x33, 0xF4, 0x1C },
-    .gc_cardinfo_kek_sealed      = {0},
     .gc_cardinfo_key_prod        = {0},
     .gc_cardinfo_key_dev         = {0}
 };
@@ -618,28 +616,17 @@ end:
 
 static bool keysDeriveNcaHeaderKey(void)
 {
-    Result rc = 0;
-
-    /* Derive nca_header_kek_sealed from nca_header_kek_source. */
-    rc = splCryptoGenerateAesKek(g_ncaKeyset.nca_header_kek_source, 0, 0, g_ncaKeyset.nca_header_kek_sealed);
-    if (R_FAILED(rc))
+    /* Derive nca_header_key (first half) from nca_header_kek_source and nca_header_key_source. */
+    if (!keysGenerateAesKey(g_ncaKeyset.nca_header_kek_source, g_ncaKeyset.nca_header_key_source, 0, 0, g_ncaKeyset.nca_header_key))
     {
-        LOG_MSG_ERROR("splCryptoGenerateAesKek failed! (0x%X) (nca_header_kek_sealed).", rc);
+        LOG_MSG_ERROR("keysGenerateAesKey failed! (#1).");
         return false;
     }
 
-    /* Derive nca_header_key from nca_header_kek_sealed and nca_header_key_source. */
-    rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_header_kek_sealed, g_ncaKeyset.nca_header_key_source, g_ncaKeyset.nca_header_key);
-    if (R_FAILED(rc))
+    /* Derive nca_header_key (second half) from nca_header_kek_source and nca_header_key_source. */
+    if (!keysGenerateAesKey(g_ncaKeyset.nca_header_kek_source, g_ncaKeyset.nca_header_key_source + AES_128_KEY_SIZE, 0, 0, g_ncaKeyset.nca_header_key + AES_128_KEY_SIZE))
     {
-        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X) (nca_header_key) (#1).", rc);
-        return false;
-    }
-
-    rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_header_kek_sealed, g_ncaKeyset.nca_header_key_source + AES_128_KEY_SIZE, g_ncaKeyset.nca_header_key + AES_128_KEY_SIZE);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X) (nca_header_key) (#2).", rc);
+        LOG_MSG_ERROR("keysGenerateAesKey failed! (#2).");
         return false;
     }
 
@@ -1146,29 +1133,48 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
 
 static bool keysDeriveGameCardKeys(void)
 {
+    /* Derive gc_cardinfo_key_prod from gc_cardinfo_kek_source and gc_cardinfo_key_prod_source. */
+    if (!keysGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_source, g_gameCardKeyset.gc_cardinfo_key_prod_source, 0, 0, g_gameCardKeyset.gc_cardinfo_key_prod))
+    {
+        LOG_MSG_ERROR("keysGenerateAesKey failed! (prod).");
+        return false;
+    }
+
+    /* Derive gc_cardinfo_key_dev from gc_cardinfo_kek_source and gc_cardinfo_key_dev_source. */
+    if (!keysGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_source, g_gameCardKeyset.gc_cardinfo_key_dev_source, 0, 0, g_gameCardKeyset.gc_cardinfo_key_dev))
+    {
+        LOG_MSG_ERROR("keysGenerateAesKey failed! (dev).");
+        return false;
+    }
+
+    return true;
+}
+
+/* Wrapper for GenerateAesKek + GenerateAesKey SMC AES engine calls. */
+static bool keysGenerateAesKey(const u8 *kek_source, const u8 *key_source, u32 key_generation, u32 option, u8 *out_key)
+{
+    if (!kek_source || !key_source || key_generation >= NcaKeyGeneration_Max || !out_key)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
     Result rc = 0;
+    u8 sealed_kek[AES_128_KEY_SIZE] = {0};
 
-    /* Derive gc_cardinfo_kek_sealed from gc_cardinfo_kek_source. */
-    rc = splCryptoGenerateAesKek(g_gameCardKeyset.gc_cardinfo_kek_source, 0, 0, g_gameCardKeyset.gc_cardinfo_kek_sealed);
+    /* Derive sealed_kek from kek_source. */
+    rc = splCryptoGenerateAesKek(kek_source, key_generation, option, sealed_kek);
     if (R_FAILED(rc))
     {
-        LOG_MSG_ERROR("splCryptoGenerateAesKek failed! (0x%X) (gc_cardinfo_kek_sealed).", rc);
+        LOG_MSG_ERROR("splCryptoGenerateAesKek failed! (0x%X).", rc);
         return false;
     }
 
-    /* Derive gc_cardinfo_key_prod from gc_cardinfo_kek_sealed and gc_cardinfo_key_prod_source. */
-    rc = splCryptoGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_sealed, g_gameCardKeyset.gc_cardinfo_key_prod_source, g_gameCardKeyset.gc_cardinfo_key_prod);
+    /* Derive out_key from sealed_kek and key_source. */
+    rc = splCryptoGenerateAesKey(sealed_kek, key_source, out_key);
     if (R_FAILED(rc))
     {
-        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X) (gc_cardinfo_key_prod).", rc);
-        return false;
-    }
-
-    /* Derive gc_cardinfo_key_dev from gc_cardinfo_kek_sealed and gc_cardinfo_key_dev_source. */
-    rc = splCryptoGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_sealed, g_gameCardKeyset.gc_cardinfo_key_dev_source, g_gameCardKeyset.gc_cardinfo_key_dev);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X) (gc_cardinfo_key_dev).", rc);
+        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X).", rc);
         return false;
     }
 

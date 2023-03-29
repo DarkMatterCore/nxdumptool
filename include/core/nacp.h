@@ -260,9 +260,9 @@ typedef enum {
 } NacpRuntimeUpgrade;
 
 typedef enum {
-    NacpSupportingLimitedLicenses_Demo  = BIT(0),
-    NacpSupportingLimitedLicenses_Count = 1         ///< Total values supported by this enum.
-} NacpSupportingLimitedLicenses;
+    NacpSupportingLimitedApplicationLicenses_Demo  = BIT(0),
+    NacpSupportingLimitedApplicationLicenses_Count = 1          ///< Total values supported by this enum.
+} NacpSupportingLimitedApplicationLicenses;
 
 typedef enum {
     NacpPlayLogQueryCapability_None      = 0,
@@ -392,7 +392,7 @@ typedef struct {
     u16 cache_storage_index_max;
     u8 reserved_1;
     u8 runtime_upgrade;                                                                             ///< NacpRuntimeUpgrade.
-    u32 supporting_limited_licenses;                                                                ///< NacpSupportingLimitedLicenses.
+    u32 supporting_limited_application_licenses;                                                    ///< NacpSupportingLimitedApplicationLicenses.
     u64 play_log_queryable_application_id[0x10];
     u8 play_log_query_capability;                                                                   ///< NacpPlayLogQueryCapability.
     u8 repair;                                                                                      ///< NacpRepair.

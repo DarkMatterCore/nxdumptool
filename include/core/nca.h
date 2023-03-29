@@ -92,7 +92,8 @@ typedef enum {
     NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
     NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.2.
     NcaKeyGeneration_Since1500NUP = 15,                             ///< 15.0.0 - 15.0.1.
-    NcaKeyGeneration_Current      = NcaKeyGeneration_Since1500NUP,
+    NcaKeyGeneration_Since1600NUP = 16,                             ///< 16.0.0 - 16.0.1.
+    NcaKeyGeneration_Current      = NcaKeyGeneration_Since1600NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;
 
@@ -107,7 +108,7 @@ typedef enum {
 /// TODO: update on signature keygen changes.
 typedef enum {
     NcaSignatureKeyGeneration_Since100NUP = 0,                                      ///< 1.0.0 - 8.1.1.
-    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 14.1.2.
+    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 16.0.1.
     NcaSignatureKeyGeneration_Current     = NcaSignatureKeyGeneration_Since900NUP,
     NcaSignatureKeyGeneration_Max         = (NcaSignatureKeyGeneration_Current + 1)
 } NcaSignatureKeyGeneration;
@@ -176,7 +177,7 @@ typedef enum {
 
 typedef enum {
     NcaHashType_Auto                      = 0,
-    NcaHashType_None                      = 1,
+    NcaHashType_None                      = 1,  ///< Possibly used by all filesystem types.
     NcaHashType_HierarchicalSha256        = 2,  ///< Used by NcaFsType_PartitionFs.
     NcaHashType_HierarchicalIntegrity     = 3,  ///< Used by NcaFsType_RomFs.
     NcaHashType_AutoSha3                  = 4,

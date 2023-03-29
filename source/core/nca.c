@@ -870,12 +870,12 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     }
 
     /* Determine FS section type. */
-    /* TODO: should NcaHashType_None be handled here as well? */
     switch(fs_ctx->header.fs_type)
     {
         case NcaFsType_PartitionFs:
-            if ((fs_ctx->hash_type == NcaHashType_HierarchicalSha256 || fs_ctx->hash_type == NcaHashType_HierarchicalSha3256) && \
-                (fs_ctx->encryption_type < NcaEncryptionType_AesCtrEx || fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash))
+            if ((fs_ctx->hash_type == NcaHashType_None && fs_ctx->encryption_type < NcaEncryptionType_AesCtrEx) || \
+                ((fs_ctx->hash_type == NcaHashType_HierarchicalSha256 || fs_ctx->hash_type == NcaHashType_HierarchicalSha3256) && \
+                (fs_ctx->encryption_type < NcaEncryptionType_AesCtrEx || fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash)))
             {
                 /* Partition FS with None, XTS or CTR encryption. */
                 fs_ctx->section_type = NcaFsSectionType_PartitionFs;
@@ -883,24 +883,24 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
 
             break;
         case NcaFsType_RomFs:
-            if (fs_ctx->hash_type == NcaHashType_HierarchicalIntegrity || fs_ctx->hash_type == NcaHashType_HierarchicalIntegritySha3)
+            if (fs_ctx->hash_type == NcaHashType_None || fs_ctx->hash_type == NcaHashType_HierarchicalIntegrity || fs_ctx->hash_type == NcaHashType_HierarchicalIntegritySha3)
             {
                 if (fs_ctx->has_patch_indirect_layer && fs_ctx->has_patch_aes_ctr_ex_layer && \
                     (fs_ctx->encryption_type == NcaEncryptionType_None || fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || \
-                    fs_ctx->encryption_type == NcaEncryptionType_AesCtrExSkipLayerHash))
+                    (fs_ctx->encryption_type == NcaEncryptionType_AesCtrExSkipLayerHash && fs_ctx->hash_type != NcaHashType_None)))
                 {
                     /* Patch RomFS. */
                     fs_ctx->section_type = NcaFsSectionType_PatchRomFs;
                 } else
                 if (!fs_ctx->has_patch_indirect_layer && !fs_ctx->has_patch_aes_ctr_ex_layer && \
                     ((fs_ctx->encryption_type >= NcaEncryptionType_None && fs_ctx->encryption_type <= NcaEncryptionType_AesCtr) || \
-                    fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash))
+                    (fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash && fs_ctx->hash_type != NcaHashType_None)))
                 {
                     /* Regular RomFS. */
                     fs_ctx->section_type = NcaFsSectionType_RomFs;
                 }
             } else
-            if (nca_ctx->format_version == NcaVersion_Nca0 && fs_ctx->hash_type == NcaHashType_HierarchicalSha256)
+            if (fs_ctx->hash_type == NcaHashType_HierarchicalSha256 && nca_ctx->format_version == NcaVersion_Nca0)
             {
                 /* NCA0 RomFS with XTS encryption. */
                 fs_ctx->section_type = NcaFsSectionType_Nca0RomFs;

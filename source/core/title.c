@@ -119,7 +119,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000007, "htc" },
     { 0x0100000000000008, "boot2" },
     { 0x0100000000000009, "settings" },
-    { 0x010000000000000A, "bus" },
+    { 0x010000000000000A, "Bus" },
     { 0x010000000000000B, "bluetooth" },
     { 0x010000000000000C, "bcat" },
     { 0x010000000000000D, "dmnt" },
@@ -176,8 +176,20 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000040, "nd" },
     { 0x0100000000000041, "ngct" },
     { 0x0100000000000042, "pgl" },
+    { 0x0100000000000043, "sys_applet_unknown_00" },            ///< Placeholder.
+    { 0x0100000000000044, "sys_applet_unknown_01" },            ///< Placeholder.
     { 0x0100000000000045, "omm" },
     { 0x0100000000000046, "eth" },
+    { 0x0100000000000047, "sys_applet_unknown_02" },            ///< Placeholder.
+    { 0x0100000000000048, "sys_applet_unknown_03" },            ///< Placeholder.
+    { 0x0100000000000049, "sys_applet_unknown_04" },            ///< Placeholder.
+    { 0x010000000000004A, "sys_applet_unknown_05" },            ///< Placeholder.
+    { 0x010000000000004B, "sys_applet_unknown_06" },            ///< Placeholder.
+    { 0x010000000000004C, "sys_applet_unknown_07" },            ///< Placeholder.
+    { 0x010000000000004D, "sys_applet_unknown_08" },            ///< Placeholder.
+    { 0x010000000000004E, "sys_applet_unknown_09" },            ///< Placeholder.
+    { 0x010000000000004F, "sys_applet_unknown_0a" },            ///< Placeholder.
+    { 0x0100000000000050, "ngc" },
 
     /* System data archives. */
     /* Meta + Data NCAs. */
@@ -225,6 +237,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000830, "NgWordT" },
     { 0x0100000000000831, "PlatformConfigAula" },
     { 0x0100000000000832, "CradleFirmwareAula" },               ///< Placeholder.
+    { 0x0100000000000835, "NewErrorMessage" },                  ///< Placeholder.
 
     /* System applets. */
     /* Meta + Program NCAs. */
@@ -249,7 +262,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000001012, "starter" },
     { 0x0100000000001013, "myPage" },
     { 0x0100000000001014, "PlayReport" },
-    { 0x0100000000001015, "MaintenanceMenu" },
+    { 0x0100000000001015, "maintenance" },
     { 0x0100000000001016, "application_install" },              ///< Placeholder.
     { 0x0100000000001017, "nn.am.SystemReportTask" },           ///< Placeholder.
     { 0x0100000000001018, "systemupdate_dl_throughput" },       ///< Placeholder.
@@ -258,28 +271,34 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000101B, "DummyECApplet" },
     { 0x010000000000101C, "userMigration" },
     { 0x010000000000101D, "EncounterSys" },
-    { 0x010000000000101E, "pearljam" },                         ///< Placeholder.
-    { 0x010000000000101F, "nim_glue_unknown" },                 ///< Placeholder.
+    { 0x010000000000101E, "nim_unknown_00" },                   ///< Placeholder.
+    { 0x010000000000101F, "nim_glue_unknown_00" },              ///< Placeholder.
     { 0x0100000000001020, "story" },
     { 0x0100000000001021, "systemupdate_pass" },                ///< Placeholder.
-    { 0x0100000000001023, "statistics" },
-    { 0x0100000000001024, "syslog" },
-    { 0x0100000000001025, "am_unknown_1" },                     ///< Placeholder.
-    { 0x0100000000001026, "olsc_unknown" },                     ///< Placeholder.
-    { 0x0100000000001027, "account_unknown" },                  ///< Placeholder.
-    { 0x0100000000001028, "ns_unknown_1" },                     ///< Placeholder.
-    { 0x010000000000102A, "am_unknown_2" },                     ///< Placeholder.
-    { 0x010000000000102B, "glue_unknown_1" },                   ///< Placeholder.
-    { 0x010000000000102C, "am_unknown_3" },                     ///< Placeholder.
-    { 0x010000000000102E, "blacklist" },
-    { 0x010000000000102F, "content_delivery" },
-    { 0x0100000000001031, "ns_unknown_2" },                     ///< Placeholder.
-    { 0x0100000000001032, "glue_unknown_2" },                   ///< Placeholder.
-    { 0x0100000000001033, "promotion" },
-    { 0x0100000000001034, "ngct_unknown" },                     ///< Placeholder.
-    { 0x0100000000001037, "nim_unknown" },                      ///< Placeholder.
+    { 0x0100000000001023, "statistics" },                       ///< Placeholder.
+    { 0x0100000000001024, "syslog" },                           ///< Placeholder.
+    { 0x0100000000001025, "am_unknown_00" },                    ///< Placeholder.
+    { 0x0100000000001026, "olsc_unknown_00" },                  ///< Placeholder.
+    { 0x0100000000001027, "account_unknown_00" },               ///< Placeholder.
+    { 0x0100000000001028, "ns_unknown_00" },                    ///< Placeholder.
+    { 0x0100000000001029, "request_count" },                    ///< Placeholder.
+    { 0x010000000000102A, "am_unknown_01" },                    ///< Placeholder.
+    { 0x010000000000102B, "glue_unknown_00" },                  ///< Placeholder.
+    { 0x010000000000102C, "am_unknown_02" },                    ///< Placeholder.
+    { 0x010000000000102E, "blacklist" },                        ///< Placeholder.
+    { 0x010000000000102F, "content_delivery" },                 ///< Placeholder.
+    { 0x0100000000001030, "npns_create_token" },                ///< Placeholder.
+    { 0x0100000000001031, "ns_unknown_01" },                    ///< Placeholder.
+    { 0x0100000000001032, "glue_unknown_01" },                  ///< Placeholder.
+    { 0x0100000000001033, "promotion" },                        ///< Placeholder.
+    { 0x0100000000001034, "ngct_bcat_unknown_00" },             ///< Placeholder.
+    { 0x0100000000001037, "nim_unknown_01" },                   ///< Placeholder.
     { 0x0100000000001038, "sample" },
     { 0x010000000000103C, "mnpp" },                             ///< Placeholder.
+    { 0x010000000000103D, "bsdsocket_setting" },                ///< Placeholder.
+    { 0x010000000000103E, "ntf_mission_completed" },            ///< Placeholder.
+    { 0x0100000000001042, "am_unknown_03" },                    ///< Placeholder.
+    { 0x0100000000001043, "am_unknown_04" },                    ///< Placeholder.
     { 0x0100000000001FFF, "EndOceanProgramId" },
 
     /* Development system applets. */
@@ -361,6 +380,8 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000211A, "PreinstallAppWriter" },
     { 0x010000000000211C, "ControllerSerialFlashTool" },
     { 0x010000000000211D, "ControllerFlashWriter" },
+    { 0x010000000000211E, "Handling" },
+    { 0x010000000000211F, "Hid" },
     { 0x0100000000002120, "ControllerTestApp" },
     { 0x0100000000002121, "HidInspectionTool" },
     { 0x0100000000002124, "BatteryCyclesEditor" },
@@ -375,6 +396,10 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000002134, "AnalogStickEvaluationTool" },
     { 0x010000000000216D, "ExhibitionSaveDataSnapshot" },       ///< Placeholder.
     { 0x0100000000002178, "SecureStartupSettings" },            ///< Placeholder.
+    { 0x010000000000217D, "CradleFirmwareUpdater" },
+    { 0x0100000000002184, "HttpInstallSettings" },              ///< Placeholder.
+    { 0x0100000000002187, "ExhibitionMovieAssetData" },         ///< Placeholder.
+    { 0x0100000000002191, "ExhibitionPlayData" },               ///< Placeholder.
 
     /* Debug system modules. */
     { 0x0100000000003002, "DummyProcess" },
@@ -383,6 +408,7 @@ static const TitleSystemEntry g_systemTitles[] = {
 
     /* Development system modules. */
     { 0x010000000000B120, "nvdbgsvc" },
+    { 0x010000000000B123, "acc:CORNX" },
     { 0x010000000000B14A, "manu" },
     { 0x010000000000B14B, "ManuUsbLoopBack" },
     { 0x010000000000B1B8, "DevFwdbgHbPackage" },
@@ -398,23 +424,25 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000C602, "BdkSample03" },
     { 0x010000000000C603, "BdkSample04" },
 
-    /* Micro system modules. */
+    /* New development system modules. */
     { 0x010000000000D609, "dmnt.gen2" },
-    { 0x010000000000D60A, "msm_unknown_1" },                    ///< Placeholder.
-    { 0x010000000000D60B, "msm_unknown_3" },                    ///< Placeholder.
-    { 0x010000000000D60C, "msm_unknown_3" },                    ///< Placeholder.
-    { 0x010000000000D60D, "msm_unknown_4" },                    ///< Placeholder.
-    { 0x010000000000D60E, "msm_unknown_5" },                    ///< Placeholder.
-    { 0x010000000000D610, "msm_unknown_6" },                    ///< Placeholder.
-    { 0x010000000000D611, "msm_unknown_7" },                    ///< Placeholder.
-    { 0x010000000000D612, "msm_unknown_8" },                    ///< Placeholder.
-    { 0x010000000000D613, "msm_unknown_9" },                    ///< Placeholder.
-    { 0x010000000000D614, "msm_unknown_10" },                   ///< Placeholder.
-    { 0x010000000000D615, "msm_unknown_11" },                   ///< Placeholder.
-    { 0x010000000000D616, "msm_unknown_12" },                   ///< Placeholder.
-    { 0x010000000000D617, "msm_unknown_13" },                   ///< Placeholder.
-    { 0x010000000000D619, "msm_unknown_14" },                   ///< Placeholder.
+    { 0x010000000000D60A, "msm_unknown_00" },                   ///< Placeholder.
+    { 0x010000000000D60B, "msm_unknown_01" },                   ///< Placeholder.
+    { 0x010000000000D60C, "msm_unknown_02" },                   ///< Placeholder.
+    { 0x010000000000D60D, "msm_unknown_03" },                   ///< Placeholder.
+    { 0x010000000000D60E, "msm_unknown_04" },                   ///< Placeholder.
+    { 0x010000000000D610, "msm_unknown_05" },                   ///< Placeholder.
+    { 0x010000000000D611, "msm_unknown_06" },                   ///< Placeholder.
+    { 0x010000000000D612, "msm_unknown_07" },                   ///< Placeholder.
+    { 0x010000000000D613, "msm_unknown_08" },                   ///< Placeholder.
+    { 0x010000000000D614, "msm_unknown_09" },                   ///< Placeholder.
+    { 0x010000000000D615, "msm_unknown_0a" },                   ///< Placeholder.
+    { 0x010000000000D616, "msm_unknown_0b" },                   ///< Placeholder.
+    { 0x010000000000D617, "msm_unknown_0c" },                   ///< Placeholder.
+    { 0x010000000000D619, "msm_unknown_0d" },                   ///< Placeholder.
     { 0x010000000000D623, "DevServer" },
+    { 0x010000000000D633, "msm_unknown_0e" },                   ///< Placeholder.
+    { 0x010000000000D640, "htcnet" },
 
     /* System applications. */
     { 0x01008BB00013C000, "flog" },
@@ -440,6 +468,8 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010086000E49C000, "EncounterUsrDummy" },
     { 0x0100810002D5A000, "ShopMonitaringTool" },
     { 0x010023D002B98000, "DeltaStress" },
+    { 0x010099F00D810000, "sysapp_unknown_00" },                ///< Placeholder.
+    { 0x0100E6C01163C000, "sysapp_unknown_01" },                ///< Placeholder.
 
     /* Pre-release system applets. */
     { 0x1000000000000001, "SystemInitializer" },
@@ -463,7 +493,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x100000000000020B, "nifm" },
     { 0x100000000000020C, "ptm" },
     { 0x100000000000020D, "shell" },
-    { 0x100000000000020E, "bsdsockets" },
+    { 0x100000000000020E, "bsdsocket" },
     { 0x100000000000020F, "hid" },
     { 0x1000000000000210, "audio" },
     { 0x1000000000000212, "LogManager" },
@@ -482,7 +512,8 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x1000000000000220, "psc" },
     { 0x1000000000000221, "capsrv" },
     { 0x1000000000000222, "am" },
-    { 0x1000000000000223, "ssl" }
+    { 0x1000000000000223, "ssl" },
+    { 0x1000000000000224, "nim" }
 };
 
 static const u32 g_systemTitlesCount = MAX_ELEMENTS(g_systemTitles);

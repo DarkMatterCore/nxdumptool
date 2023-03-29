@@ -18,6 +18,6 @@ host/nxdumptool
 *.exe
 *.code-workspace
 
-# TODO: remove these entries when we're done using PoCs.
+# TODO: remove this after the PoC builds are no longer needed.
 main.cpp
 /code_templates/tmp/*

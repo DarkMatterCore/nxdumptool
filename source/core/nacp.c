@@ -507,7 +507,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
 
     /* StartupUserAccountOption. */
     if (!NACP_ADD_BITFLAG("StartupUserAccountOption", &(nacp->startup_user_account_option), sizeof(nacp->startup_user_account_option), NacpStartupUserAccountOption_Count, \
-                          nacpGetStartupUserAccountOptionString, true)) goto end;
+                          nacpGetStartupUserAccountOptionString, false)) goto end;
 
     /* UserAccountSwitchLock. */
     if (!NACP_ADD_ENUM("UserAccountSwitchLock", nacp->user_account_switch_lock, nacpGetUserAccountSwitchLockString)) goto end;
@@ -838,7 +838,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     if (!NACP_ADD_ENUM("UndecidedParameter75b8b", nacp->undecided_parameter_75b8b, nacpGetUndecidedParameter75b8bString)) goto end;
 
     /* ApplicationId. */
-    if (!NACP_ADD_U64("ApplicationId", nacp_ctx->nca_ctx->header.program_id, true, true)) goto end;
+    //if (!NACP_ADD_U64("ApplicationId", nacp_ctx->nca_ctx->header.program_id, true, true)) goto end;
 
     /* FilterDescriptionFilePath and CompressionFileConfigurationFilePath. */
     /*if (!NACP_ADD_FMT_STR_T1("  <FilterDescriptionFilePath />\n" \
@@ -847,15 +847,15 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     /* ContentsAvailabilityTransitionPolicy. */
     if (!NACP_ADD_ENUM("ContentsAvailabilityTransitionPolicy", nacp->contents_availability_transition_policy, nacpGetContentsAvailabilityTransitionPolicyString)) goto end;
 
-    /* LimitedLicenseSettings. */
-    if (!NACP_ADD_FMT_STR_T1("  <LimitedLicenseSettings>\n" \
+    /* LimitedApplicationLicenseSettings. */
+    if (!NACP_ADD_FMT_STR_T1("  <LimitedApplicationLicenseSettings>\n" \
                              "    <RuntimeUpgrade>%s</RuntimeUpgrade>\n" \
-                             "    <SupportingLimitedLicenses>\n" \
-                             "      <LimitedLicense>%s</LimitedLicense>\n" \
-                             "    </SupportingLimitedLicenses>\n" \
-                             "  </LimitedLicenseSettings>\n", \
+                             "    <SupportingLimitedApplicationLicenses>\n" \
+                             "      <LimitedApplicationLicense>%s</LimitedApplicationLicense>\n" \
+                             "    </SupportingLimitedApplicationLicenses>\n" \
+                             "  </LimitedApplicationLicenseSettings>\n", \
                              nacpGetRuntimeUpgradeString(nacp->runtime_upgrade), \
-                             (nacp->supporting_limited_licenses & NacpSupportingLimitedLicenses_Demo) ? "Demo" : "None")) goto end;
+                             (nacp->supporting_limited_application_licenses & NacpSupportingLimitedApplicationLicenses_Demo) ? "Demo" : "None")) goto end;
 
     if (!(success = NACP_ADD_FMT_STR_T1("</Application>"))) goto end;
 

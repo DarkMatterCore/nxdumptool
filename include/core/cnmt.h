@@ -41,7 +41,8 @@ typedef enum {
 } ContentMetaAttribute;
 
 typedef enum {
-    ContentMetaInstallState_Committed = BIT(0)
+    ContentMetaInstallState_Committed = BIT(0),
+    ContentMetaInstallState_Count     = 1       ///< Total values supported by this enum.
 } ContentMetaInstallState;
 
 /// Extended variation of NcmContentMetaHeader. This is essentially the start of every CNMT file.
@@ -96,12 +97,17 @@ typedef struct {
 
 NXDT_ASSERT(ContentMetaPatchMetaExtendedHeader, 0x18);
 
+typedef enum {
+    ContentMetaContentAccessibility_Individual = BIT(0),
+    ContentMetaContentAccessibility_Count      = 1          ///< Total values supported by this enum.
+} ContentMetaContentAccessibility;
+
 /// Extended header for AddOnContent tiles (15.0.0+).
 /// Equivalent to NcmAddOnContentMetaExtendedHeader, but using a Version struct.
 typedef struct {
     u64 application_id;
     Version required_application_version;
-    u8 content_accessibilities;             /// TODO: find out purpose / how to use?
+    u8 content_accessibility;               ///< ContentMetaContentAccessibility.
     u8 reserved[0x3];
     u64 data_patch_id;
 } ContentMetaAddOnContentMetaExtendedHeader;

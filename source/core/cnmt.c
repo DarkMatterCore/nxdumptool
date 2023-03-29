@@ -192,7 +192,7 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
             case NcmContentMetaType_DataPatch:
                 invalid_ext_header_size = (out->packaged_header->extended_header_size != (u16)sizeof(ContentMetaDataPatchMetaExtendedHeader));
                 out->extended_data_size = (!invalid_ext_header_size ? ((ContentMetaDataPatchMetaExtendedHeader*)out->extended_header)->extended_data_size : 0);
-                invalid_ext_data_size = (out->extended_data_size <= sizeof(ContentMetaPatchMetaExtendedDataHeader)); // TODO: check if this is right.
+                invalid_ext_data_size = (out->extended_data_size <= sizeof(ContentMetaPatchMetaExtendedDataHeader));
                 break;
             default:
                 invalid_ext_header_size = (out->packaged_header->extended_header_size != 0);
