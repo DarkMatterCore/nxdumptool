@@ -2,7 +2,7 @@
  * exception_handler.cpp
  *
  * Copyright (c) 2019-2020, WerWolv.
- * Copyright (c) 2020-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  * Loosely based on debug_helpers.cpp from EdiZon-Rewrite.

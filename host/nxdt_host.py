@@ -3,7 +3,7 @@
 """
  * nxdt_host.py
  *
- * Copyright (c) 2021-2022, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -68,7 +68,7 @@ WINDOW_HEIGHT = 470
 APP_VERSION = '0.3'
 
 # Copyright year.
-COPYRIGHT_YEAR = '2021-2022'
+COPYRIGHT_YEAR = '2020-2023'
 
 # USB VID/PID pair.
 USB_DEV_VID = 0x057E
