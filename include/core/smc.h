@@ -62,16 +62,14 @@ typedef struct {
 
 /// Helper inline functions.
 
-NX_INLINE bool smcPrepareGenerateAesKekOption(bool is_device_unique, u32 key_type_idx, u32 seal_key_idx, SmcGenerateAesKekOption *out)
+NX_INLINE void smcPrepareGenerateAesKekOption(bool is_device_unique, u32 key_type_idx, u32 seal_key_idx, SmcGenerateAesKekOption *out)
 {
-    if (key_type_idx >= SmcKeyType_Count || seal_key_idx >= SmcSealKey_Count) return false;
+    if (key_type_idx >= SmcKeyType_Count || seal_key_idx >= SmcSealKey_Count) return;
 
     out->fields.is_device_unique = (u32)(is_device_unique & 1);
     out->fields.key_type_idx = key_type_idx;
     out->fields.seal_key_idx = seal_key_idx;
     out->fields.reserved = 0;
-
-    return true;
 }
 
 #ifdef __cplusplus
