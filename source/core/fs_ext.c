@@ -25,7 +25,7 @@
 /* IFileSystemProxy. */
 Result fsOpenGameCardStorage(FsStorage *out, const FsGameCardHandle *handle, u32 partition)
 {
-    struct {
+    const struct {
         FsGameCardHandle handle;
         u32 partition;
     } in = { *handle, partition };
@@ -47,7 +47,7 @@ Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier *out)
 /* IDeviceOperator. */
 Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCardHandle *handle, u32 *out_title_version, u64 *out_title_id)
 {
-    struct {
+    const struct {
         FsGameCardHandle handle;
     } in = { *handle };
 
@@ -66,7 +66,7 @@ Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCard
 
 Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const FsGameCardHandle *handle, FsGameCardCertificate *out)
 {
-    struct {
+    const struct {
         FsGameCardHandle handle;
         u64 buf_size;
     } in = { *handle, sizeof(FsGameCardCertificate) };
@@ -81,7 +81,7 @@ Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const F
 
 Result fsDeviceOperatorGetGameCardIdSet(FsDeviceOperator *d, FsGameCardIdSet *out)
 {
-    struct {
+    const struct {
         u64 buf_size;
     } in = { sizeof(FsGameCardIdSet) };
 

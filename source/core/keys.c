@@ -23,54 +23,50 @@
 
 #include "nxdt_utils.h"
 #include "keys.h"
-#include "mem.h"
 #include "nca.h"
 #include "rsa.h"
+#include "aes.h"
+#include "smc.h"
+#include "key_sources.h"
 
 #define ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT  0x10001
 
 /* Type definitions. */
 
-typedef bool (*KeysIsKeyMandatoryFunction)(void);   /* Used to determine if a key is mandatory or not at runtime. */
-
 typedef struct {
-    char name[64];
-    u8 hash[SHA256_HASH_SIZE];
-    u64 size;
-    void *dst;
-    KeysIsKeyMandatoryFunction mandatory_func;  ///< If NULL, key is mandatory.
-} KeysMemoryKey;
+    ///< AES-128-ECB key used to derive master KEKs from Erista master KEK sources.
+    ///< Only available in Erista units. Retrieved from the Lockpick_RCM keys file.
+    u8 tsec_root_key[AES_128_KEY_SIZE];
 
-typedef struct {
-    MemoryLocation location;
-    u32 key_count;
-    KeysMemoryKey keys[];
-} KeysMemoryInfo;
+    ///< AES-128-ECB key used to derive master KEKs from Mariko master KEK sources.
+    ///< Only available in Mariko units. Retrieved from the Lockpick_RCM keys file -- if available, because it must be manually bruteforced on a PC after running Lockpick_RCM.
+    u8 mariko_kek[AES_128_KEY_SIZE];
 
-typedef struct {
+    ///< AES-128-ECB keys used to decrypt the vast majority of Switch content.
+    ///< Derived at runtime using hardcoded key sources and additional keydata retrieved from the Lockpick_RCM keys file.
+    u8 master_keys[NcaKeyGeneration_Max][AES_128_KEY_SIZE];
+
     ///< AES-128-XTS key needed to handle NCA header crypto.
-    u8 nca_header_kek_source[AES_128_KEY_SIZE];                                                     ///< Retrieved from the .rodata segment in the FS sysmodule.
-    u8 nca_header_key_source[AES_128_KEY_SIZE * 2];                                                 ///< Retrieved from the .data segment in the FS sysmodule.
-    u8 nca_header_key[AES_128_KEY_SIZE * 2];                                                        ///< Generated from nca_header_kek (sealed by the SMC AES engine) and nca_header_key_source.
-
-    ///< RSA-2048-PSS moduli used to verify the main signature from NCA headers.
-    u8 nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];          ///< Moduli used in retail units. Retrieved from the .rodata segment in the FS sysmodule.
-    u8 nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Max][RSA2048_PUBKEY_SIZE];           ///< Moduli used in development units. Retrieved from the .rodata segment in the FS sysmodule.
+    ///< Generated from hardcoded key sources.
+    u8 nca_header_key[AES_128_KEY_SIZE * 2];
 
     ///< AES-128-ECB keys needed to handle key area crypto from NCA headers.
-    u8 nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Count][AES_128_KEY_SIZE];                      ///< Retrieved from the .rodata segment in the FS sysmodule.
-    u8 nca_kaek_sealed[NcaKeyAreaEncryptionKeyIndex_Count][NcaKeyGeneration_Max][AES_128_KEY_SIZE]; ///< Generated from nca_kaek_sources. Sealed by the SMC AES engine.
-    u8 nca_kaek[NcaKeyAreaEncryptionKeyIndex_Count][NcaKeyGeneration_Max][AES_128_KEY_SIZE];        ///< Unsealed key area encryption keys. Retrieved from the Lockpick_RCM keys file.
-                                                                                                    ///< Verified using a hardcoded hash.
+    ///< Generated from hardcoded key sources and master keys.
+    u8 nca_kaek[NcaKeyAreaEncryptionKeyIndex_Count][NcaKeyGeneration_Max][AES_128_KEY_SIZE];
 
     ///< AES-128-CTR key needed to decrypt the console-specific eTicket RSA device key stored in PRODINFO.
-    ///< Verified by decrypting the eTicket RSA device key.
-    u8 eticket_rsa_kek[AES_128_KEY_SIZE];                                                           ///< eTicket RSA key encryption key (generic). Retrieved from the Lockpick_RCM keys file.
-    u8 eticket_rsa_kek_personalized[AES_128_KEY_SIZE];                                              ///< eTicket RSA key encryption key (console-specific). Retrieved from the Lockpick_RCM keys file.
+    ///< Retrieved from the Lockpick_RCM keys file. Verified by decrypting the eTicket RSA device key.
+    ///< The key itself may or may not be console-specific (personalized), based on the eTicket RSA device key generation value.
+    u8 eticket_rsa_kek[AES_128_KEY_SIZE];
 
     ///< AES-128-ECB keys needed to decrypt titlekeys.
-    u8 ticket_common_keys[NcaKeyGeneration_Max][AES_128_KEY_SIZE];                                  ///< Retrieved from the Lockpick_RCM keys file. Verified using a hardcoded hash.
-} KeysNcaKeyset;
+    ///< Generated from a hardcoded key source and master keys.
+    u8 ticket_common_keys[NcaKeyGeneration_Max][AES_128_KEY_SIZE];
+
+    ///< AES-128-CBC key needed to decrypt the CardInfo area from gamecard headers.
+    ///< Generated from hardcoded key sources.
+    u8 gc_cardinfo_key[AES_128_KEY_SIZE];
+} KeysNxKeyset;
 
 /// Used to parse the eTicket RSA device key retrieved from PRODINFO via setcalGetEticketDeviceKey().
 /// Everything after the AES CTR is encrypted using the eTicket RSA device key encryption key.
@@ -86,226 +82,39 @@ typedef struct {
 
 NXDT_ASSERT(EticketRsaDeviceKey, 0x240);
 
-/// AES-128-CBC keys needed to decrypt the CardInfo area from gamecard headers.
-typedef struct {
-    const u8 gc_cardinfo_kek_source[AES_128_KEY_SIZE];      ///< Randomly generated KEK source to decrypt official CardInfo area keys.
-    const u8 gc_cardinfo_key_prod_source[AES_128_KEY_SIZE]; ///< CardInfo area key used in retail units. Obfuscated using the above KEK source and SMC AES engine keydata.
-    const u8 gc_cardinfo_key_dev_source[AES_128_KEY_SIZE];  ///< CardInfo area key used in development units. Obfuscated using the above KEK source and SMC AES engine keydata.
-    u8 gc_cardinfo_key_prod[AES_128_KEY_SIZE];              ///< Generated from gc_cardinfo_kek (sealed by the SMC AES engine) and gc_cardinfo_key_prod_source.
-    u8 gc_cardinfo_key_dev[AES_128_KEY_SIZE];               ///< Generated from gc_cardinfo_kek (sealed by the SMC AES engine) and gc_cardinfo_key_dev_source.
-} KeysGameCardKeyset;
-
 /* Function prototypes. */
 
-static bool keysIsProductionModulus1xMandatory(void);
-static bool keysIsProductionModulus9xMandatory(void);
-
-static bool keysIsDevelopmentModulus1xMandatory(void);
-static bool keysIsDevelopmentModulus9xMandatory(void);
-
-static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info);
-
-static bool keysDeriveNcaHeaderKey(void);
-static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void);
+static bool keysIsKeyEmpty(const void *key);
 
 static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **value);
 static char keysConvertHexDigitToBinary(char c);
 static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 size);
 static bool keysReadKeysFromFile(void);
 
-static bool keysVerifyLockpickRcmData(void);
+static bool keysDeriveMasterKeys(void);
+static bool keysDeriveNcaHeaderKey(void);
+static bool keysDerivePerGenerationKeys(void);
+static bool keysDeriveGcCardInfoKey(void);
 
 static bool keysGetDecryptedEticketRsaDeviceKey(void);
 static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void *n);
 
-static bool keysDeriveGameCardKeys(void);
+static bool keysGenerateAesKek(const u8 *kek_src, u8 key_generation, SmcGenerateAesKekOption option, u8 *out_kek);
+static bool keysLoadAesKey(const u8 *kek, const u8 *key_src, u8 *out_key);
+static bool keysGenerateAesKey(const u8 *kek, const u8 *key_src, u8 *out_key);
 
-static bool keysGenerateAesKey(const u8 *kek_source, const u8 *key_source, u32 key_generation, u32 option, u8 *out_key);
+static bool keysLoadAesKeyFromAesKek(const u8 *kek_src, u8 key_generation, SmcGenerateAesKekOption option, const u8 *key_src, u8 *out_key);
+static bool keysGenerateAesKeyFromAesKek(const u8 *kek_src, u8 key_generation, SmcGenerateAesKekOption option, const u8 *key_src, u8 *out_key);
 
 /* Global variables. */
 
 static bool g_keysetLoaded = false;
 static Mutex g_keysetMutex = 0;
 
-static KeysNcaKeyset g_ncaKeyset = {0};
-
-/// TODO: update on master key changes.
-static const u8 g_ncaKaekBlockHashes[2][NcaKeyAreaEncryptionKeyIndex_Count][SHA256_HASH_SIZE] = {
-    /* Production. */
-    {
-        /* Application. */
-        {
-            0xAE, 0x82, 0xD8, 0xE5, 0x1A, 0xC3, 0x5F, 0xC0, 0xBF, 0xE1, 0xC0, 0x88, 0x69, 0xB9, 0x69, 0xCE,
-            0x56, 0xD4, 0x99, 0xE6, 0x97, 0x80, 0xFE, 0x1C, 0x3D, 0xB7, 0xEA, 0x9C, 0xD8, 0xD7, 0xF2, 0x12
-        },
-        /* Ocean. */
-        {
-            0x6F, 0xE0, 0x38, 0xC2, 0xAF, 0xB8, 0xF7, 0xDC, 0xC4, 0x97, 0x0A, 0x19, 0xCC, 0xE7, 0xD3, 0x10,
-            0x03, 0x70, 0x2C, 0xF5, 0x51, 0xF1, 0x01, 0xDE, 0x88, 0x4E, 0x47, 0xD3, 0x8D, 0xC2, 0xFD, 0x8A
-        },
-        /* System. */
-        {
-            0x2F, 0xEB, 0xA2, 0x09, 0x42, 0x51, 0xB5, 0x88, 0x3D, 0x52, 0x3E, 0xE6, 0x47, 0x7F, 0xDD, 0xFD,
-            0x3F, 0xB2, 0x7B, 0xED, 0xBA, 0x8C, 0x98, 0x34, 0xA2, 0xF9, 0xA9, 0x5A, 0x81, 0x1A, 0x7E, 0xA9
-        }
-    },
-    /* Development. */
-    {
-        /* Application. */
-        {
-            0xD5, 0x28, 0x5F, 0xDB, 0x38, 0x6D, 0x0E, 0x3C, 0xA1, 0x14, 0x6F, 0x4D, 0x32, 0xA6, 0x22, 0x23,
-            0x8D, 0xD7, 0x81, 0xAF, 0x68, 0x71, 0x76, 0x06, 0x8B, 0x71, 0xC3, 0x87, 0x83, 0x4B, 0x86, 0xC8
-        },
-        /* Ocean. */
-        {
-            0x76, 0xD4, 0xD7, 0x1C, 0xAA, 0x19, 0x97, 0x5B, 0x74, 0xAE, 0xFF, 0x2D, 0xEA, 0x27, 0x1B, 0xC6,
-            0xED, 0xF7, 0xB5, 0xD0, 0xA3, 0xFF, 0xE7, 0xEA, 0x1A, 0x99, 0xB3, 0x8C, 0xDD, 0x4F, 0xAB, 0x5C
-        },
-        /* System. */
-        {
-            0x46, 0x5E, 0xB1, 0x43, 0x37, 0x83, 0x52, 0x84, 0x73, 0x08, 0xCA, 0x9D, 0xDE, 0x64, 0x8C, 0x76,
-            0x58, 0xB3, 0x9A, 0x42, 0xF1, 0xC5, 0xA9, 0x60, 0xA6, 0xED, 0xF3, 0xB8, 0xAA, 0x44, 0xEF, 0x41
-        }
-    }
-};
-
-/// TODO: update on master key changes.
-static const u8 g_ticketCommonKeysBlockHashes[2][SHA256_HASH_SIZE] = {
-    /* Production. */
-    {
-        0x6F, 0x42, 0x8A, 0x53, 0x51, 0x61, 0xC7, 0x69, 0x90, 0x21, 0xC5, 0x71, 0xC6, 0x89, 0x2B, 0x33,
-        0xBB, 0x1D, 0xF6, 0xA8, 0x26, 0x12, 0x21, 0x7D, 0x81, 0x9B, 0xCC, 0x78, 0x3A, 0x2D, 0xD7, 0x6C
-    },
-    /* Development. */
-    {
-        0x88, 0x61, 0x4D, 0x1E, 0xC3, 0xF0, 0x51, 0x94, 0xB7, 0x35, 0xAA, 0x2E, 0xFC, 0x4D, 0x7A, 0x7C,
-        0xFB, 0x25, 0x8A, 0x0C, 0x60, 0x68, 0x89, 0x04, 0x68, 0xAB, 0x21, 0xA0, 0x34, 0x29, 0x02, 0xE9
-    }
-};
-
 static SetCalRsa2048DeviceKey g_eTicketRsaDeviceKey = {0};
+static KeysNxKeyset g_nxKeyset = {0};
 
-static KeysMemoryInfo g_fsRodataMemoryInfo = {
-    .location = {
-        .program_id = FS_SYSMODULE_TID,
-        .mask = MemoryProgramSegmentType_Rodata,
-        .data = NULL,
-        .data_size = 0
-    },
-    .key_count = 8,
-    .keys = {
-        {
-            .name = "nca_header_kek_source",
-            .hash = {
-                0x18, 0x88, 0xCA, 0xED, 0x55, 0x51, 0xB3, 0xED, 0xE0, 0x14, 0x99, 0xE8, 0x7C, 0xE0, 0xD8, 0x68,
-                0x27, 0xF8, 0x08, 0x20, 0xEF, 0xB2, 0x75, 0x92, 0x10, 0x55, 0xAA, 0x4E, 0x2A, 0xBD, 0xFF, 0xC2
-            },
-            .size = sizeof(g_ncaKeyset.nca_header_kek_source),
-            .dst = g_ncaKeyset.nca_header_kek_source,
-            .mandatory_func = NULL
-        },
-        {
-            .name = "nca_main_signature_modulus_prod_00",
-            .hash = {
-                0xF9, 0x2E, 0x84, 0x98, 0x17, 0x2C, 0xAF, 0x9C, 0x20, 0xE3, 0xF1, 0xF7, 0xD3, 0xE7, 0x2C, 0x62,
-                0x50, 0xA9, 0x40, 0x7A, 0xE7, 0x84, 0xE0, 0x03, 0x58, 0x07, 0x85, 0xA5, 0x68, 0x0B, 0x80, 0x33
-            },
-            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Since100NUP]),
-            .dst = g_ncaKeyset.nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Since100NUP],
-            .mandatory_func = &keysIsProductionModulus1xMandatory
-        },
-        {
-            .name = "nca_main_signature_modulus_prod_01",
-            .hash = {
-                0x5F, 0x6B, 0xE3, 0x1C, 0x31, 0x6E, 0x7C, 0xB2, 0x1C, 0xA7, 0xB9, 0xA1, 0x70, 0x6A, 0x9D, 0x58,
-                0x04, 0xEB, 0x90, 0x53, 0x72, 0xEF, 0xCB, 0x56, 0xD1, 0x93, 0xF2, 0xAF, 0x9E, 0x8A, 0xD1, 0xFA
-            },
-            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Since900NUP]),
-            .dst = g_ncaKeyset.nca_main_signature_moduli_prod[NcaSignatureKeyGeneration_Since900NUP],
-            .mandatory_func = &keysIsProductionModulus9xMandatory
-        },
-        {
-            .name = "nca_main_signature_modulus_dev_00",
-            .hash = {
-                0x50, 0xF8, 0x26, 0xBB, 0x13, 0xFE, 0xB2, 0x6D, 0x83, 0xCF, 0xFF, 0xD8, 0x38, 0x45, 0xC3, 0x51,
-                0x4D, 0xCB, 0x06, 0x91, 0x83, 0x52, 0x06, 0x35, 0x7A, 0xC1, 0xDA, 0x6B, 0xF1, 0x60, 0x9F, 0x18
-            },
-            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Since100NUP]),
-            .dst = g_ncaKeyset.nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Since100NUP],
-            .mandatory_func = &keysIsDevelopmentModulus1xMandatory
-        },
-        {
-            .name = "nca_main_signature_modulus_dev_01",
-            .hash = {
-                0x56, 0xF5, 0x06, 0xEF, 0x8E, 0xCA, 0x2A, 0x29, 0x6F, 0x65, 0x45, 0xE1, 0x87, 0x60, 0x01, 0x11,
-                0xBC, 0xC7, 0x38, 0x56, 0x99, 0x16, 0xAD, 0xA5, 0xDD, 0x89, 0xF2, 0xE9, 0xAB, 0x28, 0x5B, 0x18
-            },
-            .size = sizeof(g_ncaKeyset.nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Since900NUP]),
-            .dst = g_ncaKeyset.nca_main_signature_moduli_dev[NcaSignatureKeyGeneration_Since900NUP],
-            .mandatory_func = &keysIsDevelopmentModulus9xMandatory
-        },
-        {
-            .name = "nca_kaek_application_source",
-            .hash = {
-                0x04, 0xAD, 0x66, 0x14, 0x3C, 0x72, 0x6B, 0x2A, 0x13, 0x9F, 0xB6, 0xB2, 0x11, 0x28, 0xB4, 0x6F,
-                0x56, 0xC5, 0x53, 0xB2, 0xB3, 0x88, 0x71, 0x10, 0x30, 0x42, 0x98, 0xD8, 0xD0, 0x09, 0x2D, 0x9E
-            },
-            .size = sizeof(g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Application]),
-            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Application],
-            .mandatory_func = NULL
-        },
-        {
-            .name = "nca_kaek_ocean_source",
-            .hash = {
-                0xFD, 0x43, 0x40, 0x00, 0xC8, 0xFF, 0x2B, 0x26, 0xF8, 0xE9, 0xA9, 0xD2, 0xD2, 0xC1, 0x2F, 0x6B,
-                0xE5, 0x77, 0x3C, 0xBB, 0x9D, 0xC8, 0x63, 0x00, 0xE1, 0xBD, 0x99, 0xF8, 0xEA, 0x33, 0xA4, 0x17
-            },
-            .size = sizeof(g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Ocean]),
-            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_Ocean],
-            .mandatory_func = NULL
-        },
-        {
-            .name = "nca_kaek_system_source",
-            .hash = {
-                0x1F, 0x17, 0xB1, 0xFD, 0x51, 0xAD, 0x1C, 0x23, 0x79, 0xB5, 0x8F, 0x15, 0x2C, 0xA4, 0x91, 0x2E,
-                0xC2, 0x10, 0x64, 0x41, 0xE5, 0x17, 0x22, 0xF3, 0x87, 0x00, 0xD5, 0x93, 0x7A, 0x11, 0x62, 0xF7
-            },
-            .size = sizeof(g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_System]),
-            .dst = g_ncaKeyset.nca_kaek_sources[NcaKeyAreaEncryptionKeyIndex_System],
-            .mandatory_func = NULL
-        }
-    }
-};
-
-static KeysMemoryInfo g_fsDataMemoryInfo = {
-    .location = {
-        .program_id = FS_SYSMODULE_TID,
-        .mask = MemoryProgramSegmentType_Data,
-        .data = NULL,
-        .data_size = 0
-    },
-    .key_count = 1,
-    .keys = {
-        {
-            .name = "nca_header_key_source",
-            .hash = {
-                0x8F, 0x78, 0x3E, 0x46, 0x85, 0x2D, 0xF6, 0xBE, 0x0B, 0xA4, 0xE1, 0x92, 0x73, 0xC4, 0xAD, 0xBA,
-                0xEE, 0x16, 0x38, 0x00, 0x43, 0xE1, 0xB8, 0xC4, 0x18, 0xC4, 0x08, 0x9A, 0x8B, 0xD6, 0x4A, 0xA6
-            },
-            .size = sizeof(g_ncaKeyset.nca_header_key_source),
-            .dst = g_ncaKeyset.nca_header_key_source,
-            .mandatory_func = NULL
-        }
-    }
-};
-
-static KeysGameCardKeyset g_gameCardKeyset = {
-    .gc_cardinfo_kek_source      = { 0xDE, 0xC6, 0x3F, 0x6A, 0xBF, 0x37, 0x72, 0x0B, 0x7E, 0x54, 0x67, 0x6A, 0x2D, 0xEF, 0xDD, 0x97 },
-    .gc_cardinfo_key_prod_source = { 0xF4, 0x92, 0x06, 0x52, 0xD6, 0x37, 0x70, 0xAF, 0xB1, 0x9C, 0x6F, 0x63, 0x09, 0x01, 0xF6, 0x29 },
-    .gc_cardinfo_key_dev_source  = { 0x0B, 0x7D, 0xBB, 0x2C, 0xCF, 0x64, 0x1A, 0xF4, 0xD7, 0x38, 0x81, 0x3F, 0x0C, 0x33, 0xF4, 0x1C },
-    .gc_cardinfo_key_prod        = {0},
-    .gc_cardinfo_key_dev         = {0}
-};
+static bool g_latestMasterKeyAvailable = false;
 
 bool keysLoadKeyset(void)
 {
@@ -316,54 +125,47 @@ bool keysLoadKeyset(void)
         ret = g_keysetLoaded;
         if (ret) break;
 
-        /* Retrieve FS .rodata keys. */
-        if (!keysRetrieveKeysFromProgramMemory(&g_fsRodataMemoryInfo))
+        /* Get eTicket RSA device key. */
+        Result rc = setcalGetEticketDeviceKey(&g_eTicketRsaDeviceKey);
+        if (R_FAILED(rc))
         {
-            LOG_MSG_ERROR("Unable to retrieve keys from FS .rodata segment!");
+            LOG_MSG_ERROR("setcalGetEticketDeviceKey failed! (0x%X).", rc);
             break;
         }
 
-        /* Retrieve FS .data keys. */
-        if (!keysRetrieveKeysFromProgramMemory(&g_fsDataMemoryInfo))
+        /* Read data from the Lockpick_RCM keys file. */
+        if (!keysReadKeysFromFile()) break;
+
+        /* Derive master keys. */
+        if (!keysDeriveMasterKeys())
         {
-            LOG_MSG_ERROR("Unable to retrieve keys from FS .data segment!");
+            LOG_MSG_ERROR("Failed to derive master keys!");
             break;
         }
 
         /* Derive NCA header key. */
-        if (!keysDeriveNcaHeaderKey())
+        if (!keysDeriveNcaHeaderKey()) break;
+
+        /* Derive per-generation keys. */
+        if (!keysDerivePerGenerationKeys()) break;
+
+        /* Derive gamecard CardInfo key */
+        if (!keysDeriveGcCardInfoKey())
         {
-            LOG_MSG_ERROR("Unable to derive NCA header key!");
+            LOG_MSG_ERROR("Failed to derive gamecard CardInfo key!");
             break;
         }
-
-        /* Derive sealed NCA KAEKs. */
-        if (!keysDeriveSealedNcaKeyAreaEncryptionKeys())
-        {
-            LOG_MSG_ERROR("Unable to derive sealed NCA KAEKs!");
-            break;
-        }
-
-        /* Read additional keys from the keys file. */
-        if (!keysReadKeysFromFile()) break;
-
-        /* Verify loaded Lockpick_RCM data. */
-        if (!keysVerifyLockpickRcmData()) break;
 
         /* Get decrypted eTicket RSA device key. */
         if (!keysGetDecryptedEticketRsaDeviceKey()) break;
-
-        /* Derive gamecard keys. */
-        if (!keysDeriveGameCardKeys()) break;
 
         /* Update flags. */
         ret = g_keysetLoaded = true;
     }
 
 #if LOG_LEVEL == LOG_LEVEL_DEBUG
-    LOG_DATA_DEBUG(&g_ncaKeyset, sizeof(KeysNcaKeyset), "NCA keyset dump:");
     LOG_DATA_DEBUG(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
-    LOG_DATA_DEBUG(&g_gameCardKeyset, sizeof(KeysGameCardKeyset), "Gamecard keyset dump:");
+    LOG_DATA_DEBUG(&g_nxKeyset, sizeof(KeysNxKeyset), "NX keyset dump:");
 #endif
 
     return ret;
@@ -375,70 +177,9 @@ const u8 *keysGetNcaHeaderKey(void)
 
     SCOPED_LOCK(&g_keysetMutex)
     {
-        if (g_keysetLoaded) ret = (const u8*)(g_ncaKeyset.nca_header_key);
+        if (g_keysetLoaded) ret = (const u8*)(g_nxKeyset.nca_header_key);
     }
 
-    return ret;
-}
-
-const u8 *keysGetNcaMainSignatureModulus(u8 key_generation)
-{
-    if (key_generation > NcaSignatureKeyGeneration_Current)
-    {
-        LOG_MSG_ERROR("Unsupported key generation value! (0x%02X).", key_generation);
-        return NULL;
-    }
-
-    bool dev_unit = utilsIsDevelopmentUnit();
-    const u8 *ret = NULL, null_modulus[RSA2048_PUBKEY_SIZE] = {0};
-
-    SCOPED_LOCK(&g_keysetMutex)
-    {
-        if (!g_keysetLoaded) break;
-
-        ret = (const u8*)(dev_unit ? g_ncaKeyset.nca_main_signature_moduli_dev[key_generation] : g_ncaKeyset.nca_main_signature_moduli_prod[key_generation]);
-
-        if (!memcmp(ret, null_modulus, RSA2048_PUBKEY_SIZE))
-        {
-            LOG_MSG_ERROR("%s NCA header main signature modulus 0x%02X unavailable.", dev_unit ? "Development" : "Retail", key_generation);
-            ret = NULL;
-        }
-    }
-
-    return ret;
-}
-
-bool keysDecryptNcaKeyAreaEntry(u8 kaek_index, u8 key_generation, void *dst, const void *src)
-{
-    bool ret = false;
-    u8 key_gen_val = (key_generation ? (key_generation - 1) : key_generation);
-
-    if (kaek_index >= NcaKeyAreaEncryptionKeyIndex_Count)
-    {
-        LOG_MSG_ERROR("Invalid KAEK index! (0x%02X).", kaek_index);
-        goto end;
-    }
-
-    if (key_gen_val >= NcaKeyGeneration_Max)
-    {
-        LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_gen_val);
-        goto end;
-    }
-
-    if (!dst || !src)
-    {
-        LOG_MSG_ERROR("Invalid destination/source pointer.");
-        goto end;
-    }
-
-    SCOPED_LOCK(&g_keysetMutex)
-    {
-        if (!g_keysetLoaded) break;
-        Result rc = splCryptoGenerateAesKey(g_ncaKeyset.nca_kaek_sealed[kaek_index][key_gen_val], src, dst);
-        if (!(ret = R_SUCCEEDED(rc))) LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X).", rc);
-    }
-
-end:
     return ret;
 }
 
@@ -453,15 +194,23 @@ const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
         goto end;
     }
 
-    if (key_gen_val >= NcaKeyGeneration_Max)
+    if (key_generation >= NcaKeyGeneration_Max)
     {
-        LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_gen_val);
+        LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_generation);
         goto end;
     }
 
     SCOPED_LOCK(&g_keysetMutex)
     {
-        if (g_keysetLoaded) ret = (const u8*)(g_ncaKeyset.nca_kaek[kaek_index][key_gen_val]);
+        if (!g_keysetLoaded) break;
+
+        ret = (const u8*)(g_nxKeyset.nca_kaek[kaek_index][key_gen_val]);
+
+        if (keysIsKeyEmpty(ret))
+        {
+            LOG_MSG_ERROR("NCA KAEK for type %u and generation %u unavailable.", kaek_index, key_gen_val);
+            ret = NULL;
+        }
     }
 
 end:
@@ -509,15 +258,23 @@ const u8 *keysGetTicketCommonKey(u8 key_generation)
     const u8 *ret = NULL;
     u8 key_gen_val = (key_generation ? (key_generation - 1) : key_generation);
 
-    if (key_gen_val >= NcaKeyGeneration_Max)
+    if (key_generation >= NcaKeyGeneration_Max)
     {
-        LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_gen_val);
+        LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_generation);
         goto end;
     }
 
     SCOPED_LOCK(&g_keysetMutex)
     {
-        if (g_keysetLoaded) ret = (const u8*)(g_ncaKeyset.ticket_common_keys[key_gen_val]);
+        if (!g_keysetLoaded) break;
+
+        ret = (const u8*)(g_nxKeyset.ticket_common_keys[key_gen_val]);
+
+        if (keysIsKeyEmpty(ret))
+        {
+            LOG_MSG_ERROR("Ticket common key for generation %u unavailable.", key_gen_val);
+            ret = NULL;
+        }
     }
 
 end:
@@ -530,145 +287,16 @@ const u8 *keysGetGameCardInfoKey(void)
 
     SCOPED_LOCK(&g_keysetMutex)
     {
-        if (g_keysetLoaded) ret = (const u8*)(utilsIsDevelopmentUnit() ? g_gameCardKeyset.gc_cardinfo_key_dev : g_gameCardKeyset.gc_cardinfo_key_prod);
+        if (g_keysetLoaded) ret = (const u8*)(g_nxKeyset.gc_cardinfo_key);
     }
 
     return ret;
 }
 
-static bool keysIsProductionModulus1xMandatory(void)
+static bool keysIsKeyEmpty(const void *key)
 {
-    return !utilsIsDevelopmentUnit();
-}
-
-static bool keysIsProductionModulus9xMandatory(void)
-{
-    return (!utilsIsDevelopmentUnit() && hosversionAtLeast(9, 0, 0));
-}
-
-static bool keysIsDevelopmentModulus1xMandatory(void)
-{
-    return utilsIsDevelopmentUnit();
-}
-
-static bool keysIsDevelopmentModulus9xMandatory(void)
-{
-    return (utilsIsDevelopmentUnit() && hosversionAtLeast(9, 0, 0));
-}
-
-static bool keysRetrieveKeysFromProgramMemory(KeysMemoryInfo *info)
-{
-    if (!info || !info->key_count)
-    {
-        LOG_MSG_ERROR("Invalid parameters!");
-        return false;
-    }
-
-    u8 tmp_hash[SHA256_HASH_SIZE];
-    bool success = false;
-
-    if (!memRetrieveProgramMemorySegment(&(info->location))) return false;
-
-    for(u32 i = 0; i < info->key_count; i++)
-    {
-        KeysMemoryKey *key = &(info->keys[i]);
-        bool found = false, mandatory = (key->mandatory_func != NULL ? key->mandatory_func() : true);
-
-        /* Skip key if it's not mandatory. */
-        if (!mandatory) continue;
-
-        /* Check destination pointer. */
-        if (!key->dst)
-        {
-            LOG_MSG_ERROR("Invalid destination pointer for key \"%s\" in program %016lX!", key->name, info->location.program_id);
-            goto end;
-        }
-
-        /* Hash every key length-sized byte chunk in the process memory buffer until a match is found. */
-        for(u64 j = 0; j < info->location.data_size; j++)
-        {
-            if ((info->location.data_size - j) < key->size) break;
-
-            sha256CalculateHash(tmp_hash, info->location.data + j, key->size);
-            if (!memcmp(tmp_hash, key->hash, SHA256_HASH_SIZE))
-            {
-                /* Jackpot. */
-                memcpy(key->dst, info->location.data + j, key->size);
-                found = true;
-                break;
-            }
-        }
-
-        if (!found)
-        {
-            LOG_MSG_ERROR("Unable to locate key \"%s\" in process memory from program %016lX!", key->name, info->location.program_id);
-            goto end;
-        }
-    }
-
-    success = true;
-
-end:
-    memFreeMemoryLocation(&(info->location));
-
-    return success;
-}
-
-static bool keysDeriveNcaHeaderKey(void)
-{
-    /* Derive nca_header_key (first half) from nca_header_kek_source and nca_header_key_source. */
-    if (!keysGenerateAesKey(g_ncaKeyset.nca_header_kek_source, g_ncaKeyset.nca_header_key_source, 0, 0, g_ncaKeyset.nca_header_key))
-    {
-        LOG_MSG_ERROR("keysGenerateAesKey failed! (#1).");
-        return false;
-    }
-
-    /* Derive nca_header_key (second half) from nca_header_kek_source and nca_header_key_source. */
-    if (!keysGenerateAesKey(g_ncaKeyset.nca_header_kek_source, g_ncaKeyset.nca_header_key_source + AES_128_KEY_SIZE, 0, 0, g_ncaKeyset.nca_header_key + AES_128_KEY_SIZE))
-    {
-        LOG_MSG_ERROR("keysGenerateAesKey failed! (#2).");
-        return false;
-    }
-
-    return true;
-}
-
-static bool keysDeriveSealedNcaKeyAreaEncryptionKeys(void)
-{
-    Result rc = 0;
-    u32 key_cnt = 0;
-    u8 highest_key_gen = 0;
-    bool success = false;
-
-    for(u8 i = 0; i < NcaKeyAreaEncryptionKeyIndex_Count; i++)
-    {
-        /* Get pointer to current KAEK source. */
-        const u8 *nca_kaek_source = (const u8*)(g_ncaKeyset.nca_kaek_sources[i]);
-
-        for(u8 j = 1; j <= NcaKeyGeneration_Max; j++)
-        {
-            /* Get pointer to current sealed KAEK. */
-            u8 key_gen_val = (j - 1);
-            u8 *nca_kaek_sealed = g_ncaKeyset.nca_kaek_sealed[i][key_gen_val];
-
-            /* Derive sealed KAEK using the current KAEK source and key generation. */
-            rc = splCryptoGenerateAesKek(nca_kaek_source, j, 0, nca_kaek_sealed);
-            if (R_FAILED(rc))
-            {
-                LOG_MSG_DEBUG("splCryptoGenerateAesKek failed for KAEK index %u and key generation %u! (0x%X).", i, (j <= 1 ? 0 : j), rc);
-                break;
-            }
-
-            /* Update derived key count and highest key generation value. */
-            key_cnt++;
-            if (key_gen_val > highest_key_gen) highest_key_gen = key_gen_val;
-        }
-    }
-
-    success = (key_cnt > 0);
-    if (success) LOG_MSG_INFO("Derived %u sealed NCA KAEK(s) (%u key generation[s]).", key_cnt, highest_key_gen + 1);
-
-    return success;
+    const u8 null_key[AES_128_KEY_SIZE] = {0};
+    return (memcmp(key, null_key, AES_128_KEY_SIZE) == 0);
 }
 
 /**
@@ -941,8 +569,12 @@ static bool keysReadKeysFromFile(void)
     FILE *keys_file = NULL;
     char *line = NULL, *key = NULL, *value = NULL;
     char test_name[0x40] = {0};
-    bool eticket_rsa_kek_available = false;
+
     const char *keys_file_path = (utilsIsDevelopmentUnit() ? DEV_KEYS_FILE_PATH : PROD_KEYS_FILE_PATH);
+
+    bool is_mariko = utilsIsMarikoUnit();
+    bool tsec_root_key_available = false, mariko_kek_available = false;
+    bool use_personalized_eticket_rsa_kek = (g_eTicketRsaDeviceKey.generation > 0), eticket_rsa_kek_available = false;
 
     keys_file = fopen(keys_file_path, "rb");
     if (!keys_file)
@@ -957,9 +589,9 @@ static bool keysReadKeysFromFile(void)
         decl; \
     }
 
-#define PARSE_HEX_KEY_WITH_INDEX(name, out) \
-    snprintf(test_name, sizeof(test_name), "%s_%02x", name, i); \
-    PARSE_HEX_KEY(test_name, out, break);
+#define PARSE_HEX_KEY_WITH_INDEX(name, idx, out, decl) \
+    snprintf(test_name, sizeof(test_name), "%s_%02x", name, idx); \
+    PARSE_HEX_KEY(test_name, out, decl);
 
     while(true)
     {
@@ -971,20 +603,35 @@ static bool keysReadKeysFromFile(void)
         /* Ignore malformed or empty lines. */
         if (ret != 0 || !key || !value) continue;
 
-        PARSE_HEX_KEY("eticket_rsa_kek", g_ncaKeyset.eticket_rsa_kek, eticket_rsa_kek_available = true; continue);
-
-        /* This only appears on consoles that use the new PRODINFO key generation scheme. */
-        PARSE_HEX_KEY("eticket_rsa_kek_personalized", g_ncaKeyset.eticket_rsa_kek_personalized, eticket_rsa_kek_available = true; continue);
-
-        for(u32 i = 0; i < NcaKeyGeneration_Max; i++)
+        if (is_mariko)
         {
-            PARSE_HEX_KEY_WITH_INDEX("titlekek", g_ncaKeyset.ticket_common_keys[i]);
+            /* Parse Mariko KEK. */
+            /* This will only appear on Mariko units. */
+            if (!mariko_kek_available)
+            {
+                PARSE_HEX_KEY("mariko_kek", g_nxKeyset.mariko_kek, mariko_kek_available = true; continue);
+            }
+        } else {
+            /* Parse TSEC root key. */
+            /* This will only appear on Erista units. */
+            if (!tsec_root_key_available)
+            {
+                PARSE_HEX_KEY_WITH_INDEX("tsec_root_key", TSEC_ROOT_KEY_VERSION, g_nxKeyset.tsec_root_key, tsec_root_key_available = true; continue);
+            }
+        }
 
-            PARSE_HEX_KEY_WITH_INDEX("key_area_key_application", g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_Application][i]);
+        /* Parse eTicket RSA device KEK. */
+        /* The personalized entry only appears on consoles that use the new PRODINFO key generation scheme. */
+        if (!eticket_rsa_kek_available)
+        {
+            PARSE_HEX_KEY(use_personalized_eticket_rsa_kek ? "eticket_rsa_kek_personalized" : "eticket_rsa_kek", g_nxKeyset.eticket_rsa_kek, eticket_rsa_kek_available = true; continue);
+        }
 
-            PARSE_HEX_KEY_WITH_INDEX("key_area_key_ocean", g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_Ocean][i]);
-
-            PARSE_HEX_KEY_WITH_INDEX("key_area_key_system", g_ncaKeyset.nca_kaek[NcaKeyAreaEncryptionKeyIndex_System][i]);
+        /* Parse master keys, starting with the last known one. */
+        for(u8 i = NcaKeyGeneration_Current; i <= NcaKeyGeneration_Max; i++)
+        {
+            u8 key_gen_val = (i - 1);
+            PARSE_HEX_KEY_WITH_INDEX("master_key", key_gen_val, g_nxKeyset.master_keys[key_gen_val], break);
         }
     }
 
@@ -996,6 +643,7 @@ static bool keysReadKeysFromFile(void)
 
     fclose(keys_file);
 
+    /* Bail out if we didn't retrieve a single key. */
     if (key_count)
     {
         LOG_MSG_INFO("Loaded %u key(s) from \"%s\".", key_count, keys_file_path);
@@ -1004,72 +652,156 @@ static bool keysReadKeysFromFile(void)
         return false;
     }
 
+    /* Check if the latest master key was retrieved. */
+    g_latestMasterKeyAvailable = !keysIsKeyEmpty(g_nxKeyset.master_keys[NcaKeyGeneration_Current - 1]);
+    if (!g_latestMasterKeyAvailable)
+    {
+        LOG_MSG_WARNING("Latest known master key (%02X) unavailable in \"%s\". Latest master key derivation will be carried out.", NcaKeyGeneration_Current - 1, keys_file_path);
+
+        /* Make sure we have what we need to derive the latest master key. */
+        if (is_mariko)
+        {
+            if (!mariko_kek_available)
+            {
+                LOG_MSG_ERROR("Mariko KEK unavailable in \"%s\"!", keys_file_path);
+                return false;
+            }
+        } else {
+            if (!tsec_root_key_available)
+            {
+                LOG_MSG_ERROR("TSEC root key unavailable in \"%s\"!", keys_file_path);
+                return false;
+            }
+        }
+    }
+
     if (!eticket_rsa_kek_available)
     {
-        LOG_MSG_ERROR("\"eticket_rsa_kek\" unavailable in \"%s\"!", keys_file_path);
+        LOG_MSG_ERROR("eTicket RSA KEK unavailable in \"%s\"!", keys_file_path);
         return false;
     }
 
     return true;
 }
 
-static bool keysVerifyLockpickRcmData(void)
+static bool keysDeriveMasterKeys(void)
 {
-    u8 hash[SHA256_HASH_SIZE] = {0};
-    u8 dev_unit = (utilsIsDevelopmentUnit() ? 1 : 0);
-    size_t block_size = (NcaKeyGeneration_Current * AES_128_KEY_SIZE);
+    u8 tmp[AES_128_KEY_SIZE] = {0};
+    u8 latest_mkey_index = (NcaKeyGeneration_Current - 1);
+    bool is_dev = utilsIsDevelopmentUnit();
 
-    /* Verify loaded NCA key area encryption keys. */
-    for(u8 i = 0; i < NcaKeyAreaEncryptionKeyIndex_Count; i++)
+    /* Only derive the latest master key if it hasn't been populated already. */
+    if (!g_latestMasterKeyAvailable)
     {
-        sha256CalculateHash(hash, g_ncaKeyset.nca_kaek[i], block_size);
-        if (memcmp(hash, g_ncaKaekBlockHashes[dev_unit][i], SHA256_HASH_SIZE) != 0)
+        if (utilsIsMarikoUnit())
         {
-            LOG_MSG_ERROR("NCA KAEK block #%u checksum mismatch! (%s, keygen %u).", i, dev_unit ? "dev" : "prod", NcaKeyGeneration_Current);
-            return false;
+            /* Derive the latest master KEK using the hardcoded Mariko master KEK source and the Mariko KEK. */
+            aes128EcbCrypt(tmp, is_dev ? g_marikoMasterKekSourceDev : g_marikoMasterKekSourceProd, g_nxKeyset.mariko_kek, false);
+        } else {
+            /* Derive the latest master KEK using the hardcoded Erista master KEK source and the TSEC root key. */
+            aes128EcbCrypt(tmp, g_eristaMasterKekSource, g_nxKeyset.tsec_root_key, false);
         }
+
+        /* Derive the latest master key using the hardcoded master key source and the latest master KEK. */
+        aes128EcbCrypt(g_nxKeyset.master_keys[latest_mkey_index], g_masterKeySource, tmp, false);
     }
 
-    /* Verify loaded ticket common keys. */
-    sha256CalculateHash(hash, g_ncaKeyset.ticket_common_keys, block_size);
-    if (memcmp(hash, g_ticketCommonKeysBlockHashes[dev_unit], SHA256_HASH_SIZE) != 0)
+    /* Derive all lower master keys using the latest master key and the master key vectors. */
+    for(u8 i = latest_mkey_index; i > NcaKeyGeneration_Since100NUP; i--) aes128EcbCrypt(g_nxKeyset.master_keys[i - 1], is_dev ? g_masterKeyVectorsDev[i] : g_masterKeyVectorsProd[i], \
+                                                                                        g_nxKeyset.master_keys[i], false);
+
+    /* Check if we derived the right keys. */
+    aes128EcbCrypt(tmp, is_dev ? g_masterKeyVectorsDev[NcaKeyGeneration_Since100NUP] : g_masterKeyVectorsProd[NcaKeyGeneration_Since100NUP], \
+                   g_nxKeyset.master_keys[NcaKeyGeneration_Since100NUP], false);
+
+    return keysIsKeyEmpty(tmp);
+}
+
+static bool keysDeriveNcaHeaderKey(void)
+{
+    u8 nca_header_kek[AES_128_KEY_SIZE] = {0};
+
+    SmcGenerateAesKekOption option = {0};
+    smcPrepareGenerateAesKekOption(false, SmcKeyType_Default, SmcSealKey_LoadAesKey, &option);
+
+    /* Derive nca_header_kek using g_ncaHeaderKekSource and master key 00. */
+    if (!keysGenerateAesKek(g_ncaHeaderKekSource, NcaKeyGeneration_Since100NUP, option, nca_header_kek))
     {
-        LOG_MSG_ERROR("Ticket common keys block checksum mismatch! (%s, keygen %u).", dev_unit ? "dev" : "prod", NcaKeyGeneration_Current);
+        LOG_MSG_ERROR("Failed to derive NCA header KEK!");
+        return false;
+    }
+
+    /* Derive nca_header_key (first half) from nca_header_kek and g_ncaHeaderKeySource. */
+    if (!keysGenerateAesKey(nca_header_kek, g_ncaHeaderKeySource, g_nxKeyset.nca_header_key))
+    {
+        LOG_MSG_ERROR("Failed to derive NCA header key! (#1).");
+        return false;
+    }
+
+    /* Derive nca_header_key (second half) from nca_header_kek and g_ncaHeaderKeySource. */
+    if (!keysGenerateAesKey(nca_header_kek, g_ncaHeaderKeySource + AES_128_KEY_SIZE, g_nxKeyset.nca_header_key + AES_128_KEY_SIZE))
+    {
+        LOG_MSG_ERROR("Failed to derive NCA header key! (#2).");
         return false;
     }
 
     return true;
+}
+
+static bool keysDerivePerGenerationKeys(void)
+{
+    SmcGenerateAesKekOption option = {0};
+    smcPrepareGenerateAesKekOption(false, SmcKeyType_Default, SmcSealKey_LoadAesKey, &option);
+
+    bool success = true;
+
+    for(u8 i = 1; i <= NcaKeyGeneration_Max; i++)
+    {
+        u8 key_gen_val = (i - 1);
+
+        /* Make sure we're not dealing with an unpopulated master key entry. */
+        if (i > NcaKeyGeneration_Current && keysIsKeyEmpty(g_nxKeyset.master_keys[key_gen_val]))
+        {
+            //LOG_MSG_DEBUG("Master key %02X unavailable.", key_gen_val);
+            continue;
+        }
+
+        /* Derive NCA key area keys for this generation. */
+        for(u8 j = 0; j < NcaKeyAreaEncryptionKeyIndex_Count; j++)
+        {
+            if (!keysLoadAesKeyFromAesKek(g_ncaKeyAreaEncryptionKeySources[j], i, option, g_aesKeyGenerationSource, g_nxKeyset.nca_kaek[j][key_gen_val]))
+            {
+                LOG_MSG_DEBUG("Failed to derive NCA KAEK for type %u and generation %u!", j, key_gen_val);
+                success = false;
+                break;
+            }
+        }
+
+        if (!success) break;
+
+        /* Derive ticket common key for this generation. */
+        aes128EcbCrypt(g_nxKeyset.ticket_common_keys[key_gen_val], g_ticketCommonKeySource, g_nxKeyset.master_keys[key_gen_val], false);
+    }
+
+    return success;
+}
+
+static bool keysDeriveGcCardInfoKey(void)
+{
+    SmcGenerateAesKekOption option = {0};
+    const u8 *key_src = (utilsIsDevelopmentUnit() ? g_gcCardInfoKeySourceDev : g_gcCardInfoKeySourceProd);
+    smcPrepareGenerateAesKekOption(false, SmcKeyType_Default, SmcSealKey_LoadAesKey, &option);
+    return keysGenerateAesKeyFromAesKek(g_gcCardInfoKekSource, NcaKeyGeneration_Since100NUP, option, key_src, g_nxKeyset.gc_cardinfo_key);
 }
 
 static bool keysGetDecryptedEticketRsaDeviceKey(void)
 {
-    Result rc = 0;
     u32 public_exponent = 0;
-    const u8 *eticket_rsa_kek = NULL;
-    EticketRsaDeviceKey *eticket_rsa_key = NULL;
     Aes128CtrContext eticket_aes_ctx = {0};
-    const u8 nullkey[AES_128_KEY_SIZE] = {0};
-
-    /* Get eTicket RSA device key. */
-    rc = setcalGetEticketDeviceKey(&g_eTicketRsaDeviceKey);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG_ERROR("setcalGetEticketDeviceKey failed! (0x%X).", rc);
-        return false;
-    }
-
-    /* Get eTicket RSA device key encryption key. */
-    eticket_rsa_kek = (const u8*)(g_eTicketRsaDeviceKey.generation > 0 ? g_ncaKeyset.eticket_rsa_kek_personalized : g_ncaKeyset.eticket_rsa_kek);
-
-    if (!memcmp(eticket_rsa_kek, nullkey, sizeof(nullkey)))
-    {
-        LOG_MSG_ERROR("Empty \"eticket_rsa_kek\" key entry! (0x%X).", g_eTicketRsaDeviceKey.generation);
-        return false;
-    }
+    EticketRsaDeviceKey *eticket_rsa_key = (EticketRsaDeviceKey*)g_eTicketRsaDeviceKey.key;
 
     /* Decrypt eTicket RSA device key. */
-    eticket_rsa_key = (EticketRsaDeviceKey*)g_eTicketRsaDeviceKey.key;
-    aes128CtrContextCreate(&eticket_aes_ctx, eticket_rsa_kek, eticket_rsa_key->ctr);
+    aes128CtrContextCreate(&eticket_aes_ctx, g_nxKeyset.eticket_rsa_kek, eticket_rsa_key->ctr);
     aes128CtrCrypt(&eticket_aes_ctx, &(eticket_rsa_key->private_exponent), &(eticket_rsa_key->private_exponent), sizeof(EticketRsaDeviceKey) - sizeof(eticket_rsa_key->ctr));
 
     /* Public exponent value must be 0x10001. */
@@ -1131,52 +863,85 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
     return true;
 }
 
-static bool keysDeriveGameCardKeys(void)
+/* Based on splCryptoGenerateAesKek(). Excludes key sealing and device-unique shenanigans. */
+static bool keysGenerateAesKek(const u8 *kek_src, u8 key_generation, SmcGenerateAesKekOption option, u8 *out_kek)
 {
-    /* Derive gc_cardinfo_key_prod from gc_cardinfo_kek_source and gc_cardinfo_key_prod_source. */
-    if (!keysGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_source, g_gameCardKeyset.gc_cardinfo_key_prod_source, 0, 0, g_gameCardKeyset.gc_cardinfo_key_prod))
-    {
-        LOG_MSG_ERROR("keysGenerateAesKey failed! (prod).");
-        return false;
-    }
+    bool is_device_unique = (option.fields.is_device_unique == 1);
+    u8 key_type_idx = option.fields.key_type_idx;
+    u8 seal_key_idx = option.fields.seal_key_idx;
 
-    /* Derive gc_cardinfo_key_dev from gc_cardinfo_kek_source and gc_cardinfo_key_dev_source. */
-    if (!keysGenerateAesKey(g_gameCardKeyset.gc_cardinfo_kek_source, g_gameCardKeyset.gc_cardinfo_key_dev_source, 0, 0, g_gameCardKeyset.gc_cardinfo_key_dev))
-    {
-        LOG_MSG_ERROR("keysGenerateAesKey failed! (dev).");
-        return false;
-    }
-
-    return true;
-}
-
-/* Wrapper for GenerateAesKek + GenerateAesKey SMC AES engine calls. */
-static bool keysGenerateAesKey(const u8 *kek_source, const u8 *key_source, u32 key_generation, u32 option, u8 *out_key)
-{
-    if (!kek_source || !key_source || key_generation >= NcaKeyGeneration_Max || !out_key)
+    if (!kek_src || key_generation > NcaKeyGeneration_Max || is_device_unique || key_type_idx >= SmcKeyType_Count || seal_key_idx >= SmcSealKey_Count || \
+        option.fields.reserved != 0 || !out_kek)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
-    Result rc = 0;
-    u8 sealed_kek[AES_128_KEY_SIZE] = {0};
+    if (key_generation) key_generation--;
 
-    /* Derive sealed_kek from kek_source. */
-    rc = splCryptoGenerateAesKek(kek_source, key_generation, option, sealed_kek);
-    if (R_FAILED(rc))
+    u8 kekek_src[AES_128_KEY_SIZE] = {0}, kekek[AES_128_KEY_SIZE] = {0};
+    const u8 *mkey = g_nxKeyset.master_keys[key_generation];
+
+    /* Make sure this master key is available. */
+    if (keysIsKeyEmpty(mkey))
     {
-        LOG_MSG_ERROR("splCryptoGenerateAesKek failed! (0x%X).", rc);
+        LOG_MSG_ERROR("Master key %02X unavailable!", key_generation);
         return false;
     }
 
-    /* Derive out_key from sealed_kek and key_source. */
-    rc = splCryptoGenerateAesKey(sealed_kek, key_source, out_key);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG_ERROR("splCryptoGenerateAesKey failed! (0x%X).", rc);
-        return false;
-    }
+    /* Derive the KEKEK source using hardcoded data. */
+    for(u8 i = 0; i < AES_128_KEY_SIZE; i++) kekek_src[i] = (g_smcKeyTypeSources[key_type_idx][i] ^ g_smcSealKeyMasks[seal_key_idx][i]);
+
+    /* Derive the KEKEK using the KEKEK source and the master key. */
+    aes128EcbCrypt(kekek, kekek_src, mkey, false);
+
+    /* Derive the KEK using the provided KEK source and the derived KEKEK. */
+    aes128EcbCrypt(out_kek, kek_src, kekek, false);
 
     return true;
+}
+
+/* Based on splCryptoLoadAesKey(). Excludes key sealing shenanigans. */
+static bool keysLoadAesKey(const u8 *kek, const u8 *key_src, u8 *out_key)
+{
+    if (!kek || !key_src || !out_key)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    aes128EcbCrypt(out_key, key_src, kek, false);
+
+    return true;
+}
+
+/* Based on splCryptoGenerateAesKey(). Excludes key sealing shenanigans. */
+static bool keysGenerateAesKey(const u8 *kek, const u8 *key_src, u8 *out_key)
+{
+    if (!kek || !key_src || !out_key)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    u8 aes_key[AES_128_KEY_SIZE] = {0};
+
+    keysLoadAesKey(kek, g_aesKeyGenerationSource, aes_key);
+    aes128EcbCrypt(out_key, key_src, aes_key, false);
+
+    return true;
+}
+
+/* Wrapper for keysGenerateAesKek() + keysLoadAesKey() to generate a single usable AES key in one shot. */
+static bool keysLoadAesKeyFromAesKek(const u8 *kek_src, u8 key_generation, SmcGenerateAesKekOption option, const u8 *key_src, u8 *out_key)
+{
+    u8 kek[AES_128_KEY_SIZE] = {0};
+    return (keysGenerateAesKek(kek_src, key_generation, option, kek) && keysLoadAesKey(kek, key_src, out_key));
+}
+
+/* Wrapper for keysGenerateAesKek() + keysGenerateAesKey() to generate a single usable AES key in one shot. */
+static bool keysGenerateAesKeyFromAesKek(const u8 *kek_src, u8 key_generation, SmcGenerateAesKekOption option, const u8 *key_src, u8 *out_key)
+{
+    u8 kek[AES_128_KEY_SIZE] = {0};
+    return (keysGenerateAesKek(kek_src, key_generation, option, kek) && keysGenerateAesKey(kek, key_src, out_key));
 }

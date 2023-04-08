@@ -387,7 +387,6 @@ static bool tikGetDecryptedTitleKey(void *dst, const void *src, u8 key_generatio
     }
 
     const u8 *ticket_common_key = NULL;
-    Aes128Context titlekey_aes_ctx = {0};
 
     ticket_common_key = keysGetTicketCommonKey(key_generation);
     if (!ticket_common_key)
@@ -396,8 +395,7 @@ static bool tikGetDecryptedTitleKey(void *dst, const void *src, u8 key_generatio
         return false;
     }
 
-    aes128ContextCreate(&titlekey_aes_ctx, ticket_common_key, false);
-    aes128DecryptBlock(&titlekey_aes_ctx, dst, src);
+    aes128EcbCrypt(dst, src, ticket_common_key, false);
 
     return true;
 }

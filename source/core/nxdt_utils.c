@@ -57,6 +57,8 @@ static int g_nxLinkSocketFd = -1;
 
 static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
+static u8 g_productModel = SetSysProductModel_Invalid;
+
 static bool g_isDevUnit = false;
 
 static AppletType g_programAppletType = AppletType_None;
@@ -96,9 +98,9 @@ static void _utilsGetLaunchPath(int program_argc, const char **program_argv);
 
 static void _utilsGetCustomFirmwareType(void);
 
-static bool _utilsIsDevelopmentUnit(void);
+static bool _utilsGetProductModel(void);
 
-static bool _utilsAppletModeCheck(void);
+static bool _utilsIsDevelopmentUnit(void);
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
@@ -153,13 +155,16 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         if (g_customFirmwareType != UtilsCustomFirmwareType_Unknown) LOG_MSG_INFO("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : \
                                                                                   (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
 
-        /* Check if we're not running under a development unit. */
+        /* Get product model. */
+        if (!_utilsGetProductModel()) break;
+
+        /* Get development unit flag. */
         if (!_utilsIsDevelopmentUnit()) break;
-        LOG_MSG_INFO("Running under %s unit.", g_isDevUnit ? "development" : "retail");
 
         /* Get applet type. */
         g_programAppletType = appletGetAppletType();
-        LOG_MSG_INFO("Running under %s mode.", _utilsAppletModeCheck() ? "applet" : "title override");
+
+        LOG_MSG_INFO("Running under %s %s unit in %s mode.", g_isDevUnit ? "development" : "retail", utilsIsMarikoUnit() ? "Mariko" : "Erista", utilsIsAppletMode() ? "applet" : "title override");
 
         /* Create output directories (SD card only). */
         /* TODO: remove the APP_TITLE check whenever we're ready for a release. */
@@ -182,7 +187,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         }
 
         /* Initialize HTTP interface. */
-        /* CURL must be initialized before starting any other threads. */
+        /* cURL must be initialized before starting any other threads. */
         if (!httpInitialize()) break;
 
         /* Initialize USB interface. */
@@ -235,7 +240,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         appletHook(&g_systemOverclockCookie, utilsOverclockSystemAppletHook, NULL);
 
         /* Enable video recording if we're running under title override mode. */
-        if (!_utilsAppletModeCheck())
+        if (!utilsIsAppletMode())
         {
             bool flag = false;
             rc = appletIsGamePlayRecordingSupported(&flag);
@@ -369,14 +374,19 @@ u8 utilsGetCustomFirmwareType(void)
     return g_customFirmwareType;
 }
 
+bool utilsIsMarikoUnit(void)
+{
+    return (g_productModel > SetSysProductModel_Copper);
+}
+
 bool utilsIsDevelopmentUnit(void)
 {
     return g_isDevUnit;
 }
 
-bool utilsAppletModeCheck(void)
+bool utilsIsAppletMode(void)
 {
-    return _utilsAppletModeCheck();
+    return (g_programAppletType > AppletType_Application && g_programAppletType < AppletType_SystemApplication);
 }
 
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void)
@@ -1050,6 +1060,24 @@ static void _utilsGetCustomFirmwareType(void)
     g_customFirmwareType = (rnx_srv ? UtilsCustomFirmwareType_ReiNX : (tx_srv ? UtilsCustomFirmwareType_SXOS : UtilsCustomFirmwareType_Atmosphere));
 }
 
+static bool _utilsGetProductModel(void)
+{
+    Result rc = 0;
+    bool ret = false;
+    SetSysProductModel model = SetSysProductModel_Invalid;
+
+    rc = setsysGetProductModel(&model);
+    if (R_SUCCEEDED(rc) && model != SetSysProductModel_Invalid)
+    {
+        g_productModel = model;
+        ret = true;
+    } else {
+        LOG_MSG_ERROR("setsysGetProductModel failed! (0x%X) (%d).", rc, model);
+    }
+
+    return ret;
+}
+
 static bool _utilsIsDevelopmentUnit(void)
 {
     Result rc = 0;
@@ -1064,11 +1092,6 @@ static bool _utilsIsDevelopmentUnit(void)
     }
 
     return R_SUCCEEDED(rc);
-}
-
-static bool _utilsAppletModeCheck(void)
-{
-    return (g_programAppletType > AppletType_Application && g_programAppletType < AppletType_SystemApplication);
 }
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void)
@@ -1137,7 +1160,7 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
 static void utilsChangeHomeButtonBlockStatus(bool block)
 {
     /* Only change HOME button blocking status if we're running as a regular application or a system application. */
-    if (_utilsAppletModeCheck()) return;
+    if (utilsIsAppletMode()) return;
 
     if (block)
     {

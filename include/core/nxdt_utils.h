@@ -87,11 +87,14 @@ bool utilsCommitSdCardFileSystemChanges(void);
 /// Returns a UtilsCustomFirmwareType value.
 u8 utilsGetCustomFirmwareType(void);
 
+/// Returns true if the application is running under a Mariko unit.
+bool utilsIsMarikoUnit(void);
+
 /// Returns true if the application is running under a development unit.
 bool utilsIsDevelopmentUnit(void);
 
 /// Returns true if the application is running under applet mode.
-bool utilsAppletModeCheck(void);
+bool utilsIsAppletMode(void);
 
 /// Returns a pointer to the FsStorage object for the eMMC BIS System partition.
 FsStorage *utilsGetEmmcBisSystemPartitionStorage(void);

@@ -40,7 +40,7 @@ namespace nxdt::views
         this->setIcon(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
 
         /* Check if we're running under applet mode. */
-        this->applet_mode = utilsAppletModeCheck();
+        this->applet_mode = utilsIsAppletMode();
 
         /* Create labels. */
         this->applet_mode_lbl = new brls::Label(brls::LabelStyle::HINT, "root_view/applet_mode"_i18n);

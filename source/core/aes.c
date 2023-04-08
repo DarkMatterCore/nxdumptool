@@ -21,6 +21,21 @@
 
 #include "nxdt_utils.h"
 
+void aes128EcbCrypt(void *dst, const void *src, const void *key, bool encrypt)
+{
+    if (!dst || !src || !key) return;
+
+    Aes128Context ctx = {0};
+    aes128ContextCreate(&ctx, key, encrypt);
+
+    if (encrypt)
+    {
+        aes128EncryptBlock(&ctx, dst, src);
+    } else {
+        aes128DecryptBlock(&ctx, dst, src);
+    }
+}
+
 size_t aes128XtsNintendoCrypt(Aes128XtsContext *ctx, void *dst, const void *src, size_t size, u64 sector, size_t sector_size, bool encrypt)
 {
     if (!ctx || !dst || !src || !size || !sector_size || (size % sector_size) != 0)
