@@ -3,6 +3,15 @@ name: Build nxdumptool-rewrite binaries
 on:
   push:
     branches: [ rewrite ]
+    paths:
+      - '.github/workflows/rewrite.yml'
+      - 'code_templates/**'
+      - 'include/**'
+      - 'libs/**'
+      - 'romfs/**'
+      - 'source/**'
+      - 'build.sh'
+      - 'Makefile'
 
   # Allows you to run this workflow manually from the Actions tab.
   workflow_dispatch:

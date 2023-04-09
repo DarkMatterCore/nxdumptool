@@ -28,13 +28,14 @@
 extern "C" {
 #endif
 
-#define TITLE_PATCH_TYPE_VALUE              (u64)0x800
+#define TITLE_PATCH_ID_OFFSET               (u64)0x800
 
-#define TITLE_ADDONCONTENT_TYPE_VALUE       (u64)0x1000
+#define TITLE_ADDONCONTENT_ID_OFFSET        (u64)0x1000
 #define TITLE_ADDONCONTENT_CONVERSION_MASK  (u64)0xFFFFFFFFFFFFF000
-#define TITLE_ADDONCONTENT_MAX_ENTRIES      2000
+#define TITLE_ADDONCONTENT_MIN_INDEX        1
+#define TITLE_ADDONCONTENT_MAX_INDEX        2000
 
-#define TITLE_DELTA_TYPE_VALUE              (u64)0xC00
+#define TITLE_DELTA_ID_OFFSET               (u64)0xC00
 
 /// Generated using ns application records and/or ncm content meta keys.
 /// Used by the UI to display title lists.
@@ -159,12 +160,12 @@ const char *titleGetNcmContentMetaTypeName(u8 content_meta_type);
 
 NX_INLINE u64 titleGetPatchIdByApplicationId(u64 app_id)
 {
-    return (app_id + TITLE_PATCH_TYPE_VALUE);
+    return (app_id + TITLE_PATCH_ID_OFFSET);
 }
 
 NX_INLINE u64 titleGetApplicationIdByPatchId(u64 patch_id)
 {
-    return (patch_id - TITLE_PATCH_TYPE_VALUE);
+    return (patch_id - TITLE_PATCH_ID_OFFSET);
 }
 
 NX_INLINE bool titleCheckIfPatchIdBelongsToApplicationId(u64 app_id, u64 patch_id)
@@ -174,34 +175,35 @@ NX_INLINE bool titleCheckIfPatchIdBelongsToApplicationId(u64 app_id, u64 patch_i
 
 NX_INLINE u64 titleGetAddOnContentBaseIdByApplicationId(u64 app_id)
 {
-    return ((app_id & TITLE_ADDONCONTENT_CONVERSION_MASK) + TITLE_ADDONCONTENT_TYPE_VALUE);
+    return ((app_id & TITLE_ADDONCONTENT_CONVERSION_MASK) + TITLE_ADDONCONTENT_ID_OFFSET);
 }
 
-NX_INLINE u64 titleGetAddOnContentIdByApplicationIdAndIndex(u64 app_id, u16 idx)
+NX_INLINE u64 titleGetAddOnContentMinIdByBaseId(u64 aoc_base_id)
 {
-    return (titleGetAddOnContentBaseIdByApplicationId(app_id) + idx + 1);
-}
-
-NX_INLINE u64 titleGetApplicationIdByAddOnContentId(u64 aoc_id)
-{
-    return ((aoc_id - TITLE_ADDONCONTENT_TYPE_VALUE) & TITLE_ADDONCONTENT_CONVERSION_MASK);
+    return (aoc_base_id + TITLE_ADDONCONTENT_MIN_INDEX);
 }
 
 NX_INLINE u64 titleGetAddOnContentMaxIdByBaseId(u64 aoc_base_id)
 {
-    return (aoc_base_id + TITLE_ADDONCONTENT_MAX_ENTRIES + 1);
+    return (aoc_base_id + TITLE_ADDONCONTENT_MAX_INDEX);
 }
 
-NX_INLINE bool titleIsAddOnContentIdValid(u64 aoc_id, u64 aoc_base_id, u64 aoc_max_id)
+NX_INLINE u64 titleGetApplicationIdByAddOnContentId(u64 aoc_id)
 {
-    return (aoc_id > aoc_base_id && aoc_id < aoc_max_id);
+    return ((aoc_id - TITLE_ADDONCONTENT_ID_OFFSET) & TITLE_ADDONCONTENT_CONVERSION_MASK);
+}
+
+NX_INLINE bool titleIsAddOnContentIdValid(u64 aoc_id, u64 aoc_min_id, u64 aoc_max_id)
+{
+    return (aoc_min_id <= aoc_id && aoc_id <= aoc_max_id);
 }
 
 NX_INLINE bool titleCheckIfAddOnContentIdBelongsToApplicationId(u64 app_id, u64 aoc_id)
 {
     u64 aoc_base_id = titleGetAddOnContentBaseIdByApplicationId(app_id);
+    u64 aoc_min_id = titleGetAddOnContentMinIdByBaseId(aoc_base_id);
     u64 aoc_max_id = titleGetAddOnContentMaxIdByBaseId(aoc_base_id);
-    return titleIsAddOnContentIdValid(aoc_id, aoc_base_id, aoc_max_id);
+    return titleIsAddOnContentIdValid(aoc_id, aoc_min_id, aoc_max_id);
 }
 
 NX_INLINE bool titleCheckIfAddOnContentIdsAreSiblings(u64 aoc_id_1, u64 aoc_id_2)
@@ -211,14 +213,20 @@ NX_INLINE bool titleCheckIfAddOnContentIdsAreSiblings(u64 aoc_id_1, u64 aoc_id_2
     return (app_id_1 == app_id_2 && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id_1, aoc_id_1) && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id_2, aoc_id_2));
 }
 
+/// Nintendo uses one-based indexes for IDs... but we won't.
+NX_INLINE u64 titleGetAddOnContentIdByApplicationIdAndIndex(u64 app_id, u16 idx)
+{
+    return (titleGetAddOnContentBaseIdByApplicationId(app_id) + 1 + idx);
+}
+
 NX_INLINE u64 titleGetDeltaIdByApplicationId(u64 app_id)
 {
-    return (app_id + TITLE_DELTA_TYPE_VALUE);
+    return (app_id + TITLE_DELTA_ID_OFFSET);
 }
 
 NX_INLINE u64 titleGetApplicationIdByDeltaId(u64 delta_id)
 {
-    return (delta_id - TITLE_DELTA_TYPE_VALUE);
+    return (delta_id - TITLE_DELTA_ID_OFFSET);
 }
 
 NX_INLINE bool titleCheckIfDeltaIdBelongsToApplicationId(u64 app_id, u64 delta_id)
@@ -228,12 +236,12 @@ NX_INLINE bool titleCheckIfDeltaIdBelongsToApplicationId(u64 app_id, u64 delta_i
 
 NX_INLINE u64 titleGetDataPatchIdByAddOnContentId(u64 aoc_id)
 {
-    return (aoc_id + TITLE_PATCH_TYPE_VALUE);
+    return (aoc_id + TITLE_PATCH_ID_OFFSET);
 }
 
 NX_INLINE u64 titleGetAddOnContentIdByDataPatchId(u64 data_patch_id)
 {
-    return (data_patch_id - TITLE_PATCH_TYPE_VALUE);
+    return (data_patch_id - TITLE_PATCH_ID_OFFSET);
 }
 
 NX_INLINE bool titleCheckIfDataPatchIdBelongsToAddOnContentId(u64 aoc_id, u64 data_patch_id)
