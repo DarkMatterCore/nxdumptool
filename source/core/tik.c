@@ -168,7 +168,7 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
     u8 *signature = NULL;
     u64 signature_size = 0;
 
-    bool generate_cert = false, dev_cert = false;
+    bool dev_cert = false;
     char cert_chain_issuer[0x40] = {0};
     static const char *common_cert_names[] = { "XS00000020", "XS00000022", NULL };
 
@@ -183,24 +183,20 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
         return false;
     }
 
-    /* Generate raw certificate chain for the new signature issuer (common), if needed. */
-    generate_cert = (out_raw_cert_chain && out_raw_cert_chain_size);
-    if (generate_cert)
+    /* Generate raw certificate chain for the new signature issuer (common). */
+    dev_cert = (strstr(tik_common_block->issuer, "CA00000004") != NULL);
+
+    for(u8 i = 0; common_cert_names[i] != NULL; i++)
     {
-        dev_cert = (strstr(tik_common_block->issuer, "CA00000004") != NULL);
+        sprintf(cert_chain_issuer, "Root-CA%08X-%s", dev_cert ? 4 : 3, common_cert_names[i]);
+        raw_cert_chain = certGenerateRawCertificateChainBySignatureIssuer(cert_chain_issuer, &raw_cert_chain_size);
+        if (raw_cert_chain) break;
+    }
 
-        for(u8 i = 0; common_cert_names[i] != NULL; i++)
-        {
-            sprintf(cert_chain_issuer, "Root-CA%08X-%s", dev_cert ? 4 : 3, common_cert_names[i]);
-            raw_cert_chain = certGenerateRawCertificateChainBySignatureIssuer(cert_chain_issuer, &raw_cert_chain_size);
-            if (raw_cert_chain) break;
-        }
-
-        if (!raw_cert_chain)
-        {
-            LOG_MSG_ERROR("Failed to generate raw certificate chain for common ticket signature issuer!");
-            return false;
-        }
+    if (!raw_cert_chain)
+    {
+        LOG_MSG_ERROR("Failed to generate raw certificate chain for common ticket signature issuer!");
+        return false;
     }
 
     /* Wipe signature. */
@@ -235,11 +231,8 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
     memset(tik->data + tik->size, 0, SIGNED_TIK_MAX_SIZE - tik->size);
 
     /* Update output pointers. */
-    if (generate_cert)
-    {
-        *out_raw_cert_chain = raw_cert_chain;
-        *out_raw_cert_chain_size = raw_cert_chain_size;
-    }
+    if (out_raw_cert_chain) *out_raw_cert_chain = raw_cert_chain;
+    if (out_raw_cert_chain_size) *out_raw_cert_chain_size = raw_cert_chain_size;
 
     return true;
 }
