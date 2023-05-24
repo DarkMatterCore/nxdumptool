@@ -231,7 +231,13 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
     memset(tik->data + tik->size, 0, SIGNED_TIK_MAX_SIZE - tik->size);
 
     /* Update output pointers. */
-    if (out_raw_cert_chain) *out_raw_cert_chain = raw_cert_chain;
+    if (out_raw_cert_chain)
+    {
+        *out_raw_cert_chain = raw_cert_chain;
+    } else {
+        free(raw_cert_chain);
+    }
+
     if (out_raw_cert_chain_size) *out_raw_cert_chain_size = raw_cert_chain_size;
 
     return true;
