@@ -32,12 +32,12 @@ jobs:
         run: |
           sudo -n apt-get update
           sudo -n apt-get upgrade -y patch autoconf automake tar bzip2 diffutils pkgconf fakeroot p7zip-full git file
-      #    sudo -n dkp-pacman --noconfirm -U \
-      #      "https://wii.leseratte10.de/devkitPro/switch/switch-libjson-c-0.16-1-any.pkg.tar.xz" \
-      #      "https://wii.leseratte10.de/devkitPro/switch/switch-libpng-1.6.39-2-any.pkg.tar.zst" \
-      #      "https://wii.leseratte10.de/devkitPro/switch/switch-zlib-1.2.13-1-any.pkg.tar.xz" \
-      #      "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.3-2-any.pkg.tar.zst" \
-      #      "https://wii.leseratte10.de/devkitPro/cmake/switch-cmake-1.5.0-1-any.pkg.tar.xz"
+          sudo -n dkp-pacman --noconfirm -U \
+            "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.3-2-any.pkg.tar.zst" \
+            "https://wii.leseratte10.de/devkitPro/cmake/switch-cmake-1.5.0-1-any.pkg.tar.xz"
+        #    "https://wii.leseratte10.de/devkitPro/switch/switch-libjson-c-0.16-1-any.pkg.tar.xz" \
+        #    "https://wii.leseratte10.de/devkitPro/switch/switch-libpng-1.6.39-2-any.pkg.tar.zst" \
+        #    "https://wii.leseratte10.de/devkitPro/switch/switch-zlib-1.2.13-1-any.pkg.tar.xz"
 
       - name: Silence all git safe directory warnings
         run: git config --system --add safe.directory '*'
