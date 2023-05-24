@@ -38,6 +38,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <sys/param.h>
+#include <dirent.h>
 #include <assert.h>
 #include <unistd.h>
 
@@ -76,10 +77,8 @@
 #define LZ4_STATIC_LINKING_ONLY /* Required by LZ4 to enable in-place decompression. */
 #include "lz4.h"
 
-/// Used to store version numbers expressed in dot notation:
-///     * System version: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
-///     * Application version: "{release}.{private}".
-/// Referenced by multiple header files.
+/// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
+/// Used by system version fields.
 typedef struct {
     union {
         u32 value;
@@ -89,18 +88,28 @@ typedef struct {
             u32 micro         : 4;
             u32 minor         : 6;
             u32 major         : 6;
-        } system_version;
-        struct {
-            u32 private_ver   : 16;
-            u32 release_ver   : 16;
-        } application_version;
+        };
     };
-} Version;
+} SystemVersion;
 
-NXDT_ASSERT(Version, 0x4);
+NXDT_ASSERT(SystemVersion, 0x4);
+
+/// Used to store version numbers expressed in dot notation: "{release}.{private}".
+/// Used by application version fields.
+typedef struct {
+    union {
+        u32 value;
+        struct {
+            u32 private_ver : 16;
+            u32 release_ver : 16;
+        };
+    };
+} ApplicationVersion;
+
+NXDT_ASSERT(ApplicationVersion, 0x4);
 
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{relstep}".
-/// Only used by GameCardFwMode and NcaSdkAddOnVersion.
+/// Used by SDK version fields. This format was also used for system version fields prior to HOS 3.0.0.
 typedef struct {
     union {
         u32 value;
@@ -114,5 +123,17 @@ typedef struct {
 } SdkAddOnVersion;
 
 NXDT_ASSERT(SdkAddOnVersion, 0x4);
+
+/// Convenient wrapper for all version structs.
+typedef struct {
+    union {
+        u32 value;
+        SystemVersion system_version;
+        ApplicationVersion application_version;
+        SdkAddOnVersion sdk_addon_version;
+    };
+} Version;
+
+NXDT_ASSERT(Version, 0x4);
 
 #endif /* __NXDT_INCLUDES_H__ */

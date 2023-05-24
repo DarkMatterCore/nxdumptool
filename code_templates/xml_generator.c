@@ -280,7 +280,7 @@ int main(int argc, char *argv[])
         NcmContentInfo *content_info = &(user_app_data.app_info->content_infos[i]);
         if (content_info->content_type == NcmContentType_Meta) continue;
 
-        if (!ncaInitializeContext(&(nca_ctx[j]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+        if (!ncaInitializeContext(&(nca_ctx[j]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
             content_info, user_app_data.app_info->version.value, &tik))
         {
             consolePrint("%s #%u initialize nca ctx failed\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
@@ -330,7 +330,7 @@ int main(int argc, char *argv[])
         j++;
     }
 
-    if (!ncaInitializeContext(&(nca_ctx[meta_idx]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+    if (!ncaInitializeContext(&(nca_ctx[meta_idx]), user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
         titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Meta, 0), user_app_data.app_info->version.value, &tik))
     {
         consolePrint("Meta nca initialize ctx failed\n");

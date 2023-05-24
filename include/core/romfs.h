@@ -193,6 +193,7 @@ NX_INLINE void romfsFreeContext(RomFileSystemContext *ctx)
 }
 
 /// Functions to reset the current directory/file entry offset.
+
 NX_INLINE void romfsResetDirectoryTableOffset(RomFileSystemContext *ctx)
 {
     if (ctx) ctx->cur_dir_offset = 0;
@@ -211,6 +212,7 @@ NX_INLINE bool romfsIsValidContext(RomFileSystemContext *ctx)
 }
 
 /// Functions to retrieve a directory/file entry.
+
 NX_INLINE void *romfsGetEntryByOffset(RomFileSystemContext *ctx, void *entry_table, u64 entry_table_size, u64 entry_size, u64 entry_offset)
 {
     if (!romfsIsValidContext(ctx) || !entry_table || !entry_table_size || !entry_size || (entry_offset + entry_size) > entry_table_size) return NULL;
@@ -238,6 +240,7 @@ NX_INLINE RomFileSystemFileEntry *romfsGetCurrentFileEntry(RomFileSystemContext 
 }
 
 /// Functions to check if it's possible to move to the next directory/file entry based on the current directory/file entry offset.
+
 NX_INLINE bool romfsCanMoveToNextEntry(RomFileSystemContext *ctx, void *entry_table, u64 entry_table_size, u64 entry_size, u64 entry_offset)
 {
     if (!romfsIsValidContext(ctx) || !entry_table || !entry_table_size || entry_size < 4 || (entry_offset + entry_size) > entry_table_size) return false;
@@ -256,6 +259,7 @@ NX_INLINE bool romfsCanMoveToNextFileEntry(RomFileSystemContext *ctx)
 }
 
 /// Functions to update the current directory/file entry offset to make it point to the next directory/file entry.
+
 NX_INLINE bool romfsMoveToNextEntry(RomFileSystemContext *ctx, void *entry_table, u64 entry_table_size, u64 entry_size, u64 *entry_offset)
 {
     if (!romfsIsValidContext(ctx) || !entry_table || !entry_table_size || entry_size < 4 || !entry_offset || (*entry_offset + entry_size) > entry_table_size) return false;
@@ -275,6 +279,7 @@ NX_INLINE bool romfsMoveToNextFileEntry(RomFileSystemContext *ctx)
 }
 
 /// NCA patch management functions.
+
 NX_INLINE void romfsWriteFileEntryPatchToMemoryBuffer(RomFileSystemContext *ctx, RomFileSystemFileEntryPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
     if (!romfsIsValidContext(ctx) || ctx->is_patch || ctx->default_storage_ctx->base_storage_type != NcaStorageBaseStorageType_Regular || !patch || \

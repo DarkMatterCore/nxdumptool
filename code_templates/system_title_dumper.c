@@ -122,6 +122,9 @@ static void dumpPartitionFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
             goto end;
         }
 
+        /* Set file size. */
+        ftruncate(fileno(filefd), (off_t)pfs_entry->size);
+
         consolePrint("dumping \"%s\"...\n", pfs_entry_name);
 
         u64 blksize = BLOCK_SIZE;
@@ -194,6 +197,9 @@ static void dumpRomFs(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
             consolePrint("failed to create \"%s\"!\n", path);
             goto end;
         }
+
+        /* Set file size. */
+        ftruncate(fileno(filefd), (off_t)romfs_file_entry->size);
 
         consolePrint("dumping \"%s\"...\n", path + path_len);
 

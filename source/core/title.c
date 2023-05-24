@@ -540,6 +540,8 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
 
 NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system, u32 extra_app_count);
 
+NX_INLINE u64 titleGetApplicationIdByMetaKey(const NcmContentMetaKey *meta_key);
+
 static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_storage);
 static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, NcmContentMetaKey **out_meta_keys, u32 *out_meta_key_count);
 static bool titleGetContentInfosForMetaKey(NcmContentMetaDatabase *ncm_db, const NcmContentMetaKey *meta_key, NcmContentInfo **out_content_infos, u32 *out_content_count);
@@ -1777,6 +1779,33 @@ NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 ti
     return NULL;
 }
 
+NX_INLINE u64 titleGetApplicationIdByMetaKey(const NcmContentMetaKey *meta_key)
+{
+    if (!meta_key) return 0;
+
+    u64 app_id = meta_key->id;
+
+    switch(meta_key->type)
+    {
+        case NcmContentMetaType_Patch:
+            app_id = titleGetApplicationIdByPatchId(meta_key->id);
+            break;
+        case NcmContentMetaType_AddOnContent:
+            app_id = titleGetApplicationIdByAddOnContentId(meta_key->id);
+            break;
+        case NcmContentMetaType_Delta:
+            app_id = titleGetApplicationIdByDeltaId(meta_key->id);
+            break;
+        case NcmContentMetaType_DataPatch:
+            app_id = titleGetApplicationIdByDataPatchId(meta_key->id);
+            break;
+        default:
+            break;
+    }
+
+    return app_id;
+}
+
 static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_storage)
 {
     if (!title_storage || title_storage->storage_id < NcmStorageId_GameCard || title_storage->storage_id > NcmStorageId_SdCard || !serviceIsActive(&(title_storage->ncm_db.s)))
@@ -1850,12 +1879,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
         utilsGenerateFormattedSizeString((double)cur_title_info->size, cur_title_info->size_str, sizeof(cur_title_info->size_str));
 
         /* Retrieve application metadata. */
-        u64 app_id = (cur_title_info->meta_key.type <= NcmContentMetaType_Application ? cur_title_info->meta_key.id : \
-                     (cur_title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(cur_title_info->meta_key.id) : \
-                     (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(cur_title_info->meta_key.id) : \
-                     (cur_title_info->meta_key.type == NcmContentMetaType_Delta ? titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id) : \
-                     (cur_title_info->meta_key.type == NcmContentMetaType_DataPatch ? titleGetApplicationIdByDataPatchId(cur_title_info->meta_key.id) : 0)))));
-
+        u64 app_id = titleGetApplicationIdByMetaKey(&(cur_title_info->meta_key));
         cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, storage_id == NcmStorageId_BuiltInSystem, 0);
         if (!cur_title_info->app_metadata && storage_id == NcmStorageId_BuiltInSystem)
         {
@@ -2097,10 +2121,7 @@ static void titleUpdateTitleInfoLinkedLists(void)
             {
                 /* We're dealing with a patch, an add-on content or an add-on content patch. */
                 /* We'll just retrieve a pointer to the first matching user application entry and use it to set a pointer to an application metadata entry. */
-                u64 app_id = (child_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(child_info->meta_key.id) : \
-                             (child_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(child_info->meta_key.id) : \
-                             titleGetApplicationIdByDataPatchId(child_info->meta_key.id)));
-
+                u64 app_id = titleGetApplicationIdByMetaKey(&(child_info->meta_key));
                 TitleInfo *parent = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, app_id);
                 if (parent)
                 {
@@ -2263,14 +2284,9 @@ static bool titleRefreshGameCardTitleInfo(void)
         TitleInfo *cur_title_info = titles[i];
         if (!cur_title_info) continue;
 
-        u64 app_id = (cur_title_info->meta_key.type <= NcmContentMetaType_Application ? cur_title_info->meta_key.id : \
-                     (cur_title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(cur_title_info->meta_key.id) : \
-                     (cur_title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetApplicationIdByAddOnContentId(cur_title_info->meta_key.id) : \
-                     (cur_title_info->meta_key.type == NcmContentMetaType_Delta ? titleGetApplicationIdByDeltaId(cur_title_info->meta_key.id) : \
-                     (cur_title_info->meta_key.type == NcmContentMetaType_DataPatch ? titleGetApplicationIdByDataPatchId(cur_title_info->meta_key.id) : 0)))));
-
-        /* Do not proceed if we couldn't retrieve an application ID, if application metadata has already been retrieved, or if we can successfully retrieve it. */
-        if (!app_id || cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, extra_app_count)) != NULL) continue;
+        /* Do not proceed if application metadata has already been retrieved, or if we can successfully retrieve it. */
+        u64 app_id = titleGetApplicationIdByMetaKey(&(cur_title_info->meta_key));
+        if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, extra_app_count)) != NULL) continue;
 
         /* Retrieve application metadata pointer. */
         TitleApplicationMetadata *cur_app_metadata = g_userMetadata[g_userMetadataCount + extra_app_count];
@@ -2568,7 +2584,7 @@ static int titleInfoEntrySortFunction(const void *a, const void *b)
 static char *titleGetPatchVersionString(TitleInfo *title_info)
 {
     NcmContentInfo *nacp_content = NULL;
-    u8 storage_id = 0, hfs_partition_type = 0;
+    u8 storage_id = NcmStorageId_None, hfs_partition_type = HashFileSystemPartitionType_None;
     NcaContext *nca_ctx = NULL;
     NacpContext nacp_ctx = {0};
     char display_version[0x11] = {0}, *str = NULL;
@@ -2581,7 +2597,7 @@ static char *titleGetPatchVersionString(TitleInfo *title_info)
 
     /* Update parameters. */
     storage_id = title_info->storage_id;
-    if (storage_id == NcmStorageId_GameCard) hfs_partition_type = GameCardHashFileSystemPartitionType_Secure;
+    if (storage_id == NcmStorageId_GameCard) hfs_partition_type = HashFileSystemPartitionType_Secure;
 
     /* Allocate memory for the NCA context. */
     nca_ctx = calloc(1, sizeof(NcaContext));

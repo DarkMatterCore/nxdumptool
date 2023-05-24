@@ -35,8 +35,6 @@
 
 #define GAMECARD_STORAGE_AREA_NAME(x)           ((x) == GameCardStorageArea_Normal ? "normal" : ((x) == GameCardStorageArea_Secure ? "secure" : "none"))
 
-#define GAMECARD_HFS_PARTITION_NAME_INDEX(x)    ((x) - 1)
-
 #define LAFW_MAGIC                              0x4C414657              /* "LAFW". */
 
 /* Type definitions. */
@@ -93,14 +91,6 @@ static MemoryLocation g_fsProgramMemory = {
     .mask = 0,
     .data = NULL,
     .data_size = 0
-};
-
-static const char *g_gameCardHfsPartitionNames[] = {
-    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Root)]   = "root",
-    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Update)] = "update",
-    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Logo)]   = "logo",
-    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Normal)] = "normal",
-    [GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Secure)] = "secure"
 };
 
 static const char *g_gameCardHosVersionStrings[GameCardFwVersion_Count] = {
@@ -457,7 +447,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(Version *out)
 
 bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemContext *out)
 {
-    if (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count || !out)
+    if (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count || !out)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -471,30 +461,30 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
     SCOPED_LOCK(&g_gameCardMutex)
     {
         /* Get pointer to the Hash FS context for the requested partition. */
-        HashFileSystemContext *fs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
-        if (!fs_ctx) break;
+        HashFileSystemContext *hfs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
+        if (!hfs_ctx) break;
 
         /* Fill Hash FS context. */
-        out->name = strdup(fs_ctx->name);
+        out->name = strdup(hfs_ctx->name);
         if (!out->name)
         {
-            LOG_MSG_ERROR("Failed to duplicate Hash FS partition name! (%s).", fs_ctx->name);
+            LOG_MSG_ERROR("Failed to duplicate Hash FS partition name! (%s).", hfs_ctx->name);
             break;
         }
 
-        out->type = fs_ctx->type;
-        out->offset = fs_ctx->offset;
-        out->size = fs_ctx->size;
-        out->header_size = fs_ctx->header_size;
+        out->type = hfs_ctx->type;
+        out->offset = hfs_ctx->offset;
+        out->size = hfs_ctx->size;
+        out->header_size = hfs_ctx->header_size;
 
-        out->header = calloc(fs_ctx->header_size, sizeof(u8));
+        out->header = calloc(hfs_ctx->header_size, sizeof(u8));
         if (!out->header)
         {
-            LOG_MSG_ERROR("Failed to duplicate Hash FS partition header! (%s).", fs_ctx->name);
+            LOG_MSG_ERROR("Failed to duplicate Hash FS partition header! (%s).", hfs_ctx->name);
             break;
         }
 
-        memcpy(out->header, fs_ctx->header, fs_ctx->header_size);
+        memcpy(out->header, hfs_ctx->header, hfs_ctx->header_size);
 
         /* Update flag. */
         ret = true;
@@ -507,7 +497,7 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
 
 bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size)
 {
-    if (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count || !entry_name || !*entry_name || (!out_offset && !out_size))
+    if (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count || !entry_name || !*entry_name || (!out_offset && !out_size))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -518,16 +508,16 @@ bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char 
     SCOPED_LOCK(&g_gameCardMutex)
     {
         /* Get pointer to the Hash FS context for the requested partition. */
-        HashFileSystemContext *fs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
-        if (!fs_ctx) break;
+        HashFileSystemContext *hfs_ctx = _gamecardGetHashFileSystemContext(hfs_partition_type);
+        if (!hfs_ctx) break;
 
         /* Get Hash FS entry by name. */
-        HashFileSystemEntry *fs_entry = hfsGetEntryByName(fs_ctx, entry_name);
-        if (!fs_entry) break;
+        HashFileSystemEntry *hfs_entry = hfsGetEntryByName(hfs_ctx, entry_name);
+        if (!hfs_entry) break;
 
         /* Update output variables. */
-        if (out_offset) *out_offset = (fs_ctx->offset + fs_ctx->header_size + fs_entry->offset);
-        if (out_size) *out_size = fs_entry->size;
+        if (out_offset) *out_offset = (hfs_ctx->offset + hfs_ctx->header_size + hfs_entry->offset);
+        if (out_size) *out_size = hfs_entry->size;
 
         /* Update flag. */
         ret = true;
@@ -734,9 +724,9 @@ static void gamecardLoadInfo(void)
 {
     if (g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded) return;
 
-    HashFileSystemContext *root_fs_ctx = NULL;
-    u32 root_fs_entry_count = 0, root_fs_name_table_size = 0;
-    char *root_fs_name_table = NULL;
+    HashFileSystemContext *root_hfs_ctx = NULL;
+    u32 root_hfs_entry_count = 0, root_hfs_name_table_size = 0;
+    char *root_hfs_name_table = NULL;
 
     /* Set initial gamecard status. */
     g_gameCardStatus = GameCardStatus_InsertedAndInfoNotLoaded;
@@ -781,12 +771,12 @@ static void gamecardLoadInfo(void)
     }
 
     /* Initialize Hash FS context for the root partition. */
-    root_fs_ctx = gamecardInitializeHashFileSystemContext(NULL, g_gameCardHeader.partition_fs_header_address, 0, g_gameCardHeader.partition_fs_header_hash, 0, g_gameCardHeader.partition_fs_header_size);
-    if (!root_fs_ctx) goto end;
+    root_hfs_ctx = gamecardInitializeHashFileSystemContext(NULL, g_gameCardHeader.partition_fs_header_address, 0, g_gameCardHeader.partition_fs_header_hash, 0, g_gameCardHeader.partition_fs_header_size);
+    if (!root_hfs_ctx) goto end;
 
     /* Calculate total Hash FS partition count. */
-    root_fs_entry_count = hfsGetEntryCount(root_fs_ctx);
-    g_gameCardHfsCount = (root_fs_entry_count + 1);
+    root_hfs_entry_count = hfsGetEntryCount(root_hfs_ctx);
+    g_gameCardHfsCount = (root_hfs_entry_count + 1);
 
     /* Allocate Hash FS context pointer array. */
     g_gameCardHfsCtx = calloc(g_gameCardHfsCount, sizeof(HashFileSystemContext*));
@@ -797,26 +787,26 @@ static void gamecardLoadInfo(void)
     }
 
     /* Set root partition context as the first pointer. */
-    g_gameCardHfsCtx[0] = root_fs_ctx;
+    g_gameCardHfsCtx[0] = root_hfs_ctx;
 
     /* Get root partition name table. */
-    root_fs_name_table_size = ((HashFileSystemHeader*)root_fs_ctx->header)->name_table_size;
-    root_fs_name_table = hfsGetNameTable(root_fs_ctx);
+    root_hfs_name_table_size = ((HashFileSystemHeader*)root_hfs_ctx->header)->name_table_size;
+    root_hfs_name_table = hfsGetNameTable(root_hfs_ctx);
 
     /* Initialize Hash FS contexts for the child partitions. */
-    for(u32 i = 0; i < root_fs_entry_count; i++)
+    for(u32 i = 0; i < root_hfs_entry_count; i++)
     {
-        HashFileSystemEntry *fs_entry = hfsGetEntryByIndex(root_fs_ctx, i);
-        char *fs_entry_name = (root_fs_name_table + fs_entry->name_offset);
-        u64 fs_entry_offset = (root_fs_ctx->offset + root_fs_ctx->header_size + fs_entry->offset);
+        HashFileSystemEntry *hfs_entry = hfsGetEntryByIndex(root_hfs_ctx, i);
+        char *hfs_entry_name = (root_hfs_name_table + hfs_entry->name_offset);
+        u64 hfs_entry_offset = (root_hfs_ctx->offset + root_hfs_ctx->header_size + hfs_entry->offset);
 
-        if (fs_entry->name_offset >= root_fs_name_table_size || !*fs_entry_name)
+        if (hfs_entry->name_offset >= root_hfs_name_table_size || !*hfs_entry_name)
         {
             LOG_MSG_ERROR("Invalid name for root Hash FS partition entry #%u!", i);
             goto end;
         }
 
-        g_gameCardHfsCtx[i + 1] = gamecardInitializeHashFileSystemContext(fs_entry_name, fs_entry_offset, fs_entry->size, fs_entry->hash, fs_entry->hash_target_offset, fs_entry->hash_target_size);
+        g_gameCardHfsCtx[i + 1] = gamecardInitializeHashFileSystemContext(hfs_entry_name, hfs_entry_offset, hfs_entry->size, hfs_entry->hash, hfs_entry->hash_target_offset, hfs_entry->hash_target_size);
         if (!g_gameCardHfsCtx[i + 1]) goto end;
     }
 
@@ -826,10 +816,10 @@ static void gamecardLoadInfo(void)
 end:
     if (g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded)
     {
-        if (!g_gameCardHfsCtx && root_fs_ctx)
+        if (!g_gameCardHfsCtx && root_hfs_ctx)
         {
-            hfsFreeContext(root_fs_ctx);
-            free(root_fs_ctx);
+            hfsFreeContext(root_hfs_ctx);
+            free(root_hfs_ctx);
         }
 
         gamecardFreeInfo(false);
@@ -850,11 +840,11 @@ static void gamecardFreeInfo(bool clear_status)
     {
         for(u32 i = 0; i < g_gameCardHfsCount; i++)
         {
-            HashFileSystemContext *cur_fs_ctx = g_gameCardHfsCtx[i];
-            if (cur_fs_ctx)
+            HashFileSystemContext *cur_hfs_ctx = g_gameCardHfsCtx[i];
+            if (cur_hfs_ctx)
             {
-                hfsFreeContext(cur_fs_ctx);
-                free(cur_fs_ctx);
+                hfsFreeContext(cur_hfs_ctx);
+                free(cur_hfs_ctx);
             }
         }
 
@@ -1225,9 +1215,9 @@ NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
 static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size)
 {
     u32 i = 0, magic = 0;
-    HashFileSystemContext *fs_ctx = NULL;
-    HashFileSystemHeader fs_header = {0};
-    u8 fs_header_hash[SHA256_HASH_SIZE] = {0};
+    HashFileSystemContext *hfs_ctx = NULL;
+    HashFileSystemHeader hfs_header = {0};
+    u8 hfs_header_hash[SHA256_HASH_SIZE] = {0};
 
     bool success = false, dump_fs_header = false;
 
@@ -1239,149 +1229,150 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     }
 
     /* Allocate memory for the output context. */
-    fs_ctx = calloc(1, sizeof(HashFileSystemContext));
-    if (!fs_ctx)
+    hfs_ctx = calloc(1, sizeof(HashFileSystemContext));
+    if (!hfs_ctx)
     {
         LOG_MSG_ERROR("Unable to allocate memory for Hash FS context! (offset 0x%lX).", offset);
         goto end;
     }
 
     /* Duplicate partition name. */
-    fs_ctx->name = (name ? strdup(name) : strdup(g_gameCardHfsPartitionNames[GAMECARD_HFS_PARTITION_NAME_INDEX(GameCardHashFileSystemPartitionType_Root)]));
-    if (!fs_ctx->name)
+    hfs_ctx->name = (name ? strdup(name) : strdup(hfsGetPartitionNameString(HashFileSystemPartitionType_Root)));
+    if (!hfs_ctx->name)
     {
         LOG_MSG_ERROR("Failed to duplicate Hash FS partition name! (offset 0x%lX).", offset);
         goto end;
     }
 
     /* Determine Hash FS partition type. */
-    for(i = GameCardHashFileSystemPartitionType_Root; i < GameCardHashFileSystemPartitionType_Count; i++)
+    for(i = HashFileSystemPartitionType_Root; i < HashFileSystemPartitionType_Count; i++)
     {
-        if (!strcmp(g_gameCardHfsPartitionNames[GAMECARD_HFS_PARTITION_NAME_INDEX(i)], fs_ctx->name)) break;
+        const char *hfs_partition_name = hfsGetPartitionNameString((u8)i);
+        if (hfs_partition_name && !strcmp(hfs_partition_name, hfs_ctx->name)) break;
     }
 
-    if (i >= GameCardHashFileSystemPartitionType_Count)
+    if (i >= HashFileSystemPartitionType_Count)
     {
-        LOG_MSG_ERROR("Failed to find a matching Hash FS partition type for \"%s\"! (offset 0x%lX).", fs_ctx->name, offset);
+        LOG_MSG_ERROR("Failed to find a matching Hash FS partition type for \"%s\"! (offset 0x%lX).", hfs_ctx->name, offset);
         goto end;
     }
 
-    fs_ctx->type = i;
+    hfs_ctx->type = i;
 
     /* Read partial Hash FS header. */
-    if (!gamecardReadStorageArea(&fs_header, sizeof(HashFileSystemHeader), offset))
+    if (!gamecardReadStorageArea(&hfs_header, sizeof(HashFileSystemHeader), offset))
     {
-        LOG_MSG_ERROR("Failed to read partial Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
+        LOG_MSG_ERROR("Failed to read partial Hash FS header! (\"%s\", offset 0x%lX).", hfs_ctx->name, offset);
         goto end;
     }
 
-    magic = __builtin_bswap32(fs_header.magic);
+    magic = __builtin_bswap32(hfs_header.magic);
     if (magic != HFS0_MAGIC)
     {
-        LOG_MSG_ERROR("Invalid Hash FS magic word! (0x%08X) (\"%s\", offset 0x%lX).", magic, fs_ctx->name, offset);
+        LOG_MSG_ERROR("Invalid Hash FS magic word! (0x%08X) (\"%s\", offset 0x%lX).", magic, hfs_ctx->name, offset);
         dump_fs_header = true;
         goto end;
     }
 
     /* Check Hash FS entry count and name table size. */
     /* Only allow a zero entry count if we're not dealing with the root partition. Never allow a zero-sized name table. */
-    if ((!name && !fs_header.entry_count) || !fs_header.name_table_size)
+    if ((!name && !hfs_header.entry_count) || !hfs_header.name_table_size)
     {
-        LOG_MSG_ERROR("Invalid Hash FS entry count / name table size! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
+        LOG_MSG_ERROR("Invalid Hash FS entry count / name table size! (\"%s\", offset 0x%lX).", hfs_ctx->name, offset);
         dump_fs_header = true;
         goto end;
     }
 
     /* Calculate full Hash FS header size. */
-    fs_ctx->header_size = (sizeof(HashFileSystemHeader) + (fs_header.entry_count * sizeof(HashFileSystemEntry)) + fs_header.name_table_size);
-    fs_ctx->header_size = ALIGN_UP(fs_ctx->header_size, GAMECARD_PAGE_SIZE);
+    hfs_ctx->header_size = (sizeof(HashFileSystemHeader) + (hfs_header.entry_count * sizeof(HashFileSystemEntry)) + hfs_header.name_table_size);
+    hfs_ctx->header_size = ALIGN_UP(hfs_ctx->header_size, GAMECARD_PAGE_SIZE);
 
     /* Allocate memory for the full Hash FS header. */
-    fs_ctx->header = calloc(fs_ctx->header_size, sizeof(u8));
-    if (!fs_ctx->header)
+    hfs_ctx->header = calloc(hfs_ctx->header_size, sizeof(u8));
+    if (!hfs_ctx->header)
     {
-        LOG_MSG_ERROR("Unable to allocate 0x%lX bytes buffer for the full Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->header_size, fs_ctx->name, offset);
+        LOG_MSG_ERROR("Unable to allocate 0x%lX bytes buffer for the full Hash FS header! (\"%s\", offset 0x%lX).", hfs_ctx->header_size, hfs_ctx->name, offset);
         goto end;
     }
 
     /* Read full Hash FS header. */
-    if (!gamecardReadStorageArea(fs_ctx->header, fs_ctx->header_size, offset))
+    if (!gamecardReadStorageArea(hfs_ctx->header, hfs_ctx->header_size, offset))
     {
-        LOG_MSG_ERROR("Failed to read full Hash FS header! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
+        LOG_MSG_ERROR("Failed to read full Hash FS header! (\"%s\", offset 0x%lX).", hfs_ctx->name, offset);
         goto end;
     }
 
     /* Verify Hash FS header (if possible). */
-    if (hash && hash_target_size && (hash_target_offset + hash_target_size) <= fs_ctx->header_size)
+    if (hash && hash_target_size && (hash_target_offset + hash_target_size) <= hfs_ctx->header_size)
     {
-        sha256CalculateHash(fs_header_hash, fs_ctx->header + hash_target_offset, hash_target_size);
-        if (memcmp(fs_header_hash, hash, SHA256_HASH_SIZE) != 0)
+        sha256CalculateHash(hfs_header_hash, hfs_ctx->header + hash_target_offset, hash_target_size);
+        if (memcmp(hfs_header_hash, hash, SHA256_HASH_SIZE) != 0)
         {
-            LOG_MSG_ERROR("Hash FS header doesn't match expected SHA-256 hash! (\"%s\", offset 0x%lX).", fs_ctx->name, offset);
+            LOG_MSG_ERROR("Hash FS header doesn't match expected SHA-256 hash! (\"%s\", offset 0x%lX).", hfs_ctx->name, offset);
             goto end;
         }
     }
 
     /* Fill context. */
-    fs_ctx->offset = offset;
+    hfs_ctx->offset = offset;
 
     if (name)
     {
         /* Use provided partition size. */
-        fs_ctx->size = size;
+        hfs_ctx->size = size;
     } else {
         /* Calculate root partition size. */
-        HashFileSystemEntry *fs_entry = hfsGetEntryByIndex(fs_ctx, fs_header.entry_count - 1);
-        fs_ctx->size = (fs_ctx->header_size + fs_entry->offset + fs_entry->size);
+        HashFileSystemEntry *hfs_entry = hfsGetEntryByIndex(hfs_ctx, hfs_header.entry_count - 1);
+        hfs_ctx->size = (hfs_ctx->header_size + hfs_entry->offset + hfs_entry->size);
     }
 
     /* Update flag. */
     success = true;
 
 end:
-    if (!success && fs_ctx)
+    if (!success && hfs_ctx)
     {
-        if (dump_fs_header) LOG_DATA_DEBUG(&fs_header, sizeof(HashFileSystemHeader), "Partial Hash FS header dump (\"%s\", offset 0x%lX):", fs_ctx->name, offset);
+        if (dump_fs_header) LOG_DATA_DEBUG(&hfs_header, sizeof(HashFileSystemHeader), "Partial Hash FS header dump (\"%s\", offset 0x%lX):", hfs_ctx->name, offset);
 
-        if (fs_ctx->header) free(fs_ctx->header);
+        if (hfs_ctx->header) free(hfs_ctx->header);
 
-        if (fs_ctx->name) free(fs_ctx->name);
+        if (hfs_ctx->name) free(hfs_ctx->name);
 
-        free(fs_ctx);
-        fs_ctx = NULL;
+        free(hfs_ctx);
+        hfs_ctx = NULL;
     }
 
-    return fs_ctx;
+    return hfs_ctx;
 }
 
 static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition_type)
 {
-    HashFileSystemContext *fs_ctx = NULL;
+    HashFileSystemContext *hfs_ctx = NULL;
 
-    if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || !hfs_partition_type || \
-        hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)
+    if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || \
+        hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         goto end;
     }
 
     /* Return right away if the root partition was requested. */
-    if (hfs_partition_type == GameCardHashFileSystemPartitionType_Root)
+    if (hfs_partition_type == HashFileSystemPartitionType_Root)
     {
-        fs_ctx = g_gameCardHfsCtx[0];
+        hfs_ctx = g_gameCardHfsCtx[0];
         goto end;
     }
 
     /* Try to find the requested partition by looping through our Hash FS contexts. */
     for(u32 i = 1; i < g_gameCardHfsCount; i++)
     {
-        fs_ctx = g_gameCardHfsCtx[i];
-        if (fs_ctx->type == hfs_partition_type) break;
-        fs_ctx = NULL;
+        hfs_ctx = g_gameCardHfsCtx[i];
+        if (hfs_ctx->type == hfs_partition_type) break;
+        hfs_ctx = NULL;
     }
 
-    if (!fs_ctx) LOG_MSG_ERROR("Failed to locate Hash FS partition with type %u!", hfs_partition_type);
+    if (!hfs_ctx) LOG_MSG_ERROR("Failed to locate Hash FS partition with type %u!", hfs_partition_type);
 
 end:
-    return fs_ctx;
+    return hfs_ctx;
 }

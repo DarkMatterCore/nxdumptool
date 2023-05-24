@@ -1,6 +1,6 @@
 # nxdumptool USB Application Binary Interface (ABI) Technical Specification
 
-This Markdown document aims to explain the technical details behind the ABI used by nxdumptool to communicate with a USB host device connected to the console. As of this writing (May 11th, 2021), the current ABI version is `1`.
+This Markdown document aims to explain the technical details behind the ABI used by nxdumptool to communicate with a USB host device connected to the console. As of this writing (April 19th, 2023), the current ABI version is `1.1`.
 
 In order to avoid unnecessary clutter, this document assumes the reader is already familiar with homebrew launching on the Nintendo Switch, as well as USB concepts such as device/configuration/interface/endpoint descriptors and bulk mode transfers. Shall this not be the case, a small list of helpful resources is available at the end of this document.
 
@@ -109,14 +109,14 @@ All commands, with the exception of `CancelFileTransfer` and `EndSession`, yield
 
 #### StartSession
 
-| Offset | Size | Description                               |
-|:------:|------|-------------------------------------------|
-|  0x00  | 0x01 | nxdumptool version (major).               |
-|  0x01  | 0x01 | nxdumptool version (minor).               |
-|  0x02  | 0x01 | nxdumptool version (micro).               |
-|  0x03  | 0x01 | nxdumptool USB ABI version.               |
-|  0x04  | 0x08 | Git commit hash (NULL terminated string). |
-|  0x0C  | 0x04 | Reserved.                                 |
+| Offset | Size | Description                                                         |
+|:------:|------|---------------------------------------------------------------------|
+|  0x00  | 0x01 | nxdumptool version (major).                                         |
+|  0x01  | 0x01 | nxdumptool version (minor).                                         |
+|  0x02  | 0x01 | nxdumptool version (micro).                                         |
+|  0x03  | 0x01 | nxdumptool USB ABI version (high nibble: major, low nibble: minor). |
+|  0x04  | 0x08 | Git commit hash (NULL terminated string).                           |
+|  0x0C  | 0x04 | Reserved.                                                           |
 
 This is the first USB command issued by nxdumptool upon connection to a USB host device. If it succeeds, further USB commands may be sent.
 
@@ -180,7 +180,7 @@ Status responses are expected by nxdumptool at certain points throughout the com
 * Right after receiving a command header and/or command block.
 * Right after receiving the last file data chunk from a [SendFileProperties](#sendfileproperties) command.
 
-The endpoint max packet size must be sent back to the target console using status responses because the `usb:ds` API provides no way for homebrew applications to know which device descriptor and/or speed was selected by the USB host device.
+The endpoint max packet size must be sent back to the target console using status responses because `usb:ds` API's `GetUsbDeviceSpeed` cmd is only available under Horizon OS 8.0.0+ -- and we definitely want to provide USB communication support under lower versions.
 
 #### Status codes
 

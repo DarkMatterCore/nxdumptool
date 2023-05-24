@@ -25,7 +25,9 @@
 #include "nxdt_utils.h"
 #include "usb.h"
 
-#define USB_ABI_VERSION             1
+#define USB_ABI_VERSION_MAJOR       1
+#define USB_ABI_VERSION_MINOR       1
+#define USB_ABI_VERSION             ((USB_ABI_VERSION_MAJOR << 4) | USB_ABI_VERSION_MINOR)
 
 #define USB_CMD_HEADER_MAGIC        0x4E584454                  /* "NXDT". */
 
@@ -41,7 +43,7 @@
 #define USB_FS_EP_MAX_PACKET_SIZE   0x40                        /* 64 bytes. */
 
 #define USB_HS_BCD_REVISION         0x0200                      /* USB 2.0. */
-#define USB_HS_EP0_MAX_PACKET_SIZE  USB_FS_EP0_MAX_PACKET_SIZE  /* 64 bytes. */
+#define USB_HS_EP0_MAX_PACKET_SIZE  0x40                        /* 64 bytes. */
 #define USB_HS_EP_MAX_PACKET_SIZE   0x200                       /* 512 bytes. */
 
 #define USB_SS_BCD_REVISION         0x0300                      /* USB 3.0. */
@@ -145,27 +147,27 @@ enum usb_supported_speed {
 };
 
 /// Imported from libusb, with some adjustments.
-struct usb_bos_descriptor {
+struct PACKED usb_bos_descriptor {
     u8 bLength;
     u8 bDescriptorType; ///< Must match USB_DT_BOS.
     u16 wTotalLength;   ///< Length of this descriptor and all of its sub descriptors.
     u8 bNumDeviceCaps;  ///< The number of separate device capability descriptors in the BOS.
-} PACKED;
+};
 
 NXDT_ASSERT(struct usb_bos_descriptor, 0x5);
 
 /// Imported from libusb, with some adjustments.
-struct usb_2_0_extension_descriptor {
+struct PACKED usb_2_0_extension_descriptor {
     u8 bLength;
     u8 bDescriptorType;     ///< Must match USB_DT_DEVICE_CAPABILITY.
     u8 bDevCapabilityType;  ///< Must match USB_BT_USB_2_0_EXTENSION.
     u32 bmAttributes;       ///< usb_2_0_extension_attributes.
-} PACKED;
+};
 
 NXDT_ASSERT(struct usb_2_0_extension_descriptor, 0x7);
 
 /// Imported from libusb, with some adjustments.
-struct usb_ss_usb_device_capability_descriptor {
+struct PACKED usb_ss_usb_device_capability_descriptor {
     u8 bLength;
     u8 bDescriptorType;         ///< Must match USB_DT_DEVICE_CAPABILITY.
     u8 bDevCapabilityType;      ///< Must match USB_BT_SS_USB_DEVICE_CAPABILITY.
@@ -174,7 +176,7 @@ struct usb_ss_usb_device_capability_descriptor {
     u8 bFunctionalitySupport;   ///< The lowest speed at which all the functionality that the device supports is available to the user.
     u8 bU1DevExitLat;           ///< U1 Device Exit Latency.
     u16 bU2DevExitLat;          ///< U2 Device Exit Latency.
-} PACKED;
+};
 
 NXDT_ASSERT(struct usb_ss_usb_device_capability_descriptor, 0xA);
 
@@ -183,7 +185,7 @@ NXDT_ASSERT(struct usb_ss_usb_device_capability_descriptor, 0xA);
 static Mutex g_usbInterfaceMutex = 0;
 static UsbDsInterface *g_usbInterface = NULL;
 static UsbDsEndpoint *g_usbEndpointIn = NULL, *g_usbEndpointOut = NULL;
-static bool g_usbInterfaceInit = false;
+static bool g_usbInterfaceInit = false, g_usbHos5xEnabled = false;
 
 static Event *g_usbStateChangeEvent = NULL;
 static Thread g_usbDetectionThread = {0};
@@ -214,10 +216,11 @@ NX_INLINE bool usbAllocateTransferBuffer(void);
 NX_INLINE void usbFreeTransferBuffer(void);
 
 static bool usbInitializeComms(void);
+static bool usbInitializeComms5x(void);
+static bool usbInitializeComms1x(void);
 static void usbCloseComms(void);
 
-static bool usbInitializeDeviceInterface5x(void);
-static bool usbInitializeDeviceInterface1x(void);
+static bool _usbSendFileProperties(u64 file_size, const char *filename, u32 nsp_header_size, bool enforce_nsp_mode);
 
 NX_INLINE bool usbIsHostAvailable(void);
 
@@ -243,10 +246,10 @@ bool usbInitialize(void)
             break;
         }
 
-        /* Initialize USB device interface. */
+        /* Initialize USB comms. */
         if (!usbInitializeComms())
         {
-            LOG_MSG_ERROR("Failed to initialize USB device interface!");
+            LOG_MSG_ERROR("Failed to initialize USB comms!");
             break;
         }
 
@@ -334,45 +337,17 @@ u8 usbIsReady(void)
     return ret;
 }
 
-bool usbSendFileProperties(u64 file_size, const char *filename, u32 nsp_header_size)
+bool usbSendFileProperties(u64 file_size, const char *filename)
 {
     bool ret = false;
+    SCOPED_LOCK(&g_usbInterfaceMutex) ret = _usbSendFileProperties(file_size, filename, 0, false);
+    return ret;
+}
 
-    SCOPED_LOCK(&g_usbInterfaceMutex)
-    {
-        size_t filename_length = 0;
-
-        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || !filename || !(filename_length = strlen(filename)) || filename_length >= FS_MAX_PATH || \
-            (!g_nspTransferMode && ((file_size && nsp_header_size >= file_size) || g_usbTransferRemainingSize)) || (g_nspTransferMode && nsp_header_size))
-        {
-            LOG_MSG_ERROR("Invalid parameters!");
-            goto end;
-        }
-
-        /* Prepare command data. */
-        usbPrepareCommandHeader(UsbCommandType_SendFileProperties, (u32)sizeof(UsbCommandSendFileProperties));
-
-        UsbCommandSendFileProperties *cmd_block = (UsbCommandSendFileProperties*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
-        memset(cmd_block, 0, sizeof(UsbCommandSendFileProperties));
-
-        cmd_block->file_size = file_size;
-        cmd_block->filename_length = (u32)filename_length;
-        cmd_block->nsp_header_size = nsp_header_size;
-        snprintf(cmd_block->filename, sizeof(cmd_block->filename), "%s", filename);
-
-        /* Send command. */
-        ret = usbSendCommand();
-        if (!ret) goto end;
-
-        /* Update variables. */
-        g_usbTransferRemainingSize = file_size;
-        g_usbTransferWrittenSize = 0;
-        if (!g_nspTransferMode) g_nspTransferMode = (file_size && nsp_header_size);
-
-end:
-        if (!ret && g_nspTransferMode) g_nspTransferMode = false;
-    }
-
+bool usbSendNspProperties(u64 nsp_size, const char *filename, u32 nsp_header_size)
+{
+    bool ret = false;
+    SCOPED_LOCK(&g_usbInterfaceMutex) ret = _usbSendFileProperties(nsp_size, filename, nsp_header_size, true);
     return ret;
 }
 
@@ -426,7 +401,7 @@ bool usbSendFileData(void *data, u64 data_size)
         if (!(ret = usbWrite(buf, data_size)))
         {
             LOG_MSG_ERROR("Failed to write 0x%lX bytes long file data chunk from offset 0x%lX! (total size: 0x%lX).", data_size, g_usbTransferWrittenSize, \
-                    g_usbTransferRemainingSize + g_usbTransferWrittenSize);
+                                                                                                                      g_usbTransferRemainingSize + g_usbTransferWrittenSize);
             goto end;
         }
 
@@ -630,7 +605,7 @@ static bool usbStartSession(void)
     {
         /* Get the endpoint max packet size from the response sent by the USB host. */
         /* This is done to accurately know when and where to enable Zero Length Termination (ZLT) packets during bulk transfers. */
-        /* As much as I'd like to avoid this, usb:ds doesn't disclose information such as the exact device descriptor and/or speed used by the USB host. */
+        /* As much as I'd like to avoid this, the GetUsbDeviceSpeed cmd from usb:ds is only available in HOS 8.0.0+ -- and we definitely want to provide USB comms under older versions. */
         g_usbEndpointMaxPacketSize = ((UsbStatus*)g_usbTransferBuffer)->max_packet_size;
         if (g_usbEndpointMaxPacketSize != USB_FS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_HS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_SS_EP_MAX_PACKET_SIZE)
         {
@@ -801,9 +776,47 @@ NX_INLINE void usbFreeTransferBuffer(void)
 static bool usbInitializeComms(void)
 {
     Result rc = 0;
-    bool ret = false, init_dev_if = false;
+    bool ret = false, is_5x = hosversionAtLeast(5, 0, 0);
 
-    /* Used on HOS >= 5.0.0. */
+    /* Carry out USB comms initialization steps for this HOS version. */
+    ret = (is_5x ? usbInitializeComms5x() : usbInitializeComms1x());
+    if (!ret) goto end;
+
+    /* Enable USB interface. */
+    /* This is always needed regardless of the HOS version. */
+    rc = usbDsInterface_EnableInterface(g_usbInterface);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsInterface_EnableInterface failed! (0x%X).", rc);
+        goto end;
+    }
+
+    /* Additional step needed under HOS 5.0.0+. */
+    if (is_5x)
+    {
+        rc = usbDsEnable();
+        if (R_FAILED(rc))
+        {
+            LOG_MSG_ERROR("usbDsEnable failed! (0x%X).", rc);
+            goto end;
+        }
+
+        g_usbHos5xEnabled = true;
+    }
+
+    ret = true;
+
+end:
+    if (!ret) usbCloseComms();
+
+    return ret;
+}
+
+static bool usbInitializeComms5x(void)
+{
+    Result rc = 0;
+    bool ret = false;
+
     struct usb_device_descriptor device_descriptor = {
         .bLength = USB_DT_DEVICE_SIZE,
         .bDescriptorType = USB_DT_DEVICE,
@@ -849,130 +862,6 @@ static bool usbInitializeComms(void)
     usb3_devcap_desc->bU1DevExitLat = 0;
     usb3_devcap_desc->bU2DevExitLat = 0;
 
-    /* Used on HOS < 5.0.0. */
-    static const UsbDsDeviceInfo device_info = {
-        .idVendor = USB_DEV_VID,
-        .idProduct = USB_DEV_PID,
-        .bcdDevice = USB_DEV_BCD_REL,
-        .Manufacturer = APP_AUTHOR,
-        .Product = APP_TITLE,
-        .SerialNumber = APP_VERSION
-    };
-
-    rc = usbDsInitialize();
-    if (R_FAILED(rc))
-    {
-        LOG_MSG_ERROR("usbDsInitialize failed! (0x%X).", rc);
-        goto end;
-    }
-
-    if (hosversionAtLeast(5, 0, 0))
-    {
-        /* Set language string descriptor. */
-        rc = usbDsAddUsbLanguageStringDescriptor(NULL, supported_langs, num_supported_langs);
-        if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsAddUsbLanguageStringDescriptor failed! (0x%X).", rc);
-
-        /* Set manufacturer string descriptor. */
-        if (R_SUCCEEDED(rc))
-        {
-            rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iManufacturer), APP_AUTHOR);
-            if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsAddUsbStringDescriptor failed! (0x%X) (manufacturer).", rc);
-        }
-
-        /* Set product string descriptor. */
-        if (R_SUCCEEDED(rc))
-        {
-            rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iProduct), APP_TITLE);
-            if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsAddUsbStringDescriptor failed! (0x%X) (product).", rc);
-        }
-
-        /* Set serial number string descriptor. */
-        if (R_SUCCEEDED(rc))
-        {
-            rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iSerialNumber), APP_VERSION);
-            if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsAddUsbStringDescriptor failed! (0x%X) (serial number).", rc);
-        }
-
-        /* Set device descriptors. */
-
-        if (R_SUCCEEDED(rc))
-        {
-            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Full, &device_descriptor);  /* Full Speed is USB 1.1. */
-            if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsSetUsbDeviceDescriptor failed! (0x%X) (USB 1.1).", rc);
-        }
-
-        if (R_SUCCEEDED(rc))
-        {
-            /* Update USB revision before proceeding. */
-            device_descriptor.bcdUSB = USB_HS_BCD_REVISION;
-
-            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_High, &device_descriptor);  /* High Speed is USB 2.0. */
-            if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsSetUsbDeviceDescriptor failed! (0x%X) (USB 2.0).", rc);
-        }
-
-        if (R_SUCCEEDED(rc))
-        {
-            /* Update USB revision and upgrade control endpoint packet size before proceeding. */
-            device_descriptor.bcdUSB = USB_SS_BCD_REVISION;
-            device_descriptor.bMaxPacketSize0 = USB_SS_EP0_MAX_PACKET_SIZE;
-
-            rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Super, &device_descriptor); /* Super Speed is USB 3.0. */
-            if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsSetUsbDeviceDescriptor failed! (0x%X) (USB 3.0).", rc);
-        }
-
-        /* Set Binary Object Store. */
-        if (R_SUCCEEDED(rc))
-        {
-            rc = usbDsSetBinaryObjectStore(bos, USB_BOS_SIZE);
-            if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsSetBinaryObjectStore failed! (0x%X).", rc);
-        }
-    } else {
-        /* Set VID, PID and BCD. */
-        rc = usbDsSetVidPidBcd(&device_info);
-        if (R_FAILED(rc)) LOG_MSG_ERROR("usbDsSetVidPidBcd failed! (0x%X).", rc);
-    }
-
-    if (R_FAILED(rc)) goto end;
-
-    /* Initialize USB device interface. */
-    init_dev_if = (hosversionAtLeast(5, 0, 0) ? usbInitializeDeviceInterface5x() : usbInitializeDeviceInterface1x());
-    if (!init_dev_if)
-    {
-        LOG_MSG_ERROR("Failed to initialize USB device interface!");
-        goto end;
-    }
-
-    if (hosversionAtLeast(5, 0, 0))
-    {
-        rc = usbDsEnable();
-        if (R_FAILED(rc))
-        {
-            LOG_MSG_ERROR("usbDsEnable failed! (0x%X).", rc);
-            goto end;
-        }
-    }
-
-    ret = true;
-
-end:
-    if (!ret) usbCloseComms();
-
-    return ret;
-}
-
-static void usbCloseComms(void)
-{
-    usbDsExit();
-
-    g_usbInterface = NULL;
-    g_usbEndpointIn = NULL;
-    g_usbEndpointOut = NULL;
-}
-
-static bool usbInitializeDeviceInterface5x(void)
-{
-    Result rc = 0;
-
     struct usb_interface_descriptor interface_descriptor = {
         .bLength = USB_DT_INTERFACE_SIZE,
         .bDescriptorType = USB_DT_INTERFACE,
@@ -1011,12 +900,77 @@ static bool usbInitializeDeviceInterface5x(void)
         .wBytesPerInterval = 0
     };
 
+    /* Set language string descriptor. */
+    rc = usbDsAddUsbLanguageStringDescriptor(NULL, supported_langs, num_supported_langs);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsAddUsbLanguageStringDescriptor failed! (0x%X).", rc);
+        goto end;
+    }
+
+    /* Set manufacturer string descriptor. */
+    rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iManufacturer), APP_AUTHOR);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsAddUsbStringDescriptor failed! (0x%X) (manufacturer).", rc);
+        goto end;
+    }
+
+    /* Set product string descriptor. */
+    rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iProduct), APP_TITLE);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsAddUsbStringDescriptor failed! (0x%X) (product).", rc);
+        goto end;
+    }
+
+    /* Set serial number string descriptor. */
+    rc = usbDsAddUsbStringDescriptor(&(device_descriptor.iSerialNumber), APP_VERSION);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsAddUsbStringDescriptor failed! (0x%X) (serial number).", rc);
+        goto end;
+    }
+
+    /* Set device descriptors. */
+    rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Full, &device_descriptor);  /* Full Speed is USB 1.1. */
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsSetUsbDeviceDescriptor failed! (0x%X) (USB 1.1).", rc);
+        goto end;
+    }
+
+    device_descriptor.bcdUSB = USB_HS_BCD_REVISION;
+    rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_High, &device_descriptor);  /* High Speed is USB 2.0. */
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsSetUsbDeviceDescriptor failed! (0x%X) (USB 2.0).", rc);
+        goto end;
+    }
+
+    device_descriptor.bcdUSB = USB_SS_BCD_REVISION;
+    device_descriptor.bMaxPacketSize0 = USB_SS_EP0_MAX_PACKET_SIZE;
+    rc = usbDsSetUsbDeviceDescriptor(UsbDeviceSpeed_Super, &device_descriptor); /* Super Speed is USB 3.0. */
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsSetUsbDeviceDescriptor failed! (0x%X) (USB 3.0).", rc);
+        goto end;
+    }
+
+    /* Set Binary Object Store. */
+    rc = usbDsSetBinaryObjectStore(bos, USB_BOS_SIZE);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsSetBinaryObjectStore failed! (0x%X).", rc);
+        goto end;
+    }
+
     /* Setup interface. */
     rc = usbDsRegisterInterface(&g_usbInterface);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsRegisterInterface failed! (0x%X).", rc);
-        return false;
+        goto end;
     }
 
     interface_descriptor.bInterfaceNumber = g_usbInterface->interface_index;
@@ -1028,85 +982,83 @@ static bool usbInitializeDeviceInterface5x(void)
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 1.1) (interface).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Full, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 1.1) (in endpoint).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Full, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 1.1) (out endpoint).", rc);
-        return false;
+        goto end;
     }
 
     /* High Speed config (USB 2.0). */
-    endpoint_descriptor_in.wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE;
-    endpoint_descriptor_out.wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE;
+    endpoint_descriptor_in.wMaxPacketSize = endpoint_descriptor_out.wMaxPacketSize = USB_HS_EP_MAX_PACKET_SIZE;
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_High, &interface_descriptor, USB_DT_INTERFACE_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 2.0) (interface).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_High, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 2.0) (in endpoint).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_High, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 2.0) (out endpoint).", rc);
-        return false;
+        goto end;
     }
 
     /* Super Speed config (USB 3.0). */
-    endpoint_descriptor_in.wMaxPacketSize = USB_SS_EP_MAX_PACKET_SIZE;
-    endpoint_descriptor_out.wMaxPacketSize = USB_SS_EP_MAX_PACKET_SIZE;
+    endpoint_descriptor_in.wMaxPacketSize = endpoint_descriptor_out.wMaxPacketSize = USB_SS_EP_MAX_PACKET_SIZE;
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &interface_descriptor, USB_DT_INTERFACE_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 3.0) (interface).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &endpoint_descriptor_in, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 3.0) (in endpoint).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &endpoint_companion, USB_DT_SS_ENDPOINT_COMPANION_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 3.0) (in endpoint companion).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &endpoint_descriptor_out, USB_DT_ENDPOINT_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 3.0) (out endpoint).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_AppendConfigurationData(g_usbInterface, UsbDeviceSpeed_Super, &endpoint_companion, USB_DT_SS_ENDPOINT_COMPANION_SIZE);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_AppendConfigurationData failed! (0x%X) (USB 3.0) (out endpoint companion).", rc);
-        return false;
+        goto end;
     }
 
     /* Setup endpoints. */
@@ -1114,29 +1066,35 @@ static bool usbInitializeDeviceInterface5x(void)
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_RegisterEndpoint failed! (0x%X) (in endpoint).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_RegisterEndpoint(g_usbInterface, &g_usbEndpointOut, endpoint_descriptor_out.bEndpointAddress);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_RegisterEndpoint failed! (0x%X) (out endpoint).", rc);
-        return false;
+        goto end;
     }
 
-    rc = usbDsInterface_EnableInterface(g_usbInterface);
-    if (R_FAILED(rc))
-    {
-        LOG_MSG_ERROR("usbDsInterface_EnableInterface failed! (0x%X).", rc);
-        return false;
-    }
+    ret = true;
 
-    return true;
+end:
+    return ret;
 }
 
-static bool usbInitializeDeviceInterface1x(void)
+static bool usbInitializeComms1x(void)
 {
     Result rc = 0;
+    bool ret = false;
+
+    static const UsbDsDeviceInfo device_info = {
+        .idVendor = USB_DEV_VID,
+        .idProduct = USB_DEV_PID,
+        .bcdDevice = USB_DEV_BCD_REL,
+        .Manufacturer = APP_AUTHOR,
+        .Product = APP_TITLE,
+        .SerialNumber = APP_VERSION
+    };
 
     struct usb_interface_descriptor interface_descriptor = {
         .bLength = USB_DT_INTERFACE_SIZE,
@@ -1167,12 +1125,20 @@ static bool usbInitializeDeviceInterface1x(void)
         .bInterval = 0
     };
 
+    /* Set VID, PID and BCD. */
+    rc = usbDsSetVidPidBcd(&device_info);
+    if (R_FAILED(rc))
+    {
+        LOG_MSG_ERROR("usbDsSetVidPidBcd failed! (0x%X).", rc);
+        goto end;
+    }
+
     /* Setup interface. */
     rc = usbDsGetDsInterface(&g_usbInterface, &interface_descriptor, "usb");
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsGetDsInterface failed! (0x%X).", rc);
-        return false;
+        goto end;
     }
 
     /* Setup endpoints. */
@@ -1180,24 +1146,94 @@ static bool usbInitializeDeviceInterface1x(void)
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_GetDsEndpoint failed! (0x%X) (in endpoint).", rc);
-        return false;
+        goto end;
     }
 
     rc = usbDsInterface_GetDsEndpoint(g_usbInterface, &g_usbEndpointOut, &endpoint_descriptor_out);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsInterface_GetDsEndpoint failed! (0x%X) (out endpoint).", rc);
-        return false;
+        goto end;
     }
 
-    rc = usbDsInterface_EnableInterface(g_usbInterface);
-    if (R_FAILED(rc))
+    ret = true;
+
+end:
+    return ret;
+}
+
+static void usbCloseComms(void)
+{
+    bool is_5x = hosversionAtLeast(5, 0, 0);
+
+    if (is_5x && g_usbHos5xEnabled)
     {
-        LOG_MSG_ERROR("usbDsInterface_EnableInterface failed! (0x%X).", rc);
+        usbDsDisable();
+        g_usbHos5xEnabled = false;
+    }
+
+    if (g_usbEndpointOut)
+    {
+        usbDsEndpoint_Close(g_usbEndpointOut);
+        g_usbEndpointOut = NULL;
+    }
+
+    if (g_usbEndpointIn)
+    {
+        usbDsEndpoint_Close(g_usbEndpointIn);
+        g_usbEndpointIn = NULL;
+    }
+
+    if (g_usbInterface)
+    {
+        /* usbDsInterface_DisableInterface() is internally called here. */
+        usbDsInterface_Close(g_usbInterface);
+        g_usbInterface = NULL;
+    }
+
+    if (is_5x) usbDsClearDeviceData();
+}
+
+static bool _usbSendFileProperties(u64 file_size, const char *filename, u32 nsp_header_size, bool enforce_nsp_mode)
+{
+    bool ret = false;
+    size_t filename_length = 0;
+
+    /* Disallow sending new files if we're not in NSP transfer mode and the remaining transfer size isn't zero. */
+    /* Allow empty files if we're not in NSP transfer mode. */
+    /* Disallow sending new NSPs if we're already in NSP transfer mode. */
+    if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || (!g_nspTransferMode && g_usbTransferRemainingSize) || \
+        !filename || !(filename_length = strlen(filename)) || filename_length >= FS_MAX_PATH || (!enforce_nsp_mode && nsp_header_size) || \
+        (enforce_nsp_mode && (g_nspTransferMode || !file_size || !nsp_header_size || nsp_header_size >= file_size)))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
-    return true;
+    /* Prepare command data. */
+    usbPrepareCommandHeader(UsbCommandType_SendFileProperties, (u32)sizeof(UsbCommandSendFileProperties));
+
+    UsbCommandSendFileProperties *cmd_block = (UsbCommandSendFileProperties*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
+    memset(cmd_block, 0, sizeof(UsbCommandSendFileProperties));
+
+    cmd_block->file_size = file_size;
+    cmd_block->filename_length = (u32)filename_length;
+    cmd_block->nsp_header_size = nsp_header_size;
+    snprintf(cmd_block->filename, sizeof(cmd_block->filename), "%s", filename);
+
+    /* Send command. */
+    ret = usbSendCommand();
+    if (ret)
+    {
+        g_usbTransferRemainingSize = file_size;
+        g_usbTransferWrittenSize = 0;
+        if (!g_nspTransferMode && enforce_nsp_mode) g_nspTransferMode = true;
+    } else {
+        g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
+        g_nspTransferMode = false;
+    }
+
+    return ret;
 }
 
 NX_INLINE bool usbIsHostAvailable(void)

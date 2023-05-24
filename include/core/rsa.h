@@ -36,13 +36,13 @@ extern "C" {
 #define RSA2048_PUBKEY_SIZE RSA2048_BYTES
 
 /// Verifies a RSA-2048-PSS with SHA-256 signature.
-/// The provided signature and modulus should have sizes of at least RSA2048_SIG_SIZE and RSA2048_PUBKEY_SIZE, respectively.
+/// The provided signature and modulus must have sizes of at least RSA2048_SIG_SIZE and RSA2048_PUBKEY_SIZE, respectively.
 bool rsa2048VerifySha256BasedPssSignature(const void *data, size_t data_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size);
 
 /// Performs RSA-2048-OAEP decryption.
 /// Suitable to decrypt the titlekey block from tickets with personalized crypto.
-/// The provided signature and modulus should have sizes of at least RSA2048_SIG_SIZE and RSA2048_PUBKEY_SIZE, respectively.
-/// The label and label_size arguments are optional - these may be set to NULL and 0 if not needed, respectively.
+/// The provided signature and modulus must have sizes of at least RSA2048_SIG_SIZE and RSA2048_PUBKEY_SIZE, respectively.
+/// 'label' and 'label_size' arguments are optional -- if not needed, these may be set to NULL and 0, respectively.
 bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size, const void *private_exponent, \
                         size_t private_exponent_size, const void *label, size_t label_size, size_t *out_size);
 

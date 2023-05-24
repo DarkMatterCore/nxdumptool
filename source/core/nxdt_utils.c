@@ -244,7 +244,13 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         {
             bool flag = false;
             rc = appletIsGamePlayRecordingSupported(&flag);
-            if (R_SUCCEEDED(rc) && flag) appletInitializeGamePlayRecording();
+            if (R_SUCCEEDED(rc) && flag)
+            {
+                rc = appletInitializeGamePlayRecording();
+                if (R_FAILED(rc)) LOG_MSG_ERROR("appletInitializeGamePlayRecording failed! (0x%X).", rc);
+            } else {
+                LOG_MSG_ERROR("appletIsGamePlayRecordingSupported returned [0x%X, %u].", rc, flag);
+            }
         }
 
         /* Update flags. */
@@ -756,6 +762,86 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element)
     if (create_last_element) mkdir(path, 0777);
 
     free(tmp);
+}
+
+bool utilsDeleteDirectoryRecursively(const char *path)
+{
+    char *name_end = NULL, *entry_path = NULL;
+    DIR *dir = NULL;
+    struct dirent *entry = NULL;
+    bool success = true;
+
+    /* Sanity checks. */
+    if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || !*(name_end + 2))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    if (!(dir = opendir(path)))
+    {
+        LOG_MSG_ERROR("Failed to open directory \"%s\"! (%d).", path, errno);
+        success = false;
+        goto end;
+    }
+
+    if (!(entry_path = calloc(1, FS_MAX_PATH)))
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for path buffer!");
+        success = false;
+        goto end;
+    }
+
+    /* Read directory entries. */
+    while((entry = readdir(dir)))
+    {
+        int status = 0;
+
+        /* Skip current directory and parent directory entries. */
+        if (!strcmp(".", entry->d_name) || !strcmp("..", entry->d_name)) continue;
+
+        /* Generate path to the current entry. */
+        snprintf(entry_path, FS_MAX_PATH, "%s/%s", path, entry->d_name);
+
+        if (entry->d_type == DT_DIR)
+        {
+            /* Delete directory contents. */
+            if (!utilsDeleteDirectoryRecursively(entry_path))
+            {
+                success = false;
+                break;
+            }
+
+            /* Delete directory. */
+            status = rmdir(entry_path);
+        } else {
+            /* Delete file. */
+            status = unlink(entry_path);
+        }
+
+        if (status != 0)
+        {
+            LOG_MSG_ERROR("Failed to delete \"%s\"! (%s, %d).", entry_path, entry->d_type == DT_DIR ? "dir" : "file", errno);
+            success = false;
+            break;
+        }
+    }
+
+    if (success)
+    {
+        closedir(dir);
+        dir = NULL;
+
+        success = (rmdir(path) == 0);
+        if (!success) LOG_MSG_ERROR("Failed to delete topmost directory \"%s\"! (%d).", path, errno);
+    }
+
+end:
+    if (entry_path) free(entry_path);
+
+    if (dir) closedir(dir);
+
+    return success;
 }
 
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension)

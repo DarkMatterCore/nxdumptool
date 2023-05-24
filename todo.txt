@@ -6,11 +6,11 @@ todo:
     title: more functions for content lookup? (based on id)
     title: parse the update partition from gamecards (if available) to generate ncmcontentinfo data for all update titles
 
-    gamecard: functions to display filelist
+    gamecard: functions to display filelist (devoptab device?)
 
-    pfs0: functions to display filelist
+    pfs0: functions to display filelist (devoptab device?)
 
-    romfs: functions to display filelist
+    romfs: functions to display filelist (devoptab device?)
 
     usb: change buffer size?
     usb: change chunk size?

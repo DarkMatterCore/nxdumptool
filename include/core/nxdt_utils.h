@@ -149,6 +149,10 @@ bool utilsCreateConcatenationFile(const char *path);
 /// If 'create_last_element' is true, the last element from the provided path will be created as well.
 void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 
+/// Recursively deletes the directory located at the provided path and all of its contents.
+/// The provided path must be absolute and it must include the virtual device name it belongs to (e.g. "sdmc:/path/to/dir").
+bool utilsDeleteDirectoryRecursively(const char *path);
+
 /// Returns a pointer to a dynamically allocated string that holds the full path formed by the provided arguments. Both path prefix and file extension are optional.
 /// If any elements from the generated path exceed safe filesystem limits, each exceeding element will be truncated. Truncations, if needed, are performed on a per-codepoint basis (UTF-8).
 /// If an extension is provided, it will always be preserved, regardless of any possible truncations being carried out.

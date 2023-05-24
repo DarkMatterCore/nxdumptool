@@ -221,7 +221,7 @@ typedef struct {
 
 
 
-/* Directory object structure (DIR) */
+/* Directory object structure (FDIR) */
 
 typedef struct {
 	FFOBJID	obj;			/* Object identifier */
@@ -236,7 +236,7 @@ typedef struct {
 #if FF_USE_FIND
 	const TCHAR* pat;		/* Pointer to the name matching pattern */
 #endif
-} DIR;
+} FDIR;
 
 
 
@@ -308,11 +308,11 @@ FRESULT f_write (FIL* fp, const void* buff, UINT btw, UINT* bw);	/* Write data t
 FRESULT f_lseek (FIL* fp, FSIZE_t ofs);								/* Move file pointer of the file object */
 FRESULT f_truncate (FIL* fp);										/* Truncate the file */
 FRESULT f_sync (FIL* fp);											/* Flush cached data of the writing file */
-FRESULT f_opendir (DIR* dp, const TCHAR* path);						/* Open a directory */
-FRESULT f_closedir (DIR* dp);										/* Close an open directory */
-FRESULT f_readdir (DIR* dp, FILINFO* fno);							/* Read a directory item */
-FRESULT f_findfirst (DIR* dp, FILINFO* fno, const TCHAR* path, const TCHAR* pattern);	/* Find first file */
-FRESULT f_findnext (DIR* dp, FILINFO* fno);							/* Find next file */
+FRESULT f_opendir (FDIR* dp, const TCHAR* path);						/* Open a directory */
+FRESULT f_closedir (FDIR* dp);										/* Close an open directory */
+FRESULT f_readdir (FDIR* dp, FILINFO* fno);							/* Read a directory item */
+FRESULT f_findfirst (FDIR* dp, FILINFO* fno, const TCHAR* path, const TCHAR* pattern);	/* Find first file */
+FRESULT f_findnext (FDIR* dp, FILINFO* fno);							/* Find next file */
 FRESULT f_mkdir (const TCHAR* path);								/* Create a sub directory */
 FRESULT f_unlink (const TCHAR* path);								/* Delete an existing file or directory */
 FRESULT f_rename (const TCHAR* path_old, const TCHAR* path_new);	/* Rename/Move a file or directory */

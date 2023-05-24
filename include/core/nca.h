@@ -92,7 +92,7 @@ typedef enum {
     NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
     NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.2.
     NcaKeyGeneration_Since1500NUP = 15,                             ///< 15.0.0 - 15.0.1.
-    NcaKeyGeneration_Since1600NUP = 16,                             ///< 16.0.0 - 16.0.1.
+    NcaKeyGeneration_Since1600NUP = 16,                             ///< 16.0.0 - 16.0.3.
     NcaKeyGeneration_Current      = NcaKeyGeneration_Since1600NUP,
     NcaKeyGeneration_Max          = 32
 } NcaKeyGeneration;
@@ -108,7 +108,7 @@ typedef enum {
 /// TODO: update on signature keygen changes.
 typedef enum {
     NcaSignatureKeyGeneration_Since100NUP = 0,                                      ///< 1.0.0 - 8.1.1.
-    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 16.0.1.
+    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0 - 16.0.3.
     NcaSignatureKeyGeneration_Current     = NcaSignatureKeyGeneration_Since900NUP,
     NcaSignatureKeyGeneration_Max         = (NcaSignatureKeyGeneration_Current + 1)
 } NcaSignatureKeyGeneration;
@@ -158,7 +158,7 @@ typedef struct {
     u64 content_size;
     u64 program_id;
     u32 content_index;
-    SdkAddOnVersion sdk_addon_version;
+    Version sdk_addon_version;
     u8 key_generation;                                      ///< NcaKeyGeneration. Uses NcaKeyGeneration_Since301NUP or greater values.
     u8 main_signature_key_generation;                       ///< NcaSignatureKeyGeneration.
     u8 reserved[0xE];
@@ -483,7 +483,7 @@ bool ncaAllocateCryptoBuffer(void);
 void ncaFreeCryptoBuffer(void);
 
 /// Initializes a NCA context.
-/// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid GameCardHashFileSystemPartitionType value.
+/// If 'storage_id' == NcmStorageId_GameCard, the 'hfs_partition_type' argument must be a valid HashFileSystemPartitionType value.
 /// If the NCA holds a populated Rights ID field, ticket data will need to be retrieved.
 /// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or used to read ticket data that has already been retrieved.
 /// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.

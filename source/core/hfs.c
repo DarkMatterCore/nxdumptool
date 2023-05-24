@@ -22,9 +22,19 @@
 #include "nxdt_utils.h"
 #include "gamecard.h"
 
+#define HFS_PARTITION_NAME_INDEX(x) ((x) - 1)
+
+static const char *g_hfsPartitionNames[] = {
+    [HFS_PARTITION_NAME_INDEX(HashFileSystemPartitionType_Root)]   = "root",
+    [HFS_PARTITION_NAME_INDEX(HashFileSystemPartitionType_Update)] = "update",
+    [HFS_PARTITION_NAME_INDEX(HashFileSystemPartitionType_Logo)]   = "logo",
+    [HFS_PARTITION_NAME_INDEX(HashFileSystemPartitionType_Normal)] = "normal",
+    [HFS_PARTITION_NAME_INDEX(HashFileSystemPartitionType_Secure)] = "secure"
+};
+
 bool hfsReadPartitionData(HashFileSystemContext *ctx, void *out, u64 read_size, u64 offset)
 {
-    if (!ctx || !ctx->size || !out || !read_size || (offset + read_size) > ctx->size)
+    if (!hfsIsValidContext(ctx) || !out || !read_size || (offset + read_size) > ctx->size)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -60,15 +70,15 @@ bool hfsReadEntryData(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry,
 
 bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size)
 {
-    u64 total_size = 0;
-    u32 entry_count = hfsGetEntryCount(ctx);
-    HashFileSystemEntry *fs_entry = NULL;
-
-    if (!entry_count || !out_size)
+    if (!hfsIsValidContext(ctx) || !out_size)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
+
+    u64 total_size = 0;
+    u32 entry_count = hfsGetEntryCount(ctx);
+    HashFileSystemEntry *fs_entry = NULL;
 
     for(u32 i = 0; i < entry_count; i++)
     {
@@ -89,15 +99,24 @@ bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size)
 bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *out_idx)
 {
     HashFileSystemEntry *fs_entry = NULL;
-    u32 entry_count = hfsGetEntryCount(ctx), name_table_size = 0;
-    char *name_table = hfsGetNameTable(ctx);
+    u32 entry_count = 0, name_table_size = 0;
+    char *name_table = NULL;
+    bool ret = false;
 
-    if (!entry_count || !name_table || !name || !*name || !out_idx)
+    if (hfsIsValidContext(ctx) && name && *name && out_idx)
     {
-        LOG_MSG_ERROR("Invalid parameters!");
-        return false;
+        entry_count = hfsGetEntryCount(ctx);
+        name_table = hfsGetNameTable(ctx);
+        ret = (entry_count && name_table);
     }
 
+    if (!ret)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        goto end;
+    }
+
+    ret = false;
     name_table_size = ((HashFileSystemHeader*)ctx->header)->name_table_size;
 
     for(u32 i = 0; i < entry_count; i++)
@@ -117,9 +136,17 @@ bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *o
         if (!strcmp(name_table + fs_entry->name_offset, name))
         {
             *out_idx = i;
-            return true;
+            ret = true;
+            break;
         }
     }
 
-    return false;
+end:
+    return ret;
+}
+
+const char *hfsGetPartitionNameString(u8 hfs_partition_type)
+{
+    return ((hfs_partition_type > HashFileSystemPartitionType_None && hfs_partition_type < HashFileSystemPartitionType_Count) ? \
+            g_hfsPartitionNames[HFS_PARTITION_NAME_INDEX(hfs_partition_type)] : NULL);
 }

@@ -50,19 +50,26 @@ typedef struct {
 
 NXDT_ASSERT(HashFileSystemEntry, 0x40);
 
+typedef enum {
+    HashFileSystemPartitionType_None   = 0, ///< Not a real value.
+    HashFileSystemPartitionType_Root   = 1,
+    HashFileSystemPartitionType_Update = 2,
+    HashFileSystemPartitionType_Logo   = 3, ///< Only available in GameCardFwVersion_Since400NUP or greater gamecards.
+    HashFileSystemPartitionType_Normal = 4,
+    HashFileSystemPartitionType_Secure = 5,
+    HashFileSystemPartitionType_Count  = 6  ///< Total values supported by this enum.
+} HashFileSystemPartitionType;
+
 /// Internally used by gamecard functions.
 /// Use gamecardGetHashFileSystemContext() to retrieve a Hash FS context.
 typedef struct {
-    u8 type;            ///< GameCardHashFileSystemPartitionType.
+    u8 type;            ///< HashFileSystemPartitionType.
     char *name;         ///< Dynamically allocated partition name.
     u64 offset;         ///< Partition offset (relative to the start of gamecard image).
     u64 size;           ///< Partition size.
     u64 header_size;    ///< Full header size.
     u8 *header;         ///< HashFileSystemHeader + (HashFileSystemEntry * entry_count) + Name Table.
 } HashFileSystemContext;
-
-/// Retrieves a Hash FS entry index by its name.
-bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *out_idx);
 
 /// Reads raw partition data using a Hash FS context.
 /// Input offset must be relative to the start of the Hash FS.
@@ -73,7 +80,15 @@ bool hfsReadPartitionData(HashFileSystemContext *ctx, void *out, u64 read_size, 
 bool hfsReadEntryData(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset);
 
 /// Calculates the extracted Hash FS size.
+/// If the target partition is empty, 'out_size' will be set to zero and true will be returned.
 bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size);
+
+/// Retrieves a Hash FS entry index by its name.
+bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *out_idx);
+
+/// Takes a HashFileSystemPartitionType value. Returns a pointer to a string that represents the partition name that matches the provided Hash FS partition type.
+/// Returns NULL if the provided value is out of range.
+const char *hfsGetPartitionNameString(u8 hfs_partition_type);
 
 /// Miscellaneous functions.
 
@@ -83,6 +98,11 @@ NX_INLINE void hfsFreeContext(HashFileSystemContext *ctx)
     if (ctx->name) free(ctx->name);
     if (ctx->header) free(ctx->header);
     memset(ctx, 0, sizeof(HashFileSystemContext));
+}
+
+NX_INLINE bool hfsIsValidContext(HashFileSystemContext *ctx)
+{
+    return (ctx && ctx->type > HashFileSystemPartitionType_None && ctx->type < HashFileSystemPartitionType_Count && ctx->name && ctx->size && ctx->header_size && ctx->header);
 }
 
 NX_INLINE u32 hfsGetEntryCount(HashFileSystemContext *ctx)

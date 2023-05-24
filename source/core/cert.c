@@ -141,7 +141,7 @@ u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, 
     utilsGenerateHexStringFromData(raw_chain_filename, sizeof(raw_chain_filename), id->c, sizeof(id->c), false);
     strcat(raw_chain_filename, ".cert");
 
-    if (!gamecardGetHashFileSystemEntryInfoByName(GameCardHashFileSystemPartitionType_Secure, raw_chain_filename, &raw_chain_offset, &raw_chain_size))
+    if (!gamecardGetHashFileSystemEntryInfoByName(HashFileSystemPartitionType_Secure, raw_chain_filename, &raw_chain_offset, &raw_chain_size))
     {
         LOG_MSG_ERROR("Error retrieving offset and size for \"%s\" entry in secure hash FS partition!", raw_chain_filename);
         return NULL;

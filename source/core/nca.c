@@ -181,8 +181,8 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     u8 valid_fs_section_cnt = 0;
 
     if (!out || (storage_id != NcmStorageId_GameCard && !(ncm_storage = titleGetNcmStorageByStorageId(storage_id))) || \
-        (storage_id == NcmStorageId_GameCard && (!hfs_partition_type || hfs_partition_type >= GameCardHashFileSystemPartitionType_Count)) || !content_info || \
-        content_info->content_type >= NcmContentType_DeltaFragment)
+        (storage_id == NcmStorageId_GameCard && (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count)) || \
+        !content_info || content_info->content_type >= NcmContentType_DeltaFragment)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -279,7 +279,7 @@ bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
         /* This strips NAX0 crypto from SD card NCAs (not used on eMMC NCAs). */
         rc = ncmContentStorageReadContentIdFile(ctx->ncm_storage, out, read_size, &(ctx->content_id), offset);
         ret = R_SUCCEEDED(rc);
-        if (!ret) LOG_MSG_ERROR("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (0x%X) (ncm).", read_size, offset, ctx->content_id_str, rc);
+        if (!ret) LOG_MSG_ERROR("Failed to read 0x%lX bytes block at offset 0x%lX from NCA \"%s\"! (ncm) (0x%X).", read_size, offset, ctx->content_id_str, rc);
     } else {
         /* Retrieve NCA data using raw gamecard reads. */
         /* Fixes NCA read issues with gamecards under HOS < 4.0.0 when using ncmContentStorageReadContentIdFile(). */

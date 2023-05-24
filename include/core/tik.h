@@ -34,13 +34,11 @@ extern "C" {
 #define SIGNED_TIK_MIN_SIZE         sizeof(TikSigHmac160)   /* Assuming no ESV1/ESV2 records are available. */
 
 #define GENERATE_TIK_STRUCT(sigtype, tiksize) \
-\
 typedef struct { \
     SignatureBlock##sigtype sig_block; \
     TikCommonBlock tik_common_block; \
     u8 es_section_record_data[]; \
 } TikSig##sigtype; \
-\
 NXDT_ASSERT(TikSig##sigtype, tiksize);
 
 typedef enum {
@@ -178,9 +176,10 @@ typedef struct {
 /// Titlekey is also RSA-OAEP unwrapped (if needed) and titlekek decrypted right away.
 bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gamecard);
 
-/// Converts a TikTitleKeyType_Personalized ticket into a TikTitleKeyType_Common ticket and generates a raw certificate chain for the new signature issuer.
+/// Converts a TikTitleKeyType_Personalized ticket into a TikTitleKeyType_Common ticket and optionally generates a raw certificate chain for the new signature issuer.
 /// Bear in mind the 'size' member from the Ticket parameter will be updated by this function to remove any possible references to ESV1/ESV2 records.
-/// Raw certificate chain data will be saved to the provided pointers. certGenerateRawCertificateChainBySignatureIssuer() is used internally, so the output buffer must be freed by the user.
+/// If both 'out_raw_cert_chain' and 'out_raw_cert_chain_size' pointers are provided, raw certificate chain data will be saved to them.
+/// certGenerateRawCertificateChainBySignatureIssuer() is used internally, so the output buffer must be freed by the user.
 bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_chain, u64 *out_raw_cert_chain_size);
 
 /// Helper inline functions.

@@ -60,6 +60,7 @@ void configSet##functype(const char *path, vartype value) { \
 static Mutex g_configMutex = 0;
 static bool g_configInterfaceInit = false;
 
+static char g_configJsonPath[FS_MAX_PATH] = {0};
 static struct json_object *g_configJson = NULL;
 
 /* Function prototypes. */
@@ -118,10 +119,29 @@ CONFIG_SETTER(Integer, int);
 
 static bool configParseConfigJson(void)
 {
-    bool use_default_config = true, ret = false;
+    bool use_default_config = true, use_root = true, ret = false;
+    const char *launch_path = utilsGetLaunchPath();
+    char *ptr1 = NULL, *ptr2 = NULL;
+
+    /* Generate config JSON path. */
+    if (launch_path)
+    {
+        ptr1 = strchr(launch_path, '/');
+        ptr2 = strrchr(launch_path, '/');
+
+        if (ptr1 && ptr2 && ptr1 != ptr2)
+        {
+            /* Use config JSON from the current working directory. */
+            snprintf(g_configJsonPath, sizeof(g_configJsonPath), "%.*s" CONFIG_FILE_NAME, (int)((ptr2 - launch_path) + 1), launch_path);
+            use_root = false;
+        }
+    }
+
+    /* Use config JSON from the SD card root directory. */
+    if (use_root) sprintf(g_configJsonPath, DEVOPTAB_SDMC_DEVICE "/" CONFIG_FILE_NAME);
 
     /* Read config JSON. */
-    g_configJson = json_object_from_file(CONFIG_PATH);
+    g_configJson = json_object_from_file(g_configJsonPath);
     if (g_configJson)
     {
         /* Validate configuration. */
@@ -157,7 +177,7 @@ static bool configParseConfigJson(void)
 static void configWriteConfigJson(void)
 {
     if (!g_configJson) return;
-    if (json_object_to_file_ext(CONFIG_PATH, g_configJson, JSON_C_TO_STRING_SPACED | JSON_C_TO_STRING_PRETTY) != 0) jsonLogLastError();
+    if (json_object_to_file_ext(g_configJsonPath, g_configJson, JSON_C_TO_STRING_SPACED | JSON_C_TO_STRING_PRETTY) != 0) jsonLogLastError();
 }
 
 static void configFreeConfigJson(void)
@@ -194,7 +214,8 @@ end:
 
 static bool configValidateJsonGameCardObject(const struct json_object *obj)
 {
-    bool ret = false, prepend_key_area_found = false, keep_certificate_found = false, trim_dump_found = false, calculate_checksum_found = false, checksum_lookup_method_found = false;
+    bool ret = false, prepend_key_area_found = false, keep_certificate_found = false, trim_dump_found = false, calculate_checksum_found = false;
+    bool checksum_lookup_method_found = false, write_raw_hfs_partition_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 
@@ -205,10 +226,11 @@ static bool configValidateJsonGameCardObject(const struct json_object *obj)
         CONFIG_VALIDATE_FIELD(Boolean, trim_dump);
         CONFIG_VALIDATE_FIELD(Boolean, calculate_checksum);
         CONFIG_VALIDATE_FIELD(Integer, checksum_lookup_method, ConfigChecksumLookupMethod_None, ConfigChecksumLookupMethod_Count - 1);
+        CONFIG_VALIDATE_FIELD(Boolean, write_raw_hfs_partition);
         goto end;
     }
 
-    ret = (prepend_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && checksum_lookup_method_found);
+    ret = (prepend_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && checksum_lookup_method_found && write_raw_hfs_partition_found);
 
 end:
     return ret;
@@ -217,7 +239,8 @@ end:
 static bool configValidateJsonNspObject(const struct json_object *obj)
 {
     bool ret = false, set_download_distribution_found = false, remove_console_data_found = false, remove_titlekey_crypto_found = false;
-    bool disable_linked_account_requirement_found = false, enable_screenshots_found = false, enable_video_capture_found = false, disable_hdcp_found = false, append_authoringtool_data_found = false, lookup_checksum_found = false;
+    bool disable_linked_account_requirement_found = false, enable_screenshots_found = false, enable_video_capture_found = false, disable_hdcp_found = false;
+    bool append_authoringtool_data_found = false, lookup_checksum_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 

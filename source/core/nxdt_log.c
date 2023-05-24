@@ -430,13 +430,13 @@ static bool logOpenLogFile(void)
 
         if (ptr1 && ptr2 && ptr1 != ptr2)
         {
-            /* Create logfile in the current working directory. */
+            /* Create logfile in the current working directory. Strip the devoptab device name prefix while we're at it, since we won't need it. */
             snprintf(path, sizeof(path), "%.*s" LOG_FILE_NAME, (int)((ptr2 - ptr1) + 1), ptr1);
             use_root = false;
         }
     }
 
-    /* Create logfile in the SD card root directory. */
+    /* Create logfile in the SD card root directory, if needed. */
     if (use_root) sprintf(path, "/" LOG_FILE_NAME);
 
     /* Create file. This will fail if the logfile exists, so we don't check its return value. */
@@ -452,17 +452,17 @@ static bool logOpenLogFile(void)
         {
             size_t len = 0;
 
-            /* Write UTF-8 BOM right away (if needed). */
             if (!g_logFileOffset)
             {
+                /* Write UTF-8 BOM if the logfile is empty. */
                 len = strlen(UTF8_BOM);
-                fsFileWrite(&g_logFile, g_logFileOffset, UTF8_BOM, len, FsWriteOption_Flush);
-                g_logFileOffset += (s64)len;
+                rc = fsFileWrite(&g_logFile, g_logFileOffset, UTF8_BOM, len, FsWriteOption_Flush);
+            } else {
+                /* Write session separator if the logfile isn't empty. */
+                len = strlen(g_logSessionSeparator);
+                rc = fsFileWrite(&g_logFile, g_logFileOffset, g_logSessionSeparator, len, FsWriteOption_Flush);
             }
 
-            /* Write session separator right away. */
-            len = strlen(g_logSessionSeparator);
-            rc = fsFileWrite(&g_logFile, g_logFileOffset, g_logSessionSeparator, len, FsWriteOption_Flush);
             if (R_SUCCEEDED(rc)) g_logFileOffset += (s64)len;
         }
     }

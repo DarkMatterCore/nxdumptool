@@ -87,7 +87,7 @@
 #define NCA_PATH                        APP_BASE_PATH "NCA/"
 #define NCA_FS_PATH                     APP_BASE_PATH "NCA FS/"
 
-#define CONFIG_PATH                     DEVOPTAB_SDMC_DEVICE APP_BASE_PATH "config.json"
+#define CONFIG_FILE_NAME                APP_TITLE "_config.json"
 #define DEFAULT_CONFIG_PATH             "romfs:/default_config.json"
 
 #define NRO_NAME                        APP_TITLE ".nro"

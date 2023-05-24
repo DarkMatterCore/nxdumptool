@@ -82,13 +82,14 @@ bool bfttfInitialize(void)
         for(u32 i = 0; i < g_fontInfoCount; i++)
         {
             BfttfFontInfo *font_info = &(g_fontInfo[i]);
-            TitleInfo *title_info = NULL;
             RomFileSystemFileEntry *romfs_file_entry = NULL;
 
             /* Check if the title ID for the current font container matches the one from the previous font container. */
             /* We won't have to reinitialize both NCA and RomFS contexts if that's the case. */
             if (font_info->title_id != prev_title_id)
             {
+                TitleInfo *title_info = NULL;
+
                 /* Get title info. */
                 if (!(title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, font_info->title_id)))
                 {
@@ -98,8 +99,9 @@ bool bfttfInitialize(void)
 
                 /* Initialize NCA context. */
                 /* NCA contexts don't need to be freed beforehand. */
-                bool nca_ctx_init = ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), \
-                                                         title_info->version.value, NULL);
+                /* Don't allow invalid NCA signatures. */
+                bool nca_ctx_init = (ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), \
+                                                          title_info->version.value, NULL) && nca_ctx->valid_main_signature);
 
                 /* Free title info. */
                 titleFreeTitleInfo(&title_info);

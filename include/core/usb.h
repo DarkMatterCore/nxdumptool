@@ -54,31 +54,31 @@ void *usbAllocatePageAlignedBuffer(size_t size);
 /// Returns a value from the UsbHostSpeed enum.
 u8 usbIsReady(void);
 
-/// Sends file properties to the host device before starting a file data transfer. Must be called before usbSendFileData().
-/// If 'nsp_header_size' is greater than zero, NSP transfer mode will be enabled. The file will be treated as a NSP and this value will be taken as its full Partition FS header size.
+/// Sends file properties to the host device before starting a file data transfer. If needed, it must be called before usbSendFileData().
+/// 'file_size' may be zero if an empty file shall be created, in which case no file data transfer will be necessary.
+/// Calling this function before finishing an ongoing file data transfer will result in an error.
 /// Under NSP transfer mode, this function must be called right before transferring data from each NSP file entry to the host device, which should in turn write it all to the same output file.
-/// Calling this function after NSP transfer mode has been enabled with a 'nsp_header_size' value greater than zero will result in an error.
-/// The host device should immediately write 'nsp_header_size' padding at the start of the output file and start listening for further usbSendFileProperties() calls, or a usbSendNspHeader() call.
-bool usbSendFileProperties(u64 file_size, const char *filename, u32 nsp_header_size);
+bool usbSendFileProperties(u64 file_size, const char *filename);
 
-/// Performs a file data transfer. Must be continuously called after usbSendFileProperties() until all file data has been transferred.
+/// Sends NSP properties to the host device and enables NSP transfer mode. If needed, it must be called before usbSendFileData().
+/// Both 'nsp_size' and 'nsp_header_size' must be greater than zero. 'nsp_size' must also be greater than 'nsp_header_size'.
+/// Calling this function after NSP transfer mode has already been enabled will result in an error.
+/// The host device should immediately write 'nsp_header_size' padding at the start of the output file and start listening for further usbSendFileProperties() calls, or a usbSendNspHeader() call.
+bool usbSendNspProperties(u64 nsp_size, const char *filename, u32 nsp_header_size);
+
+/// Performs a file data transfer. Must be continuously called after usbSendFileProperties() / usbSendNspProperties() until all file data has been transferred.
 /// Data chunk size must not exceed USB_TRANSFER_BUFFER_SIZE.
 /// If the last file data chunk is aligned to the endpoint max packet size, the host device should expect a Zero Length Termination (ZLT) packet.
+/// Calling this function if there's no remaining data to transfer will result in an error.
 bool usbSendFileData(void *data, u64 data_size);
 
 /// Used to gracefully cancel an ongoing file transfer. The current USB session is kept alive.
 void usbCancelFileTransfer(void);
 
 /// Sends NSP header data to the host device, making it rewind the NSP file pointer to write this data, essentially finishing the NSP transfer process.
-/// Must be called after the data from all NSP file entries has been transferred using both usbSendFileProperties() and usbSendFileData() calls.
+/// Must be called after the data from all NSP file entries has been transferred using both usbSendNspProperties() and usbSendFileData() calls.
 /// If the NSP header size is aligned to the endpoint max packet size, the host device should expect a Zero Length Termination (ZLT) packet.
 bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size);
-
-/// Nice and small wrapper for non-NSP files.
-NX_INLINE bool usbSendFilePropertiesCommon(u64 file_size, const char *filename)
-{
-    return usbSendFileProperties(file_size, filename, 0);
-}
 
 #ifdef __cplusplus
 }

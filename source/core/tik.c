@@ -168,7 +168,7 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
     u8 *signature = NULL;
     u64 signature_size = 0;
 
-    bool dev_cert = false;
+    bool generate_cert = false, dev_cert = false;
     char cert_chain_issuer[0x40] = {0};
     static const char *common_cert_names[] = { "XS00000020", "XS00000022", NULL };
 
@@ -176,26 +176,31 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
     u64 raw_cert_chain_size = 0;
 
     if (!tik || tik->type == TikType_None || tik->type > TikType_SigHmac160 || tik->size < SIGNED_TIK_MIN_SIZE || tik->size > SIGNED_TIK_MAX_SIZE || \
-        !(tik_common_block = tikGetCommonBlock(tik->data)) || tik_common_block->titlekey_type != TikTitleKeyType_Personalized || !out_raw_cert_chain || !out_raw_cert_chain_size)
+        !(tik_common_block = tikGetCommonBlock(tik->data)) || tik_common_block->titlekey_type != TikTitleKeyType_Personalized || (!out_raw_cert_chain && out_raw_cert_chain_size) || \
+        (out_raw_cert_chain && !out_raw_cert_chain_size))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
-    /* Generate raw certificate chain for the new signature issuer (common). */
-    dev_cert = (strstr(tik_common_block->issuer, "CA00000004") != NULL);
-
-    for(u8 i = 0; common_cert_names[i] != NULL; i++)
+    /* Generate raw certificate chain for the new signature issuer (common), if needed. */
+    generate_cert = (out_raw_cert_chain && out_raw_cert_chain_size);
+    if (generate_cert)
     {
-        sprintf(cert_chain_issuer, "Root-CA%08X-%s", dev_cert ? 4 : 3, common_cert_names[i]);
-        raw_cert_chain = certGenerateRawCertificateChainBySignatureIssuer(cert_chain_issuer, &raw_cert_chain_size);
-        if (raw_cert_chain) break;
-    }
+        dev_cert = (strstr(tik_common_block->issuer, "CA00000004") != NULL);
 
-    if (!raw_cert_chain)
-    {
-        LOG_MSG_ERROR("Failed to generate raw certificate chain for common ticket signature issuer!");
-        return false;
+        for(u8 i = 0; common_cert_names[i] != NULL; i++)
+        {
+            sprintf(cert_chain_issuer, "Root-CA%08X-%s", dev_cert ? 4 : 3, common_cert_names[i]);
+            raw_cert_chain = certGenerateRawCertificateChainBySignatureIssuer(cert_chain_issuer, &raw_cert_chain_size);
+            if (raw_cert_chain) break;
+        }
+
+        if (!raw_cert_chain)
+        {
+            LOG_MSG_ERROR("Failed to generate raw certificate chain for common ticket signature issuer!");
+            return false;
+        }
     }
 
     /* Wipe signature. */
@@ -230,8 +235,11 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
     memset(tik->data + tik->size, 0, SIGNED_TIK_MAX_SIZE - tik->size);
 
     /* Update output pointers. */
-    *out_raw_cert_chain = raw_cert_chain;
-    *out_raw_cert_chain_size = raw_cert_chain_size;
+    if (generate_cert)
+    {
+        *out_raw_cert_chain = raw_cert_chain;
+        *out_raw_cert_chain_size = raw_cert_chain_size;
+    }
 
     return true;
 }
@@ -250,7 +258,7 @@ static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsI
     utilsGenerateHexStringFromData(tik_filename, sizeof(tik_filename), id->c, sizeof(id->c), false);
     strcat(tik_filename, ".tik");
 
-    if (!gamecardGetHashFileSystemEntryInfoByName(GameCardHashFileSystemPartitionType_Secure, tik_filename, &tik_offset, &tik_size))
+    if (!gamecardGetHashFileSystemEntryInfoByName(HashFileSystemPartitionType_Secure, tik_filename, &tik_offset, &tik_size))
     {
         LOG_MSG_ERROR("Error retrieving offset and size for \"%s\" entry in secure hash FS partition!", tik_filename);
         return false;

@@ -174,22 +174,19 @@ typedef enum {
 } GameCardCompatibilityType;
 
 /// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under HOS 9.0.0+) and the IV from `GameCardHeader`.
-/// Key hashes for documentation purposes:
-/// Production XCI header key hash:  2E36CC55157A351090A73E7AE77CF581F69B0B6E48FB066C984879A6ED7D2E96
-/// Development XCI header key hash: 61D5C02244188810E2E3DE69341AC0F3C7653D370C6D3F77CA82B0B7E59F39AD
 typedef struct {
-    u64 fw_version;             ///< GameCardFwVersion.
-    u32 acc_ctrl_1;             ///< GameCardAccCtrl1.
-    u32 wait_1_time_read;       ///< Always 0x1388.
-    u32 wait_2_time_read;       ///< Always 0.
-    u32 wait_1_time_write;      ///< Always 0.
-    u32 wait_2_time_write;      ///< Always 0.
-    SdkAddOnVersion fw_mode;    ///< Current SdkAddOnVersion.
-    Version upp_version;        ///< Bundled system update version.
-    u8 compatibility_type;      ///< GameCardCompatibilityType.
+    u64 fw_version;         ///< GameCardFwVersion.
+    u32 acc_ctrl_1;         ///< GameCardAccCtrl1.
+    u32 wait_1_time_read;   ///< Always 0x1388.
+    u32 wait_2_time_read;   ///< Always 0.
+    u32 wait_1_time_write;  ///< Always 0.
+    u32 wait_2_time_write;  ///< Always 0.
+    Version fw_mode;        ///< Current SDK version.
+    Version upp_version;    ///< Bundled system update version.
+    u8 compatibility_type;  ///< GameCardCompatibilityType.
     u8 reserved_1[0x3];
-    u64 upp_hash;               ///< SHA-256 (?) checksum for the update partition. The exact way it's calculated is currently unknown.
-    u64 upp_id;                 ///< Must match GAMECARD_UPDATE_TID.
+    u64 upp_hash;           ///< Checksum for the update partition. The exact way it's calculated is currently unknown.
+    u64 upp_id;             ///< Must match GAMECARD_UPDATE_TID.
     u8 reserved_2[0x38];
 } GameCardInfo;
 
@@ -232,16 +229,6 @@ typedef enum {
     GameCardStatus_InsertedAndInfoNotLoaded        = 4, ///< A gamecard has been inserted, but an unexpected error unrelated to both "nogc" patch and LAFW version occurred.
     GameCardStatus_InsertedAndInfoLoaded           = 5  ///< A gamecard has been inserted and all required information could be successfully retrieved from it.
 } GameCardStatus;
-
-typedef enum {
-    GameCardHashFileSystemPartitionType_None   = 0, ///< Not a real value.
-    GameCardHashFileSystemPartitionType_Root   = 1,
-    GameCardHashFileSystemPartitionType_Update = 2,
-    GameCardHashFileSystemPartitionType_Logo   = 3, ///< Only available in GameCardFwVersion_Since400NUP or greater gamecards.
-    GameCardHashFileSystemPartitionType_Normal = 4,
-    GameCardHashFileSystemPartitionType_Secure = 5,
-    GameCardHashFileSystemPartitionType_Count  = 6  ///< Total values supported by this enum.
-} GameCardHashFileSystemPartitionType;
 
 typedef enum {
     LotusAsicFirmwareType_ReadFw    = 0xFF,
@@ -295,7 +282,7 @@ u8 gamecardGetStatus(void);
 
 /// Fills the provided GameCardSecurityInformation pointer.
 /// This area can't be read using gamecardReadStorage().
-bool gamecardGetSecurityInformation(GameCardSecurityInformation* out);
+bool gamecardGetSecurityInformation(GameCardSecurityInformation *out);
 
 /// Fills the provided FsGameCardIdSet pointer.
 /// This area can't be read using gamecardReadStorage().

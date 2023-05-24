@@ -67,13 +67,13 @@ bool bfsarInitialize(void)
             if (ptr1 && ptr2 && ptr1 != ptr2)
             {
                 /* Create BFSAR file in the current working directory. */
-                snprintf(g_bfsarPath, sizeof(g_bfsarPath), "%.*s" BFSAR_FILENAME, (int)((ptr2 - ptr1) + 1), ptr1);
+                snprintf(g_bfsarPath, sizeof(g_bfsarPath), "%.*s" BFSAR_FILENAME, (int)((ptr2 - launch_path) + 1), launch_path);
                 use_root = false;
             }
         }
 
         /* Create BFSAR file in the SD card root directory. */
-        if (use_root) sprintf(g_bfsarPath, "/" BFSAR_FILENAME);
+        if (use_root) sprintf(g_bfsarPath, DEVOPTAB_SDMC_DEVICE "/" BFSAR_FILENAME);
 
         LOG_MSG_DEBUG("BFSAR path: \"%s\".", g_bfsarPath);
 
@@ -106,7 +106,9 @@ bool bfsarInitialize(void)
         }
 
         /* Initialize NCA context. */
-        if (!ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Program, 0), title_info->version.value, NULL))
+        /* Don't allow invalid NCA signatures. */
+        if (!ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Program, 0), title_info->version.value, NULL) || \
+            !nca_ctx->valid_main_signature)
         {
             LOG_MSG_ERROR("Failed to initialize qlaunch Program NCA context!");
             break;

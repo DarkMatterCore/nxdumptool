@@ -161,7 +161,7 @@ static void read_thread_func(void *arg)
         if (shared_data->write_error) break;
 
         /* Send current file properties */
-        shared_data->read_error = !usbSendFilePropertiesCommon(file_entry->size, path);
+        shared_data->read_error = !usbSendFileProperties(file_entry->size, path);
         if (shared_data->read_error)
         {
             condvarWakeAll(&g_writeCondvar);
@@ -579,7 +579,7 @@ int main(int argc, char *argv[])
     consoleClear();
     consolePrint("selected title:\n%s (%016lX)\n\n", app_metadata[selected_idx]->lang_entry.name, app_metadata[selected_idx]->title_id + program_id_offset);
 
-    if (!ncaInitializeContext(base_nca_ctx, user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+    if (!ncaInitializeContext(base_nca_ctx, user_app_data.app_info->storage_id, (user_app_data.app_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
         titleGetContentInfoByTypeAndIdOffset(user_app_data.app_info, NcmContentType_Program, program_id_offset), user_app_data.app_info->version.value, NULL))
     {
         consolePrint("nca initialize base ctx failed\n");
@@ -605,7 +605,7 @@ int main(int argc, char *argv[])
     {
         consolePrint("using patch romfs with update v%u\n", latest_patch->version.value);
 
-        if (!ncaInitializeContext(update_nca_ctx, latest_patch->storage_id, (latest_patch->storage_id == NcmStorageId_GameCard ? GameCardHashFileSystemPartitionType_Secure : 0), \
+        if (!ncaInitializeContext(update_nca_ctx, latest_patch->storage_id, (latest_patch->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
             titleGetContentInfoByTypeAndIdOffset(latest_patch, NcmContentType_Program, program_id_offset), latest_patch->version.value, NULL))
         {
             consolePrint("nca initialize update ctx failed\n");
