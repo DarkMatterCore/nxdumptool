@@ -1405,9 +1405,9 @@ static void ncaCalculateLayerHash(void *dst, const void *src, size_t size, bool 
 {
     if (use_sha3)
     {
-        sha256CalculateHash(dst, src, size);
-    } else {
         sha3256CalculateHash(dst, src, size);
+    } else {
+        sha256CalculateHash(dst, src, size);
     }
 }
 
