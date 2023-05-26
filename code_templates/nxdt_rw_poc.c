@@ -65,20 +65,21 @@ struct _Menu {
 };
 
 typedef enum {
-    MenuId_Root              = 0,
-    MenuId_GameCard          = 1,
-    MenuId_XCI               = 2,
-    MenuId_HFS               = 3,
-    MenuId_UserTitles        = 4,
-    MenuId_UserTitlesSubMenu = 5,
-    MenuId_NSPTitleTypes     = 6,
-    MenuId_NSP               = 7,
-    MenuId_TicketTitleTypes  = 8,
-    MenuId_Ticket            = 9,
-    MenuId_NCATitleTypes     = 10,
-    MenuId_NCA               = 11,
-    MenuId_NCAFsSections     = 12,
-    MenuId_Count             = 13
+    MenuId_Root                 = 0,
+    MenuId_GameCard             = 1,
+    MenuId_XCI                  = 2,
+    MenuId_HFS                  = 3,
+    MenuId_UserTitles           = 4,
+    MenuId_UserTitlesSubMenu    = 5,
+    MenuId_NSPTitleTypes        = 6,
+    MenuId_NSP                  = 7,
+    MenuId_TicketTitleTypes     = 8,
+    MenuId_Ticket               = 9,
+    MenuId_NcaTitleTypes        = 10,
+    MenuId_Nca                  = 11,
+    MenuId_NcaFsSections        = 12,
+    MenuId_NcaFsSectionsSubMenu = 13,
+    MenuId_Count                = 14
 } MenuId;
 
 typedef struct
@@ -232,6 +233,12 @@ static void setNspAppendAuthoringToolDataOption(u32 idx);
 
 static u32 getTicketRemoveConsoleDataOption(void);
 static void setTicketRemoveConsoleDataOption(u32 idx);
+
+static u32 getNcaFsWriteSectionImageOption(void);
+static void setNcaFsWriteSectionImageOption(u32 idx);
+
+static u32 getNcaFsUseLayeredFsDirOption(void);
+static void setNcaFsUseLayeredFsDirOption(u32 idx);
 
 /* Global variables. */
 
@@ -611,11 +618,56 @@ static Menu g_ticketMenu = {
 static bool g_ncaMenuRawMode = false;
 static NcaContext *g_ncaFsSectionsMenuCtx = NULL;
 
+static MenuElement *g_ncaFsSectionsSubMenuElements[] = {
+    &(MenuElement){
+        .str = "start nca fs dump",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = NULL,
+        .userdata = NULL    // Dynamically set
+    },
+    // TODO: place base/patch selector here? display selector at runtime?
+    &(MenuElement){
+        .str = "write section image",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &(MenuElementOption){
+            .selected = 0,
+            .getter_func = &getNcaFsWriteSectionImageOption,
+            .setter_func = &setNcaFsWriteSectionImageOption,
+            .options = g_noYesStrings
+        },
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "use layeredfs dir",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &(MenuElementOption){
+            .selected = 0,
+            .getter_func = &getNcaFsUseLayeredFsDirOption,
+            .setter_func = &setNcaFsUseLayeredFsDirOption,
+            .options = g_noYesStrings
+        },
+        .userdata = NULL
+    },
+    &g_storageMenuElement,
+    NULL
+};
+
+static Menu g_ncaFsSectionsSubMenu = {
+    .id = MenuId_NcaFsSectionsSubMenu,
+    .parent = NULL,
+    .selected = 0,
+    .scroll = 0,
+    .elements = g_ncaFsSectionsSubMenuElements
+};
+
 static MenuElement **g_ncaFsSectionsMenuElements = NULL;
 
 // Dynamically populated using g_ncaFsSectionsMenuElements.
 static Menu g_ncaFsSectionsMenu = {
-    .id = MenuId_NCAFsSections,
+    .id = MenuId_NcaFsSections,
     .parent = NULL,
     .selected = 0,
     .scroll = 0,
@@ -626,7 +678,7 @@ static MenuElement **g_ncaMenuElements = NULL;
 
 // Dynamically populated using g_ncaMenuElements.
 static Menu g_ncaMenu = {
-    .id = MenuId_NCA,
+    .id = MenuId_Nca,
     .parent = NULL,
     .selected = 0,
     .scroll = 0,
@@ -700,7 +752,7 @@ static MenuElement *g_userTitlesSubMenuElements[] = {
     &(MenuElement){
         .str = "nca / nca fs dump options",
         .child_menu = &(Menu){
-            .id = MenuId_NCATitleTypes,
+            .id = MenuId_NcaTitleTypes,
             .parent = NULL,
             .selected = 0,
             .scroll = 0,
@@ -822,7 +874,7 @@ int main(int argc, char *argv[])
             g_titleTypesMenuElements[0]->child_menu = g_titleTypesMenuElements[1]->child_menu = \
             g_titleTypesMenuElements[2]->child_menu = g_titleTypesMenuElements[3]->child_menu = (child_id == MenuId_NSPTitleTypes ? &g_nspMenu : \
                                                                                                 (child_id == MenuId_TicketTitleTypes ? &g_ticketMenu : \
-                                                                                                (child_id == MenuId_NCATitleTypes ? &g_ncaMenu : NULL)));
+                                                                                                (child_id == MenuId_NcaTitleTypes ? &g_ncaMenu : NULL)));
         }
 
         consoleClear();
@@ -845,12 +897,14 @@ int main(int argc, char *argv[])
             consolePrint("title info:\n\n");
             consolePrint("name: %s\n", app_metadata->lang_entry.name);
             consolePrint("publisher: %s\n", app_metadata->lang_entry.author);
-            if (cur_menu->id == MenuId_UserTitlesSubMenu) consolePrint("title id: %016lX\n", app_metadata->title_id);
+            if (cur_menu->id == MenuId_UserTitlesSubMenu || cur_menu->id == MenuId_NSPTitleTypes || cur_menu->id == MenuId_TicketTitleTypes || \
+                cur_menu->id == MenuId_NcaTitleTypes) consolePrint("title id: %016lX\n", app_metadata->title_id);
             consolePrint("______________________________\n\n");
 
-            if (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_NCA || cur_menu->id == MenuId_NCAFsSections)
+            if (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_Nca || \
+                cur_menu->id == MenuId_NcaFsSections || cur_menu->id == MenuId_NcaFsSectionsSubMenu)
             {
-                if (cur_menu->id != MenuId_NCAFsSections && (title_info->previous || title_info->next))
+                if (cur_menu->id != MenuId_NcaFsSections && cur_menu->id != MenuId_NcaFsSectionsSubMenu && (title_info->previous || title_info->next))
                 {
                     consolePrint("press l/zl and/or r/zr to change the selected title\n");
                     consolePrint("title: %u / %u\n", title_info_idx, title_info_count);
@@ -871,19 +925,29 @@ int main(int argc, char *argv[])
 
                 if (cur_menu->id == MenuId_Ticket) g_ticketMenuElements[0]->userdata = title_info;
 
-                if (cur_menu->id == MenuId_NCA)
+                if (cur_menu->id == MenuId_Nca)
                 {
                     consolePrint("press y to switch to %s mode\n", g_ncaMenuRawMode ? "nca fs section" : "raw nca");
                     consolePrint("______________________________\n\n");
                 }
 
-                if (cur_menu->id == MenuId_NCAFsSections)
+                if (cur_menu->id == MenuId_NcaFsSections || cur_menu->id == MenuId_NcaFsSectionsSubMenu)
                 {
                     consolePrint("selected nca info:\n\n");
                     consolePrint("content id: %s\n", g_ncaFsSectionsMenuCtx->content_id_str);
                     consolePrint("content type: %s\n", titleGetNcmContentTypeName(g_ncaFsSectionsMenuCtx->content_type));
                     consolePrint("id offset: %u\n", g_ncaFsSectionsMenuCtx->id_offset);
                     consolePrint("size: %s\n", g_ncaFsSectionsMenuCtx->content_size_str);
+                    consolePrint("______________________________\n\n");
+                }
+
+                if (cur_menu->id == MenuId_NcaFsSectionsSubMenu)
+                {
+                    NcaFsSectionContext *nca_fs_ctx = (NcaFsSectionContext*)g_ncaFsSectionsSubMenuElements[0]->userdata;
+                    consolePrint("selected nca fs section info:\n");
+                    consolePrint("section index: %u\n", nca_fs_ctx->section_idx);
+                    consolePrint("section type: %s\n", ncaGetFsSectionTypeName(nca_fs_ctx));
+                    consolePrint("section size: %s\n", nca_fs_ctx->section_size_str);
                     consolePrint("______________________________\n\n");
                 }
             }
@@ -972,7 +1036,7 @@ int main(int argc, char *argv[])
                     error = !titleGetUserApplicationData(app_metadata->title_id, &user_app_data);
                     if (error) consolePrint("\nfailed to get user application data for %016lX!\n", app_metadata->title_id);
                 } else
-                if (child_menu->id == MenuId_NSP || child_menu->id == MenuId_Ticket || child_menu->id == MenuId_NCA)
+                if (child_menu->id == MenuId_NSP || child_menu->id == MenuId_Ticket || child_menu->id == MenuId_Nca)
                 {
                     u32 title_type = *((u32*)selected_element->userdata);
 
@@ -997,7 +1061,7 @@ int main(int argc, char *argv[])
 
                     if (title_info)
                     {
-                        if (child_menu->id == MenuId_NCA)
+                        if (child_menu->id == MenuId_Nca)
                         {
                             updateNcaList(title_info);
 
@@ -1021,13 +1085,25 @@ int main(int argc, char *argv[])
                         error = true;
                     }
                 } else
-                if (child_menu->id == MenuId_NCAFsSections)
+                if (child_menu->id == MenuId_NcaFsSections)
                 {
                     updateNcaFsSectionsList((NcaUserData*)selected_element->userdata);
 
                     if (!g_ncaFsSectionsMenuElements || !g_ncaFsSectionsMenuElements[0])
                     {
                         consolePrint("failed to generate nca fs sections list\n");
+                        error = true;
+                    }
+                } else
+                if (child_menu->id == MenuId_NcaFsSectionsSubMenu)
+                {
+                    NcaFsSectionContext *nca_fs_ctx = selected_element->userdata;
+                    if (nca_fs_ctx->enabled)
+                    {
+                        // TODO: add sparse / patch checks here
+                        g_ncaFsSectionsSubMenuElements[0]->userdata = nca_fs_ctx;
+                    } else {
+                        consolePrint("can't dump an invalid nca fs section!\n");
                         error = true;
                     }
                 }
@@ -1142,7 +1218,7 @@ int main(int argc, char *argv[])
                 g_titleTypesMenuElements[0]->child_menu = g_titleTypesMenuElements[1]->child_menu = \
                 g_titleTypesMenuElements[2]->child_menu = g_titleTypesMenuElements[3]->child_menu = NULL;
             } else
-            if (cur_menu->id == MenuId_NSPTitleTypes || cur_menu->id == MenuId_TicketTitleTypes || cur_menu->id == MenuId_NCATitleTypes)
+            if (cur_menu->id == MenuId_NSPTitleTypes || cur_menu->id == MenuId_TicketTitleTypes || cur_menu->id == MenuId_NcaTitleTypes)
             {
                 title_info = NULL;
                 title_info_idx = title_info_count = 0;
@@ -1155,13 +1231,17 @@ int main(int argc, char *argv[])
             {
                 g_ticketMenuElements[0]->userdata = NULL;
             } else
-            if (cur_menu->id == MenuId_NCA)
+            if (cur_menu->id == MenuId_Nca)
             {
                 freeNcaList();
             } else
-            if (cur_menu->id == MenuId_NCAFsSections)
+            if (cur_menu->id == MenuId_NcaFsSections)
             {
                 freeNcaFsSectionsList();
+            } else
+            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu)
+            {
+                g_ncaFsSectionsSubMenuElements[0]->userdata = NULL;
             }
 
             cur_menu->selected = 0;
@@ -1175,19 +1255,19 @@ int main(int argc, char *argv[])
             for(u32 i = 0; i < g_umsDeviceCount; i++) usbHsFsUnmountDevice(&(g_umsDevices[i]), false);
             updateStorageList();
         } else
-        if (((btn_down & (HidNpadButton_L)) || (btn_held & HidNpadButton_ZL)) && (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_NCA) && title_info->previous)
+        if (((btn_down & (HidNpadButton_L)) || (btn_held & HidNpadButton_ZL)) && (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_Nca) && title_info->previous)
         {
             title_info = title_info->previous;
             title_info_idx--;
             switchNcaListTitle(cur_menu, &element_count, title_info);
         } else
-        if (((btn_down & (HidNpadButton_R)) || (btn_held & HidNpadButton_ZR)) && (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_NCA) && title_info->next)
+        if (((btn_down & (HidNpadButton_R)) || (btn_held & HidNpadButton_ZR)) && (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_Nca) && title_info->next)
         {
             title_info = title_info->next;
             title_info_idx++;
             switchNcaListTitle(cur_menu, &element_count, title_info);
         } else
-        if ((btn_down & HidNpadButton_Y) && cur_menu->id == MenuId_NCA)
+        if ((btn_down & HidNpadButton_Y) && cur_menu->id == MenuId_Nca)
         {
             /* Change NCA menu element properties. */
             g_ncaMenuRawMode ^= 1;
@@ -1523,7 +1603,7 @@ void updateNcaList(TitleInfo *title_info)
 
 static void switchNcaListTitle(Menu *cur_menu, u32 *element_count, TitleInfo *title_info)
 {
-    if (!cur_menu || cur_menu->id != MenuId_NCA || !element_count) return;
+    if (!cur_menu || cur_menu->id != MenuId_Nca || !element_count) return;
 
     updateNcaList(title_info);
 
@@ -1595,7 +1675,7 @@ void updateNcaFsSectionsList(NcaUserData *nca_user_data)
     for(u32 i = 0; i < NCA_FS_HEADER_COUNT; i++)
     {
         NcaFsSectionContext *cur_nca_fs_ctx = &(g_ncaFsSectionsMenuCtx->fs_ctx[i]);
-        char *nca_fs_info_str = NULL, nca_fs_size_str[16] = {0};
+        char *nca_fs_info_str = NULL;
 
         g_ncaFsSectionsMenuElements[idx] = calloc(1, sizeof(MenuElement));
         if (!g_ncaFsSectionsMenuElements[idx]) continue;
@@ -1603,11 +1683,15 @@ void updateNcaFsSectionsList(NcaUserData *nca_user_data)
         nca_fs_info_str = calloc(128, sizeof(char));
         if (!nca_fs_info_str) continue;
 
-        utilsGenerateFormattedSizeString((double)cur_nca_fs_ctx->section_size, nca_fs_size_str, sizeof(nca_fs_size_str));
-        sprintf(nca_fs_info_str, "FS section #%u: %s (%s)", i + 1, ncaGetFsSectionTypeName(cur_nca_fs_ctx), nca_fs_size_str);
+        if (cur_nca_fs_ctx->enabled)
+        {
+            sprintf(nca_fs_info_str, "FS section #%u: %s (%s)", i + 1, ncaGetFsSectionTypeName(cur_nca_fs_ctx), cur_nca_fs_ctx->section_size_str);
+        } else {
+            sprintf(nca_fs_info_str, "FS section #%u: %s", i + 1, ncaGetFsSectionTypeName(cur_nca_fs_ctx));
+        }
 
         g_ncaFsSectionsMenuElements[idx]->str = nca_fs_info_str;
-        g_ncaFsSectionsMenuElements[idx]->child_menu = NULL;
+        g_ncaFsSectionsMenuElements[idx]->child_menu = &g_ncaFsSectionsSubMenu;
         g_ncaFsSectionsMenuElements[idx]->userdata = cur_nca_fs_ctx;
 
         idx++;
@@ -3473,11 +3557,11 @@ static void nspThreadFunc(void *arg)
     if (!ncaInitializeContext(meta_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
         titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Meta, 0), title_info->version.value, &tik))
     {
-        consolePrint("Meta nca initialize ctx failed\n");
+        consolePrint("meta nca initialize ctx failed\n");
         goto end;
     }
 
-    consolePrint("Meta nca initialize ctx succeeded\n");
+    consolePrint("meta nca initialize ctx succeeded\n");
 
     if (!cnmtInitializeContext(&cnmt_ctx, meta_nca_ctx))
     {
@@ -4312,4 +4396,24 @@ static u32 getTicketRemoveConsoleDataOption(void)
 static void setTicketRemoveConsoleDataOption(u32 idx)
 {
     configSetBoolean("ticket/remove_console_data", (bool)idx);
+}
+
+static u32 getNcaFsWriteSectionImageOption(void)
+{
+    return (u32)configGetBoolean("nca_fs/write_section_image");
+}
+
+static void setNcaFsWriteSectionImageOption(u32 idx)
+{
+    configSetBoolean("nca_fs/write_section_image", (bool)idx);
+}
+
+static u32 getNcaFsUseLayeredFsDirOption(void)
+{
+    return (u32)configGetBoolean("nca_fs/use_layeredfs_dir");
+}
+
+static void setNcaFsUseLayeredFsDirOption(u32 idx)
+{
+    configSetBoolean("nca_fs/use_layeredfs_dir", (bool)idx);
 }

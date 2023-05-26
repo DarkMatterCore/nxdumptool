@@ -376,6 +376,7 @@ typedef struct {
     u8 section_idx;                     ///< Index within [0 - 3].
     u64 section_offset;                 ///< Relative to the start of the NCA content file. Placed here for convenience.
     u64 section_size;                   ///< Placed here for convenience.
+    char section_size_str[0x10];        ///< Placed here for convenience.
     u8 hash_type;                       ///< NcaHashType.
     u8 encryption_type;                 ///< NcaEncryptionType.
     u8 section_type;                    ///< NcaFsSectionType.
@@ -436,7 +437,7 @@ struct _NcaContext {
     u8 format_version;                                  ///< NcaVersion.
     u8 content_type;                                    ///< NcmContentType. Retrieved from NcmContentInfo.
     u64 content_size;                                   ///< Retrieved from NcmContentInfo.
-    char content_size_str[0x10];
+    char content_size_str[0x10];                        ///< Placed here for convenience.
     u8 key_generation;                                  ///< NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
     u32 title_version;

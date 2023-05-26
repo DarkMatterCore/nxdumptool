@@ -545,7 +545,7 @@ const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
     const char *str = "Invalid";
     bool is_exefs = false;
 
-    if (!ctx || !ctx->nca_ctx) return str;
+    if (!ctx || !ctx->enabled) return str;
 
     is_exefs = (ctx->nca_ctx->content_type == NcmContentType_Program && ctx->section_idx == 0);
 
@@ -824,6 +824,8 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     /* Calculate section offset and size. */
     fs_ctx->section_offset = NCA_FS_SECTOR_OFFSET(fs_info->start_sector);
     fs_ctx->section_size = (NCA_FS_SECTOR_OFFSET(fs_info->end_sector) - fs_ctx->section_offset);
+
+    utilsGenerateFormattedSizeString((double)fs_ctx->section_size, fs_ctx->section_size_str, sizeof(fs_ctx->section_size_str));
 
     /* Check if we're dealing with an invalid start offset or an empty size. */
     if (fs_ctx->section_offset < sizeof(NcaHeader) || !fs_ctx->section_size)
