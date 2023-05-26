@@ -162,14 +162,13 @@ namespace nxdt::views
         gamecardGetDecryptedCardInfoArea(&card_info);
 
         const SystemVersion upp_version = card_info.upp_version.system_version;
-        const SdkAddOnVersion upp_version_old = card_info.upp_version.sdk_addon_version;
 
         /* TODO: move somewhere else? */
-        if (upp_version_old.major == 0 && upp_version_old.minor == 0)
+        if (upp_version.major == 0 && upp_version.minor == 0)
         {
             std::string upp_version_display = "";
 
-            switch(upp_version_old.micro)
+            switch(upp_version.micro)
             {
                 case 0: /* v450 / 0.0.0-450 */
                     upp_version_display = "1.0.0";
@@ -192,11 +191,11 @@ namespace nxdt::views
 
             if (upp_version_display != "")
             {
-                update_version->setValue(fmt::format("{} ({}.{}.{}-{}) (v{})", upp_version_display, upp_version_old.major, upp_version_old.minor, upp_version_old.micro, \
-                                                                               upp_version_old.relstep, upp_version_old.value));
+                update_version->setValue(fmt::format("{} ({}.{}.{}-{}) (v{})", upp_version_display, upp_version.major, upp_version.minor, upp_version.micro, \
+                                                                               upp_version.relstep, upp_version.value));
             } else {
-                update_version->setValue(fmt::format("{}.{}.{}-{} (v{})", upp_version_old.major, upp_version_old.minor, upp_version_old.micro, \
-                                                                          upp_version_old.relstep, upp_version_old.value));
+                update_version->setValue(fmt::format("{}.{}.{}-{} (v{})", upp_version.major, upp_version.minor, upp_version.micro, \
+                                                                          upp_version.relstep, upp_version.value));
             }
         } else {
             update_version->setValue(fmt::format("{}.{}.{}-{}.{} (v{})", upp_version.major, upp_version.minor, upp_version.micro, \

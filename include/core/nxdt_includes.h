@@ -78,16 +78,21 @@
 #include "lz4.h"
 
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{major_relstep}.{minor_relstep}".
-/// Used by system version fields.
+/// Used by system version fields. 16-bit long relstep values were used by system version fields prior to HOS 3.0.0.
 typedef struct {
     union {
         u32 value;
         struct {
-            u32 minor_relstep : 8;
-            u32 major_relstep : 8;
-            u32 micro         : 4;
-            u32 minor         : 6;
-            u32 major         : 6;
+            union {
+                u16 relstep;
+                struct {
+                    u16 minor_relstep : 8;
+                    u16 major_relstep : 8;
+                };
+            };
+            u16 micro                 : 4;
+            u16 minor                 : 6;
+            u16 major                 : 6;
         };
     };
 } SystemVersion;
@@ -109,7 +114,7 @@ typedef struct {
 NXDT_ASSERT(ApplicationVersion, 0x4);
 
 /// Used to store version numbers expressed in dot notation: "{major}.{minor}.{micro}-{relstep}".
-/// Used by SDK version fields. This format was also used for system version fields prior to HOS 3.0.0.
+/// Used by SDK version fields.
 typedef struct {
     union {
         u32 value;
