@@ -933,6 +933,8 @@ int main(int argc, char *argv[])
                 data_update = true;
                 break;
             }
+
+            svcSleepThread(50000000); // 50 ms
         }
 
         if (!g_appletStatus) break;
@@ -1193,7 +1195,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp | HidNpadButton_ZL | HidNpadButton_ZR)) svcSleepThread(50000000); // 50 ms
+        svcSleepThread(50000000); // 50 ms
     }
 
 end:
@@ -1239,6 +1241,7 @@ static void utilsWaitForButtonPress(u64 flag)
     {
         utilsScanPads();
         if (utilsGetButtonsDown() & flag) break;
+        svcSleepThread(50000000); // 50 ms
     }
 }
 
@@ -2342,7 +2345,7 @@ static bool saveNintendoSubmissionPackage(void *userdata)
     utilsCreateThread(&dump_thread, nspThreadFunc, &nsp_thread_data, 2);
 
     /* Wait until the background thread calculates the NSP size. */
-    while(!nsp_thread_data.total_size && !nsp_thread_data.error) svcSleepThread(10000000); // 10 ms
+    while(!nsp_thread_data.total_size && !nsp_thread_data.error) svcSleepThread(50000000); // 50 ms
 
     if (nsp_thread_data.error)
     {
@@ -2403,6 +2406,8 @@ static bool saveNintendoSubmissionPackage(void *userdata)
 
         consolePrint("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, nsp_thread_data.total_size, percent, (now - start));
         consoleRefresh();
+
+        svcSleepThread(50000000); // 50 ms
     }
 
     consolePrint("\nwaiting for thread to join\n");
@@ -3208,6 +3213,8 @@ static bool spanDumpThreads(ThreadFunc read_func, ThreadFunc write_func, void *a
 
         consolePrint("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_thread_data->total_size, percent, (now - start));
         consoleRefresh();
+
+        svcSleepThread(50000000); // 50 ms
     }
 
     consolePrint("\nwaiting for threads to join\n");
