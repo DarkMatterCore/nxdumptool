@@ -436,6 +436,7 @@ struct _NcaContext {
     u8 format_version;                                  ///< NcaVersion.
     u8 content_type;                                    ///< NcmContentType. Retrieved from NcmContentInfo.
     u64 content_size;                                   ///< Retrieved from NcmContentInfo.
+    char content_size_str[0x10];
     u8 key_generation;                                  ///< NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
     u32 title_version;

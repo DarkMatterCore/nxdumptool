@@ -651,7 +651,15 @@ void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size)
         if (size >= pow(1024.0, i + 1) && (i + 1) < g_sizeSuffixesCount) continue;
 
         size /= pow(1024.0, i);
-        snprintf(dst, dst_size, "%.2F %s", size, g_sizeSuffixes[i]);
+
+        if (i == 0)
+        {
+            /* Don't display decimal places if we're dealing with plain bytes. */
+            snprintf(dst, dst_size, "%.0f %s", size, g_sizeSuffixes[i]);
+        } else {
+            snprintf(dst, dst_size, "%.2f %s", size, g_sizeSuffixes[i]);
+        }
+
         break;
     }
 }

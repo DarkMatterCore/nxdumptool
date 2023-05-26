@@ -77,7 +77,7 @@ typedef enum {
     MenuId_Ticket            = 9,
     MenuId_NCATitleTypes     = 10,
     MenuId_NCA               = 11,
-    MenuId_NCAFsSection      = 12,
+    MenuId_NCAFsSections     = 12,
     MenuId_Count             = 13
 } MenuId;
 
@@ -141,6 +141,10 @@ void updateTitleList(void);
 
 void freeNcaList(void);
 void updateNcaList(TitleInfo *title_info);
+static void switchNcaListTitle(Menu *cur_menu, u32 *element_count, TitleInfo *title_info);
+
+void freeNcaFsSectionsList(void);
+void updateNcaFsSectionsList(NcaUserData *nca_user_data);
 
 NX_INLINE bool useUsbHost(void);
 
@@ -250,6 +254,14 @@ static MenuElementOption g_storageMenuElementOption = {
     .options = NULL
 };
 
+static MenuElement g_storageMenuElement = {
+    .str = "output storage",
+    .child_menu = NULL,
+    .task_func = NULL,
+    .element_options = &g_storageMenuElementOption,
+    .userdata = NULL
+};
+
 static MenuElement *g_xciMenuElements[] = {
     &(MenuElement){
         .str = "start xci dump",
@@ -306,13 +318,7 @@ static MenuElement *g_xciMenuElements[] = {
         },
         .userdata = NULL
     },
-    &(MenuElement){
-        .str = "output storage",
-        .child_menu = NULL,
-        .task_func = NULL,
-        .element_options = &g_storageMenuElementOption,
-        .userdata = NULL
-    },
+    &g_storageMenuElement,
     NULL
 };
 
@@ -370,13 +376,7 @@ static MenuElement *g_gameCardHfsMenuElements[] = {
         },
         .userdata = NULL
     },
-    &(MenuElement){
-        .str = "output storage",
-        .child_menu = NULL,
-        .task_func = NULL,
-        .element_options = &g_storageMenuElementOption,
-        .userdata = NULL
-    },
+    &g_storageMenuElement,
     NULL
 };
 
@@ -456,13 +456,7 @@ static MenuElement *g_gameCardMenuElements[] = {
         .element_options = NULL,
         .userdata = NULL
     },
-    &(MenuElement){
-        .str = "output storage",
-        .child_menu = NULL,
-        .task_func = NULL,
-        .element_options = &g_storageMenuElementOption,
-        .userdata = NULL
-    },
+    &g_storageMenuElement,
     NULL
 };
 
@@ -570,13 +564,7 @@ static MenuElement *g_nspMenuElements[] = {
         },
         .userdata = NULL
     },
-    &(MenuElement){
-        .str = "output storage",
-        .child_menu = NULL,
-        .task_func = NULL,
-        .element_options = &g_storageMenuElementOption,
-        .userdata = NULL
-    },
+    &g_storageMenuElement,
     NULL
 };
 
@@ -608,13 +596,7 @@ static MenuElement *g_ticketMenuElements[] = {
         },
         .userdata = NULL
     },
-    &(MenuElement){
-        .str = "output storage",
-        .child_menu = NULL,
-        .task_func = NULL,
-        .element_options = &g_storageMenuElementOption,
-        .userdata = NULL
-    },
+    &g_storageMenuElement,
     NULL
 };
 
@@ -624,6 +606,20 @@ static Menu g_ticketMenu = {
     .selected = 0,
     .scroll = 0,
     .elements = g_ticketMenuElements
+};
+
+static bool g_ncaMenuRawMode = false;
+static NcaContext *g_ncaFsSectionsMenuCtx = NULL;
+
+static MenuElement **g_ncaFsSectionsMenuElements = NULL;
+
+// Dynamically populated using g_ncaFsSectionsMenuElements.
+static Menu g_ncaFsSectionsMenu = {
+    .id = MenuId_NCAFsSections,
+    .parent = NULL,
+    .selected = 0,
+    .scroll = 0,
+    .elements = NULL
 };
 
 static MenuElement **g_ncaMenuElements = NULL;
@@ -702,7 +698,7 @@ static MenuElement *g_userTitlesSubMenuElements[] = {
         .userdata = NULL
     },
     &(MenuElement){
-        .str = "nca dump options",
+        .str = "nca / nca fs dump options",
         .child_menu = &(Menu){
             .id = MenuId_NCATitleTypes,
             .parent = NULL,
@@ -831,8 +827,9 @@ int main(int argc, char *argv[])
 
         consoleClear();
         consolePrint("______________________________\n\n");
-        consolePrint("press b to %s.\n", cur_menu->parent ? "go back" : "exit");
+        if (cur_menu->parent) consolePrint("press b to go back\n");
         if (g_umsDeviceCount) consolePrint("press x to safely remove all ums devices\n");
+        consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
 
         if (cur_menu->id == MenuId_UserTitles)
@@ -848,12 +845,12 @@ int main(int argc, char *argv[])
             consolePrint("title info:\n\n");
             consolePrint("name: %s\n", app_metadata->lang_entry.name);
             consolePrint("publisher: %s\n", app_metadata->lang_entry.author);
-            consolePrint("title id: %016lX\n", app_metadata->title_id);
+            if (cur_menu->id == MenuId_UserTitlesSubMenu) consolePrint("title id: %016lX\n", app_metadata->title_id);
             consolePrint("______________________________\n\n");
 
-            if (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_NCA)
+            if (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_NCA || cur_menu->id == MenuId_NCAFsSections)
             {
-                if (title_info->previous || title_info->next)
+                if (cur_menu->id != MenuId_NCAFsSections && (title_info->previous || title_info->next))
                 {
                     consolePrint("press l/zl and/or r/zr to change the selected title\n");
                     consolePrint("title: %u / %u\n", title_info_idx, title_info_count);
@@ -873,6 +870,22 @@ int main(int argc, char *argv[])
                 if (cur_menu->id == MenuId_NSP) g_nspMenuElements[0]->userdata = title_info;
 
                 if (cur_menu->id == MenuId_Ticket) g_ticketMenuElements[0]->userdata = title_info;
+
+                if (cur_menu->id == MenuId_NCA)
+                {
+                    consolePrint("press y to switch to %s mode\n", g_ncaMenuRawMode ? "nca fs section" : "raw nca");
+                    consolePrint("______________________________\n\n");
+                }
+
+                if (cur_menu->id == MenuId_NCAFsSections)
+                {
+                    consolePrint("selected nca info:\n\n");
+                    consolePrint("content id: %s\n", g_ncaFsSectionsMenuCtx->content_id_str);
+                    consolePrint("content type: %s\n", titleGetNcmContentTypeName(g_ncaFsSectionsMenuCtx->content_type));
+                    consolePrint("id offset: %u\n", g_ncaFsSectionsMenuCtx->id_offset);
+                    consolePrint("size: %s\n", g_ncaFsSectionsMenuCtx->content_size_str);
+                    consolePrint("______________________________\n\n");
+                }
             }
         }
 
@@ -1007,6 +1020,16 @@ int main(int argc, char *argv[])
 
                         error = true;
                     }
+                } else
+                if (child_menu->id == MenuId_NCAFsSections)
+                {
+                    updateNcaFsSectionsList((NcaUserData*)selected_element->userdata);
+
+                    if (!g_ncaFsSectionsMenuElements || !g_ncaFsSectionsMenuElements[0])
+                    {
+                        consolePrint("failed to generate nca fs sections list\n");
+                        error = true;
+                    }
                 }
 
                 if (!error)
@@ -1135,6 +1158,10 @@ int main(int argc, char *argv[])
             if (cur_menu->id == MenuId_NCA)
             {
                 freeNcaList();
+            } else
+            if (cur_menu->id == MenuId_NCAFsSections)
+            {
+                freeNcaFsSectionsList();
             }
 
             cur_menu->selected = 0;
@@ -1152,60 +1179,43 @@ int main(int argc, char *argv[])
         {
             title_info = title_info->previous;
             title_info_idx--;
-
-            if (cur_menu->id == MenuId_NCA)
-            {
-                updateNcaList(title_info);
-                if (!g_ncaMenuElements || !g_ncaMenuElements[0])
-                {
-                    freeNcaList();
-                    consolePrint("\nfailed to generate nca list for newly selected title\npress any button to go back\n");
-                    consoleRefresh();
-                    utilsWaitForButtonPress(0);
-
-                    cur_menu->selected = 0;
-                    cur_menu->scroll = 0;
-
-                    cur_menu = cur_menu->parent;
-                    element_count = menuGetElementCount(cur_menu);
-                }
-            }
+            switchNcaListTitle(cur_menu, &element_count, title_info);
         } else
         if (((btn_down & (HidNpadButton_R)) || (btn_held & HidNpadButton_ZR)) && (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_NCA) && title_info->next)
         {
             title_info = title_info->next;
             title_info_idx++;
+            switchNcaListTitle(cur_menu, &element_count, title_info);
+        } else
+        if ((btn_down & HidNpadButton_Y) && cur_menu->id == MenuId_NCA)
+        {
+            /* Change NCA menu element properties. */
+            g_ncaMenuRawMode ^= 1;
 
-            if (cur_menu->id == MenuId_NCA)
+            for(u32 i = 0; g_ncaMenuElements[i]; i++)
             {
-                updateNcaList(title_info);
-                if (!g_ncaMenuElements || !g_ncaMenuElements[0])
-                {
-                    freeNcaList();
-                    consolePrint("\nfailed to generate nca list for newly selected title\npress any button to go back\n");
-                    consoleRefresh();
-                    utilsWaitForButtonPress(0);
-
-                    cur_menu->selected = 0;
-                    cur_menu->scroll = 0;
-
-                    cur_menu = cur_menu->parent;
-                    element_count = menuGetElementCount(cur_menu);
-                }
+                g_ncaMenuElements[i]->child_menu = (g_ncaMenuRawMode ? NULL : &g_ncaFsSectionsMenu);
+                g_ncaMenuElements[i]->task_func = (g_ncaMenuRawMode ? &saveNintendoContentArchive : NULL);
             }
+        } else
+        if (btn_down & HidNpadButton_Plus)
+        {
+            break;
         }
 
-        svcSleepThread(50000000); // 50 ms
+        if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp | HidNpadButton_ZL | HidNpadButton_ZR)) svcSleepThread(50000000); // 50 ms
     }
 
 end:
-    titleFreeUserApplicationData(&user_app_data);
+    freeNcaFsSectionsList();
 
     freeNcaList();
 
     freeTitleList();
 
     freeStorageList();
+
+    titleFreeUserApplicationData(&user_app_data);
 
     utilsCloseResources();
 
@@ -1429,7 +1439,11 @@ void freeNcaList(void)
     /* Free all previously allocated data. */
     if (g_ncaMenuElements)
     {
-        for(u32 i = 0; g_ncaMenuElements[i] != NULL; i++)
+        u32 count = 0;
+
+        for(count = 0; g_ncaMenuElements[count]; count++);
+
+        for(u32 i = 0; count > 0 && i < (count - 1); i++) // Don't free output storage element
         {
             if (g_ncaMenuElements[i]->str) free(g_ncaMenuElements[i]->str);
             if (g_ncaMenuElements[i]->userdata) free(g_ncaMenuElements[i]->userdata);
@@ -1456,12 +1470,12 @@ void updateNcaList(TitleInfo *title_info)
     freeNcaList();
 
     /* Reallocate buffer. */
-    tmp = realloc(g_ncaMenuElements, (content_count + 1) * sizeof(MenuElement*)); // NULL terminator
+    tmp = realloc(g_ncaMenuElements, (content_count + 2) * sizeof(MenuElement*)); // Output storage, NULL terminator
 
     g_ncaMenuElements = tmp;
     tmp = NULL;
 
-    memset(g_ncaMenuElements, 0, (content_count + 1) * sizeof(MenuElement*)); // NULL terminator
+    memset(g_ncaMenuElements, 0, (content_count + 2) * sizeof(MenuElement*)); // Output storage, NULL terminator
 
     /* Generate menu elements. */
     for(u32 i = 0; i < content_count; i++)
@@ -1495,14 +1509,111 @@ void updateNcaList(TitleInfo *title_info)
         nca_user_data->content_idx = i;
 
         g_ncaMenuElements[idx]->str = nca_info_str;
-        //g_ncaMenuElements[idx]->child_menu = NULL;
-        g_ncaMenuElements[idx]->task_func = &saveNintendoContentArchive;
+        g_ncaMenuElements[idx]->child_menu = (g_ncaMenuRawMode ? NULL : &g_ncaFsSectionsMenu);
+        g_ncaMenuElements[idx]->task_func = (g_ncaMenuRawMode ? &saveNintendoContentArchive : NULL);
         g_ncaMenuElements[idx]->userdata = nca_user_data;
 
         idx++;
     }
 
+    g_ncaMenuElements[content_count] = &g_storageMenuElement;
+
     g_ncaMenu.elements = g_ncaMenuElements;
+}
+
+static void switchNcaListTitle(Menu *cur_menu, u32 *element_count, TitleInfo *title_info)
+{
+    if (!cur_menu || cur_menu->id != MenuId_NCA || !element_count) return;
+
+    updateNcaList(title_info);
+
+    if (!g_ncaMenuElements || !g_ncaMenuElements[0])
+    {
+        freeNcaList();
+        consolePrint("\nfailed to generate nca list for newly selected title\npress any button to go back\n");
+        consoleRefresh();
+        utilsWaitForButtonPress(0);
+
+        cur_menu->selected = 0;
+        cur_menu->scroll = 0;
+
+        cur_menu = cur_menu->parent;
+        *element_count = menuGetElementCount(cur_menu);
+    }
+}
+
+void freeNcaFsSectionsList(void)
+{
+    /* Free all previously allocated data. */
+    if (g_ncaFsSectionsMenuCtx)
+    {
+        free(g_ncaFsSectionsMenuCtx);
+        g_ncaFsSectionsMenuCtx = NULL;
+    }
+
+    if (g_ncaFsSectionsMenuElements)
+    {
+        for(u32 i = 0; g_ncaFsSectionsMenuElements[i] != NULL; i++)
+        {
+            if (g_ncaFsSectionsMenuElements[i]->str) free(g_ncaFsSectionsMenuElements[i]->str);
+            free(g_ncaFsSectionsMenuElements[i]);
+        }
+
+        free(g_ncaFsSectionsMenuElements);
+        g_ncaFsSectionsMenuElements = NULL;
+    }
+
+    g_ncaFsSectionsMenu.scroll = 0;
+    g_ncaFsSectionsMenu.selected = 0;
+    g_ncaFsSectionsMenu.elements = NULL;
+}
+
+void updateNcaFsSectionsList(NcaUserData *nca_user_data)
+{
+    TitleInfo *title_info = nca_user_data->title_info;
+    NcmContentInfo *content_info = &(title_info->content_infos[nca_user_data->content_idx]);
+    MenuElement **tmp = NULL;
+    u32 idx = 0;
+
+    /* Free all previously allocated data. */
+    freeNcaFsSectionsList();
+
+    /* Reallocate buffer. */
+    tmp = realloc(g_ncaFsSectionsMenuElements, (NCA_FS_HEADER_COUNT + 1) * sizeof(MenuElement*)); // NULL terminator
+
+    g_ncaFsSectionsMenuElements = tmp;
+    tmp = NULL;
+
+    memset(g_ncaFsSectionsMenuElements, 0, (NCA_FS_HEADER_COUNT + 1) * sizeof(MenuElement*)); // NULL terminator
+
+    /* Initialize NCA context. */
+    g_ncaFsSectionsMenuCtx = calloc(1, sizeof(NcaContext));
+    if (!ncaInitializeContext(g_ncaFsSectionsMenuCtx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+                         content_info, title_info->version.value, NULL)) return;
+
+    /* Generate menu elements. */
+    for(u32 i = 0; i < NCA_FS_HEADER_COUNT; i++)
+    {
+        NcaFsSectionContext *cur_nca_fs_ctx = &(g_ncaFsSectionsMenuCtx->fs_ctx[i]);
+        char *nca_fs_info_str = NULL, nca_fs_size_str[16] = {0};
+
+        g_ncaFsSectionsMenuElements[idx] = calloc(1, sizeof(MenuElement));
+        if (!g_ncaFsSectionsMenuElements[idx]) continue;
+
+        nca_fs_info_str = calloc(128, sizeof(char));
+        if (!nca_fs_info_str) continue;
+
+        utilsGenerateFormattedSizeString((double)cur_nca_fs_ctx->section_size, nca_fs_size_str, sizeof(nca_fs_size_str));
+        sprintf(nca_fs_info_str, "FS section #%u: %s (%s)", i + 1, ncaGetFsSectionTypeName(cur_nca_fs_ctx), nca_fs_size_str);
+
+        g_ncaFsSectionsMenuElements[idx]->str = nca_fs_info_str;
+        g_ncaFsSectionsMenuElements[idx]->child_menu = NULL;
+        g_ncaFsSectionsMenuElements[idx]->userdata = cur_nca_fs_ctx;
+
+        idx++;
+    }
+
+    g_ncaFsSectionsMenu.elements = g_ncaFsSectionsMenuElements;
 }
 
 NX_INLINE bool useUsbHost(void)

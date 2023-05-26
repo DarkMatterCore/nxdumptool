@@ -203,7 +203,9 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     out->content_type = content_info->content_type;
     out->id_offset = content_info->id_offset;
     out->title_version = title_version;
+
     ncmContentInfoSizeToU64(content_info, &(out->content_size));
+    utilsGenerateFormattedSizeString((double)out->content_size, out->content_size_str, sizeof(out->content_size_str));
 
     if (out->content_size < NCA_FULL_HEADER_LENGTH)
     {
