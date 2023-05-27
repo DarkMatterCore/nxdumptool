@@ -147,6 +147,9 @@ static void switchNcaListTitle(Menu *cur_menu, u32 *element_count, TitleInfo *ti
 void freeNcaFsSectionsList(void);
 void updateNcaFsSectionsList(NcaUserData *nca_user_data);
 
+void freeNcaBasePatchList(void);
+void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *title_info, NcaFsSectionContext *nca_fs_ctx);
+
 NX_INLINE bool useUsbHost(void);
 
 static bool waitForGameCard(void);
@@ -258,7 +261,7 @@ static MenuElementOption g_storageMenuElementOption = {
     .selected = 0,
     .getter_func = &getOutputStorageOption,
     .setter_func = &setOutputStorageOption,
-    .options = NULL
+    .options = NULL // Dynamically set
 };
 
 static MenuElement g_storageMenuElement = {
@@ -615,18 +618,31 @@ static Menu g_ticketMenu = {
     .elements = g_ticketMenuElements
 };
 
-static bool g_ncaMenuRawMode = false;
-static NcaContext *g_ncaFsSectionsMenuCtx = NULL;
+static TitleInfo *g_ncaBasePatchTitleInfo = NULL;
+static char **g_ncaBasePatchOptions = NULL;
+
+static MenuElementOption g_ncaFsSectionsSubMenuBasePatchElementOption = {
+    .selected = 0,
+    .getter_func = NULL,
+    .setter_func = NULL,
+    .options = NULL // Dynamically set
+};
 
 static MenuElement *g_ncaFsSectionsSubMenuElements[] = {
     &(MenuElement){
         .str = "start nca fs dump",
         .child_menu = NULL,
-        .task_func = NULL,
+        .task_func = NULL,  // TODO: implement nca fs dump function -- additional sparse/patch checks will go here
         .element_options = NULL,
         .userdata = NULL    // Dynamically set
     },
-    // TODO: place base/patch selector here? display selector at runtime?
+    &(MenuElement){
+        .str = "use base/patch title",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_ncaFsSectionsSubMenuBasePatchElementOption,
+        .userdata = NULL
+    },
     &(MenuElement){
         .str = "write section image",
         .child_menu = NULL,
@@ -662,6 +678,9 @@ static Menu g_ncaFsSectionsSubMenu = {
     .scroll = 0,
     .elements = g_ncaFsSectionsSubMenuElements
 };
+
+static bool g_ncaMenuRawMode = false;
+static NcaContext *g_ncaFsSectionsMenuCtx = NULL;
 
 static MenuElement **g_ncaFsSectionsMenuElements = NULL;
 
@@ -1011,7 +1030,7 @@ int main(int argc, char *argv[])
                 break;
             }
 
-            svcSleepThread(50000000); // 50 ms
+            svcSleepThread(10000000); // 10 ms
         }
 
         if (!g_appletStatus) break;
@@ -1100,8 +1119,7 @@ int main(int argc, char *argv[])
                     NcaFsSectionContext *nca_fs_ctx = selected_element->userdata;
                     if (nca_fs_ctx->enabled)
                     {
-                        // TODO: add sparse / patch checks here
-                        g_ncaFsSectionsSubMenuElements[0]->userdata = nca_fs_ctx;
+                        updateNcaBasePatchList(&user_app_data, title_info, nca_fs_ctx);
                     } else {
                         consolePrint("can't dump an invalid nca fs section!\n");
                         error = true;
@@ -1197,17 +1215,23 @@ int main(int argc, char *argv[])
             selected_element_options->selected++;
             if (!selected_element_options->options[selected_element_options->selected]) selected_element_options->selected--;
             if (selected_element_options->setter_func) selected_element_options->setter_func(selected_element_options->selected);
+
+            /* Point to the next base/patch title. */
+            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1 && g_ncaBasePatchTitleInfo && g_ncaBasePatchTitleInfo->next)
+                g_ncaBasePatchTitleInfo = g_ncaBasePatchTitleInfo->next;
         } else
         if ((btn_down & (HidNpadButton_Left | HidNpadButton_StickLLeft | HidNpadButton_StickRLeft)) && selected_element_options)
         {
             selected_element_options->selected--;
             if (selected_element_options->selected == UINT32_MAX) selected_element_options->selected = 0;
             if (selected_element_options->setter_func) selected_element_options->setter_func(selected_element_options->selected);
-        } else
-        if (btn_down & HidNpadButton_B)
-        {
-            if (!cur_menu->parent) break;
 
+            /* Point to the previous base/patch title. */
+            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1 && g_ncaBasePatchTitleInfo && g_ncaBasePatchTitleInfo->previous)
+                g_ncaBasePatchTitleInfo = g_ncaBasePatchTitleInfo->previous;
+        } else
+        if ((btn_down & HidNpadButton_B) && cur_menu->parent)
+        {
             if (cur_menu->id == MenuId_UserTitles)
             {
                 app_metadata = NULL;
@@ -1241,7 +1265,7 @@ int main(int argc, char *argv[])
             } else
             if (cur_menu->id == MenuId_NcaFsSectionsSubMenu)
             {
-                g_ncaFsSectionsSubMenuElements[0]->userdata = NULL;
+                freeNcaBasePatchList();
             }
 
             cur_menu->selected = 0;
@@ -1283,7 +1307,7 @@ int main(int argc, char *argv[])
             break;
         }
 
-        if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp | HidNpadButton_ZL | HidNpadButton_ZR)) svcSleepThread(50000000); // 50 ms
+        if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp | HidNpadButton_ZL | HidNpadButton_ZR)) svcSleepThread(40000000); // 40 ms
     }
 
 end:
@@ -1331,7 +1355,7 @@ static void utilsWaitForButtonPress(u64 flag)
     {
         utilsScanPads();
         if (utilsGetButtonsDown() & flag) break;
-        svcSleepThread(50000000); // 50 ms
+        svcSleepThread(10000000); // 10 ms
     }
 }
 
@@ -1386,6 +1410,8 @@ void freeStorageList(void)
     }
 
     g_umsDeviceCount = 0;
+
+    g_storageMenuElementOption.options = NULL;
 }
 
 void updateStorageList(void)
@@ -1414,8 +1440,11 @@ void updateStorageList(void)
         u64 total = 0, free = 0;
         char total_str[36] = {0}, free_str[32] = {0};
 
-        g_storageOptions[idx] = calloc(sizeof(char), 0x300);
-        if (!g_storageOptions[idx]) continue;
+        if (!g_storageOptions[idx])
+        {
+            g_storageOptions[idx] = calloc(sizeof(char), 0x300);
+            if (!g_storageOptions[idx]) continue;
+        }
 
         if (i == 1)
         {
@@ -1498,8 +1527,11 @@ void updateTitleList(void)
     {
         TitleApplicationMetadata *cur_app_metadata = app_metadata[i];
 
-        g_userTitlesMenuElements[idx] = calloc(1, sizeof(MenuElement));
-        if (!g_userTitlesMenuElements[idx]) continue;
+        if (!g_userTitlesMenuElements[idx])
+        {
+            g_userTitlesMenuElements[idx] = calloc(1, sizeof(MenuElement));
+            if (!g_userTitlesMenuElements[idx]) continue;
+        }
 
         g_userTitlesMenuElements[idx]->str = cur_app_metadata->lang_entry.name;
         g_userTitlesMenuElements[idx]->child_menu = &g_userTitlesSubMenu;
@@ -1565,8 +1597,11 @@ void updateNcaList(TitleInfo *title_info)
         u64 nca_size = 0;
         NcaUserData *nca_user_data = NULL;
 
-        g_ncaMenuElements[idx] = calloc(1, sizeof(MenuElement));
-        if (!g_ncaMenuElements[idx]) continue;
+        if (!g_ncaMenuElements[idx])
+        {
+            g_ncaMenuElements[idx] = calloc(1, sizeof(MenuElement));
+            if (!g_ncaMenuElements[idx]) continue;
+        }
 
         nca_info_str = calloc(128, sizeof(char));
         nca_user_data = calloc(1, sizeof(NcaUserData));
@@ -1677,8 +1712,11 @@ void updateNcaFsSectionsList(NcaUserData *nca_user_data)
         NcaFsSectionContext *cur_nca_fs_ctx = &(g_ncaFsSectionsMenuCtx->fs_ctx[i]);
         char *nca_fs_info_str = NULL;
 
-        g_ncaFsSectionsMenuElements[idx] = calloc(1, sizeof(MenuElement));
-        if (!g_ncaFsSectionsMenuElements[idx]) continue;
+        if (!g_ncaFsSectionsMenuElements[idx])
+        {
+            g_ncaFsSectionsMenuElements[idx] = calloc(1, sizeof(MenuElement));
+            if (!g_ncaFsSectionsMenuElements[idx]) continue;
+        }
 
         nca_fs_info_str = calloc(128, sizeof(char));
         if (!nca_fs_info_str) continue;
@@ -1698,6 +1736,114 @@ void updateNcaFsSectionsList(NcaUserData *nca_user_data)
     }
 
     g_ncaFsSectionsMenu.elements = g_ncaFsSectionsMenuElements;
+}
+
+void freeNcaBasePatchList(void)
+{
+    /* Free all previously allocated data. */
+    if (g_ncaBasePatchOptions)
+    {
+        /* Skip the first option. */
+        for(u32 i = 1; g_ncaBasePatchOptions[i]; i++)
+        {
+            free(g_ncaBasePatchOptions[i]);
+            g_ncaBasePatchOptions[i] = NULL;
+        }
+
+        free(g_ncaBasePatchOptions);
+        g_ncaBasePatchOptions = NULL;
+    }
+
+    g_ncaFsSectionsSubMenuBasePatchElementOption.selected = 0;
+    g_ncaFsSectionsSubMenuBasePatchElementOption.options = NULL;
+
+    g_ncaFsSectionsSubMenuElements[0]->userdata = NULL;
+
+    if (g_ncaBasePatchTitleInfo && (g_ncaBasePatchTitleInfo->meta_key.type == NcmContentMetaType_AddOnContent || g_ncaBasePatchTitleInfo->meta_key.type == NcmContentMetaType_DataPatch))
+    {
+        titleFreeTitleInfo(&g_ncaBasePatchTitleInfo);
+    }
+
+    g_ncaBasePatchTitleInfo = NULL;
+}
+
+void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *title_info, NcaFsSectionContext *nca_fs_ctx)
+{
+    char **tmp = NULL;
+    u32 elem_count = 1, idx = 1; // "no" option
+    TitleInfo *cur_title_info = NULL;
+
+    u8 title_type = title_info->meta_key.type;
+    u8 content_type = nca_fs_ctx->nca_ctx->content_type;
+    u8 section_type = nca_fs_ctx->section_type;
+    bool unsupported = false;
+
+    /* Free all previously allocated data. */
+    freeNcaBasePatchList();
+
+    /* Only enable base/patch list if we're dealing with supported content types and/or FS section types. */
+    if (content_type != NcmContentType_Meta && content_type != NcmContentType_Control && section_type != NcaFsSectionType_Invalid && section_type != NcaFsSectionType_PartitionFs)
+    {
+        /* Retrieve corresponding TitleInfo linked list for the current title type. */
+        switch(title_type)
+        {
+            case NcmContentMetaType_Application:
+                g_ncaBasePatchTitleInfo = user_app_data->patch_info;
+                break;
+            case NcmContentMetaType_Patch:
+                g_ncaBasePatchTitleInfo = user_app_data->app_info;
+                break;
+            case NcmContentMetaType_AddOnContent:
+            case NcmContentMetaType_DataPatch:
+                g_ncaBasePatchTitleInfo = titleGetAddOnContentBaseOrPatchList(title_info);
+                break;
+            default:
+                break;
+        }
+    } else {
+        unsupported = true;
+    }
+
+    /* Calculate element count. */
+    elem_count += titleGetCountFromInfoBlock(g_ncaBasePatchTitleInfo);
+
+    /* Reallocate buffer. */
+    tmp = realloc(g_ncaBasePatchOptions, (elem_count + 1) * sizeof(char*)); // NULL terminator
+
+    g_ncaBasePatchOptions = tmp;
+    tmp = NULL;
+
+    memset(g_ncaBasePatchOptions, 0, (elem_count + 1) * sizeof(char*)); // NULL terminator
+
+    /* Set first option. */
+    g_ncaBasePatchOptions[0] = (unsupported ? "unsupported for this content/section type" : (elem_count < 2 ? "none available" : "no"));
+
+    /* Generate base/patch strings. */
+    cur_title_info = g_ncaBasePatchTitleInfo;
+    while(cur_title_info)
+    {
+        if (!g_ncaBasePatchOptions[idx])
+        {
+            g_ncaBasePatchOptions[idx] = calloc(sizeof(char), 0x40);
+            if (!g_ncaBasePatchOptions[idx])
+            {
+                cur_title_info = cur_title_info->next;
+                continue;
+            }
+        }
+
+        snprintf(g_ncaBasePatchOptions[idx], 0x40, "%s v%u (v%u.%u) (%s)", titleGetNcmContentMetaTypeName(cur_title_info->meta_key.type), \
+                    cur_title_info->version.value, cur_title_info->version.application_version.release_ver, cur_title_info->version.application_version.private_ver, \
+                    titleGetNcmStorageIdName(cur_title_info->storage_id));
+
+        cur_title_info = cur_title_info->next;
+
+        idx++;
+    }
+
+    g_ncaFsSectionsSubMenuBasePatchElementOption.options = g_ncaBasePatchOptions;
+
+    g_ncaFsSectionsSubMenuElements[0]->userdata = nca_fs_ctx;
 }
 
 NX_INLINE bool useUsbHost(void)
@@ -2540,7 +2686,7 @@ static bool saveNintendoSubmissionPackage(void *userdata)
     utilsCreateThread(&dump_thread, nspThreadFunc, &nsp_thread_data, 2);
 
     /* Wait until the background thread calculates the NSP size. */
-    while(!nsp_thread_data.total_size && !nsp_thread_data.error) svcSleepThread(50000000); // 50 ms
+    while(!nsp_thread_data.total_size && !nsp_thread_data.error) svcSleepThread(10000000); // 10 ms
 
     if (nsp_thread_data.error)
     {
@@ -2602,7 +2748,7 @@ static bool saveNintendoSubmissionPackage(void *userdata)
         consolePrint("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, nsp_thread_data.total_size, percent, (now - start));
         consoleRefresh();
 
-        svcSleepThread(50000000); // 50 ms
+        svcSleepThread(10000000); // 10 ms
     }
 
     consolePrint("\nwaiting for thread to join\n");
@@ -3409,7 +3555,7 @@ static bool spanDumpThreads(ThreadFunc read_func, ThreadFunc write_func, void *a
         consolePrint("%lu / %lu (%u%%) | Time elapsed: %lu\n", size, shared_thread_data->total_size, percent, (now - start));
         consoleRefresh();
 
-        svcSleepThread(50000000); // 50 ms
+        svcSleepThread(10000000); // 10 ms
     }
 
     consolePrint("\nwaiting for threads to join\n");

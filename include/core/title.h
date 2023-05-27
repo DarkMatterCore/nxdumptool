@@ -123,6 +123,12 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
 /// Frees data populated by titleGetUserApplicationData().
 void titleFreeUserApplicationData(TitleUserApplicationData *user_app_data);
 
+/// Takes an input TitleInfo object with meta type NcmContentMetaType_AddOnContent or NcmContentMetaType_DataPatch.
+/// Returns a linked list of TitleInfo elements with title IDs matching the corresponding base/patch title ID, depending on the meta type of the input TitleInfo object.
+/// Particularly useful to display add-on-content base/patch titles related to a specific add-on-content (patch) entry.
+/// Use titleFreeTitleInfo() to free the returned data.
+TitleInfo *titleGetAddOnContentBaseOrPatchList(TitleInfo *title_info);
+
 /// Returns true if orphan titles are available.
 /// Orphan titles are patches or add-on contents with no NsApplicationControlData available for their parent user application ID.
 bool titleAreOrphanTitlesAvailable(void);
@@ -157,6 +163,14 @@ const char *titleGetNcmContentTypeName(u8 content_type);
 const char *titleGetNcmContentMetaTypeName(u8 content_meta_type);
 
 /// Miscellaneous functions.
+
+NX_INLINE bool titleIsValidInfoBlock(TitleInfo *title_info)
+{
+    return (title_info && title_info->storage_id >= NcmStorageId_GameCard && title_info->storage_id <= NcmStorageId_SdCard && title_info->meta_key.id && \
+           ((title_info->meta_key.type >= NcmContentMetaType_SystemProgram && title_info->meta_key.type <= NcmContentMetaType_BootImagePackageSafe) || \
+            (title_info->meta_key.type >= NcmContentMetaType_Application && title_info->meta_key.type <= NcmContentMetaType_DataPatch)) && \
+            title_info->content_count && title_info->content_infos);
+}
 
 NX_INLINE u64 titleGetPatchIdByApplicationId(u64 app_id)
 {

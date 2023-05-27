@@ -557,7 +557,8 @@ static bool titleRefreshGameCardTitleInfo(void);
 static bool titleIsUserApplicationContentAvailable(u64 app_id);
 static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
 
-static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
+static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
+static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info);
 
 static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *b);
 static int titleUserApplicationMetadataEntrySortFunction(const void *a, const void *b);
@@ -787,7 +788,7 @@ TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
         TitleInfo *title_info = (g_titleInterfaceInit ? _titleGetInfoFromStorageByTitleId(storage_id, title_id) : NULL);
         if (title_info)
         {
-            ret = titleDuplicateTitleInfo(title_info, NULL, NULL);
+            ret = titleDuplicateTitleInfoFull(title_info, NULL, NULL);
             if (!ret) LOG_MSG_ERROR("Failed to duplicate title info for %016lX!", title_id);
         }
     }
@@ -847,7 +848,7 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
 
 #define TITLE_ALLOCATE_USER_APP_DATA(elem, msg, decl) \
     if (elem##_info && !out->elem##_info) { \
-        out->elem##_info = titleDuplicateTitleInfo(elem##_info, NULL, NULL); \
+        out->elem##_info = titleDuplicateTitleInfoFull(elem##_info, NULL, NULL); \
         if (!out->elem##_info) { \
             LOG_MSG_ERROR("Failed to duplicate %s info for %016lX!", msg, app_id); \
             decl; \
@@ -926,6 +927,73 @@ void titleFreeUserApplicationData(TitleUserApplicationData *user_app_data)
     titleFreeTitleInfo(&(user_app_data->aoc_patch_info));
 }
 
+TitleInfo *titleGetAddOnContentBaseOrPatchList(TitleInfo *title_info)
+{
+    TitleInfo *out = NULL;
+    bool success = false;
+
+    SCOPED_LOCK(&g_titleMutex)
+    {
+        if (!g_titleInterfaceInit || !titleIsValidInfoBlock(title_info) || (title_info->meta_key.type != NcmContentMetaType_AddOnContent && \
+            title_info->meta_key.type != NcmContentMetaType_DataPatch))
+        {
+            LOG_MSG_ERROR("Invalid parameters!");
+            break;
+        }
+
+        TitleInfo *aoc_info = NULL, *tmp = NULL;
+        u64 ref_tid = title_info->meta_key.id;
+        u64 lookup_tid = (title_info->meta_key.type == NcmContentMetaType_AddOnContent ? titleGetDataPatchIdByAddOnContentId(ref_tid) : titleGetAddOnContentIdByDataPatchId(ref_tid));
+        bool error = false;
+
+        /* Get info for the first add-on content (patch) title matching the lookup title ID. */
+        aoc_info = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, lookup_tid);
+        if (!aoc_info) break;
+
+        /* Create our own custom linked list using entries that match our lookup title ID. */
+        while(aoc_info)
+        {
+            /* Check if this entry's title ID matches our lookup title ID. */
+            if (aoc_info->meta_key.id != lookup_tid)
+            {
+                aoc_info = aoc_info->next;
+                continue;
+            }
+
+            /* Duplicate current entry. */
+            tmp = titleDuplicateTitleInfo(aoc_info);
+            if (!tmp)
+            {
+                LOG_MSG_ERROR("Failed to duplicate TitleInfo object!");
+                error = true;
+                break;
+            }
+
+            /* Update pointer. */
+            if (out)
+            {
+                out->next = tmp;
+            } else {
+                out = tmp;
+            }
+
+            tmp = NULL;
+
+            /* Proceed onto the next entry. */
+            aoc_info = aoc_info->next;
+        }
+
+        if (error) break;
+
+        /* Update flag. */
+        success = true;
+    }
+
+    if (!success && out) titleFreeTitleInfo(&out);
+
+    return out;
+}
+
 bool titleAreOrphanTitlesAvailable(void)
 {
     bool ret = false;
@@ -956,7 +1024,7 @@ TitleInfo **titleGetOrphanTitles(u32 *out_count)
         /* Duplicate orphan title info entries. */
         for(u32 i = 0; i < g_orphanTitleInfoCount; i++)
         {
-            orphan_info[i] = titleDuplicateTitleInfo(g_orphanTitleInfo[i], NULL, NULL);
+            orphan_info[i] = titleDuplicateTitleInfoFull(g_orphanTitleInfo[i], NULL, NULL);
             if (!orphan_info[i])
             {
                 LOG_MSG_ERROR("Failed to duplicate info for orphan title %016lX!", g_orphanTitleInfo[i]->meta_key.id);
@@ -2421,52 +2489,31 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
     return out;
 }
 
-static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next)
+static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next)
 {
-    if (!title_info || title_info->storage_id < NcmStorageId_GameCard || title_info->storage_id > NcmStorageId_SdCard || !title_info->meta_key.id || \
-        (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || \
-        title_info->meta_key.type > NcmContentMetaType_DataPatch || !title_info->content_count || !title_info->content_infos)
+    if (!titleIsValidInfoBlock(title_info))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
     TitleInfo *title_info_dup = NULL, *tmp1 = NULL, *tmp2 = NULL;
-    NcmContentInfo *content_infos_dup = NULL;
     bool dup_previous = false, dup_next = false, success = false;
 
-    /* Allocate memory for the new TitleInfo element. */
-    title_info_dup = calloc(1, sizeof(TitleInfo));
+    /* Duplicate TitleInfo object. */
+    title_info_dup = titleDuplicateTitleInfo(title_info);
     if (!title_info_dup)
     {
-        LOG_MSG_ERROR("Failed to allocate memory for TitleInfo duplicate!");
+        LOG_MSG_ERROR("Failed to duplicate TitleInfo object!");
         return NULL;
     }
-
-    /* Copy TitleInfo data. */
-    memcpy(title_info_dup, title_info, sizeof(TitleInfo));
-    title_info_dup->previous = title_info_dup->next = NULL;
-
-    /* Allocate memory for NcmContentInfo elements. */
-    content_infos_dup = calloc(title_info->content_count, sizeof(NcmContentInfo));
-    if (!content_infos_dup)
-    {
-        LOG_MSG_ERROR("Failed to allocate memory for NcmContentInfo duplicates!");
-        goto end;
-    }
-
-    /* Copy NcmContentInfo data. */
-    memcpy(content_infos_dup, title_info->content_infos, title_info->content_count * sizeof(NcmContentInfo));
-
-    /* Update content infos pointer. */
-    title_info_dup->content_infos = content_infos_dup;
 
 #define TITLE_DUPLICATE_LINKED_LIST(elem, prv, nxt) \
     if (title_info->elem) { \
         if (elem) { \
             title_info_dup->elem = elem; \
         } else { \
-            title_info_dup->elem = titleDuplicateTitleInfo(title_info->elem, prv, nxt); \
+            title_info_dup->elem = titleDuplicateTitleInfoFull(title_info->elem, prv, nxt); \
             if (!title_info_dup->elem) goto end; \
             dup_##elem = true; \
         } \
@@ -2495,28 +2542,82 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info, TitleInfo *prev
 end:
     /* We can't directly use titleFreeTitleInfo() on title_info_dup because some or all of the linked list data may have been provided as function arguments. */
     /* So we'll take care of freeing data the old fashioned way. */
+    if (!success && title_info_dup)
+    {
+        /* Free content infos pointer. */
+        if (title_info_dup->content_infos) free(title_info_dup->content_infos);
+
+        /* Free previous and next linked lists (if duplicated). */
+        /* We need to take care of not freeing the linked lists right away, either because we may have already freed them, or because they may have been passed as arguments. */
+        /* Furthermore, both the next pointer from the previous sibling and the previous pointer from the next sibling reference our current duplicated entry. */
+        /* To avoid issues, we'll just clear all linked list pointers. */
+        TITLE_FREE_DUPLICATED_LINKED_LIST(previous);
+        TITLE_FREE_DUPLICATED_LINKED_LIST(next);
+
+        /* Free allocated buffer and update return pointer. */
+        free(title_info_dup);
+        title_info_dup = NULL;
+    }
+
+#undef TITLE_DUPLICATE_LINKED_LIST
+
+#undef TITLE_FREE_DUPLICATED_LINKED_LIST
+
+    return title_info_dup;
+}
+
+static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info)
+{
+    if (!titleIsValidInfoBlock(title_info))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
+
+    TitleInfo *title_info_dup = NULL;
+    NcmContentInfo *content_infos_dup = NULL;
+    bool success = false;
+
+    /* Allocate memory for the new TitleInfo element. */
+    title_info_dup = calloc(1, sizeof(TitleInfo));
+    if (!title_info_dup)
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for TitleInfo duplicate!");
+        return NULL;
+    }
+
+    /* Copy TitleInfo data. */
+    memcpy(title_info_dup, title_info, sizeof(TitleInfo));
+    title_info_dup->previous = title_info_dup->next = NULL;
+
+    /* Allocate memory for NcmContentInfo elements. */
+    content_infos_dup = calloc(title_info->content_count, sizeof(NcmContentInfo));
+    if (!content_infos_dup)
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for NcmContentInfo duplicates!");
+        goto end;
+    }
+
+    /* Copy NcmContentInfo data. */
+    memcpy(content_infos_dup, title_info->content_infos, title_info->content_count * sizeof(NcmContentInfo));
+
+    /* Update content infos pointer. */
+    title_info_dup->content_infos = content_infos_dup;
+
+    /* Update flag. */
+    success = true;
+
+end:
     if (!success)
     {
         if (content_infos_dup) free(content_infos_dup);
 
         if (title_info_dup)
         {
-            /* Free previous and next linked lists (if duplicated). */
-            /* We need to take care of not freeing the linked lists right away, either because we may have already freed them, or because they may have been passed as arguments. */
-            /* Furthermore, both the next pointer from the previous sibling and the previous pointer from the next sibling reference our current duplicated entry. */
-            /* To avoid issues, we'll just clear all linked list pointers. */
-            TITLE_FREE_DUPLICATED_LINKED_LIST(previous);
-            TITLE_FREE_DUPLICATED_LINKED_LIST(next);
-
-            /* Free allocated buffer and update return pointer. */
             free(title_info_dup);
             title_info_dup = NULL;
         }
     }
-
-#undef TITLE_DUPLICATE_LINKED_LIST
-
-#undef TITLE_FREE_DUPLICATED_LINKED_LIST
 
     return title_info_dup;
 }
