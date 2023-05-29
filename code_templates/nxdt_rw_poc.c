@@ -122,6 +122,18 @@ typedef struct {
     NcaContext *nca_ctx;
 } NcaThreadData;
 
+typedef struct {
+    SharedThreadData shared_thread_data;
+    PartitionFileSystemContext *pfs_ctx;
+    bool use_layeredfs_dir;
+} PfsThreadData;
+
+typedef struct {
+    SharedThreadData shared_thread_data;
+    RomFileSystemContext *romfs_ctx;
+    bool use_layeredfs_dir;
+} RomFsThreadData;
+
 /* Function prototypes. */
 
 static void utilsScanPads(void);
@@ -157,6 +169,7 @@ static bool waitForUsb(void);
 
 static char *generateOutputGameCardFileName(const char *subdir, const char *extension, bool use_nacp_name);
 static char *generateOutputTitleFileName(TitleInfo *title_info, const char *subdir, const char *extension);
+static char *generateOutputLayeredFsFileName(u64 title_id, const char *subdir, const char *extension);
 
 static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out);
 
@@ -178,6 +191,13 @@ static bool saveNintendoSubmissionPackage(void *userdata);
 static bool saveTicket(void *userdata);
 
 static bool saveNintendoContentArchive(void *userdata);
+static bool saveNintendoContentArchiveFsSection(void *userdata);
+
+static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir);
+static bool saveExtractedPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir);
+
+//static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir);
+//static bool saveExtractedRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir);
 
 static void xciReadThreadFunc(void *arg);
 
@@ -185,6 +205,12 @@ static void rawHfsReadThreadFunc(void *arg);
 static void extractedHfsReadThreadFunc(void *arg);
 
 static void ncaReadThreadFunc(void *arg);
+
+static void rawPartitionFsReadThreadFunc(void *arg);
+static void extractedPartitionFsReadThreadFunc(void *arg);
+
+//static void rawRomFsReadThreadFunc(void *arg);
+//static void extractedRomFsReadThreadFunc(void *arg);
 
 static void genericWriteThreadFunc(void *arg);
 
@@ -237,8 +263,8 @@ static void setNspAppendAuthoringToolDataOption(u32 idx);
 static u32 getTicketRemoveConsoleDataOption(void);
 static void setTicketRemoveConsoleDataOption(u32 idx);
 
-static u32 getNcaFsWriteSectionImageOption(void);
-static void setNcaFsWriteSectionImageOption(u32 idx);
+static u32 getNcaFsWriteRawSectionOption(void);
+static void setNcaFsWriteRawSectionOption(u32 idx);
 
 static u32 getNcaFsUseLayeredFsDirOption(void);
 static void setNcaFsUseLayeredFsDirOption(u32 idx);
@@ -618,7 +644,7 @@ static Menu g_ticketMenu = {
     .elements = g_ticketMenuElements
 };
 
-static TitleInfo *g_ncaBasePatchTitleInfo = NULL;
+static TitleInfo *g_ncaUserTitleInfo = NULL, *g_ncaBasePatchTitleInfo = NULL, *g_ncaBasePatchTitleInfoBkp = NULL;
 static char **g_ncaBasePatchOptions = NULL;
 
 static MenuElementOption g_ncaFsSectionsSubMenuBasePatchElementOption = {
@@ -632,7 +658,7 @@ static MenuElement *g_ncaFsSectionsSubMenuElements[] = {
     &(MenuElement){
         .str = "start nca fs dump",
         .child_menu = NULL,
-        .task_func = NULL,  // TODO: implement nca fs dump function -- additional sparse/patch checks will go here
+        .task_func = &saveNintendoContentArchiveFsSection,
         .element_options = NULL,
         .userdata = NULL    // Dynamically set
     },
@@ -644,13 +670,13 @@ static MenuElement *g_ncaFsSectionsSubMenuElements[] = {
         .userdata = NULL
     },
     &(MenuElement){
-        .str = "write section image",
+        .str = "write raw section",
         .child_menu = NULL,
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
-            .getter_func = &getNcaFsWriteSectionImageOption,
-            .setter_func = &setNcaFsWriteSectionImageOption,
+            .getter_func = &getNcaFsWriteRawSectionOption,
+            .setter_func = &setNcaFsWriteRawSectionOption,
             .options = g_noYesStrings
         },
         .userdata = NULL
@@ -1212,13 +1238,23 @@ int main(int argc, char *argv[])
         } else
         if ((btn_down & (HidNpadButton_Right | HidNpadButton_StickLRight | HidNpadButton_StickRRight)) && selected_element_options)
         {
+            /* Point to the next base/patch title. */
+            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1)
+            {
+                if (selected_element_options->selected == 0 && g_ncaBasePatchTitleInfoBkp)
+                {
+                    g_ncaBasePatchTitleInfo = g_ncaBasePatchTitleInfoBkp;
+                    g_ncaBasePatchTitleInfoBkp = NULL;
+                } else
+                if (selected_element_options->selected > 0 && g_ncaBasePatchTitleInfo && g_ncaBasePatchTitleInfo->next)
+                {
+                    g_ncaBasePatchTitleInfo = g_ncaBasePatchTitleInfo->next;
+                }
+            }
+
             selected_element_options->selected++;
             if (!selected_element_options->options[selected_element_options->selected]) selected_element_options->selected--;
             if (selected_element_options->setter_func) selected_element_options->setter_func(selected_element_options->selected);
-
-            /* Point to the next base/patch title. */
-            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1 && g_ncaBasePatchTitleInfo && g_ncaBasePatchTitleInfo->next)
-                g_ncaBasePatchTitleInfo = g_ncaBasePatchTitleInfo->next;
         } else
         if ((btn_down & (HidNpadButton_Left | HidNpadButton_StickLLeft | HidNpadButton_StickRLeft)) && selected_element_options)
         {
@@ -1227,8 +1263,18 @@ int main(int argc, char *argv[])
             if (selected_element_options->setter_func) selected_element_options->setter_func(selected_element_options->selected);
 
             /* Point to the previous base/patch title. */
-            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1 && g_ncaBasePatchTitleInfo && g_ncaBasePatchTitleInfo->previous)
-                g_ncaBasePatchTitleInfo = g_ncaBasePatchTitleInfo->previous;
+            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1)
+            {
+                if (selected_element_options->selected == 0 && g_ncaBasePatchTitleInfo)
+                {
+                    g_ncaBasePatchTitleInfoBkp = g_ncaBasePatchTitleInfo;
+                    g_ncaBasePatchTitleInfo = NULL;
+                } else
+                if (selected_element_options->selected > 0 && g_ncaBasePatchTitleInfo && g_ncaBasePatchTitleInfo->previous)
+                {
+                    g_ncaBasePatchTitleInfo = g_ncaBasePatchTitleInfo->previous;
+                }
+            }
         } else
         if ((btn_down & HidNpadButton_B) && cur_menu->parent)
         {
@@ -1704,7 +1750,7 @@ void updateNcaFsSectionsList(NcaUserData *nca_user_data)
     /* Initialize NCA context. */
     g_ncaFsSectionsMenuCtx = calloc(1, sizeof(NcaContext));
     if (!ncaInitializeContext(g_ncaFsSectionsMenuCtx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
-                         content_info, title_info->version.value, NULL)) return;
+                              &(title_info->meta_key), content_info, NULL)) return;
 
     /* Generate menu elements. */
     for(u32 i = 0; i < NCA_FS_HEADER_COUNT; i++)
@@ -1764,7 +1810,7 @@ void freeNcaBasePatchList(void)
         titleFreeTitleInfo(&g_ncaBasePatchTitleInfo);
     }
 
-    g_ncaBasePatchTitleInfo = NULL;
+    g_ncaUserTitleInfo = g_ncaBasePatchTitleInfo = g_ncaBasePatchTitleInfoBkp = NULL;
 }
 
 void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *title_info, NcaFsSectionContext *nca_fs_ctx)
@@ -1778,11 +1824,14 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
     u8 section_type = nca_fs_ctx->section_type;
     bool unsupported = false;
 
+    u32 selected_version = 0;
+
     /* Free all previously allocated data. */
     freeNcaBasePatchList();
 
     /* Only enable base/patch list if we're dealing with supported content types and/or FS section types. */
-    if (content_type != NcmContentType_Meta && content_type != NcmContentType_Control && section_type != NcaFsSectionType_Invalid && section_type != NcaFsSectionType_PartitionFs)
+    if ((content_type == NcmContentType_Program || content_type == NcmContentType_Data || content_type == NcmContentType_HtmlDocument) && \
+        section_type < NcaFsSectionType_Nca0RomFs && (section_type != NcaFsSectionType_PartitionFs || nca_fs_ctx->has_sparse_layer))
     {
         /* Retrieve corresponding TitleInfo linked list for the current title type. */
         switch(title_type)
@@ -1816,7 +1865,7 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
     memset(g_ncaBasePatchOptions, 0, (elem_count + 1) * sizeof(char*)); // NULL terminator
 
     /* Set first option. */
-    g_ncaBasePatchOptions[0] = (unsupported ? "unsupported for this content/section type" : (elem_count < 2 ? "none available" : "no"));
+    g_ncaBasePatchOptions[0] = (unsupported ? "unsupported by this content/section type combo" : (elem_count < 2 ? "none available" : "no"));
 
     /* Generate base/patch strings. */
     cur_title_info = g_ncaBasePatchTitleInfo;
@@ -1836,6 +1885,16 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
                     cur_title_info->version.value, cur_title_info->version.application_version.release_ver, cur_title_info->version.application_version.private_ver, \
                     titleGetNcmStorageIdName(cur_title_info->storage_id));
 
+        /* Make sure the highest available base/patch title is automatically selected. */
+        if (cur_title_info->version.value >= selected_version && \
+            (((title_type == NcmContentMetaType_Application || title_type == NcmContentMetaType_AddOnContent) && (!nca_fs_ctx->has_sparse_layer || cur_title_info->version.value >= title_info->version.value)) || \
+            ((title_type == NcmContentMetaType_Patch || title_type == NcmContentMetaType_DataPatch) && cur_title_info->version.value <= title_info->version.value)))
+        {
+            g_ncaFsSectionsSubMenuBasePatchElementOption.selected = idx;
+            selected_version = cur_title_info->version.value;
+            g_ncaBasePatchTitleInfo = cur_title_info;
+        }
+
         cur_title_info = cur_title_info->next;
 
         idx++;
@@ -1844,6 +1903,10 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
     g_ncaFsSectionsSubMenuBasePatchElementOption.options = g_ncaBasePatchOptions;
 
     g_ncaFsSectionsSubMenuElements[0]->userdata = nca_fs_ctx;
+
+    g_ncaUserTitleInfo = title_info;
+
+    g_ncaBasePatchTitleInfoBkp = (g_ncaFsSectionsSubMenuBasePatchElementOption.selected > 0 ? g_ncaBasePatchTitleInfo : NULL);
 }
 
 NX_INLINE bool useUsbHost(void)
@@ -1999,17 +2062,12 @@ static char *generateOutputGameCardFileName(const char *subdir, const char *exte
         goto end;
     }
 
-    if (dev_idx == 1)
-    {
-        if (subdir) sprintf(prefix, "/%s", subdir);
-    } else {
-        sprintf(prefix, "%s/" OUTDIR, dev_idx == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[dev_idx - 2].name);
+    if (dev_idx != 1) sprintf(prefix, "%s/" OUTDIR, dev_idx == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[dev_idx - 2].name);
 
-        if (subdir)
-        {
-            if (subdir[0] != '/') strcat(prefix, "/");
-            strcat(prefix, subdir);
-        }
+    if (subdir)
+    {
+        if (subdir[0] != '/') strcat(prefix, "/");
+        strcat(prefix, subdir);
     }
 
     output = (use_nacp_name ? utilsGeneratePath(prefix, filename, extension) : utilsGeneratePath(prefix, extension, NULL));
@@ -2040,17 +2098,12 @@ static char *generateOutputTitleFileName(TitleInfo *title_info, const char *subd
         goto end;
     }
 
-    if (dev_idx == 1)
-    {
-        if (subdir) sprintf(prefix, "/%s", subdir);
-    } else {
-        sprintf(prefix, "%s/" OUTDIR, dev_idx == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[dev_idx - 2].name);
+    if (dev_idx != 1) sprintf(prefix, "%s/" OUTDIR, dev_idx == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[dev_idx - 2].name);
 
-        if (subdir)
-        {
-            if (subdir[0] != '/') strcat(prefix, "/");
-            strcat(prefix, subdir);
-        }
+    if (subdir)
+    {
+        if (subdir[0] != '/') strcat(prefix, "/");
+        strcat(prefix, subdir);
     }
 
     output = utilsGeneratePath(prefix, filename, extension);
@@ -2063,17 +2116,42 @@ end:
     return output;
 }
 
+static char *generateOutputLayeredFsFileName(u64 title_id, const char *subdir, const char *extension)
+{
+    char *prefix = NULL, *output = NULL;
+    u32 dev_idx = g_storageMenuElementOption.selected;
 
+    if ((subdir && !*subdir) || !extension || !*extension)
+    {
+        consolePrint("failed to generate title filename!\n");
+        goto end;
+    }
 
+    prefix = calloc(sizeof(char), FS_MAX_PATH);
+    if (!prefix)
+    {
+        consolePrint("failed to generate prefix!\n");
+        goto end;
+    }
 
+    if (dev_idx != 1) sprintf(prefix, "%s", dev_idx == 0 ? DEVOPTAB_SDMC_DEVICE : g_umsDevices[dev_idx - 2].name);
 
+    sprintf(prefix + strlen(prefix), "/atmosphere/contents/%016lX", title_id);
 
+    if (subdir)
+    {
+        if (subdir[0] != '/') strcat(prefix, "/");
+        strcat(prefix, subdir);
+    }
 
+    output = utilsGeneratePath(prefix, extension, NULL);
+    if (!output) consolePrint("failed to generate output filename!\n");
 
+end:
+    if (prefix) free(prefix);
 
-
-
-
+    return output;
+}
 
 static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
 {
@@ -2818,7 +2896,7 @@ static bool saveTicket(void *userdata)
 
     /* Initialize NCA context. */
     if (!ncaInitializeContext(nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
-        content_info, title_info->version.value, &tik))
+                              &(title_info->meta_key), content_info, &tik))
     {
         consolePrint("nca initialize ctx failed\n");
         goto end;
@@ -2902,7 +2980,7 @@ static bool saveNintendoContentArchive(void *userdata)
 
     /* Initialize NCA context. */
     if (!ncaInitializeContext(nca_thread_data.nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
-        content_info, title_info->version.value, NULL))
+                              &(title_info->meta_key), content_info, NULL))
     {
         consolePrint("nca initialize ctx failed\n");
         goto end;
@@ -2997,6 +3075,320 @@ end:
 
     return success;
 }
+
+static bool saveNintendoContentArchiveFsSection(void *userdata)
+{
+    NcaFsSectionContext *nca_fs_ctx = (NcaFsSectionContext*)userdata;
+    NcaContext *nca_ctx = (nca_fs_ctx ? nca_fs_ctx->nca_ctx : NULL);
+
+    /* Sanity checks. */
+
+    if (!g_ncaUserTitleInfo || !nca_fs_ctx || !nca_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type > NcaFsSectionType_Nca0RomFs || \
+        (nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs && g_ncaBasePatchTitleInfo))
+    {
+        consolePrint("invalid nca fs parameters!\n");
+        return false;
+    }
+
+    if (nca_fs_ctx->has_sparse_layer)
+    {
+        if (!g_ncaBasePatchTitleInfo)
+        {
+            consolePrint("the selected nca fs section holds a sparse storage\na matching patch of at least v%u must be selected\n", nca_ctx->title_version.value);
+            return false;
+        } else
+        if (g_ncaBasePatchTitleInfo->version.value < nca_ctx->title_version.value)
+        {
+            consolePrint("the selected patch doesn't meet the sparse storage version requirement!\nv%u < v%u\n", g_ncaBasePatchTitleInfo->version.value, nca_ctx->title_version.value);
+            return false;
+        }
+    }
+
+    if (nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs && !g_ncaBasePatchTitleInfo)
+    {
+        consolePrint("patch romfs section selected but no base app provided\n");
+        return false;
+    }
+
+    u8 title_type = nca_ctx->title_type;
+    u8 content_type = nca_ctx->content_type;
+    u8 section_type = nca_fs_ctx->section_type;
+
+    NcmContentInfo *base_patch_content_info = (g_ncaBasePatchTitleInfo ? titleGetContentInfoByTypeAndIdOffset(g_ncaBasePatchTitleInfo, content_type, nca_ctx->id_offset) : NULL);
+    NcaContext *base_patch_nca_ctx = NULL;
+    NcaFsSectionContext *base_patch_nca_fs_ctx = NULL;
+
+    PartitionFileSystemContext pfs_ctx = {0};
+    RomFileSystemContext romfs_ctx = {0};
+
+    bool write_raw_section = (bool)getNcaFsWriteRawSectionOption();
+    bool use_layeredfs_dir = (bool)getNcaFsUseLayeredFsDirOption();
+    bool success = false;
+
+    /* Override LayeredFS flag, if needed. */
+    if (use_layeredfs_dir && ((title_type != NcmContentMetaType_Application && title_type != NcmContentMetaType_Patch) || content_type != NcmContentType_Program || nca_fs_ctx->section_idx > 1))
+    {
+        consolePrint("layeredfs setting disabled (unsupported by current content/section type combo)\n");
+        use_layeredfs_dir = false;
+    }
+
+    /* Initialize base/patch NCA context, if needed. */
+    if (g_ncaBasePatchTitleInfo)
+    {
+        if (!base_patch_content_info)
+        {
+            consolePrint("unable to find content with type %s and id offset %u in selected base/patch title!\n", titleGetNcmContentTypeName(content_type), nca_ctx->id_offset);
+            goto end;
+        }
+
+        base_patch_nca_ctx = calloc(1, sizeof(NcaContext));
+        if (!base_patch_nca_ctx)
+        {
+            consolePrint("failed to allocate memory for base/patch nca ctx!\n");
+            goto end;
+        }
+
+        if (!ncaInitializeContext(base_patch_nca_ctx, g_ncaBasePatchTitleInfo->storage_id, (g_ncaBasePatchTitleInfo->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+                                  &(g_ncaBasePatchTitleInfo->meta_key), base_patch_content_info, NULL))
+        {
+            consolePrint("failed to initialize base/patch nca ctx!\n");
+            goto end;
+        }
+
+        /* Use a matching NCA FS section entry. */
+        base_patch_nca_fs_ctx = &(base_patch_nca_ctx->fs_ctx[nca_fs_ctx->section_idx]);
+    }
+
+    if (section_type == NcaFsSectionType_PartitionFs)
+    {
+        /* Select the right NCA FS section context, depending on the sparse layer flag. */
+        NcaFsSectionContext *pfs_nca_fs_ctx = (nca_fs_ctx->has_sparse_layer ? base_patch_nca_fs_ctx : nca_fs_ctx);
+
+        /* Initialize PartitionFS context. */
+        if (!pfsInitializeContext(&pfs_ctx, pfs_nca_fs_ctx))
+        {
+            consolePrint("pfs initialize ctx failed!\n");
+            goto end;
+        }
+
+        success = (write_raw_section ? saveRawPartitionFsSection(&pfs_ctx, use_layeredfs_dir) : saveExtractedPartitionFsSection(&pfs_ctx, use_layeredfs_dir));
+    } else {
+        /* Select the right base/patch NCA FS section contexts. */
+        NcaFsSectionContext *base_nca_fs_ctx = (section_type == NcaFsSectionType_PatchRomFs ? base_patch_nca_fs_ctx : nca_fs_ctx);
+        NcaFsSectionContext *patch_nca_fs_ctx = (section_type == NcaFsSectionType_PatchRomFs ? nca_fs_ctx : base_patch_nca_fs_ctx);
+
+        /* Initialize RomFS context. */
+        if (!romfsInitializeContext(&romfs_ctx, base_nca_fs_ctx, patch_nca_fs_ctx))
+        {
+            consolePrint("romfs initialize ctx failed!\n");
+            goto end;
+        }
+
+        //success = (write_raw_section ? saveRawRomFsSection(&romfs_ctx, use_layeredfs_dir) : saveExtractedRomFsSection(&romfs_ctx, use_layeredfs_dir));
+    }
+
+end:
+    romfsFreeContext(&romfs_ctx);
+
+    pfsFreeContext(&pfs_ctx);
+
+    if (base_patch_nca_ctx) free(base_patch_nca_ctx);
+
+    return success;
+}
+
+static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir)
+{
+    u64 free_space = 0;
+
+    PfsThreadData pfs_thread_data = {0};
+    SharedThreadData *shared_thread_data = &(pfs_thread_data.shared_thread_data);
+
+    NcaContext *nca_ctx = pfs_ctx->nca_fs_ctx->nca_ctx;
+
+    u64 title_id = nca_ctx->title_id;
+    u8 title_type = nca_ctx->title_type;
+
+    char subdir[0x20] = {0}, *filename = NULL;
+    u32 dev_idx = g_storageMenuElementOption.selected;
+
+    bool success = false;
+
+    pfs_thread_data.pfs_ctx = pfs_ctx;
+    pfs_thread_data.use_layeredfs_dir = use_layeredfs_dir;
+    shared_thread_data->total_size = pfs_ctx->size;
+
+    consolePrint("raw partitionfs section size: 0x%lX\n", pfs_ctx->size);
+
+    if (use_layeredfs_dir)
+    {
+        /* Only use base title IDs if we're dealing with patches. */
+        if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
+        filename = generateOutputLayeredFsFileName(title_id, NULL, "exefs.nsp");
+    } else {
+        snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
+        snprintf(path, MAX_ELEMENTS(path), "/%s/section_%u.pfs0", nca_ctx->content_id_str, pfs_ctx->nca_fs_ctx->section_idx);
+
+        TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
+        filename = generateOutputTitleFileName(title_info, subdir, path);
+    }
+
+    if (!filename) goto end;
+
+    if (dev_idx == 1)
+    {
+        if (!usbSendFileProperties(shared_thread_data->total_size, filename))
+        {
+            consolePrint("failed to send file properties for \"%s\"!\n", filename);
+            goto end;
+        }
+    } else {
+        if (!utilsGetFileSystemStatsByPath(filename, NULL, &free_space))
+        {
+            consolePrint("failed to retrieve free space from selected device\n");
+            goto end;
+        }
+
+        if (shared_thread_data->total_size >= free_space)
+        {
+            consolePrint("dump size exceeds free space\n");
+            goto end;
+        }
+
+        utilsCreateDirectoryTree(filename, false);
+
+        if (dev_idx == 0)
+        {
+            if (shared_thread_data->total_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(filename))
+            {
+                consolePrint("failed to create concatenation file for \"%s\"!\n", filename);
+                goto end;
+            }
+        } else {
+            if (g_umsDevices[dev_idx - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && shared_thread_data->total_size > FAT32_FILESIZE_LIMIT)
+            {
+                consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+                goto end;
+            }
+        }
+
+        shared_thread_data->fp = fopen(filename, "wb");
+        if (!shared_thread_data->fp)
+        {
+            consolePrint("failed to open \"%s\" for writing!\n", filename);
+            goto end;
+        }
+
+        ftruncate(fileno(shared_thread_data->fp), (off_t)shared_thread_data->total_size);
+    }
+
+    consoleRefresh();
+
+    success = spanDumpThreads(rawPartitionFsReadThreadFunc, genericWriteThreadFunc, &pfs_thread_data);
+
+    if (success)
+    {
+        consolePrint("successfully saved raw partitionfs section as \"%s\"\n", filename);
+        consoleRefresh();
+    }
+
+end:
+    if (shared_thread_data->fp)
+    {
+        fclose(shared_thread_data->fp);
+        shared_thread_data->fp = NULL;
+
+        if (!success && dev_idx != 1)
+        {
+            if (dev_idx == 0)
+            {
+                utilsRemoveConcatenationFile(filename);
+                utilsCommitSdCardFileSystemChanges();
+            } else {
+                remove(filename);
+            }
+        }
+    }
+
+    if (filename) free(filename);
+
+    return success;
+}
+
+static bool saveExtractedPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir)
+{
+    u64 data_size = 0;
+
+    PfsThreadData pfs_thread_data = {0};
+    SharedThreadData *shared_thread_data = &(pfs_thread_data.shared_thread_data);
+
+    bool success = false;
+
+    if (!pfsGetTotalDataSize(pfs_ctx, &data_size))
+    {
+        consolePrint("failed to calculate extracted partitionfs section size!\n");
+        goto end;
+    }
+
+    if (!data_size)
+    {
+        consolePrint("partitionfs section is empty!\n");
+        goto end;
+    }
+
+    pfs_thread_data.pfs_ctx = pfs_ctx;
+    pfs_thread_data.use_layeredfs_dir = use_layeredfs_dir;
+    shared_thread_data->total_size = data_size;
+
+    consolePrint("extracted partitionfs section size: 0x%lX\n", data_size);
+    consoleRefresh();
+
+    success = spanDumpThreads(extractedPartitionFsReadThreadFunc, genericWriteThreadFunc, &pfs_thread_data);
+
+end:
+    return success;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 static void xciReadThreadFunc(void *arg)
 {
@@ -3436,6 +3828,309 @@ end:
     threadExit();
 }
 
+static void rawPartitionFsReadThreadFunc(void *arg)
+{
+    void *buf1 = NULL, *buf2 = NULL;
+    PfsThreadData *pfs_thread_data = (PfsThreadData*)arg;
+    SharedThreadData *shared_thread_data = (pfs_thread_data ? &(pfs_thread_data->shared_thread_data) : NULL);
+    PartitionFileSystemContext *pfs_ctx = (pfs_thread_data ? pfs_thread_data->pfs_ctx : NULL);
+
+    buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+    buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+
+    if (!pfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !pfs_ctx || !buf1 || !buf2)
+    {
+        shared_thread_data->read_error = true;
+        goto end;
+    }
+
+    shared_thread_data->data = NULL;
+    shared_thread_data->data_size = 0;
+
+    for(u64 offset = 0, blksize = BLOCK_SIZE; offset < shared_thread_data->total_size; offset += blksize)
+    {
+        if (blksize > (shared_thread_data->total_size - offset)) blksize = (shared_thread_data->total_size - offset);
+
+        /* Check if the transfer has been cancelled by the user */
+        if (shared_thread_data->transfer_cancelled)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        /* Read current data chunk */
+        shared_thread_data->read_error = !pfsReadPartitionData(pfs_ctx, buf1, blksize, offset);
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        /* Wait until the previous data chunk has been written */
+        mutexLock(&g_fileMutex);
+
+        if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+
+        if (shared_thread_data->write_error)
+        {
+            mutexUnlock(&g_fileMutex);
+            break;
+        }
+
+        /* Update shared object. */
+        shared_thread_data->data = buf1;
+        shared_thread_data->data_size = blksize;
+
+        /* Swap buffers. */
+        buf1 = buf2;
+        buf2 = shared_thread_data->data;
+
+        /* Wake up the write thread to continue writing data. */
+        mutexUnlock(&g_fileMutex);
+        condvarWakeAll(&g_writeCondvar);
+    }
+
+end:
+    if (buf2) free(buf2);
+    if (buf1) free(buf1);
+
+    threadExit();
+}
+
+static void extractedPartitionFsReadThreadFunc(void *arg)
+{
+    void *buf1 = NULL, *buf2 = NULL;
+    PfsThreadData *pfs_thread_data = (PfsThreadData*)arg;
+    SharedThreadData *shared_thread_data = (pfs_thread_data ? &(pfs_thread_data->shared_thread_data) : NULL);
+
+    PartitionFileSystemContext *pfs_ctx = (pfs_thread_data ? pfs_thread_data->pfs_ctx : NULL);
+    u32 pfs_entry_count = pfsGetEntryCount(pfs_ctx);
+
+    char pfs_path[FS_MAX_PATH] = {0}, subdir[0x20] = {0}, *filename = NULL;
+    size_t filename_len = 0;
+
+    PartitionFileSystemEntry *pfs_entry = NULL;
+    char *pfs_entry_name = NULL;
+
+    NcaContext *nca_ctx = pfs_ctx->nca_fs_ctx->nca_ctx;
+
+    u64 title_id = nca_ctx->title_id;
+    u8 title_type = nca_ctx->title_type;
+
+    u64 free_space = 0;
+    u32 dev_idx = g_storageMenuElementOption.selected;
+
+    buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+    buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+
+    if (pfs_thread_data->use_layeredfs_dir)
+    {
+        /* Only use base title IDs if we're dealing with patches. */
+        if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
+        filename = generateOutputLayeredFsFileName(title_id, NULL, "exefs");
+    } else {
+        snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
+        snprintf(pfs_path, MAX_ELEMENTS(pfs_path), "/%s/section_%u", nca_ctx->content_id_str, pfs_ctx->nca_fs_ctx->section_idx);
+
+        TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
+        filename = generateOutputTitleFileName(title_info, subdir, pfs_path);
+    }
+
+    filename_len = (filename ? strlen(filename) : 0);
+
+    if (!pfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !pfs_ctx || !pfs_entry_count || !buf1 || !buf2 || !filename)
+    {
+        shared_thread_data->read_error = true;
+        goto end;
+    }
+
+    if (dev_idx != 1)
+    {
+        if (!utilsGetFileSystemStatsByPath(filename, NULL, &free_space))
+        {
+            consolePrint("failed to retrieve free space from selected device\n");
+            shared_thread_data->read_error = true;
+            goto end;
+        }
+
+        if (shared_thread_data->total_size >= free_space)
+        {
+            consolePrint("dump size exceeds free space\n");
+            shared_thread_data->read_error = true;
+            goto end;
+        }
+    }
+
+    /* Loop through all file entries. */
+    for(u32 i = 0; i < pfs_entry_count; i++)
+    {
+        /* Check if the transfer has been cancelled by the user. */
+        if (shared_thread_data->transfer_cancelled)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        if (dev_idx != 1)
+        {
+            /* Wait until the previous data chunk has been written */
+            mutexLock(&g_fileMutex);
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+            mutexUnlock(&g_fileMutex);
+
+            if (shared_thread_data->write_error) break;
+
+            /* Close file. */
+            if (shared_thread_data->fp)
+            {
+                fclose(shared_thread_data->fp);
+                shared_thread_data->fp = NULL;
+                utilsCommitSdCardFileSystemChanges();
+            }
+        }
+
+        /* Retrieve Hash FS file entry information. */
+        shared_thread_data->read_error = ((pfs_entry = pfsGetEntryByIndex(pfs_ctx, i)) == NULL || (pfs_entry_name = pfsGetEntryName(pfs_ctx, pfs_entry)) == NULL);
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        /* Generate output path. */
+        snprintf(pfs_path, MAX_ELEMENTS(pfs_path), "%s/%s", filename, pfs_entry_name);
+        utilsReplaceIllegalCharacters(pfs_path + filename_len + 1, dev_idx == 0);
+
+        if (dev_idx == 1)
+        {
+            /* Wait until the previous data chunk has been written */
+            mutexLock(&g_fileMutex);
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+            mutexUnlock(&g_fileMutex);
+
+            if (shared_thread_data->write_error) break;
+
+            /* Send current file properties */
+            shared_thread_data->read_error = !usbSendFileProperties(pfs_entry->size, pfs_path);
+        } else {
+            /* Create directory tree. */
+            utilsCreateDirectoryTree(pfs_path, false);
+
+            if (dev_idx == 0)
+            {
+                /* Create ConcatenationFile if we're dealing with a big file + SD card as the output storage. */
+                if (pfs_entry->size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(pfs_path))
+                {
+                    consolePrint("failed to create concatenation file for \"%s\"!\n", pfs_path);
+                    shared_thread_data->read_error = true;
+                }
+            } else {
+                /* Don't handle file chunks on FAT12/FAT16/FAT32 formatted UMS devices. */
+                if (g_umsDevices[dev_idx - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && pfs_entry->size > FAT32_FILESIZE_LIMIT)
+                {
+                    consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+                    shared_thread_data->read_error = true;
+                }
+            }
+
+            if (!shared_thread_data->read_error)
+            {
+                /* Open output file. */
+                shared_thread_data->read_error = ((shared_thread_data->fp = fopen(pfs_path, "wb")) == NULL);
+                if (!shared_thread_data->read_error)
+                {
+                    /* Set file size. */
+                    ftruncate(fileno(shared_thread_data->fp), (off_t)pfs_entry->size);
+                } else {
+                    consolePrint("failed to open \"%s\" for writing!\n", pfs_path);
+                }
+            }
+        }
+
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        for(u64 offset = 0, blksize = BLOCK_SIZE; offset < pfs_entry->size; offset += blksize)
+        {
+            if (blksize > (pfs_entry->size - offset)) blksize = (pfs_entry->size - offset);
+
+            /* Check if the transfer has been cancelled by the user. */
+            if (shared_thread_data->transfer_cancelled)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+
+            /* Read current file data chunk. */
+            shared_thread_data->read_error = !pfsReadEntryData(pfs_ctx, pfs_entry, buf1, blksize, offset);
+            if (shared_thread_data->read_error)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+
+            /* Wait until the previous file data chunk has been written. */
+            mutexLock(&g_fileMutex);
+
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+
+            if (shared_thread_data->write_error)
+            {
+                mutexUnlock(&g_fileMutex);
+                break;
+            }
+
+            /* Update shared object. */
+            shared_thread_data->data = buf1;
+            shared_thread_data->data_size = blksize;
+
+            /* Swap buffers. */
+            buf1 = buf2;
+            buf2 = shared_thread_data->data;
+
+            /* Wake up the write thread to continue writing data. */
+            mutexUnlock(&g_fileMutex);
+            condvarWakeAll(&g_writeCondvar);
+        }
+
+        if (shared_thread_data->read_error || shared_thread_data->write_error || shared_thread_data->transfer_cancelled) break;
+    }
+
+    if (!shared_thread_data->read_error && !shared_thread_data->write_error && !shared_thread_data->transfer_cancelled)
+    {
+        /* Wait until the previous file data chunk has been written. */
+        mutexLock(&g_fileMutex);
+        if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
+        mutexUnlock(&g_fileMutex);
+
+        consolePrint("successfully saved extracted partitionfs section data to \"%s\"\n", filename);
+        consoleRefresh();
+    }
+
+end:
+    if (shared_thread_data->fp)
+    {
+        fclose(shared_thread_data->fp);
+        shared_thread_data->fp = NULL;
+
+        if ((shared_thread_data->read_error || shared_thread_data->write_error || shared_thread_data->transfer_cancelled) && dev_idx != 1)
+        {
+            utilsDeleteDirectoryRecursively(filename);
+            if (dev_idx == 0) utilsCommitSdCardFileSystemChanges();
+        }
+    }
+
+    if (filename) free(filename);
+
+    if (buf2) free(buf2);
+    if (buf1) free(buf1);
+
+    threadExit();
+}
+
 static void genericWriteThreadFunc(void *arg)
 {
     SharedThreadData *shared_thread_data = (SharedThreadData*)arg; // UB but we don't care
@@ -3701,7 +4396,7 @@ static void nspThreadFunc(void *arg)
     meta_nca_ctx = &(nca_ctx[title_info->content_count - 1]);
 
     if (!ncaInitializeContext(meta_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
-        titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Meta, 0), title_info->version.value, &tik))
+                              &(title_info->meta_key), titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Meta, 0), &tik))
     {
         consolePrint("meta nca initialize ctx failed\n");
         goto end;
@@ -3728,7 +4423,8 @@ static void nspThreadFunc(void *arg)
         if (content_info->content_type == NcmContentType_Meta) continue;
 
         NcaContext *cur_nca_ctx = &(nca_ctx[j]);
-        if (!ncaInitializeContext(cur_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), content_info, title_info->version.value, &tik))
+        if (!ncaInitializeContext(cur_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+                                  &(title_info->meta_key), content_info, &tik))
         {
             consolePrint("%s #%u initialize nca ctx failed\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
             goto end;
@@ -4544,14 +5240,14 @@ static void setTicketRemoveConsoleDataOption(u32 idx)
     configSetBoolean("ticket/remove_console_data", (bool)idx);
 }
 
-static u32 getNcaFsWriteSectionImageOption(void)
+static u32 getNcaFsWriteRawSectionOption(void)
 {
-    return (u32)configGetBoolean("nca_fs/write_section_image");
+    return (u32)configGetBoolean("nca_fs/write_raw_section");
 }
 
-static void setNcaFsWriteSectionImageOption(u32 idx)
+static void setNcaFsWriteRawSectionOption(u32 idx)
 {
-    configSetBoolean("nca_fs/write_section_image", (bool)idx);
+    configSetBoolean("nca_fs/write_raw_section", (bool)idx);
 }
 
 static u32 getNcaFsUseLayeredFsDirOption(void)

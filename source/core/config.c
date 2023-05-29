@@ -285,18 +285,18 @@ end:
 
 static bool configValidateJsonNcaFsObject(const struct json_object *obj)
 {
-    bool ret = false, write_section_image_found = false, use_layeredfs_dir_found = false;
+    bool ret = false, write_raw_section_found = false, use_layeredfs_dir_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 
     json_object_object_foreach(obj, key, val)
     {
-        CONFIG_VALIDATE_FIELD(Boolean, write_section_image);
+        CONFIG_VALIDATE_FIELD(Boolean, write_raw_section);
         CONFIG_VALIDATE_FIELD(Boolean, use_layeredfs_dir);
         goto end;
     }
 
-    ret = (write_section_image_found && use_layeredfs_dir_found);
+    ret = (write_raw_section_found && use_layeredfs_dir_found);
 
 end:
     return ret;

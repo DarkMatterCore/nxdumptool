@@ -191,7 +191,7 @@ bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u
         }
     }
 
-    LOG_MSG_ERROR("Unable to find Partition FS entry \"%s\"!", name);
+    if (strcmp(name, "main.npdm") != 0) LOG_MSG_ERROR("Unable to find Partition FS entry \"%s\"!", name);
 
     return false;
 }

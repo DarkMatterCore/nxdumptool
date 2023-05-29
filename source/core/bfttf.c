@@ -100,8 +100,8 @@ bool bfttfInitialize(void)
                 /* Initialize NCA context. */
                 /* NCA contexts don't need to be freed beforehand. */
                 /* Don't allow invalid NCA signatures. */
-                bool nca_ctx_init = (ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), \
-                                                          title_info->version.value, NULL) && nca_ctx->valid_main_signature);
+                bool nca_ctx_init = (ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, &(title_info->meta_key), \
+                                                          titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), NULL) && nca_ctx->valid_main_signature);
 
                 /* Free title info. */
                 titleFreeTitleInfo(&title_info);

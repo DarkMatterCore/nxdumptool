@@ -862,7 +862,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
 
     bool use_prefix = (prefix && *prefix);
     size_t prefix_len = (use_prefix ? strlen(prefix) : 0);
-    bool append_path_sep = (use_prefix && prefix[prefix_len - 1] != '/');
+    bool append_path_sep = (use_prefix && prefix[prefix_len - 1] != '/' && *filename != '/');
 
     bool use_extension = (extension && *extension);
     size_t extension_len = (use_extension ? strlen(extension) : 0);

@@ -430,7 +430,10 @@ struct _NcaContext {
     u8 storage_id;                                      ///< NcmStorageId.
     NcmContentStorage *ncm_storage;                     ///< Pointer to a NcmContentStorage instance. Used to read NCA data from eMMC/SD.
     u64 gamecard_offset;                                ///< Used to read NCA data from a gamecard using a FsStorage instance when storage_id == NcmStorageId_GameCard.
-    NcmContentId content_id;                            ///< Also used to read NCA data.
+    u64 title_id;                                       ///< ID from the title that owns this NCA. Retrieved from NcmContentMetaKey. Placed here for convenience.
+    Version title_version;                              ///< Version from the title that owns this NCA. Retrieved from NcmContentMetaKey. Placed here for convenience.
+    u8 title_type;                                      ///< NcmContentMetaType. Retrieved from NcmContentMetaKey. Placed here for convenience.
+    NcmContentId content_id;                            ///< Content ID for this NCA. Used to read NCA data from eMMC/SD. Retrieved from NcmContentInfo.
     char content_id_str[0x21];
     u8 hash[SHA256_HASH_SIZE];                          ///< Manually calculated (if needed).
     char hash_str[0x41];
@@ -440,7 +443,6 @@ struct _NcaContext {
     char content_size_str[0x10];                        ///< Placed here for convenience.
     u8 key_generation;                                  ///< NcaKeyGeneration. Retrieved from the decrypted header.
     u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
-    u32 title_version;
     bool rights_id_available;
     bool titlekey_retrieved;
     bool valid_main_signature;
@@ -490,7 +492,7 @@ void ncaFreeCryptoBuffer(void);
 /// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or used to read ticket data that has already been retrieved.
 /// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, u32 title_version, Ticket *tik);
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
 /// Input offset must be relative to the start of the NCA content file.

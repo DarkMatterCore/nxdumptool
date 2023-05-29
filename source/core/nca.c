@@ -175,14 +175,14 @@ void ncaFreeCryptoBuffer(void)
     }
 }
 
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentInfo *content_info, u32 title_version, Ticket *tik)
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik)
 {
     NcmContentStorage *ncm_storage = NULL;
     u8 valid_fs_section_cnt = 0;
 
     if (!out || (storage_id != NcmStorageId_GameCard && !(ncm_storage = titleGetNcmStorageByStorageId(storage_id))) || \
         (storage_id == NcmStorageId_GameCard && (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count)) || \
-        !content_info || content_info->content_type >= NcmContentType_DeltaFragment)
+        !meta_key || !content_info || content_info->content_type >= NcmContentType_DeltaFragment)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -195,6 +195,10 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     out->storage_id = storage_id;
     out->ncm_storage = (out->storage_id != NcmStorageId_GameCard ? ncm_storage : NULL);
 
+    out->title_id = meta_key->id;
+    out->title_version.value = meta_key->version;
+    out->title_type = meta_key->type;
+
     memcpy(&(out->content_id), &(content_info->content_id), sizeof(NcmContentId));
     utilsGenerateHexStringFromData(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c), false);
 
@@ -202,7 +206,6 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
 
     out->content_type = content_info->content_type;
     out->id_offset = content_info->id_offset;
-    out->title_version = title_version;
 
     ncmContentInfoSizeToU64(content_info, &(out->content_size));
     utilsGenerateFormattedSizeString((double)out->content_size, out->content_size_str, sizeof(out->content_size_str));
@@ -793,7 +796,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
 
     NcaBucketInfo *compression_bucket = &(fs_ctx->header.compression_info.bucket);
 
-    bool success = false;
+    bool skip_extra_checks = false, success = false;
 
     /* Fill section context. */
     fs_ctx->enabled = false;
@@ -897,21 +900,20 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
             goto end;
         }
 
-        if (!raw_storage_size || !sparse_bucket->header.entry_count)
+        if (raw_storage_size && sparse_bucket->header.entry_count)
         {
-            /* Return true but don't set this FS section as enabled, since we can't really use it. */
-            LOG_MSG_WARNING("Empty SparseInfo data detected for FS section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
-            success = true;
-            goto end;
+            /* Update context. */
+            fs_ctx->sparse_table_offset = (sparse_info->physical_offset + sparse_bucket->offset);
+            fs_ctx->section_size = raw_storage_size;
+        } else {
+            /* We can't really use this section. We'll just emit a warning and proceed anyway. */
+            LOG_MSG_WARNING("Empty SparseInfo data detected for FS section #%u in \"%s\". Skipping extra checks.", section_idx, nca_ctx->content_id_str);
+            skip_extra_checks = true;
         }
-
-        /* Update context. */
-        fs_ctx->sparse_table_offset = (sparse_info->physical_offset + sparse_bucket->offset);
-        fs_ctx->section_size = raw_storage_size;
     }
 
     /* Check if we're within boundaries. */
-    if ((fs_ctx->section_offset + fs_ctx->section_size) > nca_ctx->content_size)
+    if (!skip_extra_checks && (fs_ctx->section_offset + fs_ctx->section_size) > nca_ctx->content_size)
     {
         LOG_MSG_ERROR("FS section #%u in \"%s\" is out of NCA boundaries. Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;

@@ -25,7 +25,7 @@
         "remove_console_data": true
     },
     "nca_fs": {
-        "write_section_image": false,
+        "write_raw_section": false,
         "use_layeredfs_dir": false
     }
 }

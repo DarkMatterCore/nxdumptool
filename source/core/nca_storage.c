@@ -98,7 +98,7 @@ bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStora
         !(patch_nca_ctx = patch_ctx->nca_fs_ctx->nca_ctx) || !(base_nca_ctx = base_ctx->nca_fs_ctx->nca_ctx) || \
         patch_ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || base_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
         patch_nca_ctx->header.program_id != base_nca_ctx->header.program_id || patch_nca_ctx->header.content_type != base_nca_ctx->header.content_type || \
-        patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version < base_nca_ctx->title_version || \
+        patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version.value < base_nca_ctx->title_version.value || \
         (patch_ctx->base_storage_type != NcaStorageBaseStorageType_Indirect && patch_ctx->base_storage_type != NcaStorageBaseStorageType_Compressed) || \
         !patch_ctx->indirect_storage || !patch_ctx->aes_ctr_ex_storage || (base_ctx->base_storage_type == NcaStorageBaseStorageType_Compressed && \
         patch_ctx->base_storage_type != NcaStorageBaseStorageType_Compressed))
