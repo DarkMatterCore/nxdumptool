@@ -196,8 +196,8 @@ static bool saveNintendoContentArchiveFsSection(void *userdata);
 static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir);
 static bool saveExtractedPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir);
 
-//static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir);
-//static bool saveExtractedRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir);
+static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir);
+static bool saveExtractedRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir);
 
 static void xciReadThreadFunc(void *arg);
 
@@ -209,8 +209,8 @@ static void ncaReadThreadFunc(void *arg);
 static void rawPartitionFsReadThreadFunc(void *arg);
 static void extractedPartitionFsReadThreadFunc(void *arg);
 
-//static void rawRomFsReadThreadFunc(void *arg);
-//static void extractedRomFsReadThreadFunc(void *arg);
+static void rawRomFsReadThreadFunc(void *arg);
+static void extractedRomFsReadThreadFunc(void *arg);
 
 static void genericWriteThreadFunc(void *arg);
 
@@ -3184,7 +3184,7 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
             goto end;
         }
 
-        //success = (write_raw_section ? saveRawRomFsSection(&romfs_ctx, use_layeredfs_dir) : saveExtractedRomFsSection(&romfs_ctx, use_layeredfs_dir));
+        success = (write_raw_section ? saveRawRomFsSection(&romfs_ctx, use_layeredfs_dir) : saveExtractedRomFsSection(&romfs_ctx, use_layeredfs_dir));
     }
 
 end:
@@ -3227,7 +3227,7 @@ static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool 
         filename = generateOutputLayeredFsFileName(title_id, NULL, "exefs.nsp");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(path, MAX_ELEMENTS(path), "/%s/section_%u.pfs0", nca_ctx->content_id_str, pfs_ctx->nca_fs_ctx->section_idx);
+        snprintf(path, MAX_ELEMENTS(path), "/%s/section_%u.pfs.bin", nca_ctx->content_id_str, pfs_ctx->nca_fs_ctx->section_idx);
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, path);
@@ -3349,46 +3349,157 @@ end:
     return success;
 }
 
+static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir)
+{
+    u64 free_space = 0;
 
+    RomFsThreadData romfs_thread_data = {0};
+    SharedThreadData *shared_thread_data = &(romfs_thread_data.shared_thread_data);
 
+    NcaContext *nca_ctx = romfs_ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
 
+    u64 title_id = nca_ctx->title_id;
+    u8 title_type = nca_ctx->title_type;
 
+    char subdir[0x20] = {0}, *filename = NULL;
+    u32 dev_idx = g_storageMenuElementOption.selected;
 
+    bool success = false;
 
+    romfs_thread_data.romfs_ctx = romfs_ctx;
+    romfs_thread_data.use_layeredfs_dir = use_layeredfs_dir;
+    shared_thread_data->total_size = romfs_ctx->size;
 
+    consolePrint("raw romfs section size: 0x%lX\n", romfs_ctx->size);
 
+    if (use_layeredfs_dir)
+    {
+        /* Only use base title IDs if we're dealing with patches. */
+        if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
+        filename = generateOutputLayeredFsFileName(title_id, NULL, "romfs.bin");
+    } else {
+        snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
+        snprintf(path, MAX_ELEMENTS(path), "/%s/section_%u.romfs.bin", nca_ctx->content_id_str, romfs_ctx->default_storage_ctx->nca_fs_ctx->section_idx);
 
+        TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
+        filename = generateOutputTitleFileName(title_info, subdir, path);
+    }
 
+    if (!filename) goto end;
 
+    if (dev_idx == 1)
+    {
+        if (!usbSendFileProperties(shared_thread_data->total_size, filename))
+        {
+            consolePrint("failed to send file properties for \"%s\"!\n", filename);
+            goto end;
+        }
+    } else {
+        if (!utilsGetFileSystemStatsByPath(filename, NULL, &free_space))
+        {
+            consolePrint("failed to retrieve free space from selected device\n");
+            goto end;
+        }
 
+        if (shared_thread_data->total_size >= free_space)
+        {
+            consolePrint("dump size exceeds free space\n");
+            goto end;
+        }
 
+        utilsCreateDirectoryTree(filename, false);
 
+        if (dev_idx == 0)
+        {
+            if (shared_thread_data->total_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(filename))
+            {
+                consolePrint("failed to create concatenation file for \"%s\"!\n", filename);
+                goto end;
+            }
+        } else {
+            if (g_umsDevices[dev_idx - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && shared_thread_data->total_size > FAT32_FILESIZE_LIMIT)
+            {
+                consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+                goto end;
+            }
+        }
 
+        shared_thread_data->fp = fopen(filename, "wb");
+        if (!shared_thread_data->fp)
+        {
+            consolePrint("failed to open \"%s\" for writing!\n", filename);
+            goto end;
+        }
 
+        ftruncate(fileno(shared_thread_data->fp), (off_t)shared_thread_data->total_size);
+    }
 
+    consoleRefresh();
 
+    success = spanDumpThreads(rawRomFsReadThreadFunc, genericWriteThreadFunc, &romfs_thread_data);
 
+    if (success)
+    {
+        consolePrint("successfully saved raw romfs section as \"%s\"\n", filename);
+        consoleRefresh();
+    }
 
+end:
+    if (shared_thread_data->fp)
+    {
+        fclose(shared_thread_data->fp);
+        shared_thread_data->fp = NULL;
 
+        if (!success && dev_idx != 1)
+        {
+            if (dev_idx == 0)
+            {
+                utilsRemoveConcatenationFile(filename);
+                utilsCommitSdCardFileSystemChanges();
+            } else {
+                remove(filename);
+            }
+        }
+    }
 
+    if (filename) free(filename);
 
+    return success;
+}
 
+static bool saveExtractedRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir)
+{
+    u64 data_size = 0;
 
+    RomFsThreadData romfs_thread_data = {0};
+    SharedThreadData *shared_thread_data = &(romfs_thread_data.shared_thread_data);
 
+    bool success = false;
 
+    if (!romfsGetTotalDataSize(romfs_ctx, false, &data_size))
+    {
+        consolePrint("failed to calculate extracted romfs section size!\n");
+        goto end;
+    }
 
+    if (!data_size)
+    {
+        consolePrint("romfs section is empty!\n");
+        goto end;
+    }
 
+    romfs_thread_data.romfs_ctx = romfs_ctx;
+    romfs_thread_data.use_layeredfs_dir = use_layeredfs_dir;
+    shared_thread_data->total_size = data_size;
 
+    consolePrint("extracted romfs section size: 0x%lX\n", data_size);
+    consoleRefresh();
 
+    success = spanDumpThreads(extractedRomFsReadThreadFunc, genericWriteThreadFunc, &romfs_thread_data);
 
-
-
-
-
-
-
-
-
+end:
+    return success;
+}
 
 static void xciReadThreadFunc(void *arg)
 {
@@ -3989,7 +4100,7 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
             }
         }
 
-        /* Retrieve Hash FS file entry information. */
+        /* Retrieve Partition FS file entry information. */
         shared_thread_data->read_error = ((pfs_entry = pfsGetEntryByIndex(pfs_ctx, i)) == NULL || (pfs_entry_name = pfsGetEntryName(pfs_ctx, pfs_entry)) == NULL);
         if (shared_thread_data->read_error)
         {
@@ -4107,6 +4218,317 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
         mutexUnlock(&g_fileMutex);
 
         consolePrint("successfully saved extracted partitionfs section data to \"%s\"\n", filename);
+        consoleRefresh();
+    }
+
+end:
+    if (shared_thread_data->fp)
+    {
+        fclose(shared_thread_data->fp);
+        shared_thread_data->fp = NULL;
+
+        if ((shared_thread_data->read_error || shared_thread_data->write_error || shared_thread_data->transfer_cancelled) && dev_idx != 1)
+        {
+            utilsDeleteDirectoryRecursively(filename);
+            if (dev_idx == 0) utilsCommitSdCardFileSystemChanges();
+        }
+    }
+
+    if (filename) free(filename);
+
+    if (buf2) free(buf2);
+    if (buf1) free(buf1);
+
+    threadExit();
+}
+
+static void rawRomFsReadThreadFunc(void *arg)
+{
+    void *buf1 = NULL, *buf2 = NULL;
+    RomFsThreadData *romfs_thread_data = (RomFsThreadData*)arg;
+    SharedThreadData *shared_thread_data = (romfs_thread_data ? &(romfs_thread_data->shared_thread_data) : NULL);
+    RomFileSystemContext *romfs_ctx = (romfs_thread_data ? romfs_thread_data->romfs_ctx : NULL);
+
+    buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+    buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+
+    if (!romfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !romfs_ctx || !buf1 || !buf2)
+    {
+        shared_thread_data->read_error = true;
+        goto end;
+    }
+
+    shared_thread_data->data = NULL;
+    shared_thread_data->data_size = 0;
+
+    for(u64 offset = 0, blksize = BLOCK_SIZE; offset < shared_thread_data->total_size; offset += blksize)
+    {
+        if (blksize > (shared_thread_data->total_size - offset)) blksize = (shared_thread_data->total_size - offset);
+
+        /* Check if the transfer has been cancelled by the user */
+        if (shared_thread_data->transfer_cancelled)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        /* Read current data chunk */
+        shared_thread_data->read_error = !romfsReadFileSystemData(romfs_ctx, buf1, blksize, offset);
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        /* Wait until the previous data chunk has been written */
+        mutexLock(&g_fileMutex);
+
+        if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+
+        if (shared_thread_data->write_error)
+        {
+            mutexUnlock(&g_fileMutex);
+            break;
+        }
+
+        /* Update shared object. */
+        shared_thread_data->data = buf1;
+        shared_thread_data->data_size = blksize;
+
+        /* Swap buffers. */
+        buf1 = buf2;
+        buf2 = shared_thread_data->data;
+
+        /* Wake up the write thread to continue writing data. */
+        mutexUnlock(&g_fileMutex);
+        condvarWakeAll(&g_writeCondvar);
+    }
+
+end:
+    if (buf2) free(buf2);
+    if (buf1) free(buf1);
+
+    threadExit();
+}
+
+static void extractedRomFsReadThreadFunc(void *arg)
+{
+    void *buf1 = NULL, *buf2 = NULL;
+    RomFsThreadData *romfs_thread_data = (RomFsThreadData*)arg;
+    SharedThreadData *shared_thread_data = (romfs_thread_data ? &(romfs_thread_data->shared_thread_data) : NULL);
+
+    RomFileSystemContext *romfs_ctx = (romfs_thread_data ? romfs_thread_data->romfs_ctx : NULL);
+    RomFileSystemFileEntry *romfs_file_entry = NULL;
+
+    char romfs_path[FS_MAX_PATH] = {0}, subdir[0x20] = {0}, *filename = NULL;
+    size_t filename_len = 0;
+
+    NcaContext *nca_ctx = romfs_ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
+
+    u64 title_id = nca_ctx->title_id;
+    u8 title_type = nca_ctx->title_type;
+
+    u64 free_space = 0;
+    u32 dev_idx = g_storageMenuElementOption.selected;
+    u8 romfs_illegal_char_replace_type = (dev_idx != 0 ? RomFileSystemPathIllegalCharReplaceType_IllegalFsChars : RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly);
+
+    buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+    buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+
+    if (romfs_thread_data->use_layeredfs_dir)
+    {
+        /* Only use base title IDs if we're dealing with patches. */
+        if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
+        filename = generateOutputLayeredFsFileName(title_id, NULL, "romfs");
+    } else {
+        snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
+        snprintf(romfs_path, MAX_ELEMENTS(romfs_path), "/%s/section_%u", nca_ctx->content_id_str, romfs_ctx->default_storage_ctx->nca_fs_ctx->section_idx);
+
+        TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
+        filename = generateOutputTitleFileName(title_info, subdir, romfs_path);
+    }
+
+    filename_len = (filename ? strlen(filename) : 0);
+
+    if (!romfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !romfs_ctx || !buf1 || !buf2 || !filename)
+    {
+        shared_thread_data->read_error = true;
+        goto end;
+    }
+
+    snprintf(romfs_path, MAX_ELEMENTS(romfs_path), "%s", filename);
+
+    if (dev_idx != 1)
+    {
+        if (!utilsGetFileSystemStatsByPath(filename, NULL, &free_space))
+        {
+            consolePrint("failed to retrieve free space from selected device\n");
+            shared_thread_data->read_error = true;
+            goto end;
+        }
+
+        if (shared_thread_data->total_size >= free_space)
+        {
+            consolePrint("dump size exceeds free space\n");
+            shared_thread_data->read_error = true;
+            goto end;
+        }
+    }
+
+    /* Reset current file table offset. */
+    romfsResetFileTableOffset(romfs_ctx);
+
+    /* Loop through all file entries. */
+    while(shared_thread_data->data_written < shared_thread_data->total_size && romfsCanMoveToNextFileEntry(romfs_ctx))
+    {
+        /* Check if the transfer has been cancelled by the user. */
+        if (shared_thread_data->transfer_cancelled)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        if (dev_idx != 1)
+        {
+            /* Wait until the previous data chunk has been written */
+            mutexLock(&g_fileMutex);
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+            mutexUnlock(&g_fileMutex);
+
+            if (shared_thread_data->write_error) break;
+
+            /* Close file. */
+            if (shared_thread_data->fp)
+            {
+                fclose(shared_thread_data->fp);
+                shared_thread_data->fp = NULL;
+                utilsCommitSdCardFileSystemChanges();
+            }
+        }
+
+        /* Retrieve RomFS file entry information and generate output path. */
+        shared_thread_data->read_error = (!(romfs_file_entry = romfsGetCurrentFileEntry(romfs_ctx)) || \
+                                           !romfsGeneratePathFromFileEntry(romfs_ctx, romfs_file_entry, romfs_path + filename_len, FS_MAX_PATH - filename_len, romfs_illegal_char_replace_type));
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        if (dev_idx == 1)
+        {
+            /* Wait until the previous data chunk has been written */
+            mutexLock(&g_fileMutex);
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+            mutexUnlock(&g_fileMutex);
+
+            if (shared_thread_data->write_error) break;
+
+            /* Send current file properties */
+            shared_thread_data->read_error = !usbSendFileProperties(romfs_file_entry->size, romfs_path);
+        } else {
+            /* Create directory tree. */
+            utilsCreateDirectoryTree(romfs_path, false);
+
+            if (dev_idx == 0)
+            {
+                /* Create ConcatenationFile if we're dealing with a big file + SD card as the output storage. */
+                if (romfs_file_entry->size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(romfs_path))
+                {
+                    consolePrint("failed to create concatenation file for \"%s\"!\n", romfs_path);
+                    shared_thread_data->read_error = true;
+                }
+            } else {
+                /* Don't handle file chunks on FAT12/FAT16/FAT32 formatted UMS devices. */
+                if (g_umsDevices[dev_idx - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && romfs_file_entry->size > FAT32_FILESIZE_LIMIT)
+                {
+                    consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+                    shared_thread_data->read_error = true;
+                }
+            }
+
+            if (!shared_thread_data->read_error)
+            {
+                /* Open output file. */
+                shared_thread_data->read_error = ((shared_thread_data->fp = fopen(romfs_path, "wb")) == NULL);
+                if (!shared_thread_data->read_error)
+                {
+                    /* Set file size. */
+                    ftruncate(fileno(shared_thread_data->fp), (off_t)romfs_file_entry->size);
+                } else {
+                    consolePrint("failed to open \"%s\" for writing!\n", romfs_path);
+                }
+            }
+        }
+
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        for(u64 offset = 0, blksize = BLOCK_SIZE; offset < romfs_file_entry->size; offset += blksize)
+        {
+            if (blksize > (romfs_file_entry->size - offset)) blksize = (romfs_file_entry->size - offset);
+
+            /* Check if the transfer has been cancelled by the user. */
+            if (shared_thread_data->transfer_cancelled)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+
+            /* Read current file data chunk. */
+            shared_thread_data->read_error = !romfsReadFileEntryData(romfs_ctx, romfs_file_entry, buf1, blksize, offset);
+            if (shared_thread_data->read_error)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+
+            /* Wait until the previous file data chunk has been written. */
+            mutexLock(&g_fileMutex);
+
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+
+            if (shared_thread_data->write_error)
+            {
+                mutexUnlock(&g_fileMutex);
+                break;
+            }
+
+            /* Update shared object. */
+            shared_thread_data->data = buf1;
+            shared_thread_data->data_size = blksize;
+
+            /* Swap buffers. */
+            buf1 = buf2;
+            buf2 = shared_thread_data->data;
+
+            /* Wake up the write thread to continue writing data. */
+            mutexUnlock(&g_fileMutex);
+            condvarWakeAll(&g_writeCondvar);
+        }
+
+        if (shared_thread_data->read_error || shared_thread_data->write_error || shared_thread_data->transfer_cancelled) break;
+
+        /* Move to the next file entry. */
+        shared_thread_data->read_error = !romfsMoveToNextFileEntry(romfs_ctx);
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+    }
+
+    if (!shared_thread_data->read_error && !shared_thread_data->write_error && !shared_thread_data->transfer_cancelled)
+    {
+        /* Wait until the previous file data chunk has been written. */
+        mutexLock(&g_fileMutex);
+        if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
+        mutexUnlock(&g_fileMutex);
+
+        consolePrint("successfully saved extracted romfs section data to \"%s\"\n", filename);
         consoleRefresh();
     }
 
