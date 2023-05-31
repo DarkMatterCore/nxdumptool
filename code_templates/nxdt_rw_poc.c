@@ -2966,7 +2966,7 @@ static bool saveNintendoContentArchive(void *userdata)
     SharedThreadData *shared_thread_data = &(nca_thread_data.shared_thread_data);
 
     u64 free_space = 0;
-    char *filename = NULL;
+    char *filename = NULL, subdir[0x20] = {0};
     u32 dev_idx = g_storageMenuElementOption.selected;
 
     bool success = false;
@@ -2991,7 +2991,8 @@ static bool saveNintendoContentArchive(void *userdata)
     consolePrint("nca size: 0x%lX\n", shared_thread_data->total_size);
 
     snprintf(path, MAX_ELEMENTS(path), "/%s.%s", nca_thread_data.nca_ctx->content_id_str, content_info->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
-    filename = generateOutputTitleFileName(title_info, "NCA/User", path);
+    snprintf(subdir, MAX_ELEMENTS(subdir), "NCA/%s", nca_thread_data.nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
+    filename = generateOutputTitleFileName(title_info, subdir, path);
     if (!filename) goto end;
 
     if (dev_idx == 1)
