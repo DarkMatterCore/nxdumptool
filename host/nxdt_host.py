@@ -32,6 +32,8 @@
 # Under MacOS, use `brew install libusb` to install libusb via Homebrew.
 # Under Linux, you should be good to go from the start. If not, just use the package manager from your distro to install libusb.
 
+from __future__ import print_function
+
 import sys
 import os
 import platform
@@ -298,6 +300,7 @@ TASKBAR_LIB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAA
 # Global variables used throughout the code.
 g_cliMode: bool = False
 g_outputDir: str = ''
+g_logLevelIntVar: Optional[tk.IntVar] = None
 
 g_osType: str = ''
 g_osVersion: str = ''
@@ -313,6 +316,7 @@ g_tkChooseDirButton: Optional[tk.Button] = None
 g_tkServerButton: Optional[tk.Button] = None
 g_tkTipMessage: Any = None
 g_tkScrolledTextLog: Optional[scrolledtext.ScrolledText] = None
+g_tkVerboseCheckbox: Optional[tk.Checkbutton] = None
 
 g_logger: Optional[logging.Logger] = None
 
@@ -363,9 +367,11 @@ class LogConsole:
         # Create a logging handler using a queue.
         self.log_queue: queue.Queue = queue.Queue()
         self.queue_handler = LogQueueHandler(self.log_queue)
+
         #formatter = logging.Formatter('[%(asctime)s] -> %(message)s')
         formatter = logging.Formatter('%(message)s')
         self.queue_handler.setFormatter(formatter)
+
         g_logger.addHandler(self.queue_handler)
 
         # Start polling messages from the queue.
@@ -536,6 +542,14 @@ class ProgressBarWindow:
 
 g_progressBarWindow: Optional[ProgressBarWindow] = None
 
+def eprint(*args, **kwargs) -> None:
+    print(*args, file=sys.stderr, **kwargs)
+
+def utilsLogException(exception_str: str) -> None:
+    eprint(exception_str)
+    if g_logger is not None:
+        g_logger.debug(exception_str)
+
 def utilsGetPath(path_arg: str, fallback_path: str, is_file: bool, create: bool = False) -> str:
     path = os.path.abspath(os.path.expanduser(os.path.expandvars(path_arg if path_arg else fallback_path)))
 
@@ -656,7 +670,7 @@ def usbRead(size: int, timeout: int = -1) -> bytes:
         rd = bytes(g_usbEpIn.read(size, timeout))
     except usb.core.USBError:
         if not g_cliMode:
-            traceback.print_exc(file=sys.stderr)
+            utilsLogException(traceback.format_exc())
         g_logger.error('\nUSB timeout triggered or console disconnected.')
 
     return rd
@@ -670,7 +684,7 @@ def usbWrite(data: bytes, timeout: int = -1) -> int:
         wr = g_usbEpOut.write(data, timeout)
     except usb.core.USBError:
         if not g_cliMode:
-            traceback.print_exc(file=sys.stderr)
+            utilsLogException(traceback.format_exc())
         g_logger.error('\nUSB timeout triggered or console disconnected.')
 
     return wr
@@ -1070,7 +1084,7 @@ def uiStartServer() -> None:
     try:
         os.makedirs(g_outputDir, exist_ok=True)
     except:
-        traceback.print_exc(file=sys.stderr)
+        utilsLogException(traceback.format_exc())
         messagebox.showerror('Error', 'Unable to create full output directory tree!', parent=g_tkRoot)
         return
 
@@ -1086,6 +1100,7 @@ def uiToggleElements(flag: bool) -> None:
     #assert g_tkChooseDirButton is not None
     #assert g_tkServerButton is not None
     #assert g_tkCanvas is not None
+    #assert g_tkVerboseCheckbox is not None
 
     if flag:
         g_tkRoot.protocol('WM_DELETE_WINDOW', uiHandleExitProtocol)
@@ -1093,6 +1108,8 @@ def uiToggleElements(flag: bool) -> None:
         g_tkChooseDirButton.configure(state='normal')
         g_tkServerButton.configure(text='Start server', command=uiStartServer, state='normal')
         g_tkCanvas.itemconfigure(g_tkTipMessage, state='hidden', text='')
+
+        g_tkVerboseCheckbox.configure(state='normal')
     else:
         #assert g_tkScrolledTextLog is not None
 
@@ -1105,6 +1122,8 @@ def uiToggleElements(flag: bool) -> None:
         g_tkScrolledTextLog.configure(state='normal')
         g_tkScrolledTextLog.delete('1.0', tk.END)
         g_tkScrolledTextLog.configure(state='disabled')
+
+        g_tkVerboseCheckbox.configure(state='disabled')
 
 def uiChooseDirectory() -> None:
     dir = filedialog.askdirectory(parent=g_tkRoot, title='Select an output directory', initialdir=INITIAL_DIR, mustexist=True)
@@ -1128,9 +1147,14 @@ def uiHandleExitProtocolStub() -> None:
 def uiScaleMeasure(measure: int) -> int:
     return round(float(measure) * SCALE)
 
+def uiHandleVerboseCheckbox() -> None:
+    #assert g_logger is not None
+    #assert g_logLevelIntVar is not None
+    g_logger.setLevel(g_logLevelIntVar.get())
+
 def uiInitialize() -> None:
-    global SCALE
-    global g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog
+    global SCALE, g_logLevelIntVar
+    global g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog, g_tkVerboseCheckbox
     global g_stopEvent, g_tlb, g_taskbar, g_progressBarWindow
 
     # Setup thread event.
@@ -1146,7 +1170,7 @@ def uiInitialize() -> None:
             if not dpi_aware:
                 dpi_aware = (ctypes.windll.shcore.SetProcessDpiAwareness(1) == 0)
         except:
-            traceback.print_exc(file=sys.stderr)
+            utilsLogException(traceback.format_exc())
 
     # Enable taskbar features under Windows (if possible).
     del_tlb = False
@@ -1165,7 +1189,7 @@ def uiInitialize() -> None:
             g_taskbar = cc.CreateObject('{56FDF344-FD6D-11D0-958A-006097C9A090}', interface=g_tlb.ITaskbarList3)
             g_taskbar.HrInit()
         except:
-            traceback.print_exc(file=sys.stderr)
+            utilsLogException(traceback.format_exc())
 
         if del_tlb:
             os.remove(TASKBAR_LIB_PATH)
@@ -1181,7 +1205,7 @@ def uiInitialize() -> None:
         icon_image = tk.PhotoImage(data=base64.b64decode(APP_ICON))
         g_tkRoot.wm_iconphoto(True, icon_image)
     except:
-        traceback.print_exc(file=sys.stderr)
+        utilsLogException(traceback.format_exc())
 
     # Get screen resolution.
     screen_width_px = g_tkRoot.winfo_screenwidth()
@@ -1243,6 +1267,10 @@ def uiInitialize() -> None:
 
     g_tkCanvas.create_text(uiScaleMeasure(5), uiScaleMeasure(WINDOW_HEIGHT - 10), text=COPYRIGHT_TEXT, anchor=tk.W)
 
+    g_logLevelIntVar = tk.IntVar()
+    g_tkVerboseCheckbox = tk.Checkbutton(g_tkRoot, text='Verbose output', variable=g_logLevelIntVar, onvalue=logging.DEBUG, offvalue=logging.INFO, command=uiHandleVerboseCheckbox)
+    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH - 55), uiScaleMeasure(WINDOW_HEIGHT - 10), window=g_tkVerboseCheckbox, anchor=tk.CENTER)
+
     # Initialize console logger.
     console = LogConsole(g_tkScrolledTextLog)
 
@@ -1281,8 +1309,9 @@ def main() -> int:
 
     # Parse command line arguments.
     parser = ArgumentParser(description=SCRIPT_TITLE + '. ' + COPYRIGHT_TEXT + '.')
-    parser.add_argument('-c', '--cli', required=False, action='store_true', help='Start the script in CLI mode.')
+    parser.add_argument('-c', '--cli', required=False, action='store_true', default=False, help='Start the script in CLI mode.')
     parser.add_argument('-o', '--outdir', required=False, type=str, metavar='DIR', help='Path to output directory. Defaults to "' + DEFAULT_DIR + '".')
+    parser.add_argument('-v', '--verbose', required=False, action='store_true', default=False, help='Enable verbose output.')
     args = parser.parse_args()
 
     # Update global flags.
@@ -1305,10 +1334,10 @@ def main() -> int:
         g_isWindows7 = (True if (win_ver_major > 6) else (win_ver_major == 6 and win_ver_minor > 0))
 
     # Setup logging mechanism.
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
     g_logger = logging.getLogger()
     if len(g_logger.handlers):
-        # Remove stderr output handler from logger.
+        # Remove stderr output handler from logger. We'll control standard output on our own.
         log_stderr = g_logger.handlers[0]
         g_logger.removeHandler(log_stderr)
 
@@ -1330,7 +1359,7 @@ if __name__ == "__main__":
         time.sleep(0.2)
         print('\nScript interrupted.')
     except Exception as e:
-        traceback.print_exc(file=sys.stderr)
+        utilsLogException(traceback.format_exc())
 
     try:
         sys.exit(ret)
