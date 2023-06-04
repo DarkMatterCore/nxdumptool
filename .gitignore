@@ -1,6 +1,7 @@
 .vscode
 build
 host/__pycache__
+host/installer
 host/build
 host/dist
 host/nxdumptool
