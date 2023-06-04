@@ -546,8 +546,11 @@ def eprint(*args, **kwargs) -> None:
     print(*args, file=sys.stderr, **kwargs)
 
 def utilsLogException(exception_str: str) -> None:
+    # Always print exception information to the terminal output.
     eprint(exception_str)
-    if g_logger is not None:
+
+    # Only print exception information to our logger if we're not in CLI mode.
+    if (not g_cliMode) and (g_logger is not None):
         g_logger.debug(exception_str)
 
 def utilsGetPath(path_arg: str, fallback_path: str, is_file: bool, create: bool = False) -> str:
