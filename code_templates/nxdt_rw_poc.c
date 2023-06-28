@@ -31,7 +31,7 @@
 
 #define BLOCK_SIZE      USB_TRANSFER_BUFFER_SIZE
 #define WAIT_TIME_LIMIT 30
-#define OUTDIR          "nxdt_rw_poc"
+#define OUTDIR          APP_TITLE
 
 /* Type definitions. */
 
@@ -1322,7 +1322,7 @@ int main(int argc, char *argv[])
         } else
         if ((btn_down & HidNpadButton_X) && g_umsDeviceCount)
         {
-            for(u32 i = 0; i < g_umsDeviceCount; i++) usbHsFsUnmountDevice(&(g_umsDevices[i]), false);
+            for(u32 i = 0; i < g_umsDeviceCount; i++) umsUnmountDevice(&(g_umsDevices[i]));
             updateStorageList();
         } else
         if (((btn_down & (HidNpadButton_L)) || (btn_held & HidNpadButton_ZL)) && (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_Nca) && title_info->previous)
@@ -2223,7 +2223,7 @@ static bool saveGameCardImage(void *userdata)
         consolePrint("gamecard size (with key area): 0x%lX\n", gc_size);
     }
 
-    snprintf(path, MAX_ELEMENTS(path), " (%s) (%s) (%s).xci", prepend_key_area ? "keyarea" : "keyarealess", keep_certificate ? "cert" : "certless", trim_dump ? "trimmed" : "untrimmed");
+    snprintf(path, MAX_ELEMENTS(path), " [%s][%s][%s].xci", prepend_key_area ? "KA" : "NKA", keep_certificate ? "C" : "NC", trim_dump ? "T" : "NT");
     filename = generateOutputGameCardFileName("Gamecard", path, true);
     if (!filename) goto end;
 

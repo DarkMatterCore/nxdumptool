@@ -43,6 +43,10 @@ bool umsIsDeviceInfoUpdated(void);
 /// Returns NULL if an error occurs.
 UsbHsFsDevice *umsGetDevices(u32 *out_count);
 
+/// Unmounts a USB Mass Storage device using a UsbHsFsDevice element.
+/// If successful, USB Mass Storage device info will be automatically reloaded, and the next call to umsIsDeviceInfoUpdated() shall return true.
+bool umsUnmountDevice(const UsbHsFsDevice *device);
+
 #ifdef __cplusplus
 }
 #endif

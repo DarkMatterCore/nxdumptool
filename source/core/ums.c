@@ -109,6 +109,21 @@ UsbHsFsDevice *umsGetDevices(u32 *out_count)
     return devices;
 }
 
+bool umsUnmountDevice(const UsbHsFsDevice *device)
+{
+    if (!device)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    /* Unmount USB Mass Storage device. If successful, let libusbhsfs automatically call our populate callback. */
+    bool ret = usbHsFsUnmountDevice(device, true);
+    if (!ret) LOG_MSG_ERROR("Failed to unmount UMS device \"%s\"!", device->name);
+
+    return ret;
+}
+
 static void umsFreeDeviceData(void)
 {
     /* Free devices buffer. */
