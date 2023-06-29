@@ -44,9 +44,9 @@ extern "C" {
 
 /// Helper macros.
 
-#define LOG_MSG_GENERIC(level, fmt, ...)                    logWriteFormattedStringToLogFile(level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#define LOG_MSG_BUF_GENERIC(dst, dst_size, level, fmt, ...) logWriteFormattedStringToBuffer(dst, dst_size, level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
-#define LOG_DATA_GENERIC(data, data_size, level, fmt, ...)  logWriteBinaryDataToLogFile(data, data_size, level, __FILENAME__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define LOG_MSG_GENERIC(level, fmt, ...)                    logWriteFormattedStringToLogFile(level, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define LOG_MSG_BUF_GENERIC(dst, dst_size, level, fmt, ...) logWriteFormattedStringToBuffer(dst, dst_size, level, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
+#define LOG_DATA_GENERIC(data, data_size, level, fmt, ...)  logWriteBinaryDataToLogFile(data, data_size, level, __FILE__, __LINE__, __func__, fmt, ##__VA_ARGS__)
 
 #if LOG_LEVEL == LOG_LEVEL_DEBUG
 #define LOG_MSG_DEBUG(fmt, ...)                             LOG_MSG_GENERIC(LOG_LEVEL_DEBUG, fmt, ##__VA_ARGS__)

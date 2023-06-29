@@ -89,8 +89,9 @@ CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DV
 CFLAGS		+=	-DAPP_TITLE=\"${APP_TITLE}\" -DAPP_AUTHOR=\"${APP_AUTHOR}\" -DAPP_VERSION=\"${APP_VERSION}\"
 CFLAGS		+=	-DGIT_BRANCH=\"${GIT_BRANCH}\" -DGIT_COMMIT=\"${GIT_COMMIT}\" -DGIT_REV=\"${GIT_REV}\"
 CFLAGS		+=	-DBUILD_TIMESTAMP="\"${BUILD_TIMESTAMP}\"" -DBOREALIS_RESOURCES="\"${BOREALIS_RESOURCES}\"" -D_GNU_SOURCE
+CFLAGS		+=	-fmacro-prefix-map=$(ROOTDIR)=
 
-CXXFLAGS	:=	$(CFLAGS) -std=c++20 -Wno-volatile -Wno-unused-parameter
+CXXFLAGS	:=	$(CFLAGS) -std=c++20
 
 ASFLAGS		:=	-g $(ARCH)
 LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
@@ -248,18 +249,6 @@ endif
 $(OUTPUT).elf	:	$(OFILES)
 
 $(OFILES_SRC)	: $(HFILES_BIN)
-
-#---------------------------------------------------------------------------------
-# Overrides for devkitA64/base_rules targets.
-#---------------------------------------------------------------------------------
-
-%.o: %.cpp
-	$(SILENTMSG) $(notdir $<)
-	$(SILENTCMD)$(CXX) -MMD -MP -MF $(DEPSDIR)/$*.d $(CXXFLAGS) -D__FILENAME__="\"$(subst $(ROOTDIR),,$(realpath $<))\"" -c $< -o $@ $(ERROR_FILTER)
-
-%.o: %.c
-	$(SILENTMSG) $(notdir $<)
-	$(SILENTCMD)$(CC) -MMD -MP -MF $(DEPSDIR)/$*.d $(CFLAGS) -D__FILENAME__="\"$(subst $(ROOTDIR),,$(realpath $<))\"" -c $< -o $@ $(ERROR_FILTER)
 
 #---------------------------------------------------------------------------------
 # you need a rule like this for each extension you use as binary data
