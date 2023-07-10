@@ -46,12 +46,12 @@ typedef enum {
 } GameCardStorageArea;
 
 typedef enum {
-    GameCardCapacity_1GiB  = BIT_LONG(30),
-    GameCardCapacity_2GiB  = BIT_LONG(31),
-    GameCardCapacity_4GiB  = BIT_LONG(32),
-    GameCardCapacity_8GiB  = BIT_LONG(33),
-    GameCardCapacity_16GiB = BIT_LONG(34),
-    GameCardCapacity_32GiB = BIT_LONG(35)
+    GameCardCapacity_1GiB  = BITL(30),
+    GameCardCapacity_2GiB  = BITL(31),
+    GameCardCapacity_4GiB  = BITL(32),
+    GameCardCapacity_8GiB  = BITL(33),
+    GameCardCapacity_16GiB = BITL(34),
+    GameCardCapacity_32GiB = BITL(35)
 } GameCardCapacity;
 
 /* Global variables. */

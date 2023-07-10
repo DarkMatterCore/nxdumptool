@@ -282,7 +282,7 @@ typedef enum {
 } NacpRequiredNetworkServiceLicenseOnLaunch;
 
 typedef enum {
-    NacpJitConfigurationFlag_Enabled = BIT_LONG(0),
+    NacpJitConfigurationFlag_Enabled = BITL(0),
     NacpJitConfigurationFlag_Count   = 1            ///< Total values supported by this enum.
 } NacpJitConfigurationFlag;
 
