@@ -3225,7 +3225,7 @@ static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool 
     {
         /* Only use base title IDs if we're dealing with patches. */
         if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
-        filename = generateOutputLayeredFsFileName(title_id, NULL, "exefs.nsp");
+        filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "exefs.nsp");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
         snprintf(path, MAX_ELEMENTS(path), "/%s/section_%u.pfs.bin", nca_ctx->content_id_str, pfs_ctx->nca_fs_ctx->section_idx);
@@ -3377,7 +3377,7 @@ static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layere
     {
         /* Only use base title IDs if we're dealing with patches. */
         if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
-        filename = generateOutputLayeredFsFileName(title_id, NULL, "romfs.bin");
+        filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "romfs.bin");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
         snprintf(path, MAX_ELEMENTS(path), "/%s/section_%u.romfs.bin", nca_ctx->content_id_str, romfs_ctx->default_storage_ctx->nca_fs_ctx->section_idx);
@@ -4039,7 +4039,7 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
     {
         /* Only use base title IDs if we're dealing with patches. */
         if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
-        filename = generateOutputLayeredFsFileName(title_id, NULL, "exefs");
+        filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "exefs");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
         snprintf(pfs_path, MAX_ELEMENTS(pfs_path), "/%s/section_%u", nca_ctx->content_id_str, pfs_ctx->nca_fs_ctx->section_idx);
@@ -4340,7 +4340,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
     {
         /* Only use base title IDs if we're dealing with patches. */
         if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
-        filename = generateOutputLayeredFsFileName(title_id, NULL, "romfs");
+        filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "romfs");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
         snprintf(romfs_path, MAX_ELEMENTS(romfs_path), "/%s/section_%u", nca_ctx->content_id_str, romfs_ctx->default_storage_ctx->nca_fs_ctx->section_idx);
