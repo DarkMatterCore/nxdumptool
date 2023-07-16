@@ -61,7 +61,8 @@ typedef enum {
     UsbCommandType_SendFileProperties = 1,
     UsbCommandType_CancelFileTransfer = 2,
     UsbCommandType_SendNspHeader      = 3,
-    UsbCommandType_EndSession         = 4
+    UsbCommandType_EndSession         = 4,
+    UsbCommandType_Count              = 5   ///< Total values supported by this enum.
 } UsbCommandType;
 
 typedef struct {
@@ -108,7 +109,9 @@ typedef enum {
     UsbStatusType_UnsupportedCommand    = 5,
     UsbStatusType_UnsupportedAbiVersion = 6,
     UsbStatusType_MalformedCommand      = 7,
-    UsbStatusType_HostIoError           = 8
+    UsbStatusType_HostIoError           = 8,
+
+    UsbStatusType_Count                 = 9         ///< Total values supported by this enum.
 } UsbStatusType;
 
 typedef struct {

@@ -257,8 +257,8 @@ static void setNspEnableVideoCaptureOption(u32 idx);
 static u32 getNspDisableHdcpOption(void);
 static void setNspDisableHdcpOption(u32 idx);
 
-static u32 getNspAppendAuthoringToolDataOption(void);
-static void setNspAppendAuthoringToolDataOption(u32 idx);
+static u32 getNspGenerateAuthoringToolDataOption(void);
+static void setNspGenerateAuthoringToolDataOption(u32 idx);
 
 static u32 getTicketRemoveConsoleDataOption(void);
 static void setTicketRemoveConsoleDataOption(u32 idx);
@@ -589,13 +589,13 @@ static MenuElement *g_nspMenuElements[] = {
         .userdata = NULL
     },
     &(MenuElement){
-        .str = "nsp: append authoringtool data",
+        .str = "nsp: generate authoringtool data",
         .child_menu = NULL,
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 1,
-            .getter_func = &getNspAppendAuthoringToolDataOption,
-            .setter_func = &setNspAppendAuthoringToolDataOption,
+            .getter_func = &getNspGenerateAuthoringToolDataOption,
+            .setter_func = &setNspGenerateAuthoringToolDataOption,
             .options = g_noYesStrings
         },
         .userdata = NULL
@@ -876,11 +876,11 @@ static char path[FS_MAX_PATH] = {0};
 
 int main(int argc, char *argv[])
 {
-    int ret = 0;
+    int ret = EXIT_SUCCESS;
 
     if (!utilsInitializeResources(argc, (const char**)argv))
     {
-        ret = -1;
+        ret = EXIT_FAILURE;
         goto end;
     }
 
@@ -1356,7 +1356,6 @@ int main(int argc, char *argv[])
         if (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown | HidNpadButton_StickLUp | HidNpadButton_StickRUp | HidNpadButton_ZL | HidNpadButton_ZR)) svcSleepThread(40000000); // 40 ms
     }
 
-end:
     freeNcaFsSectionsList();
 
     freeNcaList();
@@ -1367,6 +1366,7 @@ end:
 
     titleFreeUserApplicationData(&user_app_data);
 
+end:
     utilsCloseResources();
 
     consoleExit(NULL);
@@ -4716,7 +4716,7 @@ static void nspThreadFunc(void *arg)
     bool patch_screenshot = (bool)getNspEnableScreenshotsOption();
     bool patch_video_capture = (bool)getNspEnableVideoCaptureOption();
     bool patch_hdcp = (bool)getNspDisableHdcpOption();
-    bool append_authoringtool_data = (bool)getNspAppendAuthoringToolDataOption();
+    bool generate_authoringtool_data = (bool)getNspGenerateAuthoringToolDataOption();
     bool success = false;
 
     u64 free_space = 0;
@@ -4783,7 +4783,7 @@ static void nspThreadFunc(void *arg)
     }
 
     // determine if we should initialize programinfo ctx
-    if (append_authoringtool_data)
+    if (generate_authoringtool_data)
     {
         program_count = titleGetContentCountByType(title_info, NcmContentType_Program);
         if (program_count && !(program_info_ctx = calloc(program_count, sizeof(ProgramInfoContext))))
@@ -4794,7 +4794,7 @@ static void nspThreadFunc(void *arg)
     }
 
     // determine if we should initialize nacp ctx
-    if (patch_sua || patch_screenshot || patch_video_capture || patch_hdcp || append_authoringtool_data)
+    if (patch_sua || patch_screenshot || patch_video_capture || patch_hdcp || generate_authoringtool_data)
     {
         control_count = titleGetContentCountByType(title_info, NcmContentType_Control);
         if (control_count && !(nacp_ctx = calloc(control_count, sizeof(NacpContext))))
@@ -4805,7 +4805,7 @@ static void nspThreadFunc(void *arg)
     }
 
     // determine if we should initialize legalinfo ctx
-    if (append_authoringtool_data)
+    if (generate_authoringtool_data)
     {
         legal_info_count = titleGetContentCountByType(title_info, NcmContentType_LegalInformation);
         if (legal_info_count && !(legal_info_ctx = calloc(legal_info_count, sizeof(LegalInfoContext))))
@@ -4923,7 +4923,7 @@ static void nspThreadFunc(void *arg)
                         goto end;
                     }
 
-                    if (append_authoringtool_data && !nacpGenerateAuthoringToolXml(cur_nacp_ctx, title_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
+                    if (generate_authoringtool_data && !nacpGenerateAuthoringToolXml(cur_nacp_ctx, title_info->version.value, cnmtGetRequiredTitleVersion(&cnmt_ctx)))
                     {
                         consolePrint("nacp xml failed (%s)\n", cur_nca_ctx->content_id_str);
                         goto end;
@@ -4972,7 +4972,7 @@ static void nspThreadFunc(void *arg)
 
     // generate cnmt xml right away even though we don't yet have all the data we need
     // This is because we need its size to calculate the full nsp size
-    if (append_authoringtool_data && !cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, title_info->content_count))
+    if (generate_authoringtool_data && !cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, title_info->content_count))
     {
         consolePrint("cnmt xml #1 failed\n");
         goto end;
@@ -5019,7 +5019,7 @@ static void nspThreadFunc(void *arg)
     }
 
     // add cnmt xml info
-    if (append_authoringtool_data)
+    if (generate_authoringtool_data)
     {
         sprintf(entry_name, "%s.cnmt.xml", meta_nca_ctx->content_id_str);
         if (!pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cnmt_ctx.authoring_tool_xml_size, &(meta_nca_ctx->content_type_ctx_data_idx)))
@@ -5030,7 +5030,7 @@ static void nspThreadFunc(void *arg)
     }
 
     // add content type ctx data info
-    u32 limit = append_authoringtool_data ? (title_info->content_count - 1) : 0;
+    u32 limit = generate_authoringtool_data ? (title_info->content_count - 1) : 0;
     for(u32 i = 0; i < limit; i++)
     {
         bool ret = false;
@@ -5275,7 +5275,7 @@ static void nspThreadFunc(void *arg)
         }
     }
 
-    if (append_authoringtool_data)
+    if (generate_authoringtool_data)
     {
         // regenerate cnmt xml
         if (!cnmtGenerateAuthoringToolXml(&cnmt_ctx, nca_ctx, title_info->content_count))
@@ -5643,14 +5643,14 @@ static void setNspDisableHdcpOption(u32 idx)
     configSetBoolean("nsp/disable_hdcp", (bool)idx);
 }
 
-static u32 getNspAppendAuthoringToolDataOption(void)
+static u32 getNspGenerateAuthoringToolDataOption(void)
 {
-    return (u32)configGetBoolean("nsp/append_authoringtool_data");
+    return (u32)configGetBoolean("nsp/generate_authoringtool_data");
 }
 
-static void setNspAppendAuthoringToolDataOption(u32 idx)
+static void setNspGenerateAuthoringToolDataOption(u32 idx)
 {
-    configSetBoolean("nsp/append_authoringtool_data", (bool)idx);
+    configSetBoolean("nsp/generate_authoringtool_data", (bool)idx);
 }
 
 static u32 getTicketRemoveConsoleDataOption(void)

@@ -31,11 +31,12 @@ extern "C" {
 #endif
 
 typedef enum {
-    NcaStorageBaseStorageType_Invalid    = 0,   /* Placeholder. */
+    NcaStorageBaseStorageType_Invalid    = 0,   ///< Placeholder.
     NcaStorageBaseStorageType_Regular    = 1,
     NcaStorageBaseStorageType_Sparse     = 2,
     NcaStorageBaseStorageType_Indirect   = 3,
-    NcaStorageBaseStorageType_Compressed = 4
+    NcaStorageBaseStorageType_Compressed = 4,
+    NcaStorageBaseStorageType_Count      = 5    ///< Total values supported by this enum.
 } NcaStorageBaseStorageType;
 
 /// Used to perform multi-layered reads within a single NCA FS section.

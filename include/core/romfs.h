@@ -134,7 +134,8 @@ typedef struct {
 typedef enum {
     RomFileSystemPathIllegalCharReplaceType_None               = 0,
     RomFileSystemPathIllegalCharReplaceType_IllegalFsChars     = 1,
-    RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly = 2
+    RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly = 2,
+    RomFileSystemPathIllegalCharReplaceType_Count              = 3  ///< Total values supported by this enum.
 } RomFileSystemPathIllegalCharReplaceType;
 
 /// Initializes a RomFS or Patch RomFS context.

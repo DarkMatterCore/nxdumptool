@@ -856,7 +856,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         }
     }
 
-    if (fs_ctx->hash_type == NcaHashType_Auto || fs_ctx->hash_type == NcaHashType_AutoSha3 || fs_ctx->hash_type > NcaHashType_HierarchicalIntegritySha3)
+    if (fs_ctx->hash_type == NcaHashType_Auto || fs_ctx->hash_type == NcaHashType_AutoSha3 || fs_ctx->hash_type >= NcaHashType_Count)
     {
         LOG_MSG_ERROR("Invalid hash type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->hash_type);
         goto end;
@@ -880,7 +880,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
         }
     }
 
-    if (fs_ctx->encryption_type == NcaEncryptionType_Auto || fs_ctx->encryption_type > NcaEncryptionType_AesCtrExSkipLayerHash)
+    if (fs_ctx->encryption_type == NcaEncryptionType_Auto || fs_ctx->encryption_type >= NcaEncryptionType_Count)
     {
         LOG_MSG_ERROR("Invalid encryption type for FS section #%u in \"%s\" (0x%02X). Skipping FS section.", section_idx, nca_ctx->content_id_str, fs_ctx->encryption_type);
         goto end;
@@ -1017,7 +1017,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
 
     /* Initialize crypto data. */
     if ((!nca_ctx->rights_id_available || (nca_ctx->rights_id_available && nca_ctx->titlekey_retrieved)) && fs_ctx->encryption_type > NcaEncryptionType_None && \
-        fs_ctx->encryption_type <= NcaEncryptionType_AesCtrExSkipLayerHash)
+        fs_ctx->encryption_type < NcaEncryptionType_Count)
     {
         /* Initialize the partial AES counter for this section. */
         aes128CtrInitializePartialCtr(fs_ctx->ctr, fs_ctx->header.aes_ctr_upper_iv.value, fs_ctx->section_offset);
@@ -1137,7 +1137,7 @@ static bool ncaFsSectionValidateHashDataBoundaries(NcaFsSectionContext *ctx)
 static bool _ncaReadFsSection(NcaFsSectionContext *ctx, void *out, u64 read_size, u64 offset)
 {
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_idx >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
-        ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type > NcaEncryptionType_AesCtrExSkipLayerHash || \
+        ctx->section_type >= NcaFsSectionType_Invalid || ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type >= NcaEncryptionType_Count || \
         !out || !read_size || (offset + read_size) > ctx->section_size)
     {
         LOG_MSG_ERROR("Invalid NCA FS section header parameters!");
@@ -1685,7 +1685,7 @@ static void *ncaGenerateEncryptedFsSectionBlock(NcaFsSectionContext *ctx, const 
     bool success = false;
 
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || ctx->has_sparse_layer || ctx->has_compression_layer || !ctx->nca_ctx || ctx->section_idx >= NCA_FS_HEADER_COUNT || \
-        ctx->section_offset < sizeof(NcaHeader) || ctx->hash_type <= NcaHashType_None || ctx->hash_type == NcaHashType_AutoSha3 || ctx->hash_type > NcaHashType_HierarchicalIntegritySha3 || \
+        ctx->section_offset < sizeof(NcaHeader) || ctx->hash_type <= NcaHashType_None || ctx->hash_type == NcaHashType_AutoSha3 || ctx->hash_type >= NcaHashType_Count || \
         ctx->encryption_type == NcaEncryptionType_Auto || ctx->encryption_type == NcaEncryptionType_AesCtrEx || ctx->encryption_type >= NcaEncryptionType_AesCtrExSkipLayerHash || \
         ctx->section_type >= NcaFsSectionType_Invalid || !data || !data_size || (data_offset + data_size) > ctx->section_size || !out_block_size || !out_block_offset)
     {

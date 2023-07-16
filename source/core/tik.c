@@ -36,8 +36,6 @@
 #define TIK_LIST_STORAGE_PATH           "/ticket_list.bin"
 #define TIK_DB_STORAGE_PATH             "/ticket.bin"
 
-#define ES_CTRKEY_ENTRY_ALIGNMENT       0x8
-
 /* Type definitions. */
 
 /// Used to parse ticket_list.bin entries.
@@ -52,7 +50,7 @@ NXDT_ASSERT(TikListEntry, 0x20);
 
 /// 9.x+ CTR key entry in ES .data segment. Used to store CTR key/IV data for encrypted volatile tickets in ticket.bin and/or encrypted entries in ticket_list.bin.
 /// This is always stored in pairs. The first entry holds the key/IV for the encrypted volatile ticket, while the second entry holds the key/IV for the encrypted entry in ticket_list.bin.
-/// First index in this list is always 0, and it's aligned to ES_CTRKEY_ENTRY_ALIGNMENT.
+/// First index in this list is always 0.
 typedef struct {
     u32 idx;                    ///< Entry index.
     u8 key[AES_128_KEY_SIZE];   ///< AES-128-CTR key.
@@ -637,7 +635,7 @@ static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u
         }
 
         /* Retrieve the CTR key/IV from ES program memory in order to decrypt this ticket. */
-        for(u64 i = 0; i < g_esMemoryLocation.data_size; i += ES_CTRKEY_ENTRY_ALIGNMENT)
+        for(u64 i = 0; i < g_esMemoryLocation.data_size; i++)
         {
             if ((g_esMemoryLocation.data_size - i) < (sizeof(TikEsCtrKeyEntry9x) * 2)) break;
 

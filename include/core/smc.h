@@ -34,7 +34,7 @@ typedef enum {
     SmcKeyType_NormalOnly        = 1,
     SmcKeyType_RecoveryOnly      = 2,
     SmcKeyType_NormalAndRecovery = 3,
-    SmcKeyType_Count             = 4
+    SmcKeyType_Count             = 4    ///< Total values supported by this enum.
 } SmcKeyType;
 
 typedef enum {
@@ -45,7 +45,7 @@ typedef enum {
     SmcSealKey_ReencryptDeviceUniqueData = 4,
     SmcSealKey_ImportSslKey              = 5,
     SmcSealKey_ImportEsClientCertKey     = 6,
-    SmcSealKey_Count                     = 7
+    SmcSealKey_Count                     = 7    ///< Total values supported by this enum.
 } SmcSealKey;
 
 typedef struct {

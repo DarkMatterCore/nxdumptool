@@ -32,14 +32,15 @@ extern "C" {
 
 /// Located at offset 0x7000 in the gamecard image.
 typedef struct {
-    u8 signature[0x100];    ///< RSA-2048-PSS with SHA-256 signature over the rest of the data.
-    u32 magic;              ///< "CERT".
+    u8 signature[0x100];        ///< RSA-2048-PSS with SHA-256 signature over the rest of the data.
+    u32 magic;                  ///< "CERT".
     u32 version;
     u8 kek_index;
     u8 reserved[0x7];
-    u8 device_id[0x10];
+    u8 t1_card_device_id[0x10];
     u8 iv[0x10];
-    u8 data[0xD0];          ///< Encrypted using the IV from this struct and an unknown key.
+    u8 hw_key[0x10];            ///< Encrypted.
+    u8 data[0xC0];              ///< Encrypted.
 } FsGameCardCertificate;
 
 NXDT_ASSERT(FsGameCardCertificate, 0x200);

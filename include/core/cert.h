@@ -46,7 +46,8 @@ NXDT_ASSERT(CertSig##sigtype##PubKey##pubkeytype, certsize);
 typedef enum {
     CertPubKeyType_Rsa4096 = 0,
     CertPubKeyType_Rsa2048 = 1,
-    CertPubKeyType_Ecc480  = 2
+    CertPubKeyType_Ecc480  = 2,
+    CertPubKeyType_Count   = 3  ///< Total values supported by this enum.
 } CertPubKeyType;
 
 /// Placed after the certificate signature block.
@@ -121,7 +122,8 @@ typedef enum {
     CertType_SigEcc480_PubKeyEcc480   = 9,
     CertType_SigHmac160_PubKeyRsa4096 = 10,
     CertType_SigHmac160_PubKeyRsa2048 = 11,
-    CertType_SigHmac160_PubKeyEcc480  = 12
+    CertType_SigHmac160_PubKeyEcc480  = 12,
+    CertType_Count                    = 13  ///< Total values supported by this enum.
 } CertType;
 
 /// Used to store certificate type, size and raw data.

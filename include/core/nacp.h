@@ -64,6 +64,7 @@ typedef enum {
 } NacpAddOnContentRegistrationType;
 
 typedef enum {
+    NacpAttribute_None                     = 0,
     NacpAttribute_Demo                     = BIT(0),
     NacpAttribute_RetailInteractiveDisplay = BIT(1),
     NacpAttribute_DownloadPlay             = BIT(2),    ///< Removed.
@@ -96,23 +97,24 @@ typedef enum {
 } NacpLanguage;
 
 typedef enum {
-    NacpSupportedLanguage_AmericanEnglish      = BIT(0),
-    NacpSupportedLanguage_BritishEnglish       = BIT(1),
-    NacpSupportedLanguage_Japanese             = BIT(2),
-    NacpSupportedLanguage_French               = BIT(3),
-    NacpSupportedLanguage_German               = BIT(4),
-    NacpSupportedLanguage_LatinAmericanSpanish = BIT(5),
-    NacpSupportedLanguage_Spanish              = BIT(6),
-    NacpSupportedLanguage_Italian              = BIT(7),
-    NacpSupportedLanguage_Dutch                = BIT(8),
-    NacpSupportedLanguage_CanadianFrench       = BIT(9),
-    NacpSupportedLanguage_Portuguese           = BIT(10),
-    NacpSupportedLanguage_Russian              = BIT(11),
-    NacpSupportedLanguage_Korean               = BIT(12),
-    NacpSupportedLanguage_TraditionalChinese   = BIT(13),
-    NacpSupportedLanguage_SimplifiedChinese    = BIT(14),
-    NacpSupportedLanguage_BrazilianPortuguese  = BIT(15),
-    NacpSupportedLanguage_Count                = 16,                                        ///< Total values supported by this enum. Should always match NacpLanguage_Count.
+    NacpSupportedLanguage_None                 = 0,
+    NacpSupportedLanguage_AmericanEnglish      = BIT(NacpLanguage_AmericanEnglish),
+    NacpSupportedLanguage_BritishEnglish       = BIT(NacpLanguage_BritishEnglish),
+    NacpSupportedLanguage_Japanese             = BIT(NacpLanguage_Japanese),
+    NacpSupportedLanguage_French               = BIT(NacpLanguage_French),
+    NacpSupportedLanguage_German               = BIT(NacpLanguage_German),
+    NacpSupportedLanguage_LatinAmericanSpanish = BIT(NacpLanguage_LatinAmericanSpanish),
+    NacpSupportedLanguage_Spanish              = BIT(NacpLanguage_Spanish),
+    NacpSupportedLanguage_Italian              = BIT(NacpLanguage_Italian),
+    NacpSupportedLanguage_Dutch                = BIT(NacpLanguage_Dutch),
+    NacpSupportedLanguage_CanadianFrench       = BIT(NacpLanguage_CanadianFrench),
+    NacpSupportedLanguage_Portuguese           = BIT(NacpLanguage_Portuguese),
+    NacpSupportedLanguage_Russian              = BIT(NacpLanguage_Russian),
+    NacpSupportedLanguage_Korean               = BIT(NacpLanguage_Korean),
+    NacpSupportedLanguage_TraditionalChinese   = BIT(NacpLanguage_TraditionalChinese),
+    NacpSupportedLanguage_SimplifiedChinese    = BIT(NacpLanguage_SimplifiedChinese),
+    NacpSupportedLanguage_BrazilianPortuguese  = BIT(NacpLanguage_BrazilianPortuguese),
+    NacpSupportedLanguage_Count                = NacpLanguage_Count,                        ///< Total values supported by this enum.
 
     ///< Old.
     NacpSupportedLanguage_Taiwanese            = NacpSupportedLanguage_TraditionalChinese,
@@ -120,6 +122,7 @@ typedef enum {
 } NacpSupportedLanguage;
 
 typedef enum {
+    NacpParentalControl_None              = 0,
     NacpParentalControl_FreeCommunication = BIT(0),
     NacpParentalControl_Count             = 1       ///< Total values supported by this enum.
 } NacpParentalControl;
@@ -249,6 +252,7 @@ typedef enum {
 } NacpHdcp;
 
 typedef enum {
+    NacpStartupUserAccountOption_None       = 0,
     NacpStartupUserAccountOption_IsOptional = BIT(0),
     NacpStartupUserAccountOption_Count      = 1         ///< Total values supported by this enum.
 } NacpStartupUserAccountOption;
@@ -260,6 +264,7 @@ typedef enum {
 } NacpRuntimeUpgrade;
 
 typedef enum {
+    NacpSupportingLimitedApplicationLicenses_None  = 0,
     NacpSupportingLimitedApplicationLicenses_Demo  = BIT(0),
     NacpSupportingLimitedApplicationLicenses_Count = 1          ///< Total values supported by this enum.
 } NacpSupportingLimitedApplicationLicenses;
@@ -272,16 +277,19 @@ typedef enum {
 } NacpPlayLogQueryCapability;
 
 typedef enum {
+    NacpRepair_None                   = 0,
     NacpRepair_SuppressGameCardAccess = BIT(0),
     NacpRepair_Count                  = 1       ///< Total values supported by this enum.
 } NacpRepair;
 
 typedef enum {
+    NacpRequiredNetworkServiceLicenseOnLaunch_None   = 0,
     NacpRequiredNetworkServiceLicenseOnLaunch_Common = BIT(0),
     NacpRequiredNetworkServiceLicenseOnLaunch_Count  = 1        ///< Total values supported by this enum.
 } NacpRequiredNetworkServiceLicenseOnLaunch;
 
 typedef enum {
+    NacpJitConfigurationFlag_None    = 0,
     NacpJitConfigurationFlag_Enabled = BITL(0),
     NacpJitConfigurationFlag_Count   = 1            ///< Total values supported by this enum.
 } NacpJitConfigurationFlag;
@@ -295,7 +303,8 @@ NXDT_ASSERT(NacpJitConfiguration, 0x10);
 
 typedef enum {
     NacpRequiredAddOnContentsSetDescriptorFlag_None     = 0,
-    NacpRequiredAddOnContentsSetDescriptorFlag_Continue = 1
+    NacpRequiredAddOnContentsSetDescriptorFlag_Continue = 1,
+    NacpRequiredAddOnContentsSetDescriptorFlag_Count    = 2     ///< Total values supported by this enum.
 } NacpRequiredAddOnContentsSetDescriptorFlag;
 
 typedef struct {
@@ -312,6 +321,7 @@ typedef struct {
 NXDT_ASSERT(NacpRequiredAddOnContentsSetBinaryDescriptor, 0x40);
 
 typedef enum {
+    NacpPlayReportPermission_None            = 0,
     NacpPlayReportPermission_TargetMarketing = BIT(0),
     NacpPlayReportPermission_Count           = 1        ///< Total values supported by this enum.
 } NacpPlayReportPermission;

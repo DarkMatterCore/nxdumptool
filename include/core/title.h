@@ -77,13 +77,14 @@ typedef enum {
                                                 ///< Gamecards: "{Name1} [{Id1}][v{Version1}] + ... + {NameN} [{IdN}][v{VersionN}]".
     TitleNamingConvention_IdAndVersionOnly = 1, ///< Individual titles: "{Id}_v{Version}_{Type}".
                                                 ///< Gamecards: "{TitleId1}_v{TitleVersion1}_{TitleType1} + ... + {TitleIdN}_v{TitleVersionN}_{TitleTypeN}".
-    TitleNamingConvention_Count            = 2
+    TitleNamingConvention_Count            = 2  ///< Total values supported by this enum.
 } TitleNamingConvention;
 
 typedef enum {
     TitleFileNameIllegalCharReplaceType_None               = 0,
     TitleFileNameIllegalCharReplaceType_IllegalFsChars     = 1,
-    TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly = 2
+    TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly = 2,
+    TitleFileNameIllegalCharReplaceType_Count              = 3  ///< Total values supported by this enum.
 } TitleFileNameIllegalCharReplaceType;
 
 /// Initializes the title interface.

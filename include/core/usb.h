@@ -38,7 +38,8 @@ typedef enum {
     UsbHostSpeed_None       = 0,
     UsbHostSpeed_FullSpeed  = 1,    ///< USB 1.x.
     UsbHostSpeed_HighSpeed  = 2,    ///< USB 2.0.
-    UsbHostSpeed_SuperSpeed = 3     ///< USB 3.0.
+    UsbHostSpeed_SuperSpeed = 3,    ///< USB 3.0.
+    UsbHostSpeed_Count      = 4     ///< Total values supported by this enum.
 } UsbHostSpeed;
 
 /// Initializes the USB interface, input and output endpoints and allocates an internal transfer buffer.

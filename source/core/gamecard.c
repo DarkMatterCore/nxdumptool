@@ -582,19 +582,14 @@ static bool gamecardReadLotusAsicFirmwareBlob(void)
     /* Temporarily set the segment mask to .data. */
     g_fsProgramMemory.mask = MemoryProgramSegmentType_Data;
 
-    /* Retrieve full FS program memory dump. */
-    ret = memRetrieveProgramMemorySegment(&g_fsProgramMemory);
-
-    /* Clear segment mask. */
-    g_fsProgramMemory.mask = 0;
-
-    if (!ret)
+    /* Retrieve FS .data segment memory dump. */
+    if (!memRetrieveProgramMemorySegment(&g_fsProgramMemory))
     {
         LOG_MSG_ERROR("Failed to retrieve FS .data segment dump!");
         goto end;
     }
 
-    /* Look for the LAFW ReadFw blob in the FS .data memory dump. */
+    /* Look for the LAFW ReadFw blob in the FS .data segment memory dump. */
     for(u64 offset = 0; offset < g_fsProgramMemory.data_size; offset++)
     {
         if ((g_fsProgramMemory.data_size - offset) < sizeof(LotusAsicFirmwareBlob)) break;
@@ -634,6 +629,8 @@ static bool gamecardReadLotusAsicFirmwareBlob(void)
 
 end:
     memFreeMemoryLocation(&g_fsProgramMemory);
+
+    g_fsProgramMemory.mask = MemoryProgramSegmentType_None;
 
     return ret;
 }
@@ -953,6 +950,7 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
         if (memcmp(g_fsProgramMemory.data + offset, &(g_gameCardHeader.package_id), sizeof(g_gameCardHeader.package_id)) != 0) continue;
 
         sha256CalculateHash(tmp_hash, g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
+
         if (!memcmp(tmp_hash, g_gameCardHeader.initial_data_hash, SHA256_HASH_SIZE))
         {
             /* Jackpot. */

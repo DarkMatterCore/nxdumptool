@@ -262,11 +262,11 @@ static void dumpFsSection(TitleInfo *info, NcaFsSectionContext *nca_fs_ctx)
 
 int main(int argc, char *argv[])
 {
-    int ret = 0;
+    int ret = EXIT_SUCCESS;
 
     if (!utilsInitializeResources(argc, (const char**)argv))
     {
-        ret = -1;
+        ret = EXIT_FAILURE;
         goto out;
     }
 

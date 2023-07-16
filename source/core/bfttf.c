@@ -208,7 +208,7 @@ void bfttfExit(void)
 
 bool bfttfGetFontByType(BfttfFontData *font_data, u8 font_type)
 {
-    if (!font_data || font_type >= BfttfFontType_Total)
+    if (!font_data || font_type >= BfttfFontType_Count)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;

@@ -34,6 +34,7 @@ extern "C" {
 
 /// Equivalent to NcmContentMetaAttribute.
 typedef enum {
+    ContentMetaAttribute_None                = 0,
     ContentMetaAttribute_IncludesExFatDriver = BIT(0),
     ContentMetaAttribute_Rebootless          = BIT(1),
     ContentMetaAttribute_Compacted           = BIT(2),  ///< One or more NCAs use SparseInfo data.
@@ -41,6 +42,7 @@ typedef enum {
 } ContentMetaAttribute;
 
 typedef enum {
+    ContentMetaInstallState_None      = 0,
     ContentMetaInstallState_Committed = BIT(0),
     ContentMetaInstallState_Count     = 1       ///< Total values supported by this enum.
 } ContentMetaInstallState;
@@ -98,6 +100,7 @@ typedef struct {
 NXDT_ASSERT(ContentMetaPatchMetaExtendedHeader, 0x18);
 
 typedef enum {
+    ContentMetaContentAccessibility_None       = 0,
     ContentMetaContentAccessibility_Individual = BIT(0),
     ContentMetaContentAccessibility_Count      = 1          ///< Total values supported by this enum.
 } ContentMetaContentAccessibility;
@@ -149,7 +152,8 @@ typedef enum {
     ContentMetaFirmwareVariationVersion_Invalid = 0,
     ContentMetaFirmwareVariationVersion_V1      = 1,
     ContentMetaFirmwareVariationVersion_V2      = 2,
-    ContentMetaFirmwareVariationVersion_Unknown = 3
+    ContentMetaFirmwareVariationVersion_Unknown = 3,
+    ContentMetaFirmwareVariationVersion_Count   = 4     ///< Total values supported by this enum.
 } ContentMetaFirmwareVariationVersion;
 
 /// Header for the extended data region in the SystemUpdate title, pointed to by the extended header.
@@ -240,7 +244,8 @@ NXDT_ASSERT(ContentMetaPatchDeltaHeader, 0x28);
 typedef enum {
     ContentMetaUpdateType_ApplyAsDelta = 0,
     ContentMetaUpdateType_Overwrite    = 1,
-    ContentMetaUpdateType_Create       = 2
+    ContentMetaUpdateType_Create       = 2,
+    ContentMetaUpdateType_Count        = 3  ///< Total values supported by this enum.
 } ContentMetaUpdateType;
 
 #pragma pack(push, 1)

@@ -30,9 +30,12 @@ extern "C" {
 #endif
 
 typedef enum {
+    MemoryProgramSegmentType_None   = 0,
     MemoryProgramSegmentType_Text   = BIT(0),
     MemoryProgramSegmentType_Rodata = BIT(1),
-    MemoryProgramSegmentType_Data   = BIT(2)
+    MemoryProgramSegmentType_Data   = BIT(2),
+    MemoryProgramSegmentType_All    = (MemoryProgramSegmentType_Data | MemoryProgramSegmentType_Rodata | MemoryProgramSegmentType_Text),
+    MemoryProgramSegmentType_Limit  = (MemoryProgramSegmentType_All + 1)                                                                    ///< Placed here for convenience.
 } MemoryProgramSegmentType;
 
 typedef struct {
@@ -43,7 +46,7 @@ typedef struct {
 } MemoryLocation;
 
 /// Retrieves memory segment (.text, .rodata, .data) data from a running program.
-/// These are memory pages with read permission (Perm_R) enabled and type MemType_CodeStatic or MemType_CodeMutable.
+/// These are memory pages with read permission (Perm_R) enabled, with type MemType_CodeStatic or MemType_CodeMutable and no MemoryAttribute flag set.
 bool memRetrieveProgramMemorySegment(MemoryLocation *location);
 
 /// Retrieves full memory data from a running program.

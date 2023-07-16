@@ -72,7 +72,7 @@ __attribute__((format(printf, 5, 6))) void logWriteFormattedStringToLogFile(u8 l
 
 __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char **dst, size_t *dst_size, u8 level, const char *file_name, int line, const char *func_name, const char *fmt, ...)
 {
-    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || level < LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
+    if (!dst || !dst_size || level < LOG_LEVEL || !file_name || !*file_name || !func_name || !*func_name || !fmt || !*fmt) return;
 
     va_list args;
 
@@ -85,7 +85,8 @@ __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char 
     struct tm ts = {0};
     struct timespec now = {0};
 
-    if (dst_str_len >= dst_cur_size) return;
+    /* Sanity check. */
+    if (dst_cur_size && dst_str_len >= dst_cur_size) return;
 
     va_start(args, fmt);
 
@@ -106,7 +107,7 @@ __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char 
 
     log_str_len = (size_t)(str1_len + str2_len + 3);
 
-    if (!dst_cur_size || log_str_len > (dst_cur_size - dst_str_len))
+    if (!dst_ptr || !dst_cur_size || log_str_len > (dst_cur_size - dst_str_len))
     {
         /* Update buffer size. */
         dst_cur_size = (dst_str_len + log_str_len);

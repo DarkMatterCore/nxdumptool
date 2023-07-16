@@ -81,11 +81,11 @@ static void writeFile(void *buf, size_t buf_size, const char *path)
 
 int main(int argc, char *argv[])
 {
-    int ret = 0;
+    int ret = EXIT_SUCCESS;
 
     if (!utilsInitializeResources(argc, (const char**)argv))
     {
-        ret = -1;
+        ret = EXIT_FAILURE;
         goto out;
     }
 

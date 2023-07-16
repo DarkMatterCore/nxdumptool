@@ -37,7 +37,7 @@ typedef enum {
     BfttfFontType_ChineseSimplified    = 3, ///< Simplified Chinese.
     BfttfFontType_ExtChineseSimplified = 4, ///< Extended Simplified Chinese.
     BfttfFontType_ChineseTraditional   = 5, ///< Traditional Chinese.
-    BfttfFontType_Total                = 6  ///< Total fonts supported by this enum.
+    BfttfFontType_Count                = 6  ///< Total fonts supported by this enum.
 } BfttfFontType;
 
 /// Loosely based on PlFontData.

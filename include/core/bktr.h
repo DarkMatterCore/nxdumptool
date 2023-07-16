@@ -70,7 +70,8 @@ NXDT_ASSERT(BucketTreeOffsetNode, BKTR_NODE_SIZE);
 /// IndirectStorage-related elements.
 typedef enum {
     BucketTreeIndirectStorageIndex_Original = 0,
-    BucketTreeIndirectStorageIndex_Patch    = 1
+    BucketTreeIndirectStorageIndex_Patch    = 1,
+    BucketTreeIndirectStorageIndex_Count    = 2     ///< Total values supported by this enum.
 } BucketTreeIndirectStorageIndex;
 
 #pragma pack(push, 1)
@@ -86,7 +87,8 @@ NXDT_ASSERT(BucketTreeIndirectStorageEntry, BKTR_INDIRECT_ENTRY_SIZE);
 /// AesCtrExStorage-related elements.
 typedef enum {
     BucketTreeAesCtrExStorageEncryption_Enabled  = 0,
-    BucketTreeAesCtrExStorageEncryption_Disabled = 1
+    BucketTreeAesCtrExStorageEncryption_Disabled = 1,
+    BucketTreeAesCtrExStorageEncryption_Count    = 2    ///< Total values supported by this enum.
 } BucketTreeAesCtrExStorageEncryption;
 
 typedef struct {
@@ -100,10 +102,11 @@ NXDT_ASSERT(BucketTreeAesCtrExStorageEntry, BKTR_AES_CTR_EX_ENTRY_SIZE);
 
 /// CompressedStorage-related elements.
 typedef enum {
-    BucketTreeCompressedStorageCompressionType_None = 0,
-    BucketTreeCompressedStorageCompressionType_Zero = 1,
-    BucketTreeCompressedStorageCompressionType_2    = 2,
-    BucketTreeCompressedStorageCompressionType_LZ4  = 3
+    BucketTreeCompressedStorageCompressionType_None  = 0,
+    BucketTreeCompressedStorageCompressionType_Zero  = 1,
+    BucketTreeCompressedStorageCompressionType_2     = 2,
+    BucketTreeCompressedStorageCompressionType_LZ4   = 3,
+    BucketTreeCompressedStorageCompressionType_Count = 4    ///< Total values supported by this enum.
 } BucketTreeCompressedStorageCompressionType;
 
 typedef struct {

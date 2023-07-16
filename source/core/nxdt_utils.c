@@ -501,7 +501,7 @@ void utilsJoinThread(Thread *thread)
 
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
 {
-    if (!dst || !dst_size || (!*dst && *dst_size) || (*dst && !*dst_size) || !fmt || !*fmt)
+    if (!dst || !dst_size || !fmt || !*fmt)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -517,6 +517,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
 
     bool success = false;
 
+    /* Sanity check. */
     if (dst_cur_size && dst_str_len >= dst_cur_size)
     {
         LOG_MSG_ERROR("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
@@ -535,7 +536,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
 
     formatted_str_len_cast = (size_t)(formatted_str_len + 1);
 
-    if (!dst_cur_size || formatted_str_len_cast > (dst_cur_size - dst_str_len))
+    if (!dst_ptr || !dst_cur_size || formatted_str_len_cast > (dst_cur_size - dst_str_len))
     {
         /* Update buffer size. */
         dst_cur_size = (dst_str_len + formatted_str_len_cast);
@@ -561,6 +562,8 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
 
     /* Generate formatted string. */
     vsprintf(dst_ptr + dst_str_len, fmt, args);
+
+    /* Update output flag. */
     success = true;
 
 end:

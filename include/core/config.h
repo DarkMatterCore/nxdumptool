@@ -33,14 +33,14 @@ extern "C" {
 typedef enum {
     ConfigOutputStorage_SdCard  = 0,
     ConfigOutputStorage_UsbHost = 1,
-    ConfigOutputStorage_Count   = 2
+    ConfigOutputStorage_Count   = 2     ///< Total values supported by this enum.
 } ConfigOutputStorage;
 
 typedef enum {
     ConfigChecksumLookupMethod_None    = 0,
     ConfigChecksumLookupMethod_NSWDB   = 1,
     ConfigChecksumLookupMethod_NoIntro = 2,
-    ConfigChecksumLookupMethod_Count   = 3
+    ConfigChecksumLookupMethod_Count   = 3  ///< Total values supported by this enum.
 } ConfigChecksumLookupMethod;
 
 /// Initializes the configuration interface.

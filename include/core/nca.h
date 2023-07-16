@@ -62,7 +62,8 @@ extern "C" {
 
 typedef enum {
     NcaDistributionType_Download = 0,
-    NcaDistributionType_GameCard = 1
+    NcaDistributionType_GameCard = 1,
+    NcaDistributionType_Count    = 2    ///< Total values supported by this enum.
 } NcaDistributionType;
 
 typedef enum {
@@ -71,7 +72,8 @@ typedef enum {
     NcaContentType_Control    = 2,
     NcaContentType_Manual     = 3,
     NcaContentType_Data       = 4,
-    NcaContentType_PublicData = 5
+    NcaContentType_PublicData = 5,
+    NcaContentType_Count      = 6   ///< Total values supported by this enum.
 } NcaContentType;
 
 /// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
@@ -101,7 +103,7 @@ typedef enum {
     NcaKeyAreaEncryptionKeyIndex_Application = 0,
     NcaKeyAreaEncryptionKeyIndex_Ocean       = 1,
     NcaKeyAreaEncryptionKeyIndex_System      = 2,
-    NcaKeyAreaEncryptionKeyIndex_Count       = 3
+    NcaKeyAreaEncryptionKeyIndex_Count       = 3    ///< Total values supported by this enum.
 } NcaKeyAreaEncryptionKeyIndex;
 
 /// 'NcaSignatureKeyGeneration_Current' will always point to the last known key generation value.
@@ -172,7 +174,8 @@ NXDT_ASSERT(NcaHeader, 0x400);
 
 typedef enum {
     NcaFsType_RomFs       = 0,
-    NcaFsType_PartitionFs = 1
+    NcaFsType_PartitionFs = 1,
+    NcaFsType_Count       = 2   ///< Total values supported by this enum.
 } NcaFsType;
 
 typedef enum {
@@ -182,7 +185,8 @@ typedef enum {
     NcaHashType_HierarchicalIntegrity     = 3,  ///< Used by NcaFsType_RomFs.
     NcaHashType_AutoSha3                  = 4,
     NcaHashType_HierarchicalSha3256       = 5,  ///< Used by NcaFsType_PartitionFs.
-    NcaHashType_HierarchicalIntegritySha3 = 6   ///< Used by NcaFsType_RomFs.
+    NcaHashType_HierarchicalIntegritySha3 = 6,  ///< Used by NcaFsType_RomFs.
+    NcaHashType_Count                     = 7   ///< Total values supported by this enum.
 } NcaHashType;
 
 typedef enum {
@@ -192,13 +196,15 @@ typedef enum {
     NcaEncryptionType_AesCtr                = 3,
     NcaEncryptionType_AesCtrEx              = 4,
     NcaEncryptionType_AesCtrSkipLayerHash   = 5,
-    NcaEncryptionType_AesCtrExSkipLayerHash = 6
+    NcaEncryptionType_AesCtrExSkipLayerHash = 6,
+    NcaEncryptionType_Count                 = 7     ///< Total values supported by this enum.
 } NcaEncryptionType;
 
 typedef enum {
     NcaMetaDataHashType_None                      = 0,
     NcaMetaDataHashType_HierarchicalIntegrity     = 1,
-    NcaMetaDataHashType_HierarchicalIntegritySha3 = 2
+    NcaMetaDataHashType_HierarchicalIntegritySha3 = 2,
+    NcaMetaDataHashType_Count                     = 3   ///< Total values supported by this enum.
 } NcaMetaDataHashType;
 
 typedef struct {
@@ -408,9 +414,10 @@ typedef struct {
 } NcaFsSectionContext;
 
 typedef enum {
-    NcaVersion_Nca0 = 0,
-    NcaVersion_Nca2 = 2,
-    NcaVersion_Nca3 = 3
+    NcaVersion_Nca0  = 0,
+    NcaVersion_Nca2  = 1,
+    NcaVersion_Nca3  = 2,
+    NcaVersion_Count = 3    ///< Total values supported by this enum.
 } NcaVersion;
 
 typedef struct {

@@ -49,7 +49,8 @@ typedef enum {
     UtilsCustomFirmwareType_Unknown    = 0,
     UtilsCustomFirmwareType_Atmosphere = 1,
     UtilsCustomFirmwareType_SXOS       = 2,
-    UtilsCustomFirmwareType_ReiNX      = 3
+    UtilsCustomFirmwareType_ReiNX      = 3,
+    UtilsCustomFirmwareType_Count      = 4  ///< Total values supported by this enum.
 } UtilsCustomFirmwareType;
 
 /// Used to handle parsed data from a GitHub release JSON.

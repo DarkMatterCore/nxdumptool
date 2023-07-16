@@ -240,7 +240,7 @@ static bool configValidateJsonNspObject(const struct json_object *obj)
 {
     bool ret = false, set_download_distribution_found = false, remove_console_data_found = false, remove_titlekey_crypto_found = false;
     bool disable_linked_account_requirement_found = false, enable_screenshots_found = false, enable_video_capture_found = false, disable_hdcp_found = false;
-    bool append_authoringtool_data_found = false, lookup_checksum_found = false;
+    bool generate_authoringtool_data_found = false, lookup_checksum_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 
@@ -254,12 +254,12 @@ static bool configValidateJsonNspObject(const struct json_object *obj)
         CONFIG_VALIDATE_FIELD(Boolean, enable_video_capture);
         CONFIG_VALIDATE_FIELD(Boolean, disable_hdcp);
         CONFIG_VALIDATE_FIELD(Boolean, lookup_checksum);
-        CONFIG_VALIDATE_FIELD(Boolean, append_authoringtool_data);
+        CONFIG_VALIDATE_FIELD(Boolean, generate_authoringtool_data);
         goto end;
     }
 
     ret = (set_download_distribution_found && remove_console_data_found && remove_titlekey_crypto_found && disable_linked_account_requirement_found && \
-           enable_screenshots_found && enable_video_capture_found && disable_hdcp_found && append_authoringtool_data_found && lookup_checksum_found);
+           enable_screenshots_found && enable_video_capture_found && disable_hdcp_found && generate_authoringtool_data_found && lookup_checksum_found);
 
 end:
     return ret;

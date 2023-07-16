@@ -43,7 +43,8 @@ NXDT_ASSERT(TikSig##sigtype, tiksize);
 
 typedef enum {
     TikTitleKeyType_Common       = 0,
-    TikTitleKeyType_Personalized = 1
+    TikTitleKeyType_Personalized = 1,
+    TikTitleKeyType_Count        = 2    ///< Total values supported by this enum.
 } TikTitleKeyType;
 
 typedef enum {
@@ -52,16 +53,19 @@ typedef enum {
     TikLicenseType_Trial        = 2,
     TikLicenseType_Rental       = 3,
     TikLicenseType_Subscription = 4,
-    TikLicenseType_Service      = 5
+    TikLicenseType_Service      = 5,
+    TikLicenseType_Count        = 6     ///< Total values supported by this enum.
 } TikLicenseType;
 
 typedef enum {
+    TikPropertyMask_None                 = 0,
     TikPropertyMask_PreInstallation      = BIT(0),
     TikPropertyMask_SharedTitle          = BIT(1),
     TikPropertyMask_AllContents          = BIT(2),
     TikPropertyMask_DeviceLinkIndepedent = BIT(3),
     TikPropertyMask_Volatile             = BIT(4),  ///< Used to determine if the ticket copy inside ticket.bin should be encrypted or not.
-    TikPropertyMask_ELicenseRequired     = BIT(5)   ///< Used to determine if the console should connect to the Internet to perform elicense verification.
+    TikPropertyMask_ELicenseRequired     = BIT(5),  ///< Used to determine if the console should connect to the Internet to perform elicense verification.
+    TikPropertyMask_Count                = 6        ///< Total values supported by this enum.
 } TikPropertyMask;
 
 /// Placed after the ticket signature block.
@@ -92,12 +96,14 @@ NXDT_ASSERT(TikCommonBlock, 0x180);
 /// Each ESV2 section record is followed by a 'record_count' number of ESV1 records, each one of 'record_size' size.
 
 typedef enum {
+    TikSectionType_None               = 0,
     TikSectionType_Permanent          = 1,
     TikSectionType_Subscription       = 2,
     TikSectionType_Content            = 3,
     TikSectionType_ContentConsumption = 4,
     TikSectionType_AccessTitle        = 5,
-    TikSectionType_LimitedResource    = 6
+    TikSectionType_LimitedResource    = 6,
+    TikSectionType_Count              = 7   ///< Total values supported by this enum.
 } TikSectionType;
 
 typedef struct {
@@ -159,7 +165,8 @@ typedef enum {
     TikType_SigRsa4096  = 1,
     TikType_SigRsa2048  = 2,
     TikType_SigEcc480   = 3,
-    TikType_SigHmac160  = 4
+    TikType_SigHmac160  = 4,
+    TikType_Count       = 5     ///< Total values supported by this enum.
 } TikType;
 
 /// Used to store ticket type, size and raw data, as well as titlekey data.
