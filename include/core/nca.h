@@ -379,7 +379,7 @@ typedef struct {
     NcaFsHeader header;                 ///< Plaintext NCA FS section header.
     NcaFsHeader encrypted_header;       ///< Encrypted NCA FS section header. If the plaintext NCA FS section header is modified, this will hold an encrypted copy of it.
                                         ///< Otherwise, this holds the unmodified, encrypted NCA FS section header.
-    u8 section_idx;                     ///< Index within [0 - 3].
+    u8 section_idx;                     ///< Index within [0, NCA_FS_HEADER_COUNT).
     u64 section_offset;                 ///< Relative to the start of the NCA content file. Placed here for convenience.
     u64 section_size;                   ///< Placed here for convenience.
     char section_size_str[0x10];        ///< Placed here for convenience.

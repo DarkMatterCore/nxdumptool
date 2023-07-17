@@ -3127,7 +3127,9 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
     bool success = false;
 
     /* Override LayeredFS flag, if needed. */
-    if (use_layeredfs_dir && ((title_type != NcmContentMetaType_Application && title_type != NcmContentMetaType_Patch) || content_type != NcmContentType_Program || nca_fs_ctx->section_idx > 1))
+    if (use_layeredfs_dir && \
+        (((title_type == NcmContentMetaType_Application || title_type == NcmContentMetaType_Patch) && (content_type != NcmContentType_Program || nca_fs_ctx->section_idx > 1)) || \
+        ((title_type == NcmContentMetaType_AddOnContent || title_type == NcmContentMetaType_DataPatch) && (content_type != NcmContentType_Data || nca_fs_ctx->section_idx != 0))))
     {
         consolePrint("layeredfs setting disabled (unsupported by current content/section type combo)\n");
         use_layeredfs_dir = false;
@@ -3205,7 +3207,8 @@ static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool 
     PfsThreadData pfs_thread_data = {0};
     SharedThreadData *shared_thread_data = &(pfs_thread_data.shared_thread_data);
 
-    NcaContext *nca_ctx = pfs_ctx->nca_fs_ctx->nca_ctx;
+    NcaFsSectionContext *nca_fs_ctx = pfs_ctx->nca_fs_ctx;
+    NcaContext *nca_ctx = nca_fs_ctx->nca_ctx;
 
     u64 title_id = nca_ctx->title_id;
     u8 title_type = nca_ctx->title_type;
@@ -3224,11 +3227,14 @@ static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool 
     if (use_layeredfs_dir)
     {
         /* Only use base title IDs if we're dealing with patches. */
-        if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
+        title_id = (title_type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(title_id) : \
+                   (title_type == NcmContentMetaType_DataPatch ? titleGetAddOnContentIdByDataPatchId(title_id) : title_id));
+
         filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "exefs.nsp");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(path, MAX_ELEMENTS(path), "/%s/section_%u.pfs.bin", nca_ctx->content_id_str, pfs_ctx->nca_fs_ctx->section_idx);
+        snprintf(path, MAX_ELEMENTS(path), "/%s #%u (%s)/Section #%u (%s).nsp", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_ctx->content_id_str, \
+                                                                                nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, path);
@@ -3357,7 +3363,8 @@ static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layere
     RomFsThreadData romfs_thread_data = {0};
     SharedThreadData *shared_thread_data = &(romfs_thread_data.shared_thread_data);
 
-    NcaContext *nca_ctx = romfs_ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
+    NcaFsSectionContext *nca_fs_ctx = romfs_ctx->default_storage_ctx->nca_fs_ctx;
+    NcaContext *nca_ctx = nca_fs_ctx->nca_ctx;
 
     u64 title_id = nca_ctx->title_id;
     u8 title_type = nca_ctx->title_type;
@@ -3376,11 +3383,14 @@ static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layere
     if (use_layeredfs_dir)
     {
         /* Only use base title IDs if we're dealing with patches. */
-        if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
+        title_id = (title_type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(title_id) : \
+                   (title_type == NcmContentMetaType_DataPatch ? titleGetAddOnContentIdByDataPatchId(title_id) : title_id));
+
         filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "romfs.bin");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(path, MAX_ELEMENTS(path), "/%s/section_%u.romfs.bin", nca_ctx->content_id_str, romfs_ctx->default_storage_ctx->nca_fs_ctx->section_idx);
+        snprintf(path, MAX_ELEMENTS(path), "/%s #%u (%s)/Section #%u (%s).bin", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_ctx->content_id_str, \
+                                                                                nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, path);
@@ -4024,7 +4034,8 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
     PartitionFileSystemEntry *pfs_entry = NULL;
     char *pfs_entry_name = NULL;
 
-    NcaContext *nca_ctx = pfs_ctx->nca_fs_ctx->nca_ctx;
+    NcaFsSectionContext *nca_fs_ctx = pfs_ctx->nca_fs_ctx;
+    NcaContext *nca_ctx = nca_fs_ctx->nca_ctx;
 
     u64 title_id = nca_ctx->title_id;
     u8 title_type = nca_ctx->title_type;
@@ -4038,11 +4049,14 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
     if (pfs_thread_data->use_layeredfs_dir)
     {
         /* Only use base title IDs if we're dealing with patches. */
-        if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
+        title_id = (title_type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(title_id) : \
+                   (title_type == NcmContentMetaType_DataPatch ? titleGetAddOnContentIdByDataPatchId(title_id) : title_id));
+
         filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "exefs");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(pfs_path, MAX_ELEMENTS(pfs_path), "/%s/section_%u", nca_ctx->content_id_str, pfs_ctx->nca_fs_ctx->section_idx);
+        snprintf(pfs_path, MAX_ELEMENTS(pfs_path), "/%s #%u (%s)/Section #%u (%s)", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_ctx->content_id_str, \
+                                                                                    nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, pfs_path);
@@ -4324,7 +4338,8 @@ static void extractedRomFsReadThreadFunc(void *arg)
     char romfs_path[FS_MAX_PATH] = {0}, subdir[0x20] = {0}, *filename = NULL;
     size_t filename_len = 0;
 
-    NcaContext *nca_ctx = romfs_ctx->default_storage_ctx->nca_fs_ctx->nca_ctx;
+    NcaFsSectionContext *nca_fs_ctx = romfs_ctx->default_storage_ctx->nca_fs_ctx;
+    NcaContext *nca_ctx = nca_fs_ctx->nca_ctx;
 
     u64 title_id = nca_ctx->title_id;
     u8 title_type = nca_ctx->title_type;
@@ -4339,11 +4354,14 @@ static void extractedRomFsReadThreadFunc(void *arg)
     if (romfs_thread_data->use_layeredfs_dir)
     {
         /* Only use base title IDs if we're dealing with patches. */
-        if (title_type == NcmContentMetaType_Patch) title_id = titleGetApplicationIdByPatchId(title_id);
+        title_id = (title_type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(title_id) : \
+                   (title_type == NcmContentMetaType_DataPatch ? titleGetAddOnContentIdByDataPatchId(title_id) : title_id));
+
         filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "romfs");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(romfs_path, MAX_ELEMENTS(romfs_path), "/%s/section_%u", nca_ctx->content_id_str, romfs_ctx->default_storage_ctx->nca_fs_ctx->section_idx);
+        snprintf(romfs_path, MAX_ELEMENTS(romfs_path), "/%s #%u (%s)/Section #%u (%s)", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_ctx->content_id_str, \
+                                                                                        nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, romfs_path);
