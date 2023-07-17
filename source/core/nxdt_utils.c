@@ -33,7 +33,8 @@
 #include "fatfs/ff.h"
 
 /* Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits. */
-#define NT_MAX_FILENAME_LENGTH  255
+#define NT_MAX_FILENAME_LENGTH      255
+#define SDMC_MAX_FILENAME_LENGTH    128 /* Arbitrarily set, I'm tired of FS sysmodule shenanigans. */
 
 /* Type definitions. */
 
@@ -872,6 +873,8 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     size_t path_len = (prefix_len + strlen(filename) + extension_len);
     if (append_path_sep) path_len++;
 
+    size_t max_filename_len = ((use_prefix && !strncmp(prefix, DEVOPTAB_SDMC_DEVICE, strlen(DEVOPTAB_SDMC_DEVICE))) ? SDMC_MAX_FILENAME_LENGTH : NT_MAX_FILENAME_LENGTH);
+
     char *path = NULL, *ptr1 = NULL, *ptr2 = NULL;
     bool filename_only = false, success = false;
 
@@ -896,7 +899,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
         ptr1 = path;
     }
 
-    /* Make sure each path element doesn't exceed NT_MAX_FILENAME_LENGTH. */
+    /* Make sure each path element doesn't exceed our max filename length. */
     while(ptr1)
     {
         if (!filename_only)
@@ -912,10 +915,10 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
         size_t element_size = (ptr2 ? (size_t)(ptr2 - ptr1) : (path_len - (size_t)(ptr1 - path)));
 
         /* Get UTF-8 codepoint count. */
-        /* Use NT_MAX_FILENAME_LENGTH as the codepoint count limit. */
+        /* Use our max filename length as the codepoint count limit. */
         size_t last_cp_pos = 0;
-        size_t cp_count = utilsGetUtf8CodepointCount(ptr1, element_size, NT_MAX_FILENAME_LENGTH, &last_cp_pos);
-        if (cp_count > NT_MAX_FILENAME_LENGTH)
+        size_t cp_count = utilsGetUtf8CodepointCount(ptr1, element_size, max_filename_len, &last_cp_pos);
+        if (cp_count > max_filename_len)
         {
             if (ptr2)
             {
@@ -1141,7 +1144,7 @@ static void _utilsGetLaunchPath(int program_argc, const char **program_argv)
 
     for(int i = 0; i < program_argc; i++)
     {
-        if (program_argv[i] && !strncmp(program_argv[i], DEVOPTAB_SDMC_DEVICE "/", 6))
+        if (program_argv[i] && !strncmp(program_argv[i], DEVOPTAB_SDMC_DEVICE "/", strlen(DEVOPTAB_SDMC_DEVICE)))
         {
             g_appLaunchPath = program_argv[i];
             break;
