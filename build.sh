@@ -1,11 +1,7 @@
 #!/bin/bash
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
-archive_filename="nxdumptool-rewrite_poc_$(git rev-parse --short HEAD)"
-
 # Clean-up from last build
-rm -f ./*.7z
-
 rm -rf ./code_templates/tmp
 mkdir ./code_templates/tmp
 
@@ -13,43 +9,25 @@ mv ./source/main.cpp ./main.cpp
 
 make clean_all
 
-# Build loop
-for f in ./code_templates/*.c; do
-    basename="$(basename "$f")"
-    filename="${basename%.*}"
+# Build PoC
+poc_name="nxdt_rw_poc"
+poc_path="./code_templates/$poc_name.c"
 
-    if [[ $filename == "dump_title_infos" ]]; then
-        continue
-    fi
+rm -f ./source/main.c
+cp $poc_path ./source/main.c
 
-    echo $filename
+cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$poc_name.jpg
 
-    rm -f ./source/main.c
-    cp $f ./source/main.c
+make BUILD_TYPE="$poc_name" -j$(nproc)
 
-    cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$filename.jpg
+rm -f ./romfs/icon/$poc_name.jpg
 
-    make BUILD_TYPE="$filename" -j$(nproc)
-
-    rm -f ./romfs/icon/$filename.jpg
-
-    mkdir ./code_templates/tmp/$filename
-    cp ./$filename.nro ./code_templates/tmp/$filename/$filename.nro
-    cp ./$filename.elf ./code_templates/tmp/$filename/$filename.elf
-
-    make BUILD_TYPE="$filename" clean
-done
+mv -f ./$poc_name.nro ./code_templates/tmp/$poc_name.nro
+mv -f ./$poc_name.elf ./code_templates/tmp/$poc_name.elf
 
 # Post build clean-up
+make BUILD_TYPE="$poc_name" clean
 make clean_all
 
-# Package resulting binaries
-cd ./code_templates/tmp
-7z a ../../"$archive_filename.7z" */*.nro
-7z a ../../"$archive_filename-Debug_ELFs.7z" */*.elf
-
-# Final clean-up
-cd ../..
 rm -f ./source/main.c
-rm -rf ./code_templates/tmp
-mv ./main.cpp ./source/main.cpp
+mv -f ./main.cpp ./source/main.cpp

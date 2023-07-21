@@ -1,4 +1,4 @@
-name: Build nxdumptool-rewrite binaries
+name: Build nxdumptool-rewrite binary
 
 on:
   push:
@@ -70,7 +70,7 @@ jobs:
           cd libntfs-3g; su -s /bin/bash nobody -c "dkp-makepkg -c -C -f" > /dev/null; sudo -n dkp-pacman -U --needed --noconfirm *.pkg.tar.* > /dev/null; cd ..
           cd liblwext4; su -s /bin/bash nobody -c "dkp-makepkg -c -C -f" > /dev/null; sudo -n dkp-pacman -U --needed --noconfirm *.pkg.tar.* > /dev/null; cd ..
 
-      - name: Build nxdumptool-rewrite PoC binaries
+      - name: Build nxdumptool-rewrite PoC binary
         run: |
           cd "$GITHUB_WORKSPACE/nxdumptool"
           echo "nxdt_commit=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
@@ -83,14 +83,14 @@ jobs:
 
       - uses: actions/upload-artifact@v3
         with:
-          name: nxdumptool-rewrite_poc_${{ env.nxdt_commit }}.7z
-          path: nxdumptool/nxdumptool-rewrite_poc_${{ env.nxdt_commit }}.7z
+          name: nxdt_rw_poc-${{ env.nxdt_commit }}.nro
+          path: nxdumptool/code_templates/tmp/nxdt_rw_poc.nro
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v3
         with:
-          name: nxdumptool-rewrite_poc_${{ env.nxdt_commit }}-Debug_ELFs.7z
-          path: nxdumptool/nxdumptool-rewrite_poc_${{ env.nxdt_commit }}-Debug_ELFs.7z
+          name: nxdt_rw_poc-${{ env.nxdt_commit }}.elf
+          path: nxdumptool/code_templates/tmp/nxdt_rw_poc.elf
           if-no-files-found: error
 
       #- uses: actions/upload-artifact@v3
