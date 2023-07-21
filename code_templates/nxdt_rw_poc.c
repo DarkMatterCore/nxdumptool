@@ -3134,7 +3134,9 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
 
     /* Override LayeredFS flag, if needed. */
     if (use_layeredfs_dir && \
-        (title_type < NcmContentMetaType_Application || \
+        (title_type == NcmContentMetaType_Unknown || (title_type > NcmContentMetaType_SystemData && title_type < NcmContentMetaType_Application) || \
+        (title_type == NcmContentMetaType_SystemProgram && (content_type != NcmContentType_Program || nca_fs_ctx->section_idx != 0)) || \
+        (title_type == NcmContentMetaType_SystemData && (content_type != NcmContentType_Data || nca_fs_ctx->section_idx != 0)) || \
         ((title_type == NcmContentMetaType_Application || title_type == NcmContentMetaType_Patch) && (content_type != NcmContentType_Program || nca_fs_ctx->section_idx > 1)) || \
         ((title_type == NcmContentMetaType_AddOnContent || title_type == NcmContentMetaType_DataPatch) && (content_type != NcmContentType_Data || nca_fs_ctx->section_idx != 0))))
     {
