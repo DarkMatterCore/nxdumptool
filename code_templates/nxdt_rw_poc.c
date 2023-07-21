@@ -3525,12 +3525,12 @@ static void xciReadThreadFunc(void *arg)
 {
     void *buf1 = NULL, *buf2 = NULL;
     XciThreadData *xci_thread_data = (XciThreadData*)arg;
-    SharedThreadData *shared_thread_data = (xci_thread_data ? &(xci_thread_data->shared_thread_data) : NULL);
+    SharedThreadData *shared_thread_data = &(xci_thread_data->shared_thread_data);
 
     buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
 
-    if (!xci_thread_data || !shared_thread_data || !shared_thread_data->total_size || !buf1 || !buf2)
+    if (!shared_thread_data->total_size || !buf1 || !buf2)
     {
         shared_thread_data->read_error = true;
         goto end;
@@ -3607,13 +3607,13 @@ static void rawHfsReadThreadFunc(void *arg)
 {
     void *buf1 = NULL, *buf2 = NULL;
     HfsThreadData *hfs_thread_data = (HfsThreadData*)arg;
-    SharedThreadData *shared_thread_data = (hfs_thread_data ? &(hfs_thread_data->shared_thread_data) : NULL);
-    HashFileSystemContext *hfs_ctx = (hfs_thread_data ? hfs_thread_data->hfs_ctx : NULL);
+    SharedThreadData *shared_thread_data = &(hfs_thread_data->shared_thread_data);
+    HashFileSystemContext *hfs_ctx = hfs_thread_data->hfs_ctx;
 
     buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
 
-    if (!hfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !hfs_ctx || !buf1 || !buf2)
+    if (!shared_thread_data->total_size || !hfs_ctx || !buf1 || !buf2)
     {
         shared_thread_data->read_error = true;
         goto end;
@@ -3676,9 +3676,9 @@ static void extractedHfsReadThreadFunc(void *arg)
 {
     void *buf1 = NULL, *buf2 = NULL;
     HfsThreadData *hfs_thread_data = (HfsThreadData*)arg;
-    SharedThreadData *shared_thread_data = (hfs_thread_data ? &(hfs_thread_data->shared_thread_data) : NULL);
+    SharedThreadData *shared_thread_data = &(hfs_thread_data->shared_thread_data);
 
-    HashFileSystemContext *hfs_ctx = (hfs_thread_data ? hfs_thread_data->hfs_ctx : NULL);
+    HashFileSystemContext *hfs_ctx = hfs_thread_data->hfs_ctx;
     u32 hfs_entry_count = hfsGetEntryCount(hfs_ctx);
 
     char hfs_path[FS_MAX_PATH] = {0}, *filename = NULL;
@@ -3697,7 +3697,7 @@ static void extractedHfsReadThreadFunc(void *arg)
     filename = generateOutputGameCardFileName("HFS/Extracted", hfs_path, true);
     filename_len = (filename ? strlen(filename) : 0);
 
-    if (!hfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !hfs_ctx || !hfs_entry_count || !buf1 || !buf2 || !filename)
+    if (!shared_thread_data->total_size || !hfs_entry_count || !buf1 || !buf2 || !filename)
     {
         shared_thread_data->read_error = true;
         goto end;
@@ -3894,13 +3894,13 @@ static void ncaReadThreadFunc(void *arg)
 {
     void *buf1 = NULL, *buf2 = NULL;
     NcaThreadData *nca_thread_data = (NcaThreadData*)arg;
-    SharedThreadData *shared_thread_data = (nca_thread_data ? &(nca_thread_data->shared_thread_data) : NULL);
-    NcaContext *nca_ctx = (nca_thread_data ? nca_thread_data->nca_ctx : NULL);
+    SharedThreadData *shared_thread_data = &(nca_thread_data->shared_thread_data);
+    NcaContext *nca_ctx = nca_thread_data->nca_ctx;
 
     buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
 
-    if (!nca_thread_data || !shared_thread_data || !shared_thread_data->total_size || !nca_ctx || !buf1 || !buf2)
+    if (!shared_thread_data->total_size || !nca_ctx || !buf1 || !buf2)
     {
         shared_thread_data->read_error = true;
         goto end;
@@ -3963,13 +3963,13 @@ static void rawPartitionFsReadThreadFunc(void *arg)
 {
     void *buf1 = NULL, *buf2 = NULL;
     PfsThreadData *pfs_thread_data = (PfsThreadData*)arg;
-    SharedThreadData *shared_thread_data = (pfs_thread_data ? &(pfs_thread_data->shared_thread_data) : NULL);
-    PartitionFileSystemContext *pfs_ctx = (pfs_thread_data ? pfs_thread_data->pfs_ctx : NULL);
+    SharedThreadData *shared_thread_data = &(pfs_thread_data->shared_thread_data);
+    PartitionFileSystemContext *pfs_ctx = pfs_thread_data->pfs_ctx;
 
     buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
 
-    if (!pfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !pfs_ctx || !buf1 || !buf2)
+    if (!shared_thread_data->total_size || !pfs_ctx || !buf1 || !buf2)
     {
         shared_thread_data->read_error = true;
         goto end;
@@ -4032,9 +4032,9 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
 {
     void *buf1 = NULL, *buf2 = NULL;
     PfsThreadData *pfs_thread_data = (PfsThreadData*)arg;
-    SharedThreadData *shared_thread_data = (pfs_thread_data ? &(pfs_thread_data->shared_thread_data) : NULL);
+    SharedThreadData *shared_thread_data = &(pfs_thread_data->shared_thread_data);
 
-    PartitionFileSystemContext *pfs_ctx = (pfs_thread_data ? pfs_thread_data->pfs_ctx : NULL);
+    PartitionFileSystemContext *pfs_ctx = pfs_thread_data->pfs_ctx;
     u32 pfs_entry_count = pfsGetEntryCount(pfs_ctx);
 
     char pfs_path[FS_MAX_PATH] = {0}, subdir[0x20] = {0}, *filename = NULL;
@@ -4073,7 +4073,7 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
 
     filename_len = (filename ? strlen(filename) : 0);
 
-    if (!pfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !pfs_ctx || !pfs_entry_count || !buf1 || !buf2 || !filename)
+    if (!shared_thread_data->total_size || !pfs_entry_count || !buf1 || !buf2 || !filename)
     {
         shared_thread_data->read_error = true;
         goto end;
@@ -4270,13 +4270,13 @@ static void rawRomFsReadThreadFunc(void *arg)
 {
     void *buf1 = NULL, *buf2 = NULL;
     RomFsThreadData *romfs_thread_data = (RomFsThreadData*)arg;
-    SharedThreadData *shared_thread_data = (romfs_thread_data ? &(romfs_thread_data->shared_thread_data) : NULL);
-    RomFileSystemContext *romfs_ctx = (romfs_thread_data ? romfs_thread_data->romfs_ctx : NULL);
+    SharedThreadData *shared_thread_data = &(romfs_thread_data->shared_thread_data);
+    RomFileSystemContext *romfs_ctx = romfs_thread_data->romfs_ctx;
 
     buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
     buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
 
-    if (!romfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !romfs_ctx || !buf1 || !buf2)
+    if (!shared_thread_data->total_size || !romfs_ctx || !buf1 || !buf2)
     {
         shared_thread_data->read_error = true;
         goto end;
@@ -4339,9 +4339,9 @@ static void extractedRomFsReadThreadFunc(void *arg)
 {
     void *buf1 = NULL, *buf2 = NULL;
     RomFsThreadData *romfs_thread_data = (RomFsThreadData*)arg;
-    SharedThreadData *shared_thread_data = (romfs_thread_data ? &(romfs_thread_data->shared_thread_data) : NULL);
+    SharedThreadData *shared_thread_data = &(romfs_thread_data->shared_thread_data);
 
-    RomFileSystemContext *romfs_ctx = (romfs_thread_data ? romfs_thread_data->romfs_ctx : NULL);
+    RomFileSystemContext *romfs_ctx = romfs_thread_data->romfs_ctx;
     RomFileSystemFileEntry *romfs_file_entry = NULL;
 
     char romfs_path[FS_MAX_PATH] = {0}, subdir[0x20] = {0}, *filename = NULL;
@@ -4378,7 +4378,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
 
     filename_len = (filename ? strlen(filename) : 0);
 
-    if (!romfs_thread_data || !shared_thread_data || !shared_thread_data->total_size || !romfs_ctx || !buf1 || !buf2 || !filename)
+    if (!shared_thread_data->total_size || !buf1 || !buf2 || !filename)
     {
         shared_thread_data->read_error = true;
         goto end;
@@ -4584,11 +4584,6 @@ end:
 static void genericWriteThreadFunc(void *arg)
 {
     SharedThreadData *shared_thread_data = (SharedThreadData*)arg; // UB but we don't care
-    if (!shared_thread_data)
-    {
-        shared_thread_data->write_error = true;
-        goto end;
-    }
 
     while(shared_thread_data->data_written < shared_thread_data->total_size)
     {
@@ -4625,7 +4620,6 @@ static void genericWriteThreadFunc(void *arg)
         if (shared_thread_data->write_error) break;
     }
 
-end:
     threadExit();
 }
 
