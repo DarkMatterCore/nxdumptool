@@ -79,7 +79,8 @@ typedef enum {
     MenuId_Nca                  = 11,
     MenuId_NcaFsSections        = 12,
     MenuId_NcaFsSectionsSubMenu = 13,
-    MenuId_Count                = 14
+    MenuId_SystemTitles         = 14,
+    MenuId_Count                = 15
 } MenuId;
 
 typedef struct
@@ -149,8 +150,8 @@ static u32 menuGetElementCount(const Menu *menu);
 void freeStorageList(void);
 void updateStorageList(void);
 
-void freeTitleList(void);
-void updateTitleList(void);
+void freeTitleList(Menu *menu);
+void updateTitleList(Menu *menu, Menu *submenu, bool is_system);
 
 void freeNcaList(void);
 void updateNcaList(TitleInfo *title_info);
@@ -810,7 +811,7 @@ static MenuElement *g_userTitlesSubMenuElements[] = {
     NULL
 };
 
-// Dynamically set as child_menu for all g_userTitlesMenuElements entries.
+// Dynamically set as child_menu for all g_userTitlesMenu entries.
 static Menu g_userTitlesSubMenu = {
     .id = MenuId_UserTitlesSubMenu,
     .parent = NULL,
@@ -819,11 +820,18 @@ static Menu g_userTitlesSubMenu = {
     .elements = g_userTitlesSubMenuElements
 };
 
-static MenuElement **g_userTitlesMenuElements = NULL;
-
-// Dynamically populated using g_userTitlesMenuElements.
+// Dynamically populated.
 static Menu g_userTitlesMenu = {
     .id = MenuId_UserTitles,
+    .parent = NULL,
+    .selected = 0,
+    .scroll = 0,
+    .elements = NULL
+};
+
+// Dynamically populated.
+static Menu g_systemTitlesMenu = {
+    .id = MenuId_SystemTitles,
     .parent = NULL,
     .selected = 0,
     .scroll = 0,
@@ -853,7 +861,7 @@ static MenuElement *g_rootMenuElements[] = {
     },
     &(MenuElement){
         .str = "system titles menu",
-        .child_menu = NULL,
+        .child_menu = &g_systemTitlesMenu,
         .task_func = NULL,
         .element_options = NULL,
         .userdata = NULL
@@ -894,7 +902,8 @@ int main(int argc, char *argv[])
 
     updateStorageList();
 
-    updateTitleList();
+    updateTitleList(&g_userTitlesMenu, &g_userTitlesSubMenu, false);
+    updateTitleList(&g_systemTitlesMenu, &g_ncaMenu, true);
 
     Menu *cur_menu = &g_rootMenu;
     u32 element_count = menuGetElementCount(cur_menu), page_size = 30;
@@ -905,6 +914,8 @@ int main(int argc, char *argv[])
 
     TitleInfo *title_info = NULL;
     u32 title_info_idx = 0, title_info_count = 0;
+
+    bool is_system = false;
 
     while(appletMainLoop())
     {
@@ -929,7 +940,7 @@ int main(int argc, char *argv[])
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
 
-        if (cur_menu->id == MenuId_UserTitles)
+        if (cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles)
         {
             app_metadata = (TitleApplicationMetadata*)selected_element->userdata;
 
@@ -937,14 +948,17 @@ int main(int argc, char *argv[])
             consolePrint("selected title: %016lX - %s\n", app_metadata->title_id, selected_element->str);
             consolePrint("______________________________\n\n");
         } else
-        if (cur_menu->id >= MenuId_UserTitlesSubMenu && cur_menu->id < MenuId_Count)
+        if (cur_menu->id >= MenuId_UserTitlesSubMenu && cur_menu->id < MenuId_SystemTitles)
         {
-            consolePrint("title info:\n\n");
-            consolePrint("name: %s\n", app_metadata->lang_entry.name);
-            consolePrint("publisher: %s\n", app_metadata->lang_entry.author);
-            if (cur_menu->id == MenuId_UserTitlesSubMenu || cur_menu->id == MenuId_NSPTitleTypes || cur_menu->id == MenuId_TicketTitleTypes || \
-                cur_menu->id == MenuId_NcaTitleTypes) consolePrint("title id: %016lX\n", app_metadata->title_id);
-            consolePrint("______________________________\n\n");
+            if (!is_system)
+            {
+                consolePrint("title info:\n\n");
+                consolePrint("name: %s\n", app_metadata->lang_entry.name);
+                consolePrint("publisher: %s\n", app_metadata->lang_entry.author);
+                if (cur_menu->id == MenuId_UserTitlesSubMenu || cur_menu->id == MenuId_NSPTitleTypes || cur_menu->id == MenuId_TicketTitleTypes || \
+                    cur_menu->id == MenuId_NcaTitleTypes) consolePrint("title id: %016lX\n", app_metadata->title_id);
+                consolePrint("______________________________\n\n");
+            }
 
             if (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_Nca || \
                 cur_menu->id == MenuId_NcaFsSections || cur_menu->id == MenuId_NcaFsSectionsSubMenu)
@@ -957,6 +971,7 @@ int main(int argc, char *argv[])
                 }
 
                 consolePrint("selected title info:\n\n");
+                if (is_system) consolePrint("name: %s\n", app_metadata->lang_entry.name);
                 consolePrint("title id: %016lX\n", title_info->meta_key.id);
                 consolePrint("type: %s\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type));
                 consolePrint("source storage: %s\n", titleGetNcmStorageIdName(title_info->storage_id));
@@ -1004,7 +1019,7 @@ int main(int argc, char *argv[])
 
             MenuElement *cur_element = cur_menu->elements[i];
             MenuElementOption *cur_options = cur_element->element_options;
-            TitleApplicationMetadata *cur_app_metadata = (cur_menu->id == MenuId_UserTitles ? (TitleApplicationMetadata*)cur_element->userdata : NULL);
+            TitleApplicationMetadata *cur_app_metadata = ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) ? (TitleApplicationMetadata*)cur_element->userdata : NULL);
 
             consolePrint("%s", i == cur_menu->selected ? " -> " : "    ");
             if (cur_app_metadata) consolePrint("%016lX - ", cur_app_metadata->title_id);
@@ -1051,7 +1066,7 @@ int main(int argc, char *argv[])
 
             if (titleIsGameCardInfoUpdated())
             {
-                updateTitleList();
+                updateTitleList(&g_userTitlesMenu, &g_userTitlesSubMenu, false);
                 data_update = true;
                 break;
             }
@@ -1083,7 +1098,7 @@ int main(int argc, char *argv[])
                 } else
                 if (child_menu->id == MenuId_NSP || child_menu->id == MenuId_Ticket || child_menu->id == MenuId_Nca)
                 {
-                    u32 title_type = *((u32*)selected_element->userdata);
+                    u32 title_type = (cur_menu->id != MenuId_SystemTitles ? *((u32*)selected_element->userdata) : NcmContentMetaType_Unknown);
 
                     switch(title_type)
                     {
@@ -1100,7 +1115,8 @@ int main(int argc, char *argv[])
                             title_info = user_app_data.aoc_patch_info;
                             break;
                         default:
-                            title_info = NULL;
+                            /* Get TitleInfo element on demand. */
+                            title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, app_metadata->title_id);
                             break;
                     }
 
@@ -1115,6 +1131,8 @@ int main(int argc, char *argv[])
                                 consolePrint("failed to generate nca list\n");
                                 error = true;
                             }
+
+                            if (!error && cur_menu->id == MenuId_SystemTitles) is_system = true;
                         }
 
                         if (!error)
@@ -1123,9 +1141,14 @@ int main(int argc, char *argv[])
                             title_info_idx = 1;
                         }
                     } else {
-                        consolePrint("\nthe selected title doesn't have available %s data\n", \
-                                    title_type == NcmContentMetaType_Application ? "base application" : \
-                                    (title_type == NcmContentMetaType_Patch ? "update" : (title_type == NcmContentMetaType_AddOnContent ? "dlc" : "dlc update")));
+                        if (cur_menu->id == MenuId_SystemTitles)
+                        {
+                            consolePrint("\nunable to retrieve data for system title %016lX\n", app_metadata->title_id);
+                        } else {
+                            consolePrint("\nthe selected title doesn't have available %s data\n", \
+                                        title_type == NcmContentMetaType_Application ? "base application" : \
+                                        (title_type == NcmContentMetaType_Patch ? "update" : (title_type == NcmContentMetaType_AddOnContent ? "dlc" : "dlc update")));
+                        }
 
                         error = true;
                     }
@@ -1278,7 +1301,7 @@ int main(int argc, char *argv[])
         } else
         if ((btn_down & HidNpadButton_B) && cur_menu->parent)
         {
-            if (cur_menu->id == MenuId_UserTitles)
+            if (cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles)
             {
                 app_metadata = NULL;
             } else
@@ -1304,6 +1327,12 @@ int main(int argc, char *argv[])
             if (cur_menu->id == MenuId_Nca)
             {
                 freeNcaList();
+
+                if (is_system)
+                {
+                    titleFreeTitleInfo(&title_info);
+                    is_system = false;
+                }
             } else
             if (cur_menu->id == MenuId_NcaFsSections)
             {
@@ -1360,7 +1389,8 @@ int main(int argc, char *argv[])
 
     freeNcaList();
 
-    freeTitleList();
+    freeTitleList(&g_systemTitlesMenu);
+    freeTitleList(&g_userTitlesMenu);
 
     freeStorageList();
 
@@ -1462,7 +1492,6 @@ void freeStorageList(void)
 
 void updateStorageList(void)
 {
-    char **tmp = NULL;
     u32 elem_count = 0, idx = 0;
 
     /* Free all previously allocated data. */
@@ -1472,13 +1501,8 @@ void updateStorageList(void)
     g_umsDevices = umsGetDevices(&g_umsDeviceCount);
     elem_count = (2 + g_umsDeviceCount); // sd card, usb host, ums devices
 
-    /* Reallocate buffer. */
-    tmp = realloc(g_storageOptions, (elem_count + 1) * sizeof(char*)); // NULL terminator
-
-    g_storageOptions = tmp;
-    tmp = NULL;
-
-    memset(g_storageOptions, 0, (elem_count + 1) * sizeof(char*)); // NULL terminator
+    /* Allocate buffer. */
+    g_storageOptions = calloc(elem_count + 1, sizeof(char*)); // NULL terminator
 
     /* Generate UMS device strings. */
     for(u32 i = 0; i < elem_count; i++)
@@ -1531,62 +1555,61 @@ void updateStorageList(void)
     g_storageMenuElementOption.options = g_storageOptions;
 }
 
-void freeTitleList(void)
+void freeTitleList(Menu *menu)
 {
-    /* Free all previously allocated data. */
-    if (g_userTitlesMenuElements)
-    {
-        for(u32 i = 0; g_userTitlesMenuElements[i] != NULL; i++) free(g_userTitlesMenuElements[i]);
+    if (!menu) return;
 
-        free(g_userTitlesMenuElements);
-        g_userTitlesMenuElements = NULL;
+    MenuElement **elements = menu->elements;
+
+    /* Free all previously allocated data. */
+    if (elements)
+    {
+        for(u32 i = 0; elements[i]; i++) free(elements[i]);
+        free(elements);
     }
 
-    g_userTitlesMenu.scroll = 0;
-    g_userTitlesMenu.selected = 0;
-    g_userTitlesMenu.elements = NULL;
+    menu->scroll = 0;
+    menu->selected = 0;
+    menu->elements = NULL;
 }
 
-void updateTitleList(void)
+void updateTitleList(Menu *menu, Menu *submenu, bool is_system)
 {
+    if (!menu || !submenu) return;
+
     u32 app_count = 0, idx = 0;
     TitleApplicationMetadata **app_metadata = NULL;
-    MenuElement **tmp = NULL;
+    MenuElement **elements = NULL;
 
     /* Free all previously allocated data. */
-    freeTitleList();
+    freeTitleList(menu);
 
     /* Get application metadata entries. */
-    app_metadata = titleGetApplicationMetadataEntries(false, &app_count);
+    app_metadata = titleGetApplicationMetadataEntries(is_system, &app_count);
     if (!app_metadata || !app_count) goto end;
 
-    /* Reallocate buffer. */
-    tmp = realloc(g_userTitlesMenuElements, (app_count + 1) * sizeof(MenuElement*)); // NULL terminator
-
-    g_userTitlesMenuElements = tmp;
-    tmp = NULL;
-
-    memset(g_userTitlesMenuElements, 0, (app_count + 1) * sizeof(MenuElement*)); // NULL terminator
+    /* Allocate buffer. */
+    elements = calloc(app_count + 1, sizeof(MenuElement*)); // NULL terminator
 
     /* Generate menu elements. */
     for(u32 i = 0; i < app_count; i++)
     {
         TitleApplicationMetadata *cur_app_metadata = app_metadata[i];
 
-        if (!g_userTitlesMenuElements[idx])
+        if (!elements[idx])
         {
-            g_userTitlesMenuElements[idx] = calloc(1, sizeof(MenuElement));
-            if (!g_userTitlesMenuElements[idx]) continue;
+            elements[idx] = calloc(1, sizeof(MenuElement));
+            if (!elements[idx]) continue;
         }
 
-        g_userTitlesMenuElements[idx]->str = cur_app_metadata->lang_entry.name;
-        g_userTitlesMenuElements[idx]->child_menu = &g_userTitlesSubMenu;
-        g_userTitlesMenuElements[idx]->userdata = cur_app_metadata;
+        elements[idx]->str = cur_app_metadata->lang_entry.name;
+        elements[idx]->child_menu = submenu;
+        elements[idx]->userdata = cur_app_metadata;
 
         idx++;
     }
 
-    g_userTitlesMenu.elements = g_userTitlesMenuElements;
+    menu->elements = elements;
 
 end:
     if (app_metadata) free(app_metadata);
@@ -1621,19 +1644,13 @@ void updateNcaList(TitleInfo *title_info)
 {
     u32 content_count = title_info->content_count, idx = 0;
     NcmContentInfo *content_infos = title_info->content_infos;
-    MenuElement **tmp = NULL;
     char nca_id_str[0x21] = {0};
 
     /* Free all previously allocated data. */
     freeNcaList();
 
-    /* Reallocate buffer. */
-    tmp = realloc(g_ncaMenuElements, (content_count + 2) * sizeof(MenuElement*)); // Output storage, NULL terminator
-
-    g_ncaMenuElements = tmp;
-    tmp = NULL;
-
-    memset(g_ncaMenuElements, 0, (content_count + 2) * sizeof(MenuElement*)); // Output storage, NULL terminator
+    /* Allocate buffer. */
+    g_ncaMenuElements = calloc(content_count + 2, sizeof(MenuElement*)); // Output storage, NULL terminator
 
     /* Generate menu elements. */
     for(u32 i = 0; i < content_count; i++)
@@ -1733,19 +1750,13 @@ void updateNcaFsSectionsList(NcaUserData *nca_user_data)
 {
     TitleInfo *title_info = nca_user_data->title_info;
     NcmContentInfo *content_info = &(title_info->content_infos[nca_user_data->content_idx]);
-    MenuElement **tmp = NULL;
     u32 idx = 0;
 
     /* Free all previously allocated data. */
     freeNcaFsSectionsList();
 
-    /* Reallocate buffer. */
-    tmp = realloc(g_ncaFsSectionsMenuElements, (NCA_FS_HEADER_COUNT + 1) * sizeof(MenuElement*)); // NULL terminator
-
-    g_ncaFsSectionsMenuElements = tmp;
-    tmp = NULL;
-
-    memset(g_ncaFsSectionsMenuElements, 0, (NCA_FS_HEADER_COUNT + 1) * sizeof(MenuElement*)); // NULL terminator
+    /* Allocate buffer. */
+    g_ncaFsSectionsMenuElements = calloc(NCA_FS_HEADER_COUNT + 1, sizeof(MenuElement*)); // NULL terminator
 
     /* Initialize NCA context. */
     g_ncaFsSectionsMenuCtx = calloc(1, sizeof(NcaContext));
@@ -1815,7 +1826,6 @@ void freeNcaBasePatchList(void)
 
 void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *title_info, NcaFsSectionContext *nca_fs_ctx)
 {
-    char **tmp = NULL;
     u32 elem_count = 1, idx = 1; // "no" option
     TitleInfo *cur_title_info = NULL;
 
@@ -1847,6 +1857,7 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
                 g_ncaBasePatchTitleInfo = titleGetAddOnContentBaseOrPatchList(title_info);
                 break;
             default:
+                unsupported = true;
                 break;
         }
     } else {
@@ -1856,13 +1867,8 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
     /* Calculate element count. */
     elem_count += titleGetCountFromInfoBlock(g_ncaBasePatchTitleInfo);
 
-    /* Reallocate buffer. */
-    tmp = realloc(g_ncaBasePatchOptions, (elem_count + 1) * sizeof(char*)); // NULL terminator
-
-    g_ncaBasePatchOptions = tmp;
-    tmp = NULL;
-
-    memset(g_ncaBasePatchOptions, 0, (elem_count + 1) * sizeof(char*)); // NULL terminator
+    /* Allocate buffer. */
+    g_ncaBasePatchOptions = calloc(elem_count + 1, sizeof(char*)); // NULL terminator
 
     /* Set first option. */
     g_ncaBasePatchOptions[0] = (unsupported ? "unsupported by this content/section type combo" : (elem_count < 2 ? "none available" : "no"));
@@ -3128,7 +3134,8 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
 
     /* Override LayeredFS flag, if needed. */
     if (use_layeredfs_dir && \
-        (((title_type == NcmContentMetaType_Application || title_type == NcmContentMetaType_Patch) && (content_type != NcmContentType_Program || nca_fs_ctx->section_idx > 1)) || \
+        (title_type < NcmContentMetaType_Application || \
+        ((title_type == NcmContentMetaType_Application || title_type == NcmContentMetaType_Patch) && (content_type != NcmContentType_Program || nca_fs_ctx->section_idx > 1)) || \
         ((title_type == NcmContentMetaType_AddOnContent || title_type == NcmContentMetaType_DataPatch) && (content_type != NcmContentType_Data || nca_fs_ctx->section_idx != 0))))
     {
         consolePrint("layeredfs setting disabled (unsupported by current content/section type combo)\n");

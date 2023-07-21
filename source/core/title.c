@@ -29,6 +29,8 @@
 #define TITLE_STORAGE_COUNT                 4                                       /* GameCard, BuiltInSystem, BuiltInUser, SdCard. */
 #define TITLE_STORAGE_INDEX(storage_id)     ((storage_id) - NcmStorageId_GameCard)
 
+#define NCM_CMT_APP_OFFSET                  0x7A
+
 /* Type definitions. */
 
 typedef struct {
@@ -83,25 +85,31 @@ static const char *g_titleNcmContentTypeNames[] = {
 };
 
 static const char *g_titleNcmContentMetaTypeNames[] = {
-    [NcmContentMetaType_Unknown]              = "Unknown",
-    [NcmContentMetaType_SystemProgram]        = "SystemProgram",
-    [NcmContentMetaType_SystemData]           = "SystemData",
-    [NcmContentMetaType_SystemUpdate]         = "SystemUpdate",
-    [NcmContentMetaType_BootImagePackage]     = "BootImagePackage",
-    [NcmContentMetaType_BootImagePackageSafe] = "BootImagePackageSafe",
-    [NcmContentMetaType_Application - 0x7A]   = "Application",
-    [NcmContentMetaType_Patch - 0x7A]         = "Patch",
-    [NcmContentMetaType_AddOnContent - 0x7A]  = "AddOnContent",
-    [NcmContentMetaType_Delta - 0x7A]         = "Delta",
-    [NcmContentMetaType_DataPatch - 0x7A]     = "DataPatch"
+    [NcmContentMetaType_Unknown]                           = "Unknown",
+    [NcmContentMetaType_SystemProgram]                     = "SystemProgram",
+    [NcmContentMetaType_SystemData]                        = "SystemData",
+    [NcmContentMetaType_SystemUpdate]                      = "SystemUpdate",
+    [NcmContentMetaType_BootImagePackage]                  = "BootImagePackage",
+    [NcmContentMetaType_BootImagePackageSafe]              = "BootImagePackageSafe",
+    [NcmContentMetaType_Application - NCM_CMT_APP_OFFSET]  = "Application",
+    [NcmContentMetaType_Patch - NCM_CMT_APP_OFFSET]        = "Patch",
+    [NcmContentMetaType_AddOnContent - NCM_CMT_APP_OFFSET] = "AddOnContent",
+    [NcmContentMetaType_Delta - NCM_CMT_APP_OFFSET]        = "Delta",
+    [NcmContentMetaType_DataPatch - NCM_CMT_APP_OFFSET]    = "DataPatch"
 };
 
 static const char *g_filenameTypeStrings[] = {
-    [NcmContentMetaType_Application - 0x80]  = "BASE",
-    [NcmContentMetaType_Patch - 0x80]        = "UPD",
-    [NcmContentMetaType_AddOnContent - 0x80] = "DLC",
-    [NcmContentMetaType_Delta - 0x80]        = "DELTA",
-    [NcmContentMetaType_DataPatch - 0x80]    = "DLCUPD"
+    [NcmContentMetaType_Unknown]                           = "UNK",
+    [NcmContentMetaType_SystemProgram]                     = "SYSPRG",
+    [NcmContentMetaType_SystemData]                        = "SYSDAT",
+    [NcmContentMetaType_SystemUpdate]                      = "SYSUPD",
+    [NcmContentMetaType_BootImagePackage]                  = "BIP",
+    [NcmContentMetaType_BootImagePackageSafe]              = "BIPS",
+    [NcmContentMetaType_Application - NCM_CMT_APP_OFFSET]  = "BASE",
+    [NcmContentMetaType_Patch - NCM_CMT_APP_OFFSET]        = "UPD",
+    [NcmContentMetaType_AddOnContent - NCM_CMT_APP_OFFSET] = "DLC",
+    [NcmContentMetaType_Delta - NCM_CMT_APP_OFFSET]        = "DELTA",
+    [NcmContentMetaType_DataPatch - NCM_CMT_APP_OFFSET]    = "DLCUPD"
 };
 
 /* Info retrieved from https://switchbrew.org/wiki/Title_list. */
@@ -1072,15 +1080,17 @@ bool titleIsGameCardInfoUpdated(void)
 
 char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 illegal_char_replace_type)
 {
-    if (!title_info || title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_DataPatch || \
-        naming_convention > TitleNamingConvention_IdAndVersionOnly || (naming_convention == TitleNamingConvention_Full && \
-        illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
+    if (!title_info || (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || \
+        title_info->meta_key.type > NcmContentMetaType_DataPatch || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
+        (naming_convention == TitleNamingConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
-    u8 type = (title_info->meta_key.type - 0x80);
+    u8 type_idx = title_info->meta_key.type;
+    if (type_idx >= NcmContentMetaType_Application) type_idx -= NCM_CMT_APP_OFFSET;
+
     char title_name[0x400] = {0}, *version_str = NULL, *filename = NULL;
 
     /* Generate filename for this title. */
@@ -1101,11 +1111,11 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
             if (illegal_char_replace_type) utilsReplaceIllegalCharacters(title_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
         }
 
-        sprintf(title_name + strlen(title_name), "[%016lX][v%u][%s]", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type]);
+        sprintf(title_name + strlen(title_name), "[%016lX][v%u][%s]", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type_idx]);
     } else
     if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
     {
-        sprintf(title_name, "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type]);
+        sprintf(title_name, "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type_idx]);
     }
 
     /* Duplicate generated filename. */
@@ -1251,7 +1261,7 @@ const char *titleGetNcmContentTypeName(u8 content_type)
 const char *titleGetNcmContentMetaTypeName(u8 content_meta_type)
 {
     if ((content_meta_type > NcmContentMetaType_BootImagePackageSafe && content_meta_type < NcmContentMetaType_Application) || content_meta_type > NcmContentMetaType_DataPatch) return NULL;
-    return (content_meta_type <= NcmContentMetaType_BootImagePackageSafe ? g_titleNcmContentMetaTypeNames[content_meta_type] : g_titleNcmContentMetaTypeNames[content_meta_type - 0x7A]);
+    return (content_meta_type <= NcmContentMetaType_BootImagePackageSafe ? g_titleNcmContentMetaTypeNames[content_meta_type] : g_titleNcmContentMetaTypeNames[content_meta_type - NCM_CMT_APP_OFFSET]);
 }
 
 NX_INLINE void titleFreeApplicationMetadata(void)

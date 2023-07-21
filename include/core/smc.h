@@ -60,6 +60,8 @@ typedef struct {
     };
 } SmcGenerateAesKekOption;
 
+NXDT_ASSERT(SmcGenerateAesKekOption, 0x4);
+
 /// Helper inline functions.
 
 NX_INLINE void smcPrepareGenerateAesKekOption(bool is_device_unique, u32 key_type_idx, u32 seal_key_idx, SmcGenerateAesKekOption *out)
