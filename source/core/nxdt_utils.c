@@ -32,8 +32,10 @@
 #include "nxdt_bfsar.h"
 #include "fatfs/ff.h"
 
-/* Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits. */
-#define NT_MAX_FILENAME_LENGTH      255
+/// Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits.
+/// Reference: https://en.wikipedia.org/wiki/Comparison_of_file_systems#Limits.
+/// Most modern filesystems use a 255-byte limit instead of 255-character/codepoint limit, so that's what we're gonna use.
+#define FS_MAX_FILENAME_LENGTH      255
 #define SDMC_MAX_FILENAME_LENGTH    128 /* Arbitrarily set, I'm tired of FS sysmodule shenanigans. */
 
 /* Type definitions. */
@@ -110,7 +112,7 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 
 static void utilsChangeHomeButtonBlockStatus(bool block);
 
-static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos);
+static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t byte_limit);
 
 bool utilsInitializeResources(const int program_argc, const char **program_argv)
 {
@@ -873,7 +875,7 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
     size_t path_len = (prefix_len + strlen(filename) + extension_len);
     if (append_path_sep) path_len++;
 
-    size_t max_filename_len = ((use_prefix && !strncmp(prefix, DEVOPTAB_SDMC_DEVICE, strlen(DEVOPTAB_SDMC_DEVICE))) ? SDMC_MAX_FILENAME_LENGTH : NT_MAX_FILENAME_LENGTH);
+    const size_t max_filename_len = ((use_prefix && !strncmp(prefix, DEVOPTAB_SDMC_DEVICE, strlen(DEVOPTAB_SDMC_DEVICE))) ? SDMC_MAX_FILENAME_LENGTH : FS_MAX_FILENAME_LENGTH);
 
     char *path = NULL, *ptr1 = NULL, *ptr2 = NULL;
     bool filename_only = false, success = false;
@@ -914,11 +916,10 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
         /* Get current path element size. */
         size_t element_size = (ptr2 ? (size_t)(ptr2 - ptr1) : (path_len - (size_t)(ptr1 - path)));
 
-        /* Get UTF-8 codepoint count. */
-        /* Use our max filename length as the codepoint count limit. */
-        size_t last_cp_pos = 0;
-        size_t cp_count = utilsGetUtf8CodepointCount(ptr1, element_size, max_filename_len, &last_cp_pos);
-        if (cp_count > max_filename_len)
+        /* Get UTF-8 string limit. */
+        /* Use our max filename length as the byte count limit. */
+        size_t last_cp_pos = utilsGetUtf8StringLimit(ptr1, element_size, max_filename_len);
+        if (last_cp_pos < element_size)
         {
             if (ptr2)
             {
@@ -1277,25 +1278,26 @@ NX_INLINE void utilsCloseFileDescriptor(int *fd)
     *fd = -1;
 }
 
-static size_t utilsGetUtf8CodepointCount(const char *str, size_t str_size, size_t cp_limit, size_t *last_cp_pos)
+static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t byte_limit)
 {
-    if (!str || !*str || !str_size || (!cp_limit && last_cp_pos) || (cp_limit && !last_cp_pos)) return 0;
+    if (!str || !*str || !str_size || !byte_limit) return 0;
+
+    if (byte_limit > str_size) return str_size;
 
     u32 code = 0;
     ssize_t units = 0;
-    size_t cur_pos = 0, cp_count = 0;
+    size_t cur_pos = 0, last_cp_pos = 0;
     const u8 *str_u8 = (const u8*)str;
 
-    while(cur_pos < str_size)
+    while(cur_pos < str_size && cur_pos < byte_limit)
     {
         units = decode_utf8(&code, str_u8 + cur_pos);
         size_t new_pos = (cur_pos + (size_t)units);
         if (units < 0 || !code || new_pos > str_size) break;
 
-        cp_count++;
         cur_pos = new_pos;
-        if (cp_limit && last_cp_pos && cp_count < cp_limit) *last_cp_pos = cur_pos;
+        if (cur_pos < byte_limit) last_cp_pos = cur_pos;
     }
 
-    return cp_count;
+    return last_cp_pos;
 }
