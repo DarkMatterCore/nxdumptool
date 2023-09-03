@@ -388,8 +388,8 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000211A, "PreinstallAppWriter" },
     { 0x010000000000211C, "ControllerSerialFlashTool" },
     { 0x010000000000211D, "ControllerFlashWriter" },
-    { 0x010000000000211E, "Handling" },
-    { 0x010000000000211F, "Hid" },
+    { 0x010000000000211E, "C13Handling" },
+    { 0x010000000000211F, "HidTest" },
     { 0x0100000000002120, "ControllerTestApp" },
     { 0x0100000000002121, "HidInspectionTool" },
     { 0x0100000000002124, "BatteryCyclesEditor" },
@@ -402,8 +402,11 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000002130, "LuciaConverter" },
     { 0x0100000000002133, "CalDumper" },
     { 0x0100000000002134, "AnalogStickEvaluationTool" },
+    { 0x010000000000216A, "ButtonTest" },
     { 0x010000000000216D, "ExhibitionSaveDataSnapshot" },       ///< Placeholder.
+    { 0x010000000000216E, "HandlingA" },
     { 0x0100000000002178, "SecureStartupSettings" },            ///< Placeholder.
+    { 0x010000000000217A, "WirelessInterference" },
     { 0x010000000000217D, "CradleFirmwareUpdater" },
     { 0x0100000000002184, "HttpInstallSettings" },              ///< Placeholder.
     { 0x0100000000002187, "ExhibitionMovieAssetData" },         ///< Placeholder.
@@ -448,8 +451,9 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000D616, "msm_unknown_0b" },                   ///< Placeholder.
     { 0x010000000000D617, "msm_unknown_0c" },                   ///< Placeholder.
     { 0x010000000000D619, "msm_unknown_0d" },                   ///< Placeholder.
+    { 0x010000000000D621, "msm_unknown_0e" },                   ///< Placeholder.
     { 0x010000000000D623, "DevServer" },
-    { 0x010000000000D633, "msm_unknown_0e" },                   ///< Placeholder.
+    { 0x010000000000D633, "msm_unknown_0f" },                   ///< Placeholder.
     { 0x010000000000D640, "htcnet" },
 
     /* System applications. */
