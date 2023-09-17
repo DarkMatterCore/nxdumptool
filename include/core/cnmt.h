@@ -254,8 +254,8 @@ typedef struct {
     NcmContentId destination_content_id;
     u32 source_size_low;
     u16 source_size_high;
-    u32 destination_size_low;
     u16 destination_size_high;
+    u32 destination_size_low;
     u16 fragment_count;
     u8 fragment_target_content_type;                ///< NcmContentType.
     u8 update_type;                                 ///< ContentMetaUpdateType.
