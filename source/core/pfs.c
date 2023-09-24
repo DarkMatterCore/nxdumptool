@@ -47,7 +47,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
 
     /* Initialize NCA storage context. */
     NcaStorageContext *storage_ctx = &(out->storage_ctx);
-    if (!ncaStorageInitializeContext(storage_ctx, nca_fs_ctx))
+    if (!ncaStorageInitializeContext(storage_ctx, nca_fs_ctx, NULL))
     {
         LOG_MSG_ERROR("Failed to initialize NCA storage context!");
         goto end;

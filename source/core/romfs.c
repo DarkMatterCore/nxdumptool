@@ -57,7 +57,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     bool is_nca0_romfs = (base_nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs);
 
     /* Initialize base NCA storage context. */
-    if (!missing_base_romfs && !ncaStorageInitializeContext(base_storage_ctx, base_nca_fs_ctx))
+    if (!missing_base_romfs && !ncaStorageInitializeContext(base_storage_ctx, base_nca_fs_ctx, NULL))
     {
         LOG_MSG_ERROR("Failed to initialize base NCA storage context!");
         goto end;
@@ -66,16 +66,9 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     if (patch_nca_fs_ctx)
     {
         /* Initialize base NCA storage context. */
-        if (!ncaStorageInitializeContext(patch_storage_ctx, patch_nca_fs_ctx))
+        if (!ncaStorageInitializeContext(patch_storage_ctx, patch_nca_fs_ctx, base_storage_ctx))
         {
             LOG_MSG_ERROR("Failed to initialize patch NCA storage context!");
-            goto end;
-        }
-
-        /* Set patch NCA storage original substorage, if available. */
-        if (!missing_base_romfs && !ncaStorageSetPatchOriginalSubStorage(patch_storage_ctx, base_storage_ctx))
-        {
-            LOG_MSG_ERROR("Failed to set patch NCA storage context's original substorage!");
             goto end;
         }
 

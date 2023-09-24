@@ -49,12 +49,11 @@ typedef struct {
     BucketTreeContext *compressed_storage;  ///< Compressed storage context.
 } NcaStorageContext;
 
-/// Initializes a NCA storage context using a NCA FS section context.
-bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx);
-
-/// Sets a storage from the provided Base NcaStorageContext as the original substorage for the provided Patch NcaStorageContext's Indirect Storage.
-/// Needed to perform combined reads between a base NCA and a patch NCA.
-bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStorageContext *base_ctx);
+/// Initializes a NCA storage context using a NCA FS section context, optionally providing a pointer to a base NcaStorageContext.
+/// 'base_ctx' must be provided if dealing with a patch NCA. One of its storages will be set as the original substorage for the initialized NcaStorageContext's Indirect Storage.
+/// This is needed to perform combined reads between a base NCA and a patch NCA.
+/// 'base_ctx' shall be NULL if dealing with a base NCA.
+bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx, NcaStorageContext *base_ctx);
 
 /// Retrieves the underlying NCA FS section's hierarchical hash target layer extents. Virtual extents may be returned, depending on the base storage type.
 /// Output offset is relative to the start of the NCA FS section.

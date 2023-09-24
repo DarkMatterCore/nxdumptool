@@ -26,11 +26,12 @@
 
 static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type);
 static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx);
+static bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaFsSectionContext *patch_nca_fs_ctx, NcaStorageContext *base_ctx);
 
-bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx)
+bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx, NcaStorageContext *base_ctx)
 {
     if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || (nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs && \
-        (!nca_fs_ctx->has_patch_indirect_layer || !nca_fs_ctx->has_patch_aes_ctr_ex_layer || nca_fs_ctx->has_sparse_layer)))
+        (!nca_fs_ctx->has_patch_indirect_layer || !nca_fs_ctx->has_patch_aes_ctr_ex_layer || nca_fs_ctx->has_sparse_layer || !base_ctx)))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -64,11 +65,11 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
         if (!ncaStorageInitializeBucketTreeContext(&(out->aes_ctr_ex_storage), nca_fs_ctx, BucketTreeStorageType_AesCtrEx) || \
             !ncaStorageInitializeBucketTreeContext(&(out->indirect_storage), nca_fs_ctx, BucketTreeStorageType_Indirect)) goto end;
 
-        /* Set AesCtrEx layer's substorage. */
+        /* Set AesCtrEx layer's substorage (plain NCA reads). */
         if (!bktrSetRegularSubStorage(out->aes_ctr_ex_storage, nca_fs_ctx)) goto end;
 
-        /* Set Indirect layer's AesCtrEx substorage. */
-        /* Original substorage (index 0) must be manually set at a later time using ncaStorageSetPatchOriginalSubStorage(). */
+        /* Set Indirect layer's substorages (Base + AesCtrEx). */
+        if (!ncaStorageSetPatchOriginalSubStorage(out, nca_fs_ctx, base_ctx)) goto end;
         if (!bktrSetBucketTreeSubStorage(out->indirect_storage, out->aes_ctr_ex_storage, 1)) goto end;
 
         /* Update base storage type. */
@@ -86,55 +87,6 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
 
 end:
     if (!success) ncaStorageFreeContext(out);
-
-    return success;
-}
-
-bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStorageContext *base_ctx)
-{
-    NcaContext *patch_nca_ctx = NULL, *base_nca_ctx = NULL;
-
-    if (!ncaStorageIsValidContext(patch_ctx) || !ncaStorageIsValidContext(base_ctx) || patch_ctx->nca_fs_ctx == base_ctx->nca_fs_ctx || \
-        !(patch_nca_ctx = patch_ctx->nca_fs_ctx->nca_ctx) || !(base_nca_ctx = base_ctx->nca_fs_ctx->nca_ctx) || \
-        patch_ctx->nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || base_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
-        patch_nca_ctx->header.program_id != base_nca_ctx->header.program_id || patch_nca_ctx->header.content_type != base_nca_ctx->header.content_type || \
-        patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version.value < base_nca_ctx->title_version.value || \
-        (patch_ctx->base_storage_type != NcaStorageBaseStorageType_Indirect && patch_ctx->base_storage_type != NcaStorageBaseStorageType_Compressed) || \
-        !patch_ctx->indirect_storage || !patch_ctx->aes_ctr_ex_storage || (base_ctx->base_storage_type == NcaStorageBaseStorageType_Compressed && \
-        patch_ctx->base_storage_type != NcaStorageBaseStorageType_Compressed))
-    {
-        LOG_MSG_ERROR("Invalid parameters!");
-        return false;
-    }
-
-    bool success = false;
-
-    /* Set original substorage. */
-    switch(base_ctx->base_storage_type)
-    {
-        case NcaStorageBaseStorageType_Regular:
-        case NcaStorageBaseStorageType_Compressed:
-            /* Regular: we just make the Patch's Indirect Storage's SubStorage #0 point to the Base NCA FS section as-is and call it a day. */
-
-            /* Compressed: if a Compressed Storage is available in the Base NCA FS section, the corresponding Patch NCA FS section *must* also have one. */
-            /* This is because the Patch's Compressed Storage also takes care of LZ4-compressed chunks within Base NCA FS section areas. */
-            /* Furthermore, the Patch's Indirect Storage already provides section-relative physical offsets for the Base NCA FS section. */
-            /* In other words, we don't need to parse the Base NCA's Compressed Storage on every read. */
-            success = bktrSetRegularSubStorage(patch_ctx->indirect_storage, base_ctx->nca_fs_ctx);
-            break;
-        case NcaStorageBaseStorageType_Sparse:
-            /* Sparse: we should *always* arrive here if a Sparse Storage is available in the Base NCA FS section, regardless if a Compressed Storage is available or not. */
-            /* This is because compression bucket trees are non-existent in Base NCA FS sections that have both Sparse and Compressed Storages. */
-            /* Furthermore, in these cases, the compression BucketInfo from the NCA FS section header references the full, patched FS section, so we can't really use it. */
-            /* We just completely ignore the Base's Compressed Storage and let the Patch's Compressed Storage take care of LZ4-compressed chunks. */
-            /* Anyway, we just make the Patch's Indirect Storage's SubStorage #0 point to the Base's Sparse Storage and call it a day. */
-            success = bktrSetBucketTreeSubStorage(patch_ctx->indirect_storage, base_ctx->sparse_storage, 0);
-            break;
-        default:
-            break;
-    }
-
-    if (!success) LOG_MSG_ERROR("Failed to set base storage to patch storage! (0x%02X, 0x%02X).", base_ctx->base_storage_type, patch_ctx->base_storage_type);
 
     return success;
 }
@@ -367,6 +319,52 @@ static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageCon
 
 end:
     if (!success && bktr_ctx) free(bktr_ctx);
+
+    return success;
+}
+
+static bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaFsSectionContext *patch_nca_fs_ctx, NcaStorageContext *base_ctx)
+{
+    NcaContext *patch_nca_ctx = NULL, *base_nca_ctx = NULL;
+
+    if (!patch_ctx || !patch_ctx->indirect_storage || !patch_ctx->aes_ctr_ex_storage || !patch_nca_fs_ctx || !ncaStorageIsValidContext(base_ctx) || \
+        !(patch_nca_ctx = patch_nca_fs_ctx->nca_ctx) || !(base_nca_ctx = base_ctx->nca_fs_ctx->nca_ctx) || \
+        patch_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || base_ctx->nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
+        patch_nca_ctx->header.program_id != base_nca_ctx->header.program_id || patch_nca_ctx->header.content_type != base_nca_ctx->header.content_type || \
+        patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version.value < base_nca_ctx->title_version.value)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    bool success = false;
+
+    /* Set original substorage. */
+    switch(base_ctx->base_storage_type)
+    {
+        case NcaStorageBaseStorageType_Regular:
+        case NcaStorageBaseStorageType_Compressed:
+            /* Regular: we just make the Patch's Indirect Storage's SubStorage #0 point to the Base NCA FS section as-is and call it a day. */
+
+            /* Compressed: if a Compressed Storage is available in the Base NCA FS section, the corresponding Patch NCA FS section *must* also have one. */
+            /* This is because the Patch's Compressed Storage also takes care of LZ4-compressed chunks within Base NCA FS section areas. */
+            /* Furthermore, the Patch's Indirect Storage already provides section-relative physical offsets for the Base NCA FS section. */
+            /* In other words, we don't need to parse the Base NCA's Compressed Storage on every read. */
+            success = bktrSetRegularSubStorage(patch_ctx->indirect_storage, base_ctx->nca_fs_ctx);
+            break;
+        case NcaStorageBaseStorageType_Sparse:
+            /* Sparse: we should *always* arrive here if a Sparse Storage is available in the Base NCA FS section, regardless if a Compressed Storage is available or not. */
+            /* This is because compression bucket trees are non-existent in Base NCA FS sections that have both Sparse and Compressed Storages. */
+            /* Furthermore, in these cases, the compression BucketInfo from the NCA FS section header references the full, patched FS section, so we can't really use it. */
+            /* We just completely ignore the Base's Compressed Storage and let the Patch's Compressed Storage take care of LZ4-compressed chunks. */
+            /* Anyway, we just make the Patch's Indirect Storage's SubStorage #0 point to the Base's Sparse Storage and call it a day. */
+            success = bktrSetBucketTreeSubStorage(patch_ctx->indirect_storage, base_ctx->sparse_storage, 0);
+            break;
+        default:
+            break;
+    }
+
+    if (!success) LOG_MSG_ERROR("Failed to set base storage to patch storage! (0x%02X, 0x%02X).", base_ctx->base_storage_type, patch_ctx->base_storage_type);
 
     return success;
 }
