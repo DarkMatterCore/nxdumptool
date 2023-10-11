@@ -43,7 +43,7 @@ extern "C" {
 /// TODO: update on signature keygen changes.
 typedef enum {
     NpdmSignatureKeyGeneration_Since100NUP = 0,                                         ///< 1.0.0 - 8.1.1.
-    NpdmSignatureKeyGeneration_Since900NUP = 1,                                         ///< 9.0.0 - 16.0.3.
+    NpdmSignatureKeyGeneration_Since900NUP = 1,                                         ///< 9.0.0 - 17.0.0.
     NpdmSignatureKeyGeneration_Current     = NpdmSignatureKeyGeneration_Since900NUP,
     NpdmSignatureKeyGeneration_Max         = (NpdmSignatureKeyGeneration_Current + 1)
 } NpdmSignatureKeyGeneration;
