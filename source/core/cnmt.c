@@ -146,6 +146,12 @@ bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx)
         goto end;
     }
 
+    if (out->packaged_header->content_meta_platform >= ContentMetaPlatform_Count)
+    {
+        LOG_MSG_ERROR("Invalid platform!");
+        goto end;
+    }
+
     if (!out->packaged_header->content_count && out->packaged_header->content_meta_type != NcmContentMetaType_SystemUpdate)
     {
         LOG_MSG_ERROR("Invalid content count!");

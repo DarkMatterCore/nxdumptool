@@ -42,6 +42,11 @@ typedef enum {
 } ContentMetaAttribute;
 
 typedef enum {
+    ContentMetaPlatform_Nx    = 0,
+    ContentMetaPlatform_Count = 1   ///< Total values supported by this enum.
+} ContentMetaPlatform;
+
+typedef enum {
     ContentMetaInstallState_None      = 0,
     ContentMetaInstallState_Committed = BIT(0),
     ContentMetaInstallState_Count     = 1       ///< Total values supported by this enum.
@@ -55,17 +60,17 @@ typedef enum {
 typedef struct {
     u64 title_id;
     Version version;
-    u8 content_meta_type;                                   ///< NcmContentMetaType.
-    u8 reserved_1;
-    u16 extended_header_size;                               ///< Must match the size from the extended header struct for this content meta type (SystemUpdate, Application, Patch, AddOnContent, Delta).
-    u16 content_count;                                      ///< Determines how many NcmPackagedContentInfo entries are available after the extended header.
-    u16 content_meta_count;                                 ///< Determines how many NcmContentMetaInfo entries are available after the NcmPackagedContentInfo entries. Only used for SystemUpdate.
-    u8 content_meta_attribute;                              ///< ContentMetaAttribute.
-    u8 storage_id;                                          ///< NcmStorageId.
-    u8 content_install_type;                                ///< NcmContentInstallType.
-    u8 install_state;                                       ///< ContentMetaInstallState.
+    u8 content_meta_type;                       ///< NcmContentMetaType.
+    u8 content_meta_platform;                   ///< ContentMetaPlatform.
+    u16 extended_header_size;                   ///< Must match the size from the extended header struct for this content meta type (SystemUpdate, Application, Patch, AddOnContent, Delta).
+    u16 content_count;                          ///< Determines how many NcmPackagedContentInfo entries are available after the extended header.
+    u16 content_meta_count;                     ///< Determines how many NcmContentMetaInfo entries are available after the NcmPackagedContentInfo entries. Only used for SystemUpdate.
+    u8 content_meta_attribute;                  ///< ContentMetaAttribute.
+    u8 storage_id;                              ///< NcmStorageId.
+    u8 content_install_type;                    ///< NcmContentInstallType.
+    u8 install_state;                           ///< ContentMetaInstallState.
     Version required_download_system_version;
-    u8 reserved_2[0x4];
+    u8 reserved[0x4];
 } ContentMetaPackagedContentMetaHeader;
 
 NXDT_ASSERT(ContentMetaPackagedContentMetaHeader, 0x20);

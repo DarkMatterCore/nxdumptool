@@ -1138,8 +1138,8 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
                 }
 
                 /* Decompress LZ4 block. */
-                int lz4_res = 0;
-                if ((lz4_res = LZ4_decompress_safe((char*)read_ptr, (char*)buffer, (int)compressed_data_size, (int)buffer_size)) != (int)decompressed_data_size)
+                int lz4_res = LZ4_decompress_safe((char*)read_ptr, (char*)buffer, (int)compressed_data_size, (int)buffer_size);
+                if (lz4_res != (int)decompressed_data_size)
                 {
                     LOG_MSG_ERROR("Failed to decompress 0x%lX-byte long compressed block! (%d).", compressed_data_size, lz4_res);
                     free(buffer);

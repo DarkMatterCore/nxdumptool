@@ -934,7 +934,7 @@ int main(int argc, char *argv[])
         }
 
         consoleClear();
-        consolePrint(APP_TITLE " v" APP_VERSION " (" GIT_REV "). Built on " BUILD_TIMESTAMP ".\n");
+        consolePrint(APP_TITLE " v" APP_VERSION " (" GIT_REV ").\nBuilt on " BUILD_TIMESTAMP ".\n");
         consolePrint("______________________________\n\n");
         if (cur_menu->parent) consolePrint("press b to go back\n");
         if (g_umsDeviceCount) consolePrint("press x to safely remove all ums devices\n");

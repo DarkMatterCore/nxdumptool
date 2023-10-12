@@ -66,7 +66,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     if (patch_nca_fs_ctx)
     {
         /* Initialize base NCA storage context. */
-        if (!ncaStorageInitializeContext(patch_storage_ctx, patch_nca_fs_ctx, base_storage_ctx))
+        if (!ncaStorageInitializeContext(patch_storage_ctx, patch_nca_fs_ctx, missing_base_romfs ? NULL : base_storage_ctx))
         {
             LOG_MSG_ERROR("Failed to initialize patch NCA storage context!");
             goto end;
