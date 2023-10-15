@@ -194,7 +194,7 @@ const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
         goto end;
     }
 
-    if (key_generation >= NcaKeyGeneration_Max)
+    if (key_generation > NcaKeyGeneration_Max)
     {
         LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_generation);
         goto end;
@@ -258,7 +258,7 @@ const u8 *keysGetTicketCommonKey(u8 key_generation)
     const u8 *ret = NULL;
     u8 key_gen_val = (key_generation ? (key_generation - 1) : key_generation);
 
-    if (key_generation >= NcaKeyGeneration_Max)
+    if (key_generation > NcaKeyGeneration_Max)
     {
         LOG_MSG_ERROR("Invalid key generation value! (0x%02X).", key_generation);
         goto end;

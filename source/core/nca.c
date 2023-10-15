@@ -244,12 +244,13 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
 
         /* Retrieve ticket. */
         /* This will return true if it has already been retrieved. */
-        if (tikRetrieveTicketByRightsId(usable_tik, &(out->header.rights_id), out->storage_id == NcmStorageId_GameCard))
+        if (tikRetrieveTicketByRightsId(usable_tik, &(out->header.rights_id), out->key_generation, out->storage_id == NcmStorageId_GameCard))
         {
             /* Copy decrypted titlekey. */
-            memcpy(out->titlekey, usable_tik->dec_titlekey, 0x10);
+            memcpy(out->titlekey, usable_tik->dec_titlekey, sizeof(usable_tik->dec_titlekey));
             out->titlekey_retrieved = true;
         } else {
+            /* We must proceed even if we have no ticket. The user may just want to copy a raw NCA. */
             LOG_MSG_ERROR("Error retrieving ticket for NCA \"%s\"!", out->content_id_str);
         }
     }

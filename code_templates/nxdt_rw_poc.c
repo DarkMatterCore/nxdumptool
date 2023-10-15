@@ -2869,8 +2869,6 @@ static bool saveTicket(void *userdata)
     NcaContext *nca_ctx = NULL;
 
     Ticket tik = {0};
-    TikCommonBlock *tik_common_block = NULL;
-    char enc_titlekey_str[33] = {0};
 
     u32 crc = 0;
     char *filename = NULL;
@@ -2916,21 +2914,14 @@ static bool saveTicket(void *userdata)
         goto end;
     }
 
-    if (!tik.size)
+    if (!nca_ctx->titlekey_retrieved)
     {
         consolePrint("failed to retrieve ticket (unavailable?)\ntry launching nxdumptool while overriding the title you wish to dump a ticket from\n");
         goto end;
     }
 
-    /* Retrieve ticket common block. */
-    if (!(tik_common_block = tikGetCommonBlock(tik.data)))
-    {
-        consolePrint("failed to get tik common block\n");
-        goto end;
-    }
-
     /* Remove console-specific data, if needed. */
-    if (remove_console_data && tik_common_block->titlekey_type == TikTitleKeyType_Personalized && !tikConvertPersonalizedTicketToCommonTicket(&tik, NULL, NULL))
+    if (remove_console_data && tikIsPersonalizedTicket(&tik) && !tikConvertPersonalizedTicketToCommonTicket(&tik, NULL, NULL))
     {
         consolePrint("failed to convert personalized ticket to common ticket\n");
         goto end;
@@ -2945,10 +2936,9 @@ static bool saveTicket(void *userdata)
 
     if (!saveFileData(filename, tik.data, tik.size)) goto end;
 
-    utilsGenerateHexStringFromData(enc_titlekey_str, MAX_ELEMENTS(enc_titlekey_str), tik.enc_titlekey, sizeof(tik.enc_titlekey), false);
-
     consolePrint("rights id: %s\n", tik.rights_id_str);
-    consolePrint("titlekey: %s\n\n", enc_titlekey_str);
+    consolePrint("encrypted titlekey: %s\n", tik.enc_titlekey_str);
+    consolePrint("decrypted titlekey: %s\n\n", tik.dec_titlekey_str);
 
     consolePrint("successfully saved ticket as \"%s\"\n", filename);
     success = true;
@@ -5003,7 +4993,7 @@ static void nspThreadFunc(void *arg)
     bool retrieve_tik_cert = (!remove_titlekey_crypto && tik.size > 0);
     if (retrieve_tik_cert)
     {
-        if (!(tik_common_block = tikGetCommonBlock(tik.data)))
+        if (!(tik_common_block = tikGetCommonBlockFromTicket(&tik)))
         {
             consolePrint("tik common block failed");
             goto end;

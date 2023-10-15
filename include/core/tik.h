@@ -30,8 +30,8 @@
 extern "C" {
 #endif
 
-#define SIGNED_TIK_MAX_SIZE         0x400                   /* Max ticket entry size in the ES ticket system savedata file. */
 #define SIGNED_TIK_MIN_SIZE         sizeof(TikSigHmac160)   /* Assuming no ESV1/ESV2 records are available. */
+#define SIGNED_TIK_MAX_SIZE         0x400                   /* Max ticket entry size in the ES ticket system savedata file. */
 
 #define GENERATE_TIK_STRUCT(sigtype, tiksize) \
 typedef struct { \
@@ -59,12 +59,12 @@ typedef enum {
 
 typedef enum {
     TikPropertyMask_None                 = 0,
-    TikPropertyMask_PreInstallation      = BIT(0),
-    TikPropertyMask_SharedTitle          = BIT(1),
-    TikPropertyMask_AllContents          = BIT(2),
-    TikPropertyMask_DeviceLinkIndepedent = BIT(3),
-    TikPropertyMask_Volatile             = BIT(4),  ///< Used to determine if the ticket copy inside ticket.bin should be encrypted or not.
-    TikPropertyMask_ELicenseRequired     = BIT(5),  ///< Used to determine if the console should connect to the Internet to perform elicense verification.
+    TikPropertyMask_PreInstallation      = BIT(0),  ///< Determines if the title comes pre-installed on the device. Most likely unused -- a remnant from previous ticket formats.
+    TikPropertyMask_SharedTitle          = BIT(1),  ///< Determines if the title holds shared contents only. Most likely unused -- a remnant from previous ticket formats.
+    TikPropertyMask_AllContents          = BIT(2),  ///< Determines if the content index mask shall be bypassed. Most likely unused -- a remnant from previous ticket formats.
+    TikPropertyMask_DeviceLinkIndepedent = BIT(3),  ///< Determines if the console should *not* connect to the Internet to verify if the title's being used by the primary console.
+    TikPropertyMask_Volatile             = BIT(4),  ///< Determines if the ticket copy inside ticket.bin should be encrypted or not.
+    TikPropertyMask_ELicenseRequired     = BIT(5),  ///< Determines if the console should connect to the Internet to perform license verification.
     TikPropertyMask_Count                = 6        ///< Total values supported by this enum.
 } TikPropertyMask;
 
@@ -174,14 +174,18 @@ typedef struct {
     u8 type;                        ///< TikType.
     u64 size;                       ///< Raw ticket size.
     u8 data[SIGNED_TIK_MAX_SIZE];   ///< Raw ticket data.
+    u8 key_generation;              ///< NcaKeyGeneration.
     u8 enc_titlekey[0x10];          ///< Titlekey with titlekek crypto (RSA-OAEP unwrapped if dealing with a TikTitleKeyType_Personalized ticket).
+    char enc_titlekey_str[0x21];    ///< Character string representation of enc_titlekey.
     u8 dec_titlekey[0x10];          ///< Titlekey without titlekek crypto. Ready to use for NCA FS section decryption.
+    char dec_titlekey_str[0x21];    ///< Character string representation of dec_titlekey.
     char rights_id_str[0x21];       ///< Character string representation of the rights ID from the ticket.
 } Ticket;
 
-/// Retrieves a ticket from either the ES ticket system savedata file (eMMC BIS System partition) or the secure hash FS partition from an inserted gamecard, using a Rights ID value.
-/// Titlekey is also RSA-OAEP unwrapped (if needed) and titlekek decrypted right away.
-bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gamecard);
+/// Retrieves a ticket from either the ES ticket system savedata file (eMMC BIS System partition) or the secure Hash FS partition from an inserted gamecard.
+/// Both the input rights ID and key generation values must have been retrieved from a NCA that depends on the desired ticket.
+/// Titlekey is also RSA-OAEP unwrapped (if needed) and titlekek-decrypted right away.
+bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, u8 key_generation, bool use_gamecard);
 
 /// Converts a TikTitleKeyType_Personalized ticket into a TikTitleKeyType_Common ticket and optionally generates a raw certificate chain for the new signature issuer.
 /// Bear in mind the 'size' member from the Ticket parameter will be updated by this function to remove any possible references to ESV1/ESV2 records.
@@ -189,15 +193,16 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, bool use_gam
 /// certGenerateRawCertificateChainBySignatureIssuer() is used internally, so the output buffer must be freed by the user.
 bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_chain, u64 *out_raw_cert_chain_size);
 
-/// Helper inline functions.
+/// Helper inline functions for signed ticket blobs.
 
-NX_INLINE TikCommonBlock *tikGetCommonBlock(void *buf)
+NX_INLINE TikCommonBlock *tikGetCommonBlockFromSignedTicketBlob(void *buf)
 {
-    return (TikCommonBlock*)signatureGetPayload(buf, false);
+    return (TikCommonBlock*)signatureGetPayloadFromSignedBlob(buf, false);
 }
 
-NX_INLINE u64 tikGetTicketSectionRecordsBlockSize(TikCommonBlock *tik_common_block)
+NX_INLINE u64 tikGetSectionRecordsSizeFromSignedTicketBlob(void *buf)
 {
+    TikCommonBlock *tik_common_block = tikGetCommonBlockFromSignedTicketBlob(buf);
     if (!tik_common_block) return 0;
 
     u64 offset = sizeof(TikCommonBlock), out_size = 0;
@@ -212,26 +217,43 @@ NX_INLINE u64 tikGetTicketSectionRecordsBlockSize(TikCommonBlock *tik_common_blo
     return out_size;
 }
 
-NX_INLINE bool tikIsValidTicket(void *buf)
+NX_INLINE bool tikIsValidSignedTicketBlob(void *buf)
 {
-    u64 ticket_size = (signatureGetBlockSize(signatureGetSigType(buf, false)) + sizeof(TikCommonBlock));
-    return (ticket_size > sizeof(TikCommonBlock) && (ticket_size + tikGetTicketSectionRecordsBlockSize(tikGetCommonBlock(buf))) <= SIGNED_TIK_MAX_SIZE);
+    u64 ticket_size = (signatureGetBlockSizeFromSignedBlob(buf, false) + sizeof(TikCommonBlock));
+    return (ticket_size > sizeof(TikCommonBlock) && (ticket_size + tikGetSectionRecordsSizeFromSignedTicketBlob(buf)) <= SIGNED_TIK_MAX_SIZE);
 }
 
-NX_INLINE u64 tikGetSignedTicketSize(void *buf)
+NX_INLINE u64 tikGetSignedTicketBlobSize(void *buf)
 {
-    return (tikIsValidTicket(buf) ? (signatureGetBlockSize(signatureGetSigType(buf, false)) + sizeof(TikCommonBlock) + tikGetTicketSectionRecordsBlockSize(tikGetCommonBlock(buf))) : 0);
+    return (tikIsValidSignedTicketBlob(buf) ? (signatureGetBlockSizeFromSignedBlob(buf, false) + sizeof(TikCommonBlock) + tikGetSectionRecordsSizeFromSignedTicketBlob(buf)) : 0);
 }
 
-NX_INLINE u64 tikGetSignedTicketHashAreaSize(void *buf)
+NX_INLINE u64 tikGetSignedTicketBlobHashAreaSize(void *buf)
 {
-    return (tikIsValidTicket(buf) ? (sizeof(TikCommonBlock) + tikGetTicketSectionRecordsBlockSize(tikGetCommonBlock(buf))) : 0);
+    return (tikIsValidSignedTicketBlob(buf) ? (sizeof(TikCommonBlock) + tikGetSectionRecordsSizeFromSignedTicketBlob(buf)) : 0);
+}
+
+/// Helper inline functions for Ticket elements.
+
+NX_INLINE bool tikIsValidTicket(Ticket *tik)
+{
+    return (tik && tik->type > TikType_None && tik->type < TikType_Count && tik->size >= SIGNED_TIK_MIN_SIZE && tik->size <= SIGNED_TIK_MAX_SIZE && tikIsValidSignedTicketBlob(tik->data));
+}
+
+NX_INLINE TikCommonBlock *tikGetCommonBlockFromTicket(Ticket *tik)
+{
+    return (tikIsValidTicket(tik) ? tikGetCommonBlockFromSignedTicketBlob(tik->data) : NULL);
 }
 
 NX_INLINE bool tikIsPersonalizedTicket(Ticket *tik)
 {
-    TikCommonBlock *tik_common_block = tikGetCommonBlock(tik->data);
-    return (tik_common_block != NULL && tik_common_block->titlekey_type == TikTitleKeyType_Personalized);
+    TikCommonBlock *tik_common_block = tikGetCommonBlockFromTicket(tik);
+    return (tik_common_block ? (tik_common_block->titlekey_type == TikTitleKeyType_Personalized) : false);
+}
+
+NX_INLINE u64 tikGetHashAreaSizeFromTicket(Ticket *tik)
+{
+    return (tikIsValidTicket(tik) ? tikGetSignedTicketBlobHashAreaSize(tik->data) : 0);
 }
 
 #ifdef __cplusplus

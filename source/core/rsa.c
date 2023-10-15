@@ -28,47 +28,19 @@
 #include <mbedtls/ctr_drbg.h>
 #include <mbedtls/pk.h>
 
+/* Function prototypes. */
+
+static bool rsa2048VerifySha256BasedSignature(const void *data, size_t data_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size, \
+                                              bool use_pss);
+
 bool rsa2048VerifySha256BasedPssSignature(const void *data, size_t data_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size)
 {
-    if (!data || !data_size || !signature || !modulus || !public_exponent || !public_exponent_size)
-    {
-        LOG_MSG_ERROR("Invalid parameters!");
-        return false;
-    }
+    return rsa2048VerifySha256BasedSignature(data, data_size, signature, modulus, public_exponent, public_exponent_size, true);
+}
 
-    int mbedtls_ret = 0;
-    mbedtls_rsa_context rsa;
-    u8 hash[SHA256_HASH_SIZE] = {0};
-    bool ret = false;
-
-    /* Initialize RSA context. */
-    mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
-
-    /* Import RSA parameters. */
-    mbedtls_ret = mbedtls_rsa_import_raw(&rsa, (const u8*)modulus, RSA2048_BYTES, NULL, 0, NULL, 0, NULL, 0, (const u8*)public_exponent, public_exponent_size);
-    if (mbedtls_ret != 0)
-    {
-        LOG_MSG_ERROR("mbedtls_rsa_import_raw failed! (%d).", mbedtls_ret);
-        goto end;
-    }
-
-    /* Calculate SHA-256 checksum for the input data. */
-    sha256CalculateHash(hash, data, data_size);
-
-    /* Verify signature. */
-    mbedtls_ret = mbedtls_rsa_rsassa_pss_verify(&rsa, NULL, NULL, MBEDTLS_RSA_PUBLIC, MBEDTLS_MD_SHA256, SHA256_HASH_SIZE, hash, (const u8*)signature);
-    if (mbedtls_ret != 0)
-    {
-        LOG_MSG_ERROR("mbedtls_rsa_rsassa_pss_verify failed! (%d).", mbedtls_ret);
-        goto end;
-    }
-
-    ret = true;
-
-end:
-    mbedtls_rsa_free(&rsa);
-
-    return ret;
+bool rsa2048VerifySha256BasedPkcs1v15Signature(const void *data, size_t data_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size)
+{
+    return rsa2048VerifySha256BasedSignature(data, data_size, signature, modulus, public_exponent, public_exponent_size, false);
 }
 
 bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size, const void *private_exponent, \
@@ -132,6 +104,51 @@ end:
     mbedtls_rsa_free(&rsa);
     mbedtls_ctr_drbg_free(&ctr_drbg);
     mbedtls_entropy_free(&entropy);
+
+    return ret;
+}
+
+static bool rsa2048VerifySha256BasedSignature(const void *data, size_t data_size, const void *signature, const void *modulus, const void *public_exponent, size_t public_exponent_size, \
+                                              bool use_pss)
+{
+    if (!data || !data_size || !signature || !modulus || !public_exponent || !public_exponent_size)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    int mbedtls_ret = 0;
+    mbedtls_rsa_context rsa;
+    u8 hash[SHA256_HASH_SIZE] = {0};
+    bool ret = false;
+
+    /* Initialize RSA context. */
+    mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
+
+    /* Import RSA parameters. */
+    mbedtls_ret = mbedtls_rsa_import_raw(&rsa, (const u8*)modulus, RSA2048_BYTES, NULL, 0, NULL, 0, NULL, 0, (const u8*)public_exponent, public_exponent_size);
+    if (mbedtls_ret != 0)
+    {
+        LOG_MSG_ERROR("mbedtls_rsa_import_raw failed! (%d).", mbedtls_ret);
+        goto end;
+    }
+
+    /* Calculate SHA-256 checksum for the input data. */
+    sha256CalculateHash(hash, data, data_size);
+
+    /* Verify signature. */
+    mbedtls_ret = (use_pss ? mbedtls_rsa_rsassa_pss_verify(&rsa, NULL, NULL, MBEDTLS_RSA_PUBLIC, MBEDTLS_MD_SHA256, SHA256_HASH_SIZE, hash, (const u8*)signature) : \
+                             mbedtls_rsa_rsassa_pkcs1_v15_verify(&rsa, NULL, NULL, MBEDTLS_RSA_PUBLIC, MBEDTLS_MD_SHA256, SHA256_HASH_SIZE, hash, (const u8*)signature));
+    if (mbedtls_ret != 0)
+    {
+        LOG_MSG_ERROR("mbedtls_rsa_rsassa_%s_verify failed! (%d).", use_pss ? "pss" : "pkcs1_v15", mbedtls_ret);
+        goto end;
+    }
+
+    ret = true;
+
+end:
+    mbedtls_rsa_free(&rsa);
 
     return ret;
 }

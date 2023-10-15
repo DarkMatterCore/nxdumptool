@@ -29,13 +29,13 @@ extern "C" {
 #endif
 
 typedef enum {
-    SignatureType_Rsa4096Sha1   = 0x10000,
-    SignatureType_Rsa2048Sha1   = 0x10001,
-    SignatureType_Ecc480Sha1    = 0x10002,
-    SignatureType_Rsa4096Sha256 = 0x10003,
-    SignatureType_Rsa2048Sha256 = 0x10004,
-    SignatureType_Ecc480Sha256  = 0x10005,
-    SignatureType_Hmac160Sha1   = 0x10006
+    SignatureType_Rsa4096Sha1   = 0x10000,  ///< RSA-4096 PKCS#1 v1.5 + SHA-1.
+    SignatureType_Rsa2048Sha1   = 0x10001,  ///< RSA-2048 PKCS#1 v1.5 + SHA-1.
+    SignatureType_Ecc480Sha1    = 0x10002,  ///< Unpadded ECDSA + SHA-1.
+    SignatureType_Rsa4096Sha256 = 0x10003,  ///< RSA-4096 PKCS#1 v1.5 + SHA-256.
+    SignatureType_Rsa2048Sha256 = 0x10004,  ///< RSA-2048 PKCS#1 v1.5 + SHA-256.
+    SignatureType_Ecc480Sha256  = 0x10005,  ///< Unpadded ECDSA + SHA-256.
+    SignatureType_Hmac160Sha1   = 0x10006   ///< HMAC-SHA1-160.
 } SignatureType;
 
 typedef struct {
@@ -72,25 +72,14 @@ NXDT_ASSERT(SignatureBlockHmac160, 0x40);
 
 /// Helper inline functions.
 
-NX_INLINE u32 signatureGetSigType(void *buf, bool byteswap)
-{
-    if (!buf) return 0;
-    return (byteswap ? __builtin_bswap32(*((u32*)buf)) : *((u32*)buf));
-}
-
-NX_INLINE bool signatureIsValidSigType(u32 type)
+NX_INLINE bool signatureIsValidType(u32 type)
 {
     return (type == SignatureType_Rsa4096Sha1   || type == SignatureType_Rsa2048Sha1   || type == SignatureType_Ecc480Sha1   || \
             type == SignatureType_Rsa4096Sha256 || type == SignatureType_Rsa2048Sha256 || type == SignatureType_Ecc480Sha256 || \
             type == SignatureType_Hmac160Sha1);
 }
 
-NX_INLINE u8 *signatureGetSig(void *buf)
-{
-    return (buf ? ((u8*)buf + 4) : NULL);
-}
-
-NX_INLINE u64 signatureGetSigSize(u32 type)
+NX_INLINE u64 signatureGetSigSizeByType(u32 type)
 {
     return (u64)((type == SignatureType_Rsa4096Sha1 || type == SignatureType_Rsa4096Sha256) ? MEMBER_SIZE(SignatureBlockRsa4096, signature) : \
                 ((type == SignatureType_Rsa2048Sha1 || type == SignatureType_Rsa2048Sha256) ? MEMBER_SIZE(SignatureBlockRsa2048, signature) : \
@@ -98,7 +87,7 @@ NX_INLINE u64 signatureGetSigSize(u32 type)
                  (type == SignatureType_Hmac160Sha1                                         ? MEMBER_SIZE(SignatureBlockHmac160, signature) : 0))));
 }
 
-NX_INLINE u64 signatureGetBlockSize(u32 type)
+NX_INLINE u64 signatureGetBlockSizeByType(u32 type)
 {
     return (u64)((type == SignatureType_Rsa4096Sha1 || type == SignatureType_Rsa4096Sha256) ? sizeof(SignatureBlockRsa4096) : \
                 ((type == SignatureType_Rsa2048Sha1 || type == SignatureType_Rsa2048Sha256) ? sizeof(SignatureBlockRsa2048) : \
@@ -106,11 +95,27 @@ NX_INLINE u64 signatureGetBlockSize(u32 type)
                  (type == SignatureType_Hmac160Sha1                                         ? sizeof(SignatureBlockHmac160) : 0))));
 }
 
-NX_INLINE void *signatureGetPayload(void *buf, bool big_endian_sig_type)
+NX_INLINE u32 signatureGetTypeFromSignedBlob(void *buf, bool big_endian_sig_type)
+{
+    if (!buf) return 0;
+    return (big_endian_sig_type ? __builtin_bswap32(*((u32*)buf)) : *((u32*)buf));
+}
+
+NX_INLINE u8 *signatureGetSigFromSignedBlob(void *buf)
+{
+    return (buf ? ((u8*)buf + 4) : NULL);
+}
+
+NX_INLINE u64 signatureGetBlockSizeFromSignedBlob(void *buf, bool big_endian_sig_type)
+{
+    return signatureGetBlockSizeByType(signatureGetTypeFromSignedBlob(buf, big_endian_sig_type));
+}
+
+NX_INLINE void *signatureGetPayloadFromSignedBlob(void *buf, bool big_endian_sig_type)
 {
     if (!buf) return NULL;
-    u32 sig_type = signatureGetSigType(buf, big_endian_sig_type);
-    return (signatureIsValidSigType(sig_type) ? (void*)((u8*)buf + signatureGetBlockSize(sig_type)) : NULL);
+    u32 sig_type = signatureGetTypeFromSignedBlob(buf, big_endian_sig_type);
+    return (signatureIsValidType(sig_type) ? (void*)((u8*)buf + signatureGetBlockSizeByType(sig_type)) : NULL);
 }
 
 #ifdef __cplusplus
