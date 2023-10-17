@@ -24,6 +24,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Skip build with [ci skip] in commit
+    if: "! contains(github.event.head_commit.message, '[ci skip]')"
     container:
       image: devkitpro/devkita64
     steps:
@@ -104,3 +106,22 @@ jobs:
       #    name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.elf
       #    path: nxdumptool/nxdumptool.elf
       #    if-no-files-found: error
+
+      - name: Upload artifact to prerelease
+        uses: ncipollo/release-action@v1
+        with:
+          # only update on prerelease
+          prerelease: True
+          tag: "rewrite-prerelease"
+          updateOnlyUnreleased: True
+          # remove old artifacts & replace with new ones
+          removeArtifacts: True
+          replacesArtifacts: True
+          # update preference
+          allowUpdates: True
+          omitBody: True
+          omitBodyDuringUpdate: True
+          omitNameDuringUpdate: True
+          artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*"
+          #artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*, nxdumptool/nxdumptool.*"
+          token: ${{ secrets.GITHUB_TOKEN }}
