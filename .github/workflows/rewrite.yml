@@ -24,6 +24,8 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
+    # Skip build with [ci skip] in commit
+    if: "! contains(github.event.head_commit.message, '[ci skip]')"
     container:
       image: devkitpro/devkita64
     steps:
