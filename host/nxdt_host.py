@@ -32,7 +32,7 @@
 # Under MacOS, use `brew install libusb` to install libusb via Homebrew.
 # Under Linux, you should be good to go from the start. If not, just use the package manager from your distro to install libusb.
 
-from __future__ import print_function
+from __future__ import annotations
 
 import sys
 import os
