@@ -28,7 +28,7 @@
 
 #define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB. */
 
-#define GAMECARD_ACCESS_WAIT_TIME               3                       /* Seconds. */
+#define GAMECARD_ACCESS_DELAY               3                       /* Seconds. */
 
 #define GAMECARD_UNUSED_AREA_BLOCK_SIZE         0x24
 #define GAMECARD_UNUSED_AREA_SIZE(x)            (((x) / GAMECARD_PAGE_SIZE) * GAMECARD_UNUSED_AREA_BLOCK_SIZE)
@@ -692,7 +692,7 @@ static void gamecardDetectionThreadFunc(void *arg)
             if (gamecardIsInserted())
             {
                 /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules. */
-                utilsSleep(GAMECARD_ACCESS_WAIT_TIME);
+                utilsSleep(GAMECARD_ACCESS_DELAY);
 
                 /* Load gamecard info. */
                 gamecardLoadInfo();

@@ -140,7 +140,7 @@ u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, 
     bool success = false;
 
     /* Generate certificate chain filename. */
-    utilsGenerateHexStringFromData(raw_chain_filename, sizeof(raw_chain_filename), id->c, sizeof(id->c), false);
+    utilsGenerateHexString(raw_chain_filename, sizeof(raw_chain_filename), id->c, sizeof(id->c), false);
     strcat(raw_chain_filename, ".cert");
 
     /* Get certificate chain entry info. */

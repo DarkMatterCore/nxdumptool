@@ -1241,7 +1241,7 @@ fallback:
             {
                 strcat(app_name, "_");
                 cur_filename_len = strlen(app_name);
-                utilsGenerateHexStringFromData(app_name + cur_filename_len, sizeof(app_name) - cur_filename_len, &(gc_header.package_id), sizeof(gc_header.package_id), false);
+                utilsGenerateHexString(app_name + cur_filename_len, sizeof(app_name) - cur_filename_len, &(gc_header.package_id), sizeof(gc_header.package_id), false);
             }
 
             filename = strdup(app_name);

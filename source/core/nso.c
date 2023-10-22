@@ -233,7 +233,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
     /* Read .rodata segment data. */
     if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, rodata_read_ptr, rodata_read_size, nso_ctx->nso_header.rodata_segment_info.file_offset))
     {
-        LOG_MSG_ERROR("Failed to read .rodata segment in NRO \"%s\"!", nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to read .rodata segment in NSO \"%s\"!", nso_ctx->nso_filename);
         goto end;
     }
 
@@ -243,7 +243,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
         if ((lz4_res = LZ4_decompress_safe((char*)rodata_read_ptr, (char*)rodata_buf, (int)nso_ctx->nso_header.rodata_file_size, (int)rodata_buf_size)) != \
             (int)nso_ctx->nso_header.rodata_segment_info.size)
         {
-            LOG_MSG_ERROR("LZ4 decompression failed for NRO \"%s\"! (%d).", nso_ctx->nso_filename, lz4_res);
+            LOG_MSG_ERROR("LZ4 decompression failed for NSO \"%s\"! (%d).", nso_ctx->nso_filename, lz4_res);
             goto end;
         }
     }
@@ -254,7 +254,7 @@ static u8 *nsoGetRodataSegment(NsoContext *nso_ctx)
         sha256CalculateHash(rodata_hash, rodata_buf, nso_ctx->nso_header.rodata_segment_info.size);
         if (memcmp(rodata_hash, nso_ctx->nso_header.rodata_segment_hash, SHA256_HASH_SIZE) != 0)
         {
-            LOG_MSG_ERROR(".rodata segment checksum mismatch for NRO \"%s\"!", nso_ctx->nso_filename);
+            LOG_MSG_ERROR(".rodata segment checksum mismatch for NSO \"%s\"!", nso_ctx->nso_filename);
             goto end;
         }
     }

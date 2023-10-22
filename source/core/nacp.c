@@ -618,7 +618,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
         sha256CalculateHash(icon_hash, icon_ctx->icon_data, icon_ctx->icon_size);
 
         /* Generate icon hash string. Only the first half from the hash is used. */
-        utilsGenerateHexStringFromData(icon_hash_str, sizeof(icon_hash_str), icon_hash, sizeof(icon_hash) / 2, false);
+        utilsGenerateHexString(icon_hash_str, sizeof(icon_hash_str), icon_hash, sizeof(icon_hash) / 2, false);
 
         /* Add XML element. */
         if (!NACP_ADD_FMT_STR_T1("  <Icon>\n" \
@@ -726,7 +726,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
         if (!NACP_ADD_FMT_STR_T1("  <NeighborDetectionClientConfiguration>\n")) goto end;
 
         /* SendGroupConfiguration. */
-        utilsGenerateHexStringFromData(key_str, sizeof(key_str), ndcc->send_group_configuration.key, sizeof(ndcc->send_group_configuration.key), false);
+        utilsGenerateHexString(key_str, sizeof(key_str), ndcc->send_group_configuration.key, sizeof(ndcc->send_group_configuration.key), false);
 
         if (!NACP_ADD_FMT_STR_T1("    <SendGroupConfiguration>\n" \
                                  "      <GroupId>0x%016lx</GroupId>\n" \
@@ -740,7 +740,7 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
         {
             NacpApplicationNeighborDetectionGroupConfiguration *rgc = &(ndcc->receivable_group_configurations[i]);
 
-            utilsGenerateHexStringFromData(key_str, sizeof(key_str), rgc->key, sizeof(rgc->key), false);
+            utilsGenerateHexString(key_str, sizeof(key_str), rgc->key, sizeof(rgc->key), false);
 
             if (!NACP_ADD_FMT_STR_T1("    <ReceivableGroupConfiguration>\n" \
                                      "      <GroupId>0x%016lx</GroupId>\n" \

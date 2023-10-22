@@ -200,9 +200,9 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     out->title_type = meta_key->type;
 
     memcpy(&(out->content_id), &(content_info->content_id), sizeof(NcmContentId));
-    utilsGenerateHexStringFromData(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c), false);
+    utilsGenerateHexString(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c), false);
 
-    utilsGenerateHexStringFromData(out->hash_str, sizeof(out->hash_str), out->hash, sizeof(out->hash), false);  /* Placeholder, needs to be manually calculated. */
+    utilsGenerateHexString(out->hash_str, sizeof(out->hash_str), out->hash, sizeof(out->hash), false);  /* Placeholder, needs to be manually calculated. */
 
     out->content_type = content_info->content_type;
     out->id_offset = content_info->id_offset;
@@ -537,11 +537,11 @@ void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE])
 
     /* Update content ID. */
     memcpy(ctx->content_id.c, hash, sizeof(ctx->content_id.c));
-    utilsGenerateHexStringFromData(ctx->content_id_str, sizeof(ctx->content_id_str), ctx->content_id.c, sizeof(ctx->content_id.c), false);
+    utilsGenerateHexString(ctx->content_id_str, sizeof(ctx->content_id_str), ctx->content_id.c, sizeof(ctx->content_id.c), false);
 
     /* Update content hash. */
     memcpy(ctx->hash, hash, sizeof(ctx->hash));
-    utilsGenerateHexStringFromData(ctx->hash_str, sizeof(ctx->hash_str), ctx->hash, sizeof(ctx->hash), false);
+    utilsGenerateHexString(ctx->hash_str, sizeof(ctx->hash_str), ctx->hash, sizeof(ctx->hash), false);
 }
 
 const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)

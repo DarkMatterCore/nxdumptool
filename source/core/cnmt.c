@@ -445,7 +445,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
                               cur_nca_ctx->id_offset)) goto end;
     }
 
-    utilsGenerateHexStringFromData(digest_str, sizeof(digest_str), cnmt_ctx->digest, CNMT_DIGEST_SIZE, false);
+    utilsGenerateHexString(digest_str, sizeof(digest_str), cnmt_ctx->digest, CNMT_DIGEST_SIZE, false);
 
     /* ContentMeta, Digest, KeyGenerationMin, KeepGeneration and KeepGenerationSpecified. */
     if (!CNMT_ADD_FMT_STR("  <ContentMeta />\n" \

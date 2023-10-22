@@ -191,8 +191,7 @@ typedef struct {
     u8 reserved_1[0x3];
     u64 upp_hash;           ///< Checksum for the update partition. The exact way it's calculated is currently unknown.
     u64 upp_id;             ///< Must match GAMECARD_UPDATE_TID.
-    u8 reserved_2[0x28];
-    u8 unknown[0x10];       ///< Unknown purpose. It's not zeroed out in recent (2021+?) gamecards.
+    u8 reserved_2[0x38];
 } GameCardInfo;
 
 NXDT_ASSERT(GameCardInfo, 0x70);

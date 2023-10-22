@@ -82,7 +82,6 @@ static const char *g_outputDirs[] = {
     HBMENU_BASE_PATH,
     APP_BASE_PATH,
     GAMECARD_PATH,
-    CERT_PATH,
     HFS_PATH,
     NSP_PATH,
     TICKET_PATH,
@@ -113,6 +112,8 @@ static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param);
 static void utilsChangeHomeButtonBlockStatus(bool block);
 
 static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t byte_limit);
+
+static char utilsConvertHexDigitToBinary(char c);
 
 bool utilsInitializeResources(const int program_argc, const char **program_argv)
 {
@@ -503,9 +504,12 @@ void utilsJoinThread(Thread *thread)
 
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...)
 {
+    bool use_log = false;
+    SCOPED_LOCK(&g_resourcesMutex) use_log = g_resourcesInit;
+
     if (!dst || !dst_size || !fmt || !*fmt)
     {
-        LOG_MSG_ERROR("Invalid parameters!");
+        if (use_log) LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
@@ -522,7 +526,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
     /* Sanity check. */
     if (dst_cur_size && dst_str_len >= dst_cur_size)
     {
-        LOG_MSG_ERROR("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
+        if (use_log) LOG_MSG_ERROR("String length is equal to or greater than the provided buffer size! (0x%lX >= 0x%lX).", dst_str_len, dst_cur_size);
         return false;
     }
 
@@ -532,7 +536,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
     formatted_str_len = vsnprintf(NULL, 0, fmt, args);
     if (formatted_str_len <= 0)
     {
-        LOG_MSG_ERROR("Failed to retrieve formatted string length!");
+        if (use_log) LOG_MSG_ERROR("Failed to retrieve formatted string length!");
         goto end;
     }
 
@@ -547,7 +551,7 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
         tmp_str = realloc(dst_ptr, dst_cur_size);
         if (!tmp_str)
         {
-            LOG_MSG_ERROR("Failed to resize buffer to 0x%lX byte(s).", dst_cur_size);
+            if (use_log) LOG_MSG_ERROR("Failed to resize buffer to 0x%lX byte(s).", dst_cur_size);
             goto end;
         }
 
@@ -626,7 +630,7 @@ void utilsTrimString(char *str)
     if (start != str) memmove(str, start, end - start + 1);
 }
 
-void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase)
+void utilsGenerateHexString(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase)
 {
     if (!src || !src_size || !dst || dst_size < ((src_size * 2) + 1)) return;
 
@@ -645,6 +649,36 @@ void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src,
     dst[j] = '\0';
 }
 
+bool utilsParseHexString(void *dst, size_t dst_size, const char *src, size_t src_size)
+{
+    u8 *dst_u8 = (u8*)dst;
+    bool success = true;
+
+    if (!dst || !dst_size || !src || !*src || (!src_size && !(src_size = strlen(src))) || (src_size % 2) != 0 || dst_size < (src_size / 2))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    memset(dst, 0, dst_size);
+
+    for(size_t i = 0; i < src_size; i++)
+    {
+        char val = utilsConvertHexDigitToBinary(src[i]);
+        if (val == 'z')
+        {
+            LOG_MSG_ERROR("Invalid hex character in string \"%s\" at position %lu!", src, i);
+            success = false;
+            break;
+        }
+
+        if ((i & 1) == 0) val <<= 4;
+        dst_u8[i >> 1] |= val;
+    }
+
+    return success;
+}
+
 void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size)
 {
     if (!dst || dst_size < 2) return;
@@ -657,13 +691,8 @@ void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size)
 
         size /= pow(1024.0, i);
 
-        if (i == 0)
-        {
-            /* Don't display decimal places if we're dealing with plain bytes. */
-            snprintf(dst, dst_size, "%.0f %s", size, g_sizeSuffixes[i]);
-        } else {
-            snprintf(dst, dst_size, "%.2f %s", size, g_sizeSuffixes[i]);
-        }
+        /* Don't display decimal places if we're dealing with plain bytes. */
+        snprintf(dst, dst_size, "%.*f %s", i == 0 ? 0 : 2, size, g_sizeSuffixes[i]);
 
         break;
     }
@@ -1001,6 +1030,7 @@ void utilsPrintConsoleError(const char *msg)
     {
         padUpdate(&pad);
         if (padGetButtonsDown(&pad) & flag) break;
+        utilsAppletLoopDelay();
     }
 
     /* Deinitialize console output. */
@@ -1271,13 +1301,6 @@ static void utilsChangeHomeButtonBlockStatus(bool block)
     }
 }
 
-NX_INLINE void utilsCloseFileDescriptor(int *fd)
-{
-    if (!fd || *fd < 0) return;
-    close(*fd);
-    *fd = -1;
-}
-
 static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t byte_limit)
 {
     if (!str || !*str || !str_size || !byte_limit) return 0;
@@ -1300,4 +1323,12 @@ static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t b
     }
 
     return last_cp_pos;
+}
+
+static char utilsConvertHexDigitToBinary(char c)
+{
+    if ('a' <= c && c <= 'f') return (c - 'a' + 0xA);
+    if ('A' <= c && c <= 'F') return (c - 'A' + 0xA);
+    if ('0' <= c && c <= '9') return (c - '0');
+    return 'z';
 }

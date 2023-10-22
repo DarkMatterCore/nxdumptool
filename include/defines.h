@@ -60,6 +60,8 @@
 
 /* Global constants used throughout the application. */
 
+#define THIRTY_FPS_DELAY                (u64)33333333                                                                           /* 1 / 30 = 33.33 milliseconds. */
+
 #define FS_SYSMODULE_TID                (u64)0x0100000000000000
 #define BOOT_SYSMODULE_TID              (u64)0x0100000000000005
 #define SPL_SYSMODULE_TID               (u64)0x0100000000000028
@@ -78,7 +80,6 @@
 #define APP_BASE_PATH                   HBMENU_BASE_PATH APP_TITLE "/"
 
 #define GAMECARD_PATH                   APP_BASE_PATH "Gamecard/"
-#define CERT_PATH                       APP_BASE_PATH "Certificate/"
 #define HFS_PATH                        APP_BASE_PATH "HFS/"
 #define NSP_PATH                        APP_BASE_PATH "NSP/"
 #define TICKET_PATH                     APP_BASE_PATH "Ticket/"

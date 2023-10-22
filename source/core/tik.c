@@ -121,6 +121,8 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, u8 key_gener
     TikCommonBlock *tik_common_block = NULL;
     bool success = false, tik_retrieved = false;
 
+    LOG_DATA_INFO(id->c, sizeof(id->c), "Input rights ID:");
+
     /* Check if this ticket has already been retrieved. */
     tik_common_block = tikGetCommonBlockFromTicket(dst);
     if (tik_common_block && !memcmp(tik_common_block->rights_id.c, id->c, sizeof(id->c)))
@@ -179,9 +181,9 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, u8 key_gener
     /* Generate hex strings. */
     tik_common_block = tikGetCommonBlockFromSignedTicketBlob(dst->data);
 
-    utilsGenerateHexStringFromData(dst->enc_titlekey_str, sizeof(dst->enc_titlekey_str), dst->enc_titlekey, sizeof(dst->enc_titlekey), false);
-    utilsGenerateHexStringFromData(dst->dec_titlekey_str, sizeof(dst->dec_titlekey_str), dst->dec_titlekey, sizeof(dst->dec_titlekey), false);
-    utilsGenerateHexStringFromData(dst->rights_id_str, sizeof(dst->rights_id_str), tik_common_block->rights_id.c, sizeof(tik_common_block->rights_id.c), false);
+    utilsGenerateHexString(dst->enc_titlekey_str, sizeof(dst->enc_titlekey_str), dst->enc_titlekey, sizeof(dst->enc_titlekey), false);
+    utilsGenerateHexString(dst->dec_titlekey_str, sizeof(dst->dec_titlekey_str), dst->dec_titlekey, sizeof(dst->dec_titlekey), false);
+    utilsGenerateHexString(dst->rights_id_str, sizeof(dst->rights_id_str), tik_common_block->rights_id.c, sizeof(tik_common_block->rights_id.c), false);
 
 end:
     return success;
@@ -277,7 +279,7 @@ static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsI
     u64 tik_offset = 0, tik_size = 0;
     bool success = false;
 
-    utilsGenerateHexStringFromData(tik_filename, sizeof(tik_filename), id->c, sizeof(id->c), false);
+    utilsGenerateHexString(tik_filename, sizeof(tik_filename), id->c, sizeof(id->c), false);
     strcat(tik_filename, ".tik");
 
     /* Get ticket entry info. */

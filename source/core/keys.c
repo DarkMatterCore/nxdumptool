@@ -87,8 +87,7 @@ NXDT_ASSERT(EticketRsaDeviceKey, 0x240);
 static bool keysIsKeyEmpty(const void *key);
 
 static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **value);
-static char keysConvertHexDigitToBinary(char c);
-static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 size);
+static bool keysParseHexKey(u8 *out, size_t out_size, const char *key, const char *value);
 static bool keysReadKeysFromFile(void);
 
 static bool keysDeriveMasterKeys(void);
@@ -519,47 +518,18 @@ end:
     return ret;
 }
 
-static char keysConvertHexDigitToBinary(char c)
+static bool keysParseHexKey(u8 *out, size_t out_size, const char *key, const char *value)
 {
-    if ('a' <= c && c <= 'f') return (c - 'a' + 0xA);
-    if ('A' <= c && c <= 'F') return (c - 'A' + 0xA);
-    if ('0' <= c && c <= '9') return (c - '0');
-    return 'z';
-}
-
-static bool keysParseHexKey(u8 *out, const char *key, const char *value, u32 size)
-{
-    u32 hex_str_len = (2 * size);
-    size_t value_len = 0;
-
-    if (!out || !key || !*key || !value || !(value_len = strlen(value)) || !size)
+    if (!out || !out_size || !key || !*key || !value || !*value)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
-    if (value_len != hex_str_len)
-    {
-        LOG_MSG_ERROR("Key \"%s\" must be %u hex digits long!", key, hex_str_len);
-        return false;
-    }
+    bool success = utilsParseHexString(out, out_size, value, 0);
+    if (!success) LOG_MSG_ERROR("Failed to parse key \"%s\"!", key);
 
-    memset(out, 0, size);
-
-    for(u32 i = 0; i < hex_str_len; i++)
-    {
-        char val = keysConvertHexDigitToBinary(value[i]);
-        if (val == 'z')
-        {
-            LOG_MSG_ERROR("Invalid hex character in key \"%s\" at position %u!", key, i);
-            return false;
-        }
-
-        if ((i & 1) == 0) val <<= 4;
-        out[i >> 1] |= val;
-    }
-
-    return true;
+    return success;
 }
 
 static bool keysReadKeysFromFile(void)
@@ -584,7 +554,7 @@ static bool keysReadKeysFromFile(void)
     }
 
 #define PARSE_HEX_KEY(name, out, decl) \
-    if (!strcasecmp(key, name) && keysParseHexKey(out, key, value, sizeof(out))) { \
+    if (!strcasecmp(key, name) && keysParseHexKey(out, sizeof(out), key, value)) { \
         key_count++; \
         decl; \
     }

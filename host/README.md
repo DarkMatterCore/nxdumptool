@@ -1,8 +1,10 @@
 # nxdumptool USB Application Binary Interface (ABI) Technical Specification
 
-This Markdown document aims to explain the technical details behind the ABI used by nxdumptool to communicate with a USB host device connected to the console. As of this writing (April 19th, 2023), the current ABI version is `1.1`.
+This Markdown document aims to explain the technical details behind the ABI used by nxdumptool to communicate with a USB host device connected to the console. As of this writing (October 22nd, 2023), the current ABI version is `1.1`.
 
 In order to avoid unnecessary clutter, this document assumes the reader is already familiar with homebrew launching on the Nintendo Switch, as well as USB concepts such as device/configuration/interface/endpoint descriptors and bulk mode transfers. Shall this not be the case, a small list of helpful resources is available at the end of this document.
+
+Unless stated otherwise, the reader must assume all integer fields in the documented structs follow a little-endian (LE) order.
 
 ## Table of contents
 
@@ -16,7 +18,6 @@ In order to avoid unnecessary clutter, this document assumes the reader is alrea
     * [Command blocks](#command-blocks).
         * [StartSession](#startsession).
         * [SendFileProperties](#sendfileproperties).
-            * [Zero Length Termination (ZLT)](#zero-length-termination-zlt).
         * [CancelFileTransfer](#cancelfiletransfer).
         * [SendNspHeader](#sendnspheader).
         * [EndSession](#endsession).
@@ -24,6 +25,7 @@ In order to avoid unnecessary clutter, this document assumes the reader is alrea
         * [Status codes](#status-codes).
     * [NSP transfer mode](#nsp-transfer-mode).
         * [Why is there such thing as a 'NSP transfer mode'?](#why-is-there-such-thing-as-a-nsp-transfer-mode)
+    * [Zero Length Termination (ZLT)](#zero-length-termination-zlt).
 * [Additional resources](#additional-resources).
 
 ## USB device interface details
@@ -56,6 +58,8 @@ Right after launching nxdumptool on the target Nintendo Switch, the application 
 
 Communication is performed through the bulk input and output endpoints using 5-second timeouts.
 
+Verifying the product string is not required at this moment -- this is because PoC builds of the rewrite branch use a different `APP_TITLE` string.
+
 ## USB driver
 
 A USB driver is needed to actually communicate to the target console running nxdumptool.
@@ -68,7 +72,7 @@ A package manager can be used to install [libusb](https://libusb.info), which in
 
 A tool such as [Zadig](https://zadig.akeo.ie) must be used to manually install a USB driver for the target console.
 
-Even though it's possible to use the `WinUSB` driver, we suggest to use `libusbK` instead - the provided Python script in this directory depends on [PyUSB](https://github.com/pyusb/pyusb), which only provides a backend for `libusb` devices. If you intend to write your own `WinUSB`-based ABI host implementation for Windows based on this document, you may be able to use that driver.
+Even though it's possible to use the `WinUSB` driver, we suggest to use `libusbK` instead -- the provided Python script in this directory depends on [PyUSB](https://github.com/pyusb/pyusb), which only provides a backend for `libusb` devices. If you intend to write your own `WinUSB`-based ABI host implementation for Windows based on this document, you may be able to use that driver.
 
 Furthermore, even though it's possible for USB devices to work right out of the box using [Microsoft OS descriptors](https://docs.microsoft.com/en-us/windows-hardware/drivers/usbcon/microsoft-defined-usb-descriptors), the `usb:ds` API available to homebrew applications on the Nintendo Switch doesn't provide any way to set them. Thus, it's not possible to interact with the target console without installing a USB driver first.
 
@@ -76,32 +80,34 @@ Furthermore, even though it's possible for USB devices to work right out of the 
 
 The USB host device essentially acts as a storage server for nxdumptool. This means all commands are initially issued by the target console, leading to data transfer stages for which status responses are expected to be sent by the USB host device.
 
-This intends to minimize the overhead on the USB host device by letting nxdumptool take care of the full dump process - the host only needs to take care of storing the received data. This also heavily simplifies the work required to write ABI host implementations from scratch, regardless of the programming language being used.
+This intends to minimize the overhead on the USB host device by letting nxdumptool take care of the full dump process -- the host only needs to take care of storing the received data. This also heavily simplifies the work required to write ABI host implementations from scratch, regardless of the programming language being used.
 
 Command handling can be broken down in three different transfer stages: command header (from nxdumptool), command block (from nxdumptool) and status response (from USB host). Certain commands may lead to an additional data transfer stage after the status response is received from the USB host device.
 
 ### Command header
 
-| Offset | Size | Description                  |
-|:------:|:----:|------------------------------|
-|  0x00  | 0x04 | Magic word (`NXDT`).         |
-|  0x04  | 0x04 | Command ID (LE u32).         |
-|  0x08  | 0x04 | Command block size (LE u32). |
-|  0x0C  | 0x04 | Reserved.                    |
+Size: 0x10 bytes.
 
-While handling ABI commands, nxdumptool first issues the command header - this way, the USB host device knows both the command ID and the command block size before attempting to receive the command block.
+| Offset | Size | Type         | Description                                    |
+|--------|------|--------------|------------------------------------------------|
+|  0x00  | 0x04 | `uint32_t`   | Magic word (`NXDT`) (`0x5444584E`).            |
+|  0x04  | 0x04 | `uint32_t`   | [Command ID](#command-ids).                    |
+|  0x08  | 0x04 | `uint32_t`   | Command block size.                            |
+|  0x0C  | 0x04 | `uint8_t[4]` | Reserved.                                      |
 
-Certain commands yield no command block at all, leading to a command block size of zero - this is considered defined behaviour. Nonetheless, a status response is still expected to be sent by the USB host.
+While handling ABI commands, nxdumptool first issues the command header -- this way, the USB host device knows both the command ID and the command block size before attempting to receive the command block.
+
+Certain commands yield no command block at all, leading to a command block size of zero -- this is considered defined behaviour. Nonetheless, a status response is still expected to be sent by the USB host.
 
 #### Command IDs
 
-| Value | Name                | Description                                                                                                                                                              |
-|:-----:|---------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-|   0   | StartSession.       | Starts a USB session between the target console and the USB host device.                                                                                                 |
-|   1   | SendFileProperties. | Sends file metadata and starts a data transfer process.                                                                                                                  |
-|   2   | CancelFileTransfer. | Cancels an ongoing data transfer process started by a previously issued SendFileProperties command.                                                                      |
-|   3   | SendNspHeader.      | Sends the `PFS0` header from a Nintendo Submission Package (NSP). Only issued under NSP transfer mode, and after the data for all NSP file entries has been transferred. |
-|   4   | EndSession.         | Ends a previously stablished USB session between the target console and the USB host device.                                                                             |
+| Value | Name                                        | Description                                                                                                                  |
+|-------|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------|
+|   0   | [`StartSession`](#startsession)             | Starts a USB session between the target console and the USB host device.                                                     |
+|   1   | [`SendFileProperties`](#sendfileproperties) | Sends file metadata and starts a data transfer process.                                                                      |
+|   2   | [`CancelFileTransfer`](#cancelfiletransfer) | Cancels an ongoing data transfer process started by a previously issued [`SendFileProperties`](#sendfileproperties) command. |
+|   3   | [`SendNspHeader`](#sendnspheader)           | Sends the `PFS0` header from a Nintendo Submission Package (NSP). Only issued under [NSP transfer mode](#nsp-transfer-mode). |
+|   4   | [`EndSession`](#endsession)                 | Ends a previously stablished USB session between the target console and the USB host device.                                 |
 
 ### Command blocks
 
@@ -109,42 +115,44 @@ All commands, with the exception of `CancelFileTransfer` and `EndSession`, yield
 
 #### StartSession
 
-| Offset | Size | Description                                                         |
-|:------:|------|---------------------------------------------------------------------|
-|  0x00  | 0x01 | nxdumptool version (major).                                         |
-|  0x01  | 0x01 | nxdumptool version (minor).                                         |
-|  0x02  | 0x01 | nxdumptool version (micro).                                         |
-|  0x03  | 0x01 | nxdumptool USB ABI version (high nibble: major, low nibble: minor). |
-|  0x04  | 0x08 | Git commit hash (NULL terminated string).                           |
-|  0x0C  | 0x04 | Reserved.                                                           |
+Size: 0x10 bytes.
+
+| Offset | Size | Type         | Description                                                         |
+|--------|------|--------------|---------------------------------------------------------------------|
+|  0x00  | 0x01 | `uint8_t`    | nxdumptool version (major).                                         |
+|  0x01  | 0x01 | `uint8_t`    | nxdumptool version (minor).                                         |
+|  0x02  | 0x01 | `uint8_t`    | nxdumptool version (micro).                                         |
+|  0x03  | 0x01 | `uint8_t`    | nxdumptool USB ABI version (high nibble: major, low nibble: minor). |
+|  0x04  | 0x08 | `char[8]`    | Git commit hash (NULL-terminated string).                           |
+|  0x0C  | 0x04 | `uint8_t[4]` | Reserved.                                                           |
 
 This is the first USB command issued by nxdumptool upon connection to a USB host device. If it succeeds, further USB commands may be sent.
 
 #### SendFileProperties
 
-| Offset | Size  | Description                                      |
-|:------:|:-----:|--------------------------------------------------|
-|  0x000 | 0x08  | File size (LE u64).                              |
-|  0x008 | 0x04  | Filename length (LE u32).                        |
-|  0x00C | 0x04  | NSP header size (LE u32).                        |
-|  0x010 | 0x301 | UTF-8 encoded filename (NULL terminated string). |
-|  0x311 | 0x0F  | Reserved.                                        |
+Size: 0x320 bytes.
 
-Sent right before starting a file transfer. If it succeeds, file data will be transferred using 8 MiB (0x800000) chunks. The last chunk will be truncated, if needed.
+| Offset | Size  | Type          | Description                                  |
+|--------|-------|---------------|----------------------------------------------|
+|  0x000 | 0x08  | `uint64_t`    | File size.                                   |
+|  0x008 | 0x04  | `uint32_t`    | Path length.                                 |
+|  0x00C | 0x04  | `uint32_t`    | [NSP header size](#nsp-transfer-mode).       |
+|  0x010 | 0x301 | `char[769]`   | UTF-8 encoded path (NULL-terminated string). |
+|  0x311 | 0x0F  | `uint8_t[15]` | Reserved.                                    |
+
+Sent right before starting a file transfer. If it succeeds, a data transfer stage will take place using 8 MiB (0x800000) chunks. If needed, the last chunk will be truncated.
 
 A status response is expected from the USB host right after receiving this command block, which is also right before starting the file data transfer stage. Furthermore, an additional status response is expected right after the last file data chunk has been sent.
 
-In the case of extracted RomFS transfers, the `filename` field may actually hold an absolute filepath - this will always start with a `/`. The USB host is free to decide how to handle this (e.g. create full directory tree, etc.).
+The `path` field uses forward slashes (`/`) as separators, and it will always begin with one. Its contents represent a relative path (e.g. `/NSP/Doki Doki Literature Club Plus 1.0.3 [010086901543E800][v196608][UPD].nsp`) generated by nxdumptool for any of its output storage devices, which is usually appended to an actual output directory path (e.g. `sdmc:/switch/nxdumptool`).
 
-##### Zero Length Termination (ZLT)
+Illegal Windows filesystem characters (`\`, `/`, `:`, `*`, `?`, `"`, `<`, `>`, `|`) are replaced by underscores (`_`) in each path element by nxdumptool itself before sending the command block.
 
-As per USB bulk transfer specification, when a USB host/device receives a data packet smaller than the endpoint max packet size, it shall consider the transfer is complete and no more data packets are left. This is called a transaction completion mechanism.
+Furthermore, the USB host is free to decide how to handle the relative path (e.g. create full directory tree in a user-defined output directory, entirely disregard the path and only keep the filename, etc.).
 
-However, if the last data chunk is aligned to the endpoint max packet size, an alternate completion mechanism is needed - this is where Zero Length Termination (ZLT) packets come into play. If this condition is met, the USB host device should expect a single ZLT packet from nxdumptool right after the last data chunk has been transferred.
+If the last chunk size from the data transfer stage is aligned to the endpoint max packet size, the USB host should expect a [ZLT packet](#zero-length-termination-zlt).
 
-If no ZLT packet were issued, the USB stack from the host device wouldn't be capable of knowing the ongoing transfer has been completed, making it expect further data to be sent by the target console - which in turn leads to a timeout error on the USB host side. Furthermore, if the ZLT packet is left unhandled by the USB host device, a timeout error will be raised on the target console's side.
-
-Most USB backend implementations require the program to provide a bigger transfer length (+1 byte at least) if a ZLT packet is to be expected. This should be more than enough.
+Finally, it should be noted that it's possible for the `filesize` field to be zero, in which case the host device shall only create the file and send a single status response right away.
 
 #### CancelFileTransfer
 
@@ -160,6 +168,8 @@ Variable length. The command block size from the command header represents the N
 
 If the NSP header size is aligned to the endpoint max packet size, the USB host should expect a [ZLT packet](#zero-length-termination-zlt).
 
+For more information, read the [NSP transfer mode](#nsp-transfer-mode) section of this document.
+
 #### EndSession
 
 Yields no command block. Expects a status response, just like the rest of the commands.
@@ -168,24 +178,26 @@ This command is only issued while exiting nxdumptool, as long as the target cons
 
 ### Status response
 
-| Offset | Size | Description                        |
-|:------:|:----:|------------------------------------|
-|  0x00  | 0x04 | Magic word (`NXDT`).               |
-|  0x04  | 0x04 | Status code (LE u32).              |
-|  0x08  | 0x02 | Endpoint max packet size (LE u16). |
-|  0x0A  | 0x06 | Reserved.                          |
+Size: 0x10 bytes.
+
+| Offset | Size | Type         | Description                         |
+|--------|------|--------------|-------------------------------------|
+|  0x00  | 0x04 | `uint32_t`   | Magic word (`NXDT`) (`0x5444584E`). |
+|  0x04  | 0x04 | `uint32_t`   | [Status code](#status-codes).       |
+|  0x08  | 0x02 | `uint16_t`   | Endpoint max packet size.           |
+|  0x0A  | 0x06 | `uint8_t[6]` | Reserved.                           |
 
 Status responses are expected by nxdumptool at certain points throughout the command handling steps:
 
-* Right after receiving a command header and/or command block.
+* Right after receiving a command header and/or command block (depending on the command ID).
 * Right after receiving the last file data chunk from a [SendFileProperties](#sendfileproperties) command.
 
-The endpoint max packet size must be sent back to the target console using status responses because `usb:ds` API's `GetUsbDeviceSpeed` cmd is only available under Horizon OS 8.0.0+ -- and we definitely want to provide USB communication support under lower versions.
+The endpoint max packet size must be sent back to the target console using status responses because `usb:ds` API's `GetUsbDeviceSpeed` cmd is only available under Horizon OS 8.0.0+. We want to provide USB communication support under lower versions, even if it means we have to resort to measures like this one.
 
 #### Status codes
 
 | Value | Description                                                      |
-|:-----:|------------------------------------------------------------------|
+|-------|------------------------------------------------------------------|
 |   0   | Success.                                                         |
 |   1   | Invalid command size. Reserved for internal nxdumptool usage.    |
 |   2   | Failed to write command. Reserved for internal nxdumptool usage. |
@@ -210,7 +222,17 @@ Finally, the USB host will receive a [SendNspHeader](#sendnspheader) command wit
 
 This is because the `PFS0` header from NSPs holds the filenames for all file entries written into the package, which are mostly [Nintendo Content Archives (NCA)](https://switchbrew.org/wiki/NCA).
 
-NCA filenames represent the first half of the NCA SHA-256 checksum, in lowercase. This fact alone makes it impossible to send a NSP header right from the beginning - SHA-256 checksums are calculated by nxdumptool while dumping each NCA.
+NCA filenames represent the first half of the NCA SHA-256 checksum, in lowercase. This fact alone makes it impossible to send a NSP header right from the beginning -- SHA-256 checksums are calculated by nxdumptool while dumping each NCA.
+
+#### Zero Length Termination (ZLT)
+
+As per USB bulk transfer specification, when a USB host/device receives a data packet smaller than the endpoint max packet size, it shall consider the transfer is complete and no more data packets are left. This is called a transaction completion mechanism.
+
+However, if the last data chunk is aligned to the endpoint max packet size, an alternate completion mechanism is needed -- this is where Zero Length Termination (ZLT) packets come into play. If this condition is met, the USB host device should expect a single ZLT packet from nxdumptool right after the last data chunk has been transferred.
+
+If no ZLT packet were issued, the USB stack from the host device wouldn't be capable of knowing the ongoing transfer has been completed, making it expect further data to be sent by the target console -- which in turn leads to a timeout error on the USB host side. Furthermore, if the ZLT packet is left unhandled by the USB host device, a timeout error will be raised on the target console's side.
+
+Most USB backend implementations require the host application to provide a bigger read size (+1 byte at least) if a ZLT packet is to be expected from the connected device. This should be more than enough.
 
 ## Additional resources
 

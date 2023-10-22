@@ -121,9 +121,16 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 /// Trims whitespace characters from the provided string.
 void utilsTrimString(char *str);
 
-/// Generates a hex string representation of the binary data stored in 'src' and stores it in 'dst'.
+/// Generates a NULL-terminated hex string representation of the binary data in 'src' and stores it in 'dst'.
 /// If 'uppercase' is true, uppercase characters will be used to generate the hex string. Otherwise, lowercase characters will be used.
-void utilsGenerateHexStringFromData(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase);
+void utilsGenerateHexString(char *dst, size_t dst_size, const void *src, size_t src_size, bool uppercase);
+
+/// Parses the hex string in 'src' and stores its binary representation in 'dst'.
+/// 'src' must match the regex /^(?:[A-Fa-f0-9]{2})+$/.
+/// 'src_size' may be zero, in which case strlen() will be used to determine the length of 'src'. Furthermore, 'src_size' must always be a multiple of 2.
+/// 'dst_size' must be at least 'src_size / 2'.
+/// Returns false if there's an error validating input arguments.
+bool utilsParseHexString(void *dst, size_t dst_size, const char *src, size_t src_size);
 
 /// Formats the provided 'size' value to a human-readable size string and stores it in 'dst'.
 void utilsGenerateFormattedSizeString(double size, char *dst, size_t dst_size);
@@ -192,6 +199,12 @@ NX_INLINE void utilsFreeGitHubReleaseJsonData(UtilsGitHubReleaseJsonData *data)
 NX_INLINE void utilsSleep(u64 seconds)
 {
     if (seconds) svcSleepThread(seconds * (u64)1000000000);
+}
+
+/// Introduces a 33.33 milliseconds delay. Suitable to avoid hitting 100% CPU core usage in appletMainLoop() loops.
+NX_INLINE void utilsAppletLoopDelay(void)
+{
+    svcSleepThread(THIRTY_FPS_DELAY);
 }
 
 /// Wrappers used in scoped locks.
