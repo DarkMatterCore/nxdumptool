@@ -16,66 +16,50 @@ on:
   # Allows you to run this workflow manually from the Actions tab.
   workflow_dispatch:
 
-env:
-  DEVKITPRO: "/opt/devkitpro"
-  DEVKITARM: "/opt/devkitpro/devkitARM"
-  DEVKITPPC: "/opt/devkitpro/devkitPPC"
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    # Skip build with [ci skip] in commit
-    if: "! contains(github.event.head_commit.message, '[ci skip]')"
     container:
       image: devkitpro/devkita64
     steps:
       # Workaround: avoid requesting data from devkitPro servers because they ban most CI/CD scripts.
+      # TODO: Remove the last dkp-pacman invocation if https://github.com/devkitPro/docker/pull/28 gets accepted
       - name: Update packages
         run: |
           sudo -n apt-get update
           sudo -n apt-get upgrade -y patch autoconf automake tar bzip2 diffutils pkgconf fakeroot git file zstd
           sudo -n dkp-pacman --noconfirm -U \
-            "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.3-2-any.pkg.tar.zst" \
-            "https://wii.leseratte10.de/devkitPro/cmake/switch-cmake-1.5.0-1-any.pkg.tar.xz"
-        #    "https://wii.leseratte10.de/devkitPro/switch/switch-libjson-c-0.16-1-any.pkg.tar.xz" \
-        #    "https://wii.leseratte10.de/devkitPro/switch/switch-libpng-1.6.39-2-any.pkg.tar.zst" \
-        #    "https://wii.leseratte10.de/devkitPro/switch/switch-zlib-1.2.13-1-any.pkg.tar.xz"
+            "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.3-2-any.pkg.tar.zst"
 
-      - name: Silence all git safe directory warnings
-        run: git config --system --add safe.directory '*'
-
-      # Workaround: manually use git instead of actions/checkout to parse repository properties (e.g. branch name, commit hash, etc.) on our own.
-      - name: Checkout latest nxdumptool-rewrite commit
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          git clone --branch rewrite --recurse-submodules https://github.com/DarkMatterCore/nxdumptool.git
+      - uses: actions/checkout@v4
+        with:
+          path: nxdumptool
+          submodules: recursive
 
       - name: Checkout latest libnx commit
-        run: |
-          cd "$GITHUB_WORKSPACE"
-          git clone --recurse-submodules https://github.com/switchbrew/libnx.git
+        uses: actions/checkout@v4
+        with:
+          repository: switchbrew/libnx
+          path: libnx
+          submodules: recursive
 
       - name: Set workspace permissions
         run: chmod 777 -R "$GITHUB_WORKSPACE"
 
       - name: Build and install libnx
+        working-directory: libnx
         run: |
-          cd "$GITHUB_WORKSPACE/libnx"
           make install -j$(nproc)
 
-      # Workaround: dkp-makepkg's "-i" option fails because it tries to run pacman as root on its own using sudo, and a password must be interactively provided.
-      # We can't just provide root access to dkp-makepkg because it refuses to work at all if we do so.
-      # As much as I'd like to run "make fs-libs" and call it a day, it's just not possible.
       - name: Build libusbhsfs dependencies
+        working-directory: nxdumptool/libs/libusbhsfs
         run: |
-          cd "$GITHUB_WORKSPACE/nxdumptool/libs/libusbhsfs"
-          cd libntfs-3g; su -s /bin/bash nobody -c "dkp-makepkg -c -C -f" > /dev/null; sudo -n dkp-pacman -U --needed --noconfirm *.pkg.tar.* > /dev/null; cd ..
-          cd liblwext4; su -s /bin/bash nobody -c "dkp-makepkg -c -C -f" > /dev/null; sudo -n dkp-pacman -U --needed --noconfirm *.pkg.tar.* > /dev/null; cd ..
+          make fs-libs
 
       - name: Build nxdumptool-rewrite PoC binary
+        working-directory: nxdumptool
         run: |
-          cd "$GITHUB_WORKSPACE/nxdumptool"
-          echo "nxdt_commit=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          echo "nxdt_commit=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
           ./build.sh
 
       #- name: Build nxdumptool-rewrite GUI binary
