@@ -140,7 +140,7 @@ typedef struct {
 static void utilsScanPads(void);
 static u64 utilsGetButtonsDown(void);
 static u64 utilsGetButtonsHeld(void);
-static void utilsWaitForButtonPress(u64 flag);
+static u64 utilsWaitForButtonPress(u64 flag);
 
 static void consolePrint(const char *text, ...);
 static void consolePrintReversedColors(const char *text, ...);
@@ -1420,7 +1420,7 @@ static u64 utilsGetButtonsHeld(void)
     return padGetButtons(&g_padState);
 }
 
-static void utilsWaitForButtonPress(u64 flag)
+static u64 utilsWaitForButtonPress(u64 flag)
 {
     /* Don't consider stick movement as button inputs. */
     if (!flag) flag = ~(HidNpadButton_StickLLeft | HidNpadButton_StickLRight | HidNpadButton_StickLUp | HidNpadButton_StickLDown | HidNpadButton_StickRLeft | HidNpadButton_StickRRight | \
@@ -1428,12 +1428,16 @@ static void utilsWaitForButtonPress(u64 flag)
 
     consoleRefresh();
 
+    u64 btn_down = 0;
+
     while(appletMainLoop())
     {
         utilsScanPads();
-        if (utilsGetButtonsDown() & flag) break;
+        if ((btn_down = utilsGetButtonsDown()) & flag) break;
         utilsAppletLoopDelay();
     }
+
+    return btn_down;
 }
 
 static void consolePrint(const char *text, ...)
@@ -3214,12 +3218,6 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
 
         /* Use a matching NCA FS section entry. */
         base_patch_nca_fs_ctx = &(base_patch_nca_ctx->fs_ctx[nca_fs_ctx->section_idx]);
-    } else
-    if (title_type != NcmContentMetaType_Patch)
-    {
-        /* Handles edge cases where a specific NCA from an update has no matching equivalent by type/ID offset in its base title (e.g. Fall Guys' HtmlDocument NCA). */
-        consolePrint("unable to find content with type %s and id offset %u in selected base/patch title!\n", titleGetNcmContentTypeName(content_type), nca_ctx->id_offset);
-        goto end;
     }
 
     if (section_type == NcaFsSectionType_PartitionFs)
@@ -4785,7 +4783,7 @@ static void nspThreadFunc(void *arg)
     bool patch_video_capture = (bool)getNspEnableVideoCaptureOption();
     bool patch_hdcp = (bool)getNspDisableHdcpOption();
     bool generate_authoringtool_data = (bool)getNspGenerateAuthoringToolDataOption();
-    bool success = false;
+    bool success = false, no_titlekey_confirmation = false;
 
     u64 free_space = 0;
     u32 dev_idx = g_storageMenuElementOption.selected;
@@ -4924,11 +4922,26 @@ static void nspThreadFunc(void *arg)
         consolePrint("%s #%u initialize nca ctx succeeded\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
 
         // don't go any further with this nca if we can't access its fs data because it's pointless
-        // TODO: add preload warning
-        if (cur_nca_ctx->rights_id_available && !cur_nca_ctx->titlekey_retrieved)
+        if (cur_nca_ctx->rights_id_available && !cur_nca_ctx->titlekey_retrieved && !no_titlekey_confirmation)
         {
-            j++;
-            continue;
+            consolePrintReversedColors("\nunable to retrieve titlekey for the selected title");
+            consolePrintReversedColors("\nif you proceed, nca modifications will be disabled, and content decryption");
+            consolePrintReversedColors("\nwill not be possible for external tools (e.g. emulators, etc.)\n");
+
+            consolePrintReversedColors("\nif this is a shared game and you wish to fix this, exit the application and");
+            consolePrintReversedColors("\ntry running it at least once, then come back and try again\n");
+
+            consolePrintReversedColors("\npress a to proceed anyway, or b to cancel\n\n");
+
+            u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
+            if (btn_down & HidNpadButton_A)
+            {
+                j++;
+                no_titlekey_confirmation = true;
+                continue;
+            }
+
+            goto end;
         }
 
         // set download distribution type

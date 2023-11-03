@@ -94,10 +94,9 @@ jobs:
       - name: Upload artifact to prerelease
         uses: ncipollo/release-action@v1
         with:
-          # Only update attachments on "rewrite-prerelease" tag. Make sure to update the commit referenced by the tag as well by using the branch name.
+          # Only update attachments on "rewrite-prerelease" tag.
           prerelease: True
           tag: "rewrite-prerelease"
-          commit: "rewrite"
           updateOnlyUnreleased: True
           # Remove old artifacts and replace with new ones.
           removeArtifacts: True
