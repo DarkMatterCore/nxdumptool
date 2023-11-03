@@ -25,7 +25,8 @@
             "lafw_version_value": "%lu or greater (%s)",
             "sdk_version": "SDK version",
             "compatibility_type": "Compatibility type",
-            "package_id": "Package ID"
+            "package_id": "Package ID",
+            "card_id_set": "Card ID Set"
         },
 
         "dump_options": "Dump options",

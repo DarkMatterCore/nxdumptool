@@ -444,7 +444,7 @@ struct _NcaContext {
     NcmContentId content_id;                            ///< Content ID for this NCA. Used to read NCA data from eMMC/SD. Retrieved from NcmContentInfo.
     char content_id_str[0x21];
     u8 hash[SHA256_HASH_SIZE];                          ///< Manually calculated (if needed).
-    char hash_str[0x41];
+    char hash_str[SHA256_HASH_STR_SIZE];
     u8 format_version;                                  ///< NcaVersion.
     u8 content_type;                                    ///< NcmContentType. Retrieved from NcmContentInfo.
     u64 content_size;                                   ///< Retrieved from NcmContentInfo.
@@ -561,7 +561,7 @@ bool ncaEncryptHeader(NcaContext *ctx);
 void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 buf_size, u64 buf_offset);
 
 /// Updates the content ID and hash from a NCA context using a provided SHA-256 checksum.
-void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE]);
+void ncaUpdateContentIdAndHash(NcaContext *ctx, const u8 *hash);
 
 /// Returns a pointer to a string holding the name of the section type from the provided NCA FS section context.
 const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx);

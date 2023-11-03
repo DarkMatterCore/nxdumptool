@@ -45,19 +45,57 @@ typedef struct {
 
 NXDT_ASSERT(FsGameCardCertificate, 0x200);
 
+typedef enum {
+    FsCardId1MakerCode_MegaChips = 0xC2,
+    FsCardId1MakerCode_Lapis     = 0xAE,
+    FsCardId1MakerCode_Unknown   = 0x36     ///< Seen in TLoZ:TotK, SMBW and other modern releases.
+} FsCardId1MakerCode;
+
+typedef enum {
+    FsCardId1MemoryType_None       = 0,
+    FsCardId1MemoryType_CardModeT1 = BIT(0),
+    FsCardId1MemoryType_CardModeT2 = BIT(1),
+    FsCardId1MemoryType_Unknown1   = BIT(2),    ///< Related to CardMode?
+    FsCardId1MemoryType_IsNand     = BIT(3),    ///< 0: Rom, 1: Nand.
+    FsCardId1MemoryType_Unknown2   = BIT(4),    ///< Related to Nand memory type?
+    FsCardId1MemoryType_IsLate     = BIT(5),    ///< 0: Fast, 1: Late.
+    FsCardId1MemoryType_Unknown3   = BIT(6),
+    FsCardId1MemoryType_Unknown4   = BIT(7),
+    FsCardId1MemoryType_Count      = 8,         ///< Total values supported by this enum.
+
+    ///< Values defined in Atmosphère source code.
+    FsCardId1MemoryType_T1RomFast  = FsCardId1MemoryType_CardModeT1,
+    FsCardId1MemoryType_T2RomFast  = FsCardId1MemoryType_CardModeT2,
+    FsCardId1MemoryType_T1NandFast = (FsCardId1MemoryType_IsNand | FsCardId1MemoryType_CardModeT1),
+    FsCardId1MemoryType_T2NandFast = (FsCardId1MemoryType_IsNand | FsCardId1MemoryType_CardModeT2),
+    FsCardId1MemoryType_T1RomLate  = (FsCardId1MemoryType_IsLate | FsCardId1MemoryType_CardModeT1),
+    FsCardId1MemoryType_T2RomLate  = (FsCardId1MemoryType_IsLate | FsCardId1MemoryType_CardModeT2),
+    FsCardId1MemoryType_T1NandLate = (FsCardId1MemoryType_IsLate | FsCardId1MemoryType_IsNand | FsCardId1MemoryType_CardModeT1),
+    FsCardId1MemoryType_T2NandLate = (FsCardId1MemoryType_IsLate | FsCardId1MemoryType_IsNand | FsCardId1MemoryType_CardModeT2)
+} FsCardId1MemoryType;
+
 typedef struct {
-    u8 maker_code;      ///< Usually 0xC2 (Macronix).
+    u8 maker_code;      ///< FsCardId1MakerCode.
     u8 memory_capacity; ///< Matches GameCardRomSize.
-    u8 reserved;        ///< Known values: 0x06, 0x09, 0x0A.
-    u8 memory_type;     ///< Usually 0x21.
+    u8 reserved;        ///< Known values: 0x00, 0x01, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0C, 0x0D, 0x0E, 0x80.
+    u8 memory_type;     ///< FsCardId1MemoryType.
 } FsCardId1;
 
 NXDT_ASSERT(FsCardId1, 0x4);
 
+typedef enum {
+    FsCardId2CardType_Rom            = 0,
+    FsCardId2CardType_WritableDevT1  = 1,
+    FsCardId2CardType_WritableProdT1 = 2,
+    FsCardId2CardType_WritableDevT2  = 3,
+    FsCardId2CardType_WritableProdT2 = 4,
+    FsCardId2CardType_Count          = 5    ///< Total values supported by this enum.
+} FsCardId2CardType;
+
 typedef struct {
-    u8 card_security_number;    ///< Usually 0x02.
-    u8 card_type;               ///< Usually 0x00.
-    u8 reserved[0x2];           ///< Usually filled with zeroes.
+    u8 sel_t1_key;      ///< Matches sel_t1_key value from GameCardHeader (usually 0x02).
+    u8 card_type;       ///< FsCardId2CardType.
+    u8 reserved[0x2];   ///< Usually filled with zeroes.
 } FsCardId2;
 
 NXDT_ASSERT(FsCardId2, 0x4);
@@ -84,7 +122,6 @@ Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier *out);
 /// IDeviceOperator.
 Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCardHandle *handle, u32 *out_title_version, u64 *out_title_id);
 Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const FsGameCardHandle *handle, FsGameCardCertificate *out);
-Result fsDeviceOperatorGetGameCardIdSet(FsDeviceOperator *d, FsGameCardIdSet *out);
 
 #ifdef __cplusplus
 }

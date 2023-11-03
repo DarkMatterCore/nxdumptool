@@ -115,6 +115,8 @@ static KeysNxKeyset g_nxKeyset = {0};
 
 static bool g_latestMasterKeyAvailable = false;
 
+static bool g_wipedSetCal = false;
+
 bool keysLoadKeyset(void)
 {
     bool ret = false;
@@ -228,7 +230,7 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
 
     SCOPED_LOCK(&g_keysetMutex)
     {
-        if (!g_keysetLoaded) break;
+        if (!g_keysetLoaded || !g_wipedSetCal) break;
 
         size_t out_keydata_size = 0;
         u8 out_keydata[RSA2048_BYTES] = {0};
@@ -769,6 +771,7 @@ static bool keysGetDecryptedEticketRsaDeviceKey(void)
     u32 public_exponent = 0;
     Aes128CtrContext eticket_aes_ctx = {0};
     EticketRsaDeviceKey *eticket_rsa_key = (EticketRsaDeviceKey*)g_eTicketRsaDeviceKey.key;
+    bool success = false;
 
     /* Decrypt eTicket RSA device key. */
     aes128CtrContextCreate(&eticket_aes_ctx, g_nxKeyset.eticket_rsa_kek, eticket_rsa_key->ctr);
@@ -779,18 +782,24 @@ static bool keysGetDecryptedEticketRsaDeviceKey(void)
     public_exponent = __builtin_bswap32(eticket_rsa_key->public_exponent);
     if (public_exponent != ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT)
     {
-        LOG_MSG_ERROR("Invalid public exponent for decrypted eTicket RSA device key! Wrong keys? (0x%X).", public_exponent);
-        return false;
+        if (public_exponent == 0)
+        {
+            /* Bail out if we're dealing with a wiped calibration area. */
+            LOG_MSG_ERROR("eTicket RSA device key is empty! Personalized titlekey crypto won't be handled. Restore an eMMC backup or disable set:cal blanking options.");
+            success = g_wipedSetCal = true;
+        } else {
+            LOG_MSG_ERROR("Invalid public exponent for decrypted eTicket RSA device key! Wrong keys? (0x%X).", public_exponent);
+        }
+
+        goto end;
     }
 
     /* Test RSA key pair. */
-    if (!keysTestEticketRsaDeviceKey(&(eticket_rsa_key->public_exponent), eticket_rsa_key->private_exponent, eticket_rsa_key->modulus))
-    {
-        LOG_MSG_ERROR("eTicket RSA device key test failed! Wrong keys?");
-        return false;
-    }
+    success = keysTestEticketRsaDeviceKey(&(eticket_rsa_key->public_exponent), eticket_rsa_key->private_exponent, eticket_rsa_key->modulus);
+    if (!success) LOG_MSG_ERROR("eTicket RSA device key test failed! Wrong keys?");
 
-    return true;
+end:
+    return success;
 }
 
 static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void *n)

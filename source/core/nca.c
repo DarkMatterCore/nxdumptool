@@ -531,7 +531,7 @@ void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 b
     }
 }
 
-void ncaUpdateContentIdAndHash(NcaContext *ctx, u8 hash[SHA256_HASH_SIZE])
+void ncaUpdateContentIdAndHash(NcaContext *ctx, const u8 *hash)
 {
     if (!ctx) return;
 

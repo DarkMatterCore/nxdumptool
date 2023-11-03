@@ -60,7 +60,9 @@
 
 /* Global constants used throughout the application. */
 
-#define THIRTY_FPS_DELAY                (u64)33333333                                                                           /* 1 / 30 = 33.33 milliseconds. */
+#define SHA256_HASH_STR_SIZE            ((SHA256_HASH_SIZE * 2) + 1)                                    /* Includes NULL terminator. */
+
+#define THIRTY_FPS_DELAY                (u64)33333333                                                   /* 1 / 30 = 33.33 milliseconds. */
 
 #define FS_SYSMODULE_TID                (u64)0x0100000000000000
 #define BOOT_SYSMODULE_TID              (u64)0x0100000000000005
@@ -69,7 +71,7 @@
 #define SYSTEM_UPDATE_TID               (u64)0x0100000000000816
 #define QLAUNCH_TID                     (u64)0x0100000000001000
 
-#define FAT32_FILESIZE_LIMIT            (u64)0xFFFFFFFF                                                                         /* 4 GiB - 1 (4294967295 bytes). */
+#define FAT32_FILESIZE_LIMIT            (u64)0xFFFFFFFF                                                 /* 4 GiB - 1 (4294967295 bytes). */
 
 #define UTF8_BOM                        "\xEF\xBB\xBF"
 #define CRLF                            "\r\n"
@@ -93,22 +95,22 @@
 #define NRO_PATH                        DEVOPTAB_SDMC_DEVICE APP_BASE_PATH NRO_NAME
 #define NRO_TMP_PATH                    NRO_PATH ".tmp"
 
-#define PROD_KEYS_FILE_PATH             DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "prod.keys"                                       /* Location used by Lockpick_RCM for retail unit keys. */
-#define DEV_KEYS_FILE_PATH              DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "dev.keys"                                        /* Location used by Lockpick_RCM for development unit keys. */
+#define PROD_KEYS_FILE_PATH             DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "prod.keys"               /* Location used by Lockpick_RCM for retail unit keys. */
+#define DEV_KEYS_FILE_PATH              DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "dev.keys"                /* Location used by Lockpick_RCM for development unit keys. */
 
 #define LOG_FILE_NAME                   APP_TITLE ".log"
-#define LOG_BUF_SIZE                    0x400000                                                                                /* 4 MiB. */
-#define LOG_FORCE_FLUSH                 0                                                                                       /* Forces a log buffer flush each time the logfile is written to. */
+#define LOG_BUF_SIZE                    0x400000                                                        /* 4 MiB. */
+#define LOG_FORCE_FLUSH                 0                                                               /* Forces a log buffer flush each time the logfile is written to. */
 
 #define BIS_SYSTEM_PARTITION_MOUNT_NAME "sys:"
 
-#define DOWNLOAD_TASK_INTERVAL          100                                                                                     /* 100 milliseconds. */
+#define DOWNLOAD_TASK_INTERVAL          100                                                             /* 100 milliseconds. */
 
 #define HTTP_USER_AGENT                 APP_TITLE "/" APP_VERSION " (Nintendo Switch)"
-#define HTTP_CONNECT_TIMEOUT            10L                                                                                     /* 10 seconds. */
-#define HTTP_LOW_SPEED_LIMIT            30L                                                                                     /* 30 bytes per second. */
+#define HTTP_CONNECT_TIMEOUT            10L                                                             /* 10 seconds. */
+#define HTTP_LOW_SPEED_LIMIT            30L                                                             /* 30 bytes per second. */
 #define HTTP_LOW_SPEED_TIME             HTTP_CONNECT_TIMEOUT
-#define HTTP_BUFFER_SIZE                131072L                                                                                 /* 128 KiB. */
+#define HTTP_BUFFER_SIZE                131072L                                                         /* 128 KiB. */
 
 #define GITHUB_URL                      "https://github.com"
 #define GITHUB_API_URL                  "https://api.github.com"

@@ -96,12 +96,28 @@ namespace nxdt::views
         return std::string(strbuf);
     }
 
+    std::string GameCardTab::GetCardIdSetString(FsGameCardIdSet *card_id_set)
+    {
+        char card_id_set_str[0x20] = {0};
+
+        utilsGenerateHexString(card_id_set_str, sizeof(card_id_set_str), &(card_id_set->id1), sizeof(card_id_set->id1), true);
+
+        card_id_set_str[8] = ' ';
+        utilsGenerateHexString(card_id_set_str + 9, sizeof(card_id_set_str) - 9, &(card_id_set->id2), sizeof(card_id_set->id2), true);
+
+        card_id_set_str[17] = ' ';
+        utilsGenerateHexString(card_id_set_str + 18, sizeof(card_id_set_str) - 18, &(card_id_set->id3), sizeof(card_id_set->id3), true);
+
+        return std::string(card_id_set_str);
+    }
+
     void GameCardTab::PopulateList(void)
     {
         TitleApplicationMetadata **app_metadata = NULL;
         u32 app_metadata_count = 0;
         GameCardHeader card_header = {0};
         GameCardInfo card_info = {0};
+        FsGameCardIdSet card_id_set = {0};
 
         bool update_focused_view = this->IsListItemFocused();
         int focus_stack_index = this->GetFocusStackViewIndex();
@@ -123,6 +139,12 @@ namespace nxdt::views
             /* Display the applications that are part of the inserted gamecard. */
             this->list->addView(new brls::Header("gamecard_tab/list/user_titles/header"_i18n));
 
+            /* Information about how to handle user titles. */
+            brls::Label *user_titles_info = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("gamecard_tab/list/user_titles/info"_i18n, \
+                                                            "root_view/tabs/user_titles"_i18n), true);
+            user_titles_info->setHorizontalAlign(NVG_ALIGN_CENTER);
+            this->list->addView(user_titles_info);
+
             /* Populate list. */
             for(u32 i = 0; i < app_metadata_count; i++)
             {
@@ -130,12 +152,6 @@ namespace nxdt::views
                 title->unregisterAction(brls::Key::A);
                 this->list->addView(title);
             }
-
-            /* Information about how to handle user titles. */
-            brls::Label *user_titles_info = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("gamecard_tab/list/user_titles/info"_i18n, \
-                                                            "root_view/tabs/user_titles"_i18n), true);
-            user_titles_info->setHorizontalAlign(NVG_ALIGN_CENTER);
-            this->list->addView(user_titles_info);
 
             /* Free application metadata array. */
             free(app_metadata);
@@ -153,6 +169,7 @@ namespace nxdt::views
         brls::TableRow *sdk_version = properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/sdk_version"_i18n);
         brls::TableRow *compatibility_type = properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/compatibility_type"_i18n);
         brls::TableRow *package_id = properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/package_id"_i18n);
+        brls::TableRow *card_id_set_row = properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/card_id_set"_i18n);
 
         capacity->setValue(this->GetFormattedSizeString(&gamecardGetRomCapacity));
         total_size->setValue(this->GetFormattedSizeString(&gamecardGetTotalSize));
@@ -160,6 +177,7 @@ namespace nxdt::views
 
         gamecardGetHeader(&card_header);
         gamecardGetDecryptedCardInfoArea(&card_info);
+        gamecardGetCardIdSet(&card_id_set);
 
         const SystemVersion upp_version = card_info.upp_version.system_version;
 
@@ -213,7 +231,11 @@ namespace nxdt::views
                                                         compat_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n : gamecardGetCompatibilityTypeString(compat_type), \
                                                         compat_type));
 
-        package_id->setValue(fmt::format("{:016X}", card_header.package_id));
+        char package_id_str[0x11] = {0};
+        utilsGenerateHexString(package_id_str, sizeof(package_id_str), card_header.package_id, sizeof(card_header.package_id), true);
+        package_id->setValue(std::string(package_id_str));
+
+        card_id_set_row->setValue(this->GetCardIdSetString(&card_id_set));
 
         this->list->addView(properties_table);
 

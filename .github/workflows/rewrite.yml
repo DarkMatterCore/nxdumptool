@@ -63,8 +63,8 @@ jobs:
           ./build.sh
 
       #- name: Build nxdumptool-rewrite GUI binary
+      #  working-directory: nxdumptool
       #  run: |
-      #    cd "$GITHUB_WORKSPACE/nxdumptool"
       #    make -j$(nproc)
 
       - uses: actions/upload-artifact@v3
@@ -94,14 +94,15 @@ jobs:
       - name: Upload artifact to prerelease
         uses: ncipollo/release-action@v1
         with:
-          # only update on prerelease
+          # Only update attachments on "rewrite-prerelease" tag. Make sure to update the commit referenced by the tag as well by using the branch name.
           prerelease: True
           tag: "rewrite-prerelease"
+          commit: "rewrite"
           updateOnlyUnreleased: True
-          # remove old artifacts & replace with new ones
+          # Remove old artifacts and replace with new ones.
           removeArtifacts: True
           replacesArtifacts: True
-          # update preference
+          # Update preferences.
           allowUpdates: True
           omitBody: True
           omitBodyDuringUpdate: True

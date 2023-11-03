@@ -318,6 +318,9 @@ typedef struct {
 /// Initializes a ContentMetaContext using a previously initialized NcaContext (which must belong to a Meta NCA).
 bool cnmtInitializeContext(ContentMetaContext *out, NcaContext *nca_ctx);
 
+/// Looks for a NcmPackagedContentInfo entry with a content ID that matches the one from the input NcaContext and verifies its hash.
+bool cnmtVerifyContentHash(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx, const u8 *hash);
+
 /// Updates NcmPackagedContentInfo data for the content entry with size, type and ID offset values that match the ones from the input NcaContext.
 bool cnmtUpdateContentInfo(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx);
 

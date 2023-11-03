@@ -143,6 +143,7 @@ static u64 utilsGetButtonsHeld(void);
 static void utilsWaitForButtonPress(u64 flag);
 
 static void consolePrint(const char *text, ...);
+static void consolePrintReversedColors(const char *text, ...);
 static void consoleRefresh(void);
 
 static u32 menuGetElementCount(const Menu *menu);
@@ -152,6 +153,8 @@ void updateStorageList(void);
 
 void freeTitleList(Menu *menu);
 void updateTitleList(Menu *menu, Menu *submenu, bool is_system);
+
+static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *out_count);
 
 void freeNcaList(void);
 void updateNcaList(TitleInfo *title_info);
@@ -966,8 +969,8 @@ int main(int argc, char *argv[])
             {
                 if (cur_menu->id != MenuId_NcaFsSections && cur_menu->id != MenuId_NcaFsSectionsSubMenu && (title_info->previous || title_info->next))
                 {
-                    consolePrint("press l/zl and/or r/zr to change the selected title\n");
-                    consolePrint("title: %u / %u\n", title_info_idx, title_info_count);
+                    consolePrintReversedColors("press l/zl/r/zr to change the selected title\n");
+                    consolePrintReversedColors("title: %u / %u\n", title_info_idx + 1, title_info_count);
                     consolePrint("______________________________\n\n");
                 }
 
@@ -988,7 +991,8 @@ int main(int argc, char *argv[])
 
                 if (cur_menu->id == MenuId_Nca)
                 {
-                    consolePrint("press y to switch to %s mode\n", g_ncaMenuRawMode ? "nca fs section" : "raw nca");
+                    consolePrintReversedColors("current mode: %s\n", g_ncaMenuRawMode ? "raw nca" : "nca fs section");
+                    consolePrintReversedColors("press y to switch to %s mode\n", g_ncaMenuRawMode ? "nca fs section" : "raw nca");
                     consolePrint("______________________________\n\n");
                 }
 
@@ -1123,6 +1127,8 @@ int main(int argc, char *argv[])
 
                     if (title_info)
                     {
+                        title_info = getLatestTitleInfo(title_info, &title_info_idx, &title_info_count);
+
                         if (child_menu->id == MenuId_Nca)
                         {
                             updateNcaList(title_info);
@@ -1134,12 +1140,6 @@ int main(int argc, char *argv[])
                             }
 
                             if (!error && cur_menu->id == MenuId_SystemTitles) is_system = true;
-                        }
-
-                        if (!error)
-                        {
-                            title_info_count = titleGetCountFromInfoBlock(title_info);
-                            title_info_idx = 1;
                         }
                     } else {
                         if (cur_menu->id == MenuId_SystemTitles)
@@ -1446,6 +1446,22 @@ static void consolePrint(const char *text, ...)
     mutexUnlock(&g_conMutex);
 }
 
+static void consolePrintReversedColors(const char *text, ...)
+{
+    mutexLock(&g_conMutex);
+
+    printf(CONSOLE_ESC(7m));
+
+    va_list v;
+    va_start(v, text);
+    vfprintf(stdout, text, v);
+    va_end(v);
+
+    printf(CONSOLE_ESC(0m));
+
+    mutexUnlock(&g_conMutex);
+}
+
 static void consoleRefresh(void)
 {
     mutexLock(&g_conMutex);
@@ -1614,6 +1630,49 @@ void updateTitleList(Menu *menu, Menu *submenu, bool is_system)
 
 end:
     if (app_metadata) free(app_metadata);
+}
+
+static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *out_count)
+{
+    if (!title_info || !out_idx || !out_count || (title_info->meta_key.type != NcmContentMetaType_Patch && title_info->meta_key.type != NcmContentMetaType_DataPatch)) return title_info;
+
+    u32 idx = 0, count = 1;
+    TitleInfo *cur_info = title_info->previous, *out = title_info;
+
+    while(cur_info)
+    {
+        count++;
+
+        if (cur_info->version.value > out->version.value)
+        {
+            out = cur_info;
+            idx = count;
+        }
+
+        cur_info = cur_info->previous;
+    }
+
+    idx = (out != title_info ? (count - idx) : (count - 1));
+
+    cur_info = title_info->next;
+
+    while(cur_info)
+    {
+        count++;
+
+        if (cur_info->version.value > out->version.value)
+        {
+            out = cur_info;
+            idx = (count - 1);
+        }
+
+        cur_info = cur_info->next;
+    }
+
+    *out_idx = idx;
+    *out_count = count;
+
+    return out;
 }
 
 void freeNcaList(void)
@@ -1966,7 +2025,7 @@ static bool waitForGameCard(void)
 
     if (status != GameCardStatus_InsertedAndInfoLoaded)
     {
-        consolePrint("press any button\n");
+        consolePrint("press any button to go back\n");
         utilsWaitForButtonPress(0);
         return false;
     }
@@ -2502,7 +2561,7 @@ static bool saveGameCardIdSet(void *userdata)
     u32 crc = 0;
     char *filename = NULL;
 
-    if (!gamecardGetIdSet(&id_set))
+    if (!gamecardGetCardIdSet(&id_set))
     {
         consolePrint("failed to get gamecard id set\n");
         goto end;
@@ -2987,8 +3046,9 @@ static bool saveNintendoContentArchive(void *userdata)
 
     consolePrint("nca size: 0x%lX\n", shared_thread_data->total_size);
 
-    snprintf(path, MAX_ELEMENTS(path), "/%s.%s", nca_thread_data.nca_ctx->content_id_str, content_info->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
     snprintf(subdir, MAX_ELEMENTS(subdir), "NCA/%s", nca_thread_data.nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
+    snprintf(path, MAX_ELEMENTS(path), "/%s.%s", nca_thread_data.nca_ctx->content_id_str, content_info->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
+
     filename = generateOutputTitleFileName(title_info, subdir, path);
     if (!filename) goto end;
 
@@ -3136,14 +3196,8 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
     }
 
     /* Initialize base/patch NCA context, if needed. */
-    if (g_ncaBasePatchTitleInfo)
+    if (base_patch_content_info)
     {
-        if (!base_patch_content_info)
-        {
-            consolePrint("unable to find content with type %s and id offset %u in selected base/patch title!\n", titleGetNcmContentTypeName(content_type), nca_ctx->id_offset);
-            goto end;
-        }
-
         base_patch_nca_ctx = calloc(1, sizeof(NcaContext));
         if (!base_patch_nca_ctx)
         {
@@ -3160,6 +3214,12 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
 
         /* Use a matching NCA FS section entry. */
         base_patch_nca_fs_ctx = &(base_patch_nca_ctx->fs_ctx[nca_fs_ctx->section_idx]);
+    } else
+    if (title_type != NcmContentMetaType_Patch)
+    {
+        /* Handles edge cases where a specific NCA from an update has no matching equivalent by type/ID offset in its base title (e.g. Fall Guys' HtmlDocument NCA). */
+        consolePrint("unable to find content with type %s and id offset %u in selected base/patch title!\n", titleGetNcmContentTypeName(content_type), nca_ctx->id_offset);
+        goto end;
     }
 
     if (section_type == NcaFsSectionType_PartitionFs)
@@ -3233,8 +3293,7 @@ static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool 
         filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "exefs.nsp");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(path, MAX_ELEMENTS(path), "/%s #%u (%s)/Section #%u (%s).nsp", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_ctx->content_id_str, \
-                                                                                nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
+        snprintf(path, MAX_ELEMENTS(path), "/%s #%u/%u.nsp", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_fs_ctx->section_idx);
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, path);
@@ -3389,8 +3448,7 @@ static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layere
         filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "romfs.bin");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Raw", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(path, MAX_ELEMENTS(path), "/%s #%u (%s)/Section #%u (%s).bin", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_ctx->content_id_str, \
-                                                                                nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
+        snprintf(path, MAX_ELEMENTS(path), "/%s #%u/%u.bin", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_fs_ctx->section_idx);
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, path);
@@ -4055,8 +4113,7 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
         filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "exefs");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(pfs_path, MAX_ELEMENTS(pfs_path), "/%s #%u (%s)/Section #%u (%s)", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_ctx->content_id_str, \
-                                                                                    nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
+        snprintf(pfs_path, MAX_ELEMENTS(pfs_path), "/%s #%u/%u", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_fs_ctx->section_idx);
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, pfs_path);
@@ -4360,8 +4417,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
         filename = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "romfs");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
-        snprintf(romfs_path, MAX_ELEMENTS(romfs_path), "/%s #%u (%s)/Section #%u (%s)", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_ctx->content_id_str, \
-                                                                                        nca_fs_ctx->section_idx, ncaGetFsSectionTypeName(nca_fs_ctx));
+        snprintf(romfs_path, MAX_ELEMENTS(romfs_path), "/%s #%u/%u", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_fs_ctx->section_idx);
 
         TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
         filename = generateOutputTitleFileName(title_info, subdir, romfs_path);
@@ -4427,7 +4483,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
 
         /* Retrieve RomFS file entry information and generate output path. */
         shared_thread_data->read_error = (!(romfs_file_entry = romfsGetCurrentFileEntry(romfs_ctx)) || \
-                                           !romfsGeneratePathFromFileEntry(romfs_ctx, romfs_file_entry, romfs_path + filename_len, FS_MAX_PATH - filename_len, romfs_illegal_char_replace_type));
+                                           !romfsGeneratePathFromFileEntry(romfs_ctx, romfs_file_entry, romfs_path + filename_len, sizeof(romfs_path) - filename_len, romfs_illegal_char_replace_type));
         if (shared_thread_data->read_error)
         {
             condvarWakeAll(&g_writeCondvar);
@@ -4758,15 +4814,15 @@ static void nspThreadFunc(void *arg)
     u8 *raw_cert_chain = NULL;
     u64 raw_cert_chain_size = 0;
 
-    PartitionFileSystemFileContext pfs_file_ctx = {0};
-    pfsInitializeFileContext(&pfs_file_ctx);
+    PartitionFileSystemImageContext pfs_img_ctx = {0};
+    pfsInitializeImageContext(&pfs_img_ctx);
 
     char entry_name[64] = {0};
     u64 nsp_header_size = 0, nsp_size = 0, nsp_offset = 0;
     char *tmp_name = NULL;
 
-    Sha256Context sha256_ctx = {0};
-    u8 sha256_hash[SHA256_HASH_SIZE] = {0};
+    Sha256Context clean_sha256_ctx = {0}, dirty_sha256_ctx = {0};
+    u8 clean_sha256_hash[SHA256_HASH_SIZE] = {0}, dirty_sha256_hash[SHA256_HASH_SIZE] = {0};
 
     if (!nsp_thread_data || !(title_info = (TitleInfo*)nsp_thread_data->data) || !title_info->content_count || !title_info->content_infos) goto end;
 
@@ -5023,7 +5079,7 @@ static void nspThreadFunc(void *arg)
         NcaContext *cur_nca_ctx = &(nca_ctx[i]);
         sprintf(entry_name, "%s.%s", cur_nca_ctx->content_id_str, cur_nca_ctx->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
 
-        if (!pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cur_nca_ctx->content_size, NULL))
+        if (!pfsAddEntryInformationToImageContext(&pfs_img_ctx, entry_name, cur_nca_ctx->content_size, NULL))
         {
             consolePrint("pfs add entry failed: %s\n", entry_name);
             goto end;
@@ -5034,7 +5090,7 @@ static void nspThreadFunc(void *arg)
     if (generate_authoringtool_data)
     {
         sprintf(entry_name, "%s.cnmt.xml", meta_nca_ctx->content_id_str);
-        if (!pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cnmt_ctx.authoring_tool_xml_size, &(meta_nca_ctx->content_type_ctx_data_idx)))
+        if (!pfsAddEntryInformationToImageContext(&pfs_img_ctx, entry_name, cnmt_ctx.authoring_tool_xml_size, &(meta_nca_ctx->content_type_ctx_data_idx)))
         {
             consolePrint("pfs add entry failed: %s\n", entry_name);
             goto end;
@@ -5055,7 +5111,7 @@ static void nspThreadFunc(void *arg)
             {
                 ProgramInfoContext *cur_program_info_ctx = (ProgramInfoContext*)cur_nca_ctx->content_type_ctx;
                 sprintf(entry_name, "%s.programinfo.xml", cur_nca_ctx->content_id_str);
-                ret = pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cur_program_info_ctx->authoring_tool_xml_size, &(cur_nca_ctx->content_type_ctx_data_idx));
+                ret = pfsAddEntryInformationToImageContext(&pfs_img_ctx, entry_name, cur_program_info_ctx->authoring_tool_xml_size, &(cur_nca_ctx->content_type_ctx_data_idx));
                 break;
             }
             case NcmContentType_Control:
@@ -5066,7 +5122,7 @@ static void nspThreadFunc(void *arg)
                 {
                     NacpIconContext *icon_ctx = &(cur_nacp_ctx->icon_ctx[j]);
                     sprintf(entry_name, "%s.nx.%s.jpg", cur_nca_ctx->content_id_str, nacpGetLanguageString(icon_ctx->language));
-                    if (!pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, icon_ctx->icon_size, j == 0 ? &(cur_nca_ctx->content_type_ctx_data_idx) : NULL))
+                    if (!pfsAddEntryInformationToImageContext(&pfs_img_ctx, entry_name, icon_ctx->icon_size, j == 0 ? &(cur_nca_ctx->content_type_ctx_data_idx) : NULL))
                     {
                         consolePrint("pfs add entry failed: %s\n", entry_name);
                         goto end;
@@ -5074,14 +5130,14 @@ static void nspThreadFunc(void *arg)
                 }
 
                 sprintf(entry_name, "%s.nacp.xml", cur_nca_ctx->content_id_str);
-                ret = pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cur_nacp_ctx->authoring_tool_xml_size, !cur_nacp_ctx->icon_count ? &(cur_nca_ctx->content_type_ctx_data_idx) : NULL);
+                ret = pfsAddEntryInformationToImageContext(&pfs_img_ctx, entry_name, cur_nacp_ctx->authoring_tool_xml_size, !cur_nacp_ctx->icon_count ? &(cur_nca_ctx->content_type_ctx_data_idx) : NULL);
                 break;
             }
             case NcmContentType_LegalInformation:
             {
                 LegalInfoContext *cur_legal_info_ctx = (LegalInfoContext*)cur_nca_ctx->content_type_ctx;
                 sprintf(entry_name, "%s.legalinfo.xml", cur_nca_ctx->content_id_str);
-                ret = pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, cur_legal_info_ctx->authoring_tool_xml_size, &(cur_nca_ctx->content_type_ctx_data_idx));
+                ret = pfsAddEntryInformationToImageContext(&pfs_img_ctx, entry_name, cur_legal_info_ctx->authoring_tool_xml_size, &(cur_nca_ctx->content_type_ctx_data_idx));
                 break;
             }
             default:
@@ -5099,28 +5155,28 @@ static void nspThreadFunc(void *arg)
     if (retrieve_tik_cert)
     {
         sprintf(entry_name, "%s.tik", tik.rights_id_str);
-        if (!pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, tik.size, NULL))
+        if (!pfsAddEntryInformationToImageContext(&pfs_img_ctx, entry_name, tik.size, NULL))
         {
             consolePrint("pfs add entry failed: %s\n", entry_name);
             goto end;
         }
 
         sprintf(entry_name, "%s.cert", tik.rights_id_str);
-        if (!pfsAddEntryInformationToFileContext(&pfs_file_ctx, entry_name, raw_cert_chain_size, NULL))
+        if (!pfsAddEntryInformationToImageContext(&pfs_img_ctx, entry_name, raw_cert_chain_size, NULL))
         {
             consolePrint("pfs add entry failed: %s\n", entry_name);
             goto end;
         }
     }
 
-    // write buffer to memory buffer
-    if (!pfsWriteFileContextHeaderToMemoryBuffer(&pfs_file_ctx, buf, BLOCK_SIZE, &nsp_header_size))
+    // write pfs header to memory buffer
+    if (!pfsWriteImageContextHeaderToMemoryBuffer(&pfs_img_ctx, buf, BLOCK_SIZE, &nsp_header_size))
     {
         consolePrint("pfs write header to mem #1 failed\n");
         goto end;
     }
 
-    nsp_size = (nsp_header_size + pfs_file_ctx.fs_size);
+    nsp_size = (nsp_header_size + pfs_img_ctx.fs_size);
     consolePrint("nsp header size: 0x%lX | nsp size: 0x%lX\n", nsp_header_size, nsp_size);
     consoleRefresh();
 
@@ -5183,8 +5239,8 @@ static void nspThreadFunc(void *arg)
         NcaContext *cur_nca_ctx = &(nca_ctx[i]);
         u64 blksize = BLOCK_SIZE;
 
-        memset(&sha256_ctx, 0, sizeof(Sha256Context));
-        sha256ContextCreate(&sha256_ctx);
+        sha256ContextCreate(&clean_sha256_ctx);
+        sha256ContextCreate(&dirty_sha256_ctx);
 
         if (cur_nca_ctx->content_type == NcmContentType_Meta && (!cnmtGenerateNcaPatch(&cnmt_ctx) || !ncaEncryptHeader(cur_nca_ctx)))
         {
@@ -5196,7 +5252,7 @@ static void nspThreadFunc(void *arg)
 
         if (dev_idx == 1)
         {
-            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, i);
+            tmp_name = pfsGetEntryNameByIndexFromImageContext(&pfs_img_ctx, i);
             if (!usbSendFileProperties(cur_nca_ctx->content_size, tmp_name))
             {
                 consolePrint("usb send file properties \"%s\" failed\n", tmp_name);
@@ -5225,6 +5281,9 @@ static void nspThreadFunc(void *arg)
                 goto end;
             }
 
+            // update clean hash calculation
+            sha256ContextUpdate(&clean_sha256_ctx, buf, blksize);
+
             if (dirty_header)
             {
                 // write re-encrypted headers
@@ -5250,8 +5309,8 @@ static void nspThreadFunc(void *arg)
                 dirty_header = (!cur_nca_ctx->header_written || cur_nca_ctx->content_type_ctx_patch);
             }
 
-            // update hash calculation
-            sha256ContextUpdate(&sha256_ctx, buf, blksize);
+            // update dirty hash calculation
+            sha256ContextUpdate(&dirty_sha256_ctx, buf, blksize);
 
             // write nca chunk
             if (dev_idx == 1)
@@ -5266,24 +5325,35 @@ static void nspThreadFunc(void *arg)
             }
         }
 
-        // get hash
-        sha256ContextGetHash(&sha256_ctx, sha256_hash);
+        // get hashes
+        sha256ContextGetHash(&clean_sha256_ctx, clean_sha256_hash);
+        sha256ContextGetHash(&dirty_sha256_ctx, dirty_sha256_hash);
 
-        // update content id and hash
-        ncaUpdateContentIdAndHash(cur_nca_ctx, sha256_hash);
-
-        // update cnmt
-        if (!cnmtUpdateContentInfo(&cnmt_ctx, cur_nca_ctx))
+        // verify content hash
+        if (!cnmtVerifyContentHash(&cnmt_ctx, cur_nca_ctx, clean_sha256_hash))
         {
-            consolePrint("cnmt update content info failed\n");
+            consolePrint("sha256 checksum mismatch for nca \"%s\"\n", cur_nca_ctx->content_id_str);
             goto end;
         }
 
-        // update pfs entry name
-        if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, i, cur_nca_ctx->content_id_str))
+        if (memcmp(clean_sha256_hash, dirty_sha256_hash, SHA256_HASH_SIZE) != 0)
         {
-            consolePrint("pfs update entry name failed for nca \"%s\"\n", cur_nca_ctx->content_id_str);
-            goto end;
+            // update content id and hash
+            ncaUpdateContentIdAndHash(cur_nca_ctx, dirty_sha256_hash);
+
+            // update cnmt
+            if (!cnmtUpdateContentInfo(&cnmt_ctx, cur_nca_ctx))
+            {
+                consolePrint("cnmt update content info failed\n");
+                goto end;
+            }
+
+            // update pfs entry name
+            if (!pfsUpdateEntryNameFromImageContext(&pfs_img_ctx, i, cur_nca_ctx->content_id_str))
+            {
+                consolePrint("pfs update entry name failed for nca \"%s\"\n", cur_nca_ctx->content_id_str);
+                goto end;
+            }
         }
     }
 
@@ -5299,7 +5369,7 @@ static void nspThreadFunc(void *arg)
         // write cnmt xml
         if (dev_idx == 1)
         {
-            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx);
+            tmp_name = pfsGetEntryNameByIndexFromImageContext(&pfs_img_ctx, meta_nca_ctx->content_type_ctx_data_idx);
             if (!usbSendFileProperties(cnmt_ctx.authoring_tool_xml_size, tmp_name) || !usbSendFileData(cnmt_ctx.authoring_tool_xml, cnmt_ctx.authoring_tool_xml_size))
             {
                 consolePrint("send \"%s\" failed\n", tmp_name);
@@ -5313,7 +5383,7 @@ static void nspThreadFunc(void *arg)
         nsp_thread_data->data_written += cnmt_ctx.authoring_tool_xml_size;
 
         // update cnmt xml pfs entry name
-        if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, meta_nca_ctx->content_type_ctx_data_idx, meta_nca_ctx->content_id_str))
+        if (!pfsUpdateEntryNameFromImageContext(&pfs_img_ctx, meta_nca_ctx->content_type_ctx_data_idx, meta_nca_ctx->content_id_str))
         {
             consolePrint("pfs update entry name cnmt xml failed\n");
             goto end;
@@ -5353,7 +5423,7 @@ static void nspThreadFunc(void *arg)
                     // write icon
                     if (dev_idx == 1)
                     {
-                        tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, data_idx);
+                        tmp_name = pfsGetEntryNameByIndexFromImageContext(&pfs_img_ctx, data_idx);
                         if (!usbSendFileProperties(icon_ctx->icon_size, tmp_name) || !usbSendFileData(icon_ctx->icon_data, icon_ctx->icon_size))
                         {
                             consolePrint("send \"%s\" failed\n", tmp_name);
@@ -5367,7 +5437,7 @@ static void nspThreadFunc(void *arg)
                     nsp_thread_data->data_written += icon_ctx->icon_size;
 
                     // update pfs entry name
-                    if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, data_idx++, cur_nca_ctx->content_id_str))
+                    if (!pfsUpdateEntryNameFromImageContext(&pfs_img_ctx, data_idx++, cur_nca_ctx->content_id_str))
                     {
                         consolePrint("pfs update entry name failed for icon \"%s\" (%u)\n", cur_nca_ctx->content_id_str, icon_ctx->language);
                         goto end;
@@ -5390,7 +5460,7 @@ static void nspThreadFunc(void *arg)
         // write xml
         if (dev_idx == 1)
         {
-            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, data_idx);
+            tmp_name = pfsGetEntryNameByIndexFromImageContext(&pfs_img_ctx, data_idx);
             if (!usbSendFileProperties(authoring_tool_xml_size, tmp_name) || !usbSendFileData(authoring_tool_xml, authoring_tool_xml_size))
             {
                 consolePrint("send \"%s\" failed\n", tmp_name);
@@ -5404,7 +5474,7 @@ static void nspThreadFunc(void *arg)
         nsp_thread_data->data_written += authoring_tool_xml_size;
 
         // update pfs entry name
-        if (!pfsUpdateEntryNameFromFileContext(&pfs_file_ctx, data_idx, cur_nca_ctx->content_id_str))
+        if (!pfsUpdateEntryNameFromImageContext(&pfs_img_ctx, data_idx, cur_nca_ctx->content_id_str))
         {
             consolePrint("pfs update entry name failed for xml \"%s\"\n", cur_nca_ctx->content_id_str);
             goto end;
@@ -5416,7 +5486,7 @@ static void nspThreadFunc(void *arg)
         // write ticket
         if (dev_idx == 1)
         {
-            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, pfs_file_ctx.header.entry_count - 2);
+            tmp_name = pfsGetEntryNameByIndexFromImageContext(&pfs_img_ctx, pfs_img_ctx.header.entry_count - 2);
             if (!usbSendFileProperties(tik.size, tmp_name) || !usbSendFileData(tik.data, tik.size))
             {
                 consolePrint("send \"%s\" failed\n", tmp_name);
@@ -5432,7 +5502,7 @@ static void nspThreadFunc(void *arg)
         // write cert
         if (dev_idx == 1)
         {
-            tmp_name = pfsGetEntryNameByIndexFromFileContext(&pfs_file_ctx, pfs_file_ctx.header.entry_count - 1);
+            tmp_name = pfsGetEntryNameByIndexFromImageContext(&pfs_img_ctx, pfs_img_ctx.header.entry_count - 1);
             if (!usbSendFileProperties(raw_cert_chain_size, tmp_name) || !usbSendFileData(raw_cert_chain, raw_cert_chain_size))
             {
                 consolePrint("send \"%s\" failed\n", tmp_name);
@@ -5447,7 +5517,7 @@ static void nspThreadFunc(void *arg)
     }
 
     // write new pfs0 header
-    if (!pfsWriteFileContextHeaderToMemoryBuffer(&pfs_file_ctx, buf, BLOCK_SIZE, &nsp_header_size))
+    if (!pfsWriteImageContextHeaderToMemoryBuffer(&pfs_img_ctx, buf, BLOCK_SIZE, &nsp_header_size))
     {
         consolePrint("pfs write header to mem #2 failed\n");
         goto end;
@@ -5492,7 +5562,7 @@ end:
         }
     }
 
-    pfsFreeFileContext(&pfs_file_ctx);
+    pfsFreeImageContext(&pfs_img_ctx);
 
     if (raw_cert_chain) free(raw_cert_chain);
 

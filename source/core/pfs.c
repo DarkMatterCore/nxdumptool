@@ -23,7 +23,7 @@
 #include "pfs.h"
 #include "npdm.h"
 
-#define PFS_FULL_HEADER_ALIGNMENT   0x20
+#define PFS_HEADER_PADDING_ALIGNMENT    0x20
 
 bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
@@ -244,7 +244,7 @@ bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemE
     return true;
 }
 
-bool pfsAddEntryInformationToFileContext(PartitionFileSystemFileContext *ctx, const char *entry_name, u64 entry_size, u32 *out_entry_idx)
+bool pfsAddEntryInformationToImageContext(PartitionFileSystemImageContext *ctx, const char *entry_name, u64 entry_size, u32 *out_entry_idx)
 {
     if (!ctx || !entry_name || !*entry_name)
     {
@@ -304,7 +304,7 @@ bool pfsAddEntryInformationToFileContext(PartitionFileSystemFileContext *ctx, co
     return true;
 }
 
-bool pfsUpdateEntryNameFromFileContext(PartitionFileSystemFileContext *ctx, u32 entry_idx, const char *new_entry_name)
+bool pfsUpdateEntryNameFromImageContext(PartitionFileSystemImageContext *ctx, u32 entry_idx, const char *new_entry_name)
 {
     if (!ctx || !ctx->header.entry_count || !ctx->header.name_table_size || !ctx->entries || !ctx->name_table || entry_idx >= ctx->header.entry_count || !new_entry_name || !*new_entry_name)
     {
@@ -329,7 +329,7 @@ bool pfsUpdateEntryNameFromFileContext(PartitionFileSystemFileContext *ctx, u32 
     return true;
 }
 
-bool pfsWriteFileContextHeaderToMemoryBuffer(PartitionFileSystemFileContext *ctx, void *buf, u64 buf_size, u64 *out_header_size)
+bool pfsWriteImageContextHeaderToMemoryBuffer(PartitionFileSystemImageContext *ctx, void *buf, u64 buf_size, u64 *out_header_size)
 {
     if (!ctx || !ctx->header.entry_count || !ctx->header.name_table_size || !ctx->entries || !ctx->name_table || !buf || !out_header_size)
     {
@@ -339,20 +339,20 @@ bool pfsWriteFileContextHeaderToMemoryBuffer(PartitionFileSystemFileContext *ctx
 
     PartitionFileSystemHeader *header = &(ctx->header);
     u8 *buf_u8 = (u8*)buf;
-    u64 header_size = 0, full_header_size = 0, block_offset = 0, block_size = 0;
+    u64 header_size = 0, padded_header_size = 0, block_offset = 0, block_size = 0;
     u32 padding_size = 0;
 
     /* Calculate header size. */
     header_size = (sizeof(PartitionFileSystemHeader) + (header->entry_count * sizeof(PartitionFileSystemEntry)) + header->name_table_size);
 
-    /* Calculate full header size and padding size. */
-    full_header_size = (IS_ALIGNED(header_size, PFS_FULL_HEADER_ALIGNMENT) ? ALIGN_UP(header_size + 1, PFS_FULL_HEADER_ALIGNMENT) : ALIGN_UP(header_size, PFS_FULL_HEADER_ALIGNMENT));
-    padding_size = (u32)(full_header_size - header_size);
+    /* Calculate padded header size and padding size. */
+    padded_header_size = (IS_ALIGNED(header_size, PFS_HEADER_PADDING_ALIGNMENT) ? ALIGN_UP(header_size + 1, PFS_HEADER_PADDING_ALIGNMENT) : ALIGN_UP(header_size, PFS_HEADER_PADDING_ALIGNMENT));
+    padding_size = (u32)(padded_header_size - header_size);
 
     /* Check buffer size. */
-    if (buf_size < full_header_size)
+    if (buf_size < padded_header_size)
     {
-        LOG_MSG_ERROR("Not enough space available in input buffer to write full Partition FS header! (got 0x%lX, need 0x%lX).", buf_size, full_header_size);
+        LOG_MSG_ERROR("Not enough space available in input buffer to write full Partition FS header! (got 0x%lX, need 0x%lX).", buf_size, padded_header_size);
         return false;
     }
 
@@ -374,7 +374,7 @@ bool pfsWriteFileContextHeaderToMemoryBuffer(PartitionFileSystemFileContext *ctx
     memset(buf_u8 + block_offset, 0, padding_size);
 
     /* Update output header size. */
-    *out_header_size = full_header_size;
+    *out_header_size = padded_header_size;
 
     return true;
 }

@@ -45,7 +45,7 @@ typedef struct {
     union {
         u8 value[0x10];
         struct {
-            u64 package_id;     ///< Matches package_id from GameCardHeader.
+            u8 package_id[0x8]; ///< Matches package_id from GameCardHeader.
             u8 reserved[0x8];   ///< Just zeroes.
         };
     };
@@ -200,14 +200,14 @@ NXDT_ASSERT(GameCardInfo, 0x70);
 typedef struct {
     u8 signature[0x100];                            ///< RSA-2048-PSS with SHA-256 signature over the rest of the header.
     u32 magic;                                      ///< "HEAD".
-    u32 rom_area_start_page_address;                ///< Expressed in GAMECARD_PAGE_SIZE units.
-    u32 backup_area_start_page_address;             ///< Always 0xFFFFFFFF.
+    u32 rom_area_start_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
+    u32 backup_area_start_page;                     ///< Always 0xFFFFFFFF.
     GameCardKeyIndex key_index;
     u8 rom_size;                                    ///< GameCardRomSize.
-    u8 header_version;                              ///< Always 0.
+    u8 version;                                     ///< Always 0x00.
     u8 flags;                                       ///< GameCardFlags.
-    u64 package_id;                                 ///< Used for challenge-response authentication.
-    u32 valid_data_end_address;                     ///< Expressed in GAMECARD_PAGE_SIZE units.
+    u8 package_id[0x8];                             ///< Used for challenge-response authentication.
+    u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 reserved[0x4];
     u8 card_info_iv[AES_128_KEY_SIZE];              ///< AES-128-CBC IV for the CardInfo area (reversed).
     u64 partition_fs_header_address;                ///< Root Hash File System header offset.
@@ -215,9 +215,9 @@ typedef struct {
     u8 partition_fs_header_hash[SHA256_HASH_SIZE];
     u8 initial_data_hash[SHA256_HASH_SIZE];
     u32 sel_sec;                                    ///< GameCardSelSec.
-    u32 sel_t1_key;                                 ///< Always 2.
-    u32 sel_key;                                    ///< Always 0.
-    u32 lim_area;                                   ///< Expressed in GAMECARD_PAGE_SIZE units.
+    u32 sel_t1_key;                                 ///< Always 0x02.
+    u32 sel_key;                                    ///< Always 0x00.
+    u32 lim_area_page;                              ///< Expressed in GAMECARD_PAGE_SIZE units.
     GameCardInfo card_info;
 } GameCardHeader;
 
@@ -291,7 +291,7 @@ bool gamecardGetSecurityInformation(GameCardSecurityInformation *out);
 
 /// Fills the provided FsGameCardIdSet pointer.
 /// This area can't be read using gamecardReadStorage().
-bool gamecardGetIdSet(FsGameCardIdSet *out);
+bool gamecardGetCardIdSet(FsGameCardIdSet *out);
 
 /// Fills the provided pointers with LAFW blob data from FS program memory.
 /// 'out_lafw_blob' or 'out_lafw_version' may be set to NULL, but at least one of them must be a valid pointer.

@@ -34,10 +34,10 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     bool dump_fs_header = false, success = false;
 
     /* Check if the base RomFS is missing (e.g. Fortnite, World of Tanks Blitz, etc.). */
-    bool missing_base_romfs = (base_nca_fs_ctx && (!base_nca_fs_ctx->enabled || (base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs && \
-                               base_nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs)));
+    bool missing_base_romfs = (!base_nca_fs_ctx || !base_nca_fs_ctx->enabled || (base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs && \
+                               base_nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs));
 
-    if (!out || !base_nca_fs_ctx || (!patch_nca_fs_ctx && (missing_base_romfs || base_nca_fs_ctx->has_sparse_layer)) || \
+    if (!out || (!patch_nca_fs_ctx && (missing_base_romfs || base_nca_fs_ctx->has_sparse_layer)) || \
         (!missing_base_romfs && (!(base_nca_ctx = base_nca_fs_ctx->nca_ctx) || (base_nca_ctx->format_version == NcaVersion_Nca0 && \
         (base_nca_fs_ctx->section_type != NcaFsSectionType_Nca0RomFs || base_nca_fs_ctx->hash_type != NcaHashType_HierarchicalSha256)) || \
         (base_nca_ctx->format_version != NcaVersion_Nca0 && (base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || \
@@ -54,7 +54,7 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     romfsFreeContext(out);
 
     NcaStorageContext *base_storage_ctx = &(out->storage_ctx[0]), *patch_storage_ctx = &(out->storage_ctx[1]);
-    bool is_nca0_romfs = (base_nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs);
+    bool is_nca0_romfs = (base_nca_fs_ctx && base_nca_fs_ctx->section_type == NcaFsSectionType_Nca0RomFs);
 
     /* Initialize base NCA storage context. */
     if (!missing_base_romfs && !ncaStorageInitializeContext(base_storage_ctx, base_nca_fs_ctx, NULL))

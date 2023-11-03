@@ -42,6 +42,7 @@ namespace nxdt::views
 
             void ProcessGameCardStatus(GameCardStatus gc_status);
             std::string GetFormattedSizeString(GameCardSizeFunc func);
+            std::string GetCardIdSetString(FsGameCardIdSet *card_id_set);
             void PopulateList(void);
 
         public:

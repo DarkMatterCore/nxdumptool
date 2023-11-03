@@ -848,7 +848,7 @@ static bool usbInitializeComms5x(void)
 
     bos_desc->bLength = sizeof(struct usb_bos_descriptor);
     bos_desc->bDescriptorType = USB_DT_BOS;
-    bos_desc->wTotalLength = USB_BOS_SIZE;
+    bos_desc->wTotalLength = sizeof(bos);
     bos_desc->bNumDeviceCaps = 2;   /* USB 2.0 + USB 3.0. No extra capabilities for USB 1.x. */
 
     usb2_ext_desc->bLength = sizeof(struct usb_2_0_extension_descriptor);
@@ -961,7 +961,7 @@ static bool usbInitializeComms5x(void)
     }
 
     /* Set Binary Object Store. */
-    rc = usbDsSetBinaryObjectStore(bos, USB_BOS_SIZE);
+    rc = usbDsSetBinaryObjectStore(bos, sizeof(bos));
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("usbDsSetBinaryObjectStore failed! (0x%X).", rc);

@@ -139,7 +139,7 @@ typedef enum {
 } RomFileSystemPathIllegalCharReplaceType;
 
 /// Initializes a RomFS or Patch RomFS context.
-/// 'base_nca_fs_ctx' must always be provided.
+/// 'base_nca_fs_ctx' shall be NULL *only* if a NCA from an update has no matching equivalent available in its base title.
 /// 'patch_nca_fs_ctx' shall be NULL if not dealing with a Patch RomFS.
 bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base_nca_fs_ctx, NcaFsSectionContext *patch_nca_fs_ctx);
 

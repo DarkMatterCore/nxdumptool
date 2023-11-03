@@ -297,7 +297,7 @@ bool gamecardGetSecurityInformation(GameCardSecurityInformation *out)
     return ret;
 }
 
-bool gamecardGetIdSet(FsGameCardIdSet *out)
+bool gamecardGetCardIdSet(FsGameCardIdSet *out)
 {
     bool ret = false;
 
@@ -305,7 +305,7 @@ bool gamecardGetIdSet(FsGameCardIdSet *out)
     {
         if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !out) break;
 
-        Result rc = fsDeviceOperatorGetGameCardIdSet(&g_deviceOperator, out);
+        Result rc = fsDeviceOperatorGetGameCardIdSet(&g_deviceOperator, out, sizeof(FsGameCardIdSet), (s64)sizeof(FsGameCardIdSet));
         if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardIdSet failed! (0x%X)", rc);
 
         ret = R_SUCCEEDED(rc);
@@ -405,7 +405,7 @@ bool gamecardGetTrimmedSize(u64 *out)
     SCOPED_LOCK(&g_gameCardMutex)
     {
         ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
-        if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_PAGE_OFFSET(g_gameCardHeader.valid_data_end_address));
+        if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_PAGE_OFFSET(g_gameCardHeader.valid_data_end_page));
     }
 
     return ret;
@@ -947,7 +947,7 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
     {
         if ((g_fsProgramMemory.data_size - offset) < sizeof(GameCardInitialData)) break;
 
-        if (memcmp(g_fsProgramMemory.data + offset, &(g_gameCardHeader.package_id), sizeof(g_gameCardHeader.package_id)) != 0) continue;
+        if (memcmp(g_fsProgramMemory.data + offset, g_gameCardHeader.package_id, sizeof(g_gameCardHeader.package_id)) != 0) continue;
 
         sha256CalculateHash(tmp_hash, g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
 
