@@ -230,7 +230,7 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
 
     SCOPED_LOCK(&g_keysetMutex)
     {
-        if (!g_keysetLoaded || !g_wipedSetCal) break;
+        if (!g_keysetLoaded || g_wipedSetCal) break;
 
         size_t out_keydata_size = 0;
         u8 out_keydata[RSA2048_BYTES] = {0};
