@@ -5279,11 +5279,7 @@ static void nspThreadFunc(void *arg)
             bool cancelled = nsp_thread_data->transfer_cancelled;
             mutexUnlock(&g_fileMutex);
 
-            if (cancelled)
-            {
-                if (dev_idx == 1) usbCancelFileTransfer();
-                goto end;
-            }
+            if (cancelled) goto end;
 
             if ((cur_nca_ctx->content_size - offset) < blksize) blksize = (cur_nca_ctx->content_size - offset);
 
@@ -5563,7 +5559,7 @@ end:
     {
         fclose(fd);
 
-        if (!success && dev_idx != 1)
+        if (!success)
         {
             if (dev_idx == 0)
             {
@@ -5574,6 +5570,8 @@ end:
             }
         }
     }
+
+    if (!success && dev_idx == 1) usbCancelFileTransfer();
 
     pfsFreeImageContext(&pfs_img_ctx);
 

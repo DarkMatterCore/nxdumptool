@@ -32,7 +32,7 @@
 #define USB_CMD_HEADER_MAGIC        0x4E584454                  /* "NXDT". */
 
 #define USB_TRANSFER_ALIGNMENT      0x1000                      /* 4 KiB. */
-#define USB_TRANSFER_TIMEOUT        5                           /* 5 seconds. */
+#define USB_TRANSFER_TIMEOUT        10                          /* 10 seconds. */
 
 #define USB_DEV_VID                 0x057E                      /* VID officially used by Nintendo in usb:ds. */
 #define USB_DEV_PID                 0x3000                      /* PID officially used by Nintendo in usb:ds. */

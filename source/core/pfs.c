@@ -346,7 +346,7 @@ bool pfsWriteImageContextHeaderToMemoryBuffer(PartitionFileSystemImageContext *c
     header_size = (sizeof(PartitionFileSystemHeader) + (header->entry_count * sizeof(PartitionFileSystemEntry)) + header->name_table_size);
 
     /* Calculate padded header size and padding size. */
-    padded_header_size = (IS_ALIGNED(header_size, PFS_HEADER_PADDING_ALIGNMENT) ? ALIGN_UP(header_size + 1, PFS_HEADER_PADDING_ALIGNMENT) : ALIGN_UP(header_size, PFS_HEADER_PADDING_ALIGNMENT));
+    padded_header_size = (IS_ALIGNED(header_size, PFS_HEADER_PADDING_ALIGNMENT) ? (header_size + PFS_HEADER_PADDING_ALIGNMENT) : ALIGN_UP(header_size, PFS_HEADER_PADDING_ALIGNMENT));
     padding_size = (u32)(padded_header_size - header_size);
 
     /* Check buffer size. */
