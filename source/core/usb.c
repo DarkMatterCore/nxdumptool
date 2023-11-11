@@ -26,7 +26,7 @@
 #include "usb.h"
 
 #define USB_ABI_VERSION_MAJOR       1
-#define USB_ABI_VERSION_MINOR       1
+#define USB_ABI_VERSION_MINOR       2
 #define USB_ABI_VERSION             ((USB_ABI_VERSION_MAJOR << 4) | USB_ABI_VERSION_MINOR)
 
 #define USB_CMD_HEADER_MAGIC        0x4E584454                  /* "NXDT". */
