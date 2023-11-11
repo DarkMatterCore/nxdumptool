@@ -3756,15 +3756,25 @@ static void extractedHfsReadThreadFunc(void *arg)
         {
             consolePrint("failed to retrieve free space from selected device\n");
             shared_thread_data->read_error = true;
-            goto end;
         }
 
-        if (shared_thread_data->total_size >= free_space)
+        if (!shared_thread_data->read_error && shared_thread_data->total_size >= free_space)
         {
             consolePrint("dump size exceeds free space\n");
             shared_thread_data->read_error = true;
-            goto end;
         }
+    } else {
+        if (!usbStartExtractedFsDump(shared_thread_data->total_size, filename))
+        {
+            consolePrint("failed to send extracted fs info to host\n");
+            shared_thread_data->read_error = true;
+        }
+    }
+
+    if (shared_thread_data->read_error)
+    {
+        condvarWakeAll(&g_writeCondvar);
+        goto end;
     }
 
     /* Loop through all file entries. */
@@ -3911,6 +3921,8 @@ static void extractedHfsReadThreadFunc(void *arg)
         mutexLock(&g_fileMutex);
         if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
         mutexUnlock(&g_fileMutex);
+
+        if (dev_idx == 1) usbEndExtractedFsDump();
 
         consolePrint("successfully saved extracted hfs partition data to \"%s\"\n", filename);
         consoleRefresh();
@@ -4131,15 +4143,25 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
         {
             consolePrint("failed to retrieve free space from selected device\n");
             shared_thread_data->read_error = true;
-            goto end;
         }
 
-        if (shared_thread_data->total_size >= free_space)
+        if (!shared_thread_data->read_error && shared_thread_data->total_size >= free_space)
         {
             consolePrint("dump size exceeds free space\n");
             shared_thread_data->read_error = true;
-            goto end;
         }
+    } else {
+        if (!usbStartExtractedFsDump(shared_thread_data->total_size, filename))
+        {
+            consolePrint("failed to send extracted fs info to host\n");
+            shared_thread_data->read_error = true;
+        }
+    }
+
+    if (shared_thread_data->read_error)
+    {
+        condvarWakeAll(&g_writeCondvar);
+        goto end;
     }
 
     /* Loop through all file entries. */
@@ -4286,6 +4308,8 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
         mutexLock(&g_fileMutex);
         if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
         mutexUnlock(&g_fileMutex);
+
+        if (dev_idx == 1) usbEndExtractedFsDump();
 
         consolePrint("successfully saved extracted partitionfs section data to \"%s\"\n", filename);
         consoleRefresh();
@@ -4437,15 +4461,25 @@ static void extractedRomFsReadThreadFunc(void *arg)
         {
             consolePrint("failed to retrieve free space from selected device\n");
             shared_thread_data->read_error = true;
-            goto end;
         }
 
-        if (shared_thread_data->total_size >= free_space)
+        if (!shared_thread_data->read_error && shared_thread_data->total_size >= free_space)
         {
             consolePrint("dump size exceeds free space\n");
             shared_thread_data->read_error = true;
-            goto end;
         }
+    } else {
+        if (!usbStartExtractedFsDump(shared_thread_data->total_size, filename))
+        {
+            consolePrint("failed to send extracted fs info to host\n");
+            shared_thread_data->read_error = true;
+        }
+    }
+
+    if (shared_thread_data->read_error)
+    {
+        condvarWakeAll(&g_writeCondvar);
+        goto end;
     }
 
     /* Reset current file table offset. */
@@ -4600,6 +4634,8 @@ static void extractedRomFsReadThreadFunc(void *arg)
         mutexLock(&g_fileMutex);
         if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
         mutexUnlock(&g_fileMutex);
+
+        if (dev_idx == 1) usbEndExtractedFsDump();
 
         consolePrint("successfully saved extracted romfs section data to \"%s\"\n", filename);
         consoleRefresh();
@@ -5293,6 +5329,19 @@ static void nspThreadFunc(void *arg)
             // update clean hash calculation
             sha256ContextUpdate(&clean_sha256_ctx, buf, blksize);
 
+            if ((offset + blksize) >= cur_nca_ctx->content_size)
+            {
+                // get clean hash
+                sha256ContextGetHash(&clean_sha256_ctx, clean_sha256_hash);
+
+                // validate clean hash
+                if (!cnmtVerifyContentHash(&cnmt_ctx, cur_nca_ctx, clean_sha256_hash))
+                {
+                    consolePrint("sha256 checksum mismatch for nca \"%s\"\n", cur_nca_ctx->content_id_str);
+                    goto end;
+                }
+            }
+
             if (dirty_header)
             {
                 // write re-encrypted headers
@@ -5334,16 +5383,8 @@ static void nspThreadFunc(void *arg)
             }
         }
 
-        // get hashes
-        sha256ContextGetHash(&clean_sha256_ctx, clean_sha256_hash);
+        // get dirty hash
         sha256ContextGetHash(&dirty_sha256_ctx, dirty_sha256_hash);
-
-        // verify content hash
-        if (!cnmtVerifyContentHash(&cnmt_ctx, cur_nca_ctx, clean_sha256_hash))
-        {
-            consolePrint("sha256 checksum mismatch for nca \"%s\"\n", cur_nca_ctx->content_id_str);
-            goto end;
-        }
 
         if (memcmp(clean_sha256_hash, dirty_sha256_hash, SHA256_HASH_SIZE) != 0)
         {

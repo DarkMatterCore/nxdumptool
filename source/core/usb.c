@@ -57,12 +57,14 @@
 /* Type definitions. */
 
 typedef enum {
-    UsbCommandType_StartSession       = 0,
-    UsbCommandType_SendFileProperties = 1,
-    UsbCommandType_CancelFileTransfer = 2,
-    UsbCommandType_SendNspHeader      = 3,
-    UsbCommandType_EndSession         = 4,
-    UsbCommandType_Count              = 5   ///< Total values supported by this enum.
+    UsbCommandType_StartSession         = 0,
+    UsbCommandType_SendFileProperties   = 1,
+    UsbCommandType_CancelFileTransfer   = 2,
+    UsbCommandType_SendNspHeader        = 3,
+    UsbCommandType_EndSession           = 4,
+    UsbCommandType_StartExtractedFsDump = 5,
+    UsbCommandType_EndExtractedFsDump   = 6,
+    UsbCommandType_Count                = 7     ///< Total values supported by this enum.
 } UsbCommandType;
 
 typedef struct {
@@ -90,10 +92,18 @@ typedef struct {
     u32 filename_length;
     u32 nsp_header_size;
     char filename[FS_MAX_PATH];
-    u8 reserved_2[0xF];
+    u8 reserved[0xF];
 } UsbCommandSendFileProperties;
 
 NXDT_ASSERT(UsbCommandSendFileProperties, 0x320);
+
+typedef struct {
+    u64 extracted_fs_size;
+    char extracted_fs_root_path[FS_MAX_PATH];
+    u8 reserved[0x6];
+} UsbCommandStartExtractedFsDump;
+
+NXDT_ASSERT(UsbCommandStartExtractedFsDump, 0x310);
 
 typedef enum {
     ///< Expected response code.
@@ -211,7 +221,7 @@ static void usbEndSession(void);
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size);
 static bool usbSendCommand(void);
-#if LOG_LEVEL <= LOG_LEVEL_ERROR
+#if LOG_LEVEL <= LOG_LEVEL_INFO
 static void usbLogStatusDetail(u32 status);
 #endif
 
@@ -363,8 +373,8 @@ bool usbSendFileData(void *data, u64 data_size)
         void *buf = NULL;
         bool zlt_required = false;
 
-        if (!g_usbTransferBuffer || !g_usbInterfaceInit || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize || !data || !data_size || data_size > USB_TRANSFER_BUFFER_SIZE || \
-            data_size > g_usbTransferRemainingSize)
+        if (!g_usbTransferBuffer || !g_usbInterfaceInit || !g_usbHostAvailable || !g_usbSessionStarted || !g_usbTransferRemainingSize || !data || !data_size || \
+            data_size > USB_TRANSFER_BUFFER_SIZE || data_size > g_usbTransferRemainingSize)
         {
             LOG_MSG_ERROR("Invalid parameters!");
             goto end;
@@ -430,7 +440,7 @@ bool usbSendFileData(void *data, u64 data_size)
             }
 
             ret = (cmd_status->status == UsbStatusType_Success);
-#if LOG_LEVEL <= LOG_LEVEL_ERROR
+#if LOG_LEVEL <= LOG_LEVEL_INFO
             if (!ret) usbLogStatusDetail(cmd_status->status);
 #endif
         }
@@ -474,8 +484,8 @@ bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size)
 
     SCOPED_LOCK(&g_usbInterfaceMutex)
     {
-        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || !g_nspTransferMode || !nsp_header || !nsp_header_size || \
-            nsp_header_size > (USB_TRANSFER_BUFFER_SIZE - sizeof(UsbCommandHeader)))
+        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || !g_nspTransferMode || !nsp_header || \
+            !nsp_header_size || nsp_header_size > (USB_TRANSFER_BUFFER_SIZE - sizeof(UsbCommandHeader)))
         {
             LOG_MSG_ERROR("Invalid parameters!");
             break;
@@ -493,6 +503,45 @@ bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size)
     }
 
     return ret;
+}
+
+bool usbStartExtractedFsDump(u64 extracted_fs_size, const char *extracted_fs_root_path)
+{
+    bool ret = false;
+
+    SCOPED_LOCK(&g_usbInterfaceMutex)
+    {
+        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || g_nspTransferMode || !extracted_fs_size || \
+            !extracted_fs_root_path || !*extracted_fs_root_path) break;
+
+        /* Prepare command data. */
+        usbPrepareCommandHeader(UsbCommandType_StartExtractedFsDump, (u32)sizeof(UsbCommandStartExtractedFsDump));
+
+        UsbCommandStartExtractedFsDump *cmd_block = (UsbCommandStartExtractedFsDump*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
+        memset(cmd_block, 0, sizeof(UsbCommandStartExtractedFsDump));
+
+        cmd_block->extracted_fs_size = extracted_fs_size;
+        snprintf(cmd_block->extracted_fs_root_path, sizeof(cmd_block->extracted_fs_root_path), "%s", extracted_fs_root_path);
+
+        /* Send command. */
+        ret = usbSendCommand();
+    }
+
+    return ret;
+}
+
+void usbEndExtractedFsDump(void)
+{
+    SCOPED_LOCK(&g_usbInterfaceMutex)
+    {
+        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || g_nspTransferMode) break;
+
+        /* Prepare command data. */
+        usbPrepareCommandHeader(UsbCommandType_EndExtractedFsDump, 0);
+
+        /* Send command. We don't care about the result here. */
+        usbSendCommand();
+    }
 }
 
 static bool usbCreateDetectionThread(void)
@@ -641,7 +690,7 @@ static void usbEndSession(void)
 
 NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size)
 {
-    if (cmd > UsbCommandType_EndSession) return;
+    if (cmd >= UsbCommandType_Count) return;
     UsbCommandHeader *cmd_header = (UsbCommandHeader*)g_usbTransferBuffer;
     memset(cmd_header, 0, sizeof(UsbCommandHeader));
     cmd_header->magic = __builtin_bswap32(USB_CMD_HEADER_MAGIC);
@@ -656,6 +705,11 @@ static bool usbSendCommand(void)
 
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
     u32 cmd = cmd_header->cmd;
+#endif
+
+#if LOG_LEVEL <= LOG_LEVEL_INFO
+    UsbCommandHeader cmd_header_bkp = {0};
+    memcpy(&cmd_header_bkp, cmd_header, sizeof(UsbCommandHeader));
 #endif
 
     UsbStatus *cmd_status = (UsbStatus*)g_usbTransferBuffer;
@@ -723,8 +777,17 @@ static bool usbSendCommand(void)
     ret = ((status = cmd_status->status) == UsbStatusType_Success);
 
 end:
-#if LOG_LEVEL <= LOG_LEVEL_ERROR
-    if (!ret) usbLogStatusDetail(status);
+#if LOG_LEVEL <= LOG_LEVEL_INFO
+    if (!ret)
+    {
+        usbLogStatusDetail(status);
+
+        if (status > UsbStatusType_ReadStatusFailed)
+        {
+            LOG_DATA_INFO(&cmd_header_bkp, sizeof(cmd_header_bkp), "USB command header dump:");
+            if (cmd_block_size) LOG_DATA_INFO(g_usbTransferBuffer, cmd_block_size, "USB command block dump:");
+        }
+    }
 #endif
 
     return ret;

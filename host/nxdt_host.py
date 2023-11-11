@@ -83,7 +83,7 @@ USB_DEV_MANUFACTURER = 'DarkMatterCore'
 USB_DEV_PRODUCT = 'nxdumptool'
 
 # USB timeout (milliseconds).
-USB_TRANSFER_TIMEOUT = 5000
+USB_TRANSFER_TIMEOUT = 10000
 
 # USB transfer block size.
 USB_TRANSFER_BLOCK_SIZE = 0x800000
@@ -102,15 +102,18 @@ USB_ABI_VERSION_MINOR = 1
 USB_CMD_HEADER_SIZE = 0x10
 
 # USB command IDs.
-USB_CMD_START_SESSION        = 0
-USB_CMD_SEND_FILE_PROPERTIES = 1
-USB_CMD_CANCEL_FILE_TRANSFER = 2
-USB_CMD_SEND_NSP_HEADER      = 3
-USB_CMD_END_SESSION          = 4
+USB_CMD_START_SESSION           = 0
+USB_CMD_SEND_FILE_PROPERTIES    = 1
+USB_CMD_CANCEL_FILE_TRANSFER    = 2
+USB_CMD_SEND_NSP_HEADER         = 3
+USB_CMD_END_SESSION             = 4
+USB_CMD_START_EXTRACTED_FS_DUMP = 5
+USB_CMD_END_EXTRACTED_FS_DUMP   = 6
 
 # USB command block sizes.
-USB_CMD_BLOCK_SIZE_START_SESSION        = 0x10
-USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES = 0x320
+USB_CMD_BLOCK_SIZE_START_SESSION           = 0x10
+USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES    = 0x320
+USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP = 0x310
 
 # Max filename length (file properties).
 USB_FILE_PROPERTIES_MAX_NAME_LENGTH = 0x300
@@ -567,8 +570,13 @@ def utilsGetPath(path_arg: str, fallback_path: str, is_file: bool, create: bool 
 def utilsIsValueAlignedToEndpointPacketSize(value: int) -> bool:
     return bool((value & (g_usbEpMaxPacketSize - 1)) == 0)
 
-def utilsResetNspInfo() -> None:
+def utilsResetNspInfo(delete: bool = False) -> None:
     global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
+
+    if g_nspFile:
+        g_nspFile.close()
+        if delete:
+            os.remove(g_nspFilePath)
 
     # Reset NSP transfer mode info.
     g_nspTransferMode = False
@@ -868,9 +876,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
 
     def cancelTransfer():
         # Cancel file transfer.
-        file.close()
-        os.remove(fullpath)
-        utilsResetNspInfo()
+        utilsResetNspInfo(True)
         if use_pbar:
             g_progressBarWindow.end()
 
@@ -941,6 +947,19 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
 
     return USB_STATUS_SUCCESS
 
+def usbHandleCancelFileTransfer(cmd_block: bytes) -> int:
+    #assert g_logger is not None
+
+    g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_START_SESSION:02X}) command.')
+
+    if g_nspTransferMode:
+        utilsResetNspInfo(True)
+        g_logger.warning('Transfer cancelled.')
+        return USB_STATUS_SUCCESS
+    else:
+        g_logger.error('Unexpected transfer cancellation.')
+        return USB_STATUS_MALFORMED_CMD
+
 def usbHandleSendNspHeader(cmd_block: bytes) -> int:
     global g_nspTransferMode, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
 
@@ -967,7 +986,6 @@ def usbHandleSendNspHeader(cmd_block: bytes) -> int:
     # Write NSP header.
     g_nspFile.seek(0)
     g_nspFile.write(cmd_block)
-    g_nspFile.close()
 
     g_logger.debug(f'Successfully wrote 0x{nsp_header_size:X}-byte long NSP header to "{g_nspFilePath}".\n')
 
@@ -981,15 +999,41 @@ def usbHandleEndSession(cmd_block: bytes) -> int:
     g_logger.debug(f'Received EndSession ({USB_CMD_END_SESSION:02X}) command.')
     return USB_STATUS_SUCCESS
 
+def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
+    #assert g_logger is not None
+
+    g_logger.debug(f'Received StartExtractedFsDump ({USB_CMD_START_EXTRACTED_FS_DUMP:02X}) command.')
+
+    if g_nspTransferMode:
+        g_logger.error('StartExtractedFsDump received mid NSP transfer.')
+        return USB_STATUS_MALFORMED_CMD
+
+    # Parse command block.
+    (extracted_fs_size, extracted_fs_root_path) = struct.unpack_from(f'<Q{USB_FILE_PROPERTIES_MAX_NAME_LENGTH}s', cmd_block, 0)
+    extracted_fs_root_path = extracted_fs_root_path.decode('utf-8').strip('\x00')
+
+    g_logger.info(f'Starting extracted FS dump (size 0x{extracted_fs_size:X}, output relative path "{extracted_fs_root_path}").')
+
+    # Return status code.
+    return USB_STATUS_SUCCESS
+
+def usbHandleEndExtractedFsDump(cmd_block: bytes) -> int:
+    #assert g_logger is not None
+    g_logger.debug(f'Received EndExtractedFsDump ({USB_CMD_END_EXTRACTED_FS_DUMP:02X}) command.')
+    g_logger.info(f'Finished extracted FS dump.')
+    return USB_STATUS_SUCCESS
+
 def usbCommandHandler() -> None:
     #assert g_logger is not None
 
-    # CancelFileTransfer is handled in usbHandleSendFileProperties().
     cmd_dict = {
-        USB_CMD_START_SESSION:        usbHandleStartSession,
-        USB_CMD_SEND_FILE_PROPERTIES: usbHandleSendFileProperties,
-        USB_CMD_SEND_NSP_HEADER:      usbHandleSendNspHeader,
-        USB_CMD_END_SESSION:          usbHandleEndSession
+        USB_CMD_START_SESSION:           usbHandleStartSession,
+        USB_CMD_SEND_FILE_PROPERTIES:    usbHandleSendFileProperties,
+        USB_CMD_CANCEL_FILE_TRANSFER:    usbHandleCancelFileTransfer,
+        USB_CMD_SEND_NSP_HEADER:         usbHandleSendNspHeader,
+        USB_CMD_END_SESSION:             usbHandleEndSession,
+        USB_CMD_START_EXTRACTED_FS_DUMP: usbHandleStartExtractedFsDump,
+        USB_CMD_END_EXTRACTED_FS_DUMP:   usbHandleEndExtractedFsDump
     }
 
     # Get device endpoints.
@@ -1050,7 +1094,8 @@ def usbCommandHandler() -> None:
         # Verify command block size.
         if (cmd_id == USB_CMD_START_SESSION and cmd_block_size != USB_CMD_BLOCK_SIZE_START_SESSION) or \
            (cmd_id == USB_CMD_SEND_FILE_PROPERTIES and cmd_block_size != USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES) or \
-           (cmd_id == USB_CMD_SEND_NSP_HEADER and not cmd_block_size):
+           (cmd_id == USB_CMD_SEND_NSP_HEADER and not cmd_block_size) or \
+           (cmd_id == USB_CMD_START_EXTRACTED_FS_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP):
             g_logger.error(f'Invalid command block size for command ID {cmd_id:02X}! (0x{cmd_block_size:X}).\n')
             usbSendStatus(USB_STATUS_MALFORMED_CMD)
             continue

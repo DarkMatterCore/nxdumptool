@@ -81,6 +81,13 @@ void usbCancelFileTransfer(void);
 /// If the NSP header size is aligned to the endpoint max packet size, the host device should expect a Zero Length Termination (ZLT) packet.
 bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size);
 
+/// Informs the host device that an extracted filesystem dump (e.g. HFS, PFS, RomFS) is about to begin.
+bool usbStartExtractedFsDump(u64 extracted_fs_size, const char *extracted_fs_root_path);
+
+/// Informs the host device that a previously started filesystem dump (via usbStartExtractedFsDump()) has finished.
+/// This is only issued after all extracted file entries have been successfully transferred to the host device.
+void usbEndExtractedFsDump(void);
+
 #ifdef __cplusplus
 }
 #endif
