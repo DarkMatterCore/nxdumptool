@@ -1,6 +1,6 @@
 # nxdumptool USB Application Binary Interface (ABI) Technical Specification
 
-This Markdown document aims to explain the technical details behind the ABI used by nxdumptool to communicate with a USB host device connected to the console. As of this writing (October 22nd, 2023), the current ABI version is `1.1`.
+This Markdown document aims to explain the technical details behind the ABI used by nxdumptool to communicate with a USB host device connected to the console. As of this writing (November 11th, 2023), the current ABI version is `1.1`.
 
 In order to avoid unnecessary clutter, this document assumes the reader is already familiar with homebrew launching on the Nintendo Switch, as well as USB concepts such as device/configuration/interface/endpoint descriptors and bulk mode transfers. Shall this not be the case, a small list of helpful resources is available at the end of this document.
 
@@ -56,7 +56,7 @@ Right after launching nxdumptool on the target Nintendo Switch, the application 
 * Binary Object Store (BOS) descriptor:
     * Holds a USB 2.0 extension descriptor for Link Power Management (LPM) support, as well as a SuperSpeed device capability descriptor to indicate the supported speeds.
 
-Communication is performed through the bulk input and output endpoints using 5-second timeouts.
+Communication is performed through the bulk input and output endpoints using 10-second timeouts.
 
 Verifying the product string is not required at this moment -- this is because PoC builds of the rewrite branch use a different `APP_TITLE` string.
 
