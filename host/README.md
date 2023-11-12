@@ -199,13 +199,21 @@ Sent right before dumping a Switch FS in extracted form (e.g. HFS, PFS, RomFS) u
 
 The extracted FS dump size field can be used by the host device to calculate an ETA for the overall FS dump.
 
-The extracted FS root path represents a path relative to the output directory where all the extracted FS entries are stored. All file paths from the extracted FS dump will begin with this string.
+The extracted FS root path follows the same conventions as the `path` field from a [`SendFileProperties`](#sendfileproperties) command, which means it also represents a relative path to an actual output directory used by nxdumptool, but with the difference that it actually points to the directory where all the extracted FS entries will be stored. In other words, all file paths from the extracted FS dump will begin with this string.
+
+A new `StartExtractedFsDump` command will never be issued unless an ongoing extracted FS dump is either cancelled (via [`CancelFileTransfer`](#cancelfiletransfer)) or finished (via [`EndExtractedFsDump`](#endextractedfsdump)).
+
+This command is mutually exclusive with the [NSP transfer mode](#nsp-transfer-mode) -- it'll never be issued if this mode is active.
 
 #### EndExtractedFsDump
 
 Yields no command block. Expects a status response, just like the rest of the commands.
 
 This command is only issued after all file entries from an extracted FS dump (started via [`StartExtractedFsDump`](#startextractedfsdump)) have been successfully transferred to the host device.
+
+If a [`CancelFileTransfer`](#cancelfiletransfer) command is issued before finishing an extracted FS dump, this command shall not be expected.
+
+This command is mutually exclusive with the [NSP transfer mode](#nsp-transfer-mode) -- it'll never be issued if this mode is active.
 
 ### Status response
 
