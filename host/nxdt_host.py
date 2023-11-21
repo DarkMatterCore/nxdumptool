@@ -60,6 +60,9 @@ from argparse import ArgumentParser
 from io import BufferedWriter
 from typing import List, Tuple, Any, Callable, Optional
 
+from datetime import datetime
+
+
 # Scaling factors.
 WINDOWS_SCALING_FACTOR = 96.0
 SCALE = 1.0
@@ -303,8 +306,10 @@ TASKBAR_LIB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAA
 # Global variables used throughout the code.
 g_cliMode: bool = False
 g_outputDir: str = ''
-g_logLevelIntVar: Optional[tk.IntVar] = None
+g_logPath: str = ''
 
+g_logLevelIntVar: Optional[tk.IntVar] = None
+g_logToFileBoolVar: Optional[tk.BooleanVar] = None
 g_osType: str = ''
 g_osVersion: str = ''
 
@@ -357,7 +362,12 @@ class LogQueueHandler(logging.Handler):
             msg = self.format(record)
             print(msg)
         else:
-            self.log_queue.put(record)
+            self.log_queue.put(record) 
+        if g_logToFileBoolVar.get():
+            logToFileMsg=datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]+'\t['+ \
+                    record.levelname+']\t'+self.format(record).strip()+'\n'
+            with open (g_logPath, 'a', encoding="utf-8") as f:
+                f.write(logToFileMsg)
 
 # Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
 class LogConsole:
@@ -388,7 +398,7 @@ class LogConsole:
             self.scrolled_text.insert(tk.END, msg + '\n', record.levelname)
             self.scrolled_text.configure(state='disabled')
             self.scrolled_text.yview(tk.END)
-
+        
     def poll_log_queue(self) -> None:
         # Check every 100 ms if there is a new message in the queue to display.
         while True:
@@ -566,7 +576,45 @@ def utilsGetPath(path_arg: str, fallback_path: str, is_file: bool, create: bool 
         raise Exception(f'Error: "{path}" points to an invalid file/directory.')
 
     return path
+    
+# Prepends `\\?\` to enable ~64KiB long paths in Windows.
+# ref0: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN#win32-file-namespaces
+# ref1: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation?tabs=registry
+# ref2: https://stackoverflow.com/a/15373771
+# Replaces '/' separator with proper '\' in case running under MSYS2 env.
 
+def utilsGetWinFullPath(path_arg: str) -> str:
+    return '\\\\?\\' + path_arg.replace("/", "\\")
+    
+def utilsResetOutputDir() -> None:
+    global g_outputDir
+    global g_logPath
+    #assert g_tkDirText is not None
+
+    g_outputDir = g_tkDirText.get('1.0', tk.END).strip()
+    if not g_outputDir:
+        # We should never reach this, honestly.
+        messagebox.showerror('Error', 'You must provide an output directory!', parent=g_tkRoot)
+        return
+    
+    if g_logToFileBoolVar.get():
+      g_logPath = os.path.abspath(g_outputDir + os.path.sep + \
+            "nxdt_host_" + datetime.now().strftime('%Y-%m-%d_%H%M%S') + '.log')
+      if g_isWindows:
+        g_logPath = utilsGetWinFullPath(g_logPath)
+      print(g_logPath)
+    else:
+      print("Not logging to file.")
+        
+    # Make sure the full directory tree exists.
+    try:
+        os.makedirs(g_outputDir, exist_ok=True)
+    except:
+        utilsLogException(traceback.format_exc())
+        messagebox.showerror('Error', 'Unable to create full output directory tree!', parent=g_tkRoot)
+        return
+        
+    return
 def utilsIsValueAlignedToEndpointPacketSize(value: int) -> bool:
     return bool((value & (g_usbEpMaxPacketSize - 1)) == 0)
 
@@ -787,9 +835,9 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         # Generate full, absolute path to the destination file.
         fullpath = os.path.abspath(g_outputDir + os.path.sep + filename)
 
-        # Unconditionally enable 32-bit paths on Windows.
+        # Unconditionally enable long paths in Windows.
         if g_isWindows:
-           fullpath = '\\\\?\\' + fullpath.replace("/", "\\")
+           fullpath = utilsGetWinFullPath(fullpath);
 
         # Get parent directory path.
         dirpath = os.path.dirname(fullpath)
@@ -827,10 +875,6 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         file = g_nspFile
         fullpath = g_nspFilePath
         
-        # Unconditionally enable 32-bit paths on Windows.
-        if g_isWindows:
-           fullpath = '\\\\?\\' + fullpath.replace("/", "\\")
-
         dirpath = os.path.dirname(fullpath)
 
     # Check if we're dealing with an empty file or with the first SendFileProperties command from a NSP.
@@ -1125,28 +1169,25 @@ def uiStopServer() -> None:
     # Signal the shared stop event.
     #assert g_stopEvent is not None
     g_stopEvent.set()
+    # Log the end of the session. 
+    g_logger.info("\nServer stopped.\n")
+
 
 def uiStartServer() -> None:
-    global g_outputDir
 
-    #assert g_tkDirText is not None
-
-    g_outputDir = g_tkDirText.get('1.0', tk.END).strip()
-    if not g_outputDir:
-        # We should never reach this, honestly.
-        messagebox.showerror('Error', 'You must provide an output directory!', parent=g_tkRoot)
-        return
-
-    # Make sure the full directory tree exists.
-    try:
-        os.makedirs(g_outputDir, exist_ok=True)
-    except:
-        utilsLogException(traceback.format_exc())
-        messagebox.showerror('Error', 'Unable to create full output directory tree!', parent=g_tkRoot)
-        return
+    # Reset output path variable based on possible user input unconditionally.
+    utilsResetOutputDir()
 
     # Update UI.
     uiToggleElements(False)
+
+    # Log basic session status and info.
+    g_logger.info('\nServer started.')
+    g_logger.info('Output Dir:\t' + g_outputDir)
+    if g_logToFileBoolVar.get():
+        g_logger.info('Logging to:\t' + g_logPath.rsplit('\\', 1)[-1] + '\n')
+    else:
+        g_logger.info('Logging to file disabled.\n')
 
     # Create background server thread.
     server_thread = threading.Thread(target=usbCommandHandler, daemon=True)
@@ -1157,6 +1198,7 @@ def uiToggleElements(flag: bool) -> None:
     #assert g_tkChooseDirButton is not None
     #assert g_tkServerButton is not None
     #assert g_tkCanvas is not None
+    #assert g_tkLogToFileCheckbox is not None
     #assert g_tkVerboseCheckbox is not None
 
     if flag:
@@ -1165,7 +1207,7 @@ def uiToggleElements(flag: bool) -> None:
         g_tkChooseDirButton.configure(state='normal')
         g_tkServerButton.configure(text='Start server', command=uiStartServer, state='normal')
         g_tkCanvas.itemconfigure(g_tkTipMessage, state='hidden', text='')
-
+        g_tkLogToFileCheckbox.configure(state='normal')
         g_tkVerboseCheckbox.configure(state='normal')
     else:
         #assert g_tkScrolledTextLog is not None
@@ -1179,7 +1221,7 @@ def uiToggleElements(flag: bool) -> None:
         g_tkScrolledTextLog.configure(state='normal')
         g_tkScrolledTextLog.delete('1.0', tk.END)
         g_tkScrolledTextLog.configure(state='disabled')
-
+        g_tkLogToFileCheckbox.configure(state='disabled')
         g_tkVerboseCheckbox.configure(state='disabled')
 
 def uiChooseDirectory() -> None:
@@ -1210,15 +1252,15 @@ def uiHandleVerboseCheckbox() -> None:
     g_logger.setLevel(g_logLevelIntVar.get())
 
 def uiInitialize() -> None:
-    global SCALE, g_logLevelIntVar
-    global g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog, g_tkVerboseCheckbox
+    global SCALE, g_logLevelIntVar, g_logToFileBoolVar
+    global g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog, g_tkLogToFileCheckbox, g_tkVerboseCheckbox
     global g_stopEvent, g_tlb, g_taskbar, g_progressBarWindow
 
     # Setup thread event.
     g_stopEvent = threading.Event()
 
     # Enable high DPI scaling under Windows (if possible).
-    # This will remove the blur caused by bilineal filtering when automatic scaling is carried out by Windows itself.
+    # This will remove the blur caused by bilinear filtering when automatic scaling is carried out by Windows itself.
     dpi_aware = False
     if g_isWindowsVista:
         try:
@@ -1299,7 +1341,7 @@ def uiInitialize() -> None:
     g_tkCanvas = tk.Canvas(g_tkRoot, width=window_width_px, height=window_height_px)
     g_tkCanvas.pack()
 
-    g_tkCanvas.create_text(uiScaleMeasure(60), uiScaleMeasure(30), text='Output directory:', anchor=tk.CENTER)
+    g_tkCanvas.create_text(uiScaleMeasure(60), uiScaleMeasure(30), text='Output Dir:', anchor=tk.CENTER)
 
     g_tkDirText = tk.Text(g_tkRoot, height=1, width=45, font=default_font, wrap='none', state='disabled', bg='#F0F0F0')
     uiUpdateDirectoryField(g_outputDir)
@@ -1322,15 +1364,22 @@ def uiInitialize() -> None:
     g_tkScrolledTextLog.tag_config('CRITICAL', foreground='red', underline=True)
     g_tkCanvas.create_window(uiScaleMeasure(int(WINDOW_WIDTH / 2)), uiScaleMeasure(280), window=g_tkScrolledTextLog, anchor=tk.CENTER)
 
-    g_tkCanvas.create_text(uiScaleMeasure(5), uiScaleMeasure(WINDOW_HEIGHT - 10), text=COPYRIGHT_TEXT, anchor=tk.W)
+    g_tkCanvas.create_text(uiScaleMeasure(5), uiScaleMeasure(WINDOW_HEIGHT - 13), text=COPYRIGHT_TEXT, anchor=tk.W)
+   
+    g_logToFileBoolVar = tk.BooleanVar()
+    g_tkLogToFileCheckbox = tk.Checkbutton(g_tkRoot, text='Log to file', variable=g_logToFileBoolVar,onvalue=True, offvalue=False)
+    g_tkLogToFileCheckbox.select()
+    
+    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH - 165), uiScaleMeasure(WINDOW_HEIGHT - 13), window=g_tkLogToFileCheckbox, anchor=tk.CENTER)
 
     g_logLevelIntVar = tk.IntVar()
     g_tkVerboseCheckbox = tk.Checkbutton(g_tkRoot, text='Verbose output', variable=g_logLevelIntVar, onvalue=logging.DEBUG, offvalue=logging.INFO, command=uiHandleVerboseCheckbox)
-    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH - 55), uiScaleMeasure(WINDOW_HEIGHT - 10), window=g_tkVerboseCheckbox, anchor=tk.CENTER)
+   
+    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH - 55), uiScaleMeasure(WINDOW_HEIGHT - 13), window=g_tkVerboseCheckbox, anchor=tk.CENTER)
 
     # Initialize console logger.
     console = LogConsole(g_tkScrolledTextLog)
-
+        
     # Initialize progress bar window object.
     bar_format = '{desc}\n\n{percentage:.2f}% - {n:.2f} / {total:.2f} {unit}\nElapsed time: {elapsed}. Remaining time: {remaining}.\nSpeed: {rate_fmt}.'
     g_progressBarWindow = ProgressBarWindow(bar_format, g_tkRoot, 'File transfer', False, uiHandleExitProtocolStub)
@@ -1341,7 +1390,7 @@ def uiInitialize() -> None:
 
 def cliInitialize() -> None:
     global g_progressBarWindow
-
+    
     #assert g_logger is not None
 
     # Initialize console logger.
@@ -1353,7 +1402,7 @@ def cliInitialize() -> None:
 
     # Print info.
     g_logger.info('\n' + SCRIPT_TITLE + '. ' + COPYRIGHT_TEXT + '.')
-    g_logger.info('Output directory: "' + g_outputDir + '".\n')
+    g_logger.info('Output Dir: "' + g_outputDir + '".\n')
 
     # Start USB command handler directly.
     usbCommandHandler()
@@ -1414,7 +1463,8 @@ if __name__ == "__main__":
         ret = main()
     except KeyboardInterrupt:
         time.sleep(0.2)
-        print('\nScript interrupted.')
+        print("\nHost script interrupted!")
+
     except Exception as e:
         utilsLogException(traceback.format_exc())
 
