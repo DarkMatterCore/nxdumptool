@@ -787,6 +787,10 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         # Generate full, absolute path to the destination file.
         fullpath = os.path.abspath(g_outputDir + os.path.sep + filename)
 
+        # Unconditionally enable 32-bit paths on Windows.
+        if g_isWindows:
+           fullpath = '\\\\?\\' + fullpath.replace("/", "\\")
+
         # Get parent directory path.
         dirpath = os.path.dirname(fullpath)
 
@@ -822,6 +826,11 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         # Retrieve what we need using global variables.
         file = g_nspFile
         fullpath = g_nspFilePath
+        
+        # Unconditionally enable 32-bit paths on Windows.
+        if g_isWindows:
+           fullpath = '\\\\?\\' + fullpath.replace("/", "\\")
+
         dirpath = os.path.dirname(fullpath)
 
     # Check if we're dealing with an empty file or with the first SendFileProperties command from a NSP.
