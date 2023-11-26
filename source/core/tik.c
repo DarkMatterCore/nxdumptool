@@ -386,8 +386,9 @@ static bool tikFixTamperedCommonTicket(Ticket *tik)
     TikCommonBlock *tik_common_block = NULL;
 
     u32 sig_type = 0;
-    u8 *signature = NULL;
-    u64 signature_size = 0, hash_area_size = 0;
+    bool dev_cert = false;
+    TikSigRsa2048 *tik_data = NULL;
+    u64 hash_area_size = 0;
 
     bool success = false;
 
@@ -397,15 +398,23 @@ static bool tikFixTamperedCommonTicket(Ticket *tik)
         return false;
     }
 
-    /* Get ticket signature and its properties, as well as the ticket hash area size. */
+    /* Get ticket signature type. Also determine if it's a development ticket. */
     sig_type = signatureGetTypeFromSignedBlob(tik->data, false);
-    signature = signatureGetSigFromSignedBlob(tik->data);
-    signature_size = signatureGetSigSizeByType(sig_type);
+    dev_cert = (strstr(tik_common_block->issuer, TIK_DEV_CERT_ISSUER) != NULL);
+
+    /* Return right away if we're not dealing with a common ticket or if the signature type doesn't match RSA-2048 + SHA-256. */
+    if (tik_common_block->titlekey_type != TikTitleKeyType_Common || sig_type != SignatureType_Rsa2048Sha256)
+    {
+        success = true;
+        goto end;
+    }
+
+    /* Make sure we're dealing with a tampered ticket by verifying its signature. */
+    tik_data = (TikSigRsa2048*)tik->data;
+    tik_common_block = &(tik_data->tik_common_block);
     hash_area_size = tikGetSignedTicketBlobHashAreaSize(tik->data);
 
-    /* Return right away if we're not dealing with a common ticket, if the signature type doesn't match RSA-2048 + SHA-256, or if the signature is valid. */
-    if (tik_common_block->titlekey_type != TikTitleKeyType_Common || sig_type != SignatureType_Rsa2048Sha256 || \
-        tikVerifyRsa2048Sha256Signature(tik_common_block, hash_area_size, signature))
+    if (tikVerifyRsa2048Sha256Signature(tik_common_block, hash_area_size, tik_data->sig_block.signature))
     {
         success = true;
         goto end;
@@ -416,21 +425,34 @@ static bool tikFixTamperedCommonTicket(Ticket *tik)
     /* Nintendo didn't start putting the key generation value into the rights ID until HOS 3.0.1. */
     /* Old custom tools used to wipe the key generation field and/or save its value into a different offset. */
     /* We're gonna take care of that by setting the correct values where they need to go. */
-    memset(signature, 0xFF, signature_size);
+    memset(tik_data->sig_block.signature, 0xFF, sizeof(tik_data->sig_block.signature));
+    memset(tik_data->sig_block.padding, 0, sizeof(tik_data->sig_block.padding));
 
+    memset(tik_common_block->issuer, 0, sizeof(tik_common_block->issuer));
+    sprintf(tik_common_block->issuer, "Root-CA%08X-%s", dev_cert ? 4 : 3, TIK_COMMON_CERT_NAME);
+
+    memset(tik_common_block->titlekey_block + 0x10, 0, sizeof(tik_common_block->titlekey_block) - 0x10);
+
+    tik_common_block->format_version = TIK_FORMAT_VERSION;
     tik_common_block->titlekey_type = TikTitleKeyType_Common;
+    tik_common_block->ticket_version = 0;
     tik_common_block->license_type = TikLicenseType_Permanent;
     tik_common_block->key_generation = tik->key_generation;
     tik_common_block->property_mask = TikPropertyMask_None;
+
+    memset(tik_common_block->reserved, 0, sizeof(tik_common_block->reserved));
 
     tik_common_block->ticket_id = 0;
     tik_common_block->device_id = 0;
     tik_common_block->account_id = 0;
 
     tik_common_block->sect_total_size = 0;
-    tik_common_block->sect_hdr_offset = (u32)tik->size;
+    tik_common_block->sect_hdr_offset = (u32)sizeof(TikSigRsa2048);
     tik_common_block->sect_hdr_count = 0;
     tik_common_block->sect_hdr_entry_size = 0;
+
+    /* Update ticket size. */
+    tik->size = sizeof(TikSigRsa2048);
 
     /* Update return value. */
     success = true;
@@ -447,8 +469,8 @@ static bool tikVerifyRsa2048Sha256Signature(const TikCommonBlock *tik_common_blo
         return false;
     }
 
-    const char *cert_name = (strrchr(tik_common_block->issuer, '-') + 1);
     Certificate cert = {0};
+    const char *cert_name = (strrchr(tik_common_block->issuer, '-') + 1);
     const u8 *modulus = NULL, *public_exponent = NULL;
 
     /* Get certificate for the ticket signature issuer. */
