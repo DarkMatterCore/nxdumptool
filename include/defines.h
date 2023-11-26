@@ -133,6 +133,4 @@
 
 #define DISCORD_SERVER_URL              "https://discord.gg/SCbbcQx"
 
-#define LOCKPICK_RCM_URL                "https://github.com/shchmue/Lockpick_RCM"
-
 #endif  /* __DEFINES_H__ */
