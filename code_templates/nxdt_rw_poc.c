@@ -43,6 +43,7 @@ typedef bool (*MenuElementFunction)(void *userdata);
 
 typedef struct {
     u32 selected;                                   ///< Used to keep track of the selected option.
+    bool retrieved;                                 ///< Used to determine if the value for this option has already been retrieved from configuration.
     MenuElementOptionGetterFunction getter_func;    ///< Pointer to a function to be called the first time an option value is loaded. Should be set to NULL if not used.
     MenuElementOptionSetterFunction setter_func;    ///< Pointer to a function to be called each time a new option value is selected. Should be set to NULL if not used.
     char **options;                                 ///< Pointer to multiple char pointers with strings representing options. Last element must be set to NULL.
@@ -147,6 +148,7 @@ static void consolePrintReversedColors(const char *text, ...);
 static void consoleRefresh(void);
 
 static u32 menuGetElementCount(const Menu *menu);
+static void menuResetAttributes(Menu *cur_menu, u32 element_count);
 
 void freeStorageList(void);
 void updateStorageList(void);
@@ -176,6 +178,8 @@ static char *generateOutputTitleFileName(TitleInfo *title_info, const char *subd
 static char *generateOutputLayeredFsFileName(u64 title_id, const char *subdir, const char *extension);
 
 static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out);
+
+static bool resetSettings(void *userdata);
 
 static bool saveGameCardImage(void *userdata);
 static bool saveGameCardHeader(void *userdata);
@@ -289,6 +293,7 @@ static char **g_storageOptions = NULL;
 
 static MenuElementOption g_storageMenuElementOption = {
     .selected = 0,
+    .retrieved = false,
     .getter_func = &getOutputStorageOption,
     .setter_func = &setOutputStorageOption,
     .options = NULL // Dynamically set
@@ -316,6 +321,7 @@ static MenuElement *g_xciMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getGameCardPrependKeyAreaOption,
             .setter_func = &setGameCardPrependKeyAreaOption,
             .options = g_noYesStrings
@@ -328,6 +334,7 @@ static MenuElement *g_xciMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getGameCardKeepCertificateOption,
             .setter_func = &setGameCardKeepCertificateOption,
             .options = g_noYesStrings
@@ -340,6 +347,7 @@ static MenuElement *g_xciMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getGameCardTrimDumpOption,
             .setter_func = &setGameCardTrimDumpOption,
             .options = g_noYesStrings
@@ -352,6 +360,7 @@ static MenuElement *g_xciMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 1,
+            .retrieved = false,
             .getter_func = &getGameCardCalculateChecksumOption,
             .setter_func = &setGameCardCalculateChecksumOption,
             .options = g_noYesStrings
@@ -410,6 +419,7 @@ static MenuElement *g_gameCardHfsMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getGameCardWriteRawHfsPartitionOption,
             .setter_func = &setGameCardWriteRawHfsPartitionOption,
             .options = g_noYesStrings
@@ -514,6 +524,7 @@ static MenuElement *g_nspMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getNspSetDownloadDistributionOption,
             .setter_func = &setNspSetDownloadDistributionOption,
             .options = g_noYesStrings
@@ -526,6 +537,7 @@ static MenuElement *g_nspMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getNspRemoveConsoleDataOption,
             .setter_func = &setNspRemoveConsoleDataOption,
             .options = g_noYesStrings
@@ -538,6 +550,7 @@ static MenuElement *g_nspMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getNspRemoveTitlekeyCryptoOption,
             .setter_func = &setNspRemoveTitlekeyCryptoOption,
             .options = g_noYesStrings
@@ -550,6 +563,7 @@ static MenuElement *g_nspMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 1,
+            .retrieved = false,
             .getter_func = &getNspDisableLinkedAccountRequirementOption,
             .setter_func = &setNspDisableLinkedAccountRequirementOption,
             .options = g_noYesStrings
@@ -562,6 +576,7 @@ static MenuElement *g_nspMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 1,
+            .retrieved = false,
             .getter_func = &getNspEnableScreenshotsOption,
             .setter_func = &setNspEnableScreenshotsOption,
             .options = g_noYesStrings
@@ -574,6 +589,7 @@ static MenuElement *g_nspMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 1,
+            .retrieved = false,
             .getter_func = &getNspEnableVideoCaptureOption,
             .setter_func = &setNspEnableVideoCaptureOption,
             .options = g_noYesStrings
@@ -586,6 +602,7 @@ static MenuElement *g_nspMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 1,
+            .retrieved = false,
             .getter_func = &getNspDisableHdcpOption,
             .setter_func = &setNspDisableHdcpOption,
             .options = g_noYesStrings
@@ -598,6 +615,7 @@ static MenuElement *g_nspMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 1,
+            .retrieved = false,
             .getter_func = &getNspGenerateAuthoringToolDataOption,
             .setter_func = &setNspGenerateAuthoringToolDataOption,
             .options = g_noYesStrings
@@ -630,6 +648,7 @@ static MenuElement *g_ticketMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getTicketRemoveConsoleDataOption,
             .setter_func = &setTicketRemoveConsoleDataOption,
             .options = g_noYesStrings
@@ -653,6 +672,7 @@ static char **g_ncaBasePatchOptions = NULL;
 
 static MenuElementOption g_ncaFsSectionsSubMenuBasePatchElementOption = {
     .selected = 0,
+    .retrieved = false,
     .getter_func = NULL,
     .setter_func = NULL,
     .options = NULL // Dynamically set
@@ -679,6 +699,7 @@ static MenuElement *g_ncaFsSectionsSubMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getNcaFsWriteRawSectionOption,
             .setter_func = &setNcaFsWriteRawSectionOption,
             .options = g_noYesStrings
@@ -691,6 +712,7 @@ static MenuElement *g_ncaFsSectionsSubMenuElements[] = {
         .task_func = NULL,
         .element_options = &(MenuElementOption){
             .selected = 0,
+            .retrieved = false,
             .getter_func = &getNcaFsUseLayeredFsDirOption,
             .setter_func = &setNcaFsUseLayeredFsDirOption,
             .options = g_noYesStrings
@@ -869,6 +891,13 @@ static MenuElement *g_rootMenuElements[] = {
         .element_options = NULL,
         .userdata = NULL
     },
+    &(MenuElement){
+        .str = "reset settings",
+        .child_menu = NULL,
+        .task_func = &resetSettings,
+        .element_options = NULL,
+        .userdata = NULL
+    },
     NULL
 };
 
@@ -941,6 +970,7 @@ int main(int argc, char *argv[])
         consolePrint("______________________________\n\n");
         if (cur_menu->parent) consolePrint("press b to go back\n");
         if (g_umsDeviceCount) consolePrint("press x to safely remove all ums devices\n");
+        consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
 
@@ -1032,10 +1062,10 @@ int main(int argc, char *argv[])
 
             if (cur_options)
             {
-                if (cur_options->getter_func)
+                if (cur_options->getter_func && !cur_options->retrieved)
                 {
                     cur_options->selected = cur_options->getter_func();
-                    cur_options->getter_func = NULL;
+                    cur_options->retrieved = true;
                 }
 
                 consolePrint(": ");
@@ -1179,7 +1209,6 @@ int main(int argc, char *argv[])
                 if (!error)
                 {
                     child_menu->parent = cur_menu;
-                    child_menu->selected = child_menu->scroll = 0;
 
                     cur_menu = child_menu;
                     element_count = menuGetElementCount(cur_menu);
@@ -1200,22 +1229,28 @@ int main(int argc, char *argv[])
                     break;
                 }
 
-                /* Wait for USB session (if needed). */
-                if (useUsbHost() && !waitForUsb())
+                if (cur_menu->id > MenuId_Root)
                 {
-                    if (g_appletStatus) continue;
-                    break;
+                    /* Wait for USB session (if needed). */
+                    if (useUsbHost() && !waitForUsb())
+                    {
+                        if (g_appletStatus) continue;
+                        break;
+                    }
+
+                    /* Run task. */
+                    utilsSetLongRunningProcessState(true);
+
+                    if (selected_element->task_func(selected_element->userdata))
+                    {
+                        if (!useUsbHost()) updateStorageList(); // update free space
+                    }
+
+                    utilsSetLongRunningProcessState(false);
+                } else {
+                    /* Ignore result. */
+                    selected_element->task_func(selected_element->userdata);
                 }
-
-                /* Run task. */
-                utilsSetLongRunningProcessState(true);
-
-                if (selected_element->task_func(selected_element->userdata))
-                {
-                    if (!useUsbHost()) updateStorageList(); // update free space
-                }
-
-                utilsSetLongRunningProcessState(false);
 
                 /* Display prompt. */
                 consolePrint("press any button to continue");
@@ -1302,6 +1337,8 @@ int main(int argc, char *argv[])
         } else
         if ((btn_down & HidNpadButton_B) && cur_menu->parent)
         {
+            menuResetAttributes(cur_menu, element_count);
+
             if (cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles)
             {
                 app_metadata = NULL;
@@ -1343,9 +1380,6 @@ int main(int argc, char *argv[])
             {
                 freeNcaBasePatchList();
             }
-
-            cur_menu->selected = 0;
-            cur_menu->scroll = 0;
 
             cur_menu = cur_menu->parent;
             element_count = menuGetElementCount(cur_menu);
@@ -1481,6 +1515,21 @@ static u32 menuGetElementCount(const Menu *menu)
     u32 cnt;
     for(cnt = 0; menu->elements[cnt]; cnt++);
     return cnt;
+}
+
+static void menuResetAttributes(Menu *cur_menu, u32 element_count)
+{
+    if (!cur_menu) return;
+
+    cur_menu->selected = 0;
+    cur_menu->scroll = 0;
+
+    for(u32 i = 0; i < element_count; i++)
+    {
+        MenuElement *cur_element = cur_menu->elements[i];
+        MenuElementOption *cur_options = cur_element->element_options;
+        if (cur_options && cur_options != &g_storageMenuElementOption) cur_options->retrieved = false;
+    }
 }
 
 void freeStorageList(void)
@@ -1638,7 +1687,12 @@ end:
 
 static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *out_count)
 {
-    if (!title_info || !out_idx || !out_count || (title_info->meta_key.type != NcmContentMetaType_Patch && title_info->meta_key.type != NcmContentMetaType_DataPatch)) return title_info;
+    if (!title_info || !out_idx || !out_count || (title_info->meta_key.type != NcmContentMetaType_Patch && title_info->meta_key.type != NcmContentMetaType_DataPatch))
+    {
+        if (out_idx) *out_idx = 0;
+        if (out_count) *out_count = titleGetCountFromInfoBlock(title_info);
+        return title_info;
+    }
 
     u32 idx = 0, count = 1;
     TitleInfo *cur_info = title_info->previous, *out = title_info;
@@ -2239,6 +2293,21 @@ static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
 
     consolePrint("get gamecard security information ok\n");
     return true;
+}
+
+static bool resetSettings(void *userdata)
+{
+    consolePrint("are you sure you want to reset all settings to their default values?\n");
+    consolePrint("press a to proceed, or b to cancel\n\n");
+
+    u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
+    if (btn_down & HidNpadButton_A)
+    {
+        configResetSettings();
+        consolePrint("settings successfully reset\n");
+    }
+
+    return false;
 }
 
 static bool saveGameCardImage(void *userdata)
@@ -4964,8 +5033,19 @@ static void nspThreadFunc(void *arg)
             consolePrintReversedColors("\nif you proceed, nca modifications will be disabled, and content decryption");
             consolePrintReversedColors("\nwill not be possible for external tools (e.g. emulators, etc.)\n");
 
-            consolePrintReversedColors("\nif this is a shared game and you wish to fix this, exit the application and");
-            consolePrintReversedColors("\ntry running it at least once, then come back and try again\n");
+            consolePrintReversedColors("\nthis may occur because of different reasons:\n");
+
+            consolePrintReversedColors("\n1. you haven't launched this game/dlc at least once since you downloaded it");
+            consolePrintReversedColors("\n2. this is a shared game/dlc across different switch consoles using the");
+            consolePrintReversedColors("\n   same nintendo account and you're using the secondary console");
+            consolePrintReversedColors("\n3. you downloaded this game/dlc onto your sd card using your sysmmc, then");
+            consolePrintReversedColors("\n   copied the 'nintendo' folder data into the 'emummc' folder (or viceversa)\n");
+
+            consolePrintReversedColors("\ncases 1 and 2 can be fixed by exiting nxdumptool, launching the game");
+            consolePrintReversedColors("\nand then running nxdumptool once again\n");
+
+            consolePrintReversedColors("\ncase 3 can be fixed by running nxdumptool directly under the emmc that was");
+            consolePrintReversedColors("\nused to download the game/dlc\n");
 
             consolePrintReversedColors("\npress a to proceed anyway, or b to cancel\n\n");
 

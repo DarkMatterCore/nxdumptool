@@ -49,6 +49,9 @@ bool configInitialize(void);
 /// Closes the configuration interface.
 void configExit(void);
 
+/// Resets settings to their default values.
+void configResetSettings(void);
+
 /// Getters and setters for various data types.
 /// Path elements must be separated using forward slashes.
 
