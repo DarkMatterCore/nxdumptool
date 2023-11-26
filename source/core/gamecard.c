@@ -28,7 +28,7 @@
 
 #define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB. */
 
-#define GAMECARD_ACCESS_DELAY               3                       /* Seconds. */
+#define GAMECARD_ACCESS_DELAY                   3                       /* Seconds. */
 
 #define GAMECARD_UNUSED_AREA_BLOCK_SIZE         0x24
 #define GAMECARD_UNUSED_AREA_SIZE(x)            (((x) / GAMECARD_PAGE_SIZE) * GAMECARD_UNUSED_AREA_BLOCK_SIZE)
@@ -134,7 +134,6 @@ static bool _gamecardGetDecryptedCardInfoArea(void);
 static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out);
 
 static bool gamecardGetHandleAndStorage(u32 partition);
-NX_INLINE void gamecardCloseHandle(void);
 
 static bool gamecardOpenStorageArea(u8 area);
 static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset);
@@ -258,6 +257,12 @@ void gamecardExit(void)
             free(g_gameCardReadBuf);
             g_gameCardReadBuf = NULL;
         }
+
+        /* Make sure NS can access the gamecard. */
+        /* Fixes gamecard launch errors after exiting the application. */
+        /* TODO: find out why this doesn't work. */
+        //Result rc = nsEnsureGameCardAccess();
+        //if (R_FAILED(rc)) LOG_MSG_ERROR("nsEnsureGameCardAccess failed! (0x%X).", rc);
 
         g_gameCardInterfaceInit = false;
     }
@@ -866,7 +871,7 @@ static bool gamecardReadHeader(void)
     }
 
     /* Read gamecard header. */
-    /* This step doesn't rely on gamecardReadStorageArea() because of its dependence on storage area sizes (which we haven't retrieved). */
+    /* We don't use gamecardReadStorageArea() here because of its dependence on storage area sizes (which we haven't yet retrieved). */
     Result rc = fsStorageRead(&g_gameCardStorage, 0, &g_gameCardHeader, sizeof(GameCardHeader));
     if (R_FAILED(rc))
     {
@@ -1000,7 +1005,6 @@ static bool gamecardGetHandleAndStorage(u32 partition)
         rc = fsOpenGameCardStorage(&g_gameCardStorage, &g_gameCardHandle, partition);
         if (R_FAILED(rc))
         {
-            gamecardCloseHandle(); /* Close invalid gamecard handle. */
             LOG_MSG_DEBUG("fsOpenGameCardStorage failed to open %s storage area on try #%u! (0x%X).", GAMECARD_STORAGE_AREA_NAME(partition + 1), i + 1, rc);
             continue;
         }
@@ -1018,11 +1022,6 @@ static bool gamecardGetHandleAndStorage(u32 partition)
     return R_SUCCEEDED(rc);
 }
 
-NX_INLINE void gamecardCloseHandle(void)
-{
-    g_gameCardHandle.value = 0;
-}
-
 static bool gamecardOpenStorageArea(u8 area)
 {
     if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || (area != GameCardStorageArea_Normal && area != GameCardStorageArea_Secure))
@@ -1034,7 +1033,7 @@ static bool gamecardOpenStorageArea(u8 area)
     /* Return right away if a valid handle has already been retrieved and the desired gamecard storage area is currently open. */
     if (g_gameCardHandle.value && serviceIsActive(&(g_gameCardStorage.s)) && g_gameCardCurrentStorageArea == area) return true;
 
-    /* Close both gamecard handle and open storage area. */
+    /* Close both the gamecard handle and the open storage area. */
     gamecardCloseStorageArea();
 
     /* Retrieve both a new gamecard handle and a storage area handle. */
@@ -1137,7 +1136,7 @@ static void gamecardCloseStorageArea(void)
         memset(&g_gameCardStorage, 0, sizeof(FsStorage));
     }
 
-    gamecardCloseHandle();
+    g_gameCardHandle.value = 0;
 
     g_gameCardCurrentStorageArea = GameCardStorageArea_None;
 }
