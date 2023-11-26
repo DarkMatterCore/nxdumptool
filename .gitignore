@@ -1,9 +1,10 @@
 .vscode
 build
 host/__pycache__
-host/installer
-host/build
-host/dist
+host/standalone
+host/nxdt_host.build
+host/nxdt_host.dist
+host/nxdt_host.onefile-build
 host/nxdumptool
 *.elf
 *.nacp
