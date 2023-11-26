@@ -92,7 +92,7 @@ namespace nxdt::utils {
     }
 #endif  /* LOG_LEVEL < LOG_LEVEL_NONE */
 
-    static void NORETURN AbortProgramExecution(std::string str)
+    static void NX_NORETURN AbortProgramExecution(std::string str)
     {
         if (g_borealisInitialized)
         {
