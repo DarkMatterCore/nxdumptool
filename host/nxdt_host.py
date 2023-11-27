@@ -1226,7 +1226,7 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
                 g_logger.info(f'\nSrc:\t{path_array[4]}')
                 g_logger.info(f'\t{path_array[5]}, FS section #{path_array[6]}')
             case _: 
-                g__logger.info(f'\tExtracted FS dump from novel source (???) started!')
+                g_logger.info(f'\tExtracted FS dump from novel source (???) started!')
                 g_logger.info:(f'\nRoot:\t{extracted_fs_root_path}')
         g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}')
         g_logger.info(f'Files:')
