@@ -919,13 +919,14 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         match ext:
             case "xci": g_logger.info("\tXCI transfer started!")
             case "bin": g_logger.info("\tGamecard extra data transfer started!")
+            case "fs0": g_logger.info("\tHFS0 raw partition transfer started!")
             case "nsp": g_logger.info("\tNSP transfer started!")
             case "nca": g_logger.info("\tRaw NCA transfer started!")
             case "tik": g_logger.info("\tTicket transfer started!")
             case _:     g_logger.info("\tTransfer of unknown data type started!") # uh-oh?
         utilsInitTransferVars(file_size)
         g_logger.info(f'\nFile:\t{filename}')
-        g_logger.info(f'Size:\t{g_formattedFileSize:.2f}{g_formattedFileUnit}')
+        g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}')
         if(ext == "nsp"):
             g_logger.info(f'Contents:')
     else:
@@ -933,7 +934,10 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         fs = file_size / div
         if g_extractedFsDumpMode:
             path_array = filename.split("/")
-            fn = '/'.join(path_array[7:])
+            match path_array[1]:
+                case 'NCA FS': fn = '/'.join(path_array[7:])
+                case 'HFS': fn = '/'.join(path_array[4:])
+                case _: fn = '/'.join(path_array[1:])
         elif g_nspTransferMode:
             fn = filename
         g_logger.info(f'\t{fn} ({fs:.2f} {unit})')
@@ -1213,9 +1217,17 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     path_array = extracted_fs_root_path.split('/')
     
     if not g_logVerbose:
-        g_logger.info(f'\tExtracted FS dump started!')
-        g_logger.info(f'\nSrc:\t{path_array[4]}')
-        g_logger.info(f'\t{path_array[5]}, FS section #{path_array[6]}')
+        match path_array[1]:
+            case 'HFS':
+                g_logger.info(f'\tExtracted FS dump from HFS (Gamecard) started!')
+                g_logger.info(f'\nSrc:\t'+'/'.join(path_array[3:]))
+            case 'NCA FS':
+                g_logger.info(f'\tExtracted FS dump from NCA FS (NSP) started!')
+                g_logger.info(f'\nSrc:\t{path_array[4]}')
+                g_logger.info(f'\t{path_array[5]}, FS section #{path_array[6]}')
+            case _: 
+                g__logger.info(f'\tExtracted FS dump from novel source (???) started!')
+                g_logger.info:(f'\nRoot:\t{extracted_fs_root_path}')
         g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}')
         g_logger.info(f'Files:')
     else:
