@@ -434,7 +434,7 @@ class LogQueueHandler(logging.Handler):
 
 # Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
 class LogConsole:
-    def __init__(self, scrolled_text: Optional[scrolledtext.ScrolledText] = None):
+    def __init__(self, scrolled_text: scrolledtext.ScrolledText | None = None) -> None:
         assert g_logger is not None
 
         self.scrolled_text = scrolled_text
@@ -838,7 +838,6 @@ def usbGetDeviceEndpoints() -> bool:
     return True
 
 def usbRead(size: int, timeout: int = -1) -> bytes:
-
     rd = b''
 
     try:
@@ -848,12 +847,11 @@ def usbRead(size: int, timeout: int = -1) -> bytes:
         if not g_cliMode:
             utilsLogException(traceback.format_exc())
         if g_logger is not None:
-            g_logger.error('\nUSB timeout triggered or console disconnected.\n')
+            g_logger.error('\nUSB timeout triggered or console disconnected.')
 
     return rd
 
 def usbWrite(data: bytes, timeout: int = -1) -> int:
-
     wr = 0
 
     try:
@@ -862,7 +860,7 @@ def usbWrite(data: bytes, timeout: int = -1) -> int:
         if not g_cliMode:
             utilsLogException(traceback.format_exc())
         if g_logger is not None:
-            g_logger.error('\nUSB timeout triggered or console disconnected.\n')
+            g_logger.error('\nUSB timeout triggered or console disconnected.')
 
     return wr
 
@@ -875,6 +873,9 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
 
     assert g_logger is not None
 
+    if g_cliMode:
+        print()
+        
     g_logger.debug(f'\nReceived StartSession ({USB_CMD_START_SESSION:02X}) command.')
 
     # Parse command block.
@@ -1064,7 +1065,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         
         dirpath = os.path.dirname(fullpath)
         printable_fullpath = (fullpath[4:] if g_isWindows else fullpath)
-        
+
     # Check if we're dealing with an empty file or with the first SendFileProperties command from a NSP.
     if (not file_size) or (g_nspTransferMode and file_size == g_nspSize):
         # Close file (if needed).
@@ -1253,14 +1254,14 @@ def usbHandleSendNspHeader(cmd_block: bytes) -> int:
 
 def usbHandleEndSession(cmd_block: bytes) -> int:
     assert g_logger is not None
-    g_logger.debug(f'\nReceived EndSession ({USB_CMD_END_SESSION:02X}) command.')
+    g_logger.debug(f'Received EndSession ({USB_CMD_END_SESSION:02X}) command.')
     return USB_STATUS_SUCCESS
 
 def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     assert g_logger is not None
     global g_isWindows, g_outputDir, g_extractedFsDumpMode, g_extractedFsAbsRoot, g_formattedFileSize, g_formattedFileUnit, g_fileSizeMiB, g_startTime
      
-    g_logger.debug(f'\nReceived StartExtractedFsDump ({USB_CMD_START_EXTRACTED_FS_DUMP:02X}) command.')
+    g_logger.debug(f'Received StartExtractedFsDump ({USB_CMD_START_EXTRACTED_FS_DUMP:02X}) command.')
 
     if g_nspTransferMode:
         g_logger.error('\nStartExtractedFsDump received mid NSP transfer.\n')
@@ -1300,7 +1301,6 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     else:
         g_logger.debug(f'Starting extracted FS dump (size 0x{extracted_fs_size:X}, output relative path "{extracted_fs_root_path}").')
     
-    #g_extractedFsAbsRoot = extracted_fs_root_path
     g_extractedFsAbsRoot = os.path.abspath(g_outputDir + os.path.sep + extracted_fs_root_path)
     g_extractedFsAbsRoot = utilsStripWinPrefix(g_extractedFsAbsRoot) #if g_isWindows else g_extractedFsAbsRoot
     g_extractedFsDumpMode = True
@@ -1312,7 +1312,8 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
 def usbHandleEndExtractedFsDump(cmd_block: bytes) -> int:
     global g_extractedFsDumpMode, g_extractedFsAbsRoot
     assert g_logger is not None
-    g_logger.debug(f'\nReceived EndExtractedFsDump ({USB_CMD_END_EXTRACTED_FS_DUMP:02X}) command.')
+    g_logger.debug(f'Received EndExtractedFsDump ({USB_CMD_END_EXTRACTED_FS_DUMP:02X}) command.')
+    g_logger.info(f'Finished extracted FS dump.')
     if not g_logVerbose:
         g_logger.info(f'\nExtracted FS dump complete!\n')
         utilsLogTransferStats(time.time() - g_startTime)
