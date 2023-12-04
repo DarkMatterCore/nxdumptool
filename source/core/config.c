@@ -66,6 +66,7 @@ static struct json_object *g_configJson = NULL;
 /* Function prototypes. */
 
 static bool configParseConfigJson(void);
+static bool configResetConfigJson(void);
 static void configWriteConfigJson(void);
 static void configFreeConfigJson(void);
 
@@ -111,6 +112,11 @@ void configExit(void)
     }
 }
 
+void configResetSettings(void)
+{
+    configResetConfigJson();
+}
+
 CONFIG_GETTER(Boolean, bool);
 CONFIG_SETTER(Boolean, bool);
 
@@ -151,25 +157,32 @@ static bool configParseConfigJson(void)
         jsonLogLastError();
     }
 
-    if (use_default_config)
-    {
-        LOG_MSG_INFO("Loading default configuration.");
-
-        /* Free config JSON. */
-        configFreeConfigJson();
-
-        /* Read default config JSON. */
-        g_configJson = json_object_from_file(DEFAULT_CONFIG_PATH);
-        if (g_configJson)
-        {
-            configWriteConfigJson();
-            ret = true;
-        } else {
-            jsonLogLastError();
-        }
-    }
+    /* Try to load the default settings. */
+    if (use_default_config) ret = configResetConfigJson();
 
     if (!ret) LOG_MSG_ERROR("Failed to parse both current and default JSON configuration files!");
+
+    return ret;
+}
+
+static bool configResetConfigJson(void)
+{
+    bool ret = false;
+
+    LOG_MSG_INFO("Loading default configuration.");
+
+    /* Free config JSON. */
+    configFreeConfigJson();
+
+    /* Read default config JSON. */
+    g_configJson = json_object_from_file(DEFAULT_CONFIG_PATH);
+    if (g_configJson)
+    {
+        configWriteConfigJson();
+        ret = true;
+    } else {
+        jsonLogLastError();
+    }
 
     return ret;
 }

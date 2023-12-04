@@ -160,7 +160,7 @@ enum usb_supported_speed {
 };
 
 /// Imported from libusb, with some adjustments.
-struct PACKED usb_bos_descriptor {
+struct NX_PACKED usb_bos_descriptor {
     u8 bLength;
     u8 bDescriptorType; ///< Must match USB_DT_BOS.
     u16 wTotalLength;   ///< Length of this descriptor and all of its sub descriptors.
@@ -170,7 +170,7 @@ struct PACKED usb_bos_descriptor {
 NXDT_ASSERT(struct usb_bos_descriptor, 0x5);
 
 /// Imported from libusb, with some adjustments.
-struct PACKED usb_2_0_extension_descriptor {
+struct NX_PACKED usb_2_0_extension_descriptor {
     u8 bLength;
     u8 bDescriptorType;     ///< Must match USB_DT_DEVICE_CAPABILITY.
     u8 bDevCapabilityType;  ///< Must match USB_BT_USB_2_0_EXTENSION.
@@ -180,7 +180,7 @@ struct PACKED usb_2_0_extension_descriptor {
 NXDT_ASSERT(struct usb_2_0_extension_descriptor, 0x7);
 
 /// Imported from libusb, with some adjustments.
-struct PACKED usb_ss_usb_device_capability_descriptor {
+struct NX_PACKED usb_ss_usb_device_capability_descriptor {
     u8 bLength;
     u8 bDescriptorType;         ///< Must match USB_DT_DEVICE_CAPABILITY.
     u8 bDevCapabilityType;      ///< Must match USB_BT_SS_USB_DEVICE_CAPABILITY.

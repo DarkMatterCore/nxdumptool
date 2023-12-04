@@ -7,8 +7,11 @@
 from subprocess import run
 from os.path import dirname, join
 from sys import executable
+from platform import system
 
 root_dir = dirname(__file__)
 
-run([executable, '-m', 'pip', 'install', '-r', join(root_dir, 'requirements-win32.txt')])
+requirements_file = ('requirements-win32.txt' if system() == 'Windows' else 'requirements.txt')
+
+run([executable, '-m', 'pip', 'install', '-r', join(root_dir, requirements_file)])
 input('Press enter to close')

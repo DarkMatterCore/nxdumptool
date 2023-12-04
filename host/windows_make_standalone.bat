@@ -3,26 +3,22 @@
 set scriptdir=%~dp0
 set scriptdir=%scriptdir:~0,-1%
 
-set venvname=installer
+set venvname=standalone
 set venvscripts=%scriptdir%\%venvname%\Scripts
 
 set venvpython=%venvscripts%\python.exe
-set venvpyinstaller=%venvscripts%\pyinstaller.exe
 
 cd /D "%scriptdir%"
 
 python -m venv "%venvname%"
 
-"%venvpython%" -m pip install --upgrade pyinstaller -r requirements-win32.txt
+"%venvpython%" -m pip install --upgrade nuitka -r requirements-win32.txt
 
-"%venvpyinstaller%" -y --clean --log-level WARN -F --add-binary "C:\Windows\System32\libusb0.dll;." -w -i nxdt.ico nxdt_host.py
+"%venvpython%" -m nuitka --standalone --onefile --deployment --disable-console --windows-icon-from-ico=nxdt.ico --enable-plugin=tk-inter nxdt_host.py
 
-move dist\nxdt_host.exe nxdt_host.exe
-
-rmdir /s /q __pycache__
-rmdir /s /q build
-rmdir /s /q dist
-rmdir /s /q installer
-del nxdt_host.spec
+rmdir /s /q nxdt_host.build
+rmdir /s /q nxdt_host.dist
+rmdir /s /q nxdt_host.onefile-build
+rmdir /s /q standalone
 
 pause

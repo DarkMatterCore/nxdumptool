@@ -33,6 +33,8 @@ extern "C" {
 #define SIGNED_TIK_MIN_SIZE         sizeof(TikSigHmac160)   /* Assuming no ESV1/ESV2 records are available. */
 #define SIGNED_TIK_MAX_SIZE         0x400                   /* Max ticket entry size in the ES ticket system savedata file. */
 
+#define TIK_FORMAT_VERSION          2
+
 #define GENERATE_TIK_STRUCT(sigtype, tiksize) \
 typedef struct { \
     SignatureBlock##sigtype sig_block; \
@@ -72,7 +74,7 @@ typedef enum {
 typedef struct {
     char issuer[0x40];
     u8 titlekey_block[0x100];
-    u8 format_version;
+    u8 format_version;          ///< Always matches TIK_FORMAT_VERSION.
     u8 titlekey_type;           ///< TikTitleKeyType.
     u16 ticket_version;
     u8 license_type;            ///< TikLicenseType.

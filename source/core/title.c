@@ -552,7 +552,7 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
 
 NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system, u32 extra_app_count);
 
-NX_INLINE u64 titleGetApplicationIdByMetaKey(const NcmContentMetaKey *meta_key);
+NX_INLINE u64 titleGetApplicationIdByContentMetaKey(const NcmContentMetaKey *meta_key);
 
 static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_storage);
 static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, NcmContentMetaKey **out_meta_keys, u32 *out_meta_key_count);
@@ -1026,6 +1026,7 @@ TitleInfo **titleGetOrphanTitles(u32 *out_count)
         }
 
         /* Allocate orphan title info pointer array. */
+        /* titleFreeOrphanTitles() depends on the last NULL element. */
         orphan_info = calloc(g_orphanTitleInfoCount + 1, sizeof(TitleInfo*));
         if (!orphan_info)
         {
@@ -1372,6 +1373,33 @@ NX_INLINE bool titleInitializePersistentTitleStorages(void)
             return false;
         }
     }
+
+#if LOG_LEVEL <= LOG_LEVEL_INFO
+#define ORPHAN_INFO_LOG(fmt, ...) utilsAppendFormattedStringToBuffer(&orphan_info_buf, &orphan_info_buf_size, fmt, ##__VA_ARGS__)
+
+    if (g_orphanTitleInfo && g_orphanTitleInfoCount)
+    {
+        char *orphan_info_buf = NULL;
+        size_t orphan_info_buf_size = 0;
+
+        ORPHAN_INFO_LOG("Identified %u orphan title(s) across all initialized title storages.\r\n", g_orphanTitleInfoCount);
+
+        for(u32 i = 0; i < g_orphanTitleInfoCount; i++)
+        {
+            TitleInfo *orphan_info = g_orphanTitleInfo[i];
+            ORPHAN_INFO_LOG("- %016lX v%u (%s, %s).%s", orphan_info->meta_key.id, orphan_info->version.value, titleGetNcmContentMetaTypeName(orphan_info->meta_key.type), \
+                                                      titleGetNcmStorageIdName(orphan_info->storage_id), (i + 1) < g_orphanTitleInfoCount ? "\r\n" : "");
+        }
+
+        if (orphan_info_buf)
+        {
+            LOG_MSG_INFO("%s", orphan_info_buf);
+            free(orphan_info_buf);
+        }
+    }
+
+#undef ORPHAN_INFO_LOG
+#endif  /* LOG_LEVEL <= LOG_LEVEL_INFO */
 
     return true;
 }
@@ -1861,7 +1889,7 @@ NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 ti
     return NULL;
 }
 
-NX_INLINE u64 titleGetApplicationIdByMetaKey(const NcmContentMetaKey *meta_key)
+NX_INLINE u64 titleGetApplicationIdByContentMetaKey(const NcmContentMetaKey *meta_key)
 {
     if (!meta_key) return 0;
 
@@ -1961,7 +1989,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
         utilsGenerateFormattedSizeString((double)cur_title_info->size, cur_title_info->size_str, sizeof(cur_title_info->size_str));
 
         /* Retrieve application metadata. */
-        u64 app_id = titleGetApplicationIdByMetaKey(&(cur_title_info->meta_key));
+        u64 app_id = titleGetApplicationIdByContentMetaKey(&(cur_title_info->meta_key));
         cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, storage_id == NcmStorageId_BuiltInSystem, 0);
         if (!cur_title_info->app_metadata && storage_id == NcmStorageId_BuiltInSystem)
         {
@@ -2203,7 +2231,7 @@ static void titleUpdateTitleInfoLinkedLists(void)
             {
                 /* We're dealing with a patch, an add-on content or an add-on content patch. */
                 /* We'll just retrieve a pointer to the first matching user application entry and use it to set a pointer to an application metadata entry. */
-                u64 app_id = titleGetApplicationIdByMetaKey(&(child_info->meta_key));
+                u64 app_id = titleGetApplicationIdByContentMetaKey(&(child_info->meta_key));
                 TitleInfo *parent = _titleGetInfoFromStorageByTitleId(NcmStorageId_Any, app_id);
                 if (parent)
                 {
@@ -2367,7 +2395,7 @@ static bool titleRefreshGameCardTitleInfo(void)
         if (!cur_title_info) continue;
 
         /* Do not proceed if application metadata has already been retrieved, or if we can successfully retrieve it. */
-        u64 app_id = titleGetApplicationIdByMetaKey(&(cur_title_info->meta_key));
+        u64 app_id = titleGetApplicationIdByContentMetaKey(&(cur_title_info->meta_key));
         if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, extra_app_count)) != NULL) continue;
 
         /* Retrieve application metadata pointer. */

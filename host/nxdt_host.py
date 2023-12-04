@@ -58,7 +58,7 @@ from tqdm import tqdm
 from argparse import ArgumentParser, RawTextHelpFormatter, ArgumentDefaultsHelpFormatter 
 
 from io import BufferedWriter
-from typing import List, Tuple, Any, Callable, Optional
+from typing import Generator, Any, Callable
 
 from datetime import datetime
 
@@ -149,8 +149,8 @@ SERVER_START_MSG = f'Please connect a Nintendo Switch console running {USB_DEV_P
 SERVER_STOP_MSG = f'Exit {USB_DEV_PRODUCT} on your console or disconnect it at any time to stop the server.'
 
 # Default directory paths.
-INITIAL_DIR = os.path.abspath(os.path.dirname(sys.executable if getattr(sys, 'frozen', False) else __file__))
-DEFAULT_DIR = (INITIAL_DIR + os.path.sep + USB_DEV_PRODUCT)
+INITIAL_DIR = os.path.dirname(os.path.abspath(os.path.expanduser(os.path.expandvars(sys.argv[0]))))
+DEFAULT_DIR = os.path.join(INITIAL_DIR, USB_DEV_PRODUCT)
 
 # Application icon (PNG).
 # Embedded to load it as the icon for all windows using PhotoImage (which doesn't support ICO files) + wm_iconphoto.
@@ -237,7 +237,7 @@ APP_ICON = b'iVBORw0KGgoAAAANSUhEUgAAADAAAAAwCAYAAABXAvmHAAAAAXNSR0IArs4c6QAAAAR
            b'43EDnoiNHI8a8FRs5HjMgCdjI8cj7+rp2MhR/Z3p7b5gyzRyjN0ei80cwP+bQrjkWSh1LgAAAABJRU5ErkJggg=='
 
 # Taskbar Type Library (TLB). Used under Windows 7 or greater.
-TASKBAR_LIB_PATH = (INITIAL_DIR + os.path.sep + 'TaskbarLib.tlb')
+TASKBAR_LIB_PATH = os.path.join(INITIAL_DIR, 'TaskbarLib.tlb')
 
 TASKBAR_LIB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAATgAAADMDAAAAAAAA/////xgAAAAgAAAAgAAAAP////8AAAAAAAAAAGQAAADIAAAA' + \
               b'LAEAAJABAAD0AQAAWAIAALwCAAAgAwAAhAMAAOgDAABMBAAAsAQAABQFAAB8AQAAeAUAAP////8PAAAA/////wAAAAD/////DwAAAP////8AAAAA/////w8AAABMCAAA' + \
@@ -318,11 +318,11 @@ g_logToFile: bool = False
 g_logVerbose: bool = False
 g_terminalColors: bool = False
 g_outputDir: str = ''
+g_logLevelIntVar: tk.IntVar | None = None
+g_logToFileBoolVar: tk.BooleanVar | None = None
 g_logPath: str = ''
 g_pathSep: str = ''
 
-g_logLevelIntVar: tk.IntVar | None = None
-g_logToFileBoolVar: tk.BooleanVar | None = None
 g_osType: str = ''
 g_osVersion: str = ''
 
@@ -331,18 +331,18 @@ g_isWindowsVista: bool = False
 g_isWindows7: bool = False
 g_isWindows10: bool = False
 
-g_tkRoot: Optional[tk.Tk] = None
-g_tkCanvas: Optional[tk.Canvas] = None
-g_tkDirText: Optional[tk.Text] = None
-g_tkChooseDirButton: Optional[tk.Button] = None
-g_tkServerButton: Optional[tk.Button] = None
-g_tkTipMessage: Any = None
-g_tkScrolledTextLog: Optional[scrolledtext.ScrolledText] = None
-g_tkVerboseCheckbox: Optional[tk.Checkbutton] = None
+g_tkRoot: tk.Tk | None = None
+g_tkCanvas: tk.Canvas | None = None
+g_tkDirText: tk.Text | None = None
+g_tkChooseDirButton: tk.Button | None = None
+g_tkServerButton: tk.Button | None = None
+g_tkTipMessage: int = 0
+g_tkScrolledTextLog: scrolledtext.ScrolledText | None = None
+g_tkVerboseCheckbox: tk.Checkbutton | None = None
 
-g_logger: Optional[logging.Logger] = None
+g_logger: logging.Logger | None = None
 
-g_stopEvent: Optional[threading.Event] = None
+g_stopEvent: threading.Event | None = None
 
 g_tlb: Any = None
 g_taskbar: Any = None
@@ -363,7 +363,7 @@ g_nspTransferMode: bool = False
 g_nspSize: int = 0
 g_nspHeaderSize: int = 0
 g_nspRemainingSize: int = 0
-g_nspFile: Optional[BufferedWriter] = None
+g_nspFile: BufferedWriter | None = None
 g_nspFilePath: str = ''
 
 g_extractedFsDumpMode: bool = False
@@ -378,7 +378,7 @@ g_extractedFsAbsRoot: str = ""
 
 # Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
 class LogQueueHandler(logging.Handler):
-    def __init__(self, log_queue: queue.Queue):
+    def __init__(self, log_queue: queue.Queue) -> None:
         super().__init__()
         self.log_queue = log_queue
 
@@ -481,7 +481,7 @@ class LogConsole:
 class ProgressBarWindow:
     global g_tlb, g_taskbar
 
-    def __init__(self, bar_format: str = '', tk_parent: Any = None, window_title: str = '', window_resize: bool = False, window_protocol: Optional[Callable] = None):
+    def __init__(self, bar_format: str = '', tk_parent: Any = None, window_title: str = '', window_resize: bool = False, window_protocol: Callable | None = None) -> None:
         self.n: int = 0
         self.total: int = 0
         self.divider: float = 1.0
@@ -496,11 +496,11 @@ class ProgressBarWindow:
         self.tk_parent = tk_parent
         self.tk_window = (tk.Toplevel(self.tk_parent) if self.tk_parent else None)
         self.withdrawn = False
-        self.tk_text_var: Optional[tk.StringVar] = None
-        self.tk_n_var: Optional[tk.DoubleVar] = None
-        self.tk_pbar: Optional[ttk.Progressbar] = None
+        self.tk_text_var: tk.StringVar | None = None
+        self.tk_n_var: tk.DoubleVar | None = None
+        self.tk_pbar: ttk.Progressbar | None = None
 
-        self.pbar: Optional[tqdm] = None
+        self.pbar: tqdm | None = None
 
         if self.tk_window:
             self.tk_window.withdraw()
@@ -526,8 +526,8 @@ class ProgressBarWindow:
             self.tk_pbar.configure(maximum=100, mode='indeterminate')
             self.tk_pbar.pack()
 
-    def __del__(self):
-        if self.tk_parent:
+    def __del__(self) -> None:
+        if self.tk_window:
             self.tk_parent.after(0, self.tk_window.destroy)
 
     def start(self, total: int, n: int = 0, divider: int = 1, prefix: str = '', unit: str = 'B') -> None:
@@ -619,7 +619,7 @@ class ProgressBarWindow:
     def set_prefix(self, prefix) -> None:
         self.prefix = prefix
 
-g_progressBarWindow: Optional[ProgressBarWindow] = None
+g_progressBarWindow: ProgressBarWindow | None = None
 
 def eprint(*args, **kwargs) -> None:
     print(*args, file=sys.stderr, **kwargs)
@@ -747,7 +747,7 @@ def utilsResetNspInfo(delete: bool = False) -> None:
     g_nspFile = None
     g_nspFilePath = ''
 
-def utilsGetSizeUnitAndDivisor(size: int) -> Tuple[str, int]:
+def utilsGetSizeUnitAndDivisor(size: int) -> tuple[str, int]:
     size_suffixes = [ 'B', 'KiB', 'MiB', 'GiB' ]
     size_suffixes_count = len(size_suffixes)
 
@@ -773,9 +773,10 @@ def usbGetDeviceEndpoints() -> bool:
     global g_usbEpIn, g_usbEpOut, g_usbEpMaxPacketSize, g_usbVer
 
     assert g_logger is not None
-#    assert g_stopEvent is not None
+    assert g_stopEvent is not None
 
-    prev_dev = cur_dev = None
+    cur_dev: Generator[usb.core.Device, Any, None] | None = None
+    prev_dev: usb.core.Device | None = None
     usb_ep_in_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_IN
     usb_ep_out_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_OUT
     usb_version = 0
@@ -791,8 +792,20 @@ def usbGetDeviceEndpoints() -> bool:
 
         # Find a connected USB device with a matching VID/PID pair.
         # Using == here to compare both device instances would also compare the backend, so we'll just compare certain elements manually.
-        cur_dev = usb.core.find(idVendor=USB_DEV_VID, idProduct=USB_DEV_PID)
-        if (cur_dev is None) or ((prev_dev is not None) and (cur_dev.bus == prev_dev.bus) and (cur_dev.address == prev_dev.address)):
+        try:
+            cur_dev = usb.core.find(find_all=False, idVendor=USB_DEV_VID, idProduct=USB_DEV_PID)
+        except:
+            if not g_cliMode:
+                utilsLogException(traceback.format_exc())
+
+            g_logger.error('\nFatal error ocurred while enumerating USB devices.')
+
+            if g_isWindows:
+                g_logger.error('\nTry reinstalling the libusbK driver using Zadig.')
+
+            return False
+
+        if (not isinstance(cur_dev, usb.core.Device)) or (isinstance(prev_dev, usb.core.Device) and (cur_dev.bus == prev_dev.bus) and (cur_dev.address == prev_dev.address)):
             time.sleep(0.1)
             continue
 
@@ -846,6 +859,7 @@ def usbRead(size: int, timeout: int = -1) -> bytes:
     except usb.core.USBError:
         if not g_cliMode:
             utilsLogException(traceback.format_exc())
+
         if g_logger is not None:
             g_logger.error('\nUSB timeout triggered or console disconnected.')
 
@@ -859,13 +873,14 @@ def usbWrite(data: bytes, timeout: int = -1) -> int:
     except usb.core.USBError:
         if not g_cliMode:
             utilsLogException(traceback.format_exc())
+
         if g_logger is not None:
             g_logger.error('\nUSB timeout triggered or console disconnected.')
 
     return wr
 
 def usbSendStatus(code: int) -> bool:
-    status = struct.pack('<4sIH6p', USB_MAGIC_WORD, code, g_usbEpMaxPacketSize, b'')
+    status = struct.pack('<4sIH6x', USB_MAGIC_WORD, code, g_usbEpMaxPacketSize)
     return bool(usbWrite(status, USB_TRANSFER_TIMEOUT) == len(status))
 
 def usbHandleStartSession(cmd_block: bytes) -> int:
@@ -1020,6 +1035,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
     if (not g_nspTransferMode) or (g_nspFile is None):
         # Generate full, absolute path to the destination file.
         fullpath = os.path.abspath(g_outputDir + os.path.sep + filename)
+        printable_fullpath = (fullpath[4:] if g_isWindows else fullpath)
 
         printable_fullpath = (fullpath[4:] if g_isWindows else fullpath)
 
@@ -1036,11 +1052,11 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         # Make sure the output filepath doesn't point to an existing directory.
         if os.path.exists(fullpath) and (not os.path.isfile(fullpath)):
             utilsResetNspInfo()
-            g_logger.error(f'\nOutput filepath points to an existing directory! ("{printable_fullpath}").\n')
+            g_logger.error(f'Output filepath points to an existing directory! ("{printable_fullpath}").\n')
             return USB_STATUS_HOST_IO_ERROR
 
         # Make sure we have enough free space.
-        (total_space, used_space, free_space) = shutil.disk_usage(dirpath)
+        (_, _, free_space) = shutil.disk_usage(dirpath)
         if free_space <= file_size:
             utilsResetNspInfo()
             g_logger.error('\nNot enough free space available in output volume!\n')
@@ -1090,10 +1106,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
             # We're not using dynamic tqdm prefixes under CLI mode.
             prefix = ''
         else:
-            idx = filename.rfind(os.path.sep)
-            prefix_filename = (filename[idx+1:] if (idx >= 0) else filename)
-
-            prefix = f'Current {file_type_str}: "{prefix_filename}".\n'
+            prefix = f'Current {file_type_str}: "{os.path.basename(filename)}".\n'
             prefix += 'Use your console to cancel the file transfer if you wish to do so.'
 
         if (not g_nspTransferMode) or g_nspRemainingSize == (g_nspSize - g_nspHeaderSize):
@@ -1117,8 +1130,13 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
 
     def cancelTransfer():
         # Cancel file transfer.
-        utilsResetNspInfo(True)
-        if use_pbar:
+        if g_nspTransferMode:
+            utilsResetNspInfo(True)
+        else:
+            file.close()
+            os.remove(fullpath)
+
+        if use_pbar and (g_progressBarWindow is not None):
             g_progressBarWindow.end()
 
     # Start transfer process.
@@ -1152,7 +1170,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
 
         # Check if we're dealing with a CancelFileTransfer command.
         if chunk_size == USB_CMD_HEADER_SIZE:
-            (magic, cmd_id, cmd_block_size) = struct.unpack_from('<4sII', chunk, 0)
+            (magic, cmd_id, _) = struct.unpack_from('<4sII', chunk, 0)
             if (magic == USB_MAGIC_WORD) and (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER):
                 # Cancel file transfer.
                 cancelTransfer()
@@ -1259,8 +1277,7 @@ def usbHandleEndSession(cmd_block: bytes) -> int:
 
 def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     assert g_logger is not None
-    global g_isWindows, g_outputDir, g_extractedFsDumpMode, g_extractedFsAbsRoot, g_formattedFileSize, g_formattedFileUnit, g_fileSizeMiB, g_startTime
-     
+
     g_logger.debug(f'Received StartExtractedFsDump ({USB_CMD_START_EXTRACTED_FS_DUMP:02X}) command.')
 
     if g_nspTransferMode:
@@ -1310,7 +1327,6 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     return USB_STATUS_SUCCESS
 
 def usbHandleEndExtractedFsDump(cmd_block: bytes) -> int:
-    global g_extractedFsDumpMode, g_extractedFsAbsRoot
     assert g_logger is not None
     g_logger.debug(f'Received EndExtractedFsDump ({USB_CMD_END_EXTRACTED_FS_DUMP:02X}) command.')
     g_logger.info(f'Finished extracted FS dump.')
@@ -1422,10 +1438,25 @@ def uiStopServer() -> None:
 
 def uiStartServer() -> None:
 
-    uiUpdateOutputDir()
-    # Set new log path for this session if logging to file is turned on.
-    if g_logToFile:
-        utilsUpdateLogPath()
+    assert g_tkDirText is not None
+
+    g_outputDir = g_tkDirText.get('1.0', tk.END).strip()
+    if not g_outputDir:
+        # We should never reach this, honestly.
+        messagebox.showerror('Error', 'You must provide an output directory!', parent=g_tkRoot)
+        return
+
+    # Unconditionally enable 32-bit paths on Windows.
+    if g_isWindows:
+        g_outputDir = '\\\\?\\' + g_outputDir
+
+    # Make sure the full directory tree exists.
+    try:
+        os.makedirs(g_outputDir, exist_ok=True)
+    except:
+        utilsLogException(traceback.format_exc())
+        messagebox.showerror('Error', 'Unable to create full output directory tree!', parent=g_tkRoot)
+        return
 
     # Update UI.
     uiToggleElements(False)
@@ -1442,7 +1473,6 @@ def uiToggleElements(flag: bool) -> None:
     assert g_tkChooseDirButton is not None
     assert g_tkServerButton is not None
     assert g_tkCanvas is not None
-    assert g_tkLogToFileCheckbox is not None
     assert g_tkVerboseCheckbox is not None
 
     if flag:
@@ -1529,11 +1559,7 @@ def uiHandleLogToFileCheckbox() -> None:
 def uiHandleVerboseCheckbox() -> None:
     assert g_logger is not None
     assert g_logLevelIntVar is not None
-    global g_logVerbose
-    logLevel=g_logLevelIntVar.get()
-    g_logger.setLevel(logLevel)
-    g_logVerbose = True if(logLevel == logging.DEBUG) else False    
-    return
+    g_logger.setLevel(g_logLevelIntVar.get())
 
 def uiInitialize() -> None:
     global SCALE, g_logLevelIntVar, g_logToFileBoolVar, g_logToFile, g_logVerbose
@@ -1678,6 +1704,8 @@ def uiInitialize() -> None:
 def cliInitialize() -> None:
     global g_progressBarWindow, g_outputDir, g_logToFile
     
+    assert g_logger is not None
+    
     # Unconditionally enable long paths on Windows.
     g_outputDir = utilsGetWinFullPath(g_outputDir) #if g_isWindows else g_outputDir
     
@@ -1688,16 +1716,20 @@ def cliInitialize() -> None:
     # NB, g_outputDir should be adjusted for Windows prior.
     if g_logToFile:
         utilsUpdateLogPath()
-  
     # Initialize console logger.
     console = LogConsole()
 
     # Initialize progress bar window object.
     bar_format = '{percentage:.2f}% |{bar}| {n:.2f}/{total:.2f} [{elapsed}<{remaining}, {rate_fmt}]'
     g_progressBarWindow = ProgressBarWindow(bar_format)
-       
-    # Log basic info about the script and settings. 
-    utilsLogBasicScriptInfo()
+
+    # Print info.
+    g_logger.info(f'\n{SCRIPT_TITLE}. {COPYRIGHT_TEXT}.')
+    g_logger.info(f'Output directory: "{g_outputDir}".\n')
+
+    # Unconditionally enable 32-bit paths on Windows.
+    if g_isWindows:
+        g_outputDir = '\\\\?\\' + g_outputDir
 
     # Start USB command handler directly.
     usbCommandHandler()
@@ -1709,12 +1741,11 @@ def main() -> int:
     warnings.filterwarnings("ignore")
 
     # Parse command line arguments.
-    parser = ArgumentParser(formatter_class=RawTextHelpFormatter, description=SCRIPT_TITLE + '. ' + COPYRIGHT_TEXT + '.')
+    parser = ArgumentParser(description=SCRIPT_TITLE + '. ' + COPYRIGHT_TEXT + '.')
     parser.add_argument('-c', '--cli', required=False, action='store_true', default=False, help='Start the script in CLI mode.')
-    parser.add_argument('-o', '--outdir', required=False, type=str, metavar='DIR', help='Path to output directory; will attempt to create if non-existent.'+\
-                                            '\nDefaults to "' + DEFAULT_DIR + '".')
-    parser.add_argument('-l', '--log', required=False, action='store_true', default=False, help='Enables logging to file in output directory in CLI mode.')
+    parser.add_argument('-o', '--outdir', required=False, type=str, metavar='DIR', help=f'Path to output directory. Defaults to "{DEFAULT_DIR}".')
     parser.add_argument('-v', '--verbose', required=False, action='store_true', default=False, help='Enable verbose output.')
+    
     args = parser.parse_args()
 
     # Update global flags.
@@ -1766,9 +1797,7 @@ if __name__ == "__main__":
         ret = main()
     except KeyboardInterrupt:
         time.sleep(0.2)
-        g_logger.info("Host script exited!")
-        if g_isWindows10: print(COLOR_RESET)
-
+        print('\nScript interrupted.')
     except:
         utilsLogException(traceback.format_exc())
 

@@ -202,7 +202,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         /* Load keyset. */
         if (!keysLoadKeyset())
         {
-            LOG_MSG_ERROR("Failed to load keyset!\nUpdate your keys file with Lockpick_RCM:\n" LOCKPICK_RCM_URL);
+            LOG_MSG_ERROR("Failed to load keyset!\nPlease update your keys file with Lockpick_RCM.\nYou can get an updated build at:" DISCORD_SERVER_URL);
             break;
         }
 
