@@ -321,8 +321,8 @@ g_outputDir: str = ''
 g_logPath: str = ''
 g_pathSep: str = ''
 
-g_logLevelIntVar: Optional[tk.IntVar] = None
-g_logToFileBoolVar: Optional[tk.BooleanVar] = None
+g_logLevelIntVar: tk.IntVar | None = None
+g_logToFileBoolVar: tk.BooleanVar | None = None
 g_osType: str = ''
 g_osVersion: str = ''
 
@@ -367,7 +367,6 @@ g_nspFile: Optional[BufferedWriter] = None
 g_nspFilePath: str = ''
 
 g_extractedFsDumpMode: bool = False
-g_layeredFsDumpMode: bool = False
 
 g_formattedFileSize: float = 0
 g_fileSizeMiB: float = 0
