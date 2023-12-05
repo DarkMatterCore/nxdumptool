@@ -55,7 +55,7 @@ from tkinter import filedialog, messagebox, font, scrolledtext
 
 from tqdm import tqdm
 
-from argparse import ArgumentParser, RawTextHelpFormatter, ArgumentDefaultsHelpFormatter 
+from argparse import ArgumentParser, RawTextHelpFormatter
 
 from io import BufferedWriter
 from typing import Generator, Any, Callable
@@ -320,6 +320,7 @@ g_terminalColors: bool = False
 g_outputDir: str = ''
 g_logLevelIntVar: tk.IntVar | None = None
 g_logToFileBoolVar: tk.BooleanVar | None = None
+
 g_logPath: str = ''
 g_pathSep: str = ''
 
@@ -632,6 +633,9 @@ def utilsLogException(exception_str: str) -> None:
     if (not g_cliMode) and (g_logger is not None):
         g_logger.debug(exception_str)
 
+def utilsGetExt(path_arg: str) -> str:
+    return os.path.splitext(path_arg)[1][1:]
+    
 def utilsGetPath(path_arg: str, fallback_path: str, is_file: bool, create: bool = False) -> str:
     path = os.path.abspath(os.path.expanduser(os.path.expandvars(path_arg if path_arg else fallback_path)))
 
@@ -773,7 +777,7 @@ def usbGetDeviceEndpoints() -> bool:
     global g_usbEpIn, g_usbEpOut, g_usbEpMaxPacketSize, g_usbVer
 
     assert g_logger is not None
-    assert g_stopEvent is not None
+    #assert g_stopEvent is not None
 
     cur_dev: Generator[usb.core.Device, Any, None] | None = None
     prev_dev: usb.core.Device | None = None
@@ -944,7 +948,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         if not g_nspTransferMode and not g_extractedFsDumpMode:
             fp = filename.split('/') # fp[0] is '/' character
             fp_len = len(fp)
-            ext = filename[-3:]
+            ext = utilsGetExt(filename)
             utilsInitTransferVars(file_size)
             g_logger.info("\nTransfer started!")
             if (fp_len >= 2): # if file has parent directories
@@ -973,7 +977,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
                         g_logger.info(f'\t{fp[4][:fp[4].index(".")]}')
                         g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}\n')
                     case 'NCA' | 'HFS':
-                        printable_ext = fp[fp_len-1][fp[fp_len-1].index(".")+1:] if fp[1] == 'HFS' else ext
+                        printable_ext = ext#fp[fp_len-1][fp[fp_len-1].index(".")+1:] if fp[1] == 'HFS' else ext
                         g_logger.info(f'\nType:\t{fp[1]} ({fp[2]}) [{printable_ext.upper()}]')
                         g_logger.info(f'Src:\t{fp[3][:fp[3].index("[")]}')
                         g_logger.info(f'\t{fp[3][fp[3].index("["):]}')
@@ -986,10 +990,10 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
                         g_logger.warning(f'\n\tNovel source!!! {fp[1]}???')
                         g_logger.info:(f'{filename}')
                         g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}\n')
-            else: # if file is just a file with no parent dirs
+            else: # If file is just a file with no parent dirs
                 if (ext == 'bin'): # Thusfar the only such case
                     g_logger.info(f'\nType:\tConsole LAFW BLOB or similar (BIN)')
-                    g_logger.info(f'File:\t{filename.rsplit('/', 1)[-1]}')
+                    g_logger.info(f'File:\t'+filename.rsplit('/', 1)[-1])
                     g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}')
                 else: # If we ever get here it is time for more work
                     g_logger.warning(f'\n\tNovel source!!!')
@@ -1035,13 +1039,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
     if (not g_nspTransferMode) or (g_nspFile is None):
         # Generate full, absolute path to the destination file.
         fullpath = os.path.abspath(g_outputDir + os.path.sep + filename)
-        printable_fullpath = (fullpath[4:] if g_isWindows else fullpath)
-
-        printable_fullpath = (fullpath[4:] if g_isWindows else fullpath)
-
-        # Unconditionally enable long paths in Windows.
-        # if g_isWindows:
-           # fullpath = utilsGetWinFullPath(fullpath);
+        printable_fullpath = utilsStripWinPrefix(fullpath)
            
         # Get parent directory path.
         dirpath = os.path.dirname(fullpath)
@@ -1080,7 +1078,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         fullpath = g_nspFilePath
         
         dirpath = os.path.dirname(fullpath)
-        printable_fullpath = (fullpath[4:] if g_isWindows else fullpath)
+        printable_fullpath = utilsStripWinPrefix(fullpath)
 
     # Check if we're dealing with an empty file or with the first SendFileProperties command from a NSP.
     if (not file_size) or (g_nspTransferMode and file_size == g_nspSize):
@@ -1277,6 +1275,7 @@ def usbHandleEndSession(cmd_block: bytes) -> int:
 
 def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     assert g_logger is not None
+    global g_isWindows, g_outputDir, g_extractedFsDumpMode, g_extractedFsAbsRoot, g_formattedFileSize, g_formattedFileUnit, g_fileSizeMiB, g_startTime
 
     g_logger.debug(f'Received StartExtractedFsDump ({USB_CMD_START_EXTRACTED_FS_DUMP:02X}) command.')
 
@@ -1318,8 +1317,7 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     else:
         g_logger.debug(f'Starting extracted FS dump (size 0x{extracted_fs_size:X}, output relative path "{extracted_fs_root_path}").')
     
-    g_extractedFsAbsRoot = os.path.abspath(g_outputDir + os.path.sep + extracted_fs_root_path)
-    g_extractedFsAbsRoot = utilsStripWinPrefix(g_extractedFsAbsRoot) #if g_isWindows else g_extractedFsAbsRoot
+    g_extractedFsAbsRoot = utilsStripWinPrefix(os.path.abspath(g_outputDir + os.path.sep + extracted_fs_root_path))
     g_extractedFsDumpMode = True
     g_startTime = time.time()
 
@@ -1328,8 +1326,9 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
 
 def usbHandleEndExtractedFsDump(cmd_block: bytes) -> int:
     assert g_logger is not None
+    global g_extractedFsDumpMode, g_extractedFsAbsRoot
     g_logger.debug(f'Received EndExtractedFsDump ({USB_CMD_END_EXTRACTED_FS_DUMP:02X}) command.')
-    g_logger.info(f'Finished extracted FS dump.')
+    g_logger.debug(f'\nFinished extracted FS dump.')
     if not g_logVerbose:
         g_logger.info(f'\nExtracted FS dump complete!\n')
         utilsLogTransferStats(time.time() - g_startTime)
@@ -1438,25 +1437,10 @@ def uiStopServer() -> None:
 
 def uiStartServer() -> None:
 
-    assert g_tkDirText is not None
-
-    g_outputDir = g_tkDirText.get('1.0', tk.END).strip()
-    if not g_outputDir:
-        # We should never reach this, honestly.
-        messagebox.showerror('Error', 'You must provide an output directory!', parent=g_tkRoot)
-        return
-
-    # Unconditionally enable 32-bit paths on Windows.
-    if g_isWindows:
-        g_outputDir = '\\\\?\\' + g_outputDir
-
-    # Make sure the full directory tree exists.
-    try:
-        os.makedirs(g_outputDir, exist_ok=True)
-    except:
-        utilsLogException(traceback.format_exc())
-        messagebox.showerror('Error', 'Unable to create full output directory tree!', parent=g_tkRoot)
-        return
+    uiUpdateOutputDir()
+    # Set new log path for this session if logging to file is turned on.
+    if g_logToFile:
+        utilsUpdateLogPath()
 
     # Update UI.
     uiToggleElements(False)
@@ -1473,6 +1457,7 @@ def uiToggleElements(flag: bool) -> None:
     assert g_tkChooseDirButton is not None
     assert g_tkServerButton is not None
     assert g_tkCanvas is not None
+    assert g_tkLogToFileCheckbox is not None
     assert g_tkVerboseCheckbox is not None
 
     if flag:
@@ -1554,12 +1539,14 @@ def uiHandleLogToFileCheckbox() -> None:
     assert g_logToFileBoolVar is not None
     global g_logToFile
     g_logToFile = g_logToFileBoolVar.get()
-    return
     
 def uiHandleVerboseCheckbox() -> None:
     assert g_logger is not None
     assert g_logLevelIntVar is not None
-    g_logger.setLevel(g_logLevelIntVar.get())
+    global g_logVerbose
+    logLevel=g_logLevelIntVar.get()
+    g_logger.setLevel(logLevel)
+    g_logVerbose = True if(logLevel == logging.DEBUG) else False    
 
 def uiInitialize() -> None:
     global SCALE, g_logLevelIntVar, g_logToFileBoolVar, g_logToFile, g_logVerbose
@@ -1703,11 +1690,10 @@ def uiInitialize() -> None:
 
 def cliInitialize() -> None:
     global g_progressBarWindow, g_outputDir, g_logToFile
-    
     assert g_logger is not None
     
     # Unconditionally enable long paths on Windows.
-    g_outputDir = utilsGetWinFullPath(g_outputDir) #if g_isWindows else g_outputDir
+    g_outputDir = utilsGetWinFullPath(g_outputDir)
     
     # Determines whether to use colors in terminal and sets up accordingly.
     utilsSetupTerminal()
@@ -1723,13 +1709,8 @@ def cliInitialize() -> None:
     bar_format = '{percentage:.2f}% |{bar}| {n:.2f}/{total:.2f} [{elapsed}<{remaining}, {rate_fmt}]'
     g_progressBarWindow = ProgressBarWindow(bar_format)
 
-    # Print info.
-    g_logger.info(f'\n{SCRIPT_TITLE}. {COPYRIGHT_TEXT}.')
-    g_logger.info(f'Output directory: "{g_outputDir}".\n')
-
-    # Unconditionally enable 32-bit paths on Windows.
-    if g_isWindows:
-        g_outputDir = '\\\\?\\' + g_outputDir
+    # Log basic info about the script and settings. 
+    utilsLogBasicScriptInfo()
 
     # Start USB command handler directly.
     usbCommandHandler()
@@ -1739,11 +1720,11 @@ def main() -> int:
     
     # Disable warnings.
     warnings.filterwarnings("ignore")
-
-    # Parse command line arguments.
-    parser = ArgumentParser(description=SCRIPT_TITLE + '. ' + COPYRIGHT_TEXT + '.')
+    
+    parser = ArgumentParser(formatter_class=RawTextHelpFormatter, description=SCRIPT_TITLE + '. ' + COPYRIGHT_TEXT + '.')
     parser.add_argument('-c', '--cli', required=False, action='store_true', default=False, help='Start the script in CLI mode.')
-    parser.add_argument('-o', '--outdir', required=False, type=str, metavar='DIR', help=f'Path to output directory. Defaults to "{DEFAULT_DIR}".')
+    parser.add_argument('-o', '--outdir', required=False, type=str, metavar='DIR', help='Path to output directory; will attempt to create if non-existent.\nDefaults to "' + DEFAULT_DIR + '".')
+    parser.add_argument('-l', '--log', required=False, action='store_true', default=False, help='Enables logging to file in output directory in CLI mode.')
     parser.add_argument('-v', '--verbose', required=False, action='store_true', default=False, help='Enable verbose output.')
     
     args = parser.parse_args()
@@ -1797,7 +1778,8 @@ if __name__ == "__main__":
         ret = main()
     except KeyboardInterrupt:
         time.sleep(0.2)
-        print('\nScript interrupted.')
+        g_logger.info("Host script exited!")
+        if g_isWindows10: print(COLOR_RESET)
     except:
         utilsLogException(traceback.format_exc())
 
