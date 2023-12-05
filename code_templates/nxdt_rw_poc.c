@@ -188,6 +188,7 @@ static bool saveGameCardCertificate(void *userdata);
 static bool saveGameCardInitialData(void *userdata);
 static bool saveGameCardSpecificData(void *userdata);
 static bool saveGameCardIdSet(void *userdata);
+static bool saveGameCardUid(void *userdata);
 static bool saveGameCardHfsPartition(void *userdata);
 static bool saveGameCardRawHfsPartition(HashFileSystemContext *hfs_ctx);
 static bool saveGameCardExtractedHfsPartition(HashFileSystemContext *hfs_ctx);
@@ -445,16 +446,9 @@ static MenuElement *g_gameCardMenuElements[] = {
         .userdata = NULL
     },
     &(MenuElement){
-        .str = "dump gamecard header",
+        .str = "dump gamecard initial data",
         .child_menu = NULL,
-        .task_func = &saveGameCardHeader,
-        .element_options = NULL,
-        .userdata = NULL
-    },
-    &(MenuElement){
-        .str = "dump gamecard cardinfo",
-        .child_menu = NULL,
-        .task_func = &saveGameCardCardInfo,
+        .task_func = &saveGameCardInitialData,
         .element_options = NULL,
         .userdata = NULL
     },
@@ -466,20 +460,6 @@ static MenuElement *g_gameCardMenuElements[] = {
         .userdata = NULL
     },
     &(MenuElement){
-        .str = "dump gamecard initial data",
-        .child_menu = NULL,
-        .task_func = &saveGameCardInitialData,
-        .element_options = NULL,
-        .userdata = NULL
-    },
-    &(MenuElement){
-        .str = "dump gamecard specific data",
-        .child_menu = NULL,
-        .task_func = &saveGameCardSpecificData,
-        .element_options = NULL,
-        .userdata = NULL
-    },
-    &(MenuElement){
         .str = "dump gamecard id set",
         .child_menu = NULL,
         .task_func = &saveGameCardIdSet,
@@ -487,7 +467,35 @@ static MenuElement *g_gameCardMenuElements[] = {
         .userdata = NULL
     },
     &(MenuElement){
-        .str = "dump hfs partitions",
+        .str = "dump gamecard uid",
+        .child_menu = NULL,
+        .task_func = &saveGameCardUid,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "dump gamecard header (optional)",
+        .child_menu = NULL,
+        .task_func = &saveGameCardHeader,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "dump gamecard cardinfo (optional)",
+        .child_menu = NULL,
+        .task_func = &saveGameCardCardInfo,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "dump gamecard specific data (optional)",
+        .child_menu = NULL,
+        .task_func = &saveGameCardSpecificData,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "dump hfs partitions (optional)",
         .child_menu = &(Menu){
             .id = MenuId_HFS,
             .parent = NULL,
@@ -500,7 +508,7 @@ static MenuElement *g_gameCardMenuElements[] = {
         .userdata = NULL
     },
     &(MenuElement){
-        .str = "dump console lafw blob",
+        .str = "dump console lafw blob (optional)",
         .child_menu = NULL,
         .task_func = &saveConsoleLafwBlob,
         .element_options = NULL,
@@ -1046,6 +1054,10 @@ int main(int argc, char *argv[])
                     consolePrint("______________________________\n\n");
                 }
             }
+        } else
+        if (cur_menu->id == MenuId_GameCard) {
+            consolePrint("For a full gamecard image: dump XCI, initial data, certificate, id set and uid.\n");
+            consolePrint("______________________________\n\n");
         }
 
         for(u32 i = cur_menu->scroll; i < element_count; i++)
@@ -2597,6 +2609,11 @@ end:
     return success;
 }
 
+/* This will save the Gamecard Specific Data. Its format is specific and internal to the current LAFW firmware version and session of the GCBRG ASIC. */
+/* Depending on which Switch system version the gamecard was dumped from, this data can change. */
+/* Even re-inserting the gamecard will change parts of this data. */
+/* For this reason the gamecard specific data is mostly uninteresting for gamecard preservation. */
+/* Instead, take a look at saveGameCardIdSet and saveGameCardUid which is a more standardised format of the Gamecard ID data. */
 static bool saveGameCardSpecificData(void *userdata)
 {
     (void)userdata;
@@ -2649,6 +2666,39 @@ static bool saveGameCardIdSet(void *userdata)
     if (!saveFileData(filename, &id_set, sizeof(FsGameCardIdSet))) goto end;
 
     consolePrint("successfully saved gamecard id set as \"%s\"\n", filename);
+    success = true;
+
+end:
+    if (filename) free(filename);
+
+    return success;
+}
+
+
+static bool saveGameCardUid(void *userdata)
+{
+    (void)userdata;
+
+    GameCardSecurityInformation gc_security_information = {0};
+    bool success = false;
+    u32 crc = 0;
+    char *filename = NULL;
+
+    if (!gamecardGetSecurityInformation(&gc_security_information)) 
+    {
+        consolePrint("failed to get gamecard security information\n");
+        goto end;
+    }
+
+    crc = crc32Calculate(gc_security_information.specific_data.card_uid, sizeof(gc_security_information.specific_data.card_uid));
+    snprintf(path, MAX_ELEMENTS(path), " (Card UID) (%08X).bin", crc);
+
+    filename = generateOutputGameCardFileName("Gamecard", path, true);
+    if (!filename) goto end;
+
+    if (!saveFileData(filename, gc_security_information.specific_data.card_uid, sizeof(gc_security_information.specific_data.card_uid))) goto end;
+
+    consolePrint("successfully saved gamecard uid as \"%s\"\n", filename);
     success = true;
 
 end:
