@@ -961,10 +961,6 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
             /* Jackpot. */
             memcpy(out, g_fsProgramMemory.data + offset + sizeof(GameCardInitialData) - sizeof(GameCardSecurityInformation), sizeof(GameCardSecurityInformation));
 
-            /* Clear out the current ASIC session hash. */
-            /* It's not actually part of the gamecard data, and this changes every time a gamecard (re)insertion takes place. */
-            memset(out->specific_data.asic_session_hash, 0xFF, sizeof(out->specific_data.asic_session_hash));
-
             found = true;
             break;
         }

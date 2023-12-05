@@ -108,9 +108,9 @@ NXDT_ASSERT(FsCardId3, 0x4);
 
 /// Returned by fsDeviceOperatorGetGameCardIdSet.
 typedef struct {
-    FsCardId1 id1;
-    FsCardId2 id2;
-    FsCardId3 id3;
+    FsCardId1 id1;      ///< Specifies maker code, memory capacity, and memory type
+    FsCardId2 id2;      ///< Specifies card security number and card type
+    FsCardId3 id3;      ///< Always zero (so far)
 } FsGameCardIdSet;
 
 NXDT_ASSERT(FsGameCardIdSet, 0xC);
