@@ -1970,8 +1970,7 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
     freeNcaBasePatchList();
 
     /* Only enable base/patch list if we're dealing with supported content types and/or FS section types. */
-    if ((content_type == NcmContentType_Program || content_type == NcmContentType_Data || content_type == NcmContentType_HtmlDocument) && \
-        section_type < NcaFsSectionType_Nca0RomFs && (section_type != NcaFsSectionType_PartitionFs || nca_fs_ctx->has_sparse_layer))
+    if ((content_type == NcmContentType_Program || content_type == NcmContentType_Data || content_type == NcmContentType_HtmlDocument) && section_type < NcaFsSectionType_Nca0RomFs)
     {
         /* Retrieve corresponding TitleInfo linked list for the current title type. */
         switch(title_type)
@@ -2684,7 +2683,7 @@ static bool saveGameCardUid(void *userdata)
     u32 crc = 0;
     char *filename = NULL;
 
-    if (!gamecardGetSecurityInformation(&gc_security_information)) 
+    if (!gamecardGetSecurityInformation(&gc_security_information))
     {
         consolePrint("failed to get gamecard security information\n");
         goto end;

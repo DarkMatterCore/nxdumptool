@@ -53,9 +53,9 @@ bool rsa2048OaepDecrypt(void *dst, size_t dst_size, const void *signature, const
         return false;
     }
 
-    mbedtls_entropy_context entropy;
-    mbedtls_ctr_drbg_context ctr_drbg;
-    mbedtls_rsa_context rsa;
+    mbedtls_entropy_context entropy = {0};
+    mbedtls_ctr_drbg_context ctr_drbg = {0};
+    mbedtls_rsa_context rsa = {0};
 
     const char *pers = __func__;
     int mbedtls_ret = 0;
@@ -118,12 +118,12 @@ static bool rsa2048VerifySha256BasedSignature(const void *data, size_t data_size
     }
 
     int mbedtls_ret = 0;
-    mbedtls_rsa_context rsa;
+    mbedtls_rsa_context rsa = {0};
     u8 hash[SHA256_HASH_SIZE] = {0};
     bool ret = false;
 
     /* Initialize RSA context. */
-    mbedtls_rsa_init(&rsa, MBEDTLS_RSA_PKCS_V21, MBEDTLS_MD_SHA256);
+    mbedtls_rsa_init(&rsa, use_pss ? MBEDTLS_RSA_PKCS_V21 : MBEDTLS_RSA_PKCS_V15, MBEDTLS_MD_SHA256);
 
     /* Import RSA parameters. */
     mbedtls_ret = mbedtls_rsa_import_raw(&rsa, (const u8*)modulus, RSA2048_BYTES, NULL, 0, NULL, 0, NULL, 0, (const u8*)public_exponent, public_exponent_size);
