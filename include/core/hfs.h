@@ -107,21 +107,18 @@ NX_INLINE bool hfsIsValidContext(HashFileSystemContext *ctx)
 
 NX_INLINE u32 hfsGetEntryCount(HashFileSystemContext *ctx)
 {
-    if (!ctx || !ctx->header_size || !ctx->header) return 0;
-    return ((HashFileSystemHeader*)ctx->header)->entry_count;
+    return (hfsIsValidContext(ctx) ? ((HashFileSystemHeader*)ctx->header)->entry_count : 0);
 }
 
 NX_INLINE HashFileSystemEntry *hfsGetEntryByIndex(HashFileSystemContext *ctx, u32 idx)
 {
-    if (idx >= hfsGetEntryCount(ctx)) return NULL;
-    return (HashFileSystemEntry*)(ctx->header + sizeof(HashFileSystemHeader) + (idx * sizeof(HashFileSystemEntry)));
+    return (idx < hfsGetEntryCount(ctx) ? (HashFileSystemEntry*)(ctx->header + sizeof(HashFileSystemHeader) + (idx * sizeof(HashFileSystemEntry))) : NULL);
 }
 
 NX_INLINE char *hfsGetNameTable(HashFileSystemContext *ctx)
 {
     u32 entry_count = hfsGetEntryCount(ctx);
-    if (!entry_count) return NULL;
-    return (char*)(ctx->header + sizeof(HashFileSystemHeader) + (entry_count * sizeof(HashFileSystemEntry)));
+    return (entry_count ? (char*)(ctx->header + sizeof(HashFileSystemHeader) + (entry_count * sizeof(HashFileSystemEntry))) : NULL);
 }
 
 NX_INLINE char *hfsGetEntryName(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry)
@@ -135,15 +132,13 @@ NX_INLINE char *hfsGetEntryNameByIndex(HashFileSystemContext *ctx, u32 idx)
 {
     HashFileSystemEntry *fs_entry = hfsGetEntryByIndex(ctx, idx);
     char *name_table = hfsGetNameTable(ctx);
-    if (!fs_entry || !name_table) return NULL;
-    return (name_table + fs_entry->name_offset);
+    return ((fs_entry && name_table) ? (name_table + fs_entry->name_offset) : NULL);
 }
 
 NX_INLINE HashFileSystemEntry *hfsGetEntryByName(HashFileSystemContext *ctx, const char *name)
 {
     u32 idx = 0;
-    if (!hfsGetEntryIndexByName(ctx, name, &idx)) return NULL;
-    return hfsGetEntryByIndex(ctx, idx);
+    return (hfsGetEntryIndexByName(ctx, name, &idx) ? hfsGetEntryByIndex(ctx, idx) : NULL);
 }
 
 #ifdef __cplusplus

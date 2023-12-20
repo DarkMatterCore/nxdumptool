@@ -112,23 +112,27 @@ NX_INLINE void pfsFreeContext(PartitionFileSystemContext *ctx)
     memset(ctx, 0, sizeof(PartitionFileSystemContext));
 }
 
+/// Checks if the provided PartitionFileSystemContext is valid.
+NX_INLINE bool pfsIsValidContext(PartitionFileSystemContext *ctx)
+{
+    return (ctx && ncaStorageIsValidContext(&(ctx->storage_ctx)) && ctx->nca_fs_ctx == ctx->storage_ctx.nca_fs_ctx && \
+            ctx->storage_ctx.base_storage_type == NcaStorageBaseStorageType_Regular && ctx->size && ctx->header_size && ctx->header);
+}
+
 NX_INLINE u32 pfsGetEntryCount(PartitionFileSystemContext *ctx)
 {
-    if (!ctx || !ctx->header_size || !ctx->header) return 0;
-    return ((PartitionFileSystemHeader*)ctx->header)->entry_count;
+    return (pfsIsValidContext(ctx) ? ((PartitionFileSystemHeader*)ctx->header)->entry_count : 0);
 }
 
 NX_INLINE PartitionFileSystemEntry *pfsGetEntryByIndex(PartitionFileSystemContext *ctx, u32 idx)
 {
-    if (idx >= pfsGetEntryCount(ctx)) return NULL;
-    return (PartitionFileSystemEntry*)(ctx->header + sizeof(PartitionFileSystemHeader) + (idx * sizeof(PartitionFileSystemEntry)));
+    return (idx < pfsGetEntryCount(ctx) ? (PartitionFileSystemEntry*)(ctx->header + sizeof(PartitionFileSystemHeader) + (idx * sizeof(PartitionFileSystemEntry))) : NULL);
 }
 
 NX_INLINE char *pfsGetNameTable(PartitionFileSystemContext *ctx)
 {
     u32 entry_count = pfsGetEntryCount(ctx);
-    if (!entry_count) return NULL;
-    return (char*)(ctx->header + sizeof(PartitionFileSystemHeader) + (entry_count * sizeof(PartitionFileSystemEntry)));
+    return (entry_count ? (char*)(ctx->header + sizeof(PartitionFileSystemHeader) + (entry_count * sizeof(PartitionFileSystemEntry))) : NULL);
 }
 
 NX_INLINE char *pfsGetEntryName(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry)
@@ -142,21 +146,18 @@ NX_INLINE char *pfsGetEntryNameByIndex(PartitionFileSystemContext *ctx, u32 idx)
 {
     PartitionFileSystemEntry *fs_entry = pfsGetEntryByIndex(ctx, idx);
     char *name_table = pfsGetNameTable(ctx);
-    if (!fs_entry || !name_table) return NULL;
-    return (name_table + fs_entry->name_offset);
+    return ((fs_entry && name_table) ? (name_table + fs_entry->name_offset) : NULL);
 }
 
 NX_INLINE PartitionFileSystemEntry *pfsGetEntryByName(PartitionFileSystemContext *ctx, const char *name)
 {
     u32 idx = 0;
-    if (!pfsGetEntryIndexByName(ctx, name, &idx)) return NULL;
-    return pfsGetEntryByIndex(ctx, idx);
+    return (pfsGetEntryIndexByName(ctx, name, &idx) ? pfsGetEntryByIndex(ctx, idx) : NULL);
 }
 
 NX_INLINE void pfsWriteEntryPatchToMemoryBuffer(PartitionFileSystemContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
-    if (!ctx || !ncaStorageIsValidContext(&(ctx->storage_ctx)) || ctx->nca_fs_ctx != ctx->storage_ctx.nca_fs_ctx || \
-        ctx->storage_ctx.base_storage_type != NcaStorageBaseStorageType_Regular) return;
+    if (!pfsIsValidContext(ctx)) return;
     ncaWriteHierarchicalSha256PatchToMemoryBuffer(ctx->nca_fs_ctx->nca_ctx, patch, buf, buf_size, buf_offset);
 }
 
@@ -187,15 +188,13 @@ NX_INLINE u32 pfsGetEntryCountFromImageContext(PartitionFileSystemImageContext *
 
 NX_INLINE PartitionFileSystemEntry *pfsGetEntryByIndexFromImageContext(PartitionFileSystemImageContext *ctx, u32 idx)
 {
-    if (idx >= pfsGetEntryCountFromImageContext(ctx)) return NULL;
-    return &(ctx->entries[idx]);
+    return (idx < pfsGetEntryCountFromImageContext(ctx) ? &(ctx->entries[idx]) : NULL);
 }
 
 NX_INLINE char *pfsGetEntryNameByIndexFromImageContext(PartitionFileSystemImageContext *ctx, u32 idx)
 {
     PartitionFileSystemEntry *fs_entry = pfsGetEntryByIndexFromImageContext(ctx, idx);
-    if (!fs_entry || !ctx->name_table) return NULL;
-    return (ctx->name_table + fs_entry->name_offset);
+    return ((fs_entry && ctx->name_table) ? (ctx->name_table + fs_entry->name_offset) : NULL);
 }
 
 #ifdef __cplusplus

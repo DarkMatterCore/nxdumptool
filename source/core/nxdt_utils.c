@@ -30,6 +30,7 @@
 #include "title.h"
 #include "bfttf.h"
 #include "nxdt_bfsar.h"
+#include "nxdt_devoptab.h"
 #include "fatfs/ff.h"
 
 /// Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits.
@@ -47,6 +48,9 @@ typedef struct {
 } UtilsApplicationVersion;
 
 /* Global variables. */
+
+extern int __system_argc;
+extern char **__system_argv;
 
 static bool g_resourcesInit = false;
 static Mutex g_resourcesMutex = 0;
@@ -95,7 +99,7 @@ static bool g_appUpdated = false;
 
 /* Function prototypes. */
 
-static void _utilsGetLaunchPath(int program_argc, const char **program_argv);
+static void _utilsGetLaunchPath(void);
 
 static void _utilsGetCustomFirmwareType(void);
 
@@ -115,7 +119,7 @@ static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t b
 
 static char utilsConvertHexDigitToBinary(char c);
 
-bool utilsInitializeResources(const int program_argc, const char **program_argv)
+bool utilsInitializeResources(void)
 {
     Result rc = 0;
     bool ret = false;
@@ -129,7 +133,7 @@ bool utilsInitializeResources(const int program_argc, const char **program_argv)
         appletLockExit();
 
         /* Retrieve pointer to the application launch path. */
-        _utilsGetLaunchPath(program_argc, program_argv);
+        _utilsGetLaunchPath();
 
         /* Retrieve pointer to the SD card FsFileSystem element. */
         if (!(g_sdCardFileSystem = fsdevGetDeviceFileSystem(DEVOPTAB_SDMC_DEVICE)))
@@ -289,6 +293,9 @@ void utilsCloseResources(void)
 {
     SCOPED_LOCK(&g_resourcesMutex)
     {
+        /* Unmount all custom devoptab devices. */
+        devoptabUnmountAllDevices();
+
         /* Unset long running process state. */
         utilsSetLongRunningProcessState(false);
 
@@ -1169,15 +1176,15 @@ bool utilsIsApplicationUpdatable(const char *version, const char *commit_hash)
     return ret;
 }
 
-static void _utilsGetLaunchPath(int program_argc, const char **program_argv)
+static void _utilsGetLaunchPath(void)
 {
-    if (program_argc <= 0 || !program_argv) return;
+    if (__system_argc <= 0 || !__system_argv) return;
 
-    for(int i = 0; i < program_argc; i++)
+    for(int i = 0; i < __system_argc; i++)
     {
-        if (program_argv[i] && !strncmp(program_argv[i], DEVOPTAB_SDMC_DEVICE "/", strlen(DEVOPTAB_SDMC_DEVICE)))
+        if (__system_argv[i] && !strncmp(__system_argv[i], DEVOPTAB_SDMC_DEVICE "/", strlen(DEVOPTAB_SDMC_DEVICE)))
         {
-            g_appLaunchPath = program_argv[i];
+            g_appLaunchPath = __system_argv[i];
             break;
         }
     }
@@ -1279,7 +1286,7 @@ static void utilsOverclockSystem(bool overclock)
 
 static void utilsOverclockSystemAppletHook(AppletHookType hook, void *param)
 {
-    (void)param;
+    NX_IGNORE_ARG(param);
 
     /* Don't proceed if we're not dealing with a desired hook type. */
     if (hook != AppletHookType_OnOperationMode && hook != AppletHookType_OnPerformanceMode) return;

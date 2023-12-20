@@ -30,11 +30,14 @@ bool g_borealisInitialized = false;
 
 int main(int argc, char *argv[])
 {
+    NX_IGNORE_ARG(argc);
+    NX_IGNORE_ARG(argv);
+
     /* Set scope guard to clean up resources at exit. */
     ON_SCOPE_EXIT { utilsCloseResources(); };
 
     /* Initialize application resources. */
-    if (!utilsInitializeResources(argc, (const char**)argv)) return EXIT_FAILURE;
+    if (!utilsInitializeResources()) return EXIT_FAILURE;
 
     /* Load Borealis translation files. */
     brls::i18n::loadTranslations();

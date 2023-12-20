@@ -28,6 +28,7 @@
 #include "legal_info.h"
 #include "cert.h"
 #include "usb.h"
+#include "nxdt_devoptab.h"
 
 #define BLOCK_SIZE      USB_TRANSFER_BUFFER_SIZE
 #define WAIT_TIME_LIMIT 30
@@ -924,9 +925,12 @@ static char path[FS_MAX_PATH] = {0};
 
 int main(int argc, char *argv[])
 {
+    NX_IGNORE_ARG(argc);
+    NX_IGNORE_ARG(argv);
+
     int ret = EXIT_SUCCESS;
 
-    if (!utilsInitializeResources(argc, (const char**)argv))
+    if (!utilsInitializeResources())
     {
         ret = EXIT_FAILURE;
         goto end;
@@ -2323,7 +2327,7 @@ static bool resetSettings(void *userdata)
 
 static bool saveGameCardImage(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     u64 gc_size = 0, free_space = 0;
 
@@ -2480,7 +2484,7 @@ end:
 
 static bool saveGameCardHeader(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     GameCardHeader gc_header = {0};
     bool success = false;
@@ -2514,7 +2518,7 @@ end:
 
 static bool saveGameCardCardInfo(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     GameCardInfo gc_cardinfo = {0};
     bool success = false;
@@ -2548,7 +2552,7 @@ end:
 
 static bool saveGameCardCertificate(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     FsGameCardCertificate gc_cert = {0};
     bool success = false;
@@ -2582,7 +2586,7 @@ end:
 
 static bool saveGameCardInitialData(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
@@ -2615,7 +2619,7 @@ end:
 /* Instead, take a look at saveGameCardIdSet and saveGameCardUid which is a more standardised format of the Gamecard ID data. */
 static bool saveGameCardSpecificData(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
@@ -2643,7 +2647,7 @@ end:
 
 static bool saveGameCardIdSet(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     FsGameCardIdSet id_set = {0};
     bool success = false;
@@ -2676,7 +2680,7 @@ end:
 
 static bool saveGameCardUid(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     GameCardSecurityInformation gc_security_information = {0};
     bool success = false;
@@ -2870,7 +2874,7 @@ end:
 
 static bool saveConsoleLafwBlob(void *userdata)
 {
-    (void)userdata;
+    NX_IGNORE_ARG(userdata);
 
     u64 lafw_version = 0;
     LotusAsicFirmwareBlob lafw_blob = {0};

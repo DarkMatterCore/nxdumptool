@@ -139,7 +139,7 @@ static void umsFreeDeviceData(void)
 
 static void umsPopulateCallback(const UsbHsFsDevice *devices, u32 device_count, void *user_data)
 {
-    (void)user_data;
+    NX_IGNORE_ARG(user_data);
 
     SCOPED_LOCK(&g_umsMutex)
     {

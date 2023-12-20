@@ -662,7 +662,7 @@ static void gamecardDestroyDetectionThread(void)
 
 static void gamecardDetectionThreadFunc(void *arg)
 {
-    (void)arg;
+    NX_IGNORE_ARG(arg);
 
     Result rc = 0;
     int idx = 0;

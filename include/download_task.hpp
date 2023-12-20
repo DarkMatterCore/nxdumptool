@@ -150,8 +150,8 @@ namespace nxdt::tasks
     template<typename Result, typename... Params>
     int DownloadTask<Result, Params...>::HttpProgressCallback(void *clientp, curl_off_t dltotal, curl_off_t dlnow, curl_off_t ultotal, curl_off_t ulnow)
     {
-        (void)ultotal;
-        (void)ulnow;
+        NX_IGNORE_ARG(ultotal);
+        NX_IGNORE_ARG(ulnow);
 
         DownloadTaskProgress progress = {0};
         DownloadTask<Result, Params...>* task = static_cast<DownloadTask<Result, Params...>*>(clientp);
@@ -173,7 +173,7 @@ namespace nxdt::tasks
     template<typename Result, typename... Params>
     void DownloadTask<Result, Params...>::onCancelled(const Result& result)
     {
-        (void)result;
+        NX_IGNORE_ARG(result);
 
         /* Pause task handler. */
         this->task_handler->pause();
@@ -185,7 +185,7 @@ namespace nxdt::tasks
     template<typename Result, typename... Params>
     void DownloadTask<Result, Params...>::onPostExecute(const Result& result)
     {
-        (void)result;
+        NX_IGNORE_ARG(result);
 
         /* Fire task handler immediately to get the last result from loopCallback(), then pause it. */
         this->task_handler->fireNow();

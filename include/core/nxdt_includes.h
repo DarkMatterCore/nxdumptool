@@ -38,6 +38,7 @@
 #include <time.h>
 #include <sys/stat.h>
 #include <sys/param.h>
+#include <fcntl.h>
 #include <dirent.h>
 #include <assert.h>
 #include <unistd.h>

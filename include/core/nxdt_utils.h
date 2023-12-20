@@ -66,7 +66,7 @@ typedef struct {
 
 /// Resource initialization.
 /// Called at program startup.
-bool utilsInitializeResources(const int program_argc, const char **program_argv);
+bool utilsInitializeResources(void);
 
 /// Resource deinitialization.
 /// Called at program exit.
