@@ -2431,6 +2431,7 @@ static bool saveGameCardImage(void *userdata)
             goto end;
         }
 
+        setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
         ftruncate(fileno(shared_thread_data->fp), (off_t)shared_thread_data->total_size);
 
         if (prepend_key_area && fwrite(&gc_key_area, 1, sizeof(GameCardKeyArea), shared_thread_data->fp) != sizeof(GameCardKeyArea))
@@ -2803,6 +2804,7 @@ static bool saveGameCardRawHfsPartition(HashFileSystemContext *hfs_ctx)
             goto end;
         }
 
+        setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
         ftruncate(fileno(shared_thread_data->fp), (off_t)shared_thread_data->total_size);
     }
 
@@ -3222,6 +3224,7 @@ static bool saveNintendoContentArchive(void *userdata)
             goto end;
         }
 
+        setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
         ftruncate(fileno(shared_thread_data->fp), (off_t)shared_thread_data->total_size);
     }
 
@@ -3465,6 +3468,7 @@ static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool 
             goto end;
         }
 
+        setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
         ftruncate(fileno(shared_thread_data->fp), (off_t)shared_thread_data->total_size);
     }
 
@@ -3620,6 +3624,7 @@ static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layere
             goto end;
         }
 
+        setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
         ftruncate(fileno(shared_thread_data->fp), (off_t)shared_thread_data->total_size);
     }
 
@@ -3978,6 +3983,7 @@ static void extractedHfsReadThreadFunc(void *arg)
                 if (!shared_thread_data->read_error)
                 {
                     /* Set file size. */
+                    setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
                     ftruncate(fileno(shared_thread_data->fp), (off_t)hfs_entry->size);
                 } else {
                     consolePrint("failed to open \"%s\" for writing!\n", hfs_path);
@@ -4365,6 +4371,7 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
                 if (!shared_thread_data->read_error)
                 {
                     /* Set file size. */
+                    setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
                     ftruncate(fileno(shared_thread_data->fp), (off_t)pfs_entry->size);
                 } else {
                     consolePrint("failed to open \"%s\" for writing!\n", pfs_path);
@@ -4683,6 +4690,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
                 if (!shared_thread_data->read_error)
                 {
                     /* Set file size. */
+                    setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
                     ftruncate(fileno(shared_thread_data->fp), (off_t)romfs_file_entry->size);
                 } else {
                     consolePrint("failed to open \"%s\" for writing!\n", romfs_path);
@@ -4948,7 +4956,7 @@ static void nspThreadFunc(void *arg)
 
     u8 *buf = NULL;
     char *filename = NULL;
-    FILE *fd = NULL;
+    FILE *fp = NULL;
 
     NcaContext *nca_ctx = NULL;
 
@@ -5393,18 +5401,19 @@ static void nspThreadFunc(void *arg)
             }
         }
 
-        if (!(fd = fopen(filename, "wb")))
+        if (!(fp = fopen(filename, "wb")))
         {
             consolePrint("fopen failed\n");
             goto end;
         }
 
         // set file size
-        ftruncate(fileno(fd), (off_t)nsp_size);
+        setvbuf(fp, NULL, _IONBF, 0);
+        ftruncate(fileno(fp), (off_t)nsp_size);
 
         // write placeholder header
         memset(buf, 0, nsp_header_size);
-        fwrite(buf, 1, nsp_header_size, fd);
+        fwrite(buf, 1, nsp_header_size, fp);
     }
 
     consolePrint("dump process started, please wait. hold b to cancel.\n");
@@ -5512,7 +5521,7 @@ static void nspThreadFunc(void *arg)
                     goto end;
                 }
             } else {
-                fwrite(buf, 1, blksize, fd);
+                fwrite(buf, 1, blksize, fp);
             }
         }
 
@@ -5559,7 +5568,7 @@ static void nspThreadFunc(void *arg)
                 goto end;
             }
         } else {
-            fwrite(cnmt_ctx.authoring_tool_xml, 1, cnmt_ctx.authoring_tool_xml_size, fd);
+            fwrite(cnmt_ctx.authoring_tool_xml, 1, cnmt_ctx.authoring_tool_xml_size, fp);
         }
 
         nsp_offset += cnmt_ctx.authoring_tool_xml_size;
@@ -5613,7 +5622,7 @@ static void nspThreadFunc(void *arg)
                             goto end;
                         }
                     } else {
-                        fwrite(icon_ctx->icon_data, 1, icon_ctx->icon_size, fd);
+                        fwrite(icon_ctx->icon_data, 1, icon_ctx->icon_size, fp);
                     }
 
                     nsp_offset += icon_ctx->icon_size;
@@ -5650,7 +5659,7 @@ static void nspThreadFunc(void *arg)
                 goto end;
             }
         } else {
-            fwrite(authoring_tool_xml, 1, authoring_tool_xml_size, fd);
+            fwrite(authoring_tool_xml, 1, authoring_tool_xml_size, fp);
         }
 
         nsp_offset += authoring_tool_xml_size;
@@ -5676,7 +5685,7 @@ static void nspThreadFunc(void *arg)
                 goto end;
             }
         } else {
-            fwrite(tik.data, 1, tik.size, fd);
+            fwrite(tik.data, 1, tik.size, fp);
         }
 
         nsp_offset += tik.size;
@@ -5692,7 +5701,7 @@ static void nspThreadFunc(void *arg)
                 goto end;
             }
         } else {
-            fwrite(raw_cert_chain, 1, raw_cert_chain_size, fd);
+            fwrite(raw_cert_chain, 1, raw_cert_chain_size, fp);
         }
 
         nsp_offset += raw_cert_chain_size;
@@ -5714,8 +5723,8 @@ static void nspThreadFunc(void *arg)
             goto end;
         }
     } else {
-        rewind(fd);
-        fwrite(buf, 1, nsp_header_size, fd);
+        rewind(fp);
+        fwrite(buf, 1, nsp_header_size, fp);
     }
 
     nsp_thread_data->data_written += nsp_header_size;
@@ -5729,9 +5738,9 @@ end:
     if (!success && !nsp_thread_data->transfer_cancelled) nsp_thread_data->error = true;
     mutexUnlock(&g_fileMutex);
 
-    if (fd)
+    if (fp)
     {
-        fclose(fd);
+        fclose(fp);
 
         if (!success)
         {

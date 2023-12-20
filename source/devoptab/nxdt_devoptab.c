@@ -42,6 +42,7 @@ static const u32 g_devoptabDeviceCount = MAX_ELEMENTS(g_devoptabDevices);
 /* Function prototypes. */
 
 const devoptab_t *pfsdev_get_devoptab();
+const devoptab_t *hfsdev_get_devoptab();
 
 static bool devoptabMountDevice(void *fs_ctx, const char *name, u8 type);
 static DevoptabDeviceContext *devoptabFindDevice(const char *name);
@@ -172,6 +173,7 @@ static bool devoptabMountDevice(void *fs_ctx, const char *name, u8 type)
             device = pfsdev_get_devoptab();
             break;
         case DevoptabDeviceType_HashFileSystem:
+            device = hfsdev_get_devoptab();
             break;
         case DevoptabDeviceType_RomFileSystem:
             break;

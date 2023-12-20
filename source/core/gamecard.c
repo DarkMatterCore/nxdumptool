@@ -1315,6 +1315,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
         hfs_ctx->size = size;
     } else {
         /* Calculate root partition size. */
+        hfs_ctx->size = 1; // Prevents hfsGetEntryByIndex() from returning NULL.
         HashFileSystemEntry *hfs_entry = hfsGetEntryByIndex(hfs_ctx, hfs_header.entry_count - 1);
         hfs_ctx->size = (hfs_ctx->header_size + hfs_entry->offset + hfs_entry->size);
     }
