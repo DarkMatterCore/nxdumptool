@@ -35,12 +35,14 @@
 /* Type definitions. */
 
 typedef struct {
+    u32 index;                      ///< Hash FS entry index.
     HashFileSystemEntry *hfs_entry; ///< Hash FS entry metadata.
     const char *name;               ///< Entry name.
     u64 offset;                     ///< Current offset within Hash FS entry data.
 } HashFileSystemFileState;
 
 typedef struct {
+    u8 state;   ///< 0: "." entry; 1: ".." entry; 2: actual Hash FS entry.
     u32 index;  ///< Current Hash FS entry index.
 } HashFileSystemDirectoryState;
 
@@ -60,7 +62,7 @@ static int       hfsdev_statvfs(struct _reent *r, const char *path, struct statv
 
 static const char *hfsdev_get_truncated_path(struct _reent *r, const char *path);
 
-static void hfsdev_fill_stat(struct stat *st, const HashFileSystemEntry *hfs_entry, time_t mount_time);
+static void hfsdev_fill_stat(struct stat *st, u32 index, const HashFileSystemEntry *hfs_entry, time_t mount_time);
 
 /* Global variables. */
 
@@ -122,8 +124,9 @@ static int hfsdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     /* Reset file descriptor. */
     memset(file, 0, sizeof(HashFileSystemFileState));
 
-    /* Get Hash FS entry. */
-    if (!(file->hfs_entry = hfsGetEntryByName(fs_ctx, path)) || !(file->name = hfsGetEntryName(fs_ctx, file->hfs_entry))) DEVOPTAB_SET_ERROR(ENOENT);
+    /* Get information about the requested Partition FS entry. */
+    if (!hfsGetEntryIndexByName(fs_ctx, path, &(file->index)) || !(file->hfs_entry = hfsGetEntryByIndex(fs_ctx, file->index)) || \
+        !(file->name = hfsGetEntryNameByIndex(fs_ctx, file->index))) DEVOPTAB_SET_ERROR(ENOENT);
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -221,7 +224,7 @@ static int hfsdev_fstat(struct _reent *r, void *fd, struct stat *st)
     LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file->name);
 
     /* Fill stat info. */
-    hfsdev_fill_stat(st, file->hfs_entry, dev_ctx->mount_time);
+    hfsdev_fill_stat(st, file->index, file->hfs_entry, dev_ctx->mount_time);
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -230,6 +233,7 @@ end:
 
 static int hfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 {
+    u32 index = 0;
     HashFileSystemEntry *hfs_entry = NULL;
 
     HFS_DEV_INIT_VARS;
@@ -243,11 +247,11 @@ static int hfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 
     LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
 
-    /* Get Hash FS entry. */
-    if (!(hfs_entry = hfsGetEntryByName(fs_ctx, file))) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    /* Get information about the requested Partition FS entry. */
+    if (!hfsGetEntryIndexByName(fs_ctx, file, &index) || !(hfs_entry = hfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR(ENOENT);
 
     /* Fill stat info. */
-    hfsdev_fill_stat(st, hfs_entry, dev_ctx->mount_time);
+    hfsdev_fill_stat(st, index, hfs_entry, dev_ctx->mount_time);
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -263,7 +267,7 @@ static DIR_ITER *hfsdev_diropen(struct _reent *r, DIR_ITER *dirState, const char
     /* Get truncated path. */
     /* We can only work with the FS root here, so we won't accept anything else. */
     if (!(path = hfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
-    if (*path) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (*path) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
 
     LOG_MSG_DEBUG("Opening directory \"%s:/\".", dev_ctx->name);
 
@@ -285,6 +289,7 @@ static int hfsdev_dirreset(struct _reent *r, DIR_ITER *dirState)
     LOG_MSG_DEBUG("Resetting directory state for \"%s:/\".", dev_ctx->name);
 
     /* Reset directory state. */
+    dir->state = 0;
     dir->index = 0;
 
 end:
@@ -303,7 +308,24 @@ static int hfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
     /* Sanity check. */
     if (!filename || !filestat) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Getting info for next directory entry in \"%s:/\" (index %u).", dev_ctx->name, dir->index);
+    LOG_MSG_DEBUG("Getting info for next directory entry in \"%s:/\" (state %u, index %u).", dev_ctx->name, dir->state, dir->index);
+
+    if (dir->state < 2)
+    {
+        /* Fill bogus directory entry. */
+        memset(filestat, 0, sizeof(struct stat));
+
+        filestat->st_nlink = 1;
+        filestat->st_mode = (S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH);
+        filestat->st_atime = filestat->st_mtime = filestat->st_ctime = dev_ctx->mount_time;
+
+        strcpy(filename, dir->state == 0 ? "." : "..");
+
+        /* Update state. */
+        dir->state++;
+
+        DEVOPTAB_EXIT;
+    }
 
     /* Check if we haven't reached EOD. */
     if (dir->index >= hfsGetEntryCount(fs_ctx)) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
@@ -315,7 +337,7 @@ static int hfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
     strcpy(filename, fname);
 
     /* Fill stat info. */
-    hfsdev_fill_stat(filestat, hfs_entry, dev_ctx->mount_time);
+    hfsdev_fill_stat(filestat, dir->index, hfs_entry, dev_ctx->mount_time);
 
     /* Adjust index. */
     dir->index++;
@@ -428,15 +450,16 @@ end:
     DEVOPTAB_RETURN_PTR(path);
 }
 
-static void hfsdev_fill_stat(struct stat *st, const HashFileSystemEntry *hfs_entry, time_t mount_time)
+static void hfsdev_fill_stat(struct stat *st, u32 index, const HashFileSystemEntry *hfs_entry, time_t mount_time)
 {
     /* Clear stat struct. */
     memset(st, 0, sizeof(struct stat));
 
     /* Fill stat struct. */
     /* We're always dealing with a file entry. */
+    st->st_ino = index;
+    st->st_mode = (S_IFREG | S_IRUSR | S_IRGRP | S_IROTH);
     st->st_nlink = 1;
     st->st_size = (off_t)hfs_entry->size;
-    st->st_mode = (S_IFREG | S_IRUSR | S_IRGRP | S_IROTH);
     st->st_atime = st->st_mtime = st->st_ctime = mount_time;
 }

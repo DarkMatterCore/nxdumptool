@@ -35,12 +35,14 @@
 /* Type definitions. */
 
 typedef struct {
+    u32 index;                              ///< Partition FS entry index.
     PartitionFileSystemEntry *pfs_entry;    ///< Partition FS entry metadata.
     const char *name;                       ///< Entry name.
     u64 offset;                             ///< Current offset within Partition FS entry data.
 } PartitionFileSystemFileState;
 
 typedef struct {
+    u8 state;   ///< 0: "." entry; 1: ".." entry; 2: actual Partition FS entry.
     u32 index;  ///< Current Partition FS entry index.
 } PartitionFileSystemDirectoryState;
 
@@ -60,7 +62,7 @@ static int       pfsdev_statvfs(struct _reent *r, const char *path, struct statv
 
 static const char *pfsdev_get_truncated_path(struct _reent *r, const char *path);
 
-static void pfsdev_fill_stat(struct stat *st, const PartitionFileSystemEntry *pfs_entry, time_t mount_time);
+static void pfsdev_fill_stat(struct stat *st, u32 index, const PartitionFileSystemEntry *pfs_entry, time_t mount_time);
 
 /* Global variables. */
 
@@ -122,8 +124,9 @@ static int pfsdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     /* Reset file descriptor. */
     memset(file, 0, sizeof(PartitionFileSystemFileState));
 
-    /* Get Partition FS entry. */
-    if (!(file->pfs_entry = pfsGetEntryByName(fs_ctx, path)) || !(file->name = pfsGetEntryName(fs_ctx, file->pfs_entry))) DEVOPTAB_SET_ERROR(ENOENT);
+    /* Get information about the requested Partition FS entry. */
+    if (!pfsGetEntryIndexByName(fs_ctx, path, &(file->index)) || !(file->pfs_entry = pfsGetEntryByIndex(fs_ctx, file->index)) || \
+        !(file->name = pfsGetEntryNameByIndex(fs_ctx, file->index))) DEVOPTAB_SET_ERROR(ENOENT);
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -221,7 +224,7 @@ static int pfsdev_fstat(struct _reent *r, void *fd, struct stat *st)
     LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file->name);
 
     /* Fill stat info. */
-    pfsdev_fill_stat(st, file->pfs_entry, dev_ctx->mount_time);
+    pfsdev_fill_stat(st, file->index, file->pfs_entry, dev_ctx->mount_time);
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -230,6 +233,7 @@ end:
 
 static int pfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 {
+    u32 index = 0;
     PartitionFileSystemEntry *pfs_entry = NULL;
 
     PFS_DEV_INIT_VARS;
@@ -243,11 +247,11 @@ static int pfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 
     LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
 
-    /* Get Partition FS entry. */
-    if (!(pfs_entry = pfsGetEntryByName(fs_ctx, file))) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    /* Get information about the requested Partition FS entry. */
+    if (!pfsGetEntryIndexByName(fs_ctx, file, &index) || !(pfs_entry = pfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR(ENOENT);
 
     /* Fill stat info. */
-    pfsdev_fill_stat(st, pfs_entry, dev_ctx->mount_time);
+    pfsdev_fill_stat(st, index, pfs_entry, dev_ctx->mount_time);
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -263,7 +267,7 @@ static DIR_ITER *pfsdev_diropen(struct _reent *r, DIR_ITER *dirState, const char
     /* Get truncated path. */
     /* We can only work with the FS root here, so we won't accept anything else. */
     if (!(path = pfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
-    if (*path) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (*path) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
 
     LOG_MSG_DEBUG("Opening directory \"%s:/\".", dev_ctx->name);
 
@@ -285,6 +289,7 @@ static int pfsdev_dirreset(struct _reent *r, DIR_ITER *dirState)
     LOG_MSG_DEBUG("Resetting directory state for \"%s:/\".", dev_ctx->name);
 
     /* Reset directory state. */
+    dir->state = 0;
     dir->index = 0;
 
 end:
@@ -303,7 +308,24 @@ static int pfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
     /* Sanity check. */
     if (!filename || !filestat) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Getting info for next directory entry in \"%s:/\" (index %u).", dev_ctx->name, dir->index);
+    LOG_MSG_DEBUG("Getting info for next directory entry in \"%s:/\" (state %u, index %u).", dev_ctx->name, dir->state, dir->index);
+
+    if (dir->state < 2)
+    {
+        /* Fill bogus directory entry. */
+        memset(filestat, 0, sizeof(struct stat));
+
+        filestat->st_nlink = 1;
+        filestat->st_mode = (S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH);
+        filestat->st_atime = filestat->st_mtime = filestat->st_ctime = dev_ctx->mount_time;
+
+        strcpy(filename, dir->state == 0 ? "." : "..");
+
+        /* Update state. */
+        dir->state++;
+
+        DEVOPTAB_EXIT;
+    }
 
     /* Check if we haven't reached EOD. */
     if (dir->index >= pfsGetEntryCount(fs_ctx)) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
@@ -315,7 +337,7 @@ static int pfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
     strcpy(filename, fname);
 
     /* Fill stat info. */
-    pfsdev_fill_stat(filestat, pfs_entry, dev_ctx->mount_time);
+    pfsdev_fill_stat(filestat, dir->index, pfs_entry, dev_ctx->mount_time);
 
     /* Adjust index. */
     dir->index++;
@@ -428,15 +450,16 @@ end:
     DEVOPTAB_RETURN_PTR(path);
 }
 
-static void pfsdev_fill_stat(struct stat *st, const PartitionFileSystemEntry *pfs_entry, time_t mount_time)
+static void pfsdev_fill_stat(struct stat *st, u32 index, const PartitionFileSystemEntry *pfs_entry, time_t mount_time)
 {
     /* Clear stat struct. */
     memset(st, 0, sizeof(struct stat));
 
     /* Fill stat struct. */
     /* We're always dealing with a file entry. */
+    st->st_ino = index;
+    st->st_mode = (S_IFREG | S_IRUSR | S_IRGRP | S_IROTH);
     st->st_nlink = 1;
     st->st_size = (off_t)pfs_entry->size;
-    st->st_mode = (S_IFREG | S_IRUSR | S_IRGRP | S_IROTH);
     st->st_atime = st->st_mtime = st->st_ctime = mount_time;
 }
