@@ -32,44 +32,42 @@
 extern "C" {
 #endif
 
-#define DEVOPTAB_MOUNT_NAME_LENGTH                              32  // Including NULL terminator.
+#define DEVOPTAB_MOUNT_NAME_LENGTH                  32  // Including NULL terminator.
 
-#define DEVOPTAB_DECL_ERROR_STATE                               int _errno = 0
-#define DEVOPTAB_DECL_DEV_CTX                                   DevoptabDeviceContext *dev_ctx = (DevoptabDeviceContext*)r->deviceData
-#define DEVOPTAB_DECL_FS_CTX(type)                              type *fs_ctx = (type*)dev_ctx->fs_ctx
-#define DEVOPTAB_DECL_FILE_STATE(type)                          type *file = (type*)fd
-#define DEVOPTAB_DECL_DIR_STATE(type)                           type *dir = (type*)dirState->dirStruct
+#define DEVOPTAB_DECL_ERROR_STATE                   int _errno = 0
+#define DEVOPTAB_DECL_DEV_CTX                       DevoptabDeviceContext *dev_ctx = (DevoptabDeviceContext*)r->deviceData
+#define DEVOPTAB_DECL_FS_CTX(type)                  type *fs_ctx = (type*)dev_ctx->fs_ctx
+#define DEVOPTAB_DECL_FILE_STATE(type)              type *file = (type*)fd
+#define DEVOPTAB_DECL_DIR_STATE(type)               type *dir = (type*)dirState->dirStruct
 
-#define DEVOPTAB_SET_ERROR(x)                                   r->_errno = _errno = (x)
-#define DEVOPTAB_IS_ERROR_SET                                   (_errno != 0)
+#define DEVOPTAB_SET_ERROR(x)                       r->_errno = _errno = (x)
+#define DEVOPTAB_IS_ERROR_SET                       (_errno != 0)
 
-#define DEVOPTAB_EXIT                                           goto end
-#define DEVOPTAB_SET_ERROR_AND_EXIT(x)                          \
+#define DEVOPTAB_EXIT                               goto end
+#define DEVOPTAB_SET_ERROR_AND_EXIT(x)              \
 do { \
     DEVOPTAB_SET_ERROR(x); \
     DEVOPTAB_EXIT; \
 } while(0)
 
-#define DEVOPTAB_RETURN_INT(x)                                  return (DEVOPTAB_IS_ERROR_SET ? -1 : (x))
-#define DEVOPTAB_RETURN_PTR(x)                                  return (DEVOPTAB_IS_ERROR_SET ? NULL : (x))
-#define DEVOPTAB_RETURN_BOOL                                    return (DEVOPTAB_IS_ERROR_SET ? false : true)
-#define DEVOPTAB_RETURN_UNSUPPORTED_OP                          r->_errno = ENOSYS; \
-                                                                return -1;
+#define DEVOPTAB_RETURN_INT(x)                      return (DEVOPTAB_IS_ERROR_SET ? -1 : (x))
+#define DEVOPTAB_RETURN_PTR(x)                      return (DEVOPTAB_IS_ERROR_SET ? NULL : (x))
+#define DEVOPTAB_RETURN_BOOL                        return (DEVOPTAB_IS_ERROR_SET ? false : true)
+#define DEVOPTAB_RETURN_UNSUPPORTED_OP              r->_errno = ENOSYS; \
+                                                    return -1;
 
-#define DEVOPTAB_INIT_VARS(type, decl)                          devoptabControlMutex(true); \
-                                                                DEVOPTAB_DECL_ERROR_STATE; \
-                                                                decl
+#define DEVOPTAB_INIT_VARS(type)                    devoptabControlMutex(true); \
+                                                    DEVOPTAB_DECL_ERROR_STATE; \
+                                                    DEVOPTAB_DECL_DEV_CTX; \
+                                                    if (!dev_ctx->initialized) DEVOPTAB_SET_ERROR_AND_EXIT(ENODEV);
 
-#define DEVOPTAB_INIT_VARS_WITH_FILE_STATE(fs_type, file_type)  DEVOPTAB_INIT_VARS(fs_type,); \
-                                                                DEVOPTAB_DECL_FILE_STATE(file_type)
+#define DEVOPTAB_INIT_FILE_VARS(fs_type, file_type) DEVOPTAB_INIT_VARS(fs_type); \
+                                                    DEVOPTAB_DECL_FILE_STATE(file_type)
 
-#define DEVOPTAB_INIT_VARS_WITH_DIR_STATE(fs_type, dir_type)    DEVOPTAB_INIT_VARS(fs_type,); \
-                                                                DEVOPTAB_DECL_DIR_STATE(dir_type)
+#define DEVOPTAB_INIT_DIR_VARS(fs_type, dir_type)   DEVOPTAB_INIT_VARS(fs_type); \
+                                                    DEVOPTAB_DECL_DIR_STATE(dir_type)
 
-#define DEVOPTAB_INIT_FS_ACCESS(type)                           DEVOPTAB_DECL_DEV_CTX; \
-                                                                DEVOPTAB_DECL_FS_CTX(type)
-
-#define DEVOPTAB_DEINIT_VARS                                    devoptabControlMutex(false)
+#define DEVOPTAB_DEINIT_VARS                        devoptabControlMutex(false)
 
 typedef struct {
     bool initialized;                       ///< Device initialization flag.

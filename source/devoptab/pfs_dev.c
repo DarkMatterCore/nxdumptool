@@ -27,10 +27,10 @@
 
 /* Helper macros. */
 
-#define PFS_DEV_INIT_VARS       DEVOPTAB_INIT_VARS(PartitionFileSystemContext,)
-#define PFS_DEV_INIT_FILE_VARS  DEVOPTAB_INIT_VARS_WITH_FILE_STATE(PartitionFileSystemContext, PartitionFileSystemFileState)
-#define PFS_DEV_INIT_DIR_VARS   DEVOPTAB_INIT_VARS_WITH_DIR_STATE(PartitionFileSystemContext, PartitionFileSystemDirectoryState)
-#define PFS_DEV_INIT_FS_ACCESS  DEVOPTAB_INIT_FS_ACCESS(PartitionFileSystemContext)
+#define PFS_DEV_INIT_VARS       DEVOPTAB_INIT_VARS(PartitionFileSystemContext)
+#define PFS_DEV_INIT_FILE_VARS  DEVOPTAB_INIT_FILE_VARS(PartitionFileSystemContext, PartitionFileSystemFileState)
+#define PFS_DEV_INIT_DIR_VARS   DEVOPTAB_INIT_DIR_VARS(PartitionFileSystemContext, PartitionFileSystemDirectoryState)
+#define PFS_DEV_INIT_FS_ACCESS  DEVOPTAB_DECL_FS_CTX(PartitionFileSystemContext)
 
 /* Type definitions. */
 
@@ -137,10 +137,7 @@ static int pfsdev_close(struct _reent *r, void *fd)
     /* Sanity check. */
     if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-#if LOG_LEVEL == LOG_LEVEL_DEBUG
-    DEVOPTAB_DECL_DEV_CTX;
     LOG_MSG_DEBUG("Closing \"%s:/%s\".", dev_ctx->name, file->name);
-#endif
 
     /* Reset file descriptor. */
     memset(file, 0, sizeof(PartitionFileSystemFileState));
@@ -204,10 +201,7 @@ static off_t pfsdev_seek(struct _reent *r, void *fd, off_t pos, int dir)
     /* Don't allow positive seeks beyond the end of file. */
     if (offset > (off_t)file->pfs_entry->size) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-#if LOG_LEVEL == LOG_LEVEL_DEBUG
-    DEVOPTAB_DECL_DEV_CTX;
     LOG_MSG_DEBUG("Seeking to offset 0x%lX from \"%s:/%s\".", offset, dev_ctx->name, file->name);
-#endif
 
     /* Adjust offset. */
     file->offset = (u64)offset;
@@ -220,7 +214,6 @@ end:
 static int pfsdev_fstat(struct _reent *r, void *fd, struct stat *st)
 {
     PFS_DEV_INIT_FILE_VARS;
-    DEVOPTAB_DECL_DEV_CTX;
 
     /* Sanity check. */
     if (!file || !st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
@@ -272,10 +265,7 @@ static DIR_ITER *pfsdev_diropen(struct _reent *r, DIR_ITER *dirState, const char
     if (!(path = pfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
     if (*path) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-#if LOG_LEVEL == LOG_LEVEL_DEBUG
-    DEVOPTAB_DECL_DEV_CTX;
     LOG_MSG_DEBUG("Opening directory \"%s:/\".", dev_ctx->name);
-#endif
 
     /* Reset directory state. */
     memset(dir, 0, sizeof(PartitionFileSystemDirectoryState));
@@ -292,14 +282,12 @@ static int pfsdev_dirreset(struct _reent *r, DIR_ITER *dirState)
 {
     PFS_DEV_INIT_DIR_VARS;
 
-#if LOG_LEVEL == LOG_LEVEL_DEBUG
-    DEVOPTAB_DECL_DEV_CTX;
     LOG_MSG_DEBUG("Resetting directory state for \"%s:/\".", dev_ctx->name);
-#endif
 
     /* Reset directory state. */
     dir->index = 0;
 
+end:
     DEVOPTAB_DEINIT_VARS;
     DEVOPTAB_RETURN_INT(0);
 }
@@ -341,14 +329,12 @@ static int pfsdev_dirclose(struct _reent *r, DIR_ITER *dirState)
 {
     PFS_DEV_INIT_DIR_VARS;
 
-#if LOG_LEVEL == LOG_LEVEL_DEBUG
-    DEVOPTAB_DECL_DEV_CTX;
     LOG_MSG_DEBUG("Closing directory \"%s:/\".", dev_ctx->name);
-#endif
 
     /* Reset directory state. */
     memset(dir, 0, sizeof(PartitionFileSystemDirectoryState));
 
+end:
     DEVOPTAB_DEINIT_VARS;
     DEVOPTAB_RETURN_INT(0);
 }
