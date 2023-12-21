@@ -114,7 +114,7 @@ static int pfsdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     PFS_DEV_INIT_FS_ACCESS;
 
     /* Validate input. */
-    if (!file || (flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (!file || (flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EROFS);
 
     /* Get truncated path. */
     if (!(path = pfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
@@ -202,7 +202,7 @@ static off_t pfsdev_seek(struct _reent *r, void *fd, off_t pos, int dir)
     offset += pos;
 
     /* Don't allow positive seeks beyond the end of file. */
-    if (offset > (off_t)file->pfs_entry->size) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (offset > (off_t)file->pfs_entry->size) DEVOPTAB_SET_ERROR_AND_EXIT(EOVERFLOW);
 
     LOG_MSG_DEBUG("Seeking to offset 0x%lX from \"%s:/%s\".", offset, dev_ctx->name, file->name);
 
@@ -315,7 +315,7 @@ static int pfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
         /* Fill bogus directory entry. */
         memset(filestat, 0, sizeof(struct stat));
 
-        filestat->st_nlink = 1;
+        filestat->st_nlink = (2 + pfsGetEntryCount(fs_ctx)); // One for self, one for parent.
         filestat->st_mode = (S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH);
         filestat->st_atime = filestat->st_mtime = filestat->st_ctime = dev_ctx->mount_time;
 
@@ -332,6 +332,7 @@ static int pfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
 
     /* Get Partition FS entry. */
     if (!(pfs_entry = pfsGetEntryByIndex(fs_ctx, dir->index)) || !(fname = pfsGetEntryName(fs_ctx, pfs_entry))) DEVOPTAB_SET_ERROR_AND_EXIT(EIO);
+    if (strlen(fname) > NAME_MAX) DEVOPTAB_SET_ERROR_AND_EXIT(ENAMETOOLONG);
 
     /* Copy filename. */
     strcpy(filename, fname);

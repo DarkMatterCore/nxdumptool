@@ -114,7 +114,7 @@ static int hfsdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     HFS_DEV_INIT_FS_ACCESS;
 
     /* Validate input. */
-    if (!file || (flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (!file || (flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EROFS);
 
     /* Get truncated path. */
     if (!(path = hfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
@@ -124,7 +124,7 @@ static int hfsdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     /* Reset file descriptor. */
     memset(file, 0, sizeof(HashFileSystemFileState));
 
-    /* Get information about the requested Partition FS entry. */
+    /* Get information about the requested Hash FS entry. */
     if (!hfsGetEntryIndexByName(fs_ctx, path, &(file->index)) || !(file->hfs_entry = hfsGetEntryByIndex(fs_ctx, file->index)) || \
         !(file->name = hfsGetEntryNameByIndex(fs_ctx, file->index))) DEVOPTAB_SET_ERROR(ENOENT);
 
@@ -202,7 +202,7 @@ static off_t hfsdev_seek(struct _reent *r, void *fd, off_t pos, int dir)
     offset += pos;
 
     /* Don't allow positive seeks beyond the end of file. */
-    if (offset > (off_t)file->hfs_entry->size) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (offset > (off_t)file->hfs_entry->size) DEVOPTAB_SET_ERROR_AND_EXIT(EOVERFLOW);
 
     LOG_MSG_DEBUG("Seeking to offset 0x%lX from \"%s:/%s\".", offset, dev_ctx->name, file->name);
 
@@ -247,7 +247,7 @@ static int hfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 
     LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
 
-    /* Get information about the requested Partition FS entry. */
+    /* Get information about the requested Hash FS entry. */
     if (!hfsGetEntryIndexByName(fs_ctx, file, &index) || !(hfs_entry = hfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR(ENOENT);
 
     /* Fill stat info. */
@@ -315,7 +315,7 @@ static int hfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
         /* Fill bogus directory entry. */
         memset(filestat, 0, sizeof(struct stat));
 
-        filestat->st_nlink = 1;
+        filestat->st_nlink = (2 + hfsGetEntryCount(fs_ctx)); // One for self, one for parent.
         filestat->st_mode = (S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH);
         filestat->st_atime = filestat->st_mtime = filestat->st_ctime = dev_ctx->mount_time;
 
@@ -332,6 +332,7 @@ static int hfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
 
     /* Get Hash FS entry. */
     if (!(hfs_entry = hfsGetEntryByIndex(fs_ctx, dir->index)) || !(fname = hfsGetEntryName(fs_ctx, hfs_entry))) DEVOPTAB_SET_ERROR_AND_EXIT(EIO);
+    if (strlen(fname) > NAME_MAX) DEVOPTAB_SET_ERROR_AND_EXIT(ENAMETOOLONG);
 
     /* Copy filename. */
     strcpy(filename, fname);

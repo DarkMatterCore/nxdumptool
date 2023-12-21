@@ -43,6 +43,7 @@ static const u32 g_devoptabDeviceCount = MAX_ELEMENTS(g_devoptabDevices);
 
 const devoptab_t *pfsdev_get_devoptab();
 const devoptab_t *hfsdev_get_devoptab();
+const devoptab_t *romfsdev_get_devoptab();
 
 static bool devoptabMountDevice(void *fs_ctx, const char *name, u8 type);
 static DevoptabDeviceContext *devoptabFindDevice(const char *name);
@@ -58,10 +59,7 @@ bool devoptabMountPartitionFileSystemDevice(PartitionFileSystemContext *pfs_ctx,
 
     bool ret = false;
 
-    SCOPED_LOCK(&g_devoptabMutex)
-    {
-        ret = devoptabMountDevice(pfs_ctx, name, DevoptabDeviceType_PartitionFileSystem);
-    }
+    SCOPED_LOCK(&g_devoptabMutex) ret = devoptabMountDevice(pfs_ctx, name, DevoptabDeviceType_PartitionFileSystem);
 
     return ret;
 }
@@ -76,10 +74,7 @@ bool devoptabMountHashFileSystemDevice(HashFileSystemContext *hfs_ctx, const cha
 
     bool ret = false;
 
-    SCOPED_LOCK(&g_devoptabMutex)
-    {
-        ret = devoptabMountDevice(hfs_ctx, name, DevoptabDeviceType_HashFileSystem);
-    }
+    SCOPED_LOCK(&g_devoptabMutex) ret = devoptabMountDevice(hfs_ctx, name, DevoptabDeviceType_HashFileSystem);
 
     return ret;
 }
@@ -94,10 +89,7 @@ bool devoptabMountRomFileSystemDevice(RomFileSystemContext *romfs_ctx, const cha
 
     bool ret = false;
 
-    SCOPED_LOCK(&g_devoptabMutex)
-    {
-        ret = devoptabMountDevice(romfs_ctx, name, DevoptabDeviceType_RomFileSystem);
-    }
+    SCOPED_LOCK(&g_devoptabMutex) ret = devoptabMountDevice(romfs_ctx, name, DevoptabDeviceType_RomFileSystem);
 
     return ret;
 }
@@ -176,6 +168,7 @@ static bool devoptabMountDevice(void *fs_ctx, const char *name, u8 type)
             device = hfsdev_get_devoptab();
             break;
         case DevoptabDeviceType_RomFileSystem:
+            device = romfsdev_get_devoptab();
             break;
         default:
             break;
