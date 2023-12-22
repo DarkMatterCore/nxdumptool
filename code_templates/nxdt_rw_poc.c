@@ -4542,6 +4542,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
 
     RomFileSystemContext *romfs_ctx = romfs_thread_data->romfs_ctx;
     RomFileSystemFileEntry *romfs_file_entry = NULL;
+    u64 cur_entry_offset = 0;
 
     char romfs_path[FS_MAX_PATH] = {0}, subdir[0x20] = {0}, *filename = NULL;
     size_t filename_len = 0;
@@ -4611,11 +4612,8 @@ static void extractedRomFsReadThreadFunc(void *arg)
         goto end;
     }
 
-    /* Reset current file table offset. */
-    romfsResetFileTableOffset(romfs_ctx);
-
     /* Loop through all file entries. */
-    while(shared_thread_data->data_written < shared_thread_data->total_size && romfsCanMoveToNextFileEntry(romfs_ctx))
+    while(shared_thread_data->data_written < shared_thread_data->total_size && cur_entry_offset < romfs_ctx->file_table_size)
     {
         /* Check if the transfer has been cancelled by the user. */
         if (shared_thread_data->transfer_cancelled)
@@ -4643,7 +4641,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
         }
 
         /* Retrieve RomFS file entry information and generate output path. */
-        shared_thread_data->read_error = (!(romfs_file_entry = romfsGetCurrentFileEntry(romfs_ctx)) || \
+        shared_thread_data->read_error = (!(romfs_file_entry = romfsGetFileEntryByOffset(romfs_ctx, cur_entry_offset)) || \
                                            !romfsGeneratePathFromFileEntry(romfs_ctx, romfs_file_entry, romfs_path + filename_len, sizeof(romfs_path) - filename_len, romfs_illegal_char_replace_type));
         if (shared_thread_data->read_error)
         {
@@ -4749,13 +4747,8 @@ static void extractedRomFsReadThreadFunc(void *arg)
 
         if (shared_thread_data->read_error || shared_thread_data->write_error || shared_thread_data->transfer_cancelled) break;
 
-        /* Move to the next file entry. */
-        shared_thread_data->read_error = !romfsMoveToNextFileEntry(romfs_ctx);
-        if (shared_thread_data->read_error)
-        {
-            condvarWakeAll(&g_writeCondvar);
-            break;
-        }
+        /* Get the offset for the next file entry. */
+        cur_entry_offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + romfs_file_entry->name_length, ROMFS_TABLE_ENTRY_ALIGNMENT);
     }
 
     if (!shared_thread_data->read_error && !shared_thread_data->write_error && !shared_thread_data->transfer_cancelled)

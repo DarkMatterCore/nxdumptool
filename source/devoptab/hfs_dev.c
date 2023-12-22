@@ -248,7 +248,7 @@ static int hfsdev_stat(struct _reent *r, const char *file, struct stat *st)
     LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
 
     /* Get information about the requested Hash FS entry. */
-    if (!hfsGetEntryIndexByName(fs_ctx, file, &index) || !(hfs_entry = hfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR(ENOENT);
+    if (!hfsGetEntryIndexByName(fs_ctx, file, &index) || !(hfs_entry = hfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
 
     /* Fill stat info. */
     hfsdev_fill_stat(st, index, hfs_entry, dev_ctx->mount_time);

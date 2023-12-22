@@ -248,7 +248,7 @@ static int pfsdev_stat(struct _reent *r, const char *file, struct stat *st)
     LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
 
     /* Get information about the requested Partition FS entry. */
-    if (!pfsGetEntryIndexByName(fs_ctx, file, &index) || !(pfs_entry = pfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR(ENOENT);
+    if (!pfsGetEntryIndexByName(fs_ctx, file, &index) || !(pfs_entry = pfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
 
     /* Fill stat info. */
     pfsdev_fill_stat(st, index, pfs_entry, dev_ctx->mount_time);

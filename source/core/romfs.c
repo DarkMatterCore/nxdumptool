@@ -22,14 +22,21 @@
 #include "nxdt_utils.h"
 #include "romfs.h"
 
+/* Helper macros. */
+
+#define ROMFS_ENTRY_OFFSET(entry, table) (u32)((uintptr_t)entry - (uintptr_t)table)
+
 /* Function prototypes. */
 
 static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name);
 static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name);
 
+static u32 romfsCalculateEntryHash(RomFileSystemContext *ctx, u32 parent_offset, const char *name, size_t name_len, bool is_file);
+
 bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base_nca_fs_ctx, NcaFsSectionContext *patch_nca_fs_ctx)
 {
-    u64 dir_table_offset = 0, file_table_offset = 0;
+    u64 dir_bucket_offset = 0, dir_table_offset = 0;
+    u64 file_bucket_offset = 0, file_table_offset = 0;
     NcaContext *base_nca_ctx = NULL, *patch_nca_ctx = NULL;
     bool dump_fs_header = false, success = false;
 
@@ -102,6 +109,30 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
         goto end;
     }
 
+    /* Read directory bucket. */
+    dir_bucket_offset = (is_nca0_romfs ? (u64)out->header.old_format.directory_bucket_offset : out->header.cur_format.directory_bucket_offset);
+    out->dir_bucket_size = (is_nca0_romfs ? (u64)out->header.old_format.directory_bucket_size : out->header.cur_format.directory_bucket_size);
+
+    if (!out->dir_bucket_size || (dir_bucket_offset + out->dir_bucket_size) > out->size)
+    {
+        LOG_MSG_ERROR("Invalid RomFS directory bucket!");
+        dump_fs_header = true;
+        goto end;
+    }
+
+    out->dir_bucket = malloc(out->dir_bucket_size);
+    if (!out->dir_bucket)
+    {
+        LOG_MSG_ERROR("Unable to allocate memory for RomFS directory bucket!");
+        goto end;
+    }
+
+    if (!ncaStorageRead(out->default_storage_ctx, out->dir_bucket, out->dir_bucket_size, out->offset + dir_bucket_offset))
+    {
+        LOG_MSG_ERROR("Failed to read RomFS directory bucket!");
+        goto end;
+    }
+
     /* Read directory entries table. */
     dir_table_offset = (is_nca0_romfs ? (u64)out->header.old_format.directory_entry_offset : out->header.cur_format.directory_entry_offset);
     out->dir_table_size = (is_nca0_romfs ? (u64)out->header.old_format.directory_entry_size : out->header.cur_format.directory_entry_size);
@@ -123,6 +154,30 @@ bool romfsInitializeContext(RomFileSystemContext *out, NcaFsSectionContext *base
     if (!ncaStorageRead(out->default_storage_ctx, out->dir_table, out->dir_table_size, out->offset + dir_table_offset))
     {
         LOG_MSG_ERROR("Failed to read RomFS directory entries table!");
+        goto end;
+    }
+
+    /* Read file bucket. */
+    file_bucket_offset = (is_nca0_romfs ? (u64)out->header.old_format.file_bucket_offset : out->header.cur_format.file_bucket_offset);
+    out->file_bucket_size = (is_nca0_romfs ? (u64)out->header.old_format.file_bucket_size : out->header.cur_format.file_bucket_size);
+
+    if (!out->file_bucket_size || (file_bucket_offset + out->file_bucket_size) > out->size)
+    {
+        LOG_MSG_ERROR("Invalid RomFS file bucket!");
+        dump_fs_header = true;
+        goto end;
+    }
+
+    out->file_bucket = malloc(out->file_bucket_size);
+    if (!out->file_bucket)
+    {
+        LOG_MSG_ERROR("Unable to allocate memory for RomFS file bucket!");
+        goto end;
+    }
+
+    if (!ncaStorageRead(out->default_storage_ctx, out->file_bucket, out->file_bucket_size, out->offset + file_bucket_offset))
+    {
+        LOG_MSG_ERROR("Failed to read RomFS file bucket!");
         goto end;
     }
 
@@ -219,39 +274,32 @@ bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *ou
     }
 
     RomFileSystemFileEntry *file_entry = NULL;
-    u64 total_size = 0;
+    u64 total_size = 0, cur_entry_offset = 0;
     bool success = false;
 
-    /* Reset current file table offset. */
-    romfsResetFileTableOffset(ctx);
-
     /* Loop through all file entries. */
-    while(romfsCanMoveToNextFileEntry(ctx))
+    while(cur_entry_offset < ctx->file_table_size)
     {
         bool updated = false;
 
         /* Get current file entry. */
-        if (!(file_entry = romfsGetCurrentFileEntry(ctx)))
+        if (!(file_entry = romfsGetFileEntryByOffset(ctx, cur_entry_offset)))
         {
-            LOG_MSG_ERROR("Failed to retrieve current file entry! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
+            LOG_MSG_ERROR("Failed to retrieve current file entry! (0x%lX, 0x%lX).", cur_entry_offset, ctx->file_table_size);
             goto end;
         }
 
         /* Update total data size, taking into account the only_updated flag. */
         if (only_updated && !romfsIsFileEntryUpdated(ctx, file_entry, &updated))
         {
-            LOG_MSG_ERROR("Failed to determine if file entry is updated or not! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
+            LOG_MSG_ERROR("Failed to determine if file entry is updated or not! (0x%lX, 0x%lX).", cur_entry_offset, ctx->file_table_size);
             goto end;
         }
 
         if (!only_updated || (only_updated && updated)) total_size += file_entry->size;
 
-        /* Move to the next file entry. */
-        if (!romfsMoveToNextFileEntry(ctx))
-        {
-            LOG_MSG_ERROR("Failed to move to the next file entry! (0x%lX, 0x%lX).", ctx->cur_file_offset, ctx->file_table_size);
-            goto end;
-        }
+        /* Get the offset for the next file entry. */
+        cur_entry_offset += ALIGN_UP(sizeof(RomFileSystemFileEntry) + file_entry->name_length, ROMFS_TABLE_ENTRY_ALIGNMENT);
     }
 
     /* Update output values. */
@@ -259,9 +307,6 @@ bool romfsGetTotalDataSize(RomFileSystemContext *ctx, bool only_updated, u64 *ou
     success = true;
 
 end:
-    /* Reset current file table offset. */
-    romfsResetFileTableOffset(ctx);
-
     return success;
 }
 
@@ -667,33 +712,42 @@ bool romfsGenerateFileEntryPatch(RomFileSystemContext *ctx, RomFileSystemFileEnt
 
 static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name)
 {
-    u64 dir_offset = 0;
     size_t name_len = 0;
     RomFileSystemDirectoryEntry *child_dir_entry = NULL;
+    u32 hash = 0, parent_offset = 0, dir_offset = 0;
 
-    if (!dir_entry || (dir_offset = dir_entry->directory_offset) == ROMFS_VOID_ENTRY || !name || !(name_len = strlen(name)))
+    if (!dir_entry || !name || !(name_len = strlen(name)))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
-    /* Loop through the child directory entries' linked list. */
+    /* Calculate hash for the child directory entry. */
+    parent_offset = ROMFS_ENTRY_OFFSET(dir_entry, ctx->dir_table);
+    hash = romfsCalculateEntryHash(ctx, parent_offset, name, name_len, false);
+
+    //LOG_MSG_DEBUG("parent_offset: 0x%X, parent_name: \"%.*s\", name: \"%s\", hash: 0x%X", parent_offset, (int)dir_entry->name_length, dir_entry->name, name, hash);
+
+    /* Perform lookup using the directory bucket. */
+    dir_offset = ctx->dir_bucket[hash];
     while(dir_offset != ROMFS_VOID_ENTRY)
     {
         /* Get current directory entry. */
         if (!(child_dir_entry = romfsGetDirectoryEntryByOffset(ctx, dir_offset)))
         {
-            LOG_MSG_ERROR("Failed to retrieve directory entry! (0x%lX, 0x%lX).", dir_offset, ctx->dir_table_size);
+            LOG_MSG_ERROR("Failed to retrieve directory entry! (0x%X, 0x%lX).", dir_offset, ctx->dir_table_size);
             break;
         }
+
+        //LOG_MSG_DEBUG("offset: 0x%X, parent: 0x%X, name: \"%.*s\"", dir_offset, child_dir_entry->parent_offset, (int)child_dir_entry->name_length, child_dir_entry->name);
 
         /* Check if we found the right child directory entry. */
         /* strncmp() is used here instead of strcmp() because names stored in RomFS sections are not always NULL terminated. */
         /* If the name ends at a 4-byte boundary, the next entry starts immediately. */
-        if (child_dir_entry->name_length == name_len && !strncmp(child_dir_entry->name, name, name_len)) return child_dir_entry;
+        if (child_dir_entry->parent_offset == parent_offset && child_dir_entry->name_length == name_len && !strncmp(child_dir_entry->name, name, name_len)) return child_dir_entry;
 
         /* Update current directory entry offset. */
-        dir_offset = child_dir_entry->next_offset;
+        dir_offset = child_dir_entry->bucket_offset;
     }
 
     return NULL;
@@ -701,33 +755,53 @@ static RomFileSystemDirectoryEntry *romfsGetChildDirectoryEntryByName(RomFileSys
 
 static RomFileSystemFileEntry *romfsGetChildFileEntryByName(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, const char *name)
 {
-    u64 file_offset = 0;
     size_t name_len = 0;
     RomFileSystemFileEntry *child_file_entry = NULL;
+    u32 hash = 0, parent_offset = 0, file_offset = 0;
 
-    if (!dir_entry || (file_offset = dir_entry->file_offset) == ROMFS_VOID_ENTRY || !name || !(name_len = strlen(name)))
+    if (!dir_entry || !name || !(name_len = strlen(name)))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
     }
 
-    /* Loop through the child file entries' linked list. */
+    /* Calculate hash for the child file entry. */
+    parent_offset = ROMFS_ENTRY_OFFSET(dir_entry, ctx->dir_table);
+    hash = romfsCalculateEntryHash(ctx, parent_offset, name, name_len, true);
+
+    //LOG_MSG_DEBUG("parent_offset: 0x%X, parent_name: \"%.*s\", name: \"%s\", hash: 0x%X", parent_offset, (int)dir_entry->name_length, dir_entry->name, name, hash);
+
+    /* Perform lookup using the file bucket. */
+    file_offset = ctx->file_bucket[hash];
     while(file_offset != ROMFS_VOID_ENTRY)
     {
         /* Get current file entry. */
         if (!(child_file_entry = romfsGetFileEntryByOffset(ctx, file_offset)))
         {
-            LOG_MSG_ERROR("Failed to retrieve file entry! (0x%lX, 0x%lX).", file_offset, ctx->file_table_size);
+            LOG_MSG_ERROR("Failed to retrieve file entry! (0x%X, 0x%lX).", file_offset, ctx->file_table_size);
             break;
         }
+
+        //LOG_MSG_DEBUG("offset: 0x%X, parent: 0x%X, name: \"%.*s\"", file_offset, child_file_entry->parent_offset, (int)child_file_entry->name_length, child_file_entry->name);
 
         /* Check if we found the right child file entry. */
         /* strncmp() is used here instead of strcmp() because names stored in RomFS sections are not always NULL terminated. */
         /* If the name ends at a 4-byte boundary, the next entry starts immediately. */
-        if (child_file_entry->name_length == name_len && !strncmp(child_file_entry->name, name, name_len)) return child_file_entry;
+        if (child_file_entry->parent_offset == parent_offset && child_file_entry->name_length == name_len && !strncmp(child_file_entry->name, name, name_len)) return child_file_entry;
 
-        file_offset = child_file_entry->next_offset;
+        /* Update current file entry offset. */
+        file_offset = child_file_entry->bucket_offset;
     }
 
     return NULL;
+}
+
+static u32 romfsCalculateEntryHash(RomFileSystemContext *ctx, u32 parent_offset, const char *name, size_t name_len, bool is_file)
+{
+    u32 hash = (parent_offset ^ 123456789);
+    u32 total = ((u32)(is_file ? ctx->file_bucket_size : ctx->dir_bucket_size) / sizeof(u32));
+
+    for(size_t i = 0; i < name_len; i++) hash = (((hash >> 5) | (hash << 27)) ^ name[i]);
+
+    return (hash % total);
 }

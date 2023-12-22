@@ -254,7 +254,7 @@ static int romfsdev_stat(struct _reent *r, const char *file, struct stat *st)
     LOG_MSG_DEBUG("Getting file stats for \"%s:%s\".", dev_ctx->name, file);
 
     /* Get information about the requested RomFS file entry. */
-    if (!(file_entry = romfsGetFileEntryByPath(fs_ctx, file))) DEVOPTAB_SET_ERROR(ENOENT);
+    if (!(file_entry = romfsGetFileEntryByPath(fs_ctx, file))) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
 
     /* Fill stat info. */
     romfsdev_fill_file_stat(st, fs_ctx, file_entry, dev_ctx->mount_time);
@@ -280,7 +280,7 @@ static DIR_ITER *romfsdev_diropen(struct _reent *r, DIR_ITER *dirState, const ch
     memset(dir, 0, sizeof(RomFileSystemDirectoryState));
 
     /* Get information about the requested RomFS directory entry. */
-    if (!(dir->dir_entry = romfsGetDirectoryEntryByPath(fs_ctx, path))) DEVOPTAB_SET_ERROR(ENOENT);
+    if (!(dir->dir_entry = romfsGetDirectoryEntryByPath(fs_ctx, path))) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
 
     dir->cur_dir_offset = dir->dir_entry->directory_offset;
     dir->cur_file_offset = dir->dir_entry->file_offset;
