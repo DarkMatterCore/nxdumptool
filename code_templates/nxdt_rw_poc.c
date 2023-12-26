@@ -137,6 +137,26 @@ typedef struct {
     bool use_layeredfs_dir;
 } RomFsThreadData;
 
+typedef struct {
+    bool highlight;
+    size_t size;
+    char size_str[0x10];
+    struct dirent dt;
+} FsBrowserEntry;
+
+typedef struct {
+    SharedThreadData shared_thread_data;
+    FILE *src;
+} FsBrowserFileThreadData;
+
+typedef struct {
+    SharedThreadData shared_thread_data;
+    const char *dir_path;
+    const FsBrowserEntry *entries;
+    u32 entries_count;
+    const char *base_out_path;
+} FsBrowserHighlightedEntriesThreadData;
+
 /* Function prototypes. */
 
 static void utilsScanPads(void);
@@ -202,6 +222,14 @@ static bool saveTicket(void *userdata);
 
 static bool saveNintendoContentArchive(void *userdata);
 static bool saveNintendoContentArchiveFsSection(void *userdata);
+static bool browseNintendoContentArchiveFsSection(void *userdata);
+
+static bool fsBrowser(const char *mount_name, const char *base_out_path);
+static bool fsBrowserGetDirEntries(const char *dir_path, FsBrowserEntry **out_entries, u32 *out_entry_count);
+static bool fsBrowserDumpFile(const char *dir_path, const FsBrowserEntry *entry, const char *base_out_path);
+static bool fsBrowserDumpHighlightedEntries(const char *dir_path, const FsBrowserEntry *entries, u32 entries_count, const char *base_out_path);
+
+static bool initializeNcaFsContext(void *userdata, u8 *out_section_type, bool *out_use_layeredfs_dir, NcaContext **out_base_patch_nca_ctx, void **out_fs_ctx);
 
 static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir);
 static bool saveExtractedPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir);
@@ -221,6 +249,10 @@ static void extractedPartitionFsReadThreadFunc(void *arg);
 
 static void rawRomFsReadThreadFunc(void *arg);
 static void extractedRomFsReadThreadFunc(void *arg);
+
+static void fsBrowserFileReadThreadFunc(void *arg);
+static void fsBrowserHighlightedEntriesReadThreadFunc(void *arg);
+static bool fsBrowserHighlightedEntriesReadThreadLoop(SharedThreadData *shared_thread_data, const char *dir_path, const FsBrowserEntry *entries, u32 entries_count, const char *base_out_path, void *buf1, void *buf2);
 
 static void genericWriteThreadFunc(void *arg);
 
@@ -689,9 +721,16 @@ static MenuElementOption g_ncaFsSectionsSubMenuBasePatchElementOption = {
 
 static MenuElement *g_ncaFsSectionsSubMenuElements[] = {
     &(MenuElement){
-        .str = "start nca fs dump",
+        .str = "start nca fs section dump",
         .child_menu = NULL,
         .task_func = &saveNintendoContentArchiveFsSection,
+        .element_options = NULL,
+        .userdata = NULL    // Dynamically set
+    },
+    &(MenuElement){
+        .str = "browse nca fs section",
+        .child_menu = NULL,
+        .task_func = &browseNintendoContentArchiveFsSection,
         .element_options = NULL,
         .userdata = NULL    // Dynamically set
     },
@@ -921,7 +960,7 @@ static Menu g_rootMenu = {
 static Mutex g_conMutex = 0, g_fileMutex = 0;
 static CondVar g_readCondvar = 0, g_writeCondvar = 0;
 
-static char path[FS_MAX_PATH] = {0};
+static char path[FS_MAX_PATH * 2] = {0};
 
 int main(int argc, char *argv[])
 {
@@ -978,6 +1017,7 @@ int main(int argc, char *argv[])
         }
 
         consoleClear();
+
         consolePrint(APP_TITLE " v" APP_VERSION " (" GIT_REV ").\nBuilt on " BUILD_TIMESTAMP ".\n");
         consolePrint("______________________________\n\n");
         if (cur_menu->parent) consolePrint("press b to go back\n");
@@ -1245,7 +1285,7 @@ int main(int argc, char *argv[])
                     break;
                 }
 
-                if (cur_menu->id > MenuId_Root)
+                if (cur_menu->id > MenuId_Root && (cur_menu->id != MenuId_NcaFsSectionsSubMenu || cur_menu->selected != 1))
                 {
                     /* Wait for USB session (if needed). */
                     if (useUsbHost() && !waitForUsb())
@@ -1268,9 +1308,12 @@ int main(int argc, char *argv[])
                     selected_element->task_func(selected_element->userdata);
                 }
 
-                /* Display prompt. */
-                consolePrint("press any button to continue");
-                utilsWaitForButtonPress(0);
+                if (g_appletStatus && (cur_menu->id != MenuId_NcaFsSectionsSubMenu || cur_menu->selected != 1))
+                {
+                    /* Display prompt. */
+                    consolePrint("press any button to continue");
+                    utilsWaitForButtonPress(0);
+                }
             }
         } else
         if (((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown))) && element_count)
@@ -1314,7 +1357,7 @@ int main(int argc, char *argv[])
         if ((btn_down & (HidNpadButton_Right | HidNpadButton_StickLRight | HidNpadButton_StickRRight)) && selected_element_options)
         {
             /* Point to the next base/patch title. */
-            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1)
+            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 2)
             {
                 if (selected_element_options->selected == 0 && g_ncaBasePatchTitleInfoBkp)
                 {
@@ -1338,7 +1381,7 @@ int main(int argc, char *argv[])
             if (selected_element_options->setter_func) selected_element_options->setter_func(selected_element_options->selected);
 
             /* Point to the previous base/patch title. */
-            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1)
+            if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 2)
             {
                 if (selected_element_options->selected == 0 && g_ncaBasePatchTitleInfo)
                 {
@@ -1432,6 +1475,8 @@ int main(int argc, char *argv[])
         {
             break;
         }
+
+        if (!g_appletStatus) break;
 
         utilsAppletLoopDelay();
     }
@@ -1948,7 +1993,7 @@ void freeNcaBasePatchList(void)
     g_ncaFsSectionsSubMenuBasePatchElementOption.selected = 0;
     g_ncaFsSectionsSubMenuBasePatchElementOption.options = NULL;
 
-    g_ncaFsSectionsSubMenuElements[0]->userdata = NULL;
+    g_ncaFsSectionsSubMenuElements[0]->userdata = g_ncaFsSectionsSubMenuElements[1]->userdata = NULL;
 
     if (g_ncaBasePatchTitleInfo && (g_ncaBasePatchTitleInfo->meta_key.type == NcmContentMetaType_AddOnContent || g_ncaBasePatchTitleInfo->meta_key.type == NcmContentMetaType_DataPatch))
     {
@@ -2041,7 +2086,7 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
 
     g_ncaFsSectionsSubMenuBasePatchElementOption.options = g_ncaBasePatchOptions;
 
-    g_ncaFsSectionsSubMenuElements[0]->userdata = nca_fs_ctx;
+    g_ncaFsSectionsSubMenuElements[0]->userdata = g_ncaFsSectionsSubMenuElements[1]->userdata = nca_fs_ctx;
 
     g_ncaUserTitleInfo = title_info;
 
@@ -3265,6 +3310,614 @@ end:
 
 static bool saveNintendoContentArchiveFsSection(void *userdata)
 {
+    u8 section_type = 0;
+    bool use_layeredfs_dir = false;
+    NcaContext *base_patch_nca_ctx = NULL;
+    void *fs_ctx = NULL;
+
+    bool write_raw_section = (bool)getNcaFsWriteRawSectionOption();
+    bool success = false;
+
+    /* Initialize NCA FS section context. */
+    if (!initializeNcaFsContext(userdata, &section_type, &use_layeredfs_dir, &base_patch_nca_ctx, &fs_ctx)) return false;
+
+    /* Perform requested operation. */
+    if (section_type == NcaFsSectionType_PartitionFs)
+    {
+        PartitionFileSystemContext *pfs_ctx = (PartitionFileSystemContext*)fs_ctx;
+        success = (write_raw_section ? saveRawPartitionFsSection(pfs_ctx, use_layeredfs_dir) : saveExtractedPartitionFsSection(pfs_ctx, use_layeredfs_dir));
+        pfsFreeContext(pfs_ctx);
+    } else {
+        RomFileSystemContext *romfs_ctx = (RomFileSystemContext*)fs_ctx;
+        success = (write_raw_section ? saveRawRomFsSection(romfs_ctx, use_layeredfs_dir) : saveExtractedRomFsSection(romfs_ctx, use_layeredfs_dir));
+        romfsFreeContext(romfs_ctx);
+    }
+
+    /* Free data. */
+    free(fs_ctx);
+    free(base_patch_nca_ctx);
+
+    return success;
+}
+
+static bool browseNintendoContentArchiveFsSection(void *userdata)
+{
+    u8 section_type = 0;
+    bool use_layeredfs_dir = false;
+    NcaContext *base_patch_nca_ctx = NULL;
+    void *fs_ctx = NULL;
+
+    PartitionFileSystemContext *pfs_ctx = NULL;
+    RomFileSystemContext *romfs_ctx = NULL;
+
+    NcaFsSectionContext *nca_fs_ctx = NULL;
+    NcaContext *nca_ctx = NULL;
+
+    u64 title_id = 0;
+    u8 title_type = 0;
+
+    char mount_name[DEVOPTAB_MOUNT_NAME_LENGTH] = {0}, subdir[0x20] = {0}, extension[FS_MAX_PATH] = {0};
+    char *base_out_path = NULL;
+
+    bool success = false;
+
+    /* Initialize NCA FS section context. */
+    if (!initializeNcaFsContext(userdata, &section_type, &use_layeredfs_dir, &base_patch_nca_ctx, &fs_ctx)) goto end;
+
+    /* Mount devoptab device. */
+    if (section_type == NcaFsSectionType_PartitionFs)
+    {
+        pfs_ctx = (PartitionFileSystemContext*)fs_ctx;
+        nca_fs_ctx = pfs_ctx->nca_fs_ctx;
+
+        snprintf(mount_name, MAX_ELEMENTS(mount_name), "%s", pfs_ctx->is_exefs ? "exefs" : "pfs");
+
+        if (!devoptabMountPartitionFileSystemDevice(pfs_ctx, mount_name))
+        {
+            consolePrint("pfs ctx devoptab mount failed!\n");
+            goto end;
+        }
+    } else {
+        romfs_ctx = (RomFileSystemContext*)fs_ctx;
+        nca_fs_ctx = romfs_ctx->default_storage_ctx->nca_fs_ctx;
+
+        snprintf(mount_name, MAX_ELEMENTS(mount_name), "ncaromfs");
+
+        if (!devoptabMountRomFileSystemDevice(romfs_ctx, mount_name))
+        {
+            consolePrint("romfs ctx devoptab mount failed!\n");
+            goto end;
+        }
+    }
+
+    /* Generate output base path. */
+    nca_ctx = nca_fs_ctx->nca_ctx;
+    title_id = nca_ctx->title_id;
+    title_type = nca_ctx->title_type;
+
+    if (use_layeredfs_dir)
+    {
+        /* Only use base title IDs if we're dealing with patches. */
+        title_id = (title_type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(title_id) : \
+                   (title_type == NcmContentMetaType_DataPatch ? titleGetAddOnContentIdByDataPatchId(title_id) : title_id));
+
+        base_out_path = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "exefs");
+    } else {
+        snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
+        snprintf(extension, MAX_ELEMENTS(extension), "/%s #%u/%u", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_fs_ctx->section_idx);
+
+        TitleInfo *title_info = (title_id == g_ncaUserTitleInfo->meta_key.id ? g_ncaUserTitleInfo : g_ncaBasePatchTitleInfo);
+        base_out_path = generateOutputTitleFileName(title_info, subdir, extension);
+    }
+
+    if (!base_out_path) goto end;
+
+    /* Display file browser. */
+    success = fsBrowser(mount_name, base_out_path);
+
+    /* Unmount devoptab device. */
+    devoptabUnmountDevice(mount_name);
+
+end:
+    /* Free data. */
+    if (base_out_path) free(base_out_path);
+    if (pfs_ctx) pfsFreeContext(pfs_ctx);
+    if (romfs_ctx) romfsFreeContext(romfs_ctx);
+    if (fs_ctx) free(fs_ctx);
+    if (base_patch_nca_ctx) free(base_patch_nca_ctx);
+
+    if (!success && g_appletStatus)
+    {
+        consolePrint("press any button to continue\n");
+        utilsWaitForButtonPress(0);
+    }
+
+    return success;
+}
+
+static bool fsBrowser(const char *mount_name, const char *base_out_path)
+{
+    char dir_path[FS_MAX_PATH] = {0};
+    size_t dir_path_len = 0;
+
+    FsBrowserEntry *entries = NULL;
+    u32 entries_count = 0, depth = 0;
+
+    u32 scroll = 0, selected = 0, highlighted = 0, page_size = 20;
+
+    bool success = true;
+
+    /* Get root directory entries. */
+    snprintf(dir_path, MAX_ELEMENTS(dir_path), "%s:/", mount_name);
+    dir_path_len = strlen(dir_path);
+
+    if (!(success = fsBrowserGetDirEntries(dir_path, &entries, &entries_count))) goto end;
+
+    while((g_appletStatus = appletMainLoop()))
+    {
+        consoleClear();
+
+        consolePrint("press a to enter a directory / dump a file\n");
+        consolePrint("press b to %s\n", depth > 0 ? "move back to the parent dir" : "exit the fs browser");
+        consolePrint("press r to (un)highlight the selected entry\n");
+        consolePrint("press l to invert the current selection\n");
+        consolePrint("press zr to highlight all entries\n");
+        consolePrint("press zl to unhighlight all entries\n");
+        consolePrint("press y to dump the highlighted entries\n");
+        consolePrint("use the sticks to scroll faster\n");
+        consolePrint("press + to exit\n");
+        consolePrint("______________________________\n\n");
+
+        consolePrint("entry: %u / %u\n", selected + 1, entries_count);
+        consolePrint("highlighted: %u / %u\n", highlighted, entries_count);
+        consolePrint("current path: %s\n", dir_path);
+        consolePrint("______________________________\n\n");
+
+        for(u32 i = scroll; i < entries_count; i++)
+        {
+            if (i >= (scroll + page_size)) break;
+
+            FsBrowserEntry *cur_entry = &(entries[i]);
+
+            consolePrint("%s", i == selected ? " -> " : "    ");
+
+            if (cur_entry->highlight)
+            {
+                consolePrintReversedColors("[%c] %s", cur_entry->dt.d_type == DT_DIR ? 'D' : 'F', cur_entry->dt.d_name);
+                if (cur_entry->dt.d_type == DT_REG) consolePrintReversedColors(" (%s)", cur_entry->size_str);
+            } else {
+                consolePrint("[%c] %s", cur_entry->dt.d_type == DT_DIR ? 'D' : 'F', cur_entry->dt.d_name);
+                if (cur_entry->dt.d_type == DT_REG) consolePrint(" (%s)", cur_entry->size_str);
+            }
+
+            consolePrint("\n");
+        }
+
+        if (!entries_count) consolePrint("no elements available!");
+
+        consolePrint("\n");
+        consoleRefresh();
+
+        u64 btn_down = 0, btn_held = 0;
+
+        while((g_appletStatus = appletMainLoop()))
+        {
+            utilsScanPads();
+            btn_down = utilsGetButtonsDown();
+            btn_held = utilsGetButtonsHeld();
+            if (btn_down || btn_held) break;
+
+            utilsAppletLoopDelay();
+        }
+
+        if (!g_appletStatus) break;
+
+        if ((btn_down & HidNpadButton_A) && entries_count)
+        {
+            FsBrowserEntry *selected_entry = &(entries[selected]);
+
+            if (selected_entry->dt.d_type == DT_DIR)
+            {
+                /* Change directory. */
+                snprintf(dir_path + dir_path_len, MAX_ELEMENTS(dir_path) - dir_path_len, "%s%s", depth > 0 ? "/" : "", selected_entry->dt.d_name);
+
+                if (!(success = fsBrowserGetDirEntries(dir_path, &entries, &entries_count))) break;
+
+                /* Update variables. */
+                dir_path_len = strlen(dir_path);
+                scroll = selected = highlighted = 0;
+                depth++;
+            } else {
+                /* Dump file. */
+                fsBrowserDumpFile(dir_path, selected_entry, base_out_path);
+            }
+        } else
+        if (btn_down & HidNpadButton_B)
+        {
+            if (depth > 0)
+            {
+                /* Go back to the parent directory. */
+                char *ptr = strrchr(dir_path, '/');
+
+                if (depth > 1)
+                {
+                    *ptr = '\0';
+                } else {
+                    *(++ptr) = '\0';
+                }
+
+                if (!(success = fsBrowserGetDirEntries(dir_path, &entries, &entries_count))) break;
+
+                /* Update variables. */
+                dir_path_len = strlen(dir_path);
+                scroll = selected = highlighted = 0;
+                depth--;
+            } else {
+                break;
+            }
+        } else
+        if ((btn_down & HidNpadButton_R) && entries_count)
+        {
+            /* (Un)highlight the selected entry. */
+            FsBrowserEntry *selected_entry = &(entries[selected]);
+            selected_entry->highlight ^= 1;
+            highlighted += (selected_entry->highlight ? 1 : -1);
+        } else
+        if ((btn_down & HidNpadButton_L) && entries_count)
+        {
+            /* Invert current selection. */
+            for(u32 i = 0; i < entries_count; i++)
+            {
+                FsBrowserEntry *cur_entry = &(entries[i]);
+                cur_entry->highlight ^= 1;
+                highlighted += (cur_entry->highlight ? 1 : -1);
+            }
+        } else
+        if ((btn_down & HidNpadButton_ZR) && entries_count)
+        {
+            /* Highlight all entries. */
+            for(u32 i = 0; i < entries_count; i++) entries[i].highlight = true;
+
+            /* Update counter. */
+            highlighted = entries_count;
+        } else
+        if ((btn_down & HidNpadButton_ZL) && entries_count)
+        {
+            /* Unhighlight all entries. */
+            for(u32 i = 0; i < entries_count; i++) entries[i].highlight = false;
+
+            /* Reset counter. */
+            highlighted = 0;
+        } else
+        if ((btn_down & HidNpadButton_Y) && entries_count && highlighted)
+        {
+            /* Dump highlighted entries. */
+            fsBrowserDumpHighlightedEntries(dir_path, entries, entries_count, base_out_path);
+
+            /* Unhighlight all entries. */
+            for(u32 i = 0; i < entries_count; i++) entries[i].highlight = false;
+
+            /* Reset counter. */
+            highlighted = 0;
+        } else
+        if (((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown))) && entries_count)
+        {
+            selected++;
+
+            if (selected >= entries_count)
+            {
+                if (btn_down & HidNpadButton_Down)
+                {
+                    scroll = 0;
+                    selected = 0;
+                } else {
+                    selected--;
+                }
+            } else
+            if (selected >= (scroll + (page_size / 2)) && entries_count > (scroll + page_size))
+            {
+                scroll++;
+            }
+        } else
+        if (((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp))) && entries_count)
+        {
+            selected--;
+
+            if (selected == UINT32_MAX)
+            {
+                if (btn_down & HidNpadButton_Up)
+                {
+                    selected = (entries_count - 1);
+                    scroll = (entries_count >= page_size ? (entries_count - page_size) : 0);
+                } else {
+                    selected = 0;
+                }
+            } else
+            if (selected < (scroll + (page_size / 2)) && scroll > 0)
+            {
+                scroll--;
+            }
+        } else
+        if (btn_down & HidNpadButton_Plus)
+        {
+            g_appletStatus = false;
+            break;
+        }
+
+        utilsAppletLoopDelay();
+    }
+
+end:
+    if (entries) free(entries);
+
+    return success;
+}
+
+static bool fsBrowserGetDirEntries(const char *dir_path, FsBrowserEntry **out_entries, u32 *out_entry_count)
+{
+    DIR *dp = NULL;
+    struct dirent *dt = NULL;
+    struct stat st = {0};
+    FsBrowserEntry *entries = NULL, *entries_tmp = NULL;
+    char tmp_path[FS_MAX_PATH] = {0};
+    u32 count = 0;
+    bool append_path_sep = (dir_path[strlen(dir_path) - 1] != '/');
+    bool success = false;
+
+    /* Free input pointer, if needed. */
+    if (*out_entries)
+    {
+        free(*out_entries);
+        *out_entries = NULL;
+    }
+
+    /* Open directory. */
+    dp = opendir(dir_path);
+    if (!dp)
+    {
+        consolePrint("failed to open dir \"%s\"\n", dir_path);
+        goto end;
+    }
+
+    /* Get entry count. */
+    while((dt = readdir(dp)))
+    {
+        /* Skip "." and ".." entries. */
+        if (!strcmp(dt->d_name, ".") || !strcmp(dt->d_name, "..") != 0) continue;
+
+        /* Reallocate directory entries buffer. */
+        if (!(entries_tmp = realloc(entries, (count + 1) * sizeof(FsBrowserEntry))))
+        {
+            consolePrint("failed to allocate memory for dir entries in \"%s\"\n", dir_path);
+            goto end;
+        }
+
+        entries = entries_tmp;
+        entries_tmp = NULL;
+
+        /* Store entry data. */
+        FsBrowserEntry *cur_entry = &(entries[count++]);
+
+        memset(cur_entry, 0, sizeof(FsBrowserEntry));
+
+        if (dt->d_type == DT_REG)
+        {
+            /* Get file size. */
+            snprintf(tmp_path, MAX_ELEMENTS(tmp_path), "%s%s%s", dir_path, append_path_sep ? "/" : "", dt->d_name);
+            stat(tmp_path, &st);
+            cur_entry->size = st.st_size;
+            utilsGenerateFormattedSizeString((double)st.st_size, cur_entry->size_str, sizeof(cur_entry->size_str));
+        }
+
+        memcpy(&(cur_entry->dt), dt, sizeof(struct dirent));
+    }
+
+    /* Short-circuit: handle empty directories. */
+    if (!entries)
+    {
+        *out_entry_count = 0;
+        success = true;
+        goto end;
+    }
+
+    /* Update output pointers. */
+    *out_entries = entries;
+    *out_entry_count = count;
+
+    /* Update return value. */
+    success = true;
+
+end:
+    if (dp) closedir(dp);
+
+    if (!success && entries) free(entries);
+
+    return success;
+}
+
+static bool fsBrowserDumpFile(const char *dir_path, const FsBrowserEntry *entry, const char *base_out_path)
+{
+    u64 free_space = 0;
+
+    FsBrowserFileThreadData fs_browser_thread_data = {0};
+    SharedThreadData *shared_thread_data = &(fs_browser_thread_data.shared_thread_data);
+
+    u32 dev_idx = g_storageMenuElementOption.selected;
+
+    bool success = false;
+
+    shared_thread_data->total_size = entry->size;
+
+    snprintf(path, MAX_ELEMENTS(path), "%s%s%s", dir_path, dir_path[strlen(dir_path) - 1] != '/' ? "/" : "", entry->dt.d_name);
+
+    consoleClear();
+    consolePrint("file path: %s\n", path);
+    consolePrint("file size: 0x%lX\n\n", entry->size);
+
+    /* Open input file. */
+    fs_browser_thread_data.src = fopen(path, "rb");
+    if (!fs_browser_thread_data.src)
+    {
+        consolePrint("failed to open input file!\n");
+        goto end;
+    }
+
+    setvbuf(fs_browser_thread_data.src, NULL, _IONBF, 0);
+
+    const char *dir_path_start = (strchr(dir_path, '/') + 1);
+    if (*dir_path_start)
+    {
+        snprintf(path, MAX_ELEMENTS(path), "%s/%s/%s", base_out_path, dir_path_start, entry->dt.d_name);
+    } else {
+        snprintf(path, MAX_ELEMENTS(path), "%s/%s", base_out_path, entry->dt.d_name);
+    }
+
+    if (dev_idx == 1)
+    {
+        if (!waitForUsb()) goto end;
+
+        if (!usbSendFileProperties(shared_thread_data->total_size, path))
+        {
+            consolePrint("failed to send file properties for \"%s\"!\n", path);
+            goto end;
+        }
+    } else {
+        if (!utilsGetFileSystemStatsByPath(path, NULL, &free_space))
+        {
+            consolePrint("failed to retrieve free space from selected device\n");
+            goto end;
+        }
+
+        if (shared_thread_data->total_size >= free_space)
+        {
+            consolePrint("dump size exceeds free space\n");
+            goto end;
+        }
+
+        utilsCreateDirectoryTree(path, false);
+
+        if (dev_idx == 0)
+        {
+            if (shared_thread_data->total_size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(path))
+            {
+                consolePrint("failed to create concatenation file for \"%s\"!\n", path);
+                goto end;
+            }
+        } else {
+            if (g_umsDevices[dev_idx - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && shared_thread_data->total_size > FAT32_FILESIZE_LIMIT)
+            {
+                consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+                goto end;
+            }
+        }
+
+        shared_thread_data->fp = fopen(path, "wb");
+        if (!shared_thread_data->fp)
+        {
+            consolePrint("failed to open \"%s\" for writing!\n", path);
+            goto end;
+        }
+
+        setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
+        ftruncate(fileno(shared_thread_data->fp), (off_t)shared_thread_data->total_size);
+    }
+
+    consoleRefresh();
+
+    success = spanDumpThreads(fsBrowserFileReadThreadFunc, genericWriteThreadFunc, &fs_browser_thread_data);
+
+    if (success)
+    {
+        consolePrint("successfully saved file to \"%s\"\n", path);
+        consoleRefresh();
+    }
+
+end:
+    if (shared_thread_data->fp)
+    {
+        fclose(shared_thread_data->fp);
+        shared_thread_data->fp = NULL;
+
+        if (!success && dev_idx != 1)
+        {
+            if (dev_idx == 0)
+            {
+                utilsRemoveConcatenationFile(path);
+                utilsCommitSdCardFileSystemChanges();
+            } else {
+                remove(path);
+            }
+        }
+    }
+
+    if (fs_browser_thread_data.src) fclose(fs_browser_thread_data.src);
+
+    consolePrint("press any button to continue\n");
+    utilsWaitForButtonPress(0);
+
+    return success;
+}
+
+static bool fsBrowserDumpHighlightedEntries(const char *dir_path, const FsBrowserEntry *entries, u32 entries_count, const char *base_out_path)
+{
+    bool append_path_sep = (dir_path[strlen(dir_path) - 1] != '/');
+    u64 data_size = 0;
+
+    FsBrowserHighlightedEntriesThreadData fs_browser_thread_data = {0};
+    SharedThreadData *shared_thread_data = &(fs_browser_thread_data.shared_thread_data);
+
+    bool success = false;
+
+    consoleClear();
+    consolePrint("calculating dump size...\n");
+    consoleRefresh();
+
+    /* Calculate dump size. */
+    for(u32 i = 0; i < entries_count; i++)
+    {
+        const FsBrowserEntry *cur_entry = &(entries[i]);
+        if (!cur_entry->highlight) continue;
+
+        if (cur_entry->dt.d_type == DT_DIR)
+        {
+            /* Get directory size. */
+            u64 dir_size = 0;
+            snprintf(path, MAX_ELEMENTS(path), "%s%s%s", dir_path, append_path_sep ? "/" : "", cur_entry->dt.d_name);
+
+            if (!utilsGetDirectorySize(path, &dir_size))
+            {
+                consolePrint("failed to calculate size for dir \"%s\"\n", path);
+                goto end;
+            }
+
+            /* Update dump size. */
+            data_size += dir_size;
+        } else {
+            /* Update dump size. */
+            data_size += cur_entry->size;
+        }
+    }
+
+    fs_browser_thread_data.dir_path = dir_path;
+    fs_browser_thread_data.entries = entries;
+    fs_browser_thread_data.entries_count = entries_count;
+    fs_browser_thread_data.base_out_path = base_out_path;
+    shared_thread_data->total_size = data_size;
+
+    consolePrint("dump size: 0x%lX\n", data_size);
+    consoleRefresh();
+
+    success = spanDumpThreads(fsBrowserHighlightedEntriesReadThreadFunc, genericWriteThreadFunc, &fs_browser_thread_data);
+
+end:
+    consolePrint("press any button to continue\n");
+    utilsWaitForButtonPress(0);
+
+    return success;
+}
+
+static bool initializeNcaFsContext(void *userdata, u8 *out_section_type, bool *out_use_layeredfs_dir, NcaContext **out_base_patch_nca_ctx, void **out_fs_ctx)
+{
     NcaFsSectionContext *nca_fs_ctx = (NcaFsSectionContext*)userdata;
     NcaContext *nca_ctx = (nca_fs_ctx ? nca_fs_ctx->nca_ctx : NULL);
 
@@ -3305,10 +3958,6 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
     NcaContext *base_patch_nca_ctx = NULL;
     NcaFsSectionContext *base_patch_nca_fs_ctx = NULL;
 
-    PartitionFileSystemContext pfs_ctx = {0};
-    RomFileSystemContext romfs_ctx = {0};
-
-    bool write_raw_section = (bool)getNcaFsWriteRawSectionOption();
     bool use_layeredfs_dir = (bool)getNcaFsUseLayeredFsDirOption();
     bool success = false;
 
@@ -3348,37 +3997,56 @@ static bool saveNintendoContentArchiveFsSection(void *userdata)
     if (section_type == NcaFsSectionType_PartitionFs)
     {
         /* Select the right NCA FS section context, depending on the sparse layer flag. */
-        NcaFsSectionContext *pfs_nca_fs_ctx = (nca_fs_ctx->has_sparse_layer ? base_patch_nca_fs_ctx : nca_fs_ctx);
+        NcaFsSectionContext *pfs_nca_fs_ctx = ((title_type == NcmContentMetaType_Application && base_patch_nca_fs_ctx && base_patch_nca_fs_ctx->enabled) ? base_patch_nca_fs_ctx : nca_fs_ctx);
 
         /* Initialize PartitionFS context. */
-        if (!pfsInitializeContext(&pfs_ctx, pfs_nca_fs_ctx))
+        PartitionFileSystemContext *pfs_ctx = calloc(1, sizeof(PartitionFileSystemContext));
+        if (!pfs_ctx)
         {
-            consolePrint("pfs initialize ctx failed!\n");
+            consolePrint("pfs ctx alloc failed!\n");
             goto end;
         }
 
-        success = (write_raw_section ? saveRawPartitionFsSection(&pfs_ctx, use_layeredfs_dir) : saveExtractedPartitionFsSection(&pfs_ctx, use_layeredfs_dir));
+        if (!pfsInitializeContext(pfs_ctx, pfs_nca_fs_ctx))
+        {
+            consolePrint("pfs initialize ctx failed!\n");
+            free(pfs_ctx);
+            goto end;
+        }
+
+        *out_fs_ctx = pfs_ctx;
     } else {
         /* Select the right base/patch NCA FS section contexts. */
         NcaFsSectionContext *base_nca_fs_ctx = (section_type == NcaFsSectionType_PatchRomFs ? base_patch_nca_fs_ctx : nca_fs_ctx);
         NcaFsSectionContext *patch_nca_fs_ctx = (section_type == NcaFsSectionType_PatchRomFs ? nca_fs_ctx : base_patch_nca_fs_ctx);
 
         /* Initialize RomFS context. */
-        if (!romfsInitializeContext(&romfs_ctx, base_nca_fs_ctx, patch_nca_fs_ctx))
+        RomFileSystemContext *romfs_ctx = calloc(1, sizeof(RomFileSystemContext));
+        if (!romfs_ctx)
         {
-            consolePrint("romfs initialize ctx failed!\n");
+            consolePrint("romfs ctx alloc failed!\n");
             goto end;
         }
 
-        success = (write_raw_section ? saveRawRomFsSection(&romfs_ctx, use_layeredfs_dir) : saveExtractedRomFsSection(&romfs_ctx, use_layeredfs_dir));
+        if (!romfsInitializeContext(romfs_ctx, base_nca_fs_ctx, patch_nca_fs_ctx))
+        {
+            consolePrint("romfs initialize ctx failed!\n");
+            free(romfs_ctx);
+            goto end;
+        }
+
+        *out_fs_ctx = romfs_ctx;
     }
 
+    /* Update output pointers. */
+    *out_section_type = section_type;
+    *out_use_layeredfs_dir = use_layeredfs_dir;
+    *out_base_patch_nca_ctx = base_patch_nca_ctx;
+
+    success = true;
+
 end:
-    romfsFreeContext(&romfs_ctx);
-
-    pfsFreeContext(&pfs_ctx);
-
-    if (base_patch_nca_ctx) free(base_patch_nca_ctx);
+    if (!success && base_patch_nca_ctx) free(base_patch_nca_ctx);
 
     return success;
 }
@@ -3928,7 +4596,7 @@ static void extractedHfsReadThreadFunc(void *arg)
             {
                 fclose(shared_thread_data->fp);
                 shared_thread_data->fp = NULL;
-                utilsCommitSdCardFileSystemChanges();
+                if (dev_idx == 0) utilsCommitSdCardFileSystemChanges();
             }
         }
 
@@ -4316,7 +4984,7 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
             {
                 fclose(shared_thread_data->fp);
                 shared_thread_data->fp = NULL;
-                utilsCommitSdCardFileSystemChanges();
+                if (dev_idx == 0) utilsCommitSdCardFileSystemChanges();
             }
         }
 
@@ -4636,7 +5304,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
             {
                 fclose(shared_thread_data->fp);
                 shared_thread_data->fp = NULL;
-                utilsCommitSdCardFileSystemChanges();
+                if (dev_idx == 0) utilsCommitSdCardFileSystemChanges();
             }
         }
 
@@ -4783,6 +5451,364 @@ end:
     if (buf1) free(buf1);
 
     threadExit();
+}
+
+static void fsBrowserFileReadThreadFunc(void *arg)
+{
+    void *buf1 = NULL, *buf2 = NULL;
+    FsBrowserFileThreadData *fs_browser_thread_data = (FsBrowserFileThreadData*)arg;
+    SharedThreadData *shared_thread_data = &(fs_browser_thread_data->shared_thread_data);
+    FILE *src = fs_browser_thread_data->src;
+
+    buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+    buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+
+    if (!shared_thread_data->total_size || !src || !buf1 || !buf2)
+    {
+        shared_thread_data->read_error = true;
+        goto end;
+    }
+
+    shared_thread_data->data = NULL;
+    shared_thread_data->data_size = 0;
+
+    for(u64 offset = 0, blksize = BLOCK_SIZE; offset < shared_thread_data->total_size; offset += blksize)
+    {
+        if (blksize > (shared_thread_data->total_size - offset)) blksize = (shared_thread_data->total_size - offset);
+
+        /* Check if the transfer has been cancelled by the user */
+        if (shared_thread_data->transfer_cancelled)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        /* Read current data chunk */
+        shared_thread_data->read_error = (fread(buf1, 1, blksize, src) != blksize);
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        /* Wait until the previous data chunk has been written */
+        mutexLock(&g_fileMutex);
+
+        if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+
+        if (shared_thread_data->write_error)
+        {
+            mutexUnlock(&g_fileMutex);
+            break;
+        }
+
+        /* Update shared object. */
+        shared_thread_data->data = buf1;
+        shared_thread_data->data_size = blksize;
+
+        /* Swap buffers. */
+        buf1 = buf2;
+        buf2 = shared_thread_data->data;
+
+        /* Wake up the write thread to continue writing data. */
+        mutexUnlock(&g_fileMutex);
+        condvarWakeAll(&g_writeCondvar);
+    }
+
+end:
+    if (buf2) free(buf2);
+    if (buf1) free(buf1);
+
+    threadExit();
+}
+
+static void fsBrowserHighlightedEntriesReadThreadFunc(void *arg)
+{
+    void *buf1 = NULL, *buf2 = NULL;
+    FsBrowserHighlightedEntriesThreadData *fs_browser_thread_data = (FsBrowserHighlightedEntriesThreadData*)arg;
+    SharedThreadData *shared_thread_data = &(fs_browser_thread_data->shared_thread_data);
+
+    const char *dir_path = fs_browser_thread_data->dir_path;
+    const FsBrowserEntry *entries = fs_browser_thread_data->entries;
+    u32 entries_count = fs_browser_thread_data->entries_count;
+    const char *base_out_path = fs_browser_thread_data->base_out_path;
+
+    u32 dev_idx = g_storageMenuElementOption.selected;
+
+    buf1 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+    buf2 = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+
+    if (!shared_thread_data->total_size || !dir_path || !*dir_path || !entries || !entries_count || !base_out_path || !*base_out_path || !buf1 || !buf2)
+    {
+        shared_thread_data->read_error = true;
+        goto end;
+    }
+
+    if (dev_idx != 1)
+    {
+        u64 free_space = 0;
+
+        if (!utilsGetFileSystemStatsByPath(base_out_path, NULL, &free_space))
+        {
+            consolePrint("failed to retrieve free space from selected device\n");
+            shared_thread_data->read_error = true;
+        }
+
+        if (!shared_thread_data->read_error && shared_thread_data->total_size >= free_space)
+        {
+            consolePrint("dump size exceeds free space\n");
+            shared_thread_data->read_error = true;
+        }
+    } else {
+        if (!usbStartExtractedFsDump(shared_thread_data->total_size, base_out_path))
+        {
+            consolePrint("failed to send extracted fs info to host\n");
+            shared_thread_data->read_error = true;
+        }
+    }
+
+    if (!shared_thread_data->read_error)
+    {
+        /* Dump highlighted entries. */
+        fsBrowserHighlightedEntriesReadThreadLoop(shared_thread_data, dir_path, entries, entries_count, base_out_path, buf1, buf2);
+
+        if (!shared_thread_data->read_error && !shared_thread_data->write_error && !shared_thread_data->transfer_cancelled)
+        {
+            if (dev_idx == 1) usbEndExtractedFsDump();
+
+            consolePrint("successfully saved dumped data to \"%s\"\n", base_out_path);
+            consoleRefresh();
+        }
+    } else {
+        condvarWakeAll(&g_writeCondvar);
+    }
+
+end:
+    if (buf2) free(buf2);
+    if (buf1) free(buf1);
+
+    threadExit();
+}
+
+static bool fsBrowserHighlightedEntriesReadThreadLoop(SharedThreadData *shared_thread_data, const char *dir_path, const FsBrowserEntry *entries, u32 entries_count, const char *base_out_path, void *buf1, void *buf2)
+{
+    bool append_path_sep = (dir_path[strlen(dir_path) - 1] != '/');
+    u32 dev_idx = g_storageMenuElementOption.selected;
+    bool is_topmost = (entries && entries_count); /* If entry data is provided, it means we're dealing with the topmost directory. */
+    const char *dir_path_start = (strchr(dir_path, '/') + 1);
+
+    char *tmp_path = NULL;
+    FILE *src = NULL;
+
+    /* Allocate memory for our temporary path. */
+    tmp_path = calloc(sizeof(char), FS_MAX_PATH);
+    if ((shared_thread_data->read_error = (tmp_path == NULL)))
+    {
+        consolePrint("failed to allocate memory for path!\n");
+        condvarWakeAll(&g_writeCondvar);
+        goto end;
+    }
+
+    /* Get directory entries, if needed. */
+    if (!is_topmost && (shared_thread_data->read_error = !fsBrowserGetDirEntries(dir_path, (FsBrowserEntry**)&entries, &entries_count)))
+    {
+        condvarWakeAll(&g_writeCondvar);
+        goto end;
+    }
+
+    /* Loop through all highlighted entries. */
+    for(u32 i = 0; i < entries_count; i++)
+    {
+        /* Get current entry. */
+        const FsBrowserEntry *entry = &(entries[i]);
+        if (is_topmost && !entry->highlight) continue;
+
+        /* Check if the transfer has been cancelled by the user. */
+        if (shared_thread_data->transfer_cancelled)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        if (dev_idx != 1)
+        {
+            /* Wait until the previous data chunk has been written */
+            mutexLock(&g_fileMutex);
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+            mutexUnlock(&g_fileMutex);
+
+            if (shared_thread_data->write_error) break;
+
+            /* Close file. */
+            if (shared_thread_data->fp)
+            {
+                fclose(shared_thread_data->fp);
+                shared_thread_data->fp = NULL;
+                if (dev_idx == 0) utilsCommitSdCardFileSystemChanges();
+            }
+        }
+
+        /* Generate input path. */
+        snprintf(tmp_path, FS_MAX_PATH, "%s%s%s", dir_path, append_path_sep ? "/" : "", entry->dt.d_name);
+
+        if (entry->dt.d_type == DT_DIR)
+        {
+            /* Dump directory. */
+            if (!fsBrowserHighlightedEntriesReadThreadLoop(shared_thread_data, tmp_path, NULL, 0, base_out_path, buf1, buf2)) break;
+            continue;
+        }
+
+        /* Open input file. */
+        src = fopen(tmp_path, "rb");
+        if ((shared_thread_data->read_error = (src == NULL)))
+        {
+            consolePrint("failed to open file \"%s\" for reading!\n", tmp_path);
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        setvbuf(src, NULL, _IONBF, 0);
+
+        /* Generate output path. */
+        if (*dir_path_start)
+        {
+            snprintf(tmp_path, FS_MAX_PATH, "%s/%s/%s", base_out_path, dir_path_start, entry->dt.d_name);
+        } else {
+            snprintf(tmp_path, FS_MAX_PATH, "%s/%s", base_out_path, entry->dt.d_name);
+        }
+
+        if (dev_idx == 1)
+        {
+            /* Wait until the previous data chunk has been written */
+            mutexLock(&g_fileMutex);
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+            mutexUnlock(&g_fileMutex);
+
+            if (shared_thread_data->write_error) break;
+
+            /* Send current file properties */
+            shared_thread_data->read_error = !usbSendFileProperties(entry->size, tmp_path);
+        } else {
+            /* Create directory tree. */
+            utilsCreateDirectoryTree(tmp_path, false);
+
+            if (dev_idx == 0)
+            {
+                /* Create ConcatenationFile if we're dealing with a big file + SD card as the output storage. */
+                if (entry->size > FAT32_FILESIZE_LIMIT && !utilsCreateConcatenationFile(tmp_path))
+                {
+                    consolePrint("failed to create concatenation file for \"%s\"!\n", tmp_path);
+                    shared_thread_data->read_error = true;
+                }
+            } else {
+                /* Don't handle file chunks on FAT12/FAT16/FAT32 formatted UMS devices. */
+                if (g_umsDevices[dev_idx - 2].fs_type < UsbHsFsDeviceFileSystemType_exFAT && entry->size > FAT32_FILESIZE_LIMIT)
+                {
+                    consolePrint("split dumps not supported for FAT12/16/32 volumes in UMS devices (yet)\n");
+                    shared_thread_data->read_error = true;
+                }
+            }
+
+            if (!shared_thread_data->read_error)
+            {
+                /* Open output file. */
+                shared_thread_data->read_error = ((shared_thread_data->fp = fopen(tmp_path, "wb")) == NULL);
+                if (!shared_thread_data->read_error)
+                {
+                    /* Set file size. */
+                    setvbuf(shared_thread_data->fp, NULL, _IONBF, 0);
+                    ftruncate(fileno(shared_thread_data->fp), (off_t)entry->size);
+                } else {
+                    consolePrint("failed to open \"%s\" for writing!\n", tmp_path);
+                }
+            }
+        }
+
+        if (shared_thread_data->read_error)
+        {
+            condvarWakeAll(&g_writeCondvar);
+            break;
+        }
+
+        /* Dump file. */
+        for(u64 offset = 0, blksize = BLOCK_SIZE; offset < entry->size; offset += blksize)
+        {
+            if (blksize > (entry->size - offset)) blksize = (entry->size - offset);
+
+            /* Check if the transfer has been cancelled by the user. */
+            if (shared_thread_data->transfer_cancelled)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+
+            /* Read current file data chunk. */
+            shared_thread_data->read_error = (fread(buf1, 1, blksize, src) != blksize);
+            if (shared_thread_data->read_error)
+            {
+                condvarWakeAll(&g_writeCondvar);
+                break;
+            }
+
+            /* Wait until the previous file data chunk has been written. */
+            mutexLock(&g_fileMutex);
+
+            if (shared_thread_data->data_size && !shared_thread_data->write_error) condvarWait(&g_readCondvar, &g_fileMutex);
+
+            if (shared_thread_data->write_error)
+            {
+                mutexUnlock(&g_fileMutex);
+                break;
+            }
+
+            /* Update shared object. */
+            shared_thread_data->data = buf1;
+            shared_thread_data->data_size = blksize;
+
+            /* Swap buffers. */
+            buf1 = buf2;
+            buf2 = shared_thread_data->data;
+
+            /* Wake up the write thread to continue writing data. */
+            mutexUnlock(&g_fileMutex);
+            condvarWakeAll(&g_writeCondvar);
+        }
+
+        /* Close input file. */
+        fclose(src);
+        src = NULL;
+
+        if (shared_thread_data->read_error || shared_thread_data->write_error || shared_thread_data->transfer_cancelled) break;
+    }
+
+    if (!shared_thread_data->read_error && !shared_thread_data->write_error && !shared_thread_data->transfer_cancelled)
+    {
+        /* Wait until the previous file data chunk has been written. */
+        mutexLock(&g_fileMutex);
+        if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
+        mutexUnlock(&g_fileMutex);
+    }
+
+end:
+    if (shared_thread_data->fp)
+    {
+        fclose(shared_thread_data->fp);
+        shared_thread_data->fp = NULL;
+
+        if ((shared_thread_data->read_error || shared_thread_data->write_error || shared_thread_data->transfer_cancelled) && dev_idx != 1)
+        {
+            utilsDeleteDirectoryRecursively(base_out_path);
+            if (dev_idx == 0) utilsCommitSdCardFileSystemChanges();
+        }
+    }
+
+    if (src) fclose(src);
+
+    if (!is_topmost && entries) free((FsBrowserEntry*)entries);
+
+    if (tmp_path) free(tmp_path);
+
+    return !shared_thread_data->read_error;
 }
 
 static void genericWriteThreadFunc(void *arg)

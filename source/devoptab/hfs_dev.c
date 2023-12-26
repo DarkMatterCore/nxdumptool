@@ -119,7 +119,7 @@ static int hfsdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     /* Get truncated path. */
     if (!(path = hfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
 
-    LOG_MSG_DEBUG("Opening \"%s:/%s\" with flags 0x%X.", dev_ctx->name, path, flags);
+    //LOG_MSG_DEBUG("Opening \"%s:/%s\" with flags 0x%X.", dev_ctx->name, path, flags);
 
     /* Reset file descriptor. */
     memset(file, 0, sizeof(HashFileSystemFileState));
@@ -140,7 +140,7 @@ static int hfsdev_close(struct _reent *r, void *fd)
     /* Sanity check. */
     if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Closing \"%s:/%s\".", dev_ctx->name, file->name);
+    //LOG_MSG_DEBUG("Closing \"%s:/%s\".", dev_ctx->name, file->name);
 
     /* Reset file descriptor. */
     memset(file, 0, sizeof(HashFileSystemFileState));
@@ -158,7 +158,7 @@ static ssize_t hfsdev_read(struct _reent *r, void *fd, char *ptr, size_t len)
     /* Sanity check. */
     if (!file || !ptr || !len) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Reading 0x%lX byte(s) at offset 0x%lX from \"%s:/%s\".", len, file->offset, dev_ctx->name, file->name);
+    //LOG_MSG_DEBUG("Reading 0x%lX byte(s) at offset 0x%lX from \"%s:/%s\".", len, file->offset, dev_ctx->name, file->name);
 
     /* Read file data. */
     if (!hfsReadEntryData(fs_ctx, file->hfs_entry, ptr, len, file->offset)) DEVOPTAB_SET_ERROR_AND_EXIT(EIO);
@@ -204,7 +204,7 @@ static off_t hfsdev_seek(struct _reent *r, void *fd, off_t pos, int dir)
     /* Don't allow positive seeks beyond the end of file. */
     if (offset > (off_t)file->hfs_entry->size) DEVOPTAB_SET_ERROR_AND_EXIT(EOVERFLOW);
 
-    LOG_MSG_DEBUG("Seeking to offset 0x%lX from \"%s:/%s\".", offset, dev_ctx->name, file->name);
+    //LOG_MSG_DEBUG("Seeking to offset 0x%lX from \"%s:/%s\".", offset, dev_ctx->name, file->name);
 
     /* Adjust offset. */
     file->offset = (u64)offset;
@@ -221,7 +221,7 @@ static int hfsdev_fstat(struct _reent *r, void *fd, struct stat *st)
     /* Sanity check. */
     if (!file || !st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file->name);
+    //LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file->name);
 
     /* Fill stat info. */
     hfsdev_fill_stat(st, file->index, file->hfs_entry, dev_ctx->mount_time);
@@ -245,7 +245,7 @@ static int hfsdev_stat(struct _reent *r, const char *file, struct stat *st)
     /* Get truncated path. */
     if (!(file = hfsdev_get_truncated_path(r, file))) DEVOPTAB_EXIT;
 
-    LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
+    //LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
 
     /* Get information about the requested Hash FS entry. */
     if (!hfsGetEntryIndexByName(fs_ctx, file, &index) || !(hfs_entry = hfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
@@ -269,7 +269,7 @@ static DIR_ITER *hfsdev_diropen(struct _reent *r, DIR_ITER *dirState, const char
     if (!(path = hfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
     if (*path) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
 
-    LOG_MSG_DEBUG("Opening directory \"%s:/\".", dev_ctx->name);
+    //LOG_MSG_DEBUG("Opening directory \"%s:/\".", dev_ctx->name);
 
     /* Reset directory state. */
     memset(dir, 0, sizeof(HashFileSystemDirectoryState));
@@ -286,7 +286,7 @@ static int hfsdev_dirreset(struct _reent *r, DIR_ITER *dirState)
 {
     HFS_DEV_INIT_DIR_VARS;
 
-    LOG_MSG_DEBUG("Resetting directory state for \"%s:/\".", dev_ctx->name);
+    //LOG_MSG_DEBUG("Resetting directory state for \"%s:/\".", dev_ctx->name);
 
     /* Reset directory state. */
     dir->state = 0;
@@ -308,7 +308,7 @@ static int hfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
     /* Sanity check. */
     if (!filename || !filestat) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Getting info for next directory entry in \"%s:/\" (state %u, index %u).", dev_ctx->name, dir->state, dir->index);
+    //LOG_MSG_DEBUG("Getting info for next directory entry in \"%s:/\" (state %u, index %u).", dev_ctx->name, dir->state, dir->index);
 
     if (dir->state < 2)
     {
@@ -352,7 +352,7 @@ static int hfsdev_dirclose(struct _reent *r, DIR_ITER *dirState)
 {
     HFS_DEV_INIT_DIR_VARS;
 
-    LOG_MSG_DEBUG("Closing directory \"%s:/\".", dev_ctx->name);
+    //LOG_MSG_DEBUG("Closing directory \"%s:/\".", dev_ctx->name);
 
     /* Reset directory state. */
     memset(dir, 0, sizeof(HashFileSystemDirectoryState));
@@ -374,7 +374,7 @@ static int hfsdev_statvfs(struct _reent *r, const char *path, struct statvfs *bu
     /* Sanity check. */
     if (!buf) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Getting filesystem stats for \"%s:\"", dev_ctx->name);
+    //LOG_MSG_DEBUG("Getting filesystem stats for \"%s:\"", dev_ctx->name);
 
     /* Get Hash FS total data size. */
     if (!hfsGetTotalDataSize(fs_ctx, &ext_fs_size)) DEVOPTAB_SET_ERROR_AND_EXIT(EIO);
@@ -411,7 +411,7 @@ static const char *hfsdev_get_truncated_path(struct _reent *r, const char *path)
 
     if (!r || !path || !*path) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Input path: \"%s\".", path);
+    //LOG_MSG_DEBUG("Input path: \"%s\".", path);
 
     /* Move the path pointer to the start of the actual path. */
     do {
@@ -445,7 +445,7 @@ static const char *hfsdev_get_truncated_path(struct _reent *r, const char *path)
     if (!len && !path_sep_skipped) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
     if (len >= FS_MAX_PATH) DEVOPTAB_SET_ERROR_AND_EXIT(ENAMETOOLONG);
 
-    LOG_MSG_DEBUG("Truncated path: \"%s\".", path);
+    //LOG_MSG_DEBUG("Truncated path: \"%s\".", path);
 
 end:
     DEVOPTAB_RETURN_PTR(path);

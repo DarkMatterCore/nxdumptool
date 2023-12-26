@@ -157,6 +157,10 @@ bool utilsCreateConcatenationFile(const char *path);
 /// If 'create_last_element' is true, the last element from the provided path will be created as well.
 void utilsCreateDirectoryTree(const char *path, bool create_last_element);
 
+/// Calculates the size of a directory by recursively traversing all of its child entries.
+/// The provided path must be absolute and it must include the virtual device name it belongs to (e.g. "sdmc:/path/to/dir").
+bool utilsGetDirectorySize(const char *path, u64 *out_size);
+
 /// Recursively deletes the directory located at the provided path and all of its contents.
 /// The provided path must be absolute and it must include the virtual device name it belongs to (e.g. "sdmc:/path/to/dir").
 bool utilsDeleteDirectoryRecursively(const char *path);

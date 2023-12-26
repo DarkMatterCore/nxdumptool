@@ -119,7 +119,7 @@ static int pfsdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     /* Get truncated path. */
     if (!(path = pfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
 
-    LOG_MSG_DEBUG("Opening \"%s:/%s\" with flags 0x%X.", dev_ctx->name, path, flags);
+    //LOG_MSG_DEBUG("Opening \"%s:/%s\" with flags 0x%X.", dev_ctx->name, path, flags);
 
     /* Reset file descriptor. */
     memset(file, 0, sizeof(PartitionFileSystemFileState));
@@ -140,7 +140,7 @@ static int pfsdev_close(struct _reent *r, void *fd)
     /* Sanity check. */
     if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Closing \"%s:/%s\".", dev_ctx->name, file->name);
+    //LOG_MSG_DEBUG("Closing \"%s:/%s\".", dev_ctx->name, file->name);
 
     /* Reset file descriptor. */
     memset(file, 0, sizeof(PartitionFileSystemFileState));
@@ -158,7 +158,7 @@ static ssize_t pfsdev_read(struct _reent *r, void *fd, char *ptr, size_t len)
     /* Sanity check. */
     if (!file || !ptr || !len) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Reading 0x%lX byte(s) at offset 0x%lX from \"%s:/%s\".", len, file->offset, dev_ctx->name, file->name);
+    //LOG_MSG_DEBUG("Reading 0x%lX byte(s) at offset 0x%lX from \"%s:/%s\".", len, file->offset, dev_ctx->name, file->name);
 
     /* Read file data. */
     if (!pfsReadEntryData(fs_ctx, file->pfs_entry, ptr, len, file->offset)) DEVOPTAB_SET_ERROR_AND_EXIT(EIO);
@@ -204,7 +204,7 @@ static off_t pfsdev_seek(struct _reent *r, void *fd, off_t pos, int dir)
     /* Don't allow positive seeks beyond the end of file. */
     if (offset > (off_t)file->pfs_entry->size) DEVOPTAB_SET_ERROR_AND_EXIT(EOVERFLOW);
 
-    LOG_MSG_DEBUG("Seeking to offset 0x%lX from \"%s:/%s\".", offset, dev_ctx->name, file->name);
+    //LOG_MSG_DEBUG("Seeking to offset 0x%lX from \"%s:/%s\".", offset, dev_ctx->name, file->name);
 
     /* Adjust offset. */
     file->offset = (u64)offset;
@@ -221,7 +221,7 @@ static int pfsdev_fstat(struct _reent *r, void *fd, struct stat *st)
     /* Sanity check. */
     if (!file || !st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file->name);
+    //LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file->name);
 
     /* Fill stat info. */
     pfsdev_fill_stat(st, file->index, file->pfs_entry, dev_ctx->mount_time);
@@ -245,7 +245,7 @@ static int pfsdev_stat(struct _reent *r, const char *file, struct stat *st)
     /* Get truncated path. */
     if (!(file = pfsdev_get_truncated_path(r, file))) DEVOPTAB_EXIT;
 
-    LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
+    //LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file);
 
     /* Get information about the requested Partition FS entry. */
     if (!pfsGetEntryIndexByName(fs_ctx, file, &index) || !(pfs_entry = pfsGetEntryByIndex(fs_ctx, index))) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
@@ -269,7 +269,7 @@ static DIR_ITER *pfsdev_diropen(struct _reent *r, DIR_ITER *dirState, const char
     if (!(path = pfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
     if (*path) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
 
-    LOG_MSG_DEBUG("Opening directory \"%s:/\".", dev_ctx->name);
+    //LOG_MSG_DEBUG("Opening directory \"%s:/\".", dev_ctx->name);
 
     /* Reset directory state. */
     memset(dir, 0, sizeof(PartitionFileSystemDirectoryState));
@@ -286,7 +286,7 @@ static int pfsdev_dirreset(struct _reent *r, DIR_ITER *dirState)
 {
     PFS_DEV_INIT_DIR_VARS;
 
-    LOG_MSG_DEBUG("Resetting directory state for \"%s:/\".", dev_ctx->name);
+    //LOG_MSG_DEBUG("Resetting directory state for \"%s:/\".", dev_ctx->name);
 
     /* Reset directory state. */
     dir->state = 0;
@@ -308,7 +308,7 @@ static int pfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
     /* Sanity check. */
     if (!filename || !filestat) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Getting info for next directory entry in \"%s:/\" (state %u, index %u).", dev_ctx->name, dir->state, dir->index);
+    //LOG_MSG_DEBUG("Getting info for next directory entry in \"%s:/\" (state %u, index %u).", dev_ctx->name, dir->state, dir->index);
 
     if (dir->state < 2)
     {
@@ -352,7 +352,7 @@ static int pfsdev_dirclose(struct _reent *r, DIR_ITER *dirState)
 {
     PFS_DEV_INIT_DIR_VARS;
 
-    LOG_MSG_DEBUG("Closing directory \"%s:/\".", dev_ctx->name);
+    //LOG_MSG_DEBUG("Closing directory \"%s:/\".", dev_ctx->name);
 
     /* Reset directory state. */
     memset(dir, 0, sizeof(PartitionFileSystemDirectoryState));
@@ -374,7 +374,7 @@ static int pfsdev_statvfs(struct _reent *r, const char *path, struct statvfs *bu
     /* Sanity check. */
     if (!buf) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Getting filesystem stats for \"%s:\"", dev_ctx->name);
+    //LOG_MSG_DEBUG("Getting filesystem stats for \"%s:\"", dev_ctx->name);
 
     /* Get Partition FS total data size. */
     if (!pfsGetTotalDataSize(fs_ctx, &ext_fs_size)) DEVOPTAB_SET_ERROR_AND_EXIT(EIO);
@@ -411,7 +411,7 @@ static const char *pfsdev_get_truncated_path(struct _reent *r, const char *path)
 
     if (!r || !path || !*path) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
-    LOG_MSG_DEBUG("Input path: \"%s\".", path);
+    //LOG_MSG_DEBUG("Input path: \"%s\".", path);
 
     /* Move the path pointer to the start of the actual path. */
     do {
@@ -445,7 +445,7 @@ static const char *pfsdev_get_truncated_path(struct _reent *r, const char *path)
     if (!len && !path_sep_skipped) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
     if (len >= FS_MAX_PATH) DEVOPTAB_SET_ERROR_AND_EXIT(ENAMETOOLONG);
 
-    LOG_MSG_DEBUG("Truncated path: \"%s\".", path);
+    //LOG_MSG_DEBUG("Truncated path: \"%s\".", path);
 
 end:
     DEVOPTAB_RETURN_PTR(path);

@@ -206,7 +206,7 @@ bool utilsInitializeResources(void)
         /* Load keyset. */
         if (!keysLoadKeyset())
         {
-            LOG_MSG_ERROR("Failed to load keyset!\nPlease update your keys file with Lockpick_RCM.\nYou can get an updated build at:" DISCORD_SERVER_URL);
+            LOG_MSG_ERROR("Failed to load keyset!\nPlease update your keys file with Lockpick_RCM.\nYou can get an updated build at: " DISCORD_SERVER_URL);
             break;
         }
 
@@ -813,12 +813,84 @@ void utilsCreateDirectoryTree(const char *path, bool create_last_element)
     free(tmp);
 }
 
+bool utilsGetDirectorySize(const char *path, u64 *out_size)
+{
+    u64 total_size = 0;
+    char *name_end = NULL, *entry_path = NULL;
+    DIR *dir = NULL;
+    struct dirent *entry = NULL;
+    struct stat st = {0};
+    bool success = false;
+
+    /* Sanity checks. */
+    if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || !*(name_end + 2) || !out_size)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    if (!(dir = opendir(path)))
+    {
+        LOG_MSG_ERROR("Failed to open directory \"%s\"! (%d).", path, errno);
+        goto end;
+    }
+
+    if (!(entry_path = calloc(1, FS_MAX_PATH)))
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for path buffer!");
+        goto end;
+    }
+
+    /* Read directory entries. */
+    while((entry = readdir(dir)))
+    {
+        /* Skip current directory and parent directory entries. */
+        if (!strcmp(".", entry->d_name) || !strcmp("..", entry->d_name)) continue;
+
+        /* Generate path to the current entry. */
+        snprintf(entry_path, FS_MAX_PATH, "%s/%s", path, entry->d_name);
+
+        if (entry->d_type == DT_DIR)
+        {
+            /* Get directory size. */
+            u64 dir_size = 0;
+            if (!utilsGetDirectorySize(entry_path, &dir_size)) goto end;
+
+            /* Update size. */
+            total_size += dir_size;
+        } else {
+            /* Get file properties. */
+            if (stat(entry_path, &st) != 0)
+            {
+                LOG_MSG_ERROR("Failed to stat file \"%s\"! (%d).", entry_path, errno);
+                goto end;
+            }
+
+            /* Update size. */
+            total_size += st.st_size;
+        }
+    }
+
+    /* Update output pointer. */
+    *out_size = total_size;
+
+    /* Update return value. */
+    success = true;
+
+end:
+    if (entry_path) free(entry_path);
+
+    if (dir) closedir(dir);
+
+    return success;
+}
+
 bool utilsDeleteDirectoryRecursively(const char *path)
 {
     char *name_end = NULL, *entry_path = NULL;
     DIR *dir = NULL;
     struct dirent *entry = NULL;
-    bool success = true;
+    bool success = false;
 
     /* Sanity checks. */
     if (!path || !*path || !(name_end = strchr(path, ':')) || *(name_end + 1) != '/' || !*(name_end + 2))
@@ -830,14 +902,12 @@ bool utilsDeleteDirectoryRecursively(const char *path)
     if (!(dir = opendir(path)))
     {
         LOG_MSG_ERROR("Failed to open directory \"%s\"! (%d).", path, errno);
-        success = false;
         goto end;
     }
 
     if (!(entry_path = calloc(1, FS_MAX_PATH)))
     {
         LOG_MSG_ERROR("Failed to allocate memory for path buffer!");
-        success = false;
         goto end;
     }
 
@@ -855,11 +925,7 @@ bool utilsDeleteDirectoryRecursively(const char *path)
         if (entry->d_type == DT_DIR)
         {
             /* Delete directory contents. */
-            if (!utilsDeleteDirectoryRecursively(entry_path))
-            {
-                success = false;
-                break;
-            }
+            if (!utilsDeleteDirectoryRecursively(entry_path)) goto end;
 
             /* Delete directory. */
             status = rmdir(entry_path);
@@ -870,20 +936,17 @@ bool utilsDeleteDirectoryRecursively(const char *path)
 
         if (status != 0)
         {
-            LOG_MSG_ERROR("Failed to delete \"%s\"! (%s, %d).", entry_path, entry->d_type == DT_DIR ? "dir" : "file", errno);
-            success = false;
-            break;
+            LOG_MSG_ERROR("Failed to delete %s \"%s\"! (%d).", entry->d_type == DT_DIR ? "directory" : "file", entry_path, errno);
+            goto end;
         }
     }
 
-    if (success)
-    {
-        closedir(dir);
-        dir = NULL;
+    /* Close topmost directory so we can delete it. */
+    closedir(dir);
+    dir = NULL;
 
-        success = (rmdir(path) == 0);
-        if (!success) LOG_MSG_ERROR("Failed to delete topmost directory \"%s\"! (%d).", path, errno);
-    }
+    success = (rmdir(path) == 0);
+    if (!success) LOG_MSG_ERROR("Failed to delete topmost directory \"%s\"! (%d).", path, errno);
 
 end:
     if (entry_path) free(entry_path);
