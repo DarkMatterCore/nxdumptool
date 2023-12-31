@@ -1342,7 +1342,7 @@ int main(int argc, char *argv[])
                     break;
                 }
 
-                if ((cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected != 1) || cur_menu->id == MenuId_BrowseHFS)
+                if ((cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 1) || cur_menu->id == MenuId_BrowseHFS)
                 {
                     show_button_prompt = false;
 
