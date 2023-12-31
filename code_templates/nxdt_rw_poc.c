@@ -70,19 +70,20 @@ typedef enum {
     MenuId_Root                 = 0,
     MenuId_GameCard             = 1,
     MenuId_XCI                  = 2,
-    MenuId_HFS                  = 3,
-    MenuId_UserTitles           = 4,
-    MenuId_UserTitlesSubMenu    = 5,
-    MenuId_NSPTitleTypes        = 6,
-    MenuId_NSP                  = 7,
-    MenuId_TicketTitleTypes     = 8,
-    MenuId_Ticket               = 9,
-    MenuId_NcaTitleTypes        = 10,
-    MenuId_Nca                  = 11,
-    MenuId_NcaFsSections        = 12,
-    MenuId_NcaFsSectionsSubMenu = 13,
-    MenuId_SystemTitles         = 14,
-    MenuId_Count                = 15
+    MenuId_DumpHFS              = 3,
+    MenuId_BrowseHFS            = 4,
+    MenuId_UserTitles           = 5,
+    MenuId_UserTitlesSubMenu    = 6,
+    MenuId_NSPTitleTypes        = 7,
+    MenuId_NSP                  = 8,
+    MenuId_TicketTitleTypes     = 9,
+    MenuId_Ticket               = 10,
+    MenuId_NcaTitleTypes        = 11,
+    MenuId_Nca                  = 12,
+    MenuId_NcaFsSections        = 13,
+    MenuId_NcaFsSectionsSubMenu = 14,
+    MenuId_SystemTitles         = 15,
+    MenuId_Count                = 16
 } MenuId;
 
 typedef struct
@@ -213,6 +214,7 @@ static bool saveGameCardUid(void *userdata);
 static bool saveGameCardHfsPartition(void *userdata);
 static bool saveGameCardRawHfsPartition(HashFileSystemContext *hfs_ctx);
 static bool saveGameCardExtractedHfsPartition(HashFileSystemContext *hfs_ctx);
+static bool browseGameCardHfsPartition(void *userdata);
 
 static bool saveConsoleLafwBlob(void *userdata);
 
@@ -411,7 +413,7 @@ static u32 g_hfsLogoPartition = HashFileSystemPartitionType_Logo;
 static u32 g_hfsNormalPartition = HashFileSystemPartitionType_Normal;
 static u32 g_hfsSecurePartition = HashFileSystemPartitionType_Secure;
 
-static MenuElement *g_gameCardHfsMenuElements[] = {
+static MenuElement *g_gameCardHfsDumpMenuElements[] = {
     &(MenuElement){
         .str = "dump root hfs partition",
         .child_menu = NULL,
@@ -459,6 +461,46 @@ static MenuElement *g_gameCardHfsMenuElements[] = {
             .options = g_noYesStrings
         },
         .userdata = NULL
+    },
+    &g_storageMenuElement,
+    NULL
+};
+
+static MenuElement *g_gameCardHfsBrowseMenuElements[] = {
+    &(MenuElement){
+        .str = "browse root hfs partition",
+        .child_menu = NULL,
+        .task_func = &browseGameCardHfsPartition,
+        .element_options = NULL,
+        .userdata = &g_hfsRootPartition
+    },
+    &(MenuElement){
+        .str = "browse update hfs partition",
+        .child_menu = NULL,
+        .task_func = &browseGameCardHfsPartition,
+        .element_options = NULL,
+        .userdata = &g_hfsUpdatePartition
+    },
+    &(MenuElement){
+        .str = "browse logo hfs partition",
+        .child_menu = NULL,
+        .task_func = &browseGameCardHfsPartition,
+        .element_options = NULL,
+        .userdata = &g_hfsLogoPartition
+    },
+    &(MenuElement){
+        .str = "browse normal hfs partition",
+        .child_menu = NULL,
+        .task_func = &browseGameCardHfsPartition,
+        .element_options = NULL,
+        .userdata = &g_hfsNormalPartition
+    },
+    &(MenuElement){
+        .str = "browse secure hfs partition",
+        .child_menu = NULL,
+        .task_func = &browseGameCardHfsPartition,
+        .element_options = NULL,
+        .userdata = &g_hfsSecurePartition
     },
     &g_storageMenuElement,
     NULL
@@ -530,11 +572,24 @@ static MenuElement *g_gameCardMenuElements[] = {
     &(MenuElement){
         .str = "dump hfs partitions (optional)",
         .child_menu = &(Menu){
-            .id = MenuId_HFS,
+            .id = MenuId_DumpHFS,
             .parent = NULL,
             .selected = 0,
             .scroll = 0,
-            .elements = g_gameCardHfsMenuElements
+            .elements = g_gameCardHfsDumpMenuElements
+        },
+        .task_func = NULL,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "browse hfs partitions (optional)",
+        .child_menu = &(Menu){
+            .id = MenuId_BrowseHFS,
+            .parent = NULL,
+            .selected = 0,
+            .scroll = 0,
+            .elements = g_gameCardHfsBrowseMenuElements
         },
         .task_func = NULL,
         .element_options = NULL,
@@ -1276,16 +1331,28 @@ int main(int argc, char *argv[])
             } else
             if (selected_element->task_func)
             {
+                bool show_button_prompt = true;
+
                 consoleClear();
 
                 /* Wait for gamecard (if needed). */
-                if (((cur_menu->id >= MenuId_GameCard && cur_menu->id <= MenuId_HFS) || (title_info && title_info->storage_id == NcmStorageId_GameCard)) && !waitForGameCard())
+                if (((cur_menu->id >= MenuId_GameCard && cur_menu->id <= MenuId_BrowseHFS) || (title_info && title_info->storage_id == NcmStorageId_GameCard)) && !waitForGameCard())
                 {
                     if (g_appletStatus) continue;
                     break;
                 }
 
-                if (cur_menu->id > MenuId_Root && (cur_menu->id != MenuId_NcaFsSectionsSubMenu || cur_menu->selected != 1))
+                if ((cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected != 1) || cur_menu->id == MenuId_BrowseHFS)
+                {
+                    show_button_prompt = false;
+
+                    /* Ignore result. */
+                    selected_element->task_func(selected_element->userdata);
+
+                    /* Update free space. */
+                    if (!useUsbHost()) updateStorageList();
+                } else
+                if (cur_menu->id > MenuId_Root)
                 {
                     /* Wait for USB session (if needed). */
                     if (useUsbHost() && !waitForUsb())
@@ -1303,12 +1370,9 @@ int main(int argc, char *argv[])
                     }
 
                     utilsSetLongRunningProcessState(false);
-                } else {
-                    /* Ignore result. */
-                    selected_element->task_func(selected_element->userdata);
                 }
 
-                if (g_appletStatus && (cur_menu->id != MenuId_NcaFsSectionsSubMenu || cur_menu->selected != 1))
+                if (g_appletStatus && show_button_prompt)
                 {
                     /* Display prompt. */
                     consolePrint("press any button to continue");
@@ -2919,6 +2983,60 @@ end:
     return success;
 }
 
+static bool browseGameCardHfsPartition(void *userdata)
+{
+    u32 hfs_partition_type = (userdata ? *((u32*)userdata) : HashFileSystemPartitionType_None);
+    HashFileSystemContext hfs_ctx = {0};
+    char mount_name[DEVOPTAB_MOUNT_NAME_LENGTH] = {0}, subdir[0x20] = {0}, *base_out_path = NULL;
+
+    bool success = false;
+
+    if (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type > HashFileSystemPartitionType_Secure)
+    {
+        consolePrint("invalid hfs partition type! (%u)\n", hfs_partition_type);
+        goto end;
+    }
+
+    if (!gamecardGetHashFileSystemContext(hfs_partition_type, &hfs_ctx))
+    {
+        consolePrint("get hfs ctx failed! this partition type may not exist within the inserted gamecard\n");
+        goto end;
+    }
+
+    /* Mount devoptab device. */
+    snprintf(mount_name, MAX_ELEMENTS(mount_name), "hfs%s", hfs_ctx.name);
+
+    if (!devoptabMountHashFileSystemDevice(&hfs_ctx, mount_name))
+    {
+        consolePrint("hfs ctx devoptab mount failed!\n");
+        goto end;
+    }
+
+    /* Generate output base path. */
+    snprintf(subdir, MAX_ELEMENTS(subdir), "/%s", hfs_ctx.name);
+    base_out_path = generateOutputGameCardFileName("HFS/Extracted", subdir, true);
+    if (!base_out_path) goto end;
+
+    /* Display file browser. */
+    success = fsBrowser(mount_name, base_out_path);
+
+    /* Unmount devoptab device. */
+    devoptabUnmountDevice(mount_name);
+
+end:
+    /* Free data. */
+    if (base_out_path) free(base_out_path);
+    hfsFreeContext(&hfs_ctx);
+
+    if (!success && g_appletStatus)
+    {
+        consolePrint("press any button to continue\n");
+        utilsWaitForButtonPress(0);
+    }
+
+    return success;
+}
+
 static bool saveConsoleLafwBlob(void *userdata)
 {
     NX_IGNORE_ARG(userdata);
@@ -3529,7 +3647,9 @@ static bool fsBrowser(const char *mount_name, const char *base_out_path)
                 depth++;
             } else {
                 /* Dump file. */
+                utilsSetLongRunningProcessState(true);
                 fsBrowserDumpFile(dir_path, selected_entry, base_out_path);
+                utilsSetLongRunningProcessState(false);
             }
         } else
         if (btn_down & HidNpadButton_B)
@@ -3592,7 +3712,9 @@ static bool fsBrowser(const char *mount_name, const char *base_out_path)
         if ((btn_down & HidNpadButton_Y) && entries_count && highlighted)
         {
             /* Dump highlighted entries. */
+            utilsSetLongRunningProcessState(true);
             fsBrowserDumpHighlightedEntries(dir_path, entries, entries_count, base_out_path);
+            utilsSetLongRunningProcessState(false);
 
             /* Unhighlight all entries. */
             for(u32 i = 0; i < entries_count; i++) entries[i].highlight = false;
@@ -3683,7 +3805,7 @@ static bool fsBrowserGetDirEntries(const char *dir_path, FsBrowserEntry **out_en
     while((dt = readdir(dp)))
     {
         /* Skip "." and ".." entries. */
-        if (!strcmp(dt->d_name, ".") || !strcmp(dt->d_name, "..") != 0) continue;
+        if (!strcmp(dt->d_name, ".") || !strcmp(dt->d_name, "..")) continue;
 
         /* Reallocate directory entries buffer. */
         if (!(entries_tmp = realloc(entries, (count + 1) * sizeof(FsBrowserEntry))))

@@ -1096,31 +1096,35 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
     u8 type_idx = title_info->meta_key.type;
     if (type_idx >= NcmContentMetaType_Application) type_idx -= NCM_CMT_APP_OFFSET;
 
-    char title_name[0x400] = {0}, *version_str = NULL, *filename = NULL;
+    char title_name[0x300] = {0}, *filename = NULL;
+    size_t title_name_len = 0;
 
     /* Generate filename for this title. */
     if (naming_convention == TitleNamingConvention_Full)
     {
         if (title_info->app_metadata && *(title_info->app_metadata->lang_entry.name))
         {
-            /* Retrieve display version string if we're dealing with a Patch. */
-            if (title_info->meta_key.type == NcmContentMetaType_Patch) version_str = titleGetPatchVersionString(title_info);
+            snprintf(title_name, MAX_ELEMENTS(title_name), "%s ", title_info->app_metadata->lang_entry.name);
 
-            sprintf(title_name, "%s ", title_info->app_metadata->lang_entry.name);
+            /* Retrieve display version string if we're dealing with a Patch. */
+            char *version_str = (title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetPatchVersionString(title_info) : NULL);
             if (version_str)
             {
-                sprintf(title_name + strlen(title_name), "%s ", version_str);
+                title_name_len = strlen(title_name);
+                snprintf(title_name + title_name_len, MAX_ELEMENTS(title_name) - title_name_len, "%s ", version_str);
                 free(version_str);
             }
 
             if (illegal_char_replace_type) utilsReplaceIllegalCharacters(title_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
         }
 
-        sprintf(title_name + strlen(title_name), "[%016lX][v%u][%s]", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type_idx]);
+        title_name_len = strlen(title_name);
+        snprintf(title_name + title_name_len, MAX_ELEMENTS(title_name) - title_name_len, "[%016lX][v%u][%s]", title_info->meta_key.id, title_info->meta_key.version, \
+                                                                                                              g_filenameTypeStrings[type_idx]);
     } else
     if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
     {
-        sprintf(title_name, "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type_idx]);
+        snprintf(title_name, MAX_ELEMENTS(title_name), "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type_idx]);
     }
 
     /* Duplicate generated filename. */
@@ -1141,8 +1145,8 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
         u32 title_count = title_storage->title_count;
 
         GameCardHeader gc_header = {0};
-        size_t cur_filename_len = 0;
-        char app_name[0x400] = {0};
+        size_t cur_filename_len = 0, app_name_len = 0;
+        char app_name[0x300] = {0};
         bool error = false;
 
         if (!g_titleInterfaceInit || !g_titleGameCardAvailable || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
@@ -1170,8 +1174,8 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
                 if (j == i) continue;
 
                 TitleInfo *cur_title_info = titles[j];
-                if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_Patch || !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id) || \
-                    cur_title_info->meta_key.version <= app_version) continue;
+                if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_Patch || \
+                    !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id) || cur_title_info->meta_key.version <= app_version) continue;
 
                 patch_info = cur_title_info;
                 app_version = cur_title_info->meta_key.version;
@@ -1186,30 +1190,33 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
 
                 if (app_info->app_metadata && *(app_info->app_metadata->lang_entry.name))
                 {
-                    /* Retrieve display version string if the inserted gamecard holds a patch for the current user application. */
-                    char *version_str = NULL;
-                    if (patch_info) version_str = titleGetPatchVersionString(patch_info);
+                    app_name_len = strlen(app_name);
+                    snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", app_info->app_metadata->lang_entry.name);
 
-                    sprintf(app_name + strlen(app_name), "%s ", app_info->app_metadata->lang_entry.name);
+                    /* Retrieve display version string if the inserted gamecard holds a patch for the current user application. */
+                    char *version_str = (patch_info ? titleGetPatchVersionString(patch_info) : NULL);
                     if (version_str)
                     {
-                        sprintf(app_name + strlen(app_name), "%s ", version_str);
+                        app_name_len = strlen(app_name);
+                        snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", version_str);
                         free(version_str);
                     }
 
                     if (illegal_char_replace_type) utilsReplaceIllegalCharacters(app_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
                 }
 
-                sprintf(app_name + strlen(app_name), "[%016lX][v%u]", app_info->meta_key.id, app_version);
+                app_name_len = strlen(app_name);
+                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "[%016lX][v%u]", app_info->meta_key.id, app_version);
             } else
             if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
             {
                 if (cur_filename_len) strcat(app_name, "+");
-                sprintf(app_name + strlen(app_name), "%016lX_v%u", app_info->meta_key.id, app_version);
+                app_name_len = strlen(app_name);
+                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%016lX_v%u", app_info->meta_key.id, app_version);
             }
 
             /* Reallocate output buffer. */
-            size_t app_name_len = strlen(app_name);
+            app_name_len = strlen(app_name);
 
             char *tmp_filename = realloc(filename, (cur_filename_len + app_name_len + 1) * sizeof(char));
             if (!tmp_filename)
