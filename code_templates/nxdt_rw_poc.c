@@ -3519,7 +3519,7 @@ static bool browseNintendoContentArchiveFsSection(void *userdata)
         title_id = (title_type == NcmContentMetaType_Patch ? titleGetApplicationIdByPatchId(title_id) : \
                    (title_type == NcmContentMetaType_DataPatch ? titleGetAddOnContentIdByDataPatchId(title_id) : title_id));
 
-        base_out_path = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, "exefs");
+        base_out_path = generateOutputLayeredFsFileName(title_id + nca_ctx->id_offset, NULL, section_type == NcaFsSectionType_PartitionFs ? "exefs" : "romfs");
     } else {
         snprintf(subdir, MAX_ELEMENTS(subdir), "NCA FS/%s/Extracted", nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
         snprintf(extension, MAX_ELEMENTS(extension), "/%s #%u/%u", titleGetNcmContentTypeName(nca_ctx->content_type), nca_ctx->id_offset, nca_fs_ctx->section_idx);
