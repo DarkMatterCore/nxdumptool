@@ -49,6 +49,8 @@ import usb.util
 import warnings
 import base64
 
+import configparser
+
 import tkinter as tk
 import tkinter.ttk as ttk
 from tkinter import filedialog, messagebox, font, scrolledtext
@@ -136,9 +138,14 @@ COPYRIGHT_TEXT = f'Copyright (c) {COPYRIGHT_YEAR}, {USB_DEV_MANUFACTURER}'
 SERVER_START_MSG = f'Please connect a Nintendo Switch console running {USB_DEV_PRODUCT}.'
 SERVER_STOP_MSG = f'Exit {USB_DEV_PRODUCT} on your console or disconnect it at any time to stop the server.'
 
+# Load the configuration from the INI file
+config = configparser.ConfigParser()
+config.read('config.ini')
+
 # Default directory paths.
 INITIAL_DIR = os.path.dirname(os.path.abspath(os.path.expanduser(os.path.expandvars(sys.argv[0]))))
-DEFAULT_DIR = os.path.join(INITIAL_DIR, USB_DEV_PRODUCT)
+# Get the default directory from the INI file or use a fallback if not present
+DEFAULT_DIR = config.get('Directories', 'Output', fallback=os.path.join(INITIAL_DIR, USB_DEV_PRODUCT))
 
 # Application icon (PNG).
 # Embedded to load it as the icon for all windows using PhotoImage (which doesn't support ICO files) + wm_iconphoto.
