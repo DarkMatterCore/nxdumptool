@@ -636,7 +636,7 @@ def usbGetDeviceEndpoints() -> bool:
             if not g_cliMode:
                 utilsLogException(traceback.format_exc())
 
-            g_logger.error('Fatal error ocurred while enumerating USB devices.')
+            g_logger.error('Fatal error occurred while enumerating USB devices.')
 
             if g_isWindows:
                 g_logger.error('Try reinstalling the libusbK driver using Zadig.')
