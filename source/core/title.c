@@ -1326,7 +1326,7 @@ static bool titleReallocateApplicationMetadata(u32 extra_app_count, bool is_syst
             {
                 if (cur_app_metadata->icon) free(cur_app_metadata->icon);
                 free(cur_app_metadata);
-                cur_app_metadata = NULL;
+                cached_app_metadata[cached_app_metadata_count + i] = NULL;
             }
         }
     }
@@ -1342,7 +1342,7 @@ static bool titleReallocateApplicationMetadata(u32 extra_app_count, bool is_syst
             tmp_app_metadata = NULL;
 
             /* Clear new application metadata pointer array area (if needed). */
-            if (!free_entries && extra_app_count) memset(cached_app_metadata + cached_app_metadata_count, 0, extra_app_count * sizeof(TitleApplicationMetadata*));
+            if (realloc_app_count > cached_app_metadata_count) memset(cached_app_metadata + cached_app_metadata_count, 0, extra_app_count * sizeof(TitleApplicationMetadata*));
         } else {
             LOG_MSG_ERROR("Failed to reallocate application metadata pointer array! (%u element[s]).", realloc_app_count);
             goto end;
@@ -1542,7 +1542,7 @@ static bool titleReallocateTitleInfoFromStorage(TitleStorage *title_storage, u32
             {
                 if (cur_title_info->content_infos) free(cur_title_info->content_infos);
                 free(cur_title_info);
-                cur_title_info = NULL;
+                title_info[title_count + i] = NULL;
             }
         }
     }
@@ -1558,7 +1558,7 @@ static bool titleReallocateTitleInfoFromStorage(TitleStorage *title_storage, u32
             tmp_title_info = NULL;
 
             /* Clear new title info pointer array area (if needed). */
-            if (!free_entries && extra_title_count) memset(title_info + title_count, 0, extra_title_count * sizeof(TitleInfo*));
+            if (realloc_title_count > title_count) memset(title_info + title_count, 0, extra_title_count * sizeof(TitleInfo*));
         } else {
             LOG_MSG_ERROR("Failed to reallocate title info pointer array! (%u element[s]).", realloc_title_count);
             goto end;
@@ -1870,9 +1870,17 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
     /* Copy data. */
     out->title_id = title_id;
 
-    memcpy(&(out->lang_entry), lang_entry, sizeof(NacpLanguageEntry));
-    utilsTrimString(out->lang_entry.name);
-    utilsTrimString(out->lang_entry.author);
+    if (lang_entry)
+    {
+        memcpy(&(out->lang_entry), lang_entry, sizeof(NacpLanguageEntry));
+        utilsTrimString(out->lang_entry.name);
+        utilsTrimString(out->lang_entry.author);
+    } else {
+        /* Yes, this can happen -- NACPs with empty language entries are a thing, somehow. */
+        sprintf(out->lang_entry.name, "Unknown");
+        sprintf(out->lang_entry.author, "Unknown");
+        LOG_DATA_DEBUG(&(g_nsAppControlData->nacp), sizeof(NacpStruct), "NACP dump (ID %016lX):", title_id);
+    }
 
     out->icon_size = icon_size;
     out->icon = icon;
