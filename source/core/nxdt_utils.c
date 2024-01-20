@@ -274,9 +274,12 @@ bool utilsInitializeResources(void)
 
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
         /* Get last log message. */
-        char log_msg[0x100] = {0};
-        logGetLastMessage(log_msg, sizeof(log_msg));
-        if (*log_msg) utilsAppendFormattedStringToBuffer(&msg, &msg_size, "\n\n%s", log_msg);
+        char *log_msg = logGetLastMessage();
+        if (log_msg)
+        {
+            utilsAppendFormattedStringToBuffer(&msg, &msg_size, "\n\n%s", log_msg);
+            free(log_msg);
+        }
 #endif
 
         /* Print error message. */
@@ -1092,7 +1095,12 @@ void utilsPrintConsoleError(const char *msg)
         printf("An error occurred.");
     }
 
+#if LOG_LEVEL < LOG_LEVEL_NONE
     printf("\n\nFor more information, please check the logfile. Press any button to exit.");
+#else
+    printf("\n\nPress any button to exit.");
+#endif
+
     consoleUpdate(NULL);
 
     /* Wait until the user presses a button. */

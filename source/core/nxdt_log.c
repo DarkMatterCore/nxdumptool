@@ -27,7 +27,7 @@
 
 static Mutex g_logMutex = 0;
 
-static char g_lastLogMsg[0x100] = {0};
+static char *g_lastLogMsg = NULL;
 
 static FsFile g_logFile = {0};
 static s64 g_logFileOffset = 0;
@@ -189,6 +189,13 @@ void logCloseLogFile(void)
             utilsCommitSdCardFileSystemChanges();
         }
 
+        /* Free last message bugger. */
+        if (g_lastLogMsg)
+        {
+            free(g_lastLogMsg);
+            g_lastLogMsg = NULL;
+        }
+
         /* Free log buffer. */
         if (g_logBuffer)
         {
@@ -201,12 +208,16 @@ void logCloseLogFile(void)
     }
 }
 
-void logGetLastMessage(char *dst, size_t dst_size)
+char *logGetLastMessage(void)
 {
+    char *ret = NULL;
+
     SCOPED_LOCK(&g_logMutex)
     {
-        if (dst && dst_size > 1 && *g_lastLogMsg) snprintf(dst, dst_size, "%s", g_lastLogMsg);
+        if (g_lastLogMsg) ret = strdup(g_lastLogMsg);
     }
+
+    return ret;
 }
 
 void logControlMutex(bool lock)
@@ -310,11 +321,15 @@ static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *f
 
     log_str_len = (size_t)(str1_len + str2_len + 2);
 
-    /* Save log message to our global stack buffer (if needed). */
+    /* Save log message (if needed). */
     if (save)
     {
+        if (g_lastLogMsg) free(g_lastLogMsg);
+
         tmp_len = (strlen(func_name) + 2);
-        if ((tmp_len + (size_t)str2_len) < sizeof(g_lastLogMsg))
+
+        g_lastLogMsg = calloc(tmp_len + (size_t)str2_len + 1, sizeof(char));
+        if (g_lastLogMsg)
         {
             sprintf(g_lastLogMsg, "%s: ", func_name);
             vsprintf(g_lastLogMsg + tmp_len, fmt, args);

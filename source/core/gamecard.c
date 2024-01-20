@@ -24,8 +24,6 @@
 #include "gamecard.h"
 #include "keys.h"
 
-#define GAMECARD_HFS0_MAGIC                     0x48465330              /* "HFS0". */
-
 #define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB. */
 
 #define GAMECARD_ACCESS_DELAY                   3                       /* Seconds. */

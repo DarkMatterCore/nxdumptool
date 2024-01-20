@@ -110,8 +110,9 @@ void logFlushLogFile(void);
 /// Write any pending data to the logfile, flushes it and then closes it.
 void logCloseLogFile(void);
 
-/// Stores the last log message in the provided buffer.
-void logGetLastMessage(char *dst, size_t dst_size);
+/// Returns a pointer to a dynamically allocated buffer that holds the last error message string, or NULL if there's none.
+/// The allocated buffer must be freed by the calling function using free().
+char *logGetLastMessage(void);
 
 /// (Un)locks the log mutex. Can be used to block other threads and prevent them from writing data to the logfile.
 /// Use with caution.
