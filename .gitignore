@@ -2,9 +2,7 @@
 build
 host/__pycache__
 host/standalone
-host/nxdt_host.build
-host/nxdt_host.dist
-host/nxdt_host.onefile-build
+host/nxdt_host*
 host/nxdumptool
 *.elf
 *.nacp
@@ -16,6 +14,7 @@ host/nxdumptool
 *.log
 *.spec
 *.exe
+*.7z
 *.code-workspace
 
 # TODO: remove this after the PoC builds are no longer needed.
