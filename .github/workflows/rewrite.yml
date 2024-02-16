@@ -60,7 +60,7 @@ jobs:
         working-directory: nxdumptool
         run: |
           echo "nxdt_commit=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
-          ./build.sh
+          ./build.sh --noconfirm
 
       #- name: Build nxdumptool-rewrite GUI binary
       #  working-directory: nxdumptool

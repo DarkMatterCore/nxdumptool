@@ -1,4 +1,6 @@
 #!/bin/bash
+ARG=${1:-'--confirm'}
+
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # Clean-up from last build
@@ -32,4 +34,6 @@ make clean_all
 rm -f ./source/main.c
 mv -f ./main.cpp ./source/main.cpp
 
-read -rsp $'Press any key to continue...\n' -n 1 key
+if [ ${ARG,,} != "--noconfirm" ]; then
+    read -rsp $'Press any key to continue...\n' -n 1 key
+fi
