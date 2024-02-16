@@ -31,3 +31,5 @@ make clean_all
 
 rm -f ./source/main.c
 mv -f ./main.cpp ./source/main.cpp
+
+read -rsp $'Press any key to continue...\n' -n 1 key

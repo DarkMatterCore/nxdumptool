@@ -1253,10 +1253,12 @@ static bool bktrValidateTableOffsetNode(const BucketTreeTable *table, u64 node_s
     u32 offset_count = bktrGetOffsetCount(node_size);
     u32 entry_set_count = bktrGetEntrySetCount(node_size, entry_size, entry_count);
 
-    const u64 start_offset = ((offset_count < entry_set_count && node_header->count < offset_count) ? *bktrGetOffsetNodeEnd(offset_node) : *bktrGetOffsetNodeBegin(offset_node));
+    u64 node_start_offset = *bktrGetOffsetNodeBegin(offset_node);
+
+    u64 start_offset = ((offset_count < entry_set_count && node_header->count < offset_count) ? *bktrGetOffsetNodeEnd(offset_node) : node_start_offset);
     u64 end_offset = node_header->offset;
 
-    if (start_offset > *bktrGetOffsetNodeBegin(offset_node) || start_offset >= end_offset || node_header->count != entry_set_count)
+    if (start_offset > node_start_offset || start_offset >= end_offset || node_header->count != entry_set_count)
     {
         LOG_MSG_ERROR("Invalid Bucket Tree Offset Node!");
         return false;
@@ -1353,13 +1355,14 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
 
     /* Get the entry node index. */
     u32 entry_set_index = 0;
+    const u64 *node_start_ptr = bktrGetOffsetNodeBegin(offset_node), *node_end_ptr = bktrGetOffsetNodeEnd(offset_node);
     const u64 *start_ptr = NULL, *end_ptr = NULL;
     bool success = false;
 
-    if (bktrIsExistOffsetL2OnL1(ctx) && virtual_offset < *bktrGetOffsetNodeBegin(offset_node))
+    if (bktrIsExistOffsetL2OnL1(ctx) && virtual_offset < *node_start_ptr)
     {
-        start_ptr = bktrGetOffsetNodeEnd(offset_node);
-        end_ptr = (bktrGetOffsetNodeBegin(offset_node) + ctx->offset_count);
+        start_ptr = node_end_ptr;
+        end_ptr = (node_start_ptr + ctx->offset_count);
 
         if (!bktrGetTreeNodeEntryIndex(start_ptr, end_ptr, virtual_offset, &entry_set_index))
         {
@@ -1367,8 +1370,8 @@ static bool bktrFindStorageEntry(BucketTreeContext *ctx, u64 virtual_offset, Buc
             goto end;
         }
     } else {
-        start_ptr = bktrGetOffsetNodeBegin(offset_node);
-        end_ptr = bktrGetOffsetNodeEnd(offset_node);
+        start_ptr = node_start_ptr;
+        end_ptr = node_end_ptr;
 
         if (!bktrGetTreeNodeEntryIndex(start_ptr, end_ptr, virtual_offset, &entry_set_index))
         {
@@ -1410,28 +1413,37 @@ static bool bktrGetTreeNodeEntryIndex(const u64 *start_ptr, const u64 *end_ptr, 
         return false;
     }
 
-    u64 *pos = (u64*)start_ptr;
-    u32 index = 0;
+    /* Perform a binary search. */
+    u32 offset_count = (u32)(end_ptr - start_ptr), low = 0, high = (offset_count - 1);
+    bool ret = false;
 
-    while(pos < end_ptr)
+    while(low <= high)
     {
-        if (start_ptr < pos)
+        /* Get the index to the middle offset within our current lookup range. */
+        u32 half = ((low + high) / 2);
+
+        /* Check middle offset value. */
+        const u64 *ptr = (start_ptr + half);
+        if (*ptr > virtual_offset)
         {
-            /* Stop looking if we have found the right offset node. */
-            if (*pos > virtual_offset) break;
+            /* Update our upper limit. */
+            high = (half - 1);
+        } else {
+            /* Check for success. */
+            if (half == (offset_count - 1) || *(ptr + 1) > virtual_offset)
+            {
+                /* Update output. */
+                *out_index = half;
+                ret = true;
+                break;
+            }
 
-            /* Increment index. */
-            index++;
+            /* Update our lower limit. */
+            low = (half + 1);
         }
-
-        /* Increment offset node pointer. */
-        pos++;
     }
 
-    /* Update output index. */
-    *out_index = index;
-
-    return true;
+    return ret;
 }
 
 static bool bktrGetEntryNodeEntryIndex(const BucketTreeNodeHeader *node_header, u64 entry_size, u64 virtual_offset, u32 *out_index)

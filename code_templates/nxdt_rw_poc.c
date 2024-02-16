@@ -181,8 +181,8 @@ void updateTitleList(Menu *menu, Menu *submenu, bool is_system);
 static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *out_count);
 
 void freeNcaList(void);
-void updateNcaList(TitleInfo *title_info);
-static void switchNcaListTitle(Menu *cur_menu, u32 *element_count, TitleInfo *title_info);
+void updateNcaList(TitleInfo *title_info, u32 *element_count);
+static void switchNcaListTitle(Menu **cur_menu, u32 *element_count, TitleInfo *title_info);
 
 void freeNcaFsSectionsList(void);
 void updateNcaFsSectionsList(NcaUserData *nca_user_data);
@@ -1272,7 +1272,7 @@ int main(int argc, char *argv[])
 
                         if (child_menu->id == MenuId_Nca)
                         {
-                            updateNcaList(title_info);
+                            updateNcaList(title_info, &element_count);
 
                             if (!g_ncaMenuElements || !g_ncaMenuElements[0])
                             {
@@ -1516,13 +1516,13 @@ int main(int argc, char *argv[])
         {
             title_info = title_info->previous;
             title_info_idx--;
-            switchNcaListTitle(cur_menu, &element_count, title_info);
+            switchNcaListTitle(&cur_menu, &element_count, title_info);
         } else
         if (((btn_down & (HidNpadButton_R)) || (btn_held & HidNpadButton_ZR)) && (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_Nca) && title_info->next)
         {
             title_info = title_info->next;
             title_info_idx++;
-            switchNcaListTitle(cur_menu, &element_count, title_info);
+            switchNcaListTitle(&cur_menu, &element_count, title_info);
         } else
         if ((btn_down & HidNpadButton_Y) && cur_menu->id == MenuId_Nca)
         {
@@ -1883,7 +1883,7 @@ void freeNcaList(void)
     g_ncaMenu.elements = NULL;
 }
 
-void updateNcaList(TitleInfo *title_info)
+void updateNcaList(TitleInfo *title_info, u32 *element_count)
 {
     u32 content_count = title_info->content_count, idx = 0;
     NcmContentInfo *content_infos = title_info->content_infos;
@@ -1894,6 +1894,7 @@ void updateNcaList(TitleInfo *title_info)
 
     /* Allocate buffer. */
     g_ncaMenuElements = calloc(content_count + 2, sizeof(MenuElement*)); // Output storage, NULL terminator
+    if (!g_ncaMenuElements) return;
 
     /* Generate menu elements. */
     for(u32 i = 0; i < content_count; i++)
@@ -1937,16 +1938,21 @@ void updateNcaList(TitleInfo *title_info)
         idx++;
     }
 
-    g_ncaMenuElements[content_count] = &g_storageMenuElement;
+    if (idx > 0)
+    {
+        g_ncaMenuElements[idx] = &g_storageMenuElement;
 
-    g_ncaMenu.elements = g_ncaMenuElements;
+        g_ncaMenu.elements = g_ncaMenuElements;
+
+        if (element_count) *element_count = (idx + 1);
+    }
 }
 
-static void switchNcaListTitle(Menu *cur_menu, u32 *element_count, TitleInfo *title_info)
+static void switchNcaListTitle(Menu **cur_menu, u32 *element_count, TitleInfo *title_info)
 {
-    if (!cur_menu || cur_menu->id != MenuId_Nca || !element_count) return;
+    if (!cur_menu || !*cur_menu || (*cur_menu)->id != MenuId_Nca || !element_count || !title_info) return;
 
-    updateNcaList(title_info);
+    updateNcaList(title_info, element_count);
 
     if (!g_ncaMenuElements || !g_ncaMenuElements[0])
     {
@@ -1955,11 +1961,11 @@ static void switchNcaListTitle(Menu *cur_menu, u32 *element_count, TitleInfo *ti
         consoleRefresh();
         utilsWaitForButtonPress(0);
 
-        cur_menu->selected = 0;
-        cur_menu->scroll = 0;
+        (*cur_menu)->selected = 0;
+        (*cur_menu)->scroll = 0;
 
-        cur_menu = cur_menu->parent;
-        *element_count = menuGetElementCount(cur_menu);
+        *cur_menu = (*cur_menu)->parent;
+        *element_count = menuGetElementCount(*cur_menu);
     }
 }
 
