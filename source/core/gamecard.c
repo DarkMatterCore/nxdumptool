@@ -379,7 +379,7 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
         if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
 
         /* Read the gamecard certificate using the official IPC call. */
-        Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out);
+        Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out, sizeof(FsGameCardCertificate), (s64)sizeof(FsGameCardCertificate));
         if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%X)", rc);
 
         ret = R_SUCCEEDED(rc);

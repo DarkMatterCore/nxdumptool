@@ -77,7 +77,7 @@ typedef enum {
 typedef struct {
     u8 maker_code;      ///< FsCardId1MakerCode.
     u8 memory_capacity; ///< Matches GameCardRomSize.
-    u8 reserved;        ///< Known values: 0x00, 0x01, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0C, 0x0D, 0x0E, 0x80.
+    u8 reserved;        ///< Known values: 0x00, 0x01, 0x02, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0C, 0x0D, 0x0E, 0x80.
     u8 memory_type;     ///< FsCardId1MemoryType.
 } FsCardId1;
 
@@ -108,9 +108,9 @@ NXDT_ASSERT(FsCardId3, 0x4);
 
 /// Returned by fsDeviceOperatorGetGameCardIdSet.
 typedef struct {
-    FsCardId1 id1;      ///< Specifies maker code, memory capacity, and memory type
-    FsCardId2 id2;      ///< Specifies card security number and card type
-    FsCardId3 id3;      ///< Always zero (so far)
+    FsCardId1 id1;  ///< Specifies maker code, memory capacity and memory type.
+    FsCardId2 id2;  ///< Specifies card security number and card type.
+    FsCardId3 id3;  ///< Always zero (so far).
 } FsGameCardIdSet;
 
 NXDT_ASSERT(FsGameCardIdSet, 0xC);
@@ -121,7 +121,6 @@ Result fsOpenGameCardDetectionEventNotifier(FsEventNotifier *out);
 
 /// IDeviceOperator.
 Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCardHandle *handle, u32 *out_title_version, u64 *out_title_id);
-Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const FsGameCardHandle *handle, FsGameCardCertificate *out);
 
 #ifdef __cplusplus
 }

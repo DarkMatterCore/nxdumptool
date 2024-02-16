@@ -63,18 +63,3 @@ Result fsDeviceOperatorUpdatePartitionInfo(FsDeviceOperator *d, const FsGameCard
 
     return rc;
 }
-
-Result fsDeviceOperatorGetGameCardDeviceCertificate(FsDeviceOperator *d, const FsGameCardHandle *handle, FsGameCardCertificate *out)
-{
-    const struct {
-        FsGameCardHandle handle;
-        u64 buf_size;
-    } in = { *handle, sizeof(FsGameCardCertificate) };
-
-    Result rc = serviceDispatchIn(&d->s, 206, in,
-        .buffer_attrs = { SfBufferAttr_HipcMapAlias | SfBufferAttr_Out },
-        .buffers = { { out, sizeof(FsGameCardCertificate) } }
-    );
-
-    return rc;
-}
