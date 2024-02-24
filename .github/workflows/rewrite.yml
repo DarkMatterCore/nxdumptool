@@ -23,13 +23,12 @@ jobs:
       image: devkitpro/devkita64
     steps:
       # Workaround: avoid requesting data from devkitPro servers because they ban most CI/CD scripts.
-      # TODO: Remove the last dkp-pacman invocation if https://github.com/devkitPro/docker/pull/28 gets accepted
+      # TODO: completely remove this step after the devkitA64 Docker image gets updated, since it should contain the NTFS-3G and lwext4 portlibs.
       - name: Update packages
         run: |
-          sudo -n apt-get update
-          sudo -n apt-get upgrade -y patch autoconf automake tar bzip2 diffutils pkgconf fakeroot git file zstd
           sudo -n dkp-pacman --noconfirm -U \
-            "https://wii.leseratte10.de/devkitPro/other-stuff/dkp-toolchain-vars-1.0.3-2-any.pkg.tar.zst"
+            "https://wii.leseratte10.de/devkitPro/switch/switch-ntfs-3g-2022.10.3-4-any.pkg.tar.zst" \
+            "https://wii.leseratte10.de/devkitPro/switch/switch-lwext4-1.0.0-1-any.pkg.tar.zst"
 
       - uses: actions/checkout@v4
         with:
@@ -50,11 +49,6 @@ jobs:
         working-directory: libnx
         run: |
           make install -j$(nproc)
-
-      - name: Build libusbhsfs dependencies
-        working-directory: nxdumptool/libs/libusbhsfs
-        run: |
-          make fs-libs
 
       - name: Build nxdumptool-rewrite PoC binary
         working-directory: nxdumptool
