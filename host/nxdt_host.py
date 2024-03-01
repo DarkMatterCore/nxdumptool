@@ -55,10 +55,22 @@ from tkinter import filedialog, messagebox, font, scrolledtext
 
 from tqdm import tqdm
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, RawTextHelpFormatter
 
 from io import BufferedWriter
 from typing import Generator, Any, Callable
+
+from datetime import datetime
+
+# Terminal colors using ANSI escape sequences. 
+# ref: https://gist.github.com/fnky/458719343aabd01cfb17a3a4f7296797
+COLOR_BACKGROUND = "\033[40m\033[0K" # black
+COLOR_DEBUG = "\033[39m" # vanilla
+COLOR_INFO  = "\033[38;5;255m" # bright white
+COLOR_WARNING = "\033[38;5;202m" # orange
+COLOR_ERROR = "\033[1;31m" # red (intense)
+COLOR_CRITICAL = "\033[4;31m"  # underlined red
+COLOR_RESET = "\033[0m\033[0K"; # resets all colors; blanks line from cursor pos
 
 # Scaling factors.
 WINDOWS_SCALING_FACTOR = 96.0
@@ -302,8 +314,15 @@ TASKBAR_LIB = b'TVNGVAIAAQAAAAAACQQAAAAAAABBAAAAAQAAAAAAAAAOAAAA/////wAAAAAAAAAA
 
 # Global variables used throughout the code.
 g_cliMode: bool = False
+g_logToFile: bool = False
+g_logVerbose: bool = False
+g_terminalColors: bool = False
 g_outputDir: str = ''
 g_logLevelIntVar: tk.IntVar | None = None
+g_logToFileBoolVar: tk.BooleanVar | None = None
+
+g_logPath: str = ''
+g_pathSep: str = ''
 
 g_osType: str = ''
 g_osVersion: str = ''
@@ -311,6 +330,7 @@ g_osVersion: str = ''
 g_isWindows: bool = False
 g_isWindowsVista: bool = False
 g_isWindows7: bool = False
+g_isWindows10: bool = False
 
 g_tkRoot: tk.Tk | None = None
 g_tkCanvas: tk.Canvas | None = None
@@ -320,6 +340,7 @@ g_tkServerButton: tk.Button | None = None
 g_tkTipMessage: int = 0
 g_tkScrolledTextLog: scrolledtext.ScrolledText | None = None
 g_tkVerboseCheckbox: tk.Checkbutton | None = None
+g_tkLogToFileCheckbox: tk.Checkbutton | None = None
 
 g_logger: logging.Logger | None = None
 
@@ -331,6 +352,7 @@ g_taskbar: Any = None
 g_usbEpIn: Any = None
 g_usbEpOut: Any = None
 g_usbEpMaxPacketSize: int = 0
+g_usbVer: str = ""
 
 g_nxdtVersionMajor: int = 0
 g_nxdtVersionMinor: int = 0
@@ -346,6 +368,16 @@ g_nspRemainingSize: int = 0
 g_nspFile: BufferedWriter | None = None
 g_nspFilePath: str = ''
 
+g_extractedFsDumpMode: bool = False
+
+g_formattedFileSize: float = 0
+g_fileSizeMiB: float = 0
+g_formattedFileUnit: str = 'B'
+g_startTime: float = 0
+g_extractedFsAbsRoot: str = ""
+
+
+
 # Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
 class LogQueueHandler(logging.Handler):
     def __init__(self, log_queue: queue.Queue) -> None:
@@ -354,10 +386,53 @@ class LogQueueHandler(logging.Handler):
 
     def emit(self, record: logging.LogRecord) -> None:
         if g_cliMode:
-            msg = self.format(record)
-            print(msg)
+            msg = self.format_message(record)
+            self.log_to_stdout(record, msg)
+            if g_logToFile:
+                self.log_to_file(msg) 
         else:
-            self.log_queue.put(record)
+            self.log_queue.put(record) 
+            
+    def format_message(self, record:logging.LogRecord) -> str:
+        msg = ""
+        prepend = datetime.now().strftime('%Y-%m-%d %H:%M:%S.%f')[:-3]+'\t['+record.levelname+']\t'
+        content = self.format(record)
+        if content[0] == '\n':
+            msg = prepend + '\n' + prepend
+            content = content[1:]
+        else:
+            msg = prepend
+        msg = msg + content
+        if content[-1:] == '\n':
+            msg = msg + prepend + '\n'
+        else:
+            msg = msg + '\n'
+        return msg
+    
+    def log_to_stdout(self, record:logging.LogRecord, msg: str) -> None: 
+        if g_terminalColors:
+            match record.levelname:
+                case "DEBUG":
+                    print(COLOR_DEBUG + msg, end="")
+                case "INFO":
+                    print(COLOR_INFO + msg, end="")
+                case "WARNING":
+                    print(COLOR_WARNING + msg, end="")
+                case "ERROR":
+                    print(COLOR_ERROR + msg, end="")
+                case "CRITICAL":
+                    print(COLOR_CRITICAL + msg, end="")
+                case _:
+                    print(COLOR_DEBUG + msg, end="")
+            if g_isWindows10:
+                print(COLOR_BACKGROUND, end="")
+        else:
+            print(msg, end="")
+            
+    def log_to_file (self, msg: str) -> None: 
+        with open (g_logPath, 'a', encoding="utf-8") as f:
+            f.write(msg)
+                
 
 # Reference: https://beenje.github.io/blog/posts/logging-to-a-tkinter-scrolledtext-widget.
 class LogConsole:
@@ -388,7 +463,7 @@ class LogConsole:
             self.scrolled_text.insert(tk.END, msg + '\n', record.levelname)
             self.scrolled_text.configure(state='disabled')
             self.scrolled_text.yview(tk.END)
-
+        
     def poll_log_queue(self) -> None:
         # Check every 100 ms if there is a new message in the queue to display.
         while True:
@@ -398,6 +473,8 @@ class LogConsole:
                 break
             else:
                 self.display(record)
+                if g_logToFile:
+                    self.queue_handler.log_to_file(self.queue_handler.format_message(record))
 
         if self.frame:
             self.frame.after(100, self.poll_log_queue)
@@ -456,6 +533,7 @@ class ProgressBarWindow:
             self.tk_parent.after(0, self.tk_window.destroy)
 
     def start(self, total: int, n: int = 0, divider: int = 1, prefix: str = '', unit: str = 'B') -> None:
+        
         if (total <= 0) or (n < 0) or (divider < 1):
             raise Exception('Invalid arguments!')
 
@@ -538,7 +616,6 @@ class ProgressBarWindow:
             assert self.pbar is not None
             self.pbar.close()
             self.pbar = None
-            print()
 
     def set_prefix(self, prefix) -> None:
         self.prefix = prefix
@@ -556,9 +633,13 @@ def utilsLogException(exception_str: str) -> None:
     if (not g_cliMode) and (g_logger is not None):
         g_logger.debug(exception_str)
 
+# Returns the extension of the given file without leading dot
+def utilsGetExt(path_arg: str) -> str:
+    return os.path.splitext(path_arg)[1][1:]
+    
 def utilsGetPath(path_arg: str, fallback_path: str, is_file: bool, create: bool = False) -> str:
     path = os.path.abspath(os.path.expanduser(os.path.expandvars(path_arg if path_arg else fallback_path)))
-
+        
     if not is_file and create:
         os.makedirs(path, exist_ok=True)
 
@@ -566,12 +647,98 @@ def utilsGetPath(path_arg: str, fallback_path: str, is_file: bool, create: bool 
         raise Exception(f'Error: "{path}" points to an invalid file/directory.')
 
     return path
+    
+# MSYS2 uses regular slashes by default, so we unconditionally
+# change this to backslashes for consistency
+def utilsGetWinSeparatedPath(path_arg: str) -> str:
+    global g_isWindows
+    return path_arg.replace('/', '\\') if g_isWindows else path_arg
+
+# Prepends `\\?\` to enable ~64KiB long paths in Windows.
+# ref0: https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file?redirectedfrom=MSDN#win32-file-namespaces
+# ref1: https://learn.microsoft.com/en-us/windows/win32/fileio/maximum-file-path-limitation?tabs=registry
+# ref2: https://stackoverflow.com/a/15373771
+# Also replaces '/' separator in case running under MSYS2 env.
+def utilsGetWinFullPath(path_arg: str) -> str:
+    global g_isWindows
+    return ('\\\\?\\' + utilsGetWinSeparatedPath(path_arg)) if g_isWindows else path_arg
+
+# Strips the preceding prefix when we want to print
+# Does /not/ actually check if it's there, do not call if prefix absent!
+def utilsStripWinPrefix(path_arg: str) -> str:
+    global g_isWindows
+    return path_arg[4:] if g_isWindows else path_arg
+
+# Updates the path of the log 
+def utilsUpdateLogPath() -> None:
+    global g_logPath
+    g_logPath = utilsGetWinFullPath(os.path.abspath(g_outputDir + os.path.sep + \
+            "nxdt_host_" + datetime.now().strftime('%Y-%m-%d_%H%M%S') + '.log'))      
+
+# Enable terminal colors on *nix and supported Windows (10.0.10586+)
+def utilsSetupTerminal() -> None:
+    global g_terminalColors
+
+    # ref0: https://stackoverflow.com/a/36760881
+    # ref1: https://learn.microsoft.com/en-us/windows/console/setconsolemode
+    
+    if g_isWindows10:
+        try:
+            import ctypes
+            ctypes.windll.kernel32.GetStdHandle((-11), 7)
+            g_terminalColors = True
+        except:
+            utilsLogException(tracebackSer.format_exc())
+            g_terminalColors = False
+    else:
+        if not g_isWindows:
+            g_terminalColors = True
+        else:
+            g_terminalColors = False
+            
+    # If colors supported, unconditionally set background color to black
+    if g_terminalColors:
+        print(COLOR_BACKGROUND)
+
+# Log basic info about the script and settings. 
+def utilsLogBasicScriptInfo() -> None: 
+    global g_osType, g_osVersion, g_logToFile, g_logVerbose, g_pathSep, g_isWindows
+    g_logger.info('\n' + SCRIPT_TITLE + '. ' + COPYRIGHT_TEXT + '.')
+    g_logger.info('\nServer started...\n')
+    g_logger.info('Sys:\tPython ' + platform.python_version() + " on "+ g_osType+" "+g_osVersion)
+    
+    # Forward slashes changed to back in case running inside MSYS2
+    g_logger.info('Dst:\t' + utilsGetWinSeparatedPath(g_outputDir))    
+    
+    if g_logToFile:
+        g_logger.info('Log:\t' + g_logPath.rsplit(g_pathSep, 1)[-1])
+    else:
+        g_logger.info('Logging to file is disabled.')
+        
+    if g_logVerbose:
+        g_logger.info('Verbose logging is enabled.\n')
+    else:
+        g_logger.info('Verbose logging is disabled.\n')
+
+# On successful transfer, log elapsed time and (within reason) average transfer speed 
+def utilsLogTransferStats(elapsed_time: float, file_counter = 0) -> None:
+    global g_formattedFileSize, g_formattedFileUnit, g_fileSizeMiB
+    if g_formattedFileUnit != "B":
+        formatted_time = f'{elapsed_time:.2f}s' if round(elapsed_time < 60) else tqdm.format_interval(elapsed_time)
+        formatted_info = f'{g_formattedFileSize:.2f} {g_formattedFileUnit}'
+        formatted_info += f' in {file_counter} files' if file_counter > 1 else ' in one file' 
+        formatted_info += f' transferred in {formatted_time}.'
+        g_logger.info(formatted_info)
+        if elapsed_time > float(1):
+            g_logger.info(f'Avg speed: {g_fileSizeMiB/elapsed_time:.2f} MiB/s\n')
+        else:
+            g_logger.info(" ")
 
 def utilsIsValueAlignedToEndpointPacketSize(value: int) -> bool:
     return bool((value & (g_usbEpMaxPacketSize - 1)) == 0)
 
 def utilsResetNspInfo(delete: bool = False) -> None:
-    global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
+    global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath, g_fileCounter
 
     if g_nspFile:
         g_nspFile.close()
@@ -585,6 +752,8 @@ def utilsResetNspInfo(delete: bool = False) -> None:
     g_nspRemainingSize = 0
     g_nspFile = None
     g_nspFilePath = ''
+    
+    g_fileCounter = 0
 
 def utilsGetSizeUnitAndDivisor(size: int) -> tuple[str, int]:
     size_suffixes = [ 'B', 'KiB', 'MiB', 'GiB' ]
@@ -600,11 +769,19 @@ def utilsGetSizeUnitAndDivisor(size: int) -> tuple[str, int]:
 
     return ret
 
+def utilsInitTransferVars(file_size: int) -> None:
+    global g_formattedFileSize, g_formattedFileUnit, g_fileSizeMiB, g_startTime
+    (g_formattedFileUnit,divisor) = utilsGetSizeUnitAndDivisor(file_size)
+    g_formattedFileSize = file_size / divisor
+    g_fileSizeMiB = file_size / 1048576
+    g_startTime = time.time()
+
+
 def usbGetDeviceEndpoints() -> bool:
-    global g_usbEpIn, g_usbEpOut, g_usbEpMaxPacketSize
+    global g_usbEpIn, g_usbEpOut, g_usbEpMaxPacketSize, g_usbVer
 
     assert g_logger is not None
-    assert g_stopEvent is not None
+    #assert g_stopEvent is not None 
 
     cur_dev: Generator[usb.core.Device, Any, None] | None = None
     prev_dev: usb.core.Device | None = None
@@ -613,7 +790,7 @@ def usbGetDeviceEndpoints() -> bool:
     usb_version = 0
 
     if g_cliMode:
-        g_logger.info(f'Please connect a Nintendo Switch console running {USB_DEV_PRODUCT}.')
+        g_logger.info(f'Please connect a Nintendo Switch console running {USB_DEV_PRODUCT}.\n')
 
     while True:
         # Check if the user decided to stop the server.
@@ -675,13 +852,10 @@ def usbGetDeviceEndpoints() -> bool:
         usb_version = cur_dev.bcdUSB
 
         break
-
+    g_usbVer = f'USB {usb_version >> 8}.{(usb_version & 0xFF) >> 4}'
     g_logger.debug(f'Successfully retrieved USB endpoints! (bus {cur_dev.bus}, address {cur_dev.address}).')
-    g_logger.debug(f'Max packet size: 0x{g_usbEpMaxPacketSize:X} (USB {usb_version >> 8}.{(usb_version & 0xFF) >> 4}).\n')
-
-    if g_cliMode:
-        g_logger.info(f'Exit {USB_DEV_PRODUCT} or disconnect your console at any time to close this script.')
-
+    g_logger.debug(f'Max packet size: 0x{g_usbEpMaxPacketSize:X} ({g_usbVer}).')
+    
     return True
 
 def usbRead(size: int, timeout: int = -1) -> bytes:
@@ -721,11 +895,8 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
     global g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, g_nxdtAbiVersionMajor, g_nxdtAbiVersionMinor, g_nxdtGitCommit
 
     assert g_logger is not None
-
-    if g_cliMode:
-        print()
-
-    g_logger.debug(f'Received StartSession ({USB_CMD_START_SESSION:02X}) command.')
+        
+    g_logger.debug(f'\nReceived StartSession ({USB_CMD_START_SESSION:02X}) command.')
 
     # Parse command block.
     (g_nxdtVersionMajor, g_nxdtVersionMinor, g_nxdtVersionMicro, abi_version, git_commit) = struct.unpack_from('<BBBB8s', cmd_block, 0)
@@ -736,11 +907,17 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
     g_nxdtAbiVersionMinor = (abi_version & 0x0F)
 
     # Print client info.
-    g_logger.info(f'Client info: {USB_DEV_PRODUCT} v{g_nxdtVersionMajor}.{g_nxdtVersionMinor}.{g_nxdtVersionMicro}, USB ABI v{g_nxdtAbiVersionMajor}.{g_nxdtAbiVersionMinor} (commit {g_nxdtGitCommit}).\n')
+    g_logger.info(f'Client: {USB_DEV_PRODUCT} v{g_nxdtVersionMajor}.{g_nxdtVersionMinor}.{g_nxdtVersionMicro}, USB ABI v{g_nxdtAbiVersionMajor}.{g_nxdtAbiVersionMinor} (commit {g_nxdtGitCommit}).')
+    if not g_logVerbose:
+        g_logger.info(f'Connection: {g_usbVer}.\n')
+
+    if g_cliMode:
+        g_logger.info(f'Exit {USB_DEV_PRODUCT} or disconnect your console at any time to close this script.\n')
+
 
     # Check if we support this ABI version.
     if (g_nxdtAbiVersionMajor != USB_ABI_VERSION_MAJOR) or (g_nxdtAbiVersionMinor != USB_ABI_VERSION_MINOR):
-        g_logger.error('Unsupported ABI version!')
+        g_logger.error('\nUnsupported ABI version!\n')
         return USB_STATUS_UNSUPPORTED_ABI_VERSION
 
     # Return status code.
@@ -748,41 +925,105 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
 
 def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
     global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath, g_outputDir, g_tkRoot, g_progressBarWindow
+    global g_formattedFileSize, g_formattedFileUnit, g_fileSizeMiB, g_startTime, g_fileCounter
 
     assert g_logger is not None
     assert g_progressBarWindow is not None
 
-    if g_cliMode and not g_nspTransferMode:
-        print()
-
-    g_logger.debug(f'Received SendFileProperties ({USB_CMD_SEND_FILE_PROPERTIES:02X}) command.')
+    g_logger.debug(f'\nReceived SendFileProperties ({USB_CMD_SEND_FILE_PROPERTIES:02X}) command.')
 
     # Parse command block.
     (file_size, filename_length, nsp_header_size, raw_filename) = struct.unpack_from(f'<QII{USB_FILE_PROPERTIES_MAX_NAME_LENGTH}s', cmd_block, 0)
     filename = raw_filename.decode('utf-8').strip('\x00')
+    file_type_str = ('file' if (not g_nspTransferMode) else 'NSP file entry')
 
-    # Print info.
+
+   # Log basic file info (debug / verbose). 
     dbg_str = f'File size: 0x{file_size:X} | Filename length: 0x{filename_length:X}'
     if nsp_header_size > 0:
         dbg_str += f' | NSP header size: 0x{nsp_header_size:X}'
     g_logger.debug(dbg_str + '.')
 
-    file_type_str = ('file' if (not g_nspTransferMode) else 'NSP file entry')
-
-    if not g_cliMode or (g_cliMode and not g_nspTransferMode):
-        g_logger.info(f'Receiving {file_type_str}: "{filename}".')
-
+    # Log basic file info (verbose off):
+    if not g_logVerbose:
+        if not g_nspTransferMode and not g_extractedFsDumpMode:
+            fp = filename.split('/') # fp[0] is '/' character
+            fp_len = len(fp)
+            ext = utilsGetExt(filename) ##fp[fp_len-1][fp[fp_len-1].index(".")+1:]
+            utilsInitTransferVars(file_size)
+            g_logger.info("\nTransfer started!")
+            if (fp_len >= 2): # if file has parent directories
+                match fp[1]:   # check parent dir and ext to find type
+                    case 'NSP' | 'Ticket':
+                        g_logger.info(f'\nType:\t{fp[1]}')
+                        g_logger.info(f'Src:\t{fp[2][:fp[2].index("[")]}')
+                        g_logger.info(f'\t{fp[2][fp[2].find("["):fp[2].rfind(".")]}')
+                        g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}')
+                        if(ext == 'nsp'): g_logger.info(f'Contents:')
+                    case 'Gamecard':
+                        g_logger.info(f'\nType:\t{fp[1]} [{ext.upper()}]')
+                        g_logger.info(f'Src:\t{fp[2][:fp[2].index("[")]}')
+                        g_logger.info(f'\t{fp[2][fp[2].find("["):fp[2].rfind(".")]}')
+                        g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}')
+                        if(ext == 'xci'): g_logger.info(" ")
+                    case 'NCA FS':
+                        g_logger.info(f'\nType:\t{fp[1]} ({fp[2]} {fp[3]}) [{ext.upper()}]')
+                        g_logger.info(f'Src:\t{fp[4][:fp[4].index("[")]}')
+                        g_logger.info(f'\t{fp[4][fp[4].index("["):]}')
+                        g_logger.info(f'\t{fp[5]}, FS section #{fp[6][:fp[6].index(".")]}')
+                        g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}\n')
+                    case 'atmosphere': # System/NCA Dump -> Section Mode && Write Raw Section && Use LayeredFS Dir
+                        g_logger.info(f'\nType:\tNCA FS (atmosphere/contents) [{ext.upper()}]')
+                        g_logger.info(f'Src:\t{fp[3]}')
+                        g_logger.info(f'\t{fp[4][:fp[4].index(".")]}')
+                        g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}\n')
+                    case 'NCA' | 'HFS':
+                        g_logger.info(f'\nType:\t{fp[1]} ({fp[2]}) [{ext.upper()}]')
+                        g_logger.info(f'Src:\t{fp[3][:fp[3].index("[")]}')
+                        g_logger.info(f'\t{fp[3][fp[3].index("["):]}')
+                        if fp[1] == 'NCA':
+                            g_logger.info(f'File:\t{fp[fp_len-1]}')
+                        else:
+                            g_logger.info(f'\t{fp[fp_len-1][:fp[fp_len-1].index(".")]}')
+                        g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}\n')
+                    case _: # If we ever get here it is time for more work
+                        g_logger.warning(f'\n\tNovel source!!! {fp[1]}???')
+                        g_logger.info:(f'{filename}')
+                        g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}\n')
+            else: # If file is just a file with no parent dirs
+                if (ext == 'bin'): # Thusfar the only such case
+                    g_logger.info(f'\nType:\tConsole LAFW BLOB or similar (BIN)')
+                    g_logger.info(f'File:\t'+filename.rsplit('/', 1)[-1])
+                    g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}')
+                else: # If we ever get here it is time for more work
+                    g_logger.warning(f'\n\tNovel source!!!')
+                    g_logger.info:(f'"{filename}"')
+        else:
+            g_fileCounter += 1
+            (unit,div) = utilsGetSizeUnitAndDivisor(file_size)
+            fs = file_size / div
+            if g_extractedFsDumpMode:
+                fp = filename.split("/")
+                match fp[1]:
+                    case 'HFS': fn = '/'.join(fp[5:])
+                    case 'NCA FS': fn = '/'.join(fp[7:])
+                    case 'atmosphere': fn = '/'.join(fp[5:])
+                    case _: fn = '/'.join(fp[1:])
+            elif g_nspTransferMode:
+                fn = filename
+            g_logger.info(f'\t{fn} ({fs:.2f} {unit})')
+        
     # Perform validity checks.
     if (not g_nspTransferMode) and file_size and (nsp_header_size >= file_size):
-        g_logger.error('NSP header size must be smaller than the full NSP size!\n')
+        g_logger.error('\nNSP header size must be smaller than the full NSP size!\n')
         return USB_STATUS_MALFORMED_CMD
 
     if g_nspTransferMode and nsp_header_size:
-        g_logger.error('Received non-zero NSP header size during NSP transfer mode!\n')
+        g_logger.error('\nReceived non-zero NSP header size during NSP transfer mode!\n')
         return USB_STATUS_MALFORMED_CMD
 
     if (not filename_length) or (filename_length > USB_FILE_PROPERTIES_MAX_NAME_LENGTH):
-        g_logger.error('Invalid filename length!\n')
+        g_logger.error('\nInvalid filename length!\n')
         return USB_STATUS_MALFORMED_CMD
 
     # Enable NSP transfer mode (if needed).
@@ -793,31 +1034,31 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         g_nspRemainingSize = (file_size - nsp_header_size)
         g_nspFile = None
         g_nspFilePath = ''
-        g_logger.debug('NSP transfer mode enabled!\n')
+        g_logger.debug('\nNSP transfer mode enabled!')
 
     # Perform additional validity checks and get a file object to work with.
     if (not g_nspTransferMode) or (g_nspFile is None):
         # Generate full, absolute path to the destination file.
-        fullpath = os.path.abspath(g_outputDir + os.path.sep + filename)
-        printable_fullpath = (fullpath[4:] if g_isWindows else fullpath)
-
+        fullpath = utilsGetWinFullPath(os.path.abspath(g_outputDir + os.path.sep + filename))
+        #printable_fullpath = utilsStripWinPrefix(fullpath)
+           
         # Get parent directory path.
         dirpath = os.path.dirname(fullpath)
-
+        
         # Create full directory tree.
         os.makedirs(dirpath, exist_ok=True)
 
         # Make sure the output filepath doesn't point to an existing directory.
         if os.path.exists(fullpath) and (not os.path.isfile(fullpath)):
             utilsResetNspInfo()
-            g_logger.error(f'Output filepath points to an existing directory! ("{printable_fullpath}").\n')
+            g_logger.error(f'Output filepath points to an existing directory! ("{fullpath}").\n') #printable_fullpath
             return USB_STATUS_HOST_IO_ERROR
 
         # Make sure we have enough free space.
         (_, _, free_space) = shutil.disk_usage(dirpath)
         if free_space <= file_size:
             utilsResetNspInfo()
-            g_logger.error('Not enough free space available in output volume!\n')
+            g_logger.error('\nNot enough free space available in output volume!\n')
             return USB_STATUS_HOST_IO_ERROR
 
         # Get file object.
@@ -836,23 +1077,23 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         # Retrieve what we need using global variables.
         file = g_nspFile
         fullpath = g_nspFilePath
+        
         dirpath = os.path.dirname(fullpath)
-        printable_fullpath = (fullpath[4:] if g_isWindows else fullpath)
+        #printable_fullpath = utilsStripWinPrefix(fullpath)
 
     # Check if we're dealing with an empty file or with the first SendFileProperties command from a NSP.
     if (not file_size) or (g_nspTransferMode and file_size == g_nspSize):
         # Close file (if needed).
         if not g_nspTransferMode:
             file.close()
-
         # Let the command handler take care of sending the status response for us.
         return USB_STATUS_SUCCESS
 
     # Send status response before entering the data transfer stage.
     usbSendStatus(USB_STATUS_SUCCESS)
-
+    
     # Start data transfer stage.
-    g_logger.debug(f'Data transfer started. Saving {file_type_str} to: "{printable_fullpath}".')
+    g_logger.debug(f'Data transfer started. Saving {file_type_str} to: "{fullpath}".') # printable_fullpath
 
     offset = 0
     blksize = USB_TRANSFER_BLOCK_SIZE
@@ -865,7 +1106,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
             prefix = ''
         else:
             prefix = f'Current {file_type_str}: "{os.path.basename(filename)}".\n'
-            prefix += 'Use your console to cancel the file transfer if you wish to do so.'
+            prefix += 'Hold \'B\' on your console to cancel the file transfer if you wish to do so.'
 
         if (not g_nspTransferMode) or g_nspRemainingSize == (g_nspSize - g_nspHeaderSize):
             if not g_nspTransferMode:
@@ -913,7 +1154,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         # Read current chunk.
         chunk = usbRead(rd_size, USB_TRANSFER_TIMEOUT)
         if not chunk:
-            g_logger.error(f'Failed to read 0x{rd_size:X}-byte long data chunk!')
+            g_logger.error(f'\nFailed to read 0x{rd_size:X}-byte long data chunk!\n')
 
             # Cancel file transfer.
             cancelTransfer()
@@ -930,7 +1171,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
                 # Cancel file transfer.
                 cancelTransfer()
 
-                g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command.')
+                g_logger.debug(f'\nReceived CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command.')
                 g_logger.warning('Transfer cancelled.')
 
                 # Let the command handler take care of sending the status response for us.
@@ -951,61 +1192,73 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
         if use_pbar:
             g_progressBarWindow.update(chunk_size)
 
-    elapsed_time = round(time.time() - start_time)
-    g_logger.debug(f'File transfer successfully completed in {tqdm.format_interval(elapsed_time)}!\n')
-
-    # Close file handle (if needed).
-    if not g_nspTransferMode:
-        file.close()
+    elapsed_time = time.time() - start_time
+    g_logger.debug(f'\nFile transfer successfully completed in {elapsed_time:.2f}s!')
 
     # Hide progress bar window (if needed).
     if use_pbar and ((not g_nspTransferMode) or (not g_nspRemainingSize)):
         g_progressBarWindow.end()
+
+    # Close file handle (if needed); log successful non-constitutent transfer.
+    if not g_nspTransferMode:
+        file.close()
+        if not g_extractedFsDumpMode and not g_logVerbose:
+            g_logger.info('\nTransfer complete!\n')
+            utilsLogTransferStats(elapsed_time)
+            g_logger.info('Your file may be found here:')
+            g_logger.info(f'{utilsStripWinPrefix(fullpath)}\n')
 
     return USB_STATUS_SUCCESS
 
 def usbHandleCancelFileTransfer(cmd_block: bytes) -> int:
     assert g_logger is not None
 
-    g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_START_SESSION:02X}) command.')
+    g_logger.debug(f'\nReceived CancelFileTransfer ({USB_CMD_START_SESSION:02X}) command.')
 
     if g_nspTransferMode:
         utilsResetNspInfo(True)
         g_logger.warning('Transfer cancelled.')
         return USB_STATUS_SUCCESS
     else:
-        g_logger.error('Unexpected transfer cancellation.')
+        g_logger.error('\nUnexpected transfer cancellation.\n')
         return USB_STATUS_MALFORMED_CMD
 
 def usbHandleSendNspHeader(cmd_block: bytes) -> int:
-    global g_nspTransferMode, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
+    global g_nspTransferMode, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath, g_isWindows, g_fileCounter
 
     assert g_logger is not None
     assert g_nspFile is not None
 
     nsp_header_size = len(cmd_block)
 
-    g_logger.debug(f'Received SendNspHeader ({USB_CMD_SEND_NSP_HEADER:02X}) command.')
+    g_logger.debug(f'\nReceived SendNspHeader ({USB_CMD_SEND_NSP_HEADER:02X}) command.')
 
     # Validity checks.
     if not g_nspTransferMode:
-        g_logger.error('Received NSP header out of NSP transfer mode!\n')
+        g_logger.error('\nReceived NSP header out of NSP transfer mode!\n')
         return USB_STATUS_MALFORMED_CMD
 
     if g_nspRemainingSize:
-        g_logger.error(f'Received NSP header before receiving all NSP data! (missing 0x{g_nspRemainingSize:X} byte[s]).\n')
+        g_logger.error(f'\nReceived NSP header before receiving all NSP data! (missing 0x{g_nspRemainingSize:X} byte[s]).\n')
         return USB_STATUS_MALFORMED_CMD
 
     if nsp_header_size != g_nspHeaderSize:
-        g_logger.error(f'NSP header size mismatch! (0x{nsp_header_size:X} != 0x{g_nspHeaderSize:X}).\n')
+        g_logger.error(f'\nNSP header size mismatch! (0x{nsp_header_size:X} != 0x{g_nspHeaderSize:X}).\n')
         return USB_STATUS_MALFORMED_CMD
 
     # Write NSP header.
     g_nspFile.seek(0)
     g_nspFile.write(cmd_block)
+    
+    # Log successful NSP transfer (header distinguishes it from constituent transfers)
+    g_logger.debug(f'Successfully wrote 0x{nsp_header_size:X}-byte long NSP header to "{g_nspFilePath}".')
 
-    g_logger.debug(f'Successfully wrote 0x{nsp_header_size:X}-byte long NSP header to "{g_nspFilePath}".\n')
-
+    if not g_logVerbose:
+        g_logger.info('\nTransfer complete!\n')
+        utilsLogTransferStats(time.time() - g_startTime, g_fileCounter)
+        g_logger.info('Your file may be found here:')
+        g_logger.info(f'{utilsStripWinPrefix(g_nspFilePath)}\n')
+        
     # Disable NSP transfer mode.
     utilsResetNspInfo()
 
@@ -1018,26 +1271,69 @@ def usbHandleEndSession(cmd_block: bytes) -> int:
 
 def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     assert g_logger is not None
+    global g_isWindows, g_outputDir, g_extractedFsDumpMode, g_extractedFsAbsRoot, g_formattedFileSize, g_formattedFileUnit, g_fileSizeMiB, g_startTime, g_fileCounter
 
     g_logger.debug(f'Received StartExtractedFsDump ({USB_CMD_START_EXTRACTED_FS_DUMP:02X}) command.')
 
     if g_nspTransferMode:
-        g_logger.error('StartExtractedFsDump received mid NSP transfer.')
+        g_logger.error('\nStartExtractedFsDump received mid NSP transfer.\n')
         return USB_STATUS_MALFORMED_CMD
 
     # Parse command block.
     (extracted_fs_size, extracted_fs_root_path) = struct.unpack_from(f'<Q{USB_FILE_PROPERTIES_MAX_NAME_LENGTH}s', cmd_block, 0)
     extracted_fs_root_path = extracted_fs_root_path.decode('utf-8').strip('\x00')
-
-    g_logger.info(f'Starting extracted FS dump (size 0x{extracted_fs_size:X}, output relative path "{extracted_fs_root_path}").')
+    
+    utilsInitTransferVars(extracted_fs_size)
+    fp = extracted_fs_root_path.split('/')
+    
+    # Non-verbose/debug logging:
+    if not g_logVerbose:
+        g_logger.info(f'Extracted FS dump started!')
+        match fp[1]:
+            case 'HFS':
+                g_logger.info(f'\nType:\t{fp[1]} ({fp[2]})')
+                g_logger.info(f'Src:\t{fp[3][:fp[3].index("[")]}')
+                g_logger.info(f'\t{fp[3][fp[3].index("["):]}')
+                g_logger.info(f'\t{fp[4]}')
+            case 'NCA FS':
+                g_logger.info(f'\nType:\t{fp[1]} ({fp[2]} {fp[3]})')
+                g_logger.info(f'Src:\t{fp[4][:fp[4].index("[")]}')
+                g_logger.info(f'\t{fp[4][fp[4].index("["):]}')
+                g_logger.info(f'\t{fp[5]}, FS section #{fp[6]}')
+            case 'atmosphere':
+                g_logger.info(f'\nType:\tLayeredFS ('+('/'.join(fp[1:3]))+')')
+                g_logger.info(f'Src:\t{fp[3]}')
+                g_logger.info(f'\t{fp[4]}')
+            case _: 
+                g_logger.warning(f'\n\tNovel source!!! {fp[1]}???\n')
+                g_logger.info:(f'\nRoot:\t"{extracted_fs_root_path}"')
+                
+        g_logger.info(f'Size:\t{g_formattedFileSize:.2f} {g_formattedFileUnit}')
+        g_logger.info(f'Contents:')
+    else:
+        g_logger.debug(f'Starting extracted FS dump (size 0x{extracted_fs_size:X}, output relative path "{extracted_fs_root_path}").')
+    
+    g_extractedFsAbsRoot = utilsGetWinSeparatedPath(os.path.abspath(g_outputDir + os.path.sep + extracted_fs_root_path)) + g_pathSep
+    g_extractedFsDumpMode = True
+    g_fileCounter = 0
+    g_startTime = time.time()
 
     # Return status code.
     return USB_STATUS_SUCCESS
 
 def usbHandleEndExtractedFsDump(cmd_block: bytes) -> int:
     assert g_logger is not None
+    global g_extractedFsDumpMode, g_extractedFsAbsRoot, g_fileCounter
     g_logger.debug(f'Received EndExtractedFsDump ({USB_CMD_END_EXTRACTED_FS_DUMP:02X}) command.')
-    g_logger.info(f'Finished extracted FS dump.')
+    g_logger.debug(f'\nFinished extracted FS dump.')
+    if not g_logVerbose:
+        g_logger.info(f'\nExtracted FS dump complete!\n')
+        utilsLogTransferStats(time.time() - g_startTime, g_fileCounter)
+        g_logger.info(f'Your files may be found here:')
+        g_logger.info(f'{g_extractedFsAbsRoot}\n')
+    g_extractedFsDumpMode = False
+    g_extractedFsAbsRoot = ""
+    g_fileCounter = 0
     return USB_STATUS_SUCCESS
 
 def usbCommandHandler() -> None:
@@ -1074,7 +1370,7 @@ def usbCommandHandler() -> None:
         # Read command header.
         cmd_header = usbRead(USB_CMD_HEADER_SIZE)
         if (not cmd_header) or (len(cmd_header) != USB_CMD_HEADER_SIZE):
-            g_logger.error(f'Failed to read 0x{USB_CMD_HEADER_SIZE:X}-byte long command header!')
+            g_logger.error(f'\nFailed to read 0x{USB_CMD_HEADER_SIZE:X}-byte long command header!\n')
             break
 
         # Parse command header.
@@ -1092,19 +1388,19 @@ def usbCommandHandler() -> None:
 
             cmd_block = usbRead(rd_size, USB_TRANSFER_TIMEOUT)
             if (not cmd_block) or (len(cmd_block) != cmd_block_size):
-                g_logger.error(f'Failed to read 0x{cmd_block_size:X}-byte long command block for command ID {cmd_id:02X}!')
+                g_logger.error(f'\nFailed to read 0x{cmd_block_size:X}-byte long command block for command ID {cmd_id:02X}!\n')
                 break
 
         # Verify magic word.
         if magic != USB_MAGIC_WORD:
-            g_logger.error('Received command header with invalid magic word!\n')
+            g_logger.error('\nReceived command header with invalid magic word!\n')
             usbSendStatus(USB_STATUS_INVALID_MAGIC_WORD)
             continue
 
         # Get command handler function.
         cmd_func = cmd_dict.get(cmd_id, None)
         if cmd_func is None:
-            g_logger.error(f'Received command header with unsupported ID {cmd_id:02X}.\n')
+            g_logger.error(f'\nReceived command header with unsupported ID {cmd_id:02X}.\n')
             usbSendStatus(USB_STATUS_UNSUPPORTED_CMD)
             continue
 
@@ -1113,7 +1409,7 @@ def usbCommandHandler() -> None:
            (cmd_id == USB_CMD_SEND_FILE_PROPERTIES and cmd_block_size != USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES) or \
            (cmd_id == USB_CMD_SEND_NSP_HEADER and not cmd_block_size) or \
            (cmd_id == USB_CMD_START_EXTRACTED_FS_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP):
-            g_logger.error(f'Invalid command block size for command ID {cmd_id:02X}! (0x{cmd_block_size:X}).\n')
+            g_logger.error(f'\nInvalid command block size for command ID {cmd_id:02X}! (0x{cmd_block_size:X}).\n')
             usbSendStatus(USB_STATUS_MALFORMED_CMD)
             continue
 
@@ -1123,7 +1419,7 @@ def usbCommandHandler() -> None:
         if (status is None) or (not usbSendStatus(status)) or (cmd_id == USB_CMD_END_SESSION) or (status == USB_STATUS_UNSUPPORTED_ABI_VERSION):
             break
 
-    g_logger.info('\nStopping server.')
+    g_logger.info('Stopping server...\n')
 
     if not g_cliMode:
         # Update UI.
@@ -1133,33 +1429,23 @@ def uiStopServer() -> None:
     # Signal the shared stop event.
     assert g_stopEvent is not None
     g_stopEvent.set()
+    # Log the end of the session. 
+    g_logger.info("Server stopped.\n")
+
 
 def uiStartServer() -> None:
-    global g_outputDir
 
-    assert g_tkDirText is not None
-
-    g_outputDir = g_tkDirText.get('1.0', tk.END).strip()
-    if not g_outputDir:
-        # We should never reach this, honestly.
-        messagebox.showerror('Error', 'You must provide an output directory!', parent=g_tkRoot)
-        return
-
-    # Unconditionally enable 32-bit paths on Windows.
-    if g_isWindows:
-        g_outputDir = '\\\\?\\' + g_outputDir
-
-    # Make sure the full directory tree exists.
-    try:
-        os.makedirs(g_outputDir, exist_ok=True)
-    except:
-        utilsLogException(traceback.format_exc())
-        messagebox.showerror('Error', 'Unable to create full output directory tree!', parent=g_tkRoot)
-        return
+    uiUpdateOutputDirectory()
+    # Set new log path for this session if logging to file is turned on.
+    if g_logToFile:
+        utilsUpdateLogPath()
 
     # Update UI.
     uiToggleElements(False)
 
+    # Log basic info about the script and settings. 
+    utilsLogBasicScriptInfo()
+    
     # Create background server thread.
     server_thread = threading.Thread(target=usbCommandHandler, daemon=True)
     server_thread.start()
@@ -1169,6 +1455,7 @@ def uiToggleElements(flag: bool) -> None:
     assert g_tkChooseDirButton is not None
     assert g_tkServerButton is not None
     assert g_tkCanvas is not None
+    assert g_tkLogToFileCheckbox is not None
     assert g_tkVerboseCheckbox is not None
 
     if flag:
@@ -1177,7 +1464,7 @@ def uiToggleElements(flag: bool) -> None:
         g_tkChooseDirButton.configure(state='normal')
         g_tkServerButton.configure(text='Start server', command=uiStartServer, state='normal')
         g_tkCanvas.itemconfigure(g_tkTipMessage, state='hidden', text='')
-
+        g_tkLogToFileCheckbox.configure(state='normal')
         g_tkVerboseCheckbox.configure(state='normal')
     else:
         assert g_tkScrolledTextLog is not None
@@ -1191,21 +1478,54 @@ def uiToggleElements(flag: bool) -> None:
         g_tkScrolledTextLog.configure(state='normal')
         g_tkScrolledTextLog.delete('1.0', tk.END)
         g_tkScrolledTextLog.configure(state='disabled')
-
+        g_tkLogToFileCheckbox.configure(state='disabled')
         g_tkVerboseCheckbox.configure(state='disabled')
 
 def uiChooseDirectory() -> None:
-    dir = filedialog.askdirectory(parent=g_tkRoot, title='Select an output directory', initialdir=INITIAL_DIR, mustexist=True)
+
+    assert g_tkDirText is not None
+    dirtext = g_tkDirText.get('1.0', tk.END).strip()
+    initdir = dirtext if os.path.exists(dirtext) else INITIAL_DIR    
+    # Using \\?\ longfile syntax for Windows will not work for tkinter.filedialog.askdirectory's initialdir parameter.
+    # Thus, win32 users must choose a directory considered the 'normal' length on their system if using the UI.
+    dir = filedialog.askdirectory(parent=g_tkRoot, title='Select an output directory', initialdir=initdir, mustexist=True)
+        
     if dir:
         uiUpdateDirectoryField(os.path.abspath(dir))
+
 
 def uiUpdateDirectoryField(path: str) -> None:
     assert g_tkDirText is not None
     g_tkDirText.configure(state='normal')
     g_tkDirText.delete('1.0', tk.END)
-    g_tkDirText.insert('1.0', path)
+    # For consistency, change path separator on Windows under MSYS2, since
+    # tkinter.filedialog.askdirectory will return a fwd-slashed path in that case.
+    g_tkDirText.insert('1.0', utilsGetWinSeparatedPath(path))
     g_tkDirText.configure(state='disabled')
 
+    
+def uiUpdateOutputDirectory() -> None:
+    global g_outputDir
+    assert g_tkDirText is not None
+
+    # Note: longpaths for Windows are now set at the file rather than dir level
+    g_outputDir = g_tkDirText.get('1.0', tk.END).strip()
+    
+    if not g_outputDir:
+        # We should never reach this, honestly.
+        messagebox.showerror('Error', 'You must provide an output directory!', parent=g_tkRoot)
+        return
+        
+    # Make sure the full directory tree exists.
+    try:
+        os.makedirs(g_outputDir, exist_ok=True)
+    except:
+        utilsLogException(traceback.format_exc())
+        messagebox.showerror('Error', 'Unable to create full output directory tree!', parent=g_tkRoot)
+        return
+   
+    return
+        
 def uiHandleExitProtocol() -> None:
     assert g_tkRoot is not None
     g_tkRoot.destroy()
@@ -1216,21 +1536,29 @@ def uiHandleExitProtocolStub() -> None:
 def uiScaleMeasure(measure: int) -> int:
     return round(float(measure) * SCALE)
 
+def uiHandleLogToFileCheckbox() -> None:
+    assert g_logToFileBoolVar is not None
+    global g_logToFile
+    g_logToFile = g_logToFileBoolVar.get()
+    
 def uiHandleVerboseCheckbox() -> None:
     assert g_logger is not None
     assert g_logLevelIntVar is not None
-    g_logger.setLevel(g_logLevelIntVar.get())
+    global g_logVerbose
+    logLevel = g_logLevelIntVar.get()
+    g_logger.setLevel(logLevel)
+    g_logVerbose = True if(logLevel == logging.DEBUG) else False    
 
 def uiInitialize() -> None:
-    global SCALE, g_logLevelIntVar
-    global g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog, g_tkVerboseCheckbox
+    global SCALE, g_logLevelIntVar, g_logToFileBoolVar, g_logToFile, g_logVerbose
+    global g_tkRoot, g_tkCanvas, g_tkDirText, g_tkChooseDirButton, g_tkServerButton, g_tkTipMessage, g_tkScrolledTextLog, g_tkLogToFileCheckbox, g_tkVerboseCheckbox
     global g_stopEvent, g_tlb, g_taskbar, g_progressBarWindow
 
     # Setup thread event.
     g_stopEvent = threading.Event()
 
     # Enable high DPI scaling under Windows (if possible).
-    # This will remove the blur caused by bilineal filtering when automatic scaling is carried out by Windows itself.
+    # This will remove the blur caused by bilinear filtering when automatic scaling is carried out by Windows itself.
     dpi_aware = False
     if g_isWindowsVista:
         try:
@@ -1295,6 +1623,7 @@ def uiInitialize() -> None:
     default_font = font.nametofont('TkDefaultFont')
     default_font_family = ('Segoe UI' if g_isWindows else 'sans-serif')
     default_font_size = (-12 if g_isWindows else -10) # Measured in pixels. Reference: https://docs.python.org/3/library/tkinter.font.html
+    padding_bottom = WINDOW_HEIGHT + default_font_size - 1
     default_font.configure(family=default_font_family, size=uiScaleMeasure(default_font_size), weight=font.NORMAL)
 
     """print(screen_width_px, screen_height_px)
@@ -1315,6 +1644,7 @@ def uiInitialize() -> None:
 
     g_tkDirText = tk.Text(g_tkRoot, height=1, width=45, font=default_font, wrap='none', state='disabled', bg='#F0F0F0')
     uiUpdateDirectoryField(g_outputDir)
+
     g_tkCanvas.create_window(uiScaleMeasure(260), uiScaleMeasure(30), window=g_tkDirText, anchor=tk.CENTER)
 
     g_tkChooseDirButton = tk.Button(g_tkRoot, text='Choose', width=10, command=uiChooseDirectory)
@@ -1334,15 +1664,23 @@ def uiInitialize() -> None:
     g_tkScrolledTextLog.tag_config('CRITICAL', foreground='red', underline=True)
     g_tkCanvas.create_window(uiScaleMeasure(int(WINDOW_WIDTH / 2)), uiScaleMeasure(280), window=g_tkScrolledTextLog, anchor=tk.CENTER)
 
-    g_tkCanvas.create_text(uiScaleMeasure(5), uiScaleMeasure(WINDOW_HEIGHT - 10), text=COPYRIGHT_TEXT, anchor=tk.W)
+    g_tkCanvas.create_text(uiScaleMeasure(5), uiScaleMeasure(padding_bottom), text=COPYRIGHT_TEXT, anchor=tk.W)
+   
+    g_logToFileBoolVar = tk.BooleanVar()
+    g_tkLogToFileCheckbox = tk.Checkbutton(g_tkRoot, text='Log to file', variable=g_logToFileBoolVar,onvalue=True, offvalue=False, command=uiHandleLogToFileCheckbox)
+    g_tkLogToFileCheckbox.select()
+    g_logToFile = g_logToFileBoolVar.get()
+    
+    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH - 165), uiScaleMeasure(padding_bottom), window=g_tkLogToFileCheckbox, anchor=tk.CENTER)
 
     g_logLevelIntVar = tk.IntVar()
     g_tkVerboseCheckbox = tk.Checkbutton(g_tkRoot, text='Verbose output', variable=g_logLevelIntVar, onvalue=logging.DEBUG, offvalue=logging.INFO, command=uiHandleVerboseCheckbox)
-    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH - 55), uiScaleMeasure(WINDOW_HEIGHT - 10), window=g_tkVerboseCheckbox, anchor=tk.CENTER)
+   
+    g_tkCanvas.create_window(uiScaleMeasure(WINDOW_WIDTH - 55), uiScaleMeasure(padding_bottom), window=g_tkVerboseCheckbox, anchor=tk.CENTER)
 
     # Initialize console logger.
     console = LogConsole(g_tkScrolledTextLog)
-
+        
     # Initialize progress bar window object.
     bar_format = '{desc}\n\n{percentage:.2f}% - {n:.2f} / {total:.2f} {unit}\nElapsed time: {elapsed}. Remaining time: {remaining}.\nSpeed: {rate_fmt}.'
     g_progressBarWindow = ProgressBarWindow(bar_format, g_tkRoot, 'File transfer', False, uiHandleExitProtocolStub)
@@ -1352,9 +1690,17 @@ def uiInitialize() -> None:
     g_tkRoot.mainloop()
 
 def cliInitialize() -> None:
-    global g_progressBarWindow, g_outputDir
-
+    global g_progressBarWindow, g_outputDir, g_logToFile
     assert g_logger is not None
+    
+    # Note: longpaths for Windows are now set at the file rather than dir level 
+    
+    # Determines whether to use colors in terminal and sets up accordingly.
+    utilsSetupTerminal()
+    
+    # Set log path if logging to file specified at cmd line.
+    if g_logToFile:
+        utilsUpdateLogPath()
 
     # Initialize console logger.
     console = LogConsole()
@@ -1363,33 +1709,30 @@ def cliInitialize() -> None:
     bar_format = '{percentage:.2f}% |{bar}| {n:.2f}/{total:.2f} [{elapsed}<{remaining}, {rate_fmt}]'
     g_progressBarWindow = ProgressBarWindow(bar_format)
 
-    # Print info.
-    g_logger.info(f'\n{SCRIPT_TITLE}. {COPYRIGHT_TEXT}.')
-    g_logger.info(f'Output directory: "{g_outputDir}".\n')
-
-    # Unconditionally enable 32-bit paths on Windows.
-    if g_isWindows:
-        g_outputDir = '\\\\?\\' + g_outputDir
+    # Log basic info about the script and settings. 
+    utilsLogBasicScriptInfo()
 
     # Start USB command handler directly.
     usbCommandHandler()
 
 def main() -> int:
-    global g_cliMode, g_outputDir, g_osType, g_osVersion, g_isWindows, g_isWindowsVista, g_isWindows7, g_logger
-
+    global g_cliMode, g_outputDir, g_logToFile, g_logVerbose, g_osType, g_osVersion, g_isWindows, g_isWindowsVista, g_isWindows7, g_isWindows10, g_pathSep, g_logger
+    
     # Disable warnings.
     warnings.filterwarnings("ignore")
-
-    # Parse command line arguments.
-    parser = ArgumentParser(description=f'{SCRIPT_TITLE}. {COPYRIGHT_TEXT}.')
+    
+    parser = ArgumentParser(formatter_class=RawTextHelpFormatter, description=SCRIPT_TITLE + '. ' + COPYRIGHT_TEXT + '.')
     parser.add_argument('-c', '--cli', required=False, action='store_true', default=False, help='Start the script in CLI mode.')
-    parser.add_argument('-o', '--outdir', required=False, type=str, metavar='DIR', help=f'Path to output directory. Defaults to "{DEFAULT_DIR}".')
+    parser.add_argument('-o', '--outdir', required=False, type=str, metavar='DIR', help='Path to output directory; will attempt to create if non-existent.\nDefaults to "' + DEFAULT_DIR + '".')
+    parser.add_argument('-l', '--log', required=False, action='store_true', default=False, help='Enables logging to file in output directory in CLI mode.')
     parser.add_argument('-v', '--verbose', required=False, action='store_true', default=False, help='Enable verbose output.')
+    
     args = parser.parse_args()
 
-    # Update global flags.
-    g_cliMode = args.cli
-    g_outputDir = utilsGetPath(args.outdir, DEFAULT_DIR, False, True)
+    # Update global flags, other than g_outputDir, which should be set only after platform seciton 
+    g_cliMode = args.cli   
+    g_logToFile = args.log
+    g_logVerbose = args.verbose
 
     # Get OS information.
     g_osType = platform.system()
@@ -1397,23 +1740,38 @@ def main() -> int:
 
     # Get Windows information.
     g_isWindows = (g_osType == 'Windows')
-    g_isWindowsVista = g_isWindows7 = False
+    g_isWindowsVista = g_isWindows7 = g_isWindows10 = False
     if g_isWindows:
         win_ver = g_osVersion.split('.')
         win_ver_major = int(win_ver[0])
         win_ver_minor = int(win_ver[1])
-
+        win_build = int(win_ver[2])
         g_isWindowsVista = (win_ver_major >= 6)
         g_isWindows7 = (True if (win_ver_major > 6) else (win_ver_major == 6 and win_ver_minor > 0))
+        # ANSI colors in cmd.exe min. build
+        # ref: https://github.com/dart-lang/sdk/issues/28614#issuecomment-287282970
+        g_isWindows10 = (win_ver_major >= 10 and win_build >= 10586)
+        g_pathSep = '\\'
+    else:
+        g_pathSep = os.path.sep
+
+    # utilsGetWinFullPath() enables output directories with longfile names on Windows. 
+    # After creation by utilsGetPath(), the Windows prefix is stripped, as setting
+    # the long-path on a per-file basis in GUI mode, which uses the same codepath 
+    # for actual file dumping, is more consistent across Windows environments, 
+    # and needs comparatively less management during logging.
+    # g_outputDir = utilsGetPath(args.outdir, DEFAULT_DIR, False, True)
+    g_outputDir = utilsStripWinPrefix(utilsGetPath(utilsGetWinFullPath(args.outdir), utilsGetWinFullPath(DEFAULT_DIR), False, True))
+    
 
     # Setup logging mechanism.
-    logging.basicConfig(level=(logging.DEBUG if args.verbose else logging.INFO))
+    logging.basicConfig(level=(logging.DEBUG if g_logVerbose else logging.INFO))
     g_logger = logging.getLogger()
     if len(g_logger.handlers):
         # Remove stderr output handler from logger. We'll control standard output on our own.
         log_stderr = g_logger.handlers[0]
         g_logger.removeHandler(log_stderr)
-
+        
     if g_cliMode:
         # Initialize CLI.
         cliInitialize()
@@ -1430,7 +1788,8 @@ if __name__ == "__main__":
         ret = main()
     except KeyboardInterrupt:
         time.sleep(0.2)
-        print('\nScript interrupted.')
+        g_logger.info("Host script exited!")
+        if g_isWindows10: print(COLOR_RESET)
     except:
         utilsLogException(traceback.format_exc())
 
