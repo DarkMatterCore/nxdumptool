@@ -659,7 +659,7 @@ static bool keysReadKeysFromFile(void)
 static bool keysDeriveMasterKeys(void)
 {
     u8 tmp[AES_128_KEY_SIZE] = {0};
-    u8 latest_mkey_index = (NcaKeyGeneration_Current - 1);
+    const u8 latest_mkey_index = (NcaKeyGeneration_Current - 1);
     bool is_dev = utilsIsDevelopmentUnit();
 
     /* Only derive the latest master key if it hasn't been populated already. */
