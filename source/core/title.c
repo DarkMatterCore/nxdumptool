@@ -193,11 +193,12 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000049, "sys_applet_unknown_04" },            ///< Placeholder.
     { 0x010000000000004A, "sys_applet_unknown_05" },            ///< Placeholder.
     { 0x010000000000004B, "sys_applet_unknown_06" },            ///< Placeholder.
-    { 0x010000000000004C, "sys_applet_unknown_07" },            ///< Placeholder.
-    { 0x010000000000004D, "sys_applet_unknown_08" },            ///< Placeholder.
-    { 0x010000000000004E, "sys_applet_unknown_09" },            ///< Placeholder.
-    { 0x010000000000004F, "sys_applet_unknown_0a" },            ///< Placeholder.
+    { 0x010000000000004C, "netTc" },
+    { 0x010000000000004D, "sys_applet_unknown_07" },            ///< Placeholder.
+    { 0x010000000000004E, "sys_applet_unknown_08" },            ///< Placeholder.
+    { 0x010000000000004F, "sys_applet_unknown_09" },            ///< Placeholder.
     { 0x0100000000000050, "ngc" },
+    { 0x0100000000000051, "dmgr" },
 
     /* System data archives. */
     /* Meta + Data NCAs. */
@@ -455,6 +456,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000D623, "DevServer" },
     { 0x010000000000D633, "msm_unknown_0f" },                   ///< Placeholder.
     { 0x010000000000D640, "htcnet" },
+    { 0x010000000000D65A, "netTcDev" },
 
     /* System applications. */
     { 0x01008BB00013C000, "flog" },

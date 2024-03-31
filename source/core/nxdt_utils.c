@@ -142,6 +142,12 @@ bool utilsInitializeResources(void)
             break;
         }
 
+        /*FsFileSystemAttribute fs_attr = {0};
+        if (R_SUCCEEDED(fsFsGetFileSystemAttribute(g_sdCardFileSystem, &fs_attr)))
+        {
+            LOG_DATA_INFO(&fs_attr, sizeof(FsFileSystemAttribute), "SD card FS attributes:");
+        }*/
+
         /* Initialize needed services. */
         if (!servicesInitialize()) break;
 
@@ -296,6 +302,8 @@ void utilsCloseResources(void)
 {
     SCOPED_LOCK(&g_resourcesMutex)
     {
+        LOG_MSG_INFO("Shutting down...");
+
         /* Unmount all custom devoptab devices. */
         devoptabUnmountAllDevices();
 
