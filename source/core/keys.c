@@ -35,15 +35,15 @@
 
 typedef struct {
     ///< AES-128-ECB key used to derive master KEKs from Erista master KEK sources.
-    ///< Only available in Erista units. Retrieved from the Lockpick_RCM keys file.
+    ///< Only available in Erista units. Retrieved from the keys file.
     u8 tsec_root_key[AES_128_KEY_SIZE];
 
     ///< AES-128-ECB key used to derive master KEKs from Mariko master KEK sources.
-    ///< Only available in Mariko units. Retrieved from the Lockpick_RCM keys file -- if available, because it must be manually bruteforced on a PC after running Lockpick_RCM.
+    ///< Only available in Mariko units. Retrieved from the keys file -- if available, because it must be manually bruteforced on a PC after dumping keys using a BPMP payload.
     u8 mariko_kek[AES_128_KEY_SIZE];
 
     ///< AES-128-ECB keys used to decrypt the vast majority of Switch content.
-    ///< Derived at runtime using hardcoded key sources and additional keydata retrieved from the Lockpick_RCM keys file.
+    ///< Derived at runtime using hardcoded key sources and additional keydata retrieved from the keys file.
     u8 master_keys[NcaKeyGeneration_Max][AES_128_KEY_SIZE];
 
     ///< AES-128-XTS key needed to handle NCA header crypto.
@@ -55,7 +55,7 @@ typedef struct {
     u8 nca_kaek[NcaKeyAreaEncryptionKeyIndex_Count][NcaKeyGeneration_Max][AES_128_KEY_SIZE];
 
     ///< AES-128-CTR key needed to decrypt the console-specific eTicket RSA device key stored in PRODINFO.
-    ///< Retrieved from the Lockpick_RCM keys file. Verified by decrypting the eTicket RSA device key.
+    ///< Retrieved from the keys file. Verified by decrypting the eTicket RSA device key.
     ///< The key itself may or may not be console-specific (personalized), based on the eTicket RSA device key generation value.
     u8 eticket_rsa_kek[AES_128_KEY_SIZE];
 
@@ -110,10 +110,12 @@ static bool keysGenerateAesKeyFromAesKek(const u8 *kek_src, u8 key_generation, S
 static bool g_keysetLoaded = false;
 static Mutex g_keysetMutex = 0;
 
+static u8 g_atmosphereKeyGeneration = 0;
+
 static SetCalRsa2048DeviceKey g_eTicketRsaDeviceKey = {0};
 static KeysNxKeyset g_nxKeyset = {0};
 
-static bool g_latestMasterKeyAvailable = false;
+static bool g_tsecRootKeyAvailable = false, g_marikoKekAvailable = false;
 
 static bool g_wipedSetCal = false;
 
@@ -126,6 +128,10 @@ bool keysLoadKeyset(void)
         ret = g_keysetLoaded;
         if (ret) break;
 
+        /* Get Atmosphère's key generation. */
+        /* This actually represents an index, so we must be careful whenever we use it. */
+        g_atmosphereKeyGeneration = utilsGetAtmosphereKeyGeneration();
+
         /* Get eTicket RSA device key. */
         Result rc = setcalGetEticketDeviceKey(&g_eTicketRsaDeviceKey);
         if (R_FAILED(rc))
@@ -134,15 +140,11 @@ bool keysLoadKeyset(void)
             break;
         }
 
-        /* Read data from the Lockpick_RCM keys file. */
+        /* Read data from the keys file. */
         if (!keysReadKeysFromFile()) break;
 
         /* Derive master keys. */
-        if (!keysDeriveMasterKeys())
-        {
-            LOG_MSG_ERROR("Failed to derive master keys!");
-            break;
-        }
+        if (!keysDeriveMasterKeys()) break;
 
         /* Derive NCA header key. */
         if (!keysDeriveNcaHeaderKey()) break;
@@ -187,7 +189,7 @@ const u8 *keysGetNcaHeaderKey(void)
 const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
 {
     const u8 *ret = NULL;
-    u8 key_gen_val = (key_generation ? (key_generation - 1) : key_generation);
+    const u8 mkey_index = (key_generation ? (key_generation - 1) : key_generation);
 
     if (kaek_index >= NcaKeyAreaEncryptionKeyIndex_Count)
     {
@@ -205,11 +207,11 @@ const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
     {
         if (!g_keysetLoaded) break;
 
-        ret = (const u8*)(g_nxKeyset.nca_kaek[kaek_index][key_gen_val]);
+        ret = (const u8*)(g_nxKeyset.nca_kaek[kaek_index][mkey_index]);
 
         if (keysIsKeyEmpty(ret))
         {
-            LOG_MSG_ERROR("NCA KAEK for type %u and generation %u unavailable.", kaek_index, key_gen_val);
+            LOG_MSG_ERROR("NCA KAEK for type %02X and generation %02X unavailable.", kaek_index, mkey_index);
             ret = NULL;
         }
     }
@@ -257,7 +259,7 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
 const u8 *keysGetTicketCommonKey(u8 key_generation)
 {
     const u8 *ret = NULL;
-    u8 key_gen_val = (key_generation ? (key_generation - 1) : key_generation);
+    const u8 mkey_index = (key_generation ? (key_generation - 1) : key_generation);
 
     if (key_generation > NcaKeyGeneration_Max)
     {
@@ -269,11 +271,11 @@ const u8 *keysGetTicketCommonKey(u8 key_generation)
     {
         if (!g_keysetLoaded) break;
 
-        ret = (const u8*)(g_nxKeyset.ticket_common_keys[key_gen_val]);
+        ret = (const u8*)(g_nxKeyset.ticket_common_keys[mkey_index]);
 
         if (keysIsKeyEmpty(ret))
         {
-            LOG_MSG_ERROR("Ticket common key for generation %u unavailable.", key_gen_val);
+            LOG_MSG_ERROR("Ticket common key for generation %02X unavailable.", mkey_index);
             ret = NULL;
         }
     }
@@ -543,10 +545,10 @@ static bool keysReadKeysFromFile(void)
     char test_name[0x40] = {0};
 
     const char *keys_file_path = (utilsIsDevelopmentUnit() ? DEV_KEYS_FILE_PATH : PROD_KEYS_FILE_PATH);
+    const bool is_mariko = utilsIsMarikoUnit();
 
-    bool is_mariko = utilsIsMarikoUnit();
-    bool tsec_root_key_available = false, mariko_kek_available = false;
-    bool use_personalized_eticket_rsa_kek = (g_eTicketRsaDeviceKey.generation > 0), eticket_rsa_kek_available = false;
+    bool eticket_rsa_kek_available = false;
+    const char *eticket_rsa_kek_name = (g_eTicketRsaDeviceKey.generation > 0 ? "eticket_rsa_kek_personalized" : "eticket_rsa_kek");
 
     keys_file = fopen(keys_file_path, "rb");
     if (!keys_file)
@@ -579,16 +581,16 @@ static bool keysReadKeysFromFile(void)
         {
             /* Parse Mariko KEK. */
             /* This will only appear on Mariko units. */
-            if (!mariko_kek_available)
+            if (!g_marikoKekAvailable)
             {
-                PARSE_HEX_KEY("mariko_kek", g_nxKeyset.mariko_kek, mariko_kek_available = true; continue);
+                PARSE_HEX_KEY("mariko_kek", g_nxKeyset.mariko_kek, g_marikoKekAvailable = true; continue);
             }
         } else {
             /* Parse TSEC root key. */
             /* This will only appear on Erista units. */
-            if (!tsec_root_key_available)
+            if (!g_tsecRootKeyAvailable)
             {
-                PARSE_HEX_KEY_WITH_INDEX("tsec_root_key", TSEC_ROOT_KEY_VERSION, g_nxKeyset.tsec_root_key, tsec_root_key_available = true; continue);
+                PARSE_HEX_KEY_WITH_INDEX("tsec_root_key", TSEC_ROOT_KEY_VERSION, g_nxKeyset.tsec_root_key, g_tsecRootKeyAvailable = true; continue);
             }
         }
 
@@ -596,14 +598,13 @@ static bool keysReadKeysFromFile(void)
         /* The personalized entry only appears on consoles that use the new PRODINFO key generation scheme. */
         if (!eticket_rsa_kek_available)
         {
-            PARSE_HEX_KEY(use_personalized_eticket_rsa_kek ? "eticket_rsa_kek_personalized" : "eticket_rsa_kek", g_nxKeyset.eticket_rsa_kek, eticket_rsa_kek_available = true; continue);
+            PARSE_HEX_KEY(eticket_rsa_kek_name, g_nxKeyset.eticket_rsa_kek, eticket_rsa_kek_available = true; continue);
         }
 
         /* Parse master keys, starting with the last known one. */
-        for(u8 i = NcaKeyGeneration_Current; i <= NcaKeyGeneration_Max; i++)
+        for(u8 i = (NcaKeyGeneration_Current - 1); i < NcaKeyGeneration_Max; i++)
         {
-            u8 key_gen_val = (i - 1);
-            PARSE_HEX_KEY_WITH_INDEX("master_key", key_gen_val, g_nxKeyset.master_keys[key_gen_val], break);
+            PARSE_HEX_KEY_WITH_INDEX("master_key", i, g_nxKeyset.master_keys[i], break);
         }
     }
 
@@ -624,32 +625,10 @@ static bool keysReadKeysFromFile(void)
         return false;
     }
 
-    /* Check if the latest master key was retrieved. */
-    g_latestMasterKeyAvailable = !keysIsKeyEmpty(g_nxKeyset.master_keys[NcaKeyGeneration_Current - 1]);
-    if (!g_latestMasterKeyAvailable)
-    {
-        LOG_MSG_WARNING("Latest known master key (%02X) unavailable in \"%s\". Latest master key derivation will be carried out.", NcaKeyGeneration_Current - 1, keys_file_path);
-
-        /* Make sure we have what we need to derive the latest master key. */
-        if (is_mariko)
-        {
-            if (!mariko_kek_available)
-            {
-                LOG_MSG_ERROR("Mariko KEK unavailable in \"%s\"!", keys_file_path);
-                return false;
-            }
-        } else {
-            if (!tsec_root_key_available)
-            {
-                LOG_MSG_ERROR("TSEC root key unavailable in \"%s\"!", keys_file_path);
-                return false;
-            }
-        }
-    }
-
+    /* Bail out if we couldn't retrieve the eTicket RSA KEK. */
     if (!eticket_rsa_kek_available)
     {
-        LOG_MSG_ERROR("eTicket RSA KEK unavailable in \"%s\"!", keys_file_path);
+        LOG_MSG_ERROR("\"%s\" unavailable in \"%s\"!", eticket_rsa_kek_name, keys_file_path);
         return false;
     }
 
@@ -659,34 +638,87 @@ static bool keysReadKeysFromFile(void)
 static bool keysDeriveMasterKeys(void)
 {
     u8 tmp[AES_128_KEY_SIZE] = {0};
-    const u8 latest_mkey_index = (NcaKeyGeneration_Current - 1);
-    bool is_dev = utilsIsDevelopmentUnit();
+    const u8 current_mkey_index = (NcaKeyGeneration_Current - 1); // Convert into an index.
+    const bool is_dev = utilsIsDevelopmentUnit(), is_mariko = utilsIsMarikoUnit(), outdated_mkey_vectors = (g_atmosphereKeyGeneration > current_mkey_index);
+    bool latest_mkey_available = false;
+
+    /* Check if the latest master key was retrieved. */
+    if (outdated_mkey_vectors)
+    {
+        /* Our master key vectors are outdated. */
+        /* This means the user is running both a HOS version with a newer key generation and an Atmosphère release with support for said HOS version. */
+        /* Not everything is lost, though. We just need to check if we parsed all master keys between the last one we know and the one Atmosphère supports (inclusive range). */
+        /* However, since we have no master key vectors for the additional master key(s), we can't reliably test them. */
+        latest_mkey_available = true;
+
+        for(u8 i = current_mkey_index; i <= g_atmosphereKeyGeneration; i++)
+        {
+            if (keysIsKeyEmpty(g_nxKeyset.master_keys[i]))
+            {
+                latest_mkey_available = false;
+                break;
+            }
+        }
+    } else {
+        /* Our master key vectors are up-to-date. */
+        /* Just checking if we have the latest known master key should suffice. */
+        latest_mkey_available = !keysIsKeyEmpty(g_nxKeyset.master_keys[current_mkey_index]);
+    }
 
     /* Only derive the latest master key if it hasn't been populated already. */
-    if (!g_latestMasterKeyAvailable)
+    if (!latest_mkey_available)
     {
-        if (utilsIsMarikoUnit())
+        /* Bail out immediately if our master key vectors are outdated. */
+        if (outdated_mkey_vectors)
         {
+            LOG_MSG_ERROR("Unable to derive master keys.\r\n" \
+                          "PKG1 key generation (%02X) is higher than the last known key generation (%02X).\r\n" \
+                          "Furthermore, one or more of the newer master keys are not available in the keys\r\n" \
+                          "file. If you haven't already, please get an updated build at:\r\n%s\r\n%s", \
+                          g_atmosphereKeyGeneration, current_mkey_index, PRERELEASE_URL, DISCORD_SERVER_URL);
+            return false;
+        }
+
+        LOG_MSG_WARNING("Latest known master key (%02X) unavailable. Latest master key derivation will be carried out.", current_mkey_index);
+
+        /* Derive the latest master KEK. */
+        if (is_mariko)
+        {
+            if (!g_marikoKekAvailable)
+            {
+                LOG_MSG_ERROR("\"mariko_kek\" unavailable! Unable to derive master keys.");
+                return false;
+            }
+
             /* Derive the latest master KEK using the hardcoded Mariko master KEK source and the Mariko KEK. */
             aes128EcbCrypt(tmp, is_dev ? g_marikoMasterKekSourceDev : g_marikoMasterKekSourceProd, g_nxKeyset.mariko_kek, false);
         } else {
+            if (!g_tsecRootKeyAvailable)
+            {
+                LOG_MSG_ERROR("\"tsec_root_key_%02X\" unavailable! Unable to derive master keys.", TSEC_ROOT_KEY_VERSION);
+                return false;
+            }
+
             /* Derive the latest master KEK using the hardcoded Erista master KEK source and the TSEC root key. */
             aes128EcbCrypt(tmp, g_eristaMasterKekSource, g_nxKeyset.tsec_root_key, false);
         }
 
         /* Derive the latest master key using the hardcoded master key source and the latest master KEK. */
-        aes128EcbCrypt(g_nxKeyset.master_keys[latest_mkey_index], g_masterKeySource, tmp, false);
+        aes128EcbCrypt(g_nxKeyset.master_keys[current_mkey_index], g_masterKeySource, tmp, false);
     }
 
     /* Derive all lower master keys using the latest master key and the master key vectors. */
-    for(u8 i = latest_mkey_index; i > NcaKeyGeneration_Since100NUP; i--) aes128EcbCrypt(g_nxKeyset.master_keys[i - 1], is_dev ? g_masterKeyVectorsDev[i] : g_masterKeyVectorsProd[i], \
+    for(u8 i = current_mkey_index; i > NcaKeyGeneration_Since100NUP; i--) aes128EcbCrypt(g_nxKeyset.master_keys[i - 1], is_dev ? g_masterKeyVectorsDev[i] : g_masterKeyVectorsProd[i], \
                                                                                         g_nxKeyset.master_keys[i], false);
 
     /* Check if we derived the right keys. */
     aes128EcbCrypt(tmp, is_dev ? g_masterKeyVectorsDev[NcaKeyGeneration_Since100NUP] : g_masterKeyVectorsProd[NcaKeyGeneration_Since100NUP], \
                    g_nxKeyset.master_keys[NcaKeyGeneration_Since100NUP], false);
 
-    return keysIsKeyEmpty(tmp);
+    bool ret = keysIsKeyEmpty(tmp);
+    if (!ret) LOG_MSG_ERROR("Master key derivation failed! Wrong keys?");
+
+    return ret;
 }
 
 static bool keysDeriveNcaHeaderKey(void)
@@ -729,21 +761,21 @@ static bool keysDerivePerGenerationKeys(void)
 
     for(u8 i = 1; i <= NcaKeyGeneration_Max; i++)
     {
-        u8 key_gen_val = (i - 1);
+        const u8 mkey_index = (i - 1);
 
         /* Make sure we're not dealing with an unpopulated master key entry. */
-        if (i > NcaKeyGeneration_Current && keysIsKeyEmpty(g_nxKeyset.master_keys[key_gen_val]))
+        if (i > NcaKeyGeneration_Current && keysIsKeyEmpty(g_nxKeyset.master_keys[mkey_index]))
         {
-            //LOG_MSG_DEBUG("Master key %02X unavailable.", key_gen_val);
+            //LOG_MSG_DEBUG("\"master_key_%02X\" unavailable.", mkey_index);
             continue;
         }
 
         /* Derive NCA key area keys for this generation. */
         for(u8 j = 0; j < NcaKeyAreaEncryptionKeyIndex_Count; j++)
         {
-            if (!keysLoadAesKeyFromAesKek(g_ncaKeyAreaEncryptionKeySources[j], i, option, g_aesKeyGenerationSource, g_nxKeyset.nca_kaek[j][key_gen_val]))
+            if (!keysLoadAesKeyFromAesKek(g_ncaKeyAreaEncryptionKeySources[j], i, option, g_aesKeyGenerationSource, g_nxKeyset.nca_kaek[j][mkey_index]))
             {
-                LOG_MSG_DEBUG("Failed to derive NCA KAEK for type %u and generation %u!", j, key_gen_val);
+                LOG_MSG_DEBUG("Failed to derive NCA KAEK for type %02X and generation %02X!", j, mkey_index);
                 success = false;
                 break;
             }
@@ -752,7 +784,7 @@ static bool keysDerivePerGenerationKeys(void)
         if (!success) break;
 
         /* Derive ticket common key for this generation. */
-        aes128EcbCrypt(g_nxKeyset.ticket_common_keys[key_gen_val], g_ticketCommonKeySource, g_nxKeyset.master_keys[key_gen_val], false);
+        aes128EcbCrypt(g_nxKeyset.ticket_common_keys[mkey_index], g_ticketCommonKeySource, g_nxKeyset.master_keys[mkey_index], false);
     }
 
     return success;
@@ -845,9 +877,8 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
 /* Based on splCryptoGenerateAesKek(). Excludes key sealing and device-unique shenanigans. */
 static bool keysGenerateAesKek(const u8 *kek_src, u8 key_generation, SmcGenerateAesKekOption option, u8 *out_kek)
 {
-    bool is_device_unique = (option.fields.is_device_unique == 1);
-    u8 key_type_idx = option.fields.key_type_idx;
-    u8 seal_key_idx = option.fields.seal_key_idx;
+    const bool is_device_unique = (option.fields.is_device_unique == 1);
+    const u8 key_type_idx = option.fields.key_type_idx, seal_key_idx = option.fields.seal_key_idx, mkey_index = (key_generation ? (key_generation - 1) : key_generation);
 
     if (!kek_src || key_generation > NcaKeyGeneration_Max || is_device_unique || key_type_idx >= SmcKeyType_Count || seal_key_idx >= SmcSealKey_Count || \
         option.fields.reserved != 0 || !out_kek)
@@ -856,15 +887,13 @@ static bool keysGenerateAesKek(const u8 *kek_src, u8 key_generation, SmcGenerate
         return false;
     }
 
-    if (key_generation) key_generation--;
-
     u8 kekek_src[AES_128_KEY_SIZE] = {0}, kekek[AES_128_KEY_SIZE] = {0};
-    const u8 *mkey = g_nxKeyset.master_keys[key_generation];
+    const u8 *mkey = g_nxKeyset.master_keys[mkey_index];
 
     /* Make sure this master key is available. */
     if (keysIsKeyEmpty(mkey))
     {
-        LOG_MSG_ERROR("Master key %02X unavailable!", key_generation);
+        LOG_MSG_ERROR("\"master_key_%02X\" unavailable!", mkey_index);
         return false;
     }
 

@@ -40,11 +40,11 @@ bool servicesInitialize();
 /// Closes services previously initialized by servicesInitialize().
 void servicesClose();
 
-/// Check if a service has been initialized using its name.
+/// Check if a service has been initialized by this interface using its name.
 bool servicesCheckInitializedServiceByName(const char *name);
 
-/// Checks if a service is running using its name.
-/// Wrapper for the "AtmosphereHasService" SM API extension from Atmosphère and Atmosphère-based CFWs.
+/// Checks if a service is running using its name, even if it wasn't initialized by this interface.
+/// This servers as a wrapper for the "AtmosphereHasService" SM API extension from Atmosphère and Atmosphère-based CFWs.
 /// Perfectly safe to use under development units. Not available in older Atmosphère releases.
 bool servicesCheckRunningServiceByName(const char *name);
 

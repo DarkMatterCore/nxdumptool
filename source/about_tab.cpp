@@ -62,7 +62,7 @@ namespace nxdt::views
         /* Acknowledgments. */
         this->addView(new brls::Header("about_tab/acknowledgments/header"_i18n));
         for(int i = 0; i < 7; i++) this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr(fmt::format("about_tab/acknowledgments/line_{:02d}", i))));
-        for(int i = 7; i < 11; i++) this->addView(new brls::Label(brls::LabelStyle::SMALL, i18n::getStr(fmt::format("about_tab/acknowledgments/line_{:02d}", i)), true));
+        for(int i = 7; i < 12; i++) this->addView(new brls::Label(brls::LabelStyle::SMALL, i18n::getStr(fmt::format("about_tab/acknowledgments/line_{:02d}", i)), true));
 
         /* Additional links and resources. */
         this->addView(new brls::Header("about_tab/links/header"_i18n));

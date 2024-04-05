@@ -95,8 +95,8 @@
 #define NRO_PATH                        DEVOPTAB_SDMC_DEVICE APP_BASE_PATH NRO_NAME
 #define NRO_TMP_PATH                    NRO_PATH ".tmp"
 
-#define PROD_KEYS_FILE_PATH             DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "prod.keys"               /* Location used by Lockpick_RCM for retail unit keys. */
-#define DEV_KEYS_FILE_PATH              DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "dev.keys"                /* Location used by Lockpick_RCM for development unit keys. */
+#define PROD_KEYS_FILE_PATH             DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "prod.keys"               /* Retail unit keys. */
+#define DEV_KEYS_FILE_PATH              DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH "dev.keys"                /* Development unit keys. */
 
 #define LOG_FILE_NAME                   APP_TITLE ".log"
 #define LOG_BUF_SIZE                    0x400000                                                        /* 4 MiB. */
@@ -132,5 +132,8 @@
 #define JSON_C_URL                      "https://github.com/json-c/json-c"
 
 #define DISCORD_SERVER_URL              "https://discord.gg/SCbbcQx"
+
+// TODO: remove this after the PoC builds are no longer needed.
+#define PRERELEASE_URL                  GITHUB_URL "/" APP_AUTHOR "/nxdumptool/releases/tag/rewrite-prerelease"
 
 #endif  /* __DEFINES_H__ */

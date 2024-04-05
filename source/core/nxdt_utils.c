@@ -41,6 +41,17 @@
 
 /* Type definitions. */
 
+/* Reference: https://github.com/Atmosphere-NX/Atmosphere/blob/master/exosphere/program/source/smc/secmon_smc_info.hpp. */
+typedef struct {
+    SdkAddOnVersion target_firmware;
+    u8 key_generation;
+    u8 ams_ver_micro;
+    u8 ams_ver_minor;
+    u8 ams_ver_major;
+} UtilsExosphereApiVersion;
+
+NXDT_ASSERT(UtilsExosphereApiVersion, 0x8);
+
 typedef struct {
     u32 major;
     u32 minor;
@@ -97,9 +108,15 @@ static const size_t g_outputDirsCount = MAX_ELEMENTS(g_outputDirs);
 
 static bool g_appUpdated = false;
 
+static const SplConfigItem SplConfigItem_ExosphereApiVersion = (SplConfigItem)65000;
+
+static UtilsExosphereApiVersion g_exosphereApiVersion = {0};
+
 /* Function prototypes. */
 
 static void _utilsGetLaunchPath(void);
+
+static bool utilsGetExosphereApiVersion(void);
 
 static void _utilsGetCustomFirmwareType(void);
 
@@ -163,10 +180,25 @@ bool utilsInitializeResources(void)
         LOG_MSG_INFO("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
 #endif
 
+        /* Retrieve Exosphère API version. */
+        if (!utilsGetExosphereApiVersion())
+        {
+            LOG_MSG_ERROR("Failed to retrieve Exosphère API version!");
+            break;
+        }
+
         /* Retrieve custom firmware type. */
         _utilsGetCustomFirmwareType();
         if (g_customFirmwareType != UtilsCustomFirmwareType_Unknown) LOG_MSG_INFO("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : \
                                                                                   (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
+
+        LOG_MSG_INFO("Exosphère API version info:\r\n" \
+                     "- Release version: %u.%u.%u.\r\n" \
+                     "- PKG1 key generation: %u (0x%02X).\r\n" \
+                     "- Target firmware: %u.%u.%u.", \
+                     g_exosphereApiVersion.ams_ver_major, g_exosphereApiVersion.ams_ver_minor, g_exosphereApiVersion.ams_ver_micro, \
+                     g_exosphereApiVersion.key_generation, !g_exosphereApiVersion.key_generation ? g_exosphereApiVersion.key_generation : (g_exosphereApiVersion.key_generation + 1), \
+                     g_exosphereApiVersion.target_firmware.major, g_exosphereApiVersion.target_firmware.minor, g_exosphereApiVersion.target_firmware.micro);
 
         /* Get product model. */
         if (!_utilsGetProductModel()) break;
@@ -210,11 +242,7 @@ bool utilsInitializeResources(void)
         if (!umsInitialize()) break;
 
         /* Load keyset. */
-        if (!keysLoadKeyset())
-        {
-            LOG_MSG_ERROR("Failed to load keyset!\nPlease update your keys file with Lockpick_RCM.\nYou can get an updated build at: " DISCORD_SERVER_URL);
-            break;
-        }
+        if (!keysLoadKeyset()) break;
 
         /* Allocate NCA crypto buffer. */
         if (!ncaAllocateCryptoBuffer())
@@ -394,6 +422,21 @@ FsFileSystem *utilsGetSdCardFileSystemObject(void)
 bool utilsCommitSdCardFileSystemChanges(void)
 {
     return (g_sdCardFileSystem ? R_SUCCEEDED(fsFsCommit(g_sdCardFileSystem)) : false);
+}
+
+u32 utilsGetAtmosphereVersion(void)
+{
+    return MAKEHOSVERSION(g_exosphereApiVersion.ams_ver_major, g_exosphereApiVersion.ams_ver_minor, g_exosphereApiVersion.ams_ver_micro);
+}
+
+u8 utilsGetAtmosphereKeyGeneration(void)
+{
+    return g_exosphereApiVersion.key_generation;
+}
+
+void utilsGetAtmosphereTargetFirmware(SdkAddOnVersion *out)
+{
+    memcpy(out, &(g_exosphereApiVersion.target_firmware), sizeof(SdkAddOnVersion));
 }
 
 u8 utilsGetCustomFirmwareType(void)
@@ -605,6 +648,7 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
     u8 *ptr1 = (u8*)str, *ptr2 = ptr1;
     ssize_t units = 0;
     u32 code = 0;
+    bool repl = false;
 
     while(cur_pos < str_size)
     {
@@ -613,10 +657,15 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
 
         if (memchr(g_illegalFileSystemChars, (int)code, g_illegalFileSystemCharsLength) || code < 0x20 || (!ascii_only && code == 0x7F) || (ascii_only && code >= 0x7F))
         {
-            *ptr2++ = '_';
+            if (!repl)
+            {
+                *ptr2++ = '_';
+                repl = true;
+            }
         } else {
             if (ptr2 != ptr1) memmove(ptr2, ptr1, (size_t)units);
             ptr2 += units;
+            repl = false;
         }
 
         ptr1 += units;
@@ -1267,6 +1316,15 @@ static void _utilsGetLaunchPath(void)
             break;
         }
     }
+}
+
+/* SMC config item available in Atmosphère and Atmosphère-based CFWs. */
+static bool utilsGetExosphereApiVersion(void)
+{
+    Result rc = splGetConfig(SplConfigItem_ExosphereApiVersion, (u64*)&g_exosphereApiVersion);
+    bool ret = R_SUCCEEDED(rc);
+    if (!ret) LOG_MSG_ERROR("splGetConfig failed! (0x%X).", rc);
+    return ret;
 }
 
 static void _utilsGetCustomFirmwareType(void)

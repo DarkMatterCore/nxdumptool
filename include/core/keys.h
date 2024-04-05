@@ -30,7 +30,7 @@
 extern "C" {
 #endif
 
-/// Loads (and derives) keydata from sysmodule program memory, the Lockpick_RCM keys file and hardcoded/obfuscated information.
+/// Loads (and derives) keydata from sysmodule program memory, a keys file and hardcoded/obfuscated information.
 /// Must be called (and succeed) before calling any of the functions below.
 bool keysLoadKeyset(void);
 

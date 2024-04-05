@@ -85,6 +85,17 @@ FsFileSystem *utilsGetSdCardFileSystemObject(void);
 /// Must be used after closing a file handle from the SD card.
 bool utilsCommitSdCardFileSystemChanges(void);
 
+/// Returns an integer that represents the full Atmosphère release version.
+/// Use the HOSVER_* macros to retrieve specific version numbers from it.
+u32 utilsGetAtmosphereVersion(void);
+
+/// Returns an integer that represents the global key generation used by Atmosphère.
+/// The returned value represents an index, so it doesn't match 1:1 the NcaKeyGeneration enum.
+u8 utilsGetAtmosphereKeyGeneration(void);
+
+/// Fills the provided SdkAddOnVersion element with the target firmware set by Atmosphère.
+void utilsGetAtmosphereTargetFirmware(SdkAddOnVersion *out);
+
 /// Returns a UtilsCustomFirmwareType value.
 u8 utilsGetCustomFirmwareType(void);
 
@@ -113,9 +124,10 @@ void utilsJoinThread(Thread *thread);
 /// If the buffer isn't big enough to hold both its current contents and the new formatted string, it will be resized.
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
-/// Replaces illegal FAT characters in the provided UTF-8 string with underscores.
-/// If 'ascii_only' is set to true, all codepoints outside the [0x20,0x7F) range will also be replaced with underscores.
-/// Replacements are performed on a per-codepoint basis, which means the string length can be reduced by this function.
+/// Replaces illegal filesystem characters in the provided NULL-terminated UTF-8 string with underscores ('_').
+/// If 'ascii_only' is set to true, all codepoints outside of the [0x20,0x7F) range will also be replaced with underscores.
+/// Replacements are performed on a per-codepoint basis, which means the string size in bytes can be reduced by this function.
+/// Furthermore, if multiple, consecutive illegal characters are found, they will all get replaced by a single underscore.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 
 /// Trims whitespace characters from the provided string.

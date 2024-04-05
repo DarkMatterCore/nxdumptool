@@ -42,7 +42,6 @@ typedef struct {
 static bool _servicesCheckInitializedServiceByName(const char *name);
 
 static Result servicesAtmosphereHasService(bool *out, SmServiceName name);
-static Result servicesGetExosphereApiVersion(u32 *out);
 
 static Result servicesNifmUserInitialize(void);
 static bool servicesClkGetServiceType(void *arg);
@@ -77,7 +76,6 @@ static u32 g_atmosphereVersion = 0;
 
 /* Atmosphère-related constants. */
 static const u32 g_smAtmosphereHasService = 65100;
-static const SplConfigItem SplConfigItem_ExosphereApiVersion = (SplConfigItem)65000;
 static const u32 g_atmosphereTipcVersion = MAKEHOSVERSION(0, 19, 0);
 
 bool servicesInitialize(void)
@@ -221,12 +219,8 @@ static Result servicesAtmosphereHasService(bool *out, SmServiceName name)
     u8 tmp = 0;
     Result rc = 0;
 
-    /* Get Exosphère API version. */
-    if (!g_atmosphereVersion)
-    {
-        rc = servicesGetExosphereApiVersion(&g_atmosphereVersion);
-        if (R_FAILED(rc)) LOG_MSG_ERROR("servicesGetExosphereApiVersion failed! (0x%X).", rc);
-    }
+    /* Get Atmosphère version if we haven't already. */
+    if (!g_atmosphereVersion) g_atmosphereVersion = utilsGetAtmosphereVersion();
 
     /* Check if service is running. */
     /* Dispatch IPC request using CMIF or TIPC serialization depending on our current environment. */
@@ -238,25 +232,6 @@ static Result servicesAtmosphereHasService(bool *out, SmServiceName name)
     }
 
     if (R_SUCCEEDED(rc)) *out = (tmp != 0);
-
-    return rc;
-}
-
-/* SMC config item available in Atmosphère and Atmosphère-based CFWs. */
-static Result servicesGetExosphereApiVersion(u32 *out)
-{
-    if (!out) return MAKERESULT(Module_Libnx, LibnxError_BadInput);
-
-    Result rc = 0;
-    u64 cfg = 0;
-    u32 version = 0;
-
-    rc = splGetConfig(SplConfigItem_ExosphereApiVersion, &cfg);
-    if (R_SUCCEEDED(rc))
-    {
-        *out = version = (u32)((cfg >> 40) & 0xFFFFFF);
-        LOG_MSG_INFO("Exosphère API version: %u.%u.%u.", HOSVER_MAJOR(version), HOSVER_MINOR(version), HOSVER_MICRO(version));
-    }
 
     return rc;
 }
