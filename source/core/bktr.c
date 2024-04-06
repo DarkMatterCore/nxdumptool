@@ -175,7 +175,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
     if (!out || !bktrIsValidSubStorage(substorage) || substorage->index != 0 || !substorage->nca_fs_ctx->enabled || !substorage->nca_fs_ctx->has_compression_layer || \
         substorage->nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || !substorage->nca_fs_ctx->nca_ctx || \
         (substorage->nca_fs_ctx->nca_ctx->rights_id_available && !substorage->nca_fs_ctx->nca_ctx->titlekey_retrieved) || \
-        substorage->type == BucketTreeSubStorageType_AesCtrEx || substorage->type == BucketTreeSubStorageType_Compressed || substorage->type >= BucketTreeSubStorageType_Count)
+        substorage->type == BucketTreeSubStorageType_AesCtrEx || substorage->type >= BucketTreeSubStorageType_Count)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -208,7 +208,7 @@ bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSu
 
     /* Read Compressed storage table data. */
     const u64 compression_table_offset = (nca_fs_ctx->hash_region.size + compressed_bucket->offset);
-    bktrInitializeSubStorageReadParams(&params, compressed_table, compression_table_offset, compressed_bucket->size, 0, 0, false, BucketTreeSubStorageType_Compressed);
+    bktrInitializeSubStorageReadParams(&params, compressed_table, compression_table_offset, compressed_bucket->size, 0, 0, false, BucketTreeStorageType_Compressed);
 
     if (!bktrReadSubStorage(substorage, &params))
     {
@@ -286,10 +286,10 @@ bool bktrSetRegularSubStorage(BucketTreeContext *ctx, NcaFsSectionContext *nca_f
 bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContext *child_ctx, u8 substorage_index)
 {
     if (!bktrIsValidContext(parent_ctx) || !bktrIsValidContext(child_ctx) || substorage_index >= BKTR_MAX_SUBSTORAGE_COUNT || \
-        parent_ctx->storage_type != BucketTreeStorageType_Indirect || child_ctx->storage_type < BucketTreeStorageType_AesCtrEx || \
-        child_ctx->storage_type > BucketTreeStorageType_Sparse || (child_ctx->storage_type == BucketTreeStorageType_AesCtrEx && (substorage_index != 1 || \
-        parent_ctx->nca_fs_ctx != child_ctx->nca_fs_ctx)) || ((child_ctx->storage_type == BucketTreeStorageType_Compressed || \
-        child_ctx->storage_type == BucketTreeStorageType_Sparse) && (substorage_index != 0 || parent_ctx->nca_fs_ctx == child_ctx->nca_fs_ctx)))
+        parent_ctx->storage_type != BucketTreeStorageType_Indirect || (child_ctx->storage_type != BucketTreeStorageType_AesCtrEx && \
+        child_ctx->storage_type != BucketTreeStorageType_Sparse) || (child_ctx->storage_type == BucketTreeStorageType_AesCtrEx && (substorage_index != 1 || \
+        parent_ctx->nca_fs_ctx != child_ctx->nca_fs_ctx)) || (child_ctx->storage_type == BucketTreeStorageType_Sparse && (substorage_index != 0 || \
+        parent_ctx->nca_fs_ctx == child_ctx->nca_fs_ctx)))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -301,7 +301,7 @@ bool bktrSetBucketTreeSubStorage(BucketTreeContext *parent_ctx, BucketTreeContex
 
     substorage->index = substorage_index;
     substorage->nca_fs_ctx = child_ctx->nca_fs_ctx;
-    substorage->type = (child_ctx->storage_type + 1);   /* Convert to BucketTreeSubStorageType value. */
+    substorage->type = (child_ctx->storage_type == BucketTreeStorageType_AesCtrEx ? BucketTreeSubStorageType_AesCtrEx : BucketTreeSubStorageType_Sparse);
     substorage->bktr_ctx = child_ctx;
 
     return true;
@@ -1054,7 +1054,7 @@ static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64
     bool success = false;
 
     if (!out || !bktrIsValidSubStorage(&(ctx->substorages[0])) || ctx->substorages[0].type == BucketTreeSubStorageType_AesCtrEx || \
-        ctx->substorages[0].type == BucketTreeSubStorageType_Compressed || ctx->substorages[0].type >= BucketTreeSubStorageType_Count || (offset + read_size) > ctx->end_offset)
+        ctx->substorages[0].type >= BucketTreeSubStorageType_Count || (offset + read_size) > ctx->end_offset)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;

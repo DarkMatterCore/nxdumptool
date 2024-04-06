@@ -58,10 +58,10 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
         out->base_storage_type = NcaStorageBaseStorageType_Sparse;
     }
 
-    /* Check if both Indirect and AesCtrEx layers are available. */
+    /* Check if both AesCtrEx and Indirect layers are available. */
     if (nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs)
     {
-        /* Initialize AesCtrEx layer. */
+        /* Initialize AesCtrEx and Indirect layers. */
         if (!ncaStorageInitializeBucketTreeContext(&(out->aes_ctr_ex_storage), nca_fs_ctx, BucketTreeStorageType_AesCtrEx) || \
             !ncaStorageInitializeBucketTreeContext(&(out->indirect_storage), nca_fs_ctx, BucketTreeStorageType_Indirect)) goto end;
 
