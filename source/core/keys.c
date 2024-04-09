@@ -110,7 +110,8 @@ static bool keysGenerateAesKeyFromAesKek(const u8 *kek_src, u8 key_generation, S
 static bool g_keysetLoaded = false;
 static Mutex g_keysetMutex = 0;
 
-static u8 g_atmosphereKeyGeneration = 0;
+static u8 g_atmosphereKeyGeneration = 0, g_currentMasterKeyIndex = 0;
+static bool g_outdatedMasterKeyVectors = false, g_lowMasterKeyRequirement = false;
 
 static SetCalRsa2048DeviceKey g_eTicketRsaDeviceKey = {0};
 static KeysNxKeyset g_nxKeyset = {0};
@@ -131,6 +132,15 @@ bool keysLoadKeyset(void)
         /* Get Atmosphère's key generation. */
         /* This actually represents an index, so we must be careful whenever we use it. */
         g_atmosphereKeyGeneration = utilsGetAtmosphereKeyGeneration();
+
+        /* Get current master key index. */
+        g_currentMasterKeyIndex = (NcaKeyGeneration_Current - 1);
+
+        /* Determine if our master key vectors are outdated. */
+        g_outdatedMasterKeyVectors = (g_atmosphereKeyGeneration > g_currentMasterKeyIndex);
+
+        /* Determine if we're dealing with a lower master key requirement. */
+        g_lowMasterKeyRequirement = (g_atmosphereKeyGeneration < g_currentMasterKeyIndex);
 
         /* Get eTicket RSA device key. */
         Result rc = setcalGetEticketDeviceKey(&g_eTicketRsaDeviceKey);
@@ -601,8 +611,8 @@ static bool keysReadKeysFromFile(void)
             PARSE_HEX_KEY(eticket_rsa_kek_name, g_nxKeyset.eticket_rsa_kek, eticket_rsa_kek_available = true; continue);
         }
 
-        /* Parse master keys, starting with the last known one. */
-        for(u8 i = (NcaKeyGeneration_Current - 1); i < NcaKeyGeneration_Max; i++)
+        /* Parse master keys, starting with the minimum required one (if dealing with a lower master key requirement) or the last known one. */
+        for(u8 i = (g_lowMasterKeyRequirement ? g_atmosphereKeyGeneration : g_currentMasterKeyIndex); i < NcaKeyGeneration_Max; i++)
         {
             PARSE_HEX_KEY_WITH_INDEX("master_key", i, g_nxKeyset.master_keys[i], break);
         }
@@ -637,86 +647,104 @@ static bool keysReadKeysFromFile(void)
 
 static bool keysDeriveMasterKeys(void)
 {
-    u8 tmp[AES_128_KEY_SIZE] = {0};
-    const u8 current_mkey_index = (NcaKeyGeneration_Current - 1); // Convert into an index.
-    const bool is_dev = utilsIsDevelopmentUnit(), is_mariko = utilsIsMarikoUnit(), outdated_mkey_vectors = (g_atmosphereKeyGeneration > current_mkey_index);
-    bool latest_mkey_available = false;
+    u8 tmp[AES_128_KEY_SIZE] = {0}, current_mkey_index = g_currentMasterKeyIndex;
+    const bool is_dev = utilsIsDevelopmentUnit(), is_mariko = utilsIsMarikoUnit();
+    bool current_mkey_available = false;
 
-    /* Check if the latest master key was retrieved. */
-    if (outdated_mkey_vectors)
+    if (current_mkey_index != g_atmosphereKeyGeneration) LOG_MSG_WARNING("Current key generation mismatch detected (%02X != %02X).", current_mkey_index, g_atmosphereKeyGeneration);
+
+    if (g_outdatedMasterKeyVectors)
     {
         /* Our master key vectors are outdated. */
-        /* This means the user is running both a HOS version with a newer key generation and an Atmosphère release with support for said HOS version. */
+        /* This means the user is running both a HOS version with a newer master key generation and an Atmosphère release with support for said HOS version. */
         /* Not everything is lost, though. We just need to check if we parsed all master keys between the last one we know and the one Atmosphère supports (inclusive range). */
         /* However, since we have no master key vectors for the additional master key(s), we can't reliably test them. */
-        latest_mkey_available = true;
+        current_mkey_available = true;
 
         for(u8 i = current_mkey_index; i <= g_atmosphereKeyGeneration; i++)
         {
             if (keysIsKeyEmpty(g_nxKeyset.master_keys[i]))
             {
-                latest_mkey_available = false;
+                current_mkey_available = false;
                 break;
             }
         }
-    } else {
-        /* Our master key vectors are up-to-date. */
-        /* Just checking if we have the latest known master key should suffice. */
-        latest_mkey_available = !keysIsKeyEmpty(g_nxKeyset.master_keys[current_mkey_index]);
-    }
 
-    /* Only derive the latest master key if it hasn't been populated already. */
-    if (!latest_mkey_available)
-    {
-        /* Bail out immediately if our master key vectors are outdated. */
-        if (outdated_mkey_vectors)
+        /* Bail out immediately if the newer master keys are unavailable. */
+        if (!current_mkey_available)
         {
-            LOG_MSG_ERROR("Unable to derive master keys.\r\n" \
-                          "PKG1 key generation (%02X) is higher than the last known key generation (%02X).\r\n" \
-                          "Furthermore, one or more of the newer master keys are not available in the keys\r\n" \
-                          "file. If you haven't already, please get an updated build at:\r\n%s\r\n%s", \
+            LOG_MSG_ERROR("PKG1 key generation (%02X) is higher than the last known\r\n" \
+                          "key generation (%02X). Furthermore, one or more of the newer master keys are not\r\n" \
+                          "available in the keys file. Please redump your console keys and get an updated\r\n" \
+                          APP_TITLE " build before trying again. You can get newer builds at:\r\n%s\r\n%s", \
                           g_atmosphereKeyGeneration, current_mkey_index, PRERELEASE_URL, DISCORD_SERVER_URL);
             return false;
         }
+    } else {
+        /* Our master key vectors are up-to-date. */
+        /* However, we may also be running under a console with an older HOS version and a lower master key generation. */
+        /* If this is the case, we'll need to adjust the current master key index to match Atmosphére's key generation value. */
+        /* There really is no point in demanding the most up-to-date master key under lower firmware versions. */
+        if (g_lowMasterKeyRequirement) current_mkey_index = g_atmosphereKeyGeneration;
 
-        LOG_MSG_WARNING("Latest known master key (%02X) unavailable. Latest master key derivation will be carried out.", current_mkey_index);
+        /* Now then, just checking if we have the current master key should suffice. */
+        current_mkey_available = !keysIsKeyEmpty(g_nxKeyset.master_keys[current_mkey_index]);
 
-        /* Derive the latest master KEK. */
+        /* Bail out if we're dealing with a lower master key generation and we don't have its master key. */
+        /* This is because current master key derivation depends on generation-specific master KEKs, and we only hardcode the last known one. */
+        if (!current_mkey_available && g_lowMasterKeyRequirement)
+        {
+            LOG_MSG_ERROR("\"master_key_%02x\" unavailable! Unable to derive lower\r\n" \
+                          "master keys. Please redump your console keys and try again.", current_mkey_index);
+            return false;
+        }
+    }
+
+    /* Derive current master key if it's not populated. */
+    /* We should only enter this conditional block if Atmosphère's key generation matches our last known master key generation. */
+    if (!current_mkey_available)
+    {
+        LOG_MSG_WARNING("Current master key (%02X) unavailable. It will be derived.", current_mkey_index);
+
+        /* Derive the current master KEK. */
         if (is_mariko)
         {
             if (!g_marikoKekAvailable)
             {
-                LOG_MSG_ERROR("\"mariko_kek\" unavailable! Unable to derive master keys.");
+                LOG_MSG_ERROR("\"mariko_kek\" unavailable! Unable to derive current\r\n" \
+                              "master key. You may need to manually derive it using PartialAesKeyCrack,\r\n" \
+                              "and/or redump your console keys. Please try again afterwards.");
                 return false;
             }
 
-            /* Derive the latest master KEK using the hardcoded Mariko master KEK source and the Mariko KEK. */
+            /* Derive the current master KEK using the hardcoded Mariko master KEK source and the Mariko KEK. */
             aes128EcbCrypt(tmp, is_dev ? g_marikoMasterKekSourceDev : g_marikoMasterKekSourceProd, g_nxKeyset.mariko_kek, false);
         } else {
             if (!g_tsecRootKeyAvailable)
             {
-                LOG_MSG_ERROR("\"tsec_root_key_%02X\" unavailable! Unable to derive master keys.", TSEC_ROOT_KEY_VERSION);
+                LOG_MSG_ERROR("\"tsec_root_key_%02x\" unavailable! Unable to derive\r\n" \
+                              "current master key. Please redump your console keys and try again.", TSEC_ROOT_KEY_VERSION);
                 return false;
             }
 
-            /* Derive the latest master KEK using the hardcoded Erista master KEK source and the TSEC root key. */
+            /* Derive the current master KEK using the hardcoded Erista master KEK source and the TSEC root key. */
             aes128EcbCrypt(tmp, g_eristaMasterKekSource, g_nxKeyset.tsec_root_key, false);
         }
 
-        /* Derive the latest master key using the hardcoded master key source and the latest master KEK. */
+        /* Derive the current master key using the hardcoded master key source and the current master KEK. */
         aes128EcbCrypt(g_nxKeyset.master_keys[current_mkey_index], g_masterKeySource, tmp, false);
     }
 
-    /* Derive all lower master keys using the latest master key and the master key vectors. */
-    for(u8 i = current_mkey_index; i > NcaKeyGeneration_Since100NUP; i--) aes128EcbCrypt(g_nxKeyset.master_keys[i - 1], is_dev ? g_masterKeyVectorsDev[i] : g_masterKeyVectorsProd[i], \
-                                                                                        g_nxKeyset.master_keys[i], false);
+    /* Derive all lower master keys using the current master key and the master key vectors. */
+    for(u8 i = current_mkey_index; i > 0; i--) aes128EcbCrypt(g_nxKeyset.master_keys[i - 1], is_dev ? g_masterKeyVectorsDev[i] : g_masterKeyVectorsProd[i], \
+                                                              g_nxKeyset.master_keys[i], false);
 
     /* Check if we derived the right keys. */
-    aes128EcbCrypt(tmp, is_dev ? g_masterKeyVectorsDev[NcaKeyGeneration_Since100NUP] : g_masterKeyVectorsProd[NcaKeyGeneration_Since100NUP], \
-                   g_nxKeyset.master_keys[NcaKeyGeneration_Since100NUP], false);
+    aes128EcbCrypt(tmp, is_dev ? g_masterKeyVectorsDev[0] : g_masterKeyVectorsProd[0], g_nxKeyset.master_keys[0], false);
 
     bool ret = keysIsKeyEmpty(tmp);
-    if (!ret) LOG_MSG_ERROR("Master key derivation failed! Wrong keys?");
+    if (!ret) LOG_MSG_ERROR("Derivation of %u lower master key(s) failed! Wrong keys?\r\n" \
+                            "Please redump your console keys and try again.", current_mkey_index);
 
     return ret;
 }
@@ -764,9 +792,9 @@ static bool keysDerivePerGenerationKeys(void)
         const u8 mkey_index = (i - 1);
 
         /* Make sure we're not dealing with an unpopulated master key entry. */
-        if (i > NcaKeyGeneration_Current && keysIsKeyEmpty(g_nxKeyset.master_keys[mkey_index]))
+        if (keysIsKeyEmpty(g_nxKeyset.master_keys[mkey_index]))
         {
-            //LOG_MSG_DEBUG("\"master_key_%02X\" unavailable.", mkey_index);
+            //LOG_MSG_DEBUG("\"master_key_%02x\" unavailable.", mkey_index);
             continue;
         }
 
@@ -893,7 +921,7 @@ static bool keysGenerateAesKek(const u8 *kek_src, u8 key_generation, SmcGenerate
     /* Make sure this master key is available. */
     if (keysIsKeyEmpty(mkey))
     {
-        LOG_MSG_ERROR("\"master_key_%02X\" unavailable!", mkey_index);
+        LOG_MSG_ERROR("\"master_key_%02x\" unavailable!", mkey_index);
         return false;
     }
 

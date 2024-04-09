@@ -1044,7 +1044,7 @@ int main(int argc, char *argv[])
     updateTitleList(&g_systemTitlesMenu, &g_ncaMenu, true);
 
     Menu *cur_menu = &g_rootMenu;
-    u32 element_count = menuGetElementCount(cur_menu), page_size = 30;
+    u32 element_count = menuGetElementCount(cur_menu), page_size = 20;
 
     TitleApplicationMetadata *app_metadata = NULL;
 
@@ -6232,7 +6232,7 @@ static void nspThreadFunc(void *arg)
             goto end;
         }
 
-        consolePrint("%s #%u initialize nca ctx succeeded\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);
+        consolePrint("%s #%u initialize nca ctx succeeded\n", titleGetNcmContentTypeName(cur_nca_ctx->content_type), cur_nca_ctx->id_offset);
 
         // don't go any further with this nca if we can't access its fs data because it's pointless
         if (cur_nca_ctx->rights_id_available && !cur_nca_ctx->titlekey_retrieved && !no_titlekey_confirmation)
@@ -6286,7 +6286,7 @@ static void nspThreadFunc(void *arg)
             {
                 case NcmContentType_Program:
                 {
-                    // don't proceed if we didn't allocate programinfo ctx or if we're dealing with a sparse layer
+                    // don't proceed if we didn't allocate programinfo ctx
                     if (!program_count || !program_info_ctx) break;
 
                     ProgramInfoContext *cur_program_info_ctx = &(program_info_ctx[program_idx]);
@@ -6383,7 +6383,7 @@ static void nspThreadFunc(void *arg)
         goto end;
     }
 
-    bool retrieve_tik_cert = (!remove_titlekey_crypto && tik.size > 0);
+    bool retrieve_tik_cert = (!remove_titlekey_crypto && tikIsValidTicket(&tik));
     if (retrieve_tik_cert)
     {
         if (!(tik_common_block = tikGetCommonBlockFromTicket(&tik)))
