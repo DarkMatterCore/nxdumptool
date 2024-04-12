@@ -1,7 +1,7 @@
 /*
  * error_frame.hpp
  *
- * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * Based on crash_frame.hpp from Borealis.
  *

@@ -2,7 +2,7 @@
  * key_sources.h
  *
  * Copyright (c) 2019-2023, shchmue.
- * Copyright (c) 2020-2023, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* Last updated on: 2023-10-11. */
-/* Current key generation: NcaKeyGeneration_Since1700NUP (17 / 10). */
+/* Last updated on: 2024-03-31. */
+/* Current key generation: NcaKeyGeneration_Since1800NUP (18 / 11). */
 
 #pragma once
 
