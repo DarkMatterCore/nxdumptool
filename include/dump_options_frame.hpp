@@ -73,7 +73,7 @@ namespace nxdt::views
 
             void UpdateRawFileName(void)
             {
-                if (raw_filename) free(this->raw_filename);
+                if (this->raw_filename) free(this->raw_filename);
                 this->raw_filename = strdup(this->filename_input->getValue().c_str());
             }
 
@@ -92,7 +92,7 @@ namespace nxdt::views
                     std::string device_str = (std::string(cur_ums_device.name) + ", ");
                     if (cur_ums_device.product_name[0]) device_str += (std::string(cur_ums_device.product_name) + ", ");
                     device_str += fmt::format("LUN {}, FS #{}, {}", cur_ums_device.lun, cur_ums_device.fs_idx, LIBUSBHSFS_FS_TYPE_STR(cur_ums_device.fs_type));
-                    storages->push_back(brls::i18n::getStr("dump_options/output_storage/value_02"_i18n, device_str));
+                    storages->push_back(brls::i18n::getStr("dump_options/output_storage/value_02", device_str));
                 }
 
                 if (this->output_storage->getSelectedValue() > ConfigOutputStorage_UsbHost)
@@ -152,7 +152,7 @@ namespace nxdt::views
                                                                     "dump_options/output_storage/value_00"_i18n,
                                                                     "dump_options/output_storage/value_01"_i18n
                                                                 }, configGetInteger("output_storage"),
-                                                                brls::i18n::getStr("dump_options/output_storage/description"_i18n, GITHUB_REPOSITORY_URL));
+                                                                brls::i18n::getStr("dump_options/output_storage/description", GITHUB_REPOSITORY_URL));
 
                 /* Subscribe to SelectListItem's value selected event. */
                 this->output_storage->getValueSelectedEvent()->subscribe([this](int selected) {
@@ -292,7 +292,7 @@ namespace nxdt::views
                                                                             "NSWDB",
                                                                             "No-Intro"
                                                                         }, configGetInteger("gamecard/checksum_lookup_method"),
-                                                                        brls::i18n::getStr("dump_options/checksum_lookup_method/description"_i18n,
+                                                                        brls::i18n::getStr("dump_options/checksum_lookup_method/description",
                                                                                            "dump_options/calculate_checksum/label"_i18n, "NSWDB", NSWDB_XML_NAME, "No-Intro"));
 
                 /* Subscribe to SelectListItem's value selected event. */

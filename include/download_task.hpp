@@ -28,23 +28,12 @@
 
 #include "core/nxdt_utils.h"
 #include "async_task.hpp"
+#include "eta_progress_display.hpp"
 
 namespace nxdt::tasks
 {
-    /* Used to hold download progress info. */
-    typedef struct {
-        /// Fields set by DownloadTask::HttpProgressCallback().
-        size_t size;            ///< Total download size.
-        size_t current;         ///< Number of bytes downloaded thus far.
-        int percentage;         ///< Progress percentage.
-
-        /// Fields set by DownloadTask::onProgressUpdate().
-        double speed;           ///< Download speed expressed in bytes per second.
-        std::string eta;        ///< Formatted ETA string.
-    } DownloadTaskProgress;
-
     /* Custom event type used to push download progress updates. */
-    typedef brls::Event<const DownloadTaskProgress&> DownloadProgressEvent;
+    typedef brls::Event<const nxdt::views::EtaProgressInfo&> DownloadProgressEvent;
 
     /* Used to hold a buffer + size pair with downloaded data. */
     typedef std::pair<char*, size_t> DownloadDataResult;
@@ -54,7 +43,7 @@ namespace nxdt::tasks
     /* This internal RepeatingTask is guaranteed to work on the UI thread, and it is also automatically unregistered on object destruction. */
     /* Progress updates are pushed through a DownloadProgressEvent. Make sure to register all event listeners before executing the task. */
     template<typename Result, typename... Params>
-    class DownloadTask: public AsyncTask<DownloadTaskProgress, Result, Params...>
+    class DownloadTask: public AsyncTask<nxdt::views::EtaProgressInfo, Result, Params...>
     {
         public:
             /* Handles task progress updates on the calling thread. */
@@ -90,7 +79,7 @@ namespace nxdt::tasks
             void onCancelled(const Result& result) override final;
             void onPostExecute(const Result& result) override final;
             void onPreExecute(void) override final;
-            void onProgressUpdate(const DownloadTaskProgress& progress) override final;
+            void onProgressUpdate(const nxdt::views::EtaProgressInfo& progress) override final;
 
         public:
             DownloadTask(void);
@@ -153,7 +142,7 @@ namespace nxdt::tasks
         NX_IGNORE_ARG(ultotal);
         NX_IGNORE_ARG(ulnow);
 
-        DownloadTaskProgress progress = {0};
+        nxdt::views::EtaProgressInfo progress = {0};
         DownloadTask<Result, Params...>* task = static_cast<DownloadTask<Result, Params...>*>(clientp);
 
         /* Don't proceed if we're dealing with an invalid task pointer, or if the task has been cancelled. */
@@ -212,7 +201,7 @@ namespace nxdt::tasks
     }
 
     template<typename Result, typename... Params>
-    void DownloadTask<Result, Params...>::onProgressUpdate(const DownloadTaskProgress& progress)
+    void DownloadTask<Result, Params...>::onProgressUpdate(const nxdt::views::EtaProgressInfo& progress)
     {
         AsyncTaskStatus status = this->getStatus();
 
@@ -235,7 +224,7 @@ namespace nxdt::tasks
         double speed = (diff_current / diff_time_conv);
 
         /* Fill struct. */
-        DownloadTaskProgress new_progress = progress;
+        nxdt::views::EtaProgressInfo new_progress = progress;
         new_progress.speed = speed;
 
         if (progress.size)

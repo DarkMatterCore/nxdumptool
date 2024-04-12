@@ -27,32 +27,10 @@
 #include <borealis.hpp>
 
 #include "root_view.hpp"
+#include "eta_progress_display.hpp"
 
 namespace nxdt::views
 {
-    /* Used in OptionsTabUpdateFileDialog and OptionsTabUpdateApplicationFrame to display the update progress. */
-    class OptionsTabUpdateProgress: public brls::View
-    {
-        private:
-            brls::ProgressDisplay *progress_display = nullptr;
-            brls::Label *size_lbl = nullptr, *speed_eta_lbl = nullptr;
-
-            std::string GetFormattedSizeString(double size);
-
-        protected:
-            void draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx) override;
-            void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
-
-        public:
-            OptionsTabUpdateProgress(void);
-            ~OptionsTabUpdateProgress(void);
-
-            void SetProgress(const nxdt::tasks::DownloadTaskProgress& progress);
-
-            void willAppear(bool resetState = false) override;
-            void willDisappear(bool resetState = false) override;
-    };
-
     /* Update file dialog. */
     class OptionsTabUpdateFileDialog: public brls::Dialog
     {
@@ -73,9 +51,9 @@ namespace nxdt::views
             size_t json_buf_size = 0;
             UtilsGitHubReleaseJsonData json_data = {0};
 
-            brls::Label *wait_lbl = nullptr;                        /// First stage.
-            brls::List *changelog_list = nullptr;                   /// Second stage.
-            OptionsTabUpdateProgress *update_progress = nullptr;    /// Third stage.
+            brls::Label *wait_lbl = nullptr;                /// First stage.
+            brls::List *changelog_list = nullptr;           /// Second stage.
+            EtaProgressDisplay *update_progress = nullptr;  /// Third stage.
 
             nxdt::tasks::DownloadFileTask nro_task;
 

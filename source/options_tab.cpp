@@ -31,114 +31,10 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    OptionsTabUpdateProgress::OptionsTabUpdateProgress(void)
-    {
-        this->progress_display = new brls::ProgressDisplay();
-        this->progress_display->setParent(this);
-
-        this->size_lbl = new brls::Label(brls::LabelStyle::MEDIUM, "", false);
-        this->size_lbl->setVerticalAlign(NVG_ALIGN_BOTTOM);
-        this->size_lbl->setParent(this);
-
-        this->speed_eta_lbl = new brls::Label(brls::LabelStyle::MEDIUM, "", false);
-        this->speed_eta_lbl->setVerticalAlign(NVG_ALIGN_TOP);
-        this->speed_eta_lbl->setParent(this);
-    }
-
-    OptionsTabUpdateProgress::~OptionsTabUpdateProgress(void)
-    {
-        delete this->progress_display;
-        delete this->size_lbl;
-        delete this->speed_eta_lbl;
-    }
-
-    void OptionsTabUpdateProgress::SetProgress(const nxdt::tasks::DownloadTaskProgress& progress)
-    {
-        /* Update progress percentage. */
-        this->progress_display->setProgress(progress.percentage, 100);
-
-        /* Update size string. */
-        this->size_lbl->setText(fmt::format("{} / {}", this->GetFormattedSizeString(static_cast<double>(progress.current)), \
-                                                         progress.size ? this->GetFormattedSizeString(static_cast<double>(progress.size)) : "?"));
-
-        /* Update speed / ETA string. */
-        if (progress.eta.length())
-        {
-            this->speed_eta_lbl->setText(fmt::format("{}/s - ETA: {}", this->GetFormattedSizeString(progress.speed), progress.eta));
-        } else {
-            this->speed_eta_lbl->setText(fmt::format("{}/s", this->GetFormattedSizeString(progress.speed)));
-        }
-
-        this->invalidate();
-    }
-
-    void OptionsTabUpdateProgress::willAppear(bool resetState)
-    {
-        this->progress_display->willAppear(resetState);
-    }
-
-    void OptionsTabUpdateProgress::willDisappear(bool resetState)
-    {
-        this->progress_display->willDisappear(resetState);
-    }
-
-    void OptionsTabUpdateProgress::draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx)
-    {
-        /* Progress display. */
-        this->progress_display->frame(ctx);
-
-        /* Size label. */
-        this->size_lbl->frame(ctx);
-
-        /* Speed / ETA label. */
-        this->speed_eta_lbl->frame(ctx);
-    }
-
-    void OptionsTabUpdateProgress::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
-    {
-        unsigned elem_width = roundf(static_cast<float>(this->width) * 0.90f);
-
-        /* Progress display. */
-        this->progress_display->setBoundaries(
-            this->x + (this->width - elem_width) / 2,
-            this->y + (this->height - style->CrashFrame.buttonHeight) / 2,
-            elem_width,
-            style->CrashFrame.buttonHeight);
-
-        this->progress_display->invalidate(true);
-
-        /* Size label. */
-        this->size_lbl->setWidth(elem_width);
-        this->size_lbl->invalidate(true);
-
-        this->size_lbl->setBoundaries(
-            this->x + (this->width - this->size_lbl->getWidth()) / 2,
-            this->progress_display->getY() - this->progress_display->getHeight() / 8,
-            this->size_lbl->getWidth(),
-            this->size_lbl->getHeight());
-
-        /* Speed / ETA label. */
-        this->speed_eta_lbl->setWidth(elem_width);
-        this->speed_eta_lbl->invalidate(true);
-
-        this->speed_eta_lbl->setBoundaries(
-            this->x + (this->width - this->speed_eta_lbl->getWidth()) / 2,
-            this->progress_display->getY() + this->progress_display->getHeight() + this->progress_display->getHeight() / 8,
-            this->speed_eta_lbl->getWidth(),
-            this->speed_eta_lbl->getHeight());
-    }
-
-    std::string OptionsTabUpdateProgress::GetFormattedSizeString(double size)
-    {
-        char strbuf[0x40] = {0};
-        utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));
-        return std::string(strbuf);
-    }
-
     OptionsTabUpdateFileDialog::OptionsTabUpdateFileDialog(std::string path, std::string url, bool force_https, std::string success_str) : brls::Dialog(), success_str(success_str)
     {
         /* Set content view. */
-        OptionsTabUpdateProgress *update_progress = new OptionsTabUpdateProgress();
+        EtaProgressDisplay *update_progress = new EtaProgressDisplay();
         this->setContentView(update_progress);
 
         /* Add cancel button. */
@@ -154,9 +50,9 @@ namespace nxdt::views
         this->setCancelable(false);
 
         /* Subscribe to the download task. */
-        this->download_task.RegisterListener([this, update_progress](const nxdt::tasks::DownloadTaskProgress& progress) {
+        this->download_task.RegisterListener([this, update_progress](const EtaProgressInfo& progress) {
             /* Update progress. */
-            update_progress->SetProgress(progress);
+            update_progress->setProgress(progress);
 
             /* Check if the download task has finished. */
             if (this->download_task.isFinished())
@@ -194,11 +90,11 @@ namespace nxdt::views
         this->addStage(this->changelog_list);
 
         /* Add third stage. */
-        this->update_progress = new OptionsTabUpdateProgress();
+        this->update_progress = new EtaProgressDisplay();
         this->addStage(this->update_progress);
 
         /* Subscribe to the JSON task. */
-        this->json_task.RegisterListener([this](const nxdt::tasks::DownloadTaskProgress& progress) {
+        this->json_task.RegisterListener([this](const EtaProgressInfo& progress) {
             /* Return immediately if the JSON task hasn't finished. */
             if (!this->json_task.isFinished()) return;
 
@@ -293,7 +189,7 @@ namespace nxdt::views
         std::stringstream ss(std::string(this->json_data.changelog));
 
         /* Display version string at the top. */
-        FocusableLabel *version_lbl = new FocusableLabel(true, false, brls::LabelStyle::CRASH, std::string(this->json_data.version), true);
+        FocusableLabel *version_lbl = new FocusableLabel(false, false, brls::LabelStyle::CRASH, std::string(this->json_data.version), true);
         version_lbl->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->changelog_list->addView(version_lbl);
 
@@ -356,9 +252,9 @@ namespace nxdt::views
         this->updateActionHint(brls::Key::B, "options_tab/update_dialog/cancel"_i18n);
 
         /* Subscribe to the NRO task. */
-        this->nro_task.RegisterListener([this](const nxdt::tasks::DownloadTaskProgress& progress) {
+        this->nro_task.RegisterListener([this](const EtaProgressInfo& progress) {
             /* Update progress. */
-            this->update_progress->SetProgress(progress);
+            this->update_progress->setProgress(progress);
 
             /* Check if the download task has finished. */
             if (this->nro_task.isFinished())
