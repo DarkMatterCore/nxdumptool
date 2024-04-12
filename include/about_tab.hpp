@@ -33,7 +33,7 @@ namespace nxdt::views
     class AboutTabLabel: public FocusableLabel
     {
         public:
-            AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center = false) : FocusableLabel(labelStyle, text, true)
+            AboutTabLabel(brls::LabelStyle labelStyle, std::string text, bool center = false) : FocusableLabel(false, false, labelStyle, text, true)
             {
                 if (center) this->setHorizontalAlign(NVG_ALIGN_CENTER);
             }

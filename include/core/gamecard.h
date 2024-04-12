@@ -307,7 +307,7 @@ bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
 bool gamecardGetHeader(GameCardHeader *out);
 
 /// Fills the provided GameCardInfo pointer.
-bool gamecardGetDecryptedCardInfoArea(GameCardInfo *out);
+bool gamecardGetPlaintextCardInfoArea(GameCardInfo *out);
 
 /// Fills the provided FsGameCardCertificate pointer.
 /// This area can also be read using gamecardReadStorage(), starting at GAMECARD_CERTIFICATE_OFFSET.

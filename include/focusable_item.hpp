@@ -70,14 +70,14 @@ namespace nxdt::views
     {
         public:
             template<typename... Types>
-            FocusableLabel(Types... args) : FocusableItem<brls::Label>(false, false, args...) { }
+            FocusableLabel(bool highlight, bool highlight_bg, Types... args) : FocusableItem<brls::Label>(highlight, highlight_bg, args...) { }
     };
 
     class FocusableTable: public FocusableItem<brls::Table>
     {
         public:
             template<typename... Types>
-            FocusableTable(Types... args) : FocusableItem<brls::Table>(true, false, args...) { }
+            FocusableTable(bool highlight, bool highlight_bg, Types... args) : FocusableItem<brls::Table>(highlight, highlight_bg, args...) { }
     };
 }
 

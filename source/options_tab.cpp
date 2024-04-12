@@ -293,7 +293,7 @@ namespace nxdt::views
         std::stringstream ss(std::string(this->json_data.changelog));
 
         /* Display version string at the top. */
-        FocusableLabel *version_lbl = new FocusableLabel(brls::LabelStyle::CRASH, std::string(this->json_data.version), true);
+        FocusableLabel *version_lbl = new FocusableLabel(true, false, brls::LabelStyle::CRASH, std::string(this->json_data.version), true);
         version_lbl->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->changelog_list->addView(version_lbl);
 
@@ -327,7 +327,7 @@ namespace nxdt::views
             /* Add line to the changelog view. */
             if (!(line % 2))
             {
-                this->changelog_list->addView(new FocusableLabel(brls::LabelStyle::SMALL, item, true));
+                this->changelog_list->addView(new FocusableLabel(false, false, brls::LabelStyle::SMALL, item, true));
             } else {
                 this->changelog_list->addView(new brls::Label(brls::LabelStyle::SMALL, item, true));
             }

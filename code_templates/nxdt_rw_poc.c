@@ -2641,7 +2641,7 @@ static bool saveGameCardCardInfo(void *userdata)
     u32 crc = 0;
     char *filename = NULL;
 
-    if (!gamecardGetDecryptedCardInfoArea(&gc_cardinfo))
+    if (!gamecardGetPlaintextCardInfoArea(&gc_cardinfo))
     {
         consolePrint("failed to get gamecard cardinfo\n");
         goto end;
@@ -3494,7 +3494,7 @@ static bool browseNintendoContentArchiveFsSection(void *userdata)
         pfs_ctx = (PartitionFileSystemContext*)fs_ctx;
         nca_fs_ctx = pfs_ctx->nca_fs_ctx;
 
-        snprintf(mount_name, MAX_ELEMENTS(mount_name), "%s", pfs_ctx->is_exefs ? "exefs" : "pfs");
+        snprintf(mount_name, MAX_ELEMENTS(mount_name), "%s", pfs_ctx->is_exefs ? "ncaexefs" : "ncapfs");
 
         if (!devoptabMountPartitionFileSystemDevice(pfs_ctx, mount_name))
         {

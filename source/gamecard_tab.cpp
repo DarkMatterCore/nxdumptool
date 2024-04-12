@@ -128,7 +128,7 @@ namespace nxdt::views
 
         /* Information about how to handle HOS launch errors. */
         /* TODO: remove this if we ever find a way to fix this issue. */
-        FocusableLabel *launch_error_info = new FocusableLabel(brls::LabelStyle::DESCRIPTION, "gamecard_tab/list/launch_error_info"_i18n, true);
+        FocusableLabel *launch_error_info = new FocusableLabel(true, false, brls::LabelStyle::DESCRIPTION, "gamecard_tab/list/launch_error_info"_i18n, true);
         launch_error_info->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->list->addView(launch_error_info);
 
@@ -160,7 +160,7 @@ namespace nxdt::views
         /* Populate gamecard properties table. */
         this->list->addView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
 
-        FocusableTable *properties_table = new FocusableTable();
+        FocusableTable *properties_table = new FocusableTable(true, false);
         brls::TableRow *capacity = properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/capacity"_i18n);
         brls::TableRow *total_size = properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/total_size"_i18n);
         brls::TableRow *trimmed_size = properties_table->addRow(brls::TableRowType::BODY, "gamecard_tab/list/properties_table/trimmed_size"_i18n);
@@ -176,7 +176,7 @@ namespace nxdt::views
         trimmed_size->setValue(this->GetFormattedSizeString(&gamecardGetTrimmedSize));
 
         gamecardGetHeader(&card_header);
-        gamecardGetDecryptedCardInfoArea(&card_info);
+        gamecardGetPlaintextCardInfoArea(&card_info);
         gamecardGetCardIdSet(&card_id_set);
 
         const SystemVersion upp_version = card_info.upp_version.system_version;
@@ -257,20 +257,43 @@ namespace nxdt::views
 
         this->list->addView(dump_card_image);
 
-        brls::ListItem *dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, "gamecard_tab/list/dump_certificate/description"_i18n);
-        this->list->addView(dump_certificate);
+        this->list->addView(new brls::ListItemGroupSpacing(true));
 
-        brls::ListItem *dump_header = new brls::ListItem("gamecard_tab/list/dump_header/label"_i18n, "gamecard_tab/list/dump_header/description"_i18n);
-        this->list->addView(dump_header);
+        brls::Label *advanced_disclaimer = new brls::Label(brls::LabelStyle::DESCRIPTION, "gamecard_tab/list/advanced_disclaimer"_i18n, true);
+        advanced_disclaimer->setHorizontalAlign(NVG_ALIGN_CENTER);
+        this->list->addView(advanced_disclaimer);
 
-        brls::ListItem *dump_decrypted_cardinfo = new brls::ListItem("gamecard_tab/list/dump_decrypted_cardinfo/label"_i18n, "gamecard_tab/list/dump_decrypted_cardinfo/description"_i18n);
-        this->list->addView(dump_decrypted_cardinfo);
+        this->list->addView(new brls::ListItemGroupSpacing(true));
 
         brls::ListItem *dump_initial_data = new brls::ListItem("gamecard_tab/list/dump_initial_data/label"_i18n, "gamecard_tab/list/dump_initial_data/description"_i18n);
         this->list->addView(dump_initial_data);
 
+        brls::ListItem *dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, fmt::format("gamecard_tab/list/dump_certificate/description"_i18n, GAMECARD_CERTIFICATE_OFFSET / GAMECARD_PAGE_SIZE));
+        this->list->addView(dump_certificate);
+
+        brls::ListItem *dump_card_id_set = new brls::ListItem("gamecard_tab/list/dump_card_id_set/label"_i18n, "gamecard_tab/list/dump_card_id_set/description"_i18n);
+        this->list->addView(dump_card_id_set);
+
+        brls::ListItem *dump_card_uid = new brls::ListItem("gamecard_tab/list/dump_card_uid/label"_i18n, "gamecard_tab/list/dump_card_uid/description"_i18n);
+        this->list->addView(dump_card_uid);
+
+        brls::ListItem *dump_header = new brls::ListItem("gamecard_tab/list/dump_header/label"_i18n, fmt::format("gamecard_tab/list/dump_header/description"_i18n, 0));
+        this->list->addView(dump_header);
+
+        brls::ListItem *dump_plaintext_cardinfo = new brls::ListItem("gamecard_tab/list/dump_plaintext_cardinfo/label"_i18n, "gamecard_tab/list/dump_plaintext_cardinfo/description"_i18n);
+        this->list->addView(dump_plaintext_cardinfo);
+
+        brls::ListItem *dump_specific_data = new brls::ListItem("gamecard_tab/list/dump_specific_data/label"_i18n, "gamecard_tab/list/dump_specific_data/description"_i18n);
+        this->list->addView(dump_specific_data);
+
         brls::ListItem *dump_hfs_partitions = new brls::ListItem("gamecard_tab/list/dump_hfs_partitions/label"_i18n, "gamecard_tab/list/dump_hfs_partitions/description"_i18n);
         this->list->addView(dump_hfs_partitions);
+
+        brls::ListItem *browse_hfs_partitions = new brls::ListItem("gamecard_tab/list/browse_hfs_partitions/label"_i18n, "gamecard_tab/list/browse_hfs_partitions/description"_i18n);
+        this->list->addView(browse_hfs_partitions);
+
+        brls::ListItem *dump_lafw = new brls::ListItem("gamecard_tab/list/dump_lafw/label"_i18n, "gamecard_tab/list/dump_lafw/description"_i18n);
+        this->list->addView(dump_lafw);
 
         /* Update focus stack, if needed. */
         if (focus_stack_index > -1) this->UpdateFocusStackViewAtIndex(focus_stack_index, this->GetListFirstFocusableChild());
