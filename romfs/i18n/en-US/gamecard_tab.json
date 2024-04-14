@@ -39,7 +39,7 @@
 
         "dump_initial_data": {
             "label": "Dump InitialData area",
-            "description": "The InitialData area holds cryptographic information used by the Lotus ASIC to communicate with the gamecard.\nIt can't be dumped through normal means -- it's not part of the storage areas from gamecard images."
+            "description": "The InitialData area holds cryptographic information used by the Lotus ASIC to communicate with the gamecard.\nIt can't be dumped through normal means — it's not part of the storage areas from gamecard images."
         },
 
         "dump_certificate": {
@@ -49,12 +49,12 @@
 
         "dump_card_id_set": {
             "label": "Dump card ID set",
-            "description": "The card ID set is composed of three 32-bit integers that hold information such as the gamecard's memory type and manufacturer.\nIt can't be dumped through normal means -- it's not part of the storage areas from gamecard images."
+            "description": "The card ID set is composed of three 32-bit integers that hold information such as the gamecard's memory type and manufacturer.\nIt can't be dumped through normal means — it's not part of the storage areas from gamecard images."
         },
 
         "dump_card_uid": {
             "label": "Dump card UID",
-            "description": "The card UID is a 64-byte long area that serves as a unique identifier for the gamecard. It's mostly used in security contexts.\nIt can't be dumped through normal means -- it's not part of the storage areas from gamecard images."
+            "description": "The card UID is a 64-byte long area that serves as a unique identifier for the gamecard. It's mostly used in security contexts.\nIt can't be dumped through normal means — it's not part of the storage areas from gamecard images."
         },
 
         "dump_header": {

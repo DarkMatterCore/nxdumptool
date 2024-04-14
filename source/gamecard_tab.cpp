@@ -252,7 +252,9 @@ namespace nxdt::views
             icon->setImage(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
             icon->setScaleType(brls::ImageScaleType::SCALE);
 
-            brls::Application::pushView(new DumpOptionsFrame(this->root_view, "gamecard_tab/list/dump_card_image/label"_i18n, icon, raw_filename, ".xci"), brls::ViewAnimation::SLIDE_LEFT);
+            brls::Application::pushView(new DumpOptionsFrame(this->root_view, "gamecard_tab/list/dump_card_image/label"_i18n, icon, std::string(raw_filename), ".xci"), brls::ViewAnimation::SLIDE_LEFT);
+
+            free(raw_filename);
         });
 
         this->list->addView(dump_card_image);

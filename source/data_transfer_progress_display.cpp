@@ -1,5 +1,5 @@
 /*
- * eta_progress_display.cpp
+ * data_transfer_progress_display.cpp
  *
  * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -19,15 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <nxdt_utils.h>
-#include <eta_progress_display.hpp>
-
-namespace i18n = brls::i18n;    /* For getStr(). */
-using namespace i18n::literals; /* For _i18n. */
+#include <data_transfer_progress_display.hpp>
 
 namespace nxdt::views
 {
-    EtaProgressDisplay::EtaProgressDisplay(void)
+    DataTransferProgressDisplay::DataTransferProgressDisplay(void)
     {
         this->progress_display = new brls::ProgressDisplay();
         this->progress_display->setParent(this);
@@ -41,14 +37,14 @@ namespace nxdt::views
         this->speed_eta_lbl->setParent(this);
     }
 
-    EtaProgressDisplay::~EtaProgressDisplay(void)
+    DataTransferProgressDisplay::~DataTransferProgressDisplay(void)
     {
         delete this->progress_display;
         delete this->size_lbl;
         delete this->speed_eta_lbl;
     }
 
-    void EtaProgressDisplay::draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx)
+    void DataTransferProgressDisplay::draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx)
     {
         /* Progress display. */
         this->progress_display->frame(ctx);
@@ -60,7 +56,7 @@ namespace nxdt::views
         this->speed_eta_lbl->frame(ctx);
     }
 
-    void EtaProgressDisplay::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
+    void DataTransferProgressDisplay::layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash)
     {
         unsigned elem_width = roundf(static_cast<float>(this->width) * 0.90f);
 
@@ -94,17 +90,17 @@ namespace nxdt::views
             this->speed_eta_lbl->getHeight());
     }
 
-    void EtaProgressDisplay::setProgress(const EtaProgressInfo& progress)
+    void DataTransferProgressDisplay::setProgress(const nxdt::tasks::DataTransferProgress& progress)
     {
         /* Update progress percentage. */
         this->progress_display->setProgress(progress.percentage, 100);
 
         /* Update size string. */
-        this->size_lbl->setText(fmt::format("{} / {}", this->GetFormattedSizeString(static_cast<double>(progress.current)), \
-                                                       progress.size ? this->GetFormattedSizeString(static_cast<double>(progress.size)) : "?"));
+        this->size_lbl->setText(fmt::format("{} / {}", this->GetFormattedSizeString(static_cast<double>(progress.xfer_size)), \
+                                                       progress.total_size ? this->GetFormattedSizeString(static_cast<double>(progress.total_size)) : "?"));
 
         /* Update speed / ETA string. */
-        if (progress.eta.length())
+        if (!progress.eta.empty())
         {
             this->speed_eta_lbl->setText(fmt::format("{}/s - ETA: {}", this->GetFormattedSizeString(progress.speed), progress.eta));
         } else {
@@ -114,17 +110,17 @@ namespace nxdt::views
         this->invalidate();
     }
 
-    void EtaProgressDisplay::willAppear(bool resetState)
+    void DataTransferProgressDisplay::willAppear(bool resetState)
     {
         this->progress_display->willAppear(resetState);
     }
 
-    void EtaProgressDisplay::willDisappear(bool resetState)
+    void DataTransferProgressDisplay::willDisappear(bool resetState)
     {
         this->progress_display->willDisappear(resetState);
     }
 
-    std::string EtaProgressDisplay::GetFormattedSizeString(double size)
+    std::string DataTransferProgressDisplay::GetFormattedSizeString(double size)
     {
         char strbuf[0x40] = {0};
         utilsGenerateFormattedSizeString(size, strbuf, sizeof(strbuf));

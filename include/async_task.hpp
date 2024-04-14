@@ -84,7 +84,7 @@ namespace nxdt::tasks
                 /* Update status. */
                 this->m_status = AsyncTaskStatus::FINISHED;
 
-                /* Call appropiate post-execution function. */
+                /* Run appropiate post-execution callback. */
                 if (this->isCancelled())
                 {
                     this->onCancelled(this->m_result);
@@ -193,7 +193,7 @@ namespace nxdt::tasks
                 /* Update task status. */
                 this->m_status = AsyncTaskStatus::RUNNING;
 
-                /* Run onPreExecute() callback. */
+                /* Run pre-execution callback. */
                 this->onPreExecute();
 
                 /* Start asynchronous task on a new thread. */

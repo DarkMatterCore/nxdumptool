@@ -19,9 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <nxdt_utils.h>
 #include <options_tab.hpp>
-#include <root_view.hpp>
 #include <focusable_item.hpp>
 #include <title.h>
 #include <sstream>
@@ -34,11 +32,11 @@ namespace nxdt::views
     OptionsTabUpdateFileDialog::OptionsTabUpdateFileDialog(std::string path, std::string url, bool force_https, std::string success_str) : brls::Dialog(), success_str(success_str)
     {
         /* Set content view. */
-        EtaProgressDisplay *update_progress = new EtaProgressDisplay();
-        this->setContentView(update_progress);
+        this->update_progress = new DataTransferProgressDisplay();
+        this->setContentView(this->update_progress);
 
         /* Add cancel button. */
-        this->addButton("options_tab/update_dialog/cancel"_i18n, [this](brls::View* view) {
+        this->addButton("options_tab/update_dialog/cancel"_i18n, [&](brls::View* view) {
             /* Cancel download task. */
             this->download_task.cancel();
 
@@ -50,15 +48,15 @@ namespace nxdt::views
         this->setCancelable(false);
 
         /* Subscribe to the download task. */
-        this->download_task.RegisterListener([this, update_progress](const EtaProgressInfo& progress) {
+        this->download_task.RegisterListener([&](const nxdt::tasks::DataTransferProgress& progress) {
             /* Update progress. */
-            update_progress->setProgress(progress);
+            this->update_progress->setProgress(progress);
 
             /* Check if the download task has finished. */
-            if (this->download_task.isFinished())
+            if (this->download_task.IsFinished())
             {
                 /* Stop spinner. */
-                update_progress->willDisappear();
+                this->update_progress->willDisappear();
 
                 /* Update button label. */
                 this->setButtonText(0, "options_tab/update_dialog/close"_i18n);
@@ -90,15 +88,14 @@ namespace nxdt::views
         this->addStage(this->changelog_list);
 
         /* Add third stage. */
-        this->update_progress = new EtaProgressDisplay();
+        this->update_progress = new DataTransferProgressDisplay();
         this->addStage(this->update_progress);
 
         /* Subscribe to the JSON task. */
-        this->json_task.RegisterListener([this](const EtaProgressInfo& progress) {
+        this->json_task.RegisterListener([&](const nxdt::tasks::DataTransferProgress& progress) {
             /* Return immediately if the JSON task hasn't finished. */
-            if (!this->json_task.isFinished()) return;
+            if (!this->json_task.IsFinished()) return;
 
-            bool pop_view = false;
             std::string notification = "";
 
             /* Retrieve task result. */
@@ -115,9 +112,6 @@ namespace nxdt::views
                     /* Display changelog. */
                     this->DisplayChangelog();
                 } else {
-                    /* Update flag. */
-                    pop_view = true;
-
                     /* Set notification string. */
                     notification = "options_tab/notifications/up_to_date"_i18n;
                 }
@@ -125,15 +119,12 @@ namespace nxdt::views
                 /* Log downloaded data. */
                 LOG_DATA_ERROR(this->json_buf, this->json_buf_size, "Failed to parse GitHub release JSON. Downloaded data:");
 
-                /* Update flag. */
-                pop_view = true;
-
                 /* Set notification string. */
                 notification = "options_tab/notifications/github_json_failed"_i18n;
             }
 
             /* Pop view (if needed). */
-            if (pop_view)
+            if (!notification.empty())
             {
                 /* Display notification. */
                 brls::Application::notify(notification);
@@ -252,12 +243,12 @@ namespace nxdt::views
         this->updateActionHint(brls::Key::B, "options_tab/update_dialog/cancel"_i18n);
 
         /* Subscribe to the NRO task. */
-        this->nro_task.RegisterListener([this](const EtaProgressInfo& progress) {
+        this->nro_task.RegisterListener([&](const nxdt::tasks::DataTransferProgress& progress) {
             /* Update progress. */
             this->update_progress->setProgress(progress);
 
             /* Check if the download task has finished. */
-            if (this->nro_task.isFinished())
+            if (this->nro_task.IsFinished())
             {
                 /* Get NRO task result and immediately set application updated state if the task succeeded. */
                 bool ret = this->nro_task.get();

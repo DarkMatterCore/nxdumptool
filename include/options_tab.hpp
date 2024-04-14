@@ -24,10 +24,8 @@
 #ifndef __OPTIONS_TAB_HPP__
 #define __OPTIONS_TAB_HPP__
 
-#include <borealis.hpp>
-
 #include "root_view.hpp"
-#include "eta_progress_display.hpp"
+#include "data_transfer_progress_display.hpp"
 
 namespace nxdt::views
 {
@@ -35,6 +33,7 @@ namespace nxdt::views
     class OptionsTabUpdateFileDialog: public brls::Dialog
     {
         private:
+            DataTransferProgressDisplay *update_progress = nullptr;
             nxdt::tasks::DownloadFileTask download_task;
             std::string success_str;
 
@@ -51,9 +50,9 @@ namespace nxdt::views
             size_t json_buf_size = 0;
             UtilsGitHubReleaseJsonData json_data = {0};
 
-            brls::Label *wait_lbl = nullptr;                /// First stage.
-            brls::List *changelog_list = nullptr;           /// Second stage.
-            EtaProgressDisplay *update_progress = nullptr;  /// Third stage.
+            brls::Label *wait_lbl = nullptr;                        /// First stage.
+            brls::List *changelog_list = nullptr;                   /// Second stage.
+            DataTransferProgressDisplay *update_progress = nullptr; /// Third stage.
 
             nxdt::tasks::DownloadFileTask nro_task;
 

@@ -33,12 +33,6 @@
 #include "nxdt_devoptab.h"
 #include "fatfs/ff.h"
 
-/// Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits.
-/// Reference: https://en.wikipedia.org/wiki/Comparison_of_file_systems#Limits.
-/// Most modern filesystems use a 255-byte limit instead of 255-character/codepoint limit, so that's what we're gonna use.
-#define FS_MAX_FILENAME_LENGTH      255
-#define SDMC_MAX_FILENAME_LENGTH    128 /* Arbitrarily set, I'm tired of FS sysmodule shenanigans. */
-
 /* Type definitions. */
 
 /* Reference: https://github.com/Atmosphere-NX/Atmosphere/blob/master/exosphere/program/source/smc/secmon_smc_info.hpp. */

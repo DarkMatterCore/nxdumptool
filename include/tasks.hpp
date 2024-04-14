@@ -26,7 +26,7 @@
 
 #include <borealis.hpp>
 
-#include "defines.h"
+#include "core/nxdt_includes.h"
 #include "core/gamecard.h"
 #include "core/title.h"
 #include "core/ums.h"
