@@ -1,7 +1,7 @@
 {
     "filename": {
         "label": "Filename",
-        "description": "Filename used for the output dump.\nIllegal filesystem characters will be automatically replaced with underscores (\"_\"). If the inserted SD card is used as the output storage, only ASCII characters will be kept — this is a limitation on Nintendo's FS driver.\nThe file extension cannot be modified, and it is excluded on purpose."
+        "description": "Filename used for the output dump.\nIllegal filesystem characters will be automatically replaced with underscores (\"_\"). If the inserted SD card is used as the output storage, only ASCII characters will be kept — this is a limitation of Nintendo's FS driver.\nThe file extension cannot be modified, and it is excluded on purpose."
     },
 
     "output_storage": {

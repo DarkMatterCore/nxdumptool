@@ -3,6 +3,7 @@ name: Build nxdumptool-rewrite binary
 on:
   push:
     branches: [ rewrite ]
+
     paths:
       - '.github/workflows/rewrite.yml'
       - 'code_templates/**'
@@ -19,62 +20,71 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     container:
       image: devkitpro/devkita64
+
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - uses: actions/checkout@v4
         with:
-          path: nxdumptool
-          submodules: recursive
+          submodules: true
 
-      - name: Checkout latest libnx commit
-        uses: actions/checkout@v4
-        with:
-          repository: switchbrew/libnx
-          path: libnx
-          submodules: recursive
-
-      - name: Set workspace permissions
-        run: chmod 777 -R "$GITHUB_WORKSPACE"
-
-      - name: Build and install libnx
-        working-directory: libnx
-        run: |
-          make install -j$(nproc)
-
-      - name: Build nxdumptool-rewrite PoC binary
-        working-directory: nxdumptool
+      - name: Set environment variables
         run: |
           echo "nxdt_commit=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
+
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
+
+      # ccache invocation is handled in the build script.
+      - name: Build nxdumptool-rewrite PoC binary
+        id: build
+        continue-on-error: true
+        run: |
+          ./build.sh --noconfirm
+
+      - name: Install latest libnx commit and retry build
+        id: retry
+        if: ${{ steps.build.outcome == 'failure' }}
+        run: |
+          pushd /tmp
+          git clone https://github.com/switchbrew/libnx
+          cd libnx
+          make -j8 PREFIX="ccache aarch64-none-elf-"
+          make install
+          popd
           ./build.sh --noconfirm
 
       #- name: Build nxdumptool-rewrite GUI binary
-      #  working-directory: nxdumptool
       #  run: |
-      #    make -j$(nproc)
+      #    make -j8 PREFIX="ccache aarch64-none-elf-"
 
       - uses: actions/upload-artifact@v3
         with:
           name: nxdt_rw_poc-${{ env.nxdt_commit }}.nro
-          path: nxdumptool/code_templates/tmp/nxdt_rw_poc.nro
+          path: code_templates/tmp/nxdt_rw_poc.nro
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v3
         with:
           name: nxdt_rw_poc-${{ env.nxdt_commit }}.elf
-          path: nxdumptool/code_templates/tmp/nxdt_rw_poc.elf
+          path: code_templates/tmp/nxdt_rw_poc.elf
           if-no-files-found: error
 
       #- uses: actions/upload-artifact@v3
       #  with:
       #    name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.nro
-      #    path: nxdumptool/nxdumptool.nro
+      #    path: nxdumptool.nro
       #    if-no-files-found: error
 
       #- uses: actions/upload-artifact@v3
       #  with:
       #    name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.elf
-      #    path: nxdumptool/nxdumptool.elf
+      #    path: nxdumptool.elf
       #    if-no-files-found: error
 
       - name: Upload artifact to prerelease
@@ -92,6 +102,6 @@ jobs:
           omitBody: True
           omitBodyDuringUpdate: True
           omitNameDuringUpdate: True
-          artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*"
-          #artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*, nxdumptool/nxdumptool.*"
+          artifacts: "code_templates/tmp/nxdt_rw_poc.*"
+          #artifacts: "code_templates/tmp/nxdt_rw_poc.*, nxdumptool.*"
           token: ${{ secrets.GITHUB_TOKEN }}

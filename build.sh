@@ -20,7 +20,11 @@ cp $poc_path ./source/main.c
 
 cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$poc_name.jpg
 
-make BUILD_TYPE="$poc_name" -j$(nproc)
+if [ ${ARG,,} != "--noconfirm" ]; then
+    make BUILD_TYPE="$poc_name" -j$(nproc)
+else
+    make BUILD_TYPE="$poc_name" -j8 PREFIX="ccache aarch64-none-elf-"
+fi
 
 rm -f ./romfs/icon/$poc_name.jpg
 
