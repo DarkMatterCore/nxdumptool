@@ -1,6 +1,8 @@
 #!/bin/bash
 ARG=${1:-'--confirm'}
 
+set -e
+
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # Clean-up from last build
