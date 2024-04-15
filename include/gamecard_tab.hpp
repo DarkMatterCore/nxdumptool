@@ -40,6 +40,9 @@ namespace nxdt::views
             nxdt::tasks::GameCardStatusEvent::Subscription gc_status_task_sub;
             GameCardStatus gc_status = GameCardStatus_NotInserted;
 
+            std::string raw_filename_full = "";
+            std::string raw_filename_id_only = "";
+
             void ProcessGameCardStatus(GameCardStatus gc_status);
             std::string GetFormattedSizeString(GameCardSizeFunc func);
             std::string GetCardIdSetString(FsGameCardIdSet *card_id_set);

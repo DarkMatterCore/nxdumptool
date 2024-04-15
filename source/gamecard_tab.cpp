@@ -113,11 +113,12 @@ namespace nxdt::views
 
     void GameCardTab::PopulateList(void)
     {
-        TitleApplicationMetadata **app_metadata = NULL;
+        TitleApplicationMetadata **app_metadata = nullptr;
         u32 app_metadata_count = 0;
         GameCardHeader card_header = {0};
         GameCardInfo card_info = {0};
         FsGameCardIdSet card_id_set = {0};
+        char *raw_filename = nullptr;
 
         bool update_focused_view = this->IsListItemFocused();
         int focus_stack_index = this->GetFocusStackViewIndex();
@@ -242,19 +243,25 @@ namespace nxdt::views
         /* ListItem elements. */
         this->list->addView(new brls::Header("gamecard_tab/list/dump_options"_i18n));
 
+        raw_filename = titleGenerateGameCardFileName(TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_None);
+        this->raw_filename_full = std::string(raw_filename);
+        if (raw_filename) free(raw_filename);
+
+        raw_filename = titleGenerateGameCardFileName(TitleNamingConvention_IdAndVersionOnly, TitleFileNameIllegalCharReplaceType_None);
+        this->raw_filename_id_only = std::string(raw_filename);
+        if (raw_filename) free(raw_filename);
+
+        raw_filename = nullptr;
+
         brls::ListItem *dump_card_image = new brls::ListItem("gamecard_tab/list/dump_card_image/label"_i18n, "gamecard_tab/list/dump_card_image/description"_i18n);
 
         dump_card_image->getClickEvent()->subscribe([this](brls::View *view) {
-            char *raw_filename = titleGenerateGameCardFileName(configGetInteger("naming_convention"), TitleFileNameIllegalCharReplaceType_None);
-            if (!raw_filename) return;
-
             brls::Image *icon = new brls::Image();
             icon->setImage(BOREALIS_ASSET("icon/" APP_TITLE ".jpg"));
             icon->setScaleType(brls::ImageScaleType::SCALE);
 
-            brls::Application::pushView(new DumpOptionsFrame(this->root_view, "gamecard_tab/list/dump_card_image/label"_i18n, icon, std::string(raw_filename), ".xci"), brls::ViewAnimation::SLIDE_LEFT);
-
-            free(raw_filename);
+            brls::Application::pushView(new DumpOptionsFrame(this->root_view, "gamecard_tab/list/dump_card_image/label"_i18n, icon,
+                                                             configGetInteger("naming_convention") == TitleNamingConvention_Full ? raw_filename_full : raw_filename_id_only, ".xci"), brls::ViewAnimation::SLIDE_LEFT);
         });
 
         this->list->addView(dump_card_image);

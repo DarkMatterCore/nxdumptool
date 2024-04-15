@@ -77,7 +77,7 @@ namespace nxdt::views
             brls::menu_timer_t notification_timer = 0.0f;
             brls::menu_timer_ctx_entry_t notification_timer_ctx = {0};
 
-            void DisplayNotification(std::string str);
+            void DisplayNotification(const std::string& str);
         public:
             OptionsTab(RootView *root_view);
             ~OptionsTab(void);

@@ -370,9 +370,9 @@ namespace nxdt::views
         brls::menu_timer_kill(&(this->notification_timer));
     }
 
-    void OptionsTab::DisplayNotification(std::string str)
+    void OptionsTab::DisplayNotification(const std::string& str)
     {
-        if (str == "" || !this->display_notification) return;
+        if (str.empty() || !this->display_notification) return;
 
         brls::Application::notify(str);
         this->display_notification = false;
