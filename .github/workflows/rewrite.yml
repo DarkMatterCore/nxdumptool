@@ -37,6 +37,9 @@ jobs:
         run: |
           echo "nxdt_commit=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
 
+      - name: Set workspace permissions
+        run: chmod 777 -R "$GITHUB_WORKSPACE"
+
       - name: Setup ccache
         uses: hendrikmuhs/ccache-action@v1.2
 
