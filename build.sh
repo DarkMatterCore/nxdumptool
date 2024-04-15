@@ -1,8 +1,6 @@
 #!/bin/bash
 ARG=${1:-'--confirm'}
 
-set -e
-
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
 # Clean-up from last build
@@ -22,11 +20,15 @@ cp $poc_path ./source/main.c
 
 cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$poc_name.jpg
 
+set -e
+
 if [ ${ARG,,} != "--noconfirm" ]; then
     make BUILD_TYPE="$poc_name" -j$(nproc)
 else
     make BUILD_TYPE="$poc_name" -j8 PREFIX="ccache aarch64-none-elf-"
 fi
+
+set +e
 
 rm -f ./romfs/icon/$poc_name.jpg
 
