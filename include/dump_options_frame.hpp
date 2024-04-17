@@ -74,17 +74,17 @@ namespace nxdt::views
             {
                 if (!this->output_storage_item) return;
 
-                std::vector<std::string> *storages = this->output_storage_item->getValues();
-                storages->clear();
+                std::vector<std::string> storages{};
 
                 size_t elem_count = (ConfigOutputStorage_Count + ums_devices->size());
                 u32 selected = this->output_storage_item->getSelectedValue();
 
+                /* Fill storages vector. */
                 for(size_t i = 0; i < elem_count; i++)
                 {
                     if (i == 1)
                     {
-                        storages->push_back("dump_options/output_storage/value_01"_i18n);
+                        storages.push_back("dump_options/output_storage/value_01"_i18n);
                         continue;
                     }
 
@@ -102,11 +102,15 @@ namespace nxdt::views
                     {
                         std::string ums_extra_info = (cur_ums_device->product_name[0] ? (std::string(cur_ums_device->product_name) + ", ") : "");
                         ums_extra_info += fmt::format("LUN {}, FS #{}, {}", cur_ums_device->lun, cur_ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(cur_ums_device->fs_type));
-                        storages->push_back(brls::i18n::getStr("dump_options/output_storage/value_02", static_cast<int>(strlen(cur_ums_device->name + 3) - 1), cur_ums_device->name + 3, free_sz_str, total_sz_str, ums_extra_info));
+                        storages.push_back(brls::i18n::getStr("dump_options/output_storage/value_02", static_cast<int>(strlen(cur_ums_device->name + 3) - 1), cur_ums_device->name + 3, free_sz_str, total_sz_str, ums_extra_info));
                     } else {
-                        storages->push_back(brls::i18n::getStr("dump_options/output_storage/value_00", free_sz_str, total_sz_str));
+                        storages.push_back(brls::i18n::getStr("dump_options/output_storage/value_00", free_sz_str, total_sz_str));
                     }
                 }
+
+                /* Update SelectListItem values. */
+                /* If the dropdown menu currently is being displayed, it'll be reloaded. */
+                this->output_storage_item->updateValues(storages);
 
                 if (selected > ConfigOutputStorage_UsbHost)
                 {
@@ -117,7 +121,7 @@ namespace nxdt::views
                     /* This will take care of both updating the JSON configuration and saniziting the filename provided by the user. */
                     this->output_storage_item->getValueSelectedEvent()->fire(ConfigOutputStorage_SdCard);
                 } else {
-                    /* Set the current output storage once more. This will make sure the device string gets updated. */
+                    /* Set the current output storage once more. This will make sure the selected device string gets updated. */
                     this->output_storage_item->setSelectedValue(selected);
                 }
             }
