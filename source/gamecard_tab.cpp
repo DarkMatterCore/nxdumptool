@@ -277,7 +277,7 @@ namespace nxdt::views
         brls::ListItem *dump_initial_data = new brls::ListItem("gamecard_tab/list/dump_initial_data/label"_i18n, "gamecard_tab/list/dump_initial_data/description"_i18n);
         this->list->addView(dump_initial_data);
 
-        brls::ListItem *dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, brls::i18n::getStr("gamecard_tab/list/dump_certificate/description", GAMECARD_CERTIFICATE_OFFSET / GAMECARD_PAGE_SIZE));
+        brls::ListItem *dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, i18n::getStr("gamecard_tab/list/dump_certificate/description", GAMECARD_CERTIFICATE_OFFSET / GAMECARD_PAGE_SIZE));
         this->list->addView(dump_certificate);
 
         brls::ListItem *dump_card_id_set = new brls::ListItem("gamecard_tab/list/dump_card_id_set/label"_i18n, "gamecard_tab/list/dump_card_id_set/description"_i18n);
@@ -286,7 +286,7 @@ namespace nxdt::views
         brls::ListItem *dump_card_uid = new brls::ListItem("gamecard_tab/list/dump_card_uid/label"_i18n, "gamecard_tab/list/dump_card_uid/description"_i18n);
         this->list->addView(dump_card_uid);
 
-        brls::ListItem *dump_header = new brls::ListItem("gamecard_tab/list/dump_header/label"_i18n, brls::i18n::getStr("gamecard_tab/list/dump_header/description", 0));
+        brls::ListItem *dump_header = new brls::ListItem("gamecard_tab/list/dump_header/label"_i18n, i18n::getStr("gamecard_tab/list/dump_header/description", 0));
         this->list->addView(dump_header);
 
         brls::ListItem *dump_plaintext_cardinfo = new brls::ListItem("gamecard_tab/list/dump_plaintext_cardinfo/label"_i18n, "gamecard_tab/list/dump_plaintext_cardinfo/description"_i18n);

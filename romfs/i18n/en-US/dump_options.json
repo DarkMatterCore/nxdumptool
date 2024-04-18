@@ -8,8 +8,8 @@
         "label": "Output storage",
         "description": "Storage where the dumped data will be written to. Changing it will automatically update the output filename to better suit the output filesystem limitations.\nUsing a connected USB host requires a libusb-based driver, as well as the Python host script. For more information, please visit \"{0}\".",
         "value_00": "SD card ({0} free / {1} total)",
-        "value_01": "USB host",
-        "value_02": "USB Mass Storage {1:.{0}} ({2} free / {3} total) ({4})"
+        "value_01": "USB host (PC)",
+        "value_02": "{0} ({1} free / {2} total)"
     },
 
     "prepend_key_area": {

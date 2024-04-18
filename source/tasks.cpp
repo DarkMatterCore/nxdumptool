@@ -212,7 +212,10 @@ namespace nxdt::tasks
     UmsTask::~UmsTask(void)
     {
         /* Clear UMS device vector. */
-        this->ums_devices.clear();
+        this->ums_devices_vector.clear();
+
+        /* Free UMS devices buffer. */
+        if (this->ums_devices) free(this->ums_devices);
 
         LOG_MSG_DEBUG("UMS task stopped.");
     }
@@ -230,35 +233,49 @@ namespace nxdt::tasks
             this->PopulateUmsDeviceVector();
 
             /* Fire task event. */
-            this->ums_event.fire(this->ums_devices);
+            this->ums_event.fire(this->ums_devices_vector);
         }
     }
 
     const UmsDeviceVector& UmsTask::GetUmsDevices(void)
     {
-        return this->ums_devices;
+        return this->ums_devices_vector;
     }
 
     void UmsTask::PopulateUmsDeviceVector(void)
     {
-        UsbHsFsDevice *ums_devices = nullptr;
-        u32 ums_device_count = 0;
-
         /* Clear UMS device vector. */
-        this->ums_devices.clear();
+        this->ums_devices_vector.clear();
+
+        /* Free UMS devices buffer. */
+        if (this->ums_devices) free(this->ums_devices);
+
+        /* Reset UMS devices counter. */
+        this->ums_devices_count = 0;
 
         /* Get UMS devices. */
-        ums_devices = umsGetDevices(&ums_device_count);
-        if (ums_devices)
+        this->ums_devices = umsGetDevices(&(this->ums_devices_count));
+        if (this->ums_devices)
         {
             /* Fill UMS device vector. */
-            for(u32 i = 0; i < ums_device_count; i++) this->ums_devices.push_back(ums_devices[i]);
+            for(u32 i = 0; i < this->ums_devices_count; i++)
+            {
+                const UsbHsFsDevice *cur_ums_device = &(this->ums_devices[i]);
+                int name_len = static_cast<int>(strlen(cur_ums_device->name) - 1);
+                std::string ums_info{};
 
-            /* Free UMS devices array. */
-            free(ums_devices);
+                if (cur_ums_device->product_name[0])
+                {
+                    ums_info = fmt::format("{1:.{0}} ({2}, LUN #{3}, FS#{4}, {5})", name_len, cur_ums_device->name, cur_ums_device->product_name, cur_ums_device->lun, cur_ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(cur_ums_device->fs_type));
+                } else {
+                    ums_info = fmt::format("{1:.{0}} (LUN #{2}, FS#{3}, {4})", name_len, cur_ums_device->name, cur_ums_device->lun, cur_ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(cur_ums_device->fs_type));
+                }
+
+                this->ums_devices_vector.push_back(std::make_pair(cur_ums_device, ums_info));
+            }
         }
 
-        LOG_MSG_DEBUG("Retrieved info for %u UMS %s.", ums_device_count, ums_device_count == 1 ? "device" : "devices");
+        LOG_MSG_DEBUG("Retrieved info for %u UMS %s.", this->ums_devices_count, this->ums_devices_count == 1 ? "device" : "devices");
     }
 
     /* USB host device connection task. */

@@ -52,8 +52,9 @@ namespace nxdt::tasks
     /* Used to hold pointers to application metadata entries. */
     typedef std::vector<TitleApplicationMetadata*> TitleApplicationMetadataVector;
 
-    /* Used to hold UMS devices. */
-    typedef std::vector<UsbHsFsDevice> UmsDeviceVector;
+    /* Used to hold information from UMS devices. */
+    typedef std::pair<const UsbHsFsDevice*, std::string> UmsDeviceVectorEntry;
+    typedef std::vector<UmsDeviceVectorEntry> UmsDeviceVector;
 
     /* Custom event types. */
     typedef brls::Event<const StatusInfoData&> StatusInfoEvent;
@@ -133,7 +134,11 @@ namespace nxdt::tasks
     {
         private:
             UmsEvent ums_event;
-            UmsDeviceVector ums_devices{};
+
+            UsbHsFsDevice *ums_devices = nullptr;
+            u32 ums_devices_count = 0;
+
+            UmsDeviceVector ums_devices_vector{};
 
             void PopulateUmsDeviceVector(void);
 

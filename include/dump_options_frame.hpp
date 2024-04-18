@@ -91,7 +91,8 @@ namespace nxdt::views
                     u64 total_sz = 0, free_sz = 0;
                     char total_sz_str[64] = {0}, free_sz_str[64] = {0};
 
-                    const UsbHsFsDevice *cur_ums_device = (i >= ConfigOutputStorage_Count ? &(ums_devices.at(i - ConfigOutputStorage_Count)) : nullptr);
+                    const nxdt::tasks::UmsDeviceVectorEntry *ums_device_entry = (i >= ConfigOutputStorage_Count ? &(ums_devices.at(i - ConfigOutputStorage_Count)) : nullptr);
+                    const UsbHsFsDevice *cur_ums_device = (ums_device_entry ? ums_device_entry->first : nullptr);
 
                     sprintf(total_sz_str, "%s/", cur_ums_device ? cur_ums_device->name : DEVOPTAB_SDMC_DEVICE);
                     utilsGetFileSystemStatsByPath(total_sz_str, &total_sz, &free_sz);
@@ -100,9 +101,7 @@ namespace nxdt::views
 
                     if (cur_ums_device)
                     {
-                        std::string ums_extra_info = (cur_ums_device->product_name[0] ? (std::string(cur_ums_device->product_name) + ", ") : "");
-                        ums_extra_info += fmt::format("LUN {}, FS #{}, {}", cur_ums_device->lun, cur_ums_device->fs_idx, LIBUSBHSFS_FS_TYPE_STR(cur_ums_device->fs_type));
-                        storages.push_back(brls::i18n::getStr("dump_options/output_storage/value_02", static_cast<int>(strlen(cur_ums_device->name + 3) - 1), cur_ums_device->name + 3, free_sz_str, total_sz_str, ums_extra_info));
+                        storages.push_back(brls::i18n::getStr("dump_options/output_storage/value_02", ums_device_entry->second, free_sz_str, total_sz_str));
                     } else {
                         storages.push_back(brls::i18n::getStr("dump_options/output_storage/value_00", free_sz_str, total_sz_str));
                     }

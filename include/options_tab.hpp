@@ -73,9 +73,13 @@ namespace nxdt::views
         private:
             RootView *root_view = nullptr;
 
+            brls::SelectListItem *unmount_ums_device = nullptr;
+            nxdt::tasks::UmsDeviceVector ums_devices{};
+            nxdt::tasks::UmsEvent::Subscription ums_task_sub;
+
             bool display_notification = true;
             brls::menu_timer_t notification_timer = 0.0f;
-            brls::menu_timer_ctx_entry_t notification_timer_ctx = {0};
+            brls::menu_timer_ctx_entry_t notification_timer_ctx{};
 
             void DisplayNotification(const std::string& str);
         public:

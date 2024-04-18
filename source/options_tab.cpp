@@ -317,6 +317,62 @@ namespace nxdt::views
 
         this->addView(naming_convention);
 
+        /* Unmount UMS devices. */
+        /* We will replace its default click event with a new one that will: */
+        /*     1. Check if any UMS devices are available before displaying the dropdown and display a notification if there are none. */
+        /*     2. Generate the string vector required by the dropdown. */
+        /*     3. Initialize the dropdown and pass a custom callback that will take care of unmounting the selected device. */
+        this->unmount_ums_device = new brls::SelectListItem("options_tab/unmount_ums_device/label"_i18n, { "dummy" }, 0,
+                                                            i18n::getStr("options_tab/unmount_ums_device/description"_i18n, APP_TITLE), false);
+
+        this->unmount_ums_device->getClickEvent()->unsubscribeAll();
+
+        this->unmount_ums_device->getClickEvent()->subscribe([this](brls::View* view) {
+            if (this->ums_devices.empty())
+            {
+                /* Display a notification if we haven't mounted any UMS devices at all. */
+                this->DisplayNotification("options_tab/notifications/no_ums_devices"_i18n);
+                return;
+            }
+
+            /* Generate values vector for the dropdown. */
+            std::vector<std::string> values{};
+            for(nxdt::tasks::UmsDeviceVectorEntry ums_device_entry : this->ums_devices) values.push_back(ums_device_entry.second);
+
+            /* Display dropdown. */
+            brls::Dropdown::open(this->unmount_ums_device->getLabel(), values, [this](int idx) {
+                /* Make sure the current value isn't out of bounds. */
+                if (idx < 0 || idx >= static_cast<int>(this->ums_devices.size())) return;
+
+                /* Unmount UMS device. */
+                if (umsUnmountDevice(this->ums_devices.at(idx).first))
+                {
+                    this->DisplayNotification("options_tab/notifications/ums_device_unmount_success"_i18n);
+                } else {
+                    this->DisplayNotification("options_tab/notifications/ums_device_unmount_failure"_i18n);
+                }
+            });
+        });
+
+        /* Update UMS devices vector. */
+        this->ums_devices = this->root_view->GetUmsDevices();
+
+        /* Subscribe to the UMS device event. */
+        this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this](const nxdt::tasks::UmsDeviceVector& ums_devices) {
+            /* Update UMS devices vector. */
+            this->ums_devices = this->root_view->GetUmsDevices();
+
+            /* Generate values vector for the dropdown. */
+            std::vector<std::string> values{};
+            for(nxdt::tasks::UmsDeviceVectorEntry ums_device_entry : this->ums_devices) values.push_back(ums_device_entry.second);
+
+            /* Update SelectListItem values. */
+            /* If the dropdown menu is already being displayed, it'll be reloaded or popped from the view stack, depending on whether the provided vector is empty or not. */
+            this->unmount_ums_device->updateValues(values);
+        });
+
+        this->addView(unmount_ums_device);
+
         /* Update NSWDB XML. */
         brls::ListItem *update_nswdb_xml = new brls::ListItem("options_tab/update_nswdb_xml/label"_i18n, "options_tab/update_nswdb_xml/description"_i18n);
 
@@ -367,6 +423,10 @@ namespace nxdt::views
 
     OptionsTab::~OptionsTab(void)
     {
+        this->root_view->UnregisterUmsTaskListener(this->ums_task_sub);
+
+        this->ums_devices.clear();
+
         brls::menu_timer_kill(&(this->notification_timer));
     }
 
