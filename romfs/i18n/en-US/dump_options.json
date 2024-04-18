@@ -1,12 +1,12 @@
 {
     "filename": {
         "label": "Filename",
-        "description": "Filename used for the output dump.\nIllegal filesystem characters will be automatically replaced with underscores (\"_\"). If the inserted SD card is used as the output storage, only ASCII characters will be kept — this is a limitation of Nintendo's FS driver.\nThe file extension cannot be modified, and it is excluded on purpose."
+        "description": "Filename used for the output dump.\n\nIllegal filesystem characters will be automatically replaced with underscores (\"_\"). If the inserted SD card is used as the output storage, only ASCII characters will be kept — this is a limitation of Nintendo's FS driver.\n\nThe file extension cannot be modified, and it is excluded on purpose."
     },
 
     "output_storage": {
         "label": "Output storage",
-        "description": "Storage where the dumped data will be written to. Changing it will automatically update the output filename to better suit the output filesystem limitations.\nUsing a connected USB host requires a libusb-based driver, as well as the Python host script. For more information, please visit \"{0}\".",
+        "description": "Storage where the dumped data will be written to. Changing it will automatically update the output filename to better suit the output filesystem limitations.\n\nUsing a connected USB host requires a libusb-based driver, as well as the Python host script. For more information, please visit \"{0}\".",
         "value_00": "SD card ({0} free / {1} total)",
         "value_01": "USB host (PC)",
         "value_02": "{0} ({1} free / {2} total)"
@@ -34,7 +34,7 @@
 
     "checksum_lookup_method": {
         "label": "Checksum lookup method",
-        "description": "If \"{0}\" is enabled, this option determines which lookup method is used to validate the calculated CRC32 checksum at the end of the dump process.\nIf \"{1}\" is selected, the calculated checksum will be looked up in \"{2}\", which must have been previously downloaded.\nIf \"{3}\" is selected, the calculated checksum will be looked up using an Internet connection and a public HTTP endpoint.",
+        "description": "If \"{0}\" is enabled, this option determines which lookup method is used to validate the calculated CRC32 checksum at the end of the dump process.\n\nIf \"{1}\" is selected, the calculated checksum will be looked up in \"{2}\", which must have been previously downloaded.\n\nIf \"{3}\" is selected, the calculated checksum will be looked up using an Internet connection and a public HTTP endpoint.",
         "value_00": "None"
     },
 

@@ -272,8 +272,6 @@ namespace nxdt::views
         advanced_disclaimer->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->list->addView(advanced_disclaimer);
 
-        this->list->addView(new brls::ListItemGroupSpacing(true));
-
         brls::ListItem *dump_initial_data = new brls::ListItem("gamecard_tab/list/dump_initial_data/label"_i18n, "gamecard_tab/list/dump_initial_data/description"_i18n);
         this->list->addView(dump_initial_data);
 
