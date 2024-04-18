@@ -46,7 +46,7 @@ namespace nxdt::views
     {
         private:
             nxdt::tasks::DownloadDataTask json_task;
-            char *json_buf = NULL;
+            char *json_buf = nullptr;
             size_t json_buf_size = 0;
             UtilsGitHubReleaseJsonData json_data = {0};
 

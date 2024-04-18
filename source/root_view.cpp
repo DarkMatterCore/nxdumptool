@@ -128,15 +128,16 @@ namespace nxdt::views
         this->addTab("root_view/tabs/about"_i18n, new AboutTab());
 
         /* Subscribe to status info event. */
-        this->status_info_task_sub = this->status_info_task->RegisterListener([this](const nxdt::tasks::StatusInfoData *status_info_data) {
-            u32 charge_percentage = status_info_data->charge_percentage;
-            PsmChargerType charger_type = status_info_data->charger_type;
+        this->status_info_task_sub = this->status_info_task->RegisterListener([this](const nxdt::tasks::StatusInfoData& status_info_data) {
+            u32 charge_percentage = status_info_data.charge_percentage;
+            PsmChargerType charger_type = status_info_data.charger_type;
 
-            NifmInternetConnectionType connection_type = status_info_data->connection_type;
-            char *ip_addr = status_info_data->ip_addr;
+            bool connected = status_info_data.connected;
+            NifmInternetConnectionType connection_type = status_info_data.connection_type;
+            const char *ip_addr = status_info_data.ip_addr;
 
             /* Update time label. */
-            this->time_lbl->setText(this->GetFormattedDateString(status_info_data->timeinfo));
+            this->time_lbl->setText(this->GetFormattedDateString(status_info_data.timeinfo));
 
             /* Update battery labels. */
             this->battery_icon->setText(charger_type != PsmChargerType_Unconnected ? "\uE1A3" : (charge_percentage >= 100 ? "\uE1A4" : (charge_percentage >= 83 ? "\uEBD2" : \
@@ -150,12 +151,12 @@ namespace nxdt::views
             this->battery_percentage->setText(fmt::format("{}%", charge_percentage));
 
             /* Update network labels. */
-            this->connection_icon->setText(!connection_type ? "\uE195" : (connection_type == NifmInternetConnectionType_WiFi ? "\uE63E" : "\uE8BE"));
-            this->connection_status_lbl->setText(ip_addr ? std::string(ip_addr) : "root_view/not_connected"_i18n);
+            this->connection_icon->setText(connected ? (connection_type == NifmInternetConnectionType_WiFi ? "\uE63E" : "\uE8BE") : "\uE195");
+            this->connection_status_lbl->setText(connected ? std::string(ip_addr) : "root_view/not_connected"_i18n);
         });
 
         /* Subscribe to UMS event. */
-        this->ums_task_sub = this->ums_task->RegisterListener([this](const nxdt::tasks::UmsDeviceVector* ums_devices) {
+        this->ums_task_sub = this->ums_task->RegisterListener([this](const nxdt::tasks::UmsDeviceVector& ums_devices) {
             /* Update UMS counter label. */
             this->ums_counter_lbl->setText(i18n::getStr("root_view/ums_counter"_i18n, usbHsFsGetPhysicalDeviceCount()));
         });

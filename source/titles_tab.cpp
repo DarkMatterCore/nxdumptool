@@ -41,7 +41,7 @@ namespace nxdt::views
             this->system_title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, title_id);
         }
 
-        /* Make sure we got title information. */
+        /* Make sure we got title information. This should never get triggered. */
         if ((!this->is_system && !user_ret) || (this->is_system && !this->system_title_info)) throw fmt::format("Failed to retrieve title information for {:016X}.", title_id);
 
         /* Add tabs. */
@@ -89,7 +89,7 @@ namespace nxdt::views
         /* Subscribe to the title event if this is the user titles tab. */
         if (!this->is_system)
         {
-            this->title_task_sub = this->root_view->RegisterTitleTaskListener([this](const nxdt::tasks::TitleApplicationMetadataVector* app_metadata) {
+            this->title_task_sub = this->root_view->RegisterTitleTaskListener([this](const nxdt::tasks::TitleApplicationMetadataVector& app_metadata) {
                 /* Update list. */
                 this->PopulateList(app_metadata);
             });
@@ -102,10 +102,10 @@ namespace nxdt::views
         if (!this->is_system) this->root_view->UnregisterTitleTaskListener(this->title_task_sub);
     }
 
-    void TitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* app_metadata)
+    void TitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector& app_metadata)
     {
         /* Populate variables. */
-        size_t app_metadata_count = (app_metadata ? app_metadata->size() : 0);
+        size_t app_metadata_count = app_metadata.size();
         bool update_focused_view = this->IsListItemFocused();
         int focus_stack_index = this->GetFocusStackViewIndex();
 
@@ -120,13 +120,13 @@ namespace nxdt::views
         if (!app_metadata_count) return;
 
         /* Populate list. */
-        for(const TitleApplicationMetadata *cur_app_metadata : *app_metadata)
+        for(const TitleApplicationMetadata *cur_app_metadata : app_metadata)
         {
             /* Create list item. */
-            TitlesTabItem *title = new TitlesTabItem(cur_app_metadata, this->is_system);
+            TitlesTabItem *item = new TitlesTabItem(cur_app_metadata, this->is_system);
 
             /* Register click event. */
-            title->getClickEvent()->subscribe([](brls::View *view) {
+            item->getClickEvent()->subscribe([](brls::View *view) {
                 TitlesTabItem *item = static_cast<TitlesTabItem*>(view);
                 const TitleApplicationMetadata *app_metadata = item->GetApplicationMetadata();
                 bool is_system = item->IsSystemTitle();
@@ -157,7 +157,7 @@ namespace nxdt::views
             });
 
             /* Add list item to our view. */
-            this->list->addView(title);
+            this->list->addView(item);
         }
 
         /* Update focus stack, if needed. */

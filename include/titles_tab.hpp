@@ -36,8 +36,8 @@ namespace nxdt::views
             const TitleApplicationMetadata *app_metadata = nullptr;
             bool is_system = false;
 
-            TitleUserApplicationData user_app_data = {0};
-            TitleInfo *system_title_info = NULL;
+            TitleUserApplicationData user_app_data{};
+            TitleInfo *system_title_info = nullptr;
 
         public:
             TitlesTabPopup(const TitleApplicationMetadata *app_metadata, bool is_system);
@@ -50,7 +50,7 @@ namespace nxdt::views
         private:
             const TitleApplicationMetadata *app_metadata = nullptr;
             bool is_system = false;
-            bool click_anim;
+            bool click_anim = true;
 
         public:
             TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system, bool click_anim = true);
@@ -73,10 +73,10 @@ namespace nxdt::views
         private:
             RootView *root_view = nullptr;
 
-            nxdt::tasks::TitleEvent::Subscription title_task_sub;
+            nxdt::tasks::UserTitleEvent::Subscription title_task_sub;
             bool is_system = false;
 
-            void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector* app_metadata);
+            void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector& app_metadata);
 
         public:
             TitlesTab(RootView *root_view, bool is_system);

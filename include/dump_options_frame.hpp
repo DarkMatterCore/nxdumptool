@@ -70,13 +70,13 @@ namespace nxdt::views
                 return output;
             }
 
-            void UpdateStorages(const nxdt::tasks::UmsDeviceVector* ums_devices)
+            void UpdateStorages(const nxdt::tasks::UmsDeviceVector& ums_devices)
             {
                 if (!this->output_storage_item) return;
 
                 std::vector<std::string> storages{};
 
-                size_t elem_count = (ConfigOutputStorage_Count + ums_devices->size());
+                size_t elem_count = (ConfigOutputStorage_Count + ums_devices.size());
                 u32 selected = this->output_storage_item->getSelectedValue();
 
                 /* Fill storages vector. */
@@ -91,7 +91,7 @@ namespace nxdt::views
                     u64 total_sz = 0, free_sz = 0;
                     char total_sz_str[64] = {0}, free_sz_str[64] = {0};
 
-                    const UsbHsFsDevice *cur_ums_device = (i >= ConfigOutputStorage_Count ? (ums_devices->data() + (i - ConfigOutputStorage_Count)) : nullptr);
+                    const UsbHsFsDevice *cur_ums_device = (i >= ConfigOutputStorage_Count ? &(ums_devices.at(i - ConfigOutputStorage_Count)) : nullptr);
 
                     sprintf(total_sz_str, "%s/", cur_ums_device ? cur_ums_device->name : DEVOPTAB_SDMC_DEVICE);
                     utilsGetFileSystemStatsByPath(total_sz_str, &total_sz, &free_sz);
@@ -175,7 +175,7 @@ namespace nxdt::views
                 /* Subscribe to SelectListItem's value selected event. */
                 this->output_storage_item->getValueSelectedEvent()->subscribe([this](int selected) {
                     /* Make sure the current value isn't out of bounds. */
-                    if (selected < ConfigOutputStorage_SdCard || selected >= static_cast<int>(this->root_view->GetUmsDevices()->size() + ConfigOutputStorage_Count)) return;
+                    if (selected < ConfigOutputStorage_SdCard || selected >= static_cast<int>(this->root_view->GetUmsDevices().size() + ConfigOutputStorage_Count)) return;
 
                     /* Update configuration. */
                     if (selected == ConfigOutputStorage_SdCard || selected == ConfigOutputStorage_UsbHost) configSetInteger("output_storage", selected);
@@ -195,7 +195,7 @@ namespace nxdt::views
 
 
                 /* Subscribe to the UMS device event. */
-                this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this](const nxdt::tasks::UmsDeviceVector* ums_devices) {
+                this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this](const nxdt::tasks::UmsDeviceVector& ums_devices) {
                     /* Update output storages vector. */
                     this->UpdateStorages(ums_devices);
                 });

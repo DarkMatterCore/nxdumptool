@@ -103,7 +103,7 @@ namespace nxdt::tasks
                 char *buf = nullptr;
                 size_t buf_size = 0;
 
-                /* If the process fails or if it's cancelled, httpDownloadData() will take care of freeing up the allocated memory and return NULL. */
+                /* If the process fails or if it's cancelled, httpDownloadData() will take care of freeing up the allocated memory and returning NULL. */
                 buf = httpDownloadData(&buf_size, url.c_str(), force_https, DownloadDataTask::HttpProgressCallback, this);
 
                 return std::make_pair(buf, buf_size);

@@ -44,8 +44,9 @@ namespace nxdt::tasks
         struct tm timeinfo;
         u32 charge_percentage;
         PsmChargerType charger_type;
+        bool connected;
         NifmInternetConnectionType connection_type;
-        char *ip_addr;
+        char ip_addr[16];
     } StatusInfoData;
 
     /* Used to hold pointers to application metadata entries. */
@@ -55,19 +56,19 @@ namespace nxdt::tasks
     typedef std::vector<UsbHsFsDevice> UmsDeviceVector;
 
     /* Custom event types. */
-    typedef brls::Event<const StatusInfoData*> StatusInfoEvent;
-    typedef brls::Event<GameCardStatus> GameCardStatusEvent;
-    typedef brls::Event<const TitleApplicationMetadataVector*> TitleEvent;
-    typedef brls::Event<const UmsDeviceVector*> UmsEvent;
-    typedef brls::Event<UsbHostSpeed> UsbHostEvent;
+    typedef brls::Event<const StatusInfoData&> StatusInfoEvent;
+    typedef brls::Event<const GameCardStatus&> GameCardStatusEvent;
+    typedef brls::Event<const TitleApplicationMetadataVector&> UserTitleEvent;
+    typedef brls::Event<const UmsDeviceVector&> UmsEvent;
+    typedef brls::Event<const UsbHostSpeed&> UsbHostEvent;
 
     /* Status info task. */
-    /* Its event returns a pointer to a StatusInfoData struct. */
+    /* Its event returns a reference to a StatusInfoData struct. */
     class StatusInfoTask: public brls::RepeatingTask
     {
         private:
             StatusInfoEvent status_info_event;
-            StatusInfoData status_info_data = {0};
+            StatusInfoData status_info_data{};
 
         protected:
             void run(retro_time_t current_time) override;
@@ -102,14 +103,14 @@ namespace nxdt::tasks
     };
 
     /* Title task. */
-    /* Its event returns a pointer to a TitleApplicationMetadataVector with metadata for user titles (system titles don't change at runtime). */
+    /* Its event returns a reference to a TitleApplicationMetadataVector with metadata for user titles (system titles don't change at runtime). */
     class TitleTask: public brls::RepeatingTask
     {
         private:
-            TitleEvent title_event;
+            UserTitleEvent user_title_event;
 
-            TitleApplicationMetadataVector system_metadata;
-            TitleApplicationMetadataVector user_metadata;
+            TitleApplicationMetadataVector system_metadata{};
+            TitleApplicationMetadataVector user_metadata{};
 
             void PopulateApplicationMetadataVector(bool is_system);
 
@@ -120,19 +121,19 @@ namespace nxdt::tasks
             TitleTask(void);
             ~TitleTask(void);
 
-            /* Intentionally left here to let views retrieve title metadata. */
-            const TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system);
+            /* Intentionally left here to let views retrieve title metadata on-demand. */
+            const TitleApplicationMetadataVector& GetApplicationMetadata(bool is_system);
 
-            EVENT_SUBSCRIPTION(TitleEvent, title_event);
+            EVENT_SUBSCRIPTION(UserTitleEvent, user_title_event);
     };
 
     /* USB Mass Storage task. */
-    /* Its event returns a pointer to a UmsDeviceVector. */
+    /* Its event returns a reference to a UmsDeviceVector. */
     class UmsTask: public brls::RepeatingTask
     {
         private:
             UmsEvent ums_event;
-            UmsDeviceVector ums_devices;
+            UmsDeviceVector ums_devices{};
 
             void PopulateUmsDeviceVector(void);
 
@@ -143,8 +144,8 @@ namespace nxdt::tasks
             UmsTask(void);
             ~UmsTask(void);
 
-            /* Intentionally left here to let views retrieve UMS device info. */
-            const UmsDeviceVector* GetUmsDevices(void);
+            /* Intentionally left here to let views retrieve UMS device info on-demand. */
+            const UmsDeviceVector& GetUmsDevices(void);
 
             EVENT_SUBSCRIPTION(UmsEvent, ums_event);
     };

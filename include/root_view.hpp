@@ -72,19 +72,19 @@ namespace nxdt::views
                 return this->status_info_task->IsInternetConnectionAvailable();
             }
 
-            ALWAYS_INLINE const nxdt::tasks::TitleApplicationMetadataVector* GetApplicationMetadata(bool is_system)
+            ALWAYS_INLINE const nxdt::tasks::TitleApplicationMetadataVector& GetApplicationMetadata(bool is_system)
             {
                 return this->title_task->GetApplicationMetadata(is_system);
             }
 
-            ALWAYS_INLINE const nxdt::tasks::UmsDeviceVector* GetUmsDevices(void)
+            ALWAYS_INLINE const nxdt::tasks::UmsDeviceVector& GetUmsDevices(void)
             {
                 return this->ums_task->GetUmsDevices();
             }
 
             EVENT_SUBSCRIPTION(StatusInfoTask, StatusInfoEvent, status_info_task);
             EVENT_SUBSCRIPTION(GameCardTask, GameCardStatusEvent, gc_status_task);
-            EVENT_SUBSCRIPTION(TitleTask, TitleEvent, title_task);
+            EVENT_SUBSCRIPTION(TitleTask, UserTitleEvent, title_task);
             EVENT_SUBSCRIPTION(UmsTask, UmsEvent, ums_task);
             EVENT_SUBSCRIPTION(UsbHostTask, UsbHostEvent, usb_host_task);
     };

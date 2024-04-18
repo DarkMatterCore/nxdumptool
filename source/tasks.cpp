@@ -43,7 +43,7 @@ namespace nxdt::tasks
 
     bool StatusInfoTask::IsInternetConnectionAvailable(void)
     {
-        return (this->status_info_data.ip_addr != NULL);
+        return this->status_info_data.connected;
     }
 
     void StatusInfoTask::run(retro_time_t current_time)
@@ -53,7 +53,7 @@ namespace nxdt::tasks
         StatusInfoData *status_info_data = &(this->status_info_data);
 
         /* Get current time. */
-        time_t unix_time = time(NULL);
+        time_t unix_time = time(nullptr);
         localtime_r(&unix_time, &(status_info_data->timeinfo));
 
         /* Get battery stats. */
@@ -62,26 +62,24 @@ namespace nxdt::tasks
 
         /* Get network connection status. */
         u32 signal_strength = 0;
-        NifmInternetConnectionStatus connection_status = static_cast<NifmInternetConnectionStatus>(0);
+        NifmInternetConnectionStatus connection_status{};
+        char *ip_addr = nullptr;
+
+        status_info_data->connected = false;
 
         Result rc = nifmGetInternetConnectionStatus(&(status_info_data->connection_type), &signal_strength, &connection_status);
-        if (R_SUCCEEDED(rc))
+        if (R_SUCCEEDED(rc) && status_info_data->connection_type && connection_status == NifmInternetConnectionStatus_Connected)
         {
-            if (status_info_data->connection_type && connection_status == NifmInternetConnectionStatus_Connected)
-            {
-                struct in_addr addr = { .s_addr = INADDR_NONE };
-                nifmGetCurrentIpAddress(&(addr.s_addr));
-                status_info_data->ip_addr = (addr.s_addr != INADDR_NONE ? inet_ntoa(addr) : NULL);
-            } else {
-                status_info_data->ip_addr = NULL;
-            }
-        } else {
-            status_info_data->connection_type = static_cast<NifmInternetConnectionType>(0);
-            status_info_data->ip_addr = NULL;
+            status_info_data->connected = true;
+
+            struct in_addr addr = { .s_addr = INADDR_NONE };
+            nifmGetCurrentIpAddress(&(addr.s_addr));
+
+            if (addr.s_addr != INADDR_NONE && (ip_addr = inet_ntoa(addr))) snprintf(status_info_data->ip_addr, MAX_ELEMENTS(status_info_data->ip_addr), "%s", ip_addr);
         }
 
         /* Fire task event. */
-        this->status_info_event.fire(status_info_data);
+        this->status_info_event.fire(this->status_info_data);
     }
 
     /* Gamecard task. */
@@ -171,30 +169,30 @@ namespace nxdt::tasks
             this->PopulateApplicationMetadataVector(false);
 
             /* Fire task event. */
-            this->title_event.fire(&(this->user_metadata));
+            this->user_title_event.fire(this->user_metadata);
         }
     }
 
-    const TitleApplicationMetadataVector* TitleTask::GetApplicationMetadata(bool is_system)
+    const TitleApplicationMetadataVector& TitleTask::GetApplicationMetadata(bool is_system)
     {
-        return (is_system ? &(this->system_metadata) : &(this->user_metadata));
+        return (is_system ? this->system_metadata : this->user_metadata);
     }
 
     void TitleTask::PopulateApplicationMetadataVector(bool is_system)
     {
-        TitleApplicationMetadata **app_metadata = NULL;
+        TitleApplicationMetadata **app_metadata = nullptr;
         u32 app_metadata_count = 0;
 
         /* Get pointer to output vector. */
-        TitleApplicationMetadataVector *vector = (is_system ? &(this->system_metadata) : &(this->user_metadata));
-        vector->clear();
+        TitleApplicationMetadataVector& vector = (is_system ? this->system_metadata : this->user_metadata);
+        vector.clear();
 
         /* Get application metadata entries. */
         app_metadata = titleGetApplicationMetadataEntries(is_system, &app_metadata_count);
         if (app_metadata)
         {
             /* Fill output vector. */
-            for(u32 i = 0; i < app_metadata_count; i++) vector->push_back(app_metadata[i]);
+            for(u32 i = 0; i < app_metadata_count; i++) vector.push_back(app_metadata[i]);
 
             /* Free application metadata array. */
             free(app_metadata);
@@ -232,18 +230,18 @@ namespace nxdt::tasks
             this->PopulateUmsDeviceVector();
 
             /* Fire task event. */
-            this->ums_event.fire(&(this->ums_devices));
+            this->ums_event.fire(this->ums_devices);
         }
     }
 
-    const UmsDeviceVector* UmsTask::GetUmsDevices(void)
+    const UmsDeviceVector& UmsTask::GetUmsDevices(void)
     {
-        return &(this->ums_devices);
+        return this->ums_devices;
     }
 
     void UmsTask::PopulateUmsDeviceVector(void)
     {
-        UsbHsFsDevice *ums_devices = NULL;
+        UsbHsFsDevice *ums_devices = nullptr;
         u32 ums_device_count = 0;
 
         /* Clear UMS device vector. */
