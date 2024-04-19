@@ -364,7 +364,7 @@ namespace nxdt::views
                 this->setContentView(this->list);
             }
 
-            ~DumpOptionsFrame(void)
+            ~DumpOptionsFrame()
             {
                 /* Unregister task listener. */
                 this->root_view->UnregisterUmsTaskListener(this->ums_task_sub);

@@ -41,7 +41,7 @@ namespace nxdt::views
 
         public:
             TitlesTabPopup(const TitleApplicationMetadata *app_metadata, bool is_system);
-            ~TitlesTabPopup(void);
+            ~TitlesTabPopup();
     };
 
     /* Expanded ListItem class to hold application metadata. */
@@ -80,7 +80,7 @@ namespace nxdt::views
 
         public:
             TitlesTab(RootView *root_view, bool is_system);
-            ~TitlesTab(void);
+            ~TitlesTab();
     };
 }
 

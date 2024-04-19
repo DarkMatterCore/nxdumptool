@@ -190,13 +190,13 @@ namespace nxdt::tasks
             }
 
         public:
-            DataTransferTask(void)
+            DataTransferTask()
             {
                 /* Create task handler. */
                 this->task_handler = new Handler(DATA_TRANSFER_TASK_INTERVAL, this);
             }
 
-            ~DataTransferTask(void)
+            ~DataTransferTask()
             {
                 /* Stop task handler. Borealis' task manager will take care of deleting it. */
                 this->task_handler->stop();

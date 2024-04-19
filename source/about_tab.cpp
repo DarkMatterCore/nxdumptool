@@ -29,7 +29,7 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    AboutTab::AboutTab(void) : brls::List()
+    AboutTab::AboutTab() : brls::List()
     {
         /* Set custom spacing. */
         this->setSpacing(this->getSpacing() / 2);
@@ -69,7 +69,7 @@ namespace nxdt::views
         this->addView(new AboutTabLabel(brls::LabelStyle::SMALL, i18n::getStr("about_tab/links/line_00"_i18n, DISCORD_SERVER_URL)));
     }
 
-    AboutTab::~AboutTab(void)
+    AboutTab::~AboutTab()
     {
         delete this->logo;
     }

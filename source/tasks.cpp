@@ -30,13 +30,13 @@ namespace nxdt::tasks
 {
     /* Status info task. */
 
-    StatusInfoTask::StatusInfoTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
+    StatusInfoTask::StatusInfoTask() : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
         LOG_MSG_DEBUG("Status info task started.");
     }
 
-    StatusInfoTask::~StatusInfoTask(void)
+    StatusInfoTask::~StatusInfoTask()
     {
         LOG_MSG_DEBUG("Status info task stopped.");
     }
@@ -84,7 +84,7 @@ namespace nxdt::tasks
 
     /* Gamecard task. */
 
-    GameCardTask::GameCardTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
+    GameCardTask::GameCardTask() : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
         LOG_MSG_DEBUG("Gamecard task started.");
@@ -92,7 +92,7 @@ namespace nxdt::tasks
         this->first_notification = (gamecardGetStatus() >= GameCardStatus_Processing);
     }
 
-    GameCardTask::~GameCardTask(void)
+    GameCardTask::~GameCardTask()
     {
         LOG_MSG_DEBUG("Gamecard task stopped.");
     }
@@ -134,7 +134,7 @@ namespace nxdt::tasks
 
     /* Title task. */
 
-    TitleTask::TitleTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
+    TitleTask::TitleTask() : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         /* Get system metadata entries. */
         this->PopulateApplicationMetadataVector(true);
@@ -147,7 +147,7 @@ namespace nxdt::tasks
         LOG_MSG_DEBUG("Title task started.");
     }
 
-    TitleTask::~TitleTask(void)
+    TitleTask::~TitleTask()
     {
         /* Clear application metadata vectors. */
         this->system_metadata.clear();
@@ -203,13 +203,13 @@ namespace nxdt::tasks
 
     /* USB Mass Storage task. */
 
-    UmsTask::UmsTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
+    UmsTask::UmsTask() : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
         LOG_MSG_DEBUG("UMS task started.");
     }
 
-    UmsTask::~UmsTask(void)
+    UmsTask::~UmsTask()
     {
         /* Clear UMS device vector. */
         this->ums_devices_vector.clear();
@@ -280,13 +280,13 @@ namespace nxdt::tasks
 
     /* USB host device connection task. */
 
-    UsbHostTask::UsbHostTask(void) : brls::RepeatingTask(NXDT_TASK_INTERVAL)
+    UsbHostTask::UsbHostTask() : brls::RepeatingTask(NXDT_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
         LOG_MSG_DEBUG("USB host task started.");
     }
 
-    UsbHostTask::~UsbHostTask(void)
+    UsbHostTask::~UsbHostTask()
     {
         LOG_MSG_DEBUG("USB host task stopped.");
     }

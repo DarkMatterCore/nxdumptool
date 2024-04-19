@@ -101,7 +101,7 @@ namespace nxdt::tasks
             NON_COPYABLE(AsyncTask);
             NON_MOVEABLE(AsyncTask);
 
-            virtual ~AsyncTask(void) noexcept
+            virtual ~AsyncTask() noexcept
             {
                 /* Return right away if the task isn't running. */
                 if (this->getStatus() != AsyncTaskStatus::RUNNING) return;
@@ -159,7 +159,7 @@ namespace nxdt::tasks
             }
 
         public:
-            AsyncTask(void) = default;
+            AsyncTask() = default;
 
             /* Cancels the task. Runs on the calling thread. */
             void cancel(void) noexcept

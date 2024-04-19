@@ -45,7 +45,7 @@ namespace nxdt::views
         this->ProcessGameCardStatus(GameCardStatus_NotInserted);
     }
 
-    GameCardTab::~GameCardTab(void)
+    GameCardTab::~GameCardTab()
     {
         /* Unregister task listener. */
         this->root_view->UnregisterGameCardTaskListener(this->gc_status_task_sub);

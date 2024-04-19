@@ -41,7 +41,7 @@ namespace nxdt::views
 
         public:
             ErrorFrame(std::string msg = "");
-            ~ErrorFrame(void);
+            ~ErrorFrame();
 
             void SetMessage(std::string msg);
     };

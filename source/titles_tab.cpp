@@ -50,7 +50,7 @@ namespace nxdt::views
         this->addTab("Blue", new brls::Rectangle(nvgRGB(0, 0, 255)));
     }
 
-    TitlesTabPopup::~TitlesTabPopup(void)
+    TitlesTabPopup::~TitlesTabPopup()
     {
         /* Free title information. */
         if (!this->is_system)
@@ -96,7 +96,7 @@ namespace nxdt::views
         }
     }
 
-    TitlesTab::~TitlesTab(void)
+    TitlesTab::~TitlesTab()
     {
         /* Unregister task listener if this is the user titles tab. */
         if (!this->is_system) this->root_view->UnregisterTitleTaskListener(this->title_task_sub);

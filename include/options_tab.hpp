@@ -64,8 +64,8 @@ namespace nxdt::views
             bool onCancel(void) override;
 
         public:
-            OptionsTabUpdateApplicationFrame(void);
-            ~OptionsTabUpdateApplicationFrame(void);
+            OptionsTabUpdateApplicationFrame();
+            ~OptionsTabUpdateApplicationFrame();
     };
 
     class OptionsTab: public brls::List
@@ -73,7 +73,6 @@ namespace nxdt::views
         private:
             RootView *root_view = nullptr;
 
-            brls::SelectListItem *unmount_ums_device = nullptr;
             nxdt::tasks::UmsDeviceVector ums_devices{};
             nxdt::tasks::UmsEvent::Subscription ums_task_sub;
 
@@ -84,7 +83,7 @@ namespace nxdt::views
             void DisplayNotification(const std::string& str);
         public:
             OptionsTab(RootView *root_view);
-            ~OptionsTab(void);
+            ~OptionsTab();
     };
 }
 

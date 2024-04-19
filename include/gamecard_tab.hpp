@@ -50,7 +50,7 @@ namespace nxdt::views
 
         public:
             GameCardTab(RootView *root_view);
-            ~GameCardTab(void);
+            ~GameCardTab();
     };
 }
 

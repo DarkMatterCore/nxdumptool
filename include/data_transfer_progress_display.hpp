@@ -42,8 +42,8 @@ namespace nxdt::views
             void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
 
         public:
-            DataTransferProgressDisplay(void);
-            ~DataTransferProgressDisplay(void);
+            DataTransferProgressDisplay();
+            ~DataTransferProgressDisplay();
 
             void setProgress(const nxdt::tasks::DataTransferProgress& progress);
 

@@ -75,8 +75,8 @@ namespace nxdt::tasks
             void run(retro_time_t current_time) override;
 
         public:
-            StatusInfoTask(void);
-            ~StatusInfoTask(void);
+            StatusInfoTask();
+            ~StatusInfoTask();
 
             bool IsInternetConnectionAvailable(void);
 
@@ -97,8 +97,8 @@ namespace nxdt::tasks
             void run(retro_time_t current_time) override;
 
         public:
-            GameCardTask(void);
-            ~GameCardTask(void);
+            GameCardTask();
+            ~GameCardTask();
 
             EVENT_SUBSCRIPTION(GameCardStatusEvent, gc_status_event);
     };
@@ -119,8 +119,8 @@ namespace nxdt::tasks
             void run(retro_time_t current_time) override;
 
         public:
-            TitleTask(void);
-            ~TitleTask(void);
+            TitleTask();
+            ~TitleTask();
 
             /* Intentionally left here to let views retrieve title metadata on-demand. */
             const TitleApplicationMetadataVector& GetApplicationMetadata(bool is_system);
@@ -146,8 +146,8 @@ namespace nxdt::tasks
             void run(retro_time_t current_time) override;
 
         public:
-            UmsTask(void);
-            ~UmsTask(void);
+            UmsTask();
+            ~UmsTask();
 
             /* Intentionally left here to let views retrieve UMS device info on-demand. */
             const UmsDeviceVector& GetUmsDevices(void);
@@ -167,8 +167,8 @@ namespace nxdt::tasks
             void run(retro_time_t current_time) override;
 
         public:
-            UsbHostTask(void);
-            ~UsbHostTask(void);
+            UsbHostTask();
+            ~UsbHostTask();
 
             EVENT_SUBSCRIPTION(UsbHostEvent, usb_host_event);
     };

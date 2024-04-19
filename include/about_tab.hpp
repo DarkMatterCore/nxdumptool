@@ -49,8 +49,8 @@ namespace nxdt::views
             void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
 
         public:
-            AboutTab(void);
-            ~AboutTab(void);
+            AboutTab();
+            ~AboutTab();
     };
 }
 

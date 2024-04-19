@@ -23,7 +23,7 @@
 
 namespace nxdt::views
 {
-    DataTransferProgressDisplay::DataTransferProgressDisplay(void)
+    DataTransferProgressDisplay::DataTransferProgressDisplay()
     {
         this->progress_display = new brls::ProgressDisplay();
         this->progress_display->setParent(this);
@@ -37,7 +37,7 @@ namespace nxdt::views
         this->speed_eta_lbl->setParent(this);
     }
 
-    DataTransferProgressDisplay::~DataTransferProgressDisplay(void)
+    DataTransferProgressDisplay::~DataTransferProgressDisplay()
     {
         delete this->progress_display;
         delete this->size_lbl;

@@ -60,8 +60,8 @@ namespace nxdt::views
             brls::View *getDefaultFocus(void) override;
 
         public:
-            RootView(void);
-            ~RootView(void);
+            RootView();
+            ~RootView();
 
             static std::string GetFormattedDateString(const struct tm& timeinfo);
 

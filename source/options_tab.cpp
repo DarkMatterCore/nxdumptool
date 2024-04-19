@@ -70,7 +70,7 @@ namespace nxdt::views
         this->download_task.execute(path, url, force_https);
     }
 
-    OptionsTabUpdateApplicationFrame::OptionsTabUpdateApplicationFrame(void) : brls::StagedAppletFrame(false)
+    OptionsTabUpdateApplicationFrame::OptionsTabUpdateApplicationFrame() : brls::StagedAppletFrame(false)
     {
         /* Set UI properties. */
         this->setTitle("options_tab/update_app/label"_i18n);
@@ -138,7 +138,7 @@ namespace nxdt::views
         this->json_task.execute(GITHUB_API_RELEASE_URL, true);
     }
 
-    OptionsTabUpdateApplicationFrame::~OptionsTabUpdateApplicationFrame(void)
+    OptionsTabUpdateApplicationFrame::~OptionsTabUpdateApplicationFrame()
     {
         /* Free parsed JSON data. */
         utilsFreeGitHubReleaseJsonData(&(this->json_data));
@@ -317,17 +317,17 @@ namespace nxdt::views
 
         this->addView(naming_convention);
 
-        /* Unmount UMS devices. */
+        /* Unmount USB Mass Storage devices. */
         /* We will replace its default click event with a new one that will: */
         /*     1. Check if any UMS devices are available before displaying the dropdown and display a notification if there are none. */
         /*     2. Generate the string vector required by the dropdown. */
         /*     3. Initialize the dropdown and pass a custom callback that will take care of unmounting the selected device. */
-        this->unmount_ums_device = new brls::SelectListItem("options_tab/unmount_ums_device/label"_i18n, { "dummy" }, 0,
-                                                            i18n::getStr("options_tab/unmount_ums_device/description"_i18n, APP_TITLE), false);
+        brls::SelectListItem *unmount_ums_device = new brls::SelectListItem("options_tab/unmount_ums_device/label"_i18n, { "dummy" }, 0,
+                                                                            i18n::getStr("options_tab/unmount_ums_device/description"_i18n, APP_TITLE), false);
 
-        this->unmount_ums_device->getClickEvent()->unsubscribeAll();
+        unmount_ums_device->getClickEvent()->unsubscribeAll();
 
-        this->unmount_ums_device->getClickEvent()->subscribe([this](brls::View* view) {
+        unmount_ums_device->getClickEvent()->subscribe([this](brls::View* view) {
             if (this->ums_devices.empty())
             {
                 /* Display a notification if we haven't mounted any UMS devices at all. */
@@ -340,7 +340,9 @@ namespace nxdt::views
             for(nxdt::tasks::UmsDeviceVectorEntry ums_device_entry : this->ums_devices) values.push_back(ums_device_entry.second);
 
             /* Display dropdown. */
-            brls::Dropdown::open(this->unmount_ums_device->getLabel(), values, [this](int idx) {
+            brls::SelectListItem *unmount_ums_device = static_cast<brls::SelectListItem*>(view);
+
+            brls::Dropdown::open(unmount_ums_device->getLabel(), values, [this](int idx) {
                 /* Make sure the current value isn't out of bounds. */
                 if (idx < 0 || idx >= static_cast<int>(this->ums_devices.size())) return;
 
@@ -358,7 +360,7 @@ namespace nxdt::views
         this->ums_devices = this->root_view->GetUmsDevices();
 
         /* Subscribe to the UMS device event. */
-        this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this](const nxdt::tasks::UmsDeviceVector& ums_devices) {
+        this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this, unmount_ums_device](const nxdt::tasks::UmsDeviceVector& ums_devices) {
             /* Update UMS devices vector. */
             this->ums_devices = this->root_view->GetUmsDevices();
 
@@ -368,7 +370,7 @@ namespace nxdt::views
 
             /* Update SelectListItem values. */
             /* If the dropdown menu is already being displayed, it'll be reloaded or popped from the view stack, depending on whether the provided vector is empty or not. */
-            this->unmount_ums_device->updateValues(values);
+            unmount_ums_device->updateValues(values);
         });
 
         this->addView(unmount_ums_device);
@@ -421,7 +423,7 @@ namespace nxdt::views
         this->addView(update_app);
     }
 
-    OptionsTab::~OptionsTab(void)
+    OptionsTab::~OptionsTab()
     {
         this->root_view->UnregisterUmsTaskListener(this->ums_task_sub);
 

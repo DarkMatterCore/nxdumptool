@@ -33,7 +33,7 @@ namespace nxdt::views
         this->label->setParent(this);
     }
 
-    ErrorFrame::~ErrorFrame(void)
+    ErrorFrame::~ErrorFrame()
     {
         delete this->label;
     }

@@ -31,7 +31,7 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    RootView::RootView(void) : brls::TabFrame()
+    RootView::RootView() : brls::TabFrame()
     {
         int material = brls::Application::getFontStash()->material;
 
@@ -168,7 +168,7 @@ namespace nxdt::views
         });
     }
 
-    RootView::~RootView(void)
+    RootView::~RootView()
     {
         /* Unregister task listeners. */
         this->usb_host_task->UnregisterListener(this->usb_host_task_sub);

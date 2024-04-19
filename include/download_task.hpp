@@ -42,7 +42,7 @@ namespace nxdt::tasks
             NON_MOVEABLE(DownloadTask);
 
         public:
-            DownloadTask(void) = default;
+            DownloadTask() = default;
 
             /* Runs on the asynchronous task thread. Required by cURL. */
             /* Make sure to pass it to either httpDownloadFile() or httpDownloadData() with 'this' as the user pointer. */
@@ -85,7 +85,7 @@ namespace nxdt::tasks
             }
 
         public:
-            DownloadFileTask(void) = default;
+            DownloadFileTask() = default;
     };
 
     /* Asynchronous task to store downloaded data into a dynamically allocated buffer using a URL. */
@@ -110,7 +110,7 @@ namespace nxdt::tasks
             }
 
         public:
-            DownloadDataTask(void) = default;
+            DownloadDataTask() = default;
     };
 }
 
