@@ -23,6 +23,7 @@
 #include "mem.h"
 #include "gamecard.h"
 #include "keys.h"
+#include "rsa.h"
 
 #define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB. */
 
@@ -78,6 +79,10 @@ static u8 *g_gameCardReadBuf = NULL;
 
 static GameCardHeader g_gameCardHeader = {0};
 static GameCardInfo g_gameCardInfoArea = {0};
+
+static GameCardHeader2 g_gameCardHeader2 = {0};
+static GameCardHeader2Certificate g_gameCardHeader2Cert = {0};
+
 static u64 g_gameCardNormalAreaSize = 0, g_gameCardSecureAreaSize = 0, g_gameCardTotalSize = 0;
 static u64 g_gameCardCapacity = 0;
 
@@ -829,8 +834,10 @@ end:
 static void gamecardFreeInfo(bool clear_status)
 {
     memset(&g_gameCardHeader, 0, sizeof(GameCardHeader));
-
     memset(&g_gameCardInfoArea, 0, sizeof(GameCardInfo));
+
+    memset(&g_gameCardHeader2, 0, sizeof(GameCardHeader2));
+    memset(&g_gameCardHeader2Cert, 0, sizeof(GameCardHeader2Certificate));
 
     g_gameCardNormalAreaSize = g_gameCardSecureAreaSize = g_gameCardTotalSize = 0;
 
@@ -861,6 +868,8 @@ static void gamecardFreeInfo(bool clear_status)
 
 static bool gamecardReadHeader(void)
 {
+    Result rc = 0;
+
     /* Open normal storage area. */
     if (!gamecardOpenStorageArea(GameCardStorageArea_Normal))
     {
@@ -870,7 +879,7 @@ static bool gamecardReadHeader(void)
 
     /* Read gamecard header. */
     /* We don't use gamecardReadStorageArea() here because of its dependence on storage area sizes (which we haven't yet retrieved). */
-    Result rc = fsStorageRead(&g_gameCardStorage, 0, &g_gameCardHeader, sizeof(GameCardHeader));
+    rc = fsStorageRead(&g_gameCardStorage, 0, &g_gameCardHeader, sizeof(GameCardHeader));
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("fsStorageRead failed to read gamecard header! (0x%X).", rc);
@@ -883,6 +892,43 @@ static bool gamecardReadHeader(void)
     if (__builtin_bswap32(g_gameCardHeader.magic) != GAMECARD_HEAD_MAGIC)
     {
         LOG_MSG_ERROR("Invalid gamecard header magic word! (0x%08X).", __builtin_bswap32(g_gameCardHeader.magic));
+        return false;
+    }
+
+    /* Check if a Header2 area is available. */
+    if (g_gameCardHeader.flags & GameCardFlags_HasCa10Certificate)
+    {
+        /* Read the Header2 area. */
+        rc = fsStorageRead(&g_gameCardStorage, GAMECARD_HEADER2_OFFSET, &g_gameCardHeader2, sizeof(GameCardHeader2));
+        if (R_FAILED(rc))
+        {
+            LOG_MSG_ERROR("fsStorageRead failed to read gamecard Header2 area! (0x%X).", rc);
+            return false;
+        }
+
+        LOG_DATA_DEBUG(&g_gameCardHeader2, sizeof(GameCardHeader2), "Gamecard Header2 dump:");
+
+        /* Read the Header2Certificate area. */
+        rc = fsStorageRead(&g_gameCardStorage, GAMECARD_HEADER2_CERT_OFFSET, &g_gameCardHeader2Cert, sizeof(GameCardHeader2Certificate));
+        if (R_FAILED(rc))
+        {
+            LOG_MSG_ERROR("fsStorageRead failed to read gamecard Header2Certificate area! (0x%X).", rc);
+            return false;
+        }
+
+        LOG_DATA_DEBUG(&g_gameCardHeader2Cert, sizeof(GameCardHeader2Certificate), "Gamecard Header2Certificate dump:");
+
+        /* Verify the signature from the Header2 area. */
+        if (!rsa2048VerifySha256BasedPkcs1v15Signature(&(g_gameCardHeader2.unknown), sizeof(GameCardHeader2) - MEMBER_SIZE(GameCardHeader2, signature), g_gameCardHeader2.signature, \
+                                                       g_gameCardHeader2Cert.modulus, g_gameCardHeader2Cert.exponent, sizeof(g_gameCardHeader2Cert.exponent)))
+        {
+            LOG_MSG_ERROR("Gamecard Header2 signature verification failed!");
+            return false;
+        }
+
+        // TODO: remove this once anyone comes across a gamecard with an actual Header2 area.
+        // Public non-static functions to retrieve both the Header2 and the Header2Certificate areas will be implemented afterwards.
+        // For the time being, we will force an error.
         return false;
     }
 
@@ -1212,7 +1258,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
 
     bool success = false, dump_fs_header = false;
 
-    if ((name && !*name) || offset < (GAMECARD_CERTIFICATE_OFFSET + sizeof(FsGameCardCertificate)) || !IS_ALIGNED(offset, GAMECARD_PAGE_SIZE) || \
+    if ((name && !*name) || offset < (GAMECARD_CERT_OFFSET + sizeof(FsGameCardCertificate)) || !IS_ALIGNED(offset, GAMECARD_PAGE_SIZE) || \
         (size && (!IS_ALIGNED(size, GAMECARD_PAGE_SIZE) || (offset + size) > g_gameCardTotalSize)))
     {
         LOG_MSG_ERROR("Invalid parameters!");

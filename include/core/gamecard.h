@@ -31,14 +31,17 @@
 extern "C" {
 #endif
 
-#define GAMECARD_HEAD_MAGIC         0x48454144                      /* "HEAD". */
+#define GAMECARD_HEAD_MAGIC             0x48454144                      /* "HEAD". */
 
-#define GAMECARD_PAGE_SIZE          0x200
-#define GAMECARD_PAGE_OFFSET(x)     ((u64)(x) * GAMECARD_PAGE_SIZE)
+#define GAMECARD_PAGE_SIZE              0x200
+#define GAMECARD_PAGE_OFFSET(x)         ((u64)(x) * GAMECARD_PAGE_SIZE)
 
-#define GAMECARD_UPDATE_TID         SYSTEM_UPDATE_TID
+#define GAMECARD_UPDATE_TID             SYSTEM_UPDATE_TID
 
-#define GAMECARD_CERTIFICATE_OFFSET 0x7000
+#define GAMECARD_HEADER2_OFFSET         0x200
+#define GAMECARD_HEADER2_CERT_OFFSET    0x400
+
+#define GAMECARD_CERT_OFFSET            0x7000
 
 /// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
 typedef struct {
@@ -150,6 +153,14 @@ typedef enum {
     GameCardFlags_Count                            = 6          ///< Total values supported by this enum.
 } GameCardFlags;
 
+/// Available in HOS 18.0.0+.
+typedef enum {
+    GameCardFlags2_None     = 0,
+    GameCardFlags2_T1       = 1,
+    GameCardFlags2_T2       = 2,
+    GameCardFlags2_Count    = 3     ///< Total values supported by this enum.
+} GameCardFlags2;
+
 typedef enum {
     GameCardSelSec_ForT1 = 1,
     GameCardSelSec_ForT2 = 2,
@@ -198,7 +209,7 @@ NXDT_ASSERT(GameCardInfo, 0x70);
 
 /// Placed after the `GameCardKeyArea` section.
 typedef struct {
-    u8 signature[0x100];                            ///< RSA-2048-PSS with SHA-256 signature over the rest of the header.
+    u8 signature[0x100];                            ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the header.
     u32 magic;                                      ///< "HEAD".
     u32 rom_area_start_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u32 backup_area_start_page;                     ///< Always 0xFFFFFFFF.
@@ -208,7 +219,9 @@ typedef struct {
     u8 flags;                                       ///< GameCardFlags.
     u8 package_id[0x8];                             ///< Used for challenge-response authentication.
     u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
-    u8 reserved[0x4];
+    u8 reserved_1;
+    u8 flags_2;                                     ///< GameCardFlags2.
+    u8 reserved_2[0x2];
     u8 card_info_iv[AES_128_KEY_SIZE];              ///< AES-128-CBC IV for the CardInfo area (reversed).
     u64 partition_fs_header_address;                ///< Root Hash File System header offset.
     u64 partition_fs_header_size;                   ///< Root Hash File System header size.
@@ -222,6 +235,35 @@ typedef struct {
 } GameCardHeader;
 
 NXDT_ASSERT(GameCardHeader, 0x200);
+
+/// Encrypted using AES-128-CBC.
+typedef struct {
+    u8 unknown[0x40];
+    u8 header_hash[SHA256_HASH_SIZE];
+    u8 reserved[0x10];
+} GameCardHeader2EncryptedData;
+
+NXDT_ASSERT(GameCardHeader2EncryptedData, 0x70);
+
+/// Placed immediately after the `GameCardHeader` section.
+typedef struct {
+    u8 signature[0x100];                            ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the header.
+    u8 unknown[0x90];
+    GameCardHeader2EncryptedData encrypted_data;
+} GameCardHeader2;
+
+NXDT_ASSERT(GameCardHeader2, 0x200);
+
+/// Placed immediately after the `GameCardHeader2` section.
+typedef struct {
+    u8 signature[0x100];    ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the data from 0x100 to 0x300.
+    u8 unknown_1[0x30];
+    u8 modulus[0x100];      ///< RSA modulus used to verify the signature from GameCardHeader2.
+    u8 exponent[0x4];       ///< RSA exponent used to verify the signature from GameCardHeader2.
+    u8 unknown_2[0x1CC];
+} GameCardHeader2Certificate;
+
+NXDT_ASSERT(GameCardHeader2Certificate, 0x400);
 
 typedef enum {
     GameCardStatus_NotInserted                     = 0, ///< No gamecard is inserted.
@@ -310,7 +352,7 @@ bool gamecardGetHeader(GameCardHeader *out);
 bool gamecardGetPlaintextCardInfoArea(GameCardInfo *out);
 
 /// Fills the provided FsGameCardCertificate pointer.
-/// This area can also be read using gamecardReadStorage(), starting at GAMECARD_CERTIFICATE_OFFSET.
+/// This area can also be read using gamecardReadStorage(), starting at GAMECARD_CERT_OFFSET.
 bool gamecardGetCertificate(FsGameCardCertificate *out);
 
 /// Fills the provided u64 pointer with the total gamecard size, which is the size taken by both Normal and Secure storage areas.

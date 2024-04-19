@@ -4533,7 +4533,7 @@ static void xciReadThreadFunc(void *arg)
         }
 
         /* Remove certificate */
-        if (!keep_certificate && offset == 0) memset((u8*)buf1 + GAMECARD_CERTIFICATE_OFFSET, 0xFF, sizeof(FsGameCardCertificate));
+        if (!keep_certificate && offset == 0) memset((u8*)buf1 + GAMECARD_CERT_OFFSET, 0xFF, sizeof(FsGameCardCertificate));
 
         /* Update checksum */
         if (calculate_checksum)

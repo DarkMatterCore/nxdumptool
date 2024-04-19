@@ -275,7 +275,7 @@ namespace nxdt::views
         brls::ListItem *dump_initial_data = new brls::ListItem("gamecard_tab/list/dump_initial_data/label"_i18n, "gamecard_tab/list/dump_initial_data/description"_i18n);
         this->list->addView(dump_initial_data);
 
-        brls::ListItem *dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, i18n::getStr("gamecard_tab/list/dump_certificate/description", GAMECARD_CERTIFICATE_OFFSET / GAMECARD_PAGE_SIZE));
+        brls::ListItem *dump_certificate = new brls::ListItem("gamecard_tab/list/dump_certificate/label"_i18n, i18n::getStr("gamecard_tab/list/dump_certificate/description", GAMECARD_CERT_OFFSET / GAMECARD_PAGE_SIZE));
         this->list->addView(dump_certificate);
 
         brls::ListItem *dump_card_id_set = new brls::ListItem("gamecard_tab/list/dump_card_id_set/label"_i18n, "gamecard_tab/list/dump_card_id_set/description"_i18n);

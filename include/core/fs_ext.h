@@ -32,7 +32,7 @@ extern "C" {
 
 /// Located at offset 0x7000 in the gamecard image.
 typedef struct {
-    u8 signature[0x100];        ///< RSA-2048-PSS with SHA-256 signature over the rest of the data.
+    u8 signature[0x100];        ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the data.
     u32 magic;                  ///< "CERT".
     u32 version;
     u8 kek_index;
