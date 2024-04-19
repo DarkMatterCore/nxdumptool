@@ -20,12 +20,12 @@
 
     "update_nswdb_xml": {
         "label": "Update NSWDB XML",
-        "description": "Retrieves the latest NSWDB XML, which can be optionally used to validate checksums from gamecard dumps. Requires Internet connectivity."
+        "description": "Retrieves the latest NSWDB XML, which can be optionally used to validate checksums from gamecard dumps. Requires an Internet connection."
     },
 
     "update_app": {
         "label": "Update application",
-        "description": "Checks if an update is available in nxdumptool's GitHub repository. Requires Internet connectivity.",
+        "description": "Checks if an update is available in nxdumptool's GitHub repository. Requires an Internet connection.",
         "frame": {
             "please_wait": "Please wait…",
             "release_details": "Commit hash: {0:.7}\nRelease date: {1} UTC+0",
