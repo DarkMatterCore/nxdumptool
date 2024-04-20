@@ -81,12 +81,12 @@
 #define HBMENU_BASE_PATH                "/switch/"
 #define APP_BASE_PATH                   HBMENU_BASE_PATH APP_TITLE "/"
 
-#define GAMECARD_PATH                   APP_BASE_PATH "Gamecard/"
-#define HFS_PATH                        APP_BASE_PATH "HFS/"
-#define NSP_PATH                        APP_BASE_PATH "NSP/"
-#define TICKET_PATH                     APP_BASE_PATH "Ticket/"
-#define NCA_PATH                        APP_BASE_PATH "NCA/"
-#define NCA_FS_PATH                     APP_BASE_PATH "NCA FS/"
+#define GAMECARD_SUBDIR                 "Gamecard"
+#define HFS_SUBDIR                      "HFS"
+#define NSP_SUBDIR                      "NSP"
+#define TICKET_SUBDIR                   "Ticket"
+#define NCA_SUBDIR                      "NCA"
+#define NCA_FS_SUBDIR                   "NCA FS"
 
 #define CONFIG_FILE_NAME                APP_TITLE "_config.json"
 #define DEFAULT_CONFIG_PATH             "romfs:/default_config.json"

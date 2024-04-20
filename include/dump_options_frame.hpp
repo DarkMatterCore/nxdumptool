@@ -34,7 +34,7 @@ namespace nxdt::views
     {
         private:
             RootView *root_view = nullptr;
-            std::string raw_filename{}, extension{};
+            std::string storage_prefix{}, base_output_path{}, raw_filename{}, extension{};
 
             brls::List *list = nullptr;
             brls::InputListItem *filename = nullptr;
@@ -45,24 +45,23 @@ namespace nxdt::views
 
             bool finalized = false;
 
-            void Initialize(std::string& title, brls::Image *icon);
+            void Initialize(const std::string& title, brls::Image *icon);
 
             std::string SanitizeUserFileName(void);
 
             void UpdateOutputStorages(const nxdt::tasks::UmsDeviceVector& ums_devices);
+            void UpdateStoragePrefix(u32 selected);
 
         protected:
-            DumpOptionsFrame(RootView *root_view, std::string& title, std::string& raw_filename, std::string extension);
-            DumpOptionsFrame(RootView *root_view, std::string& title, brls::Image *icon, std::string& raw_filename, std::string extension);
+            DumpOptionsFrame(RootView *root_view, const std::string& title, const std::string& base_output_path, const std::string& raw_filename, const std::string& extension);
+            DumpOptionsFrame(RootView *root_view, const std::string& title, brls::Image *icon, const std::string& base_output_path, const std::string& raw_filename, const std::string& extension);
             ~DumpOptionsFrame();
 
             bool onCancel(void) override final;
 
             void addView(brls::View *view, bool fill = false);
 
-            std::string GetFileName(void);
-
-            std::string GetOutputStoragePrefix(void);
+            const std::string GetOutputFilePath(void);
 
             ALWAYS_INLINE brls::GenericEvent::Subscription RegisterButtonListener(brls::GenericEvent::Callback cb)
             {

@@ -80,7 +80,7 @@ namespace nxdt::tasks
             /* Runs in the background thread. */
             bool doInBackground(const std::string& path, const std::string& url, const bool& force_https) override final
             {
-                /* If the process fails or if it's cancelled, httpDownloadFile() will take care of closing the incomplete output file and delete it. */
+                /* If the process fails or if it's cancelled, httpDownloadFile() will take care of closing the incomplete output file and deleting it. */
                 return httpDownloadFile(path.c_str(), url.c_str(), force_https, DownloadFileTask::HttpProgressCallback, this);
             }
 

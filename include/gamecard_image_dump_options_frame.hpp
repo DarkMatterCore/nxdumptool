@@ -38,7 +38,7 @@ namespace nxdt::views
             brls::SelectListItem *checksum_lookup_method = nullptr;
 
         public:
-            GameCardImageDumpOptionsFrame(RootView *root_view, std::string title, std::string raw_filename);
+            GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename);
     };
 }
 

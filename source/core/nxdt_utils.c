@@ -87,19 +87,6 @@ static const u32 g_sizeSuffixesCount = MAX_ELEMENTS(g_sizeSuffixes);
 static const char g_illegalFileSystemChars[] = "\\/:*?\"<>|";
 static const size_t g_illegalFileSystemCharsLength = (MAX_ELEMENTS(g_illegalFileSystemChars) - 1);
 
-static const char *g_outputDirs[] = {
-    HBMENU_BASE_PATH,
-    APP_BASE_PATH,
-    GAMECARD_PATH,
-    HFS_PATH,
-    NSP_PATH,
-    TICKET_PATH,
-    NCA_PATH,
-    NCA_FS_PATH
-};
-
-static const size_t g_outputDirsCount = MAX_ELEMENTS(g_outputDirs);
-
 static bool g_appUpdated = false;
 
 static const SplConfigItem SplConfigItem_ExosphereApiVersion = (SplConfigItem)65000;
@@ -205,10 +192,6 @@ bool utilsInitializeResources(void)
 
         LOG_MSG_INFO("Running under %s %s unit in %s mode.", g_isDevUnit ? "development" : "retail", utilsIsMarikoUnit() ? "Mariko" : "Erista", utilsIsAppletMode() ? "applet" : "title override");
 
-        /* Create output directories (SD card only). */
-        /* TODO: remove the APP_TITLE check whenever we're ready for a release. */
-        if (!strcasecmp(APP_TITLE, "nxdumptool")) utilsCreateOutputDirectories(NULL);
-
         if (g_appLaunchPath)
         {
             LOG_MSG_INFO("Launch path: \"%s\".", g_appLaunchPath);
@@ -217,6 +200,7 @@ bool utilsInitializeResources(void)
             /* TODO: uncomment this block whenever we are ready for a release. */
             /*if (strcmp(g_appLaunchPath, NRO_PATH) != 0)
             {
+                utilsCreateDirectoryTree(NRO_PATH, false);
                 remove(NRO_PATH);
                 rename(g_appLaunchPath, NRO_PATH);
 
@@ -784,24 +768,6 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
     if (out_free) *out_free = ((u64)info.f_bfree * (u64)info.f_frsize);
 
     return true;
-}
-
-void utilsCreateOutputDirectories(const char *device)
-{
-    size_t device_len = 0;
-    char path[FS_MAX_PATH] = {0};
-
-    if (device && (!(device_len = strlen(device)) || device[device_len - 1] != ':'))
-    {
-        LOG_MSG_ERROR("Invalid parameters!");
-        return;
-    }
-
-    for(size_t i = 0; i < g_outputDirsCount; i++)
-    {
-        sprintf(path, "%s%s", (device ? device : DEVOPTAB_SDMC_DEVICE), g_outputDirs[i]);
-        mkdir(path, 0744);
-    }
 }
 
 bool utilsCheckIfFileExists(const char *path)

@@ -26,7 +26,8 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    DumpOptionsFrame::DumpOptionsFrame(RootView *root_view, std::string& title, std::string& raw_filename, std::string extension) : brls::ThumbnailFrame(), root_view(root_view), raw_filename(raw_filename), extension(extension)
+    DumpOptionsFrame::DumpOptionsFrame(RootView *root_view, const std::string& title, const std::string& base_output_path, const std::string& raw_filename, const std::string& extension) :
+        brls::ThumbnailFrame(), root_view(root_view), base_output_path(base_output_path), raw_filename(raw_filename), extension(extension)
     {
         /* Generate icon using the default image. */
         brls::Image *icon = new brls::Image();
@@ -37,7 +38,8 @@ namespace nxdt::views
         this->Initialize(title, icon);
     }
 
-    DumpOptionsFrame::DumpOptionsFrame(RootView *root_view, std::string& title, brls::Image *icon, std::string& raw_filename, std::string extension) : brls::ThumbnailFrame(), root_view(root_view), raw_filename(raw_filename), extension(extension)
+    DumpOptionsFrame::DumpOptionsFrame(RootView *root_view, const std::string& title, brls::Image *icon, const std::string& base_output_path, const std::string& raw_filename, const std::string& extension) :
+        brls::ThumbnailFrame(), root_view(root_view), base_output_path(base_output_path), raw_filename(raw_filename), extension(extension)
     {
         /* Initialize the rest of the elements. */
         this->Initialize(title, icon);
@@ -52,7 +54,7 @@ namespace nxdt::views
         this->root_view->UnregisterUmsTaskListener(this->ums_task_sub);
     }
 
-    void DumpOptionsFrame::Initialize(std::string& title, brls::Image *icon)
+    void DumpOptionsFrame::Initialize(const std::string& title, brls::Image *icon)
     {
         /* Set UI properties. */
         this->setTitle(title);
@@ -86,10 +88,16 @@ namespace nxdt::views
 
             /* Sanitize output filename for the selected storage. */
             this->filename->setValue(this->SanitizeUserFileName());
+
+            /* Update the storage prefix. */
+            this->UpdateStoragePrefix(static_cast<u32>(selected));
         });
 
-        /* Manually update output storages vector. */
+        /* Manually update the output storages vector. */
         this->UpdateOutputStorages(this->root_view->GetUmsDevices());
+
+        /* Manually update the storage prefix. */
+        this->UpdateStoragePrefix(this->output_storage->getSelectedValue());
 
         this->list->addView(this->output_storage);
 
@@ -180,6 +188,25 @@ namespace nxdt::views
         }
     }
 
+    void DumpOptionsFrame::UpdateStoragePrefix(u32 selected)
+    {
+        switch(selected)
+        {
+            case ConfigOutputStorage_SdCard:
+                this->storage_prefix = DEVOPTAB_SDMC_DEVICE "/";
+                break;
+            case ConfigOutputStorage_UsbHost:
+                this->storage_prefix = "/";
+                break;
+            default:
+            {
+                const nxdt::tasks::UmsDeviceVector& ums_devices = this->root_view->GetUmsDevices();
+                this->storage_prefix = std::string(ums_devices.at(selected - ConfigOutputStorage_Count).first->name);
+                break;
+            }
+        }
+    }
+
     bool DumpOptionsFrame::onCancel(void)
     {
         /* Pop view. */
@@ -192,33 +219,35 @@ namespace nxdt::views
         this->list->addView(view, fill);
     }
 
-    std::string DumpOptionsFrame::GetFileName(void)
+    const std::string DumpOptionsFrame::GetOutputFilePath(void)
     {
-        return this->filename->getValue();
-    }
+        std::string output = this->storage_prefix;
+        u32 selected = this->output_storage->getSelectedValue();
+        char *sanitized_path = nullptr;
 
-    std::string DumpOptionsFrame::GetOutputStoragePrefix(void)
-    {
-        std::string prefix{};
-
-        u8 selected = static_cast<u8>(this->output_storage ? this->output_storage->getSelectedValue() : configGetInteger("output_storage"));
-
-        switch(selected)
+        if (selected == ConfigOutputStorage_SdCard || selected >= ConfigOutputStorage_Count)
         {
-            case ConfigOutputStorage_SdCard:
-                prefix = DEVOPTAB_SDMC_DEVICE "/";
-                break;
-            case ConfigOutputStorage_UsbHost:
-                prefix = "/";
-                break;
-            default:
-            {
-                const nxdt::tasks::UmsDeviceVector& ums_devices = this->root_view->GetUmsDevices();
-                prefix = std::string(ums_devices.at(selected - ConfigOutputStorage_Count).first->name);
-                break;
-            }
+            /* Remove the trailing path separator (if available) and append the application's base path if we're dealing with an SD card or a UMS device. */
+            if (output.back() == '/') output.pop_back();
+            output += APP_BASE_PATH;
         }
 
-        return prefix;
+        /* Append a path separator, if needed. */
+        if (output.back() != '/' && this->base_output_path.front() != '/') output.push_back('/');
+
+        /* Append the base output path string. */
+        output += this->base_output_path;
+
+        /* Generate the sanitized file path. */
+        sanitized_path = utilsGeneratePath(output.c_str(), this->filename->getValue().c_str(), this->extension.c_str());
+        if (!sanitized_path) throw fmt::format("Failed to generate sanitized file path.");
+
+        /* Update output. */
+        output = std::string(sanitized_path);
+
+        /* Free sanitized path. */
+        free(sanitized_path);
+
+        return output;
     }
 }

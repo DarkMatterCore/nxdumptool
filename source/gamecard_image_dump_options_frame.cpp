@@ -26,7 +26,8 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    GameCardImageDumpOptionsFrame::GameCardImageDumpOptionsFrame(RootView *root_view, std::string title, std::string raw_filename) : DumpOptionsFrame(root_view, title, raw_filename, ".xci")
+    GameCardImageDumpOptionsFrame::GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename) :
+        DumpOptionsFrame(root_view, "gamecard_tab/list/dump_card_image/label"_i18n, std::string(GAMECARD_SUBDIR), raw_filename, std::string(".xci"))
     {
         /* Prepend KeyArea data. */
         this->prepend_key_area = new brls::ToggleListItem("dump_options/prepend_key_area/label"_i18n, configGetBoolean("gamecard/prepend_key_area"), "dump_options/prepend_key_area/description"_i18n,
@@ -116,10 +117,11 @@ namespace nxdt::views
         /* Register dump button callback. */
         this->RegisterButtonListener([this](brls::View *view) {
             /* Retrieve configuration values set by the user. */
-            //bool prepend_key_area = this->prepend_key_area_item->getToggleState();
-            //bool keep_certificate = this->keep_certificate_item->getToggleState();
+            //bool prepend_key_area_val = this->prepend_key_area->getToggleState();
+            //bool keep_certificate_val = this->keep_certificate->getToggleState();
             bool trim_dump_val = this->trim_dump->getToggleState();
-            //bool calculate_checksum = this->calculate_checksum_item->getToggleState();
+            //bool calculate_checksum_val = this->calculate_checksum->getToggleState();
+            //int checksum_lookup_method_val = static_cast<int>(this->checksum_lookup_method->getSelectedValue());
 
             /* Get gamecard size. */
             u64 gc_size = 0;
@@ -132,6 +134,11 @@ namespace nxdt::views
             /* Display update frame. */
             //brls::Application::pushView(new OptionsTabUpdateApplicationFrame(), brls::ViewAnimation::SLIDE_LEFT, false);
             brls::Application::notify(fmt::format("0x{:X}", gc_size));
+
+
+
+
+            LOG_MSG_DEBUG("Output file path: %s", this->GetOutputFilePath().c_str());
         });
     }
 }

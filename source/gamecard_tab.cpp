@@ -257,7 +257,7 @@ namespace nxdt::views
 
         dump_card_image->getClickEvent()->subscribe([this](brls::View *view) {
             std::string& raw_filename = (configGetInteger("naming_convention") == TitleNamingConvention_Full ? raw_filename_full : raw_filename_id_only);
-            brls::Application::pushView(new GameCardImageDumpOptionsFrame(this->root_view, "gamecard_tab/list/dump_card_image/label"_i18n, raw_filename), brls::ViewAnimation::SLIDE_LEFT);
+            brls::Application::pushView(new GameCardImageDumpOptionsFrame(this->root_view, raw_filename), brls::ViewAnimation::SLIDE_LEFT);
         });
 
         this->list->addView(dump_card_image);
