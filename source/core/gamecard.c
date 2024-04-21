@@ -695,16 +695,28 @@ static void gamecardDetectionThreadFunc(void *arg)
             /* Free gamecard info before proceeding. */
             gamecardFreeInfo(true);
 
-            /* Retrieve current gamecard insertion status. */
-            /* Only proceed if we're dealing with a status change. */
-            if (gamecardIsInserted())
-            {
-                /* Don't access the gamecard immediately to avoid conflicts with HOS / sysmodules. */
-                utilsSleep(GAMECARD_ACCESS_DELAY);
+            /* Delay gamecard access by GAMECARD_ACCESS_DELAY full seconds. This is done to to avoid conflicts with HOS / sysmodules. */
+            /* We will periodically check if the gamecard is still inserted during this period. */
+            /* If the gamecard is taken out before reaching the length of the delay, we won't try to access it. */
+            time_t start = time(NULL);
+            bool gc_delay_passed = false;
 
-                /* Load gamecard info. */
-                gamecardLoadInfo();
+            while(gamecardIsInserted())
+            {
+                time_t now = time(NULL);
+                time_t diff = (now - start);
+
+                if (diff >= GAMECARD_ACCESS_DELAY)
+                {
+                    gc_delay_passed = true;
+                    break;
+                }
+
+                utilsAppletLoopDelay();
             }
+
+            /* Load gamecard info (if applicable). */
+            if (gc_delay_passed) gamecardLoadInfo();
 
             /* Signal user mode gamecard status change event. */
             ueventSignal(&g_gameCardStatusChangeEvent);
