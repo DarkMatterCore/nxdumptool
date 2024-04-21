@@ -50,7 +50,7 @@ namespace nxdt::views
         /* Unregister all button click event listeners. */
         this->button_click_event->unsubscribeAll();
 
-        /* Unregister task listener. */
+        /* Unregister UMS task listener. */
         this->root_view->UnregisterUmsTaskListener(this->ums_task_sub);
     }
 

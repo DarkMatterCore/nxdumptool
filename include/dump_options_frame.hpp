@@ -32,8 +32,10 @@ namespace nxdt::views
 {
     class DumpOptionsFrame: public brls::ThumbnailFrame
     {
-        private:
+        protected:
             RootView *root_view = nullptr;
+
+        private:
             std::string storage_prefix{}, base_output_path{}, raw_filename{}, extension{};
 
             brls::List *list = nullptr;

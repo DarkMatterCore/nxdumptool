@@ -31,6 +31,9 @@ namespace nxdt::views
     class GameCardImageDumpOptionsFrame: public DumpOptionsFrame
     {
         private:
+            nxdt::tasks::GameCardStatusEvent::Subscription gc_task_sub;
+            brls::VoidEvent gc_ejected_event;
+
             brls::ToggleListItem *prepend_key_area = nullptr;
             brls::ToggleListItem *keep_certificate = nullptr;
             brls::ToggleListItem *trim_dump = nullptr;
@@ -39,6 +42,17 @@ namespace nxdt::views
 
         public:
             GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename);
+            ~GameCardImageDumpOptionsFrame();
+
+            ALWAYS_INLINE brls::VoidEvent::Subscription RegisterGameCardEjectionListener(brls::VoidEvent::Callback cb)
+            {
+                return this->gc_ejected_event.subscribe(cb);
+            }
+
+            ALWAYS_INLINE void UnregisterGameCardEjectionListener(brls::VoidEvent::Subscription subscription)
+            {
+                this->gc_ejected_event.unsubscribe(subscription);
+            }
     };
 }
 

@@ -29,6 +29,18 @@ namespace nxdt::views
     GameCardImageDumpOptionsFrame::GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename) :
         DumpOptionsFrame(root_view, "gamecard_tab/list/dump_card_image/label"_i18n, std::string(GAMECARD_SUBDIR), raw_filename, std::string(".xci"))
     {
+        /* Subscribe to the gamecard task event. */
+        this->gc_task_sub = this->root_view->RegisterGameCardTaskListener([this](const GameCardStatus& gc_status) {
+            /* Realistically speaking, this should always match a NotInserted status, but it's always better to be safe than sorry. */
+            if (gc_status != GameCardStatus_NotInserted) return;
+
+            /* Fire gamecard ejection event. */
+            this->gc_ejected_event.fire();
+
+            /* Pop view from stack immediately. */
+            brls::Application::popView();
+        });
+
         /* Prepend KeyArea data. */
         this->prepend_key_area = new brls::ToggleListItem("dump_options/prepend_key_area/label"_i18n, configGetBoolean("gamecard/prepend_key_area"), "dump_options/prepend_key_area/description"_i18n,
                                                           "generic/value_enabled"_i18n, "generic/value_disabled"_i18n);
@@ -140,5 +152,14 @@ namespace nxdt::views
 
             LOG_MSG_DEBUG("Output file path: %s", this->GetOutputFilePath().c_str());
         });
+    }
+
+    GameCardImageDumpOptionsFrame::~GameCardImageDumpOptionsFrame()
+    {
+        /* Unregister all gamecard ejection event listeners. */
+        this->gc_ejected_event.unsubscribeAll();
+
+        /* Unregister gamecard task listener. */
+        this->root_view->UnregisterGameCardTaskListener(this->gc_task_sub);
     }
 }
