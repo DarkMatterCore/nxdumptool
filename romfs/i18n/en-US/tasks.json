@@ -1,4 +1,13 @@
 {
+    "gamecard": {
+        "image": {
+            "get_size_failed": "Failed to retrieve gamecard image size.",
+            "get_security_info_failed": "Failed to retrieve gamecard security information.",
+            "write_key_area_failed": "Failed to write gamecard key area.",
+            "io_failed": "Failed to {0} 0x{1:X}-byte long gamecard block at offset 0x{2:X}."
+        }
+    },
+
     "notifications": {
         "gamecard_status_updated": "Gamecard status updated.",
         "gamecard_ejected": "Gamecard ejected.",

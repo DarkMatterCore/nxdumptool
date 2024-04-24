@@ -36,9 +36,9 @@ namespace nxdt::views
         this->setContentView(this->update_progress);
 
         /* Add cancel button. */
-        this->addButton("options_tab/update_dialog/cancel"_i18n, [&](brls::View* view) {
+        this->addButton("generic/cancel"_i18n, [&](brls::View* view) {
             /* Cancel download task. */
-            this->download_task.cancel();
+            this->download_task.Cancel();
 
             /* Close dialog. */
             this->close();
@@ -59,15 +59,15 @@ namespace nxdt::views
                 this->update_progress->willDisappear();
 
                 /* Update button label. */
-                this->setButtonText(0, "options_tab/update_dialog/close"_i18n);
+                this->setButtonText(0, "generic/close"_i18n);
 
                 /* Display notification. */
-                brls::Application::notify(this->download_task.get() ? this->success_str : "options_tab/notifications/update_failed"_i18n);
+                brls::Application::notify(this->download_task.GetResult() ? this->success_str : "options_tab/notifications/update_failed"_i18n);
             }
         });
 
         /* Start download task. */
-        this->download_task.execute(path, url, force_https);
+        this->download_task.Execute(path, url, force_https);
     }
 
     OptionsTabUpdateApplicationFrame::OptionsTabUpdateApplicationFrame() : brls::StagedAppletFrame(false)
@@ -93,13 +93,13 @@ namespace nxdt::views
 
         /* Subscribe to the JSON task. */
         this->json_task.RegisterListener([&](const nxdt::tasks::DataTransferProgress& progress) {
-            /* Return immediately if the JSON task hasn't finished. */
-            if (!this->json_task.IsFinished()) return;
+            /* Return immediately if the JSON task hasn't finished yet or if it was cancelled. */
+            if (!this->json_task.IsFinished() || this->json_task.IsCancelled()) return;
 
             std::string notification = "";
 
             /* Retrieve task result. */
-            nxdt::tasks::DownloadDataResult json_task_result = this->json_task.get();
+            nxdt::tasks::DownloadDataResult json_task_result = this->json_task.GetResult();
             this->json_buf = json_task_result.first;
             this->json_buf_size = json_task_result.second;
 
@@ -135,7 +135,7 @@ namespace nxdt::views
         });
 
         /* Start JSON task. */
-        this->json_task.execute(GITHUB_API_RELEASE_URL, true);
+        this->json_task.Execute(GITHUB_API_RELEASE_URL, true);
     }
 
     OptionsTabUpdateApplicationFrame::~OptionsTabUpdateApplicationFrame()
@@ -162,10 +162,10 @@ namespace nxdt::views
     bool OptionsTabUpdateApplicationFrame::onCancel(void)
     {
         /* Cancel NRO task. */
-        this->nro_task.cancel();
+        this->nro_task.Cancel();
 
         /* Cancel JSON task. */
-        this->json_task.cancel();
+        this->json_task.Cancel();
 
         /* Pop view. */
         brls::Application::popView(brls::ViewAnimation::SLIDE_RIGHT);
@@ -176,8 +176,8 @@ namespace nxdt::views
     void OptionsTabUpdateApplicationFrame::DisplayChangelog(void)
     {
         int line = 0;
-        std::string item;
-        std::stringstream ss(std::string(this->json_data.changelog));
+        std::string item{};
+        std::stringstream ss(this->json_data.changelog);
 
         /* Display version string at the top. */
         FocusableLabel *version_lbl = new FocusableLabel(false, false, brls::LabelStyle::CRASH, std::string(this->json_data.version), true);
@@ -240,7 +240,7 @@ namespace nxdt::views
         this->unregisterAction(brls::Key::PLUS);
 
         /* Update cancel action label. */
-        this->updateActionHint(brls::Key::B, "options_tab/update_dialog/cancel"_i18n);
+        this->updateActionHint(brls::Key::B, "generic/cancel"_i18n);
 
         /* Subscribe to the NRO task. */
         this->nro_task.RegisterListener([&](const nxdt::tasks::DataTransferProgress& progress) {
@@ -251,7 +251,7 @@ namespace nxdt::views
             if (this->nro_task.IsFinished())
             {
                 /* Get NRO task result and immediately set application updated state if the task succeeded. */
-                bool ret = this->nro_task.get();
+                bool ret = this->nro_task.GetResult();
                 if (ret) utilsSetApplicationUpdatedState();
 
                 /* Display notification. */
@@ -263,7 +263,7 @@ namespace nxdt::views
         });
 
         /* Start NRO task. */
-        this->nro_task.execute(NRO_TMP_PATH, std::string(this->json_data.download_url), true);
+        this->nro_task.Execute(NRO_TMP_PATH, std::string(this->json_data.download_url), true);
 
         /* Go to the next stage. */
         this->nextStage();
@@ -351,7 +351,7 @@ namespace nxdt::views
                 {
                     this->DisplayNotification("options_tab/notifications/ums_device_unmount_success"_i18n);
                 } else {
-                    this->DisplayNotification("options_tab/notifications/ums_device_unmount_failure"_i18n);
+                    this->DisplayNotification("options_tab/notifications/ums_device_unmount_failed"_i18n);
                 }
             });
         });

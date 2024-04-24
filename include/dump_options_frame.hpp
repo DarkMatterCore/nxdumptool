@@ -36,7 +36,7 @@ namespace nxdt::views
             RootView *root_view = nullptr;
 
         private:
-            std::string storage_prefix{}, base_output_path{}, raw_filename{}, extension{};
+            std::string storage_prefix{}, base_output_path{}, raw_filename{};
 
             brls::List *list = nullptr;
             brls::InputListItem *filename = nullptr;
@@ -55,15 +55,15 @@ namespace nxdt::views
             void UpdateStoragePrefix(u32 selected);
 
         protected:
-            DumpOptionsFrame(RootView *root_view, const std::string& title, const std::string& base_output_path, const std::string& raw_filename, const std::string& extension);
-            DumpOptionsFrame(RootView *root_view, const std::string& title, brls::Image *icon, const std::string& base_output_path, const std::string& raw_filename, const std::string& extension);
+            DumpOptionsFrame(RootView *root_view, const std::string& title, const std::string& base_output_path, const std::string& raw_filename);
+            DumpOptionsFrame(RootView *root_view, const std::string& title, brls::Image *icon, const std::string& base_output_path, const std::string& raw_filename);
             ~DumpOptionsFrame();
 
             bool onCancel(void) override final;
 
             void addView(brls::View *view, bool fill = false);
 
-            const std::string GetOutputFilePath(void);
+            bool GetOutputFilePath(const std::string& extension, std::string& output);
 
             ALWAYS_INLINE brls::GenericEvent::Subscription RegisterButtonListener(brls::GenericEvent::Callback cb)
             {

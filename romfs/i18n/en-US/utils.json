@@ -1,0 +1,22 @@
+{
+    "exception_handler": {
+        "libnx_abort": "Fatal error triggered in libnx!\nError code: 0x{:08X}.",
+        "exception_triggered": "Fatal exception triggered!\nReason: {} (0x{:X})."
+    },
+
+    "file_writer": {
+        "ums_device_info_error": "Failed to retrieve UMS device info.",
+
+        "free_space_check": {
+            "retrieve_error": "Failed to retrieve free space from the selected storage.",
+            "insufficient_space_error": "File size exceeds the available free space ({} required)."
+        },
+
+        "initial_file": {
+            "usb_host_error": "Failed to send file details to USB host.",
+            "generic_error": "Failed to create output file."
+        },
+
+        "nsp_header_placeholder_error": "Failed to write placeholder NSP header."
+    }
+}

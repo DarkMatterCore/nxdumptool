@@ -14,9 +14,16 @@
     "exception_caught": "Exception caught! ({}).",
     "unknown_exception": "unknown",
 
-    "libnx_abort": "Fatal error triggered in libnx!\nError code: 0x{:08X}.",
-    "exception_triggered": "Fatal exception triggered!\nReason: {} (0x{:X}).",
-
     "value_enabled": "Yes",
-    "value_disabled": "No"
+    "value_disabled": "No",
+
+    "cancel": "Cancel",
+    "close": "Close",
+
+    "mem_alloc_failed": "Failed to allocate memory buffer.",
+
+    "process_cancelled": "Process cancelled.",
+
+    "read": "read",
+    "write": "write"
 }

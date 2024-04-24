@@ -62,7 +62,12 @@ namespace nxdt::tasks
                     void run(retro_time_t current_time) override final
                     {
                         brls::RepeatingTask::run(current_time);
-                        if (this->task && !this->finished) this->finished = this->task->loopCallback();
+
+                        if (this->task && !this->finished)
+                        {
+                            this->finished = this->task->LoopCallback();
+                            if (this->finished) this->pause();
+                        }
                     }
 
                 public:
@@ -83,50 +88,51 @@ namespace nxdt::tasks
             SteadyTimePoint start_time{}, prev_time{}, end_time{};
             size_t prev_xfer_size = 0;
 
+            ALWAYS_INLINE std::string FormatTimeString(double seconds)
+            {
+                return fmt::format("{:02.0F}H{:02.0F}M{:02.0F}S", std::fmod(seconds, 86400.0) / 3600.0, std::fmod(seconds, 3600.0) / 60.0, std::fmod(seconds, 60.0));
+            }
+
         protected:
             /* Set class as non-copyable and non-moveable. */
             NON_COPYABLE(DataTransferTask);
             NON_MOVEABLE(DataTransferTask);
 
-            /* Make the background function overridable. */
-            virtual Result doInBackground(const Params&... params) override = 0;
-
             /* Runs on the calling thread. */
-            void onCancelled(const Result& result) override final
+            void OnCancelled(const Result& result) override final
             {
                 NX_IGNORE_ARG(result);
 
                 /* Set end time. */
                 this->end_time = CurrentSteadyTimePoint();
-
-                /* Pause task handler. */
-                this->task_handler->pause();
 
                 /* Unset long running process state. */
                 utilsSetLongRunningProcessState(false);
             }
 
             /* Runs on the calling thread. */
-            void onPostExecute(const Result& result) override final
+            void OnPostExecute(const Result& result) override final
             {
                 NX_IGNORE_ARG(result);
 
                 /* Set end time. */
                 this->end_time = CurrentSteadyTimePoint();
 
-                /* Fire task handler immediately to get the last result from AsyncTask::loopCallback(), then pause it. */
+                /* Fire task handler immediately to make it store the last result from AsyncTask::LoopCallback(). */
+                /* We do this here because all subscriptors to our progress event will most likely call IsFinished() to check if the task is complete. */
+                /* That being the case, if the `finished` flag returned by the task handler isn't updated before the progress event subscriptors receive the last progress update, */
+                /* they won't be able to determine if the task has already finished, leading to unsuspected consequences. */
                 this->task_handler->fireNow();
-                this->task_handler->pause();
 
                 /* Update progress one last time. */
-                this->onProgressUpdate(this->getProgress());
+                this->OnProgressUpdate(this->GetProgress());
 
                 /* Unset long running process state. */
                 utilsSetLongRunningProcessState(false);
             }
 
             /* Runs on the calling thread. */
-            void onPreExecute(void) override final
+            void OnPreExecute(void) override final
             {
                 /* Set long running process state. */
                 utilsSetLongRunningProcessState(true);
@@ -139,13 +145,13 @@ namespace nxdt::tasks
             }
 
             /* Runs on the calling thread. */
-            void onProgressUpdate(const DataTransferProgress& progress) override final
+            void OnProgressUpdate(const DataTransferProgress& progress) override final
             {
-                AsyncTaskStatus status = this->getStatus();
+                AsyncTaskStatus status = this->GetStatus();
 
                 /* Return immediately if there has been no progress at all, or if it the task has been cancelled. */
                 bool proceed = (progress.xfer_size > prev_xfer_size || (progress.xfer_size == prev_xfer_size && (!progress.total_size || progress.xfer_size >= progress.total_size)));
-                if (!proceed || this->isCancelled()) return;
+                if (!proceed || this->IsCancelled()) return;
 
                 /* Calculate time difference between the last progress update and the current one. */
                 /* Return immediately if it's less than 1 second, but only if this isn't the last chunk; or if we don't know the total size and the task is still running . */
@@ -168,7 +174,7 @@ namespace nxdt::tasks
                     /* Calculate remaining data size and ETA if we know the total size. */
                     double remaining = static_cast<double>(progress.total_size - progress.xfer_size);
                     double eta = (remaining / speed);
-                    new_progress.eta = fmt::format("{:02.0F}H{:02.0F}M{:02.0F}S", std::fmod(eta, 86400.0) / 3600.0, std::fmod(eta, 3600.0) / 60.0, std::fmod(eta, 60.0));
+                    new_progress.eta = this->FormatTimeString(eta);
                 } else {
                     /* No total size means no ETA calculation, sadly. */
                     new_progress.eta = "";
@@ -205,7 +211,7 @@ namespace nxdt::tasks
                 this->progress_event.unsubscribeAll();
             }
 
-            /* Returns the last result from AsyncTask::loopCallback(). Runs on the calling thread. */
+            /* Returns the last result from AsyncTask::LoopCallback(). Runs on the calling thread. */
             ALWAYS_INLINE bool IsFinished(void)
             {
                 return this->task_handler->IsFinished();
@@ -216,6 +222,13 @@ namespace nxdt::tasks
             ALWAYS_INLINE double GetDuration(void)
             {
                 return std::chrono::duration<double>(this->IsFinished() ? (this->end_time - this->start_time) : (CurrentSteadyTimePoint() - this->start_time)).count();
+            }
+
+            /* Returns a human-readable string that represents the task duration. */
+            /* If the task hasn't finished yet, the string represents the time that has passed since the task was started. */
+            ALWAYS_INLINE std::string GetDurationString(void)
+            {
+                return this->FormatTimeString(this->GetDuration());
             }
 
             ALWAYS_INLINE DataTransferProgressEvent::Subscription RegisterListener(DataTransferProgressEvent::Callback cb)

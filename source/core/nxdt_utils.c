@@ -756,7 +756,7 @@ bool utilsGetFileSystemStatsByPath(const char *path, u64 *out_total, u64 *out_fr
     }
 
     name_end += 2;
-    sprintf(stat_path, "%.*s", (int)(name_end - path), path);
+    snprintf(stat_path, MAX_ELEMENTS(stat_path), "%.*s", (int)(name_end - path), path);
 
     if ((ret = statvfs(stat_path, &info)) != 0)
     {

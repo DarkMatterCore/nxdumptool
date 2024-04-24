@@ -55,7 +55,7 @@ namespace nxdt::tasks
                 DownloadTask<Result, Params...>* task = static_cast<DownloadTask<Result, Params...>*>(clientp);
 
                 /* Don't proceed if we're dealing with an invalid task pointer, or if the task has been cancelled. */
-                if (!task || task->isCancelled()) return 1;
+                if (!task || task->IsCancelled()) return 1;
 
                 /* Fill struct. */
                 progress.total_size = static_cast<size_t>(dltotal);
@@ -63,13 +63,13 @@ namespace nxdt::tasks
                 progress.percentage = (progress.total_size ? static_cast<int>((progress.xfer_size * 100) / progress.total_size) : 0);
 
                 /* Push progress onto the class. */
-                task->publishProgress(progress);
+                task->PublishProgress(progress);
 
                 return 0;
             }
     };
 
-    /* Asynchronous task to download a file using an output path and a URL. */
+    /* Asynchronous task used to download a file using an output path and a URL. */
     class DownloadFileTask: public DownloadTask<bool, std::string, std::string, bool>
     {
         protected:
@@ -78,7 +78,7 @@ namespace nxdt::tasks
             NON_MOVEABLE(DownloadFileTask);
 
             /* Runs in the background thread. */
-            bool doInBackground(const std::string& path, const std::string& url, const bool& force_https) override final
+            bool DoInBackground(const std::string& path, const std::string& url, const bool& force_https) override final
             {
                 /* If the process fails or if it's cancelled, httpDownloadFile() will take care of closing the incomplete output file and deleting it. */
                 return httpDownloadFile(path.c_str(), url.c_str(), force_https, DownloadFileTask::HttpProgressCallback, this);
@@ -88,7 +88,7 @@ namespace nxdt::tasks
             DownloadFileTask() = default;
     };
 
-    /* Asynchronous task to store downloaded data into a dynamically allocated buffer using a URL. */
+    /* Asynchronous task used to store downloaded data into a dynamically allocated buffer using a URL. */
     /* The buffer returned by std::pair::first() must be manually freed by the calling function using free(). */
     class DownloadDataTask: public DownloadTask<DownloadDataResult, std::string, bool>
     {
@@ -98,7 +98,7 @@ namespace nxdt::tasks
             NON_MOVEABLE(DownloadDataTask);
 
             /* Runs in the background thread. */
-            DownloadDataResult doInBackground(const std::string& url, const bool& force_https) override final
+            DownloadDataResult DoInBackground(const std::string& url, const bool& force_https) override final
             {
                 char *buf = nullptr;
                 size_t buf_size = 0;

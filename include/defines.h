@@ -71,7 +71,8 @@
 #define SYSTEM_UPDATE_TID               (u64)0x0100000000000816
 #define QLAUNCH_TID                     (u64)0x0100000000001000
 
-#define FAT32_FILESIZE_LIMIT            (u64)0xFFFFFFFF                                                 /* 4 GiB - 1 (4294967295 bytes). */
+#define FAT32_FILESIZE_LIMIT            (u64)UINT32_MAX                                                 /* 4 GiB - 1 (4294967295 bytes). */
+#define CONCATENATION_FILE_PART_SIZE    (u64)0xFFFF0000                                                 /* 4 GiB - 65536 (4294901760 bytes). */
 
 #define UTF8_BOM                        "\xEF\xBB\xBF"
 #define CRLF                            "\r\n"

@@ -27,7 +27,7 @@ using namespace i18n::literals; /* For _i18n. */
 namespace nxdt::views
 {
     GameCardImageDumpOptionsFrame::GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename) :
-        DumpOptionsFrame(root_view, "gamecard_tab/list/dump_card_image/label"_i18n, std::string(GAMECARD_SUBDIR), raw_filename, std::string(".xci"))
+        DumpOptionsFrame(root_view, "gamecard_tab/list/dump_card_image/label"_i18n, std::string(GAMECARD_SUBDIR), raw_filename)
     {
         /* Subscribe to the gamecard task event. */
         this->gc_task_sub = this->root_view->RegisterGameCardTaskListener([this](const GameCardStatus& gc_status) {
@@ -42,8 +42,8 @@ namespace nxdt::views
         });
 
         /* Prepend KeyArea data. */
-        this->prepend_key_area = new brls::ToggleListItem("dump_options/prepend_key_area/label"_i18n, configGetBoolean("gamecard/prepend_key_area"), "dump_options/prepend_key_area/description"_i18n,
-                                                          "generic/value_enabled"_i18n, "generic/value_disabled"_i18n);
+        this->prepend_key_area = new brls::ToggleListItem("dump_options/gamecard/image/prepend_key_area/label"_i18n, configGetBoolean("gamecard/prepend_key_area"),
+                                                          "dump_options/gamecard/image/prepend_key_area/description"_i18n, "generic/value_enabled"_i18n, "generic/value_disabled"_i18n);
 
         this->prepend_key_area->getClickEvent()->subscribe([](brls::View* view) {
             /* Get current value. */
@@ -59,8 +59,8 @@ namespace nxdt::views
         this->addView(this->prepend_key_area);
 
         /* Keep certificate. */
-        this->keep_certificate = new brls::ToggleListItem("dump_options/keep_certificate/label"_i18n, configGetBoolean("gamecard/keep_certificate"), "dump_options/keep_certificate/description"_i18n,
-                                                          "generic/value_enabled"_i18n, "generic/value_disabled"_i18n);
+        this->keep_certificate = new brls::ToggleListItem("dump_options/gamecard/image/keep_certificate/label"_i18n, configGetBoolean("gamecard/keep_certificate"),
+                                                          "dump_options/gamecard/image/keep_certificate/description"_i18n, "generic/value_enabled"_i18n, "generic/value_disabled"_i18n);
 
         this->keep_certificate->getClickEvent()->subscribe([](brls::View* view) {
             /* Get current value. */
@@ -76,8 +76,8 @@ namespace nxdt::views
         this->addView(this->keep_certificate);
 
         /* Trim dump. */
-        this->trim_dump = new brls::ToggleListItem("dump_options/trim_dump/label"_i18n, configGetBoolean("gamecard/trim_dump"), "dump_options/trim_dump/description"_i18n, "generic/value_enabled"_i18n,
-                                                   "generic/value_disabled"_i18n);
+        this->trim_dump = new brls::ToggleListItem("dump_options/gamecard/image/trim_dump/label"_i18n, configGetBoolean("gamecard/trim_dump"), "dump_options/gamecard/image/trim_dump/description"_i18n,
+                                                   "generic/value_enabled"_i18n, "generic/value_disabled"_i18n);
 
         this->trim_dump->getClickEvent()->subscribe([](brls::View* view) {
             /* Get current value. */
@@ -92,8 +92,8 @@ namespace nxdt::views
 
         this->addView(this->trim_dump);
 
-        this->calculate_checksum = new brls::ToggleListItem("dump_options/calculate_checksum/label"_i18n, configGetBoolean("gamecard/calculate_checksum"), "dump_options/calculate_checksum/description"_i18n,
-                                                            "generic/value_enabled"_i18n, "generic/value_disabled"_i18n);
+        this->calculate_checksum = new brls::ToggleListItem("dump_options/gamecard/image/calculate_checksum/label"_i18n, configGetBoolean("gamecard/calculate_checksum"),
+                                                            "dump_options/gamecard/image/calculate_checksum/description"_i18n, "generic/value_enabled"_i18n, "generic/value_disabled"_i18n);
 
         this->calculate_checksum->getClickEvent()->subscribe([](brls::View* view) {
             /* Get current value. */
@@ -109,12 +109,13 @@ namespace nxdt::views
         this->addView(this->calculate_checksum);
 
         /* Checksum lookup method. */
-        this->checksum_lookup_method = new brls::SelectListItem("dump_options/checksum_lookup_method/label"_i18n, {
-                                                                    "dump_options/checksum_lookup_method/value_00"_i18n,
+        this->checksum_lookup_method = new brls::SelectListItem("dump_options/gamecard/image/checksum_lookup_method/label"_i18n, {
+                                                                    "dump_options/gamecard/image/checksum_lookup_method/value_00"_i18n,
                                                                     "NSWDB",
                                                                     "No-Intro"
-                                                                }, configGetInteger("gamecard/checksum_lookup_method"), brls::i18n::getStr("dump_options/checksum_lookup_method/description",
-                                                                "dump_options/calculate_checksum/label"_i18n, "NSWDB", NSWDB_XML_NAME, "No-Intro"));
+                                                                }, configGetInteger("gamecard/checksum_lookup_method"),
+                                                                i18n::getStr("dump_options/gamecard/image/checksum_lookup_method/description", "dump_options/gamecard/image/calculate_checksum/label"_i18n,
+                                                                "NSWDB", NSWDB_XML_NAME, "No-Intro"));
 
         this->checksum_lookup_method->getValueSelectedEvent()->subscribe([this](int selected) {
             /* Make sure the current value isn't out of bounds. */
@@ -129,28 +130,23 @@ namespace nxdt::views
         /* Register dump button callback. */
         this->RegisterButtonListener([this](brls::View *view) {
             /* Retrieve configuration values set by the user. */
-            //bool prepend_key_area_val = this->prepend_key_area->getToggleState();
-            //bool keep_certificate_val = this->keep_certificate->getToggleState();
+            bool prepend_key_area_val = this->prepend_key_area->getToggleState();
+            bool keep_certificate_val = this->keep_certificate->getToggleState();
             bool trim_dump_val = this->trim_dump->getToggleState();
             //bool calculate_checksum_val = this->calculate_checksum->getToggleState();
             //int checksum_lookup_method_val = static_cast<int>(this->checksum_lookup_method->getSelectedValue());
 
-            /* Get gamecard size. */
-            u64 gc_size = 0;
-            if ((!trim_dump_val && !gamecardGetTotalSize(&gc_size)) || (trim_dump_val && !gamecardGetTrimmedSize(&gc_size)) || !gc_size)
-            {
-                brls::Application::notify("fail");
-                return;
-            }
+            /* Generate file extension. */
+            std::string extension = fmt::format(" [{}][{}][{}].xci", prepend_key_area_val ? "KA" : "NKA", keep_certificate_val ? "C" : "NC", trim_dump_val ? "T" : "NT");
+
+            /* Get output path. */
+            std::string output_path{};
+            if (!this->GetOutputFilePath(extension, output_path)) return;
 
             /* Display update frame. */
             //brls::Application::pushView(new OptionsTabUpdateApplicationFrame(), brls::ViewAnimation::SLIDE_LEFT, false);
-            brls::Application::notify(fmt::format("0x{:X}", gc_size));
 
-
-
-
-            LOG_MSG_DEBUG("Output file path: %s", this->GetOutputFilePath().c_str());
+            LOG_MSG_DEBUG("Output file path: %s", output_path.c_str());
         });
     }
 

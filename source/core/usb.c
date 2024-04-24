@@ -364,7 +364,7 @@ bool usbSendNspProperties(u64 nsp_size, const char *filename, u32 nsp_header_siz
     return ret;
 }
 
-bool usbSendFileData(void *data, u64 data_size)
+bool usbSendFileData(const void *data, u64 data_size)
 {
     bool ret = false;
 
@@ -383,7 +383,7 @@ bool usbSendFileData(void *data, u64 data_size)
         /* Optimization for buffers that already are page aligned. */
         if (IS_ALIGNED((u64)data, USB_TRANSFER_ALIGNMENT))
         {
-            buf = data;
+            buf = (void*)data;
         } else {
             buf = g_usbTransferBuffer;
             memcpy(buf, data, data_size);
@@ -478,7 +478,7 @@ void usbCancelFileTransfer(void)
     }
 }
 
-bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size)
+bool usbSendNspHeader(const void *nsp_header, u32 nsp_header_size)
 {
     bool ret = false;
 

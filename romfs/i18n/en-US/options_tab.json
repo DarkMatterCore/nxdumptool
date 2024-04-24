@@ -34,15 +34,10 @@
         }
     },
 
-    "update_dialog": {
-        "cancel": "Cancel",
-        "close": "Close"
-    },
-
     "notifications": {
         "no_ums_devices": "No USB Mass Storage devices available.",
         "ums_device_unmount_success": "USB Mass Storage device successfully unmounted!",
-        "ums_device_unmount_failure": "Failed to unmount USB Mass Storage device!",
+        "ums_device_unmount_failed": "Failed to unmount USB Mass Storage device!",
         "no_internet_connection": "Internet connection unavailable. Unable to update.",
         "update_failed": "Update failed! Check the logfile for more info.",
         "nswdb_xml_updated": "NSWDB XML successfully updated!",

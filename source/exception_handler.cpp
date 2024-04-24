@@ -123,7 +123,7 @@ extern "C" {
         LOG_MSG_ERROR("*** libnx aborted with error code: 0x%X ***", res);
 
         /* Abort program execution. */
-        std::string crash_str = (g_borealisInitialized ? i18n::getStr("generic/libnx_abort"_i18n, res) : fmt::format("Fatal error triggered in libnx!\nError code: 0x{:08X}.", res));
+        std::string crash_str = (g_borealisInitialized ? i18n::getStr("utils/exception_handler/libnx_abort"_i18n, res) : fmt::format("Fatal error triggered in libnx!\nError code: 0x{:08X}.", res));
         nxdt::utils::AbortProgramExecution(crash_str);
     }
 
@@ -223,7 +223,7 @@ extern "C" {
 #endif  /* LOG_LEVEL < LOG_LEVEL_NONE */
 
         /* Abort program execution. */
-        crash_str = (g_borealisInitialized ? i18n::getStr("generic/exception_triggered"_i18n, error_desc_str, ctx->error_desc) : \
+        crash_str = (g_borealisInitialized ? i18n::getStr("utils/exception_handler/exception_triggered"_i18n, error_desc_str, ctx->error_desc) : \
                                              fmt::format("Fatal exception triggered!\nReason: {} (0x{:X}).", error_desc_str, ctx->error_desc));
         crash_str += (fmt::format("\nPC: 0x{:X}", ctx->pc.x) + (IS_HB_ADDR(ctx->pc.x) ? fmt::format(" (BASE + 0x{:X}).", ctx->pc.x - info.addr) : "."));
         nxdt::utils::AbortProgramExecution(crash_str);

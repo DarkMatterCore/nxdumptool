@@ -12,31 +12,39 @@
         "value_02": "{0} ({1} free / {2} total)"
     },
 
-    "prepend_key_area": {
-        "label": "Prepend KeyArea data",
-        "description": "Prepends the full, 4 KiB long KeyArea block to the output XCI dump, which includes the InitialData area. XCI dumps with KeyArea data are also known as \"Full XCIs\". Disabled by default."
+    "gamecard": {
+        "image": {
+            "prepend_key_area": {
+                "label": "Prepend KeyArea data",
+                "description": "Prepends the full, 4 KiB long KeyArea block to the output XCI dump, which includes the InitialData area. XCI dumps with KeyArea data are also known as \"Full XCIs\". Disabled by default."
+            },
+
+            "keep_certificate": {
+                "label": "Keep certificate",
+                "description": "Preserves the gamecard certificate in the output XCI dump, which is used to unequivocally identify each individual gamecard. Disabled by default."
+            },
+
+            "trim_dump": {
+                "label": "Trim dump",
+                "description": "Trims the output XCI dump by removing padding data beyond the end of the last HFS partition. Disabled by default."
+            },
+
+            "calculate_checksum": {
+                "label": "Calculate checksum",
+                "description": "Calculates one or more CRC32 checksums over the dumped data, depending on the selected configuration. Checksums are useful to verify data integrity. Enabled by default."
+            },
+
+            "checksum_lookup_method": {
+                "label": "Checksum lookup method",
+                "description": "If \"{0}\" is enabled, this option determines which lookup method is used to validate the calculated CRC32 checksum at the end of the dump process.\n\nIf \"{1}\" is selected, the calculated checksum will be looked up in \"{2}\", which must have been previously downloaded.\n\nIf \"{3}\" is selected, the calculated checksum will be looked up using an Internet connection and a public HTTP endpoint.",
+                "value_00": "None"
+            }
+        }
     },
 
-    "keep_certificate": {
-        "label": "Keep certificate",
-        "description": "Preserves the gamecard certificate in the output XCI dump, which is used to unequivocally identify each individual gamecard. Disabled by default."
-    },
+    "start_dump": "Start dump",
 
-    "trim_dump": {
-        "label": "Trim dump",
-        "description": "Trims the output XCI dump by removing padding data beyond the end of the last HFS partition. Disabled by default."
-    },
-
-    "calculate_checksum": {
-        "label": "Calculate checksum",
-        "description": "Calculates one or more CRC32 checksums over the dumped data, depending on the selected configuration. Checksums are useful to verify data integrity. Enabled by default."
-    },
-
-    "checksum_lookup_method": {
-        "label": "Checksum lookup method",
-        "description": "If \"{0}\" is enabled, this option determines which lookup method is used to validate the calculated CRC32 checksum at the end of the dump process.\n\nIf \"{1}\" is selected, the calculated checksum will be looked up in \"{2}\", which must have been previously downloaded.\n\nIf \"{3}\" is selected, the calculated checksum will be looked up using an Internet connection and a public HTTP endpoint.",
-        "value_00": "None"
-    },
-
-    "start_dump": "Start dump"
+    "notifications": {
+        "get_output_path_error": "Failed to generate output path."
+    }
 }

@@ -29,6 +29,8 @@
 namespace nxdt::views
 {
     /* Extended class to switch between ErrorFrame and List views on demand. */
+    /* Intended to be used with lists that need to be updated dynamically based on runtime events. */
+    /* Implements some hacky workarounds to prevent borealis from crashing and/or going out of focus. */
     class LayeredErrorFrame: public brls::LayerView
     {
         private:

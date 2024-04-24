@@ -71,7 +71,7 @@ bool usbSendNspProperties(u64 nsp_size, const char *filename, u32 nsp_header_siz
 /// Data chunk size must not exceed USB_TRANSFER_BUFFER_SIZE.
 /// If the last file data chunk is aligned to the endpoint max packet size, the host device should expect a Zero Length Termination (ZLT) packet.
 /// Calling this function if there's no remaining data to transfer will result in an error.
-bool usbSendFileData(void *data, u64 data_size);
+bool usbSendFileData(const void *data, u64 data_size);
 
 /// Used to gracefully cancel an ongoing file transfer. The current USB session is kept alive.
 void usbCancelFileTransfer(void);
@@ -79,7 +79,7 @@ void usbCancelFileTransfer(void);
 /// Sends NSP header data to the host device, making it rewind the NSP file pointer to write this data, essentially finishing the NSP transfer process.
 /// Must be called after the data from all NSP file entries has been transferred using both usbSendNspProperties() and usbSendFileData() calls.
 /// If the NSP header size is aligned to the endpoint max packet size, the host device should expect a Zero Length Termination (ZLT) packet.
-bool usbSendNspHeader(void *nsp_header, u32 nsp_header_size);
+bool usbSendNspHeader(const void *nsp_header, u32 nsp_header_size);
 
 /// Informs the host device that an extracted filesystem dump (e.g. HFS, PFS, RomFS) is about to begin.
 bool usbStartExtractedFsDump(u64 extracted_fs_size, const char *extracted_fs_root_path);
