@@ -70,7 +70,7 @@ static Thread g_gameCardDetectionThread = {0};
 static UEvent g_gameCardDetectionThreadExitEvent = {0}, g_gameCardStatusChangeEvent = {0};
 static bool g_gameCardDetectionThreadCreated = false;
 
-static GameCardStatus g_gameCardStatus = GameCardStatus_NotInserted;
+static atomic_uchar g_gameCardStatus = GameCardStatus_NotInserted;
 
 static FsGameCardHandle g_gameCardHandle = {0};
 static FsStorage g_gameCardStorage = {0};
@@ -285,14 +285,7 @@ UEvent *gamecardGetStatusChangeUserEvent(void)
 
 u8 gamecardGetStatus(void)
 {
-    u8 status = GameCardStatus_Processing;
-
-    SCOPED_TRY_LOCK(&g_gameCardMutex)
-    {
-        if (g_gameCardInterfaceInit) status = g_gameCardStatus;
-    }
-
-    return status;
+    return atomic_load(&g_gameCardStatus);
 }
 
 /* Read full FS program memory to retrieve the GameCardSecurityInformation block. */
@@ -311,7 +304,7 @@ bool gamecardGetCardIdSet(FsGameCardIdSet *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !out) break;
+        if (!g_gameCardInterfaceInit || atomic_load(&g_gameCardStatus) != GameCardStatus_InsertedAndInfoLoaded || !out) break;
 
         Result rc = fsDeviceOperatorGetGameCardIdSet(&g_deviceOperator, out, sizeof(FsGameCardIdSet), (s64)sizeof(FsGameCardIdSet));
         if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardIdSet failed! (0x%X)", rc);
@@ -355,7 +348,7 @@ bool gamecardGetHeader(GameCardHeader *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) memcpy(out, &g_gameCardHeader, sizeof(GameCardHeader));
     }
 
@@ -368,7 +361,7 @@ bool gamecardGetPlaintextCardInfoArea(GameCardInfo *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) memcpy(out, &g_gameCardInfoArea, sizeof(GameCardInfo));
     }
 
@@ -381,7 +374,7 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
+        if (!g_gameCardInterfaceInit || atomic_load(&g_gameCardStatus) != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
 
         /* Read the gamecard certificate using the official IPC call. */
         Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out, sizeof(FsGameCardCertificate), (s64)sizeof(FsGameCardCertificate));
@@ -399,7 +392,7 @@ bool gamecardGetTotalSize(u64 *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) *out = g_gameCardTotalSize;
     }
 
@@ -412,7 +405,7 @@ bool gamecardGetTrimmedSize(u64 *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) *out = (sizeof(GameCardHeader) + GAMECARD_PAGE_OFFSET(g_gameCardHeader.valid_data_end_page));
     }
 
@@ -425,7 +418,7 @@ bool gamecardGetRomCapacity(u64 *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        ret = (g_gameCardInterfaceInit && g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded && out);
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) *out = g_gameCardCapacity;
     }
 
@@ -438,7 +431,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(Version *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
+        if (!g_gameCardInterfaceInit || atomic_load(&g_gameCardStatus) != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
 
         u64 update_id = 0;
         u32 update_version = 0;
@@ -739,14 +732,14 @@ NX_INLINE bool gamecardIsInserted(void)
 
 static void gamecardLoadInfo(void)
 {
-    if (g_gameCardStatus == GameCardStatus_InsertedAndInfoLoaded) return;
+    if (atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded) return;
 
     HashFileSystemContext *root_hfs_ctx = NULL;
     u32 root_hfs_entry_count = 0, root_hfs_name_table_size = 0;
     char *root_hfs_name_table = NULL;
 
     /* Set initial gamecard status. */
-    g_gameCardStatus = GameCardStatus_InsertedAndInfoNotLoaded;
+    atomic_store(&g_gameCardStatus, GameCardStatus_Processing);
 
     /* Read gamecard header. */
     /* This step *will* fail if the running CFW enabled the "nogc" patch. */
@@ -760,7 +753,7 @@ static void gamecardLoadInfo(void)
     if (g_lafwVersion < g_gameCardInfoArea.fw_version)
     {
         LOG_MSG_ERROR("LAFW version doesn't meet gamecard requirement! (%lu < %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
-        g_gameCardStatus = GameCardStatus_LotusAsicFirmwareUpdateRequired;
+        atomic_store(&g_gameCardStatus, GameCardStatus_LotusAsicFirmwareUpdateRequired);
         goto end;
     }
 
@@ -828,11 +821,14 @@ static void gamecardLoadInfo(void)
     }
 
     /* Update gamecard status. */
-    g_gameCardStatus = GameCardStatus_InsertedAndInfoLoaded;
+    atomic_store(&g_gameCardStatus, GameCardStatus_InsertedAndInfoLoaded);
 
 end:
-    if (g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded)
+    u8 status = atomic_load(&g_gameCardStatus);
+    if (status != GameCardStatus_InsertedAndInfoLoaded)
     {
+        if (status == GameCardStatus_Processing) atomic_store(&g_gameCardStatus, GameCardStatus_InsertedAndInfoNotLoaded);
+
         if (!g_gameCardHfsCtx && root_hfs_ctx)
         {
             hfsFreeContext(root_hfs_ctx);
@@ -875,7 +871,7 @@ static void gamecardFreeInfo(bool clear_status)
 
     gamecardCloseStorageArea();
 
-    if (clear_status) g_gameCardStatus = GameCardStatus_NotInserted;
+    if (clear_status) atomic_store(&g_gameCardStatus, GameCardStatus_NotInserted);
 }
 
 static bool gamecardReadHeader(void)
@@ -977,7 +973,7 @@ static bool _gamecardGetPlaintextCardInfoArea(void)
 
 static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
 {
-    if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !out)
+    if (!g_gameCardInterfaceInit || atomic_load(&g_gameCardStatus) != GameCardStatus_InsertedAndInfoLoaded || !out)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -1030,7 +1026,10 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
 
 static bool gamecardGetHandleAndStorage(u32 partition)
 {
-    if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || partition > 1)
+    u8 status = atomic_load(&g_gameCardStatus);
+
+    if (partition > 1 || (status < GameCardStatus_LotusAsicFirmwareUpdateRequired && status != GameCardStatus_Processing) || \
+        (status == GameCardStatus_LotusAsicFirmwareUpdateRequired && partition == 1))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -1068,7 +1067,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("fsDeviceOperatorGetGameCardHandle / fsOpenGameCardStorage failed! (0x%X).", rc);
-        if (g_gameCardStatus == GameCardStatus_InsertedAndInfoNotLoaded && partition == 0) g_gameCardStatus = GameCardStatus_NoGameCardPatchEnabled;
+        if (status == GameCardStatus_Processing && partition == 0) atomic_store(&g_gameCardStatus, GameCardStatus_NoGameCardPatchEnabled);
     }
 
     return R_SUCCEEDED(rc);
@@ -1076,7 +1075,10 @@ static bool gamecardGetHandleAndStorage(u32 partition)
 
 static bool gamecardOpenStorageArea(u8 area)
 {
-    if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || (area != GameCardStorageArea_Normal && area != GameCardStorageArea_Secure))
+    u8 status = atomic_load(&g_gameCardStatus);
+
+    if ((area != GameCardStorageArea_Normal && area != GameCardStorageArea_Secure) || (status < GameCardStatus_LotusAsicFirmwareUpdateRequired && \
+        status != GameCardStatus_Processing) || (status == GameCardStatus_LotusAsicFirmwareUpdateRequired && area == GameCardStorageArea_Secure))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -1103,7 +1105,10 @@ static bool gamecardOpenStorageArea(u8 area)
 
 static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
 {
-    if (g_gameCardStatus < GameCardStatus_InsertedAndInfoNotLoaded || !g_gameCardNormalAreaSize || !g_gameCardSecureAreaSize || !out || !read_size || (offset + read_size) > g_gameCardTotalSize)
+    u8 status = atomic_load(&g_gameCardStatus);
+
+    if ((status < GameCardStatus_LotusAsicFirmwareUpdateRequired && status != GameCardStatus_Processing) || !g_gameCardNormalAreaSize || !g_gameCardSecureAreaSize || \
+        !out || !read_size || (offset + read_size) > g_gameCardTotalSize)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -1399,7 +1404,7 @@ static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition
 {
     HashFileSystemContext *hfs_ctx = NULL;
 
-    if (!g_gameCardInterfaceInit || g_gameCardStatus != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || \
+    if (!g_gameCardInterfaceInit || atomic_load(&g_gameCardStatus) != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHfsCount || !g_gameCardHfsCtx || \
         hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count)
     {
         LOG_MSG_ERROR("Invalid parameters!");

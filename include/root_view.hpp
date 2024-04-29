@@ -37,6 +37,8 @@ namespace nxdt::views
         private:
             bool applet_mode = false;
 
+            int output_storage = ConfigOutputStorage_SdCard;
+
             brls::Label *applet_mode_lbl = nullptr;
             brls::Label *time_lbl = nullptr;
             brls::Label *battery_icon = nullptr, *battery_percentage = nullptr;
@@ -65,7 +67,19 @@ namespace nxdt::views
 
             static std::string GetFormattedDateString(const struct tm& timeinfo);
 
-            /* Wrappers for task functions. */
+            /* Helpers used to propagate the selected output storage throughout different parts of the UI. */
+
+            ALWAYS_INLINE int GetOutputStorage(void)
+            {
+                return this->output_storage;
+            }
+
+            ALWAYS_INLINE void SetOutputStorage(int value)
+            {
+                this->output_storage = value;
+            }
+
+            /* Wrappers for task methods. */
 
             ALWAYS_INLINE bool IsInternetConnectionAvailable(void)
             {
@@ -80,6 +94,11 @@ namespace nxdt::views
             ALWAYS_INLINE const nxdt::tasks::UmsDeviceVector& GetUmsDevices(void)
             {
                 return this->ums_task->GetUmsDevices();
+            }
+
+            ALWAYS_INLINE const UsbHostSpeed& GetUsbHostSpeed(void)
+            {
+                return this->usb_host_task->GetUsbHostSpeed();
             }
 
             EVENT_SUBSCRIPTION(StatusInfoTask, StatusInfoEvent, status_info_task);

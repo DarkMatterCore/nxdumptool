@@ -90,7 +90,7 @@ namespace nxdt::views
             this->speed_eta_lbl->getHeight());
     }
 
-    void DataTransferProgressDisplay::setProgress(const nxdt::tasks::DataTransferProgress& progress)
+    void DataTransferProgressDisplay::SetProgress(const nxdt::tasks::DataTransferProgress& progress)
     {
         /* Update progress percentage. */
         this->progress_display->setProgress(progress.percentage, 100);

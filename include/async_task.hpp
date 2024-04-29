@@ -113,7 +113,7 @@ namespace nxdt::tasks
                 if (!this->m_future.valid()) return;
 
                 /* Wait until a result is provided by the task thread. */
-                /* Avoid rethrowing any exceptions here - program execution could end if another exception has already been rethrown. */
+                /* Avoid rethrowing any exceptions here -- program execution could end if another exception has already been rethrown. */
                 m_future.wait();
             }
 

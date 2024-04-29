@@ -208,7 +208,7 @@ static atomic_bool g_usbDetectionThreadCreated = false;
 
 static u8 *g_usbTransferBuffer = NULL;
 static u64 g_usbTransferRemainingSize = 0, g_usbTransferWrittenSize = 0;
-static u16 g_usbEndpointMaxPacketSize = 0;
+static atomic_ushort g_usbEndpointMaxPacketSize = 0;
 
 /* Function prototypes. */
 
@@ -326,25 +326,21 @@ void *usbAllocatePageAlignedBuffer(size_t size)
 u8 usbIsReady(void)
 {
     u8 ret = UsbHostSpeed_None;
+    u16 max_packet_size = atomic_load(&g_usbEndpointMaxPacketSize);
 
-    SCOPED_TRY_LOCK(&g_usbInterfaceMutex)
+    switch(max_packet_size)
     {
-        if (!g_usbHostAvailable || !g_usbSessionStarted) break;
-
-        switch(g_usbEndpointMaxPacketSize)
-        {
-            case USB_FS_EP_MAX_PACKET_SIZE: /* USB 1.x. */
-                ret = UsbHostSpeed_FullSpeed;
-                break;
-            case USB_HS_EP_MAX_PACKET_SIZE: /* USB 2.0. */
-                ret = UsbHostSpeed_HighSpeed;
-                break;
-            case USB_SS_EP_MAX_PACKET_SIZE: /* USB 3.0. */
-                ret = UsbHostSpeed_SuperSpeed;
-                break;
-            default:
-                break;
-        }
+        case USB_FS_EP_MAX_PACKET_SIZE: /* USB 1.x. */
+            ret = UsbHostSpeed_FullSpeed;
+            break;
+        case USB_HS_EP_MAX_PACKET_SIZE: /* USB 2.0. */
+            ret = UsbHostSpeed_HighSpeed;
+            break;
+        case USB_SS_EP_MAX_PACKET_SIZE: /* USB 3.0. */
+            ret = UsbHostSpeed_SuperSpeed;
+            break;
+        default:
+            break;
     }
 
     return ret;
@@ -395,7 +391,7 @@ bool usbSendFileData(const void *data, u64 data_size)
         if ((g_usbTransferRemainingSize - data_size) == 0)
         {
             /* Enable ZLT if the last chunk size is aligned to the USB endpoint max packet size. */
-            if (IS_ALIGNED(data_size, g_usbEndpointMaxPacketSize))
+            if (IS_ALIGNED(data_size, atomic_load(&g_usbEndpointMaxPacketSize)))
             {
                 zlt_required = true;
                 usbSetZltPacket(true);
@@ -593,7 +589,7 @@ static void usbDetectionThreadFunc(void *arg)
             g_usbHostAvailable = usbIsHostAvailable();
             g_usbSessionStarted = false;
             g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
-            g_usbEndpointMaxPacketSize = 0;
+            atomic_store(&g_usbEndpointMaxPacketSize, 0);
 
             /* Start a USB session if we're connected to a host device. */
             /* This will essentially hang this thread and all other threads that call USB-related functions until: */
@@ -606,7 +602,7 @@ static void usbDetectionThreadFunc(void *arg)
                 g_usbSessionStarted = usbStartSession();
                 if (g_usbSessionStarted)
                 {
-                    LOG_MSG_INFO("USB session successfully established. Endpoint max packet size: 0x%04X.", g_usbEndpointMaxPacketSize);
+                    LOG_MSG_INFO("USB session successfully established. Endpoint max packet size: 0x%04X.", atomic_load(&g_usbEndpointMaxPacketSize));
                 } else {
                     /* Update exit flag. */
                     exit_flag = g_usbDetectionThreadExitFlag;
@@ -624,7 +620,7 @@ static void usbDetectionThreadFunc(void *arg)
         if (g_usbHostAvailable && g_usbSessionStarted) usbEndSession();
         g_usbHostAvailable = g_usbSessionStarted = g_usbDetectionThreadExitFlag = false;
         g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
-        g_usbEndpointMaxPacketSize = 0;
+        atomic_store(&g_usbEndpointMaxPacketSize, 0);
     }
 
     threadExit();
@@ -658,14 +654,15 @@ static bool usbStartSession(void)
         /* Get the endpoint max packet size from the response sent by the USB host. */
         /* This is done to accurately know when and where to enable Zero Length Termination (ZLT) packets during bulk transfers. */
         /* As much as I'd like to avoid this, the GetUsbDeviceSpeed cmd from usb:ds is only available in HOS 8.0.0+ -- and we definitely want to provide USB comms under older versions. */
-        g_usbEndpointMaxPacketSize = ((UsbStatus*)g_usbTransferBuffer)->max_packet_size;
-        if (g_usbEndpointMaxPacketSize != USB_FS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_HS_EP_MAX_PACKET_SIZE && g_usbEndpointMaxPacketSize != USB_SS_EP_MAX_PACKET_SIZE)
+        u16 max_packet_size = ((UsbStatus*)g_usbTransferBuffer)->max_packet_size;
+        if (max_packet_size != USB_FS_EP_MAX_PACKET_SIZE && max_packet_size != USB_HS_EP_MAX_PACKET_SIZE && max_packet_size != USB_SS_EP_MAX_PACKET_SIZE)
         {
-            LOG_MSG_ERROR("Invalid endpoint max packet size value received from USB host: 0x%04X.", g_usbEndpointMaxPacketSize);
+            LOG_MSG_ERROR("Invalid endpoint max packet size value received from USB host: 0x%04X.", max_packet_size);
 
             /* Reset flags. */
             ret = false;
-            g_usbEndpointMaxPacketSize = 0;
+        } else {
+            atomic_store(&g_usbEndpointMaxPacketSize, max_packet_size);
         }
     }
 
@@ -739,7 +736,7 @@ static bool usbSendCommand(void)
         memmove(g_usbTransferBuffer, g_usbTransferBuffer + sizeof(UsbCommandHeader), cmd_block_size);
 
         /* Determine if we'll need to set a Zero Length Termination (ZLT) packet after sending the command block. */
-        zlt_required = IS_ALIGNED(cmd_block_size, g_usbEndpointMaxPacketSize);
+        zlt_required = IS_ALIGNED(cmd_block_size, atomic_load(&g_usbEndpointMaxPacketSize));
         if (zlt_required) usbSetZltPacket(true);
 
         /* Write command block. */

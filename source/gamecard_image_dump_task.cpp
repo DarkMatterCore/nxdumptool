@@ -1,5 +1,5 @@
 /*
- * gamecard_dump_tasks.cpp
+ * gamecard_image_dump_task.cpp
  *
  * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -19,7 +19,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <gamecard_dump_tasks.hpp>
+#include <gamecard_image_dump_task.hpp>
 #include <core/gamecard.h>
 #include <scope_guard.hpp>
 #include <file_writer.hpp>
@@ -27,14 +27,12 @@
 namespace i18n = brls::i18n;    /* For getStr(). */
 using namespace i18n::literals; /* For _i18n. */
 
-#define BLOCK_SIZE 0x800000
-
 namespace nxdt::tasks
 {
     GameCardDumpTaskError GameCardImageDumpTask::DoInBackground(const std::string& output_path, const bool& prepend_key_area, const bool& keep_certificate, const bool& trim_dump,
-                                                                const bool& calculate_checksum)
+                                                                const bool& calculate_checksum, const int& checksum_lookup_method)
     {
-        std::scoped_lock lock(this->crc_mtx);
+        std::scoped_lock lock(this->task_mtx);
 
         GameCardKeyArea gc_key_area{};
         GameCardSecurityInformation gc_security_information{};
@@ -47,10 +45,12 @@ namespace nxdt::tasks
 
         DataTransferProgress progress{};
 
+        /* Update private variables. */
         this->calculate_checksum = calculate_checksum;
+        this->checksum_lookup_method = checksum_lookup_method;
 
-        LOG_MSG_DEBUG("Starting dump with parameters:\n- Output path: \"%s\".\n- Prepend key area: %u.\n- Keep certificate: %u.\n- Trim dump: %u.\n- Calculate checksum: %u.", \
-                      output_path.c_str(), prepend_key_area, keep_certificate, trim_dump, calculate_checksum);
+        LOG_MSG_DEBUG("Starting dump with parameters:\n- Output path: \"%s\".\n- Prepend key area: %u.\n- Keep certificate: %u.\n- Trim dump: %u.\n- Calculate checksum: %u.\n- Checksum lookup method: %d.", \
+                      output_path.c_str(), prepend_key_area, keep_certificate, trim_dump, calculate_checksum, checksum_lookup_method);
 
         /* Retrieve gamecard image size. */
         if ((!trim_dump && !gamecardGetTotalSize(&gc_img_size)) || (trim_dump && !gamecardGetTrimmedSize(&gc_img_size)) || !gc_img_size) return "tasks/gamecard/image/get_size_failed"_i18n;
@@ -75,6 +75,10 @@ namespace nxdt::tasks
             }
         }
 
+        /* Push progress onto the class. */
+        progress.total_size = gc_img_size;
+        this->PublishProgress(progress);
+
         /* Open output file. */
         try {
             file = new nxdt::utils::FileWriter(output_path, gc_img_size);
@@ -84,31 +88,27 @@ namespace nxdt::tasks
 
         ON_SCOPE_EXIT { delete file; };
 
-        /* Push progress onto the class. */
-        progress.total_size = gc_img_size;
-        this->PublishProgress(progress);
-
         if (prepend_key_area)
         {
             /* Write GameCardKeyArea object. */
             if (!file->Write(&gc_key_area, sizeof(GameCardKeyArea))) return "tasks/gamecard/image/write_key_area_failed"_i18n;
 
             /* Push progress onto the class. */
-            progress.xfer_size = sizeof(GameCardKeyArea);
+            progress.xfer_size += sizeof(GameCardKeyArea);
             this->PublishProgress(progress);
         }
 
         /* Allocate memory buffer for the dump process. */
-        buf = usbAllocatePageAlignedBuffer(BLOCK_SIZE);
+        buf = usbAllocatePageAlignedBuffer(USB_TRANSFER_BUFFER_SIZE);
         if (!buf) return "generic/mem_alloc_failed"_i18n;
 
         ON_SCOPE_EXIT { free(buf); };
 
         /* Dump gamecard image. */
-        for(size_t offset = 0, blksize = BLOCK_SIZE; offset < gc_img_size; offset += blksize)
+        for(size_t offset = 0, blksize = USB_TRANSFER_BUFFER_SIZE; offset < gc_img_size; offset += blksize)
         {
             /* Don't proceed if the task has been cancelled. */
-            if (this->IsCancelled()) return "generic/process_cancelled"_i18n;
+            if (this->IsCancelled()) return {};
 
             /* Adjust current block size, if needed. */
             if (blksize > (gc_img_size - offset)) blksize = (gc_img_size - offset);

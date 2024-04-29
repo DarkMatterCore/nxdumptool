@@ -1,5 +1,5 @@
 /*
- * gamecard_dump_tasks.hpp
+ * gamecard_image_dump_task.hpp
  *
  * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
  *
@@ -21,8 +21,8 @@
 
 #pragma once
 
-#ifndef __GAMECARD_DUMP_TASKS_HPP__
-#define __GAMECARD_DUMP_TASKS_HPP__
+#ifndef __GAMECARD_IMAGE_DUMP_TASK_HPP__
+#define __GAMECARD_IMAGE_DUMP_TASK_HPP__
 
 #include <optional>
 #include <mutex>
@@ -33,12 +33,14 @@ namespace nxdt::tasks
 {
     typedef std::optional<std::string> GameCardDumpTaskError;
 
-    class GameCardImageDumpTask: public DataTransferTask<GameCardDumpTaskError, std::string, bool, bool, bool, bool>
+    /* Generates an image dump out of the inserted gamecard. */
+    class GameCardImageDumpTask: public DataTransferTask<GameCardDumpTaskError, std::string, bool, bool, bool, bool, int>
     {
         private:
+            std::mutex task_mtx;
             bool calculate_checksum = false;
+            int checksum_lookup_method = ConfigChecksumLookupMethod_None;
             u32 gc_img_crc = 0, full_gc_img_crc = 0;
-            std::mutex crc_mtx;
 
         protected:
             /* Set class as non-copyable and non-moveable. */
@@ -47,7 +49,7 @@ namespace nxdt::tasks
 
             /* Runs in the background thread. */
             GameCardDumpTaskError DoInBackground(const std::string& output_path, const bool& prepend_key_area, const bool& keep_certificate, const bool& trim_dump,
-                                                 const bool& calculate_checksum) override final;
+                                                 const bool& calculate_checksum, const int& checksum_lookup_method) override final;
 
         public:
             GameCardImageDumpTask() = default;
@@ -56,7 +58,7 @@ namespace nxdt::tasks
             /* Returns zero if checksum calculation wasn't enabled, if the task hasn't finished yet or if the task was cancelled. */
             ALWAYS_INLINE u32 GetImageChecksum(void)
             {
-                std::scoped_lock lock(this->crc_mtx);
+                std::scoped_lock lock(this->task_mtx);
                 return ((this->calculate_checksum && this->IsFinished() && !this->IsCancelled()) ? this->gc_img_crc : 0);
             }
 
@@ -64,10 +66,10 @@ namespace nxdt::tasks
             /* Returns zero if checksum calculation wasn't enabled, if the task hasn't finished yet or if the task was cancelled. */
             ALWAYS_INLINE u32 GetFullImageChecksum(void)
             {
-                std::scoped_lock lock(this->crc_mtx);
+                std::scoped_lock lock(this->task_mtx);
                 return ((this->calculate_checksum && this->IsFinished() && !this->IsCancelled()) ? this->full_gc_img_crc : 0);
             }
     };
 }
 
-#endif  /* __GAMECARD_DUMP_TASKS_HPP__ */
+#endif  /* __GAMECARD_IMAGE_DUMP_TASK_HPP__ */

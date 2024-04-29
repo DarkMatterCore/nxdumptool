@@ -40,10 +40,10 @@ namespace nxdt::views
             void layout(NVGcontext* vg, brls::Style* style, brls::FontStash* stash) override;
 
         public:
-            ErrorFrame(std::string msg = "");
+            ErrorFrame(const std::string& msg = "");
             ~ErrorFrame();
 
-            void SetMessage(std::string msg);
+            void SetMessage(const std::string& msg);
     };
 }
 

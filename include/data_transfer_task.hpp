@@ -87,10 +87,30 @@ namespace nxdt::tasks
 
             SteadyTimePoint start_time{}, prev_time{}, end_time{};
             size_t prev_xfer_size = 0;
+            bool first_publish_progress = true;
 
             ALWAYS_INLINE std::string FormatTimeString(double seconds)
             {
                 return fmt::format("{:02.0F}H{:02.0F}M{:02.0F}S", std::fmod(seconds, 86400.0) / 3600.0, std::fmod(seconds, 3600.0) / 60.0, std::fmod(seconds, 60.0));
+            }
+
+            void PostExecutionCallback(void)
+            {
+                /* Set end time. */
+                this->end_time = CurrentSteadyTimePoint();
+
+                /* Fire task handler immediately to make it store the last result from AsyncTask::LoopCallback(). */
+                /* We do this here because all subscribers to our progress event will most likely call IsFinished() to check if the task is complete. */
+                /* That being the case, if the `finished` flag returned by the task handler isn't updated before the progress event subscribers receive the last progress update, */
+                /* they won't be able to determine if the task has already finished, leading to unsuspected consequences. */
+                this->task_handler->fireNow();
+
+                /* Update progress one last time. */
+                /* This will effectively invoke the callbacks from all of our progress event subscribers. */
+                this->OnProgressUpdate(this->GetProgress());
+
+                /* Unset long running process state. */
+                utilsSetLongRunningProcessState(false);
             }
 
         protected:
@@ -103,11 +123,8 @@ namespace nxdt::tasks
             {
                 NX_IGNORE_ARG(result);
 
-                /* Set end time. */
-                this->end_time = CurrentSteadyTimePoint();
-
-                /* Unset long running process state. */
-                utilsSetLongRunningProcessState(false);
+                /* Run post execution callback. */
+                this->PostExecutionCallback();
             }
 
             /* Runs on the calling thread. */
@@ -115,20 +132,8 @@ namespace nxdt::tasks
             {
                 NX_IGNORE_ARG(result);
 
-                /* Set end time. */
-                this->end_time = CurrentSteadyTimePoint();
-
-                /* Fire task handler immediately to make it store the last result from AsyncTask::LoopCallback(). */
-                /* We do this here because all subscriptors to our progress event will most likely call IsFinished() to check if the task is complete. */
-                /* That being the case, if the `finished` flag returned by the task handler isn't updated before the progress event subscriptors receive the last progress update, */
-                /* they won't be able to determine if the task has already finished, leading to unsuspected consequences. */
-                this->task_handler->fireNow();
-
-                /* Update progress one last time. */
-                this->OnProgressUpdate(this->GetProgress());
-
-                /* Unset long running process state. */
-                utilsSetLongRunningProcessState(false);
+                /* Run post execution callback. */
+                this->PostExecutionCallback();
             }
 
             /* Runs on the calling thread. */
@@ -147,17 +152,18 @@ namespace nxdt::tasks
             /* Runs on the calling thread. */
             void OnProgressUpdate(const DataTransferProgress& progress) override final
             {
-                AsyncTaskStatus status = this->GetStatus();
-
-                /* Return immediately if there has been no progress at all, or if it the task has been cancelled. */
-                bool proceed = (progress.xfer_size > prev_xfer_size || (progress.xfer_size == prev_xfer_size && (!progress.total_size || progress.xfer_size >= progress.total_size)));
-                if (!proceed || this->IsCancelled()) return;
+                /* Return immediately if there has been no progress at all. */
+                bool proceed = (progress.xfer_size > prev_xfer_size || (progress.xfer_size == prev_xfer_size && (!progress.total_size || progress.xfer_size >= progress.total_size ||
+                                this->first_publish_progress)));
+                if (!proceed) return;
 
                 /* Calculate time difference between the last progress update and the current one. */
-                /* Return immediately if it's less than 1 second, but only if this isn't the last chunk; or if we don't know the total size and the task is still running . */
+                /* Return immediately if the task hasn't been cancelled and less than 1 second has passed since the last progress update -- but only if */
+                /* this isn't the last chunk *or* if we don't know the total size and the task is still running . */
+                AsyncTaskStatus status = this->GetStatus();
                 SteadyTimePoint cur_time = std::chrono::steady_clock::now();
                 double diff_time = std::chrono::duration<double>(cur_time - this->prev_time).count();
-                if (diff_time < 1.0 && ((progress.total_size && progress.xfer_size < progress.total_size) || status == AsyncTaskStatus::RUNNING)) return;
+                if (!this->IsCancelled() && diff_time < 1.0 && ((progress.total_size && progress.xfer_size < progress.total_size) || status == AsyncTaskStatus::RUNNING)) return;
 
                 /* Calculate transferred data size difference between the last progress update and the current one. */
                 double diff_xfer_size = static_cast<double>(progress.xfer_size - prev_xfer_size);
@@ -169,14 +175,14 @@ namespace nxdt::tasks
                 DataTransferProgress new_progress = progress;
                 new_progress.speed = speed;
 
-                if (progress.total_size)
+                if (progress.total_size && speed > 0.0)
                 {
                     /* Calculate remaining data size and ETA if we know the total size. */
                     double remaining = static_cast<double>(progress.total_size - progress.xfer_size);
                     double eta = (remaining / speed);
                     new_progress.eta = this->FormatTimeString(eta);
                 } else {
-                    /* No total size means no ETA calculation, sadly. */
+                    /* No total size nor speed means no ETA calculation, sadly. */
                     new_progress.eta = "";
                 }
 
@@ -190,6 +196,7 @@ namespace nxdt::tasks
                 /* Update class variables. */
                 this->prev_time = cur_time;
                 this->prev_xfer_size = progress.xfer_size;
+                if (this->first_publish_progress) this->first_publish_progress = false;
 
                 /* Send updated progress to all listeners. */
                 this->progress_event.fire(new_progress);

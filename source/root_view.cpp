@@ -33,6 +33,7 @@ namespace nxdt::views
 {
     RootView::RootView() : brls::TabFrame()
     {
+        /* Get Material font ID. */
         int material = brls::Application::getFontStash()->material;
 
         /* Set UI properties. */
@@ -41,6 +42,9 @@ namespace nxdt::views
 
         /* Check if we're running under applet mode. */
         this->applet_mode = utilsIsAppletMode();
+
+        /* Cache output storage configuration value. */
+        this->output_storage = configGetInteger("output_storage");
 
         /* Create labels. */
         this->applet_mode_lbl = new brls::Label(brls::LabelStyle::HINT, "root_view/applet_mode"_i18n);
@@ -159,6 +163,9 @@ namespace nxdt::views
         this->ums_task_sub = this->ums_task->RegisterListener([this](const nxdt::tasks::UmsDeviceVector& ums_devices) {
             /* Update UMS counter label. */
             this->ums_counter_lbl->setText(i18n::getStr("root_view/ums_counter"_i18n, usbHsFsGetPhysicalDeviceCount()));
+
+            /* Update cached output storage value, if needed. */
+            if (this->output_storage > ConfigOutputStorage_UsbHost) this->output_storage = ConfigOutputStorage_SdCard;
         });
 
         /* Subscribe to USB host event. */

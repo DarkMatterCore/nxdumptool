@@ -45,7 +45,7 @@ namespace nxdt::views
             DataTransferProgressDisplay();
             ~DataTransferProgressDisplay();
 
-            void setProgress(const nxdt::tasks::DataTransferProgress& progress);
+            void SetProgress(const nxdt::tasks::DataTransferProgress& progress);
 
             void willAppear(bool resetState = false) override;
             void willDisappear(bool resetState = false) override;

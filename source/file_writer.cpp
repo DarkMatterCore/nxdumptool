@@ -102,7 +102,7 @@ namespace nxdt::utils
         {
             char needed_size_str[0x40] = {0};
             utilsGenerateFormattedSizeString(static_cast<double>(this->total_size), needed_size_str, sizeof(needed_size_str));
-            return i18n::getStr("utils/file_writer/free_space_check/insufficiente_space_error", needed_size_str);
+            return i18n::getStr("utils/file_writer/free_space_check/insufficient_space_error", needed_size_str);
         }
 
         return {};
@@ -139,7 +139,7 @@ namespace nxdt::utils
             this->fp = fopen(this->output_path.c_str(), "wb");
         } else {
             /* Open current part file. */
-            std::string part_file_path = fmt::format("{}/{:02u}", this->output_path, this->split_file_part_idx);
+            std::string part_file_path = fmt::format("{}/{:02d}", this->output_path, this->split_file_part_idx);
             this->fp = fopen(part_file_path.c_str(), "wb");
             if (this->fp)
             {

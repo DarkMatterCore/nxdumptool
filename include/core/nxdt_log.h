@@ -111,7 +111,7 @@ void logFlushLogFile(void);
 void logCloseLogFile(void);
 
 /// Returns a pointer to a dynamically allocated buffer that holds the last error message string, or NULL if there's none.
-/// The allocated buffer must be freed by the calling function using free().
+/// The allocated buffer must be freed by the caller using free().
 char *logGetLastMessage(void);
 
 /// (Un)locks the log mutex. Can be used to block other threads and prevent them from writing data to the logfile.

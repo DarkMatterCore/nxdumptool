@@ -26,7 +26,7 @@
 
 namespace nxdt::views
 {
-    ErrorFrame::ErrorFrame(std::string msg) : brls::View()
+    ErrorFrame::ErrorFrame(const std::string& msg) : brls::View()
     {
         this->label = new brls::Label(brls::LabelStyle::REGULAR, msg, true);
         this->label->setHorizontalAlign(NVG_ALIGN_CENTER);
@@ -89,7 +89,7 @@ namespace nxdt::views
             this->label->getHeight());
     }
 
-    void ErrorFrame::SetMessage(std::string msg)
+    void ErrorFrame::SetMessage(const std::string& msg)
     {
         this->label->setText(msg);
         this->invalidate();

@@ -308,4 +308,9 @@ namespace nxdt::tasks
             this->usb_host_event.fire(this->cur_usb_host_speed);
         }
     }
+
+    const UsbHostSpeed& UsbHostTask::GetUsbHostSpeed(void)
+    {
+        return this->cur_usb_host_speed;
+    }
 }

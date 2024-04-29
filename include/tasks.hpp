@@ -170,6 +170,9 @@ namespace nxdt::tasks
             UsbHostTask();
             ~UsbHostTask();
 
+            /* Intentionally left here to let views retrieve USB host connection speed on-demand. */
+            const UsbHostSpeed& GetUsbHostSpeed(void);
+
             EVENT_SUBSCRIPTION(UsbHostEvent, usb_host_event);
     };
 }

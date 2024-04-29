@@ -113,8 +113,8 @@ namespace nxdt::views
 
     void GameCardTab::PopulateList(void)
     {
-        TitleApplicationMetadata **app_metadata = nullptr;
-        u32 app_metadata_count = 0;
+        TitleGameCardApplicationMetadataEntry *gc_app_metadata = nullptr;
+        u32 gc_app_metadata_count = 0;
         GameCardHeader card_header = {0};
         GameCardInfo card_info = {0};
         FsGameCardIdSet card_id_set = {0};
@@ -134,8 +134,8 @@ namespace nxdt::views
         this->list->addView(launch_error_info);
 
         /* Retrieve gamecard application metadata. */
-        app_metadata = titleGetGameCardApplicationMetadataEntries(&app_metadata_count);
-        if (app_metadata)
+        gc_app_metadata = titleGetGameCardApplicationMetadataEntries(&gc_app_metadata_count);
+        if (gc_app_metadata)
         {
             /* Display the applications that are part of the inserted gamecard. */
             this->list->addView(new brls::Header("gamecard_tab/list/user_titles/header"_i18n));
@@ -147,15 +147,33 @@ namespace nxdt::views
             this->list->addView(user_titles_info);
 
             /* Populate list. */
-            for(u32 i = 0; i < app_metadata_count; i++)
+            for(u32 i = 0; i < gc_app_metadata_count; i++)
             {
-                TitlesTabItem *title = new TitlesTabItem(app_metadata[i], false, false);
+                TitleGameCardApplicationMetadataEntry *cur_gc_app_metadata = &(gc_app_metadata[i]);
+
+                /* Create item. */
+                TitlesTabItem *title = new TitlesTabItem(cur_gc_app_metadata->app_metadata, false, false);
+
+                /* Unregister A button action. */
                 title->unregisterAction(brls::Key::A);
+
+                /* Set version information as the item sublabel instead of the title author. */
+                std::string sublabel{};
+                if (cur_gc_app_metadata->display_version[0])
+                {
+                    sublabel = fmt::format("v{} ({})", cur_gc_app_metadata->version.value, cur_gc_app_metadata->display_version);
+                } else {
+                    sublabel = fmt::format("v{}", cur_gc_app_metadata->version.value);
+                }
+
+                title->setSubLabel(sublabel);
+
+                /* Add view to item list. */
                 this->list->addView(title);
             }
 
-            /* Free application metadata array. */
-            free(app_metadata);
+            /* Free gamecard application metadata array. */
+            free(gc_app_metadata);
         }
 
         /* Populate gamecard properties table. */

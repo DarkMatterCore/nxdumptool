@@ -23,6 +23,7 @@
     "mem_alloc_failed": "Failed to allocate memory buffer.",
 
     "process_cancelled": "Process cancelled.",
+    "process_complete": "Process complete!",
 
     "read": "read",
     "write": "write"

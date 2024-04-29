@@ -51,7 +51,8 @@ namespace nxdt::views
 
             std::string SanitizeUserFileName(void);
 
-            void UpdateOutputStorages(const nxdt::tasks::UmsDeviceVector& ums_devices);
+            std::vector<std::string> GenerateOutputStoragesVector(const nxdt::tasks::UmsDeviceVector& ums_devices);
+
             void UpdateStoragePrefix(u32 selected);
 
         protected:
@@ -67,7 +68,18 @@ namespace nxdt::views
 
             ALWAYS_INLINE brls::GenericEvent::Subscription RegisterButtonListener(brls::GenericEvent::Callback cb)
             {
-                return this->button_click_event->subscribe(cb);
+                return this->button_click_event->subscribe([this, cb](brls::View *view){
+                    /* Check if the USB host is currently selected as the output storage. */
+                    /* If so, we'll prevent the provided callback from running. */
+                    if (this->output_storage->getSelectedValue() == ConfigOutputStorage_UsbHost && this->root_view->GetUsbHostSpeed() == UsbHostSpeed_None)
+                    {
+                        brls::Application::notify(brls::i18n::getStr("dump_options/notifications/usb_host_unavailable"));
+                        return;
+                    }
+
+                    /* Run the provided callback. */
+                    cb(view);
+                });
             }
 
             ALWAYS_INLINE void UnregisterButtonListener(brls::GenericEvent::Subscription subscription)

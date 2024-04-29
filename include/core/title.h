@@ -46,6 +46,13 @@ typedef struct {
     u8 *icon;                       ///< JPEG icon data.
 } TitleApplicationMetadata;
 
+/// Used to display gamecard-specific title information.
+typedef struct {
+    TitleApplicationMetadata *app_metadata; ///< User application metadata.
+    Version version;                        ///< Reflects the title version stored in the inserted gamecard.
+    char display_version[32];               ///< Reflects the title display version stored in its NACP.
+} TitleGameCardApplicationMetadataEntry;
+
 /// Generated using ncm calls.
 /// User applications: the previous/next pointers reference other user applications with the same ID.
 /// Patches: the previous/next pointers reference other patches with the same ID.
@@ -102,12 +109,13 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 /// Returns a pointer to a dynamically allocated array of pointers to TitleApplicationMetadata entries, as well as their count. Returns NULL if an error occurs.
 /// If 'is_system' is true, TitleApplicationMetadata entries from available system titles (NcmStorageId_BuiltInSystem) will be returned.
 /// Otherwise, TitleApplicationMetadata entries from user applications with available content data (NcmStorageId_BuiltInUser, NcmStorageId_SdCard, NcmStorageId_GameCard) will be returned.
-/// The allocated buffer must be freed by the calling function using free().
+/// The allocated buffer must be freed by the caller using free().
 TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count);
 
-/// Returns a pointer to a dynamically allocated array of pointers to TitleApplicationMetadata entries with matching gamecard user titles, as well as their count. Returns NULL if an error occurs.
-/// The allocated buffer must be freed by the calling function using free().
-TitleApplicationMetadata **titleGetGameCardApplicationMetadataEntries(u32 *out_count);
+/// Returns a pointer to a dynamically allocated array of TitleGameCardApplicationMetadataEntry elements generated from gamecard user titles, as well as their count.
+/// Returns NULL if an error occurs.
+/// The allocated buffer must be freed by the caller using free().
+TitleGameCardApplicationMetadataEntry *titleGetGameCardApplicationMetadataEntries(u32 *out_count);
 
 /// Returns a pointer to a dynamically allocated TitleInfo element with a matching storage ID and title ID. Returns NULL if an error occurs.
 /// If NcmStorageId_Any is used, the first entry with a matching title ID is returned.

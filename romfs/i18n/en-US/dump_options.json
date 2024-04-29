@@ -45,6 +45,7 @@
     "start_dump": "Start dump",
 
     "notifications": {
+        "usb_host_unavailable": "Please connect the console to a PC and start the host server program.",
         "get_output_path_error": "Failed to generate output path."
     }
 }

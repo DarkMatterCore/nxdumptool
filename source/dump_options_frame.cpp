@@ -66,7 +66,8 @@ namespace nxdt::views
         this->list->setMarginBottom(20);
 
         /* Filename. */
-        this->filename = new brls::InputListItem("dump_options/filename/label"_i18n, this->SanitizeUserFileName(), "", "dump_options/filename/description"_i18n, FS_MAX_FILENAME_LENGTH);
+        this->filename = new brls::InputListItem("dump_options/filename/label"_i18n, this->SanitizeUserFileName(), "", "dump_options/filename/description"_i18n,
+                                                 FS_MAX_FILENAME_LENGTH);
 
         this->filename->getClickEvent()->subscribe([this](brls::View *view) {
             /* Sanitize the string entered by the user. */
@@ -77,7 +78,9 @@ namespace nxdt::views
         this->list->addView(this->filename);
 
         /* Output storage. */
-        this->output_storage = new brls::SelectListItem("dump_options/output_storage/label"_i18n, { "dummy0", "dummy1" }, configGetInteger("output_storage"), i18n::getStr("dump_options/output_storage/description", GITHUB_REPOSITORY_URL));
+        this->output_storage = new brls::SelectListItem("dump_options/output_storage/label"_i18n, this->GenerateOutputStoragesVector(this->root_view->GetUmsDevices()),
+                                                        static_cast<u32>(this->root_view->GetOutputStorage()),
+                                                        i18n::getStr("dump_options/output_storage/description", GITHUB_REPOSITORY_URL));
 
         this->output_storage->getValueSelectedEvent()->subscribe([this](int selected) {
             /* Make sure the current value isn't out of bounds. */
@@ -86,15 +89,15 @@ namespace nxdt::views
             /* Update configuration. */
             if (selected == ConfigOutputStorage_SdCard || selected == ConfigOutputStorage_UsbHost) configSetInteger("output_storage", selected);
 
+            /* Update cached output storage value. */
+            this->root_view->SetOutputStorage(selected);
+
             /* Sanitize output filename for the selected storage. */
             this->filename->setValue(this->SanitizeUserFileName());
 
             /* Update the storage prefix. */
             this->UpdateStoragePrefix(static_cast<u32>(selected));
         });
-
-        /* Manually update the output storages vector. */
-        this->UpdateOutputStorages(this->root_view->GetUmsDevices());
 
         /* Manually update the storage prefix. */
         this->UpdateStoragePrefix(this->output_storage->getSelectedValue());
@@ -103,8 +106,24 @@ namespace nxdt::views
 
         /* Subscribe to the UMS device event. */
         this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this](const nxdt::tasks::UmsDeviceVector& ums_devices) {
-            /* Update output storages vector. */
-            this->UpdateOutputStorages(ums_devices);
+            /* Update SelectListItem values. */
+            /* If the dropdown menu currently is being displayed, it'll be reloaded. */
+            this->output_storage->updateValues(this->GenerateOutputStoragesVector(ums_devices));
+
+            /* Get selected output storage. */
+            u32 selected = this->output_storage->getSelectedValue();
+            if (selected > ConfigOutputStorage_UsbHost)
+            {
+                /* Switch the current output storage to the SD card if a UMS device was previously selected. */
+                this->output_storage->setSelectedValue(ConfigOutputStorage_SdCard);
+
+                /* Manually trigger selection event. */
+                /* This will take care of updating the JSON configuration, updating the cached output storage value and saniziting the filename provided by the user. */
+                this->output_storage->getValueSelectedEvent()->fire(ConfigOutputStorage_SdCard);
+            } else {
+                /* Set the current output storage once more. This will make sure the string for the selected storage gets updated. */
+                this->output_storage->setSelectedValue(selected);
+            }
         });
 
         /* Start dump button. */
@@ -124,7 +143,7 @@ namespace nxdt::views
 
         if (this->raw_filename.empty() || !(raw_filename_dup = strdup(this->raw_filename.c_str()))) return "dummy";
 
-        u8 selected = static_cast<u8>(this->output_storage ? this->output_storage->getSelectedValue() : configGetInteger("output_storage"));
+        int selected = this->root_view->GetOutputStorage();
         utilsReplaceIllegalCharacters(raw_filename_dup, selected == ConfigOutputStorage_SdCard);
 
         std::string output = std::string(raw_filename_dup);
@@ -133,14 +152,10 @@ namespace nxdt::views
         return output;
     }
 
-    void DumpOptionsFrame::UpdateOutputStorages(const nxdt::tasks::UmsDeviceVector& ums_devices)
+    std::vector<std::string> DumpOptionsFrame::GenerateOutputStoragesVector(const nxdt::tasks::UmsDeviceVector& ums_devices)
     {
-        if (!this->output_storage) return;
-
         std::vector<std::string> storages{};
-
         size_t elem_count = (ConfigOutputStorage_Count + ums_devices.size());
-        u32 selected = this->output_storage->getSelectedValue();
 
         /* Fill storages vector. */
         for(size_t i = 0; i < elem_count; i++)
@@ -170,22 +185,7 @@ namespace nxdt::views
             }
         }
 
-        /* Update SelectListItem values. */
-        /* If the dropdown menu currently is being displayed, it'll be reloaded. */
-        this->output_storage->updateValues(storages);
-
-        if (selected > ConfigOutputStorage_UsbHost)
-        {
-            /* Set the SD card as the current output storage. */
-            this->output_storage->setSelectedValue(ConfigOutputStorage_SdCard);
-
-            /* Manually trigger selection event. */
-            /* This will take care of both updating the JSON configuration and saniziting the filename provided by the user. */
-            this->output_storage->getValueSelectedEvent()->fire(ConfigOutputStorage_SdCard);
-        } else {
-            /* Set the current output storage once more. This will make sure the selected device string gets updated. */
-            this->output_storage->setSelectedValue(selected);
-        }
+        return storages;
     }
 
     void DumpOptionsFrame::UpdateStoragePrefix(u32 selected)
@@ -209,7 +209,7 @@ namespace nxdt::views
 
     bool DumpOptionsFrame::onCancel(void)
     {
-        /* Pop view. */
+        /* Pop view. This will invoke this class' destructor. */
         brls::Application::popView(brls::ViewAnimation::SLIDE_RIGHT);
         return true;
     }

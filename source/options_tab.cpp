@@ -49,8 +49,11 @@ namespace nxdt::views
 
         /* Subscribe to the download task. */
         this->download_task.RegisterListener([&](const nxdt::tasks::DataTransferProgress& progress) {
+            /* Return immediately if the download task was cancelled. */
+            if (this->download_task.IsCancelled()) return;
+
             /* Update progress. */
-            this->update_progress->setProgress(progress);
+            this->update_progress->SetProgress(progress);
 
             /* Check if the download task has finished. */
             if (this->download_task.IsFinished())
@@ -167,7 +170,7 @@ namespace nxdt::views
         /* Cancel JSON task. */
         this->json_task.Cancel();
 
-        /* Pop view. */
+        /* Pop view. This will invoke this class' destructor. */
         brls::Application::popView(brls::ViewAnimation::SLIDE_RIGHT);
 
         return true;
@@ -245,19 +248,23 @@ namespace nxdt::views
         /* Subscribe to the NRO task. */
         this->nro_task.RegisterListener([&](const nxdt::tasks::DataTransferProgress& progress) {
             /* Update progress. */
-            this->update_progress->setProgress(progress);
+            this->update_progress->SetProgress(progress);
 
             /* Check if the download task has finished. */
             if (this->nro_task.IsFinished())
             {
-                /* Get NRO task result and immediately set application updated state if the task succeeded. */
-                bool ret = this->nro_task.GetResult();
-                if (ret) utilsSetApplicationUpdatedState();
+                /* Check if the download task was cancelled. */
+                if (!this->nro_task.IsCancelled())
+                {
+                    /* Get NRO task result and immediately set application updated state if the task succeeded. */
+                    bool ret = this->nro_task.GetResult();
+                    if (ret) utilsSetApplicationUpdatedState();
 
-                /* Display notification. */
-                brls::Application::notify(ret ? "options_tab/notifications/app_updated"_i18n : "options_tab/notifications/update_failed"_i18n);
+                    /* Display notification. */
+                    brls::Application::notify(ret ? "options_tab/notifications/app_updated"_i18n : "options_tab/notifications/update_failed"_i18n);
+                }
 
-                /* Pop view */
+                /* Pop view. */
                 this->onCancel();
             }
         });
@@ -356,13 +363,13 @@ namespace nxdt::views
             });
         });
 
-        /* Update UMS devices vector. */
+        /* Manually update UMS devices vector. */
         this->ums_devices = this->root_view->GetUmsDevices();
 
         /* Subscribe to the UMS device event. */
         this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this, unmount_ums_device](const nxdt::tasks::UmsDeviceVector& ums_devices) {
             /* Update UMS devices vector. */
-            this->ums_devices = this->root_view->GetUmsDevices();
+            this->ums_devices = ums_devices;
 
             /* Generate values vector for the dropdown. */
             std::vector<std::string> values{};

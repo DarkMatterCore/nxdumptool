@@ -179,7 +179,7 @@ bool utilsDeleteDirectoryRecursively(const char *path);
 /// A path separator is automatically placed between the provided prefix and the filename if the prefix doesn't end with one.
 /// A dot *isn't* automatically placed between the filename and the provided extension -- if required, it must be provided as part of the extension string.
 /// Furthermore, if the full length for the generated path is >= FS_MAX_PATH, NULL will be returned.
-/// The allocated buffer must be freed by the calling function using free().
+/// The allocated buffer must be freed by the caller using free().
 char *utilsGeneratePath(const char *prefix, const char *filename, const char *extension);
 
 /// Prints an error message using the standard console output and waits for the user to press a button.

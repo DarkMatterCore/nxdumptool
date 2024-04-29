@@ -89,7 +89,7 @@ namespace nxdt::tasks
     };
 
     /* Asynchronous task used to store downloaded data into a dynamically allocated buffer using a URL. */
-    /* The buffer returned by std::pair::first() must be manually freed by the calling function using free(). */
+    /* The buffer returned by std::pair::first() must be manually freed by the caller using free(). */
     class DownloadDataTask: public DownloadTask<DownloadDataResult, std::string, bool>
     {
         protected:

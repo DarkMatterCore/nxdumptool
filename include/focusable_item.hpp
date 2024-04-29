@@ -25,12 +25,15 @@
 #define __FOCUSABLE_ITEM_HPP__
 
 #include <borealis.hpp>
+#include <type_traits>
 
 namespace nxdt::views
 {
     template<typename ViewType>
     class FocusableItem: public ViewType
     {
+        static_assert(std::is_base_of_v<brls::View, ViewType>, "ViewType must inherit from brls::View");
+
         private:
             bool highlight, highlight_bg;
 
