@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "rsa.h"
+#include <core/nxdt_utils.h>
+#include <core/rsa.h>
 
 #include <mbedtls/rsa.h>
 #include <mbedtls/entropy.h>

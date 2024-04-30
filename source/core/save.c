@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "save.h"
+#include <core/nxdt_utils.h>
+#include <core/save.h>
 
 static inline void save_bitmap_set_bit(void *buffer, size_t bit_offset)
 {

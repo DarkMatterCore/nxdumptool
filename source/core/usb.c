@@ -22,8 +22,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "usb.h"
+#include <core/nxdt_utils.h>
+#include <core/usb.h>
 
 #define USB_ABI_VERSION_MAJOR       1
 #define USB_ABI_VERSION_MINOR       2

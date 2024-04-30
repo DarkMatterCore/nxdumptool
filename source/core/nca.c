@@ -19,13 +19,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "nca.h"
-#include "keys.h"
-#include "aes.h"
-#include "rsa.h"
-#include "gamecard.h"
-#include "title.h"
+#include <core/nxdt_utils.h>
+#include <core/nca.h>
+#include <core/keys.h>
+#include <core/aes.h>
+#include <core/rsa.h>
+#include <core/gamecard.h>
+#include <core/title.h>
 
 #define NCA_CRYPTO_BUFFER_SIZE  0x800000    /* 8 MiB. */
 

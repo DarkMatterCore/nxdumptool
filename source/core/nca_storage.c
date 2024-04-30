@@ -19,8 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "nca_storage.h"
+#include <core/nxdt_utils.h>
+#include <core/nca_storage.h>
 
 /* Function prototypes. */
 

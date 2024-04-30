@@ -19,8 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "nso.h"
+#include <core/nxdt_utils.h>
+#include <core/nso.h>
 
 /* Function prototypes. */
 

@@ -19,10 +19,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "cert.h"
-#include "save.h"
-#include "gamecard.h"
+#include <core/nxdt_utils.h>
+#include <core/cert.h>
+#include <core/save.h>
+#include <core/gamecard.h>
 
 #define CERT_SAVEFILE_PATH              BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e0"
 #define CERT_SAVEFILE_STORAGE_BASE_PATH "/certificate/"

@@ -19,16 +19,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "gamecard.h"
-#include "title.h"
-#include "cnmt.h"
-#include "program_info.h"
-#include "nacp.h"
-#include "legal_info.h"
-#include "cert.h"
-#include "usb.h"
-#include "nxdt_devoptab.h"
+#include <core/nxdt_utils.h>
+#include <core/gamecard.h>
+#include <core/title.h>
+#include <core/cnmt.h>
+#include <core/program_info.h>
+#include <core/nacp.h>
+#include <core/legal_info.h>
+#include <core/cert.h>
+#include <core/usb.h>
+#include <core/devoptab/nxdt_devoptab.h>
 
 #define BLOCK_SIZE      USB_TRANSFER_BUFFER_SIZE
 #define WAIT_TIME_LIMIT 30

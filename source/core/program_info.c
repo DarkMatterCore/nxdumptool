@@ -21,9 +21,9 @@
 
 #include <mbedtls/base64.h>
 
-#include "nxdt_utils.h"
-#include "program_info.h"
-#include "elf_symbol.h"
+#include <core/nxdt_utils.h>
+#include <core/program_info.h>
+#include <core/elf_symbol.h>
 
 /* Helper macros. */
 

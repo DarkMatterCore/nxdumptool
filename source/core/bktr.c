@@ -20,9 +20,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "bktr.h"
-#include "aes.h"
+#include <core/nxdt_utils.h>
+#include <core/bktr.h>
+#include <core/aes.h>
 
 /* Type definitions. */
 

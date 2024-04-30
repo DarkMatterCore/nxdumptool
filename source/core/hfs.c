@@ -19,8 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "gamecard.h"
+#include <core/nxdt_utils.h>
+#include <core/gamecard.h>
 
 #define HFS_PARTITION_NAME_INDEX(x) ((x) - 1)
 

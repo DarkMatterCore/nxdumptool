@@ -19,9 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "pfs.h"
-#include "npdm.h"
+#include <core/nxdt_utils.h>
+#include <core/pfs.h>
+#include <core/npdm.h>
 
 #define PFS_HEADER_PADDING_ALIGNMENT    0x20
 

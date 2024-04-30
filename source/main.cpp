@@ -19,9 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include <nxdt_utils.h>
-#include <scope_guard.hpp>
-#include <root_view.hpp>
+#include <core/nxdt_utils.h>
+#include <utils/scope_guard.hpp>
+#include <views/root_view.hpp>
 
 namespace i18n = brls::i18n;    /* For getStr(). */
 using namespace i18n::literals; /* For _i18n. */

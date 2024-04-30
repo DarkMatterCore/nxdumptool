@@ -19,9 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "npdm.h"
-#include "rsa.h"
+#include <core/nxdt_utils.h>
+#include <core/npdm.h>
+#include <core/rsa.h>
 
 bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx)
 {

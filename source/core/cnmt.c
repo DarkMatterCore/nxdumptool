@@ -19,9 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "cnmt.h"
-#include "title.h"
+#include <core/nxdt_utils.h>
+#include <core/cnmt.h>
+#include <core/title.h>
 
 /* Helper macros. */
 

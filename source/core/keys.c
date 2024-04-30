@@ -21,13 +21,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "keys.h"
-#include "nca.h"
-#include "rsa.h"
-#include "aes.h"
-#include "smc.h"
-#include "key_sources.h"
+#include <core/nxdt_utils.h>
+#include <core/keys.h>
+#include <core/nca.h>
+#include <core/rsa.h>
+#include <core/aes.h>
+#include <core/smc.h>
+#include <core/key_sources.h>
 
 #define ETICKET_RSA_DEVICE_KEY_PUBLIC_EXPONENT  0x10001
 

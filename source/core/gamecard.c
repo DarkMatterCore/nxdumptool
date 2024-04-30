@@ -19,11 +19,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "mem.h"
-#include "gamecard.h"
-#include "keys.h"
-#include "rsa.h"
+#include <core/nxdt_utils.h>
+#include <core/mem.h>
+#include <core/gamecard.h>
+#include <core/keys.h>
+#include <core/rsa.h>
 
 #define GAMECARD_READ_BUFFER_SIZE               0x800000                /* 8 MiB. */
 

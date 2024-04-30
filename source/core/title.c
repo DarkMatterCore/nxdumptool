@@ -19,10 +19,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "title.h"
-#include "gamecard.h"
-#include "nacp.h"
+#include <core/nxdt_utils.h>
+#include <core/title.h>
+#include <core/gamecard.h>
+#include <core/nacp.h>
 
 #define NS_APPLICATION_RECORD_BLOCK_SIZE    1024
 
@@ -577,6 +577,7 @@ static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info);
 static int titleSystemTitleMetadataEntrySortFunction(const void *a, const void *b);
 static int titleUserApplicationMetadataEntrySortFunction(const void *a, const void *b);
 static int titleInfoEntrySortFunction(const void *a, const void *b);
+static int titleGameCardApplicationMetadataSortFunction(const void *a, const void *b);
 
 static char *titleGetPatchVersionString(TitleInfo *title_info);
 
@@ -767,6 +768,7 @@ TitleGameCardApplicationMetadataEntry *titleGetGameCardApplicationMetadataEntrie
             if (!app_info || app_info->meta_key.type != NcmContentMetaType_Application) continue;
 
             u32 app_version = app_info->meta_key.version;
+            u32 dlc_count = 0;
 
             /* Check if the inserted gamecard holds any bundled patches for the current user application. */
             /* If so, we'll use the highest patch version available as part of the filename. */
@@ -780,6 +782,18 @@ TitleGameCardApplicationMetadataEntry *titleGetGameCardApplicationMetadataEntrie
 
                 patch_info = cur_title_info;
                 app_version = cur_title_info->meta_key.version;
+            }
+
+            /* Count DLCs available for this application in the inserted gamecard. */
+            for(u32 j = 0; j < title_count; j++)
+            {
+                if (j == i) continue;
+
+                TitleInfo *cur_title_info = titles[j];
+                if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_AddOnContent || \
+                    !titleCheckIfAddOnContentIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id)) continue;
+
+                dlc_count++;
             }
 
             /* Reallocate application metadata pointer array. */
@@ -801,6 +815,7 @@ TitleGameCardApplicationMetadataEntry *titleGetGameCardApplicationMetadataEntrie
             memset(tmp_gc_app_metadata, 0, sizeof(TitleGameCardApplicationMetadataEntry));
             tmp_gc_app_metadata->app_metadata = app_info->app_metadata;
             tmp_gc_app_metadata->version.value = app_version;
+            tmp_gc_app_metadata->dlc_count = dlc_count;
 
             /* Try to retrieve the display version. */
             char *version_str = titleGetPatchVersionString(patch_info ? patch_info : app_info);
@@ -816,7 +831,13 @@ TitleGameCardApplicationMetadataEntry *titleGetGameCardApplicationMetadataEntrie
         /* Update output counter. */
         *out_count = app_count;
 
-        if (!gc_app_metadata || !app_count) LOG_MSG_ERROR("No gamecard content data found for user applications!");
+        if (gc_app_metadata && app_count)
+        {
+            /* Reorder title metadata entries by name. */
+            if (app_count > 1) qsort(gc_app_metadata, app_count, sizeof(TitleGameCardApplicationMetadataEntry), &titleGameCardApplicationMetadataSortFunction);
+        } else {
+            LOG_MSG_ERROR("No gamecard content data found for user applications!");
+        }
     }
 
     return gc_app_metadata;
@@ -2061,7 +2082,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
     if (extra_title_count < total) titleReallocateTitleInfoFromStorage(title_storage, 0, false);
 
     /* Sort title info entries by title ID, version and storage ID. */
-    qsort(title_storage->titles, title_storage->title_count, sizeof(TitleInfo*), &titleInfoEntrySortFunction);
+    if (title_storage->title_count > 1) qsort(title_storage->titles, title_storage->title_count, sizeof(TitleInfo*), &titleInfoEntrySortFunction);
 
     /* Update linked lists for user applications, patches and add-on contents. */
     /* This will also keep track of orphan titles - titles with no available application metadata. */
@@ -2768,6 +2789,14 @@ static int titleInfoEntrySortFunction(const void *a, const void *b)
     }
 
     return 0;
+}
+
+static int titleGameCardApplicationMetadataSortFunction(const void *a, const void *b)
+{
+    const TitleGameCardApplicationMetadataEntry *gc_app_metadata_1 = (const TitleGameCardApplicationMetadataEntry*)a;
+    const TitleGameCardApplicationMetadataEntry *gc_app_metadata_2 = (const TitleGameCardApplicationMetadataEntry*)b;
+
+    return strcasecmp(gc_app_metadata_1->app_metadata->lang_entry.name, gc_app_metadata_2->app_metadata->lang_entry.name);
 }
 
 static char *titleGetPatchVersionString(TitleInfo *title_info)

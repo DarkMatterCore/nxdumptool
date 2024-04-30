@@ -19,8 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "fs_ext.h"
+#include <core/nxdt_utils.h>
+#include <core/fs_ext.h>
 
 /* IFileSystemProxy. */
 Result fsOpenGameCardStorage(FsStorage *out, const FsGameCardHandle *handle, u32 partition)

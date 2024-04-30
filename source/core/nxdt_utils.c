@@ -21,17 +21,17 @@
 
 #include <sys/statvfs.h>
 
-#include "nxdt_utils.h"
-#include "keys.h"
-#include "gamecard.h"
-#include "services.h"
-#include "nca.h"
-#include "usb.h"
-#include "title.h"
-#include "bfttf.h"
-#include "nxdt_bfsar.h"
-#include "nxdt_devoptab.h"
-#include "fatfs/ff.h"
+#include <core/nxdt_utils.h>
+#include <core/keys.h>
+#include <core/gamecard.h>
+#include <core/services.h>
+#include <core/nca.h>
+#include <core/usb.h>
+#include <core/title.h>
+#include <core/bfttf.h>
+#include <core/nxdt_bfsar.h>
+#include <core/devoptab/nxdt_devoptab.h>
+#include <core/fatfs/ff.h>
 
 /* Type definitions. */
 

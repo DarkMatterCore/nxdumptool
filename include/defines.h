@@ -111,6 +111,7 @@
 #define FS_MAX_FILENAME_LENGTH          255
 #define SDMC_MAX_FILENAME_LENGTH        128                                                             /* Arbitrarily set, I'm tired of FS sysmodule shenanigans. */
 
+#define REPEATING_TASK_INTERVAL         250                                                             /* 250 milliseconds. */
 #define DATA_TRANSFER_TASK_INTERVAL     100                                                             /* 100 milliseconds. */
 
 #define HTTP_USER_AGENT                 APP_TITLE "/" APP_VERSION " (Nintendo Switch)"

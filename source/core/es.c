@@ -20,9 +20,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "es.h"
-#include "service_guard.h"
+#include <core/nxdt_utils.h>
+#include <core/es.h>
+#include <core/service_guard.h>
 
 static Service g_esSrv = {0};
 

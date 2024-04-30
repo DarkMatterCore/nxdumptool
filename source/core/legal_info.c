@@ -19,8 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "legal_info.h"
+#include <core/nxdt_utils.h>
+#include <core/legal_info.h>
 
 bool legalInfoInitializeContext(LegalInfoContext *out, NcaContext *nca_ctx)
 {

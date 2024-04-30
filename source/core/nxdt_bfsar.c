@@ -19,10 +19,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "nxdt_bfsar.h"
-#include "romfs.h"
-#include "title.h"
+#include <core/nxdt_utils.h>
+#include <core/nxdt_bfsar.h>
+#include <core/romfs.h>
+#include <core/title.h>
 
 #define BFSAR_FILENAME      "qlaunch.bfsar"
 #define BFSAR_ROMFS_PATH    "/sound/" BFSAR_FILENAME

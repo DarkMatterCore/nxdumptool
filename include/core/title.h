@@ -51,6 +51,7 @@ typedef struct {
     TitleApplicationMetadata *app_metadata; ///< User application metadata.
     Version version;                        ///< Reflects the title version stored in the inserted gamecard.
     char display_version[32];               ///< Reflects the title display version stored in its NACP.
+    u32 dlc_count;                          ///< Reflects the number of DLCs available for this application in the inserted gamecard.
 } TitleGameCardApplicationMetadataEntry;
 
 /// Generated using ncm calls.

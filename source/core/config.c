@@ -19,9 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "config.h"
-#include "title.h"
+#include <core/nxdt_utils.h>
+#include <core/config.h>
+#include <core/title.h>
 
 #define CONFIG_VALIDATE_FIELD(type, name, ...) \
 if (!strcmp(key, #name)) { \

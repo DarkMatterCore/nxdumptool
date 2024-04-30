@@ -21,8 +21,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "sha3.h"
+#include <core/nxdt_utils.h>
+#include <core/sha3.h>
 
 #define SHA3_NUM_ROUNDS 24
 

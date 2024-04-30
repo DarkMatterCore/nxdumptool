@@ -68,10 +68,10 @@ BUILD_TIMESTAMP		:=	$(strip $(shell date --utc '+%Y-%m-%d %T UTC'))
 
 TARGET				:=	${APP_TITLE}
 BUILD				:=	build
-SOURCES				:=	source source/core source/fatfs source/devoptab
+SOURCES				:=	source source/core source/core/fatfs source/core/devoptab source/tasks source/utils source/views
 DATA				:=	data
 ICON				:=	romfs/icon/${APP_TITLE}.jpg
-INCLUDES			:=	include include/core include/fatfs include/devoptab
+INCLUDES			:=	include
 ROMFS       		:=	romfs
 
 BOREALIS_PATH		:=	libs/borealis

@@ -19,9 +19,9 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "services.h"
-#include "es.h"
+#include <core/nxdt_utils.h>
+#include <core/services.h>
+#include <core/es.h>
 
 /* Type definitions. */
 

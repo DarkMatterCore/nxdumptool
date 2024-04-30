@@ -20,10 +20,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "bfttf.h"
-#include "romfs.h"
-#include "title.h"
+#include <core/nxdt_utils.h>
+#include <core/bfttf.h>
+#include <core/romfs.h>
+#include <core/title.h>
 
 /* Type definitions. */
 

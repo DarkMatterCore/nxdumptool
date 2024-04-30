@@ -20,16 +20,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "nca.h"
-#include "cert.h"
-#include "save.h"
-#include "es.h"
-#include "keys.h"
-#include "gamecard.h"
-#include "mem.h"
-#include "aes.h"
-#include "rsa.h"
+#include <core/nxdt_utils.h>
+#include <core/nca.h>
+#include <core/cert.h>
+#include <core/save.h>
+#include <core/es.h>
+#include <core/keys.h>
+#include <core/gamecard.h>
+#include <core/mem.h>
+#include <core/aes.h>
+#include <core/rsa.h>
 
 #define TIK_COMMON_SAVEFILE_PATH        BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e1"
 #define TIK_PERSONALIZED_SAVEFILE_PATH  BIS_SYSTEM_PARTITION_MOUNT_NAME "/save/80000000000000e2"

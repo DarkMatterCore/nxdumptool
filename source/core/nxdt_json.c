@@ -19,8 +19,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-#include "nxdt_utils.h"
-#include "nxdt_json.h"
+#include <core/nxdt_utils.h>
+#include <core/nxdt_json.h>
 
 #define JSON_GETTER(functype, vartype, jsontype, ...) \
 vartype jsonGet##functype(const struct json_object *obj, const char *path) { \
