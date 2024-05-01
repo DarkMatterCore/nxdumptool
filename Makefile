@@ -43,12 +43,20 @@ include $(DEVKITPRO)/libnx/switch_rules
 
 ROOTDIR				?=	$(shell dirname $(realpath $(firstword $(MAKEFILE_LIST))))
 
-GIT_BRANCH			:=	$(shell git rev-parse --abbrev-ref HEAD)
-GIT_COMMIT			:=	$(shell git rev-parse --short HEAD)
+GIT_BRANCH			:=	$(strip $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null))
+GIT_COMMIT			:=	$(strip $(shell git rev-parse --short HEAD 2>/dev/null))
 GIT_REV				:=	${GIT_BRANCH}-${GIT_COMMIT}
 
 ifneq (,$(strip $(shell git status --porcelain 2>/dev/null)))
 GIT_REV				:=	$(GIT_REV)-dirty
+endif
+
+ifeq (,$(GIT_BRANCH))
+	$(error GIT_BRANCH is empty)
+endif
+
+ifeq (,$(GIT_COMMIT))
+	$(error GIT_COMMIT is empty)
 endif
 
 VERSION_MAJOR		:=	2
