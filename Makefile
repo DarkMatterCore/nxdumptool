@@ -52,11 +52,11 @@ GIT_REV				:=	$(GIT_REV)-dirty
 endif
 
 ifeq (,$(GIT_BRANCH))
-	$(error GIT_BRANCH is empty)
+    $(error GIT_BRANCH is empty)
 endif
 
 ifeq (,$(GIT_COMMIT))
-	$(error GIT_COMMIT is empty)
+    $(error GIT_COMMIT is empty)
 endif
 
 VERSION_MAJOR		:=	2
