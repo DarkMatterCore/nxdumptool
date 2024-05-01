@@ -35,7 +35,7 @@ jobs:
 
       - name: Set environment variables
         run: |
-          echo "nxdt_commit=$(git rev-parse --short ${{ github.sha }})" >> $GITHUB_ENV
+          echo "NXDT_COMMIT=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Set workspace permissions
         run: chmod 777 -R "$GITHUB_WORKSPACE"
@@ -66,27 +66,27 @@ jobs:
       #  run: |
       #    make -j8 PREFIX="ccache aarch64-none-elf-"
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
-          name: nxdt_rw_poc-${{ env.nxdt_commit }}.nro
+          name: nxdt_rw_poc-${{ env.NXDT_COMMIT }}.nro
           path: code_templates/tmp/nxdt_rw_poc.nro
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
-          name: nxdt_rw_poc-${{ env.nxdt_commit }}.elf
+          name: nxdt_rw_poc-${{ env.NXDT_COMMIT }}.elf
           path: code_templates/tmp/nxdt_rw_poc.elf
           if-no-files-found: error
 
-      #- uses: actions/upload-artifact@v3
+      #- uses: actions/upload-artifact@v4
       #  with:
-      #    name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.nro
+      #    name: nxdumptool-rewrite-${{ env.NXDT_COMMIT }}-WIP_UI.nro
       #    path: nxdumptool.nro
       #    if-no-files-found: error
 
-      #- uses: actions/upload-artifact@v3
+      #- uses: actions/upload-artifact@v4
       #  with:
-      #    name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.elf
+      #    name: nxdumptool-rewrite-${{ env.NXDT_COMMIT }}-WIP_UI.elf
       #    path: nxdumptool.elf
       #    if-no-files-found: error
 

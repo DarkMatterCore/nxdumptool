@@ -670,7 +670,12 @@ static void gamecardDetectionThreadFunc(void *arg)
     /* Load gamecard info right away if a gamecard is inserted, then signal the user mode gamecard status change event. */
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        if (gamecardIsInserted()) gamecardLoadInfo();
+        if (gamecardIsInserted())
+        {
+            atomic_store(&g_gameCardStatus, GameCardStatus_Processing);
+            gamecardLoadInfo();
+        }
+
         ueventSignal(&g_gameCardStatusChangeEvent);
     }
 
@@ -688,13 +693,17 @@ static void gamecardDetectionThreadFunc(void *arg)
             /* Free gamecard info before proceeding. */
             gamecardFreeInfo(true);
 
+            /* Set initial gamecard status. */
+            bool gc_inserted = gamecardIsInserted();
+            atomic_store(&g_gameCardStatus, gc_inserted ? GameCardStatus_Processing : GameCardStatus_NotInserted);
+
             /* Delay gamecard access by GAMECARD_ACCESS_DELAY full seconds. This is done to to avoid conflicts with HOS / sysmodules. */
             /* We will periodically check if the gamecard is still inserted during this period. */
             /* If the gamecard is taken out before reaching the length of the delay, we won't try to access it. */
             time_t start = time(NULL);
             bool gc_delay_passed = false;
 
-            while(gamecardIsInserted())
+            while(gc_inserted)
             {
                 time_t now = time(NULL);
                 time_t diff = (now - start);
@@ -706,6 +715,8 @@ static void gamecardDetectionThreadFunc(void *arg)
                 }
 
                 utilsAppletLoopDelay();
+
+                gc_inserted = gamecardIsInserted();
             }
 
             /* Load gamecard info (if applicable). */
@@ -737,9 +748,6 @@ static void gamecardLoadInfo(void)
     HashFileSystemContext *root_hfs_ctx = NULL;
     u32 root_hfs_entry_count = 0, root_hfs_name_table_size = 0;
     char *root_hfs_name_table = NULL;
-
-    /* Set initial gamecard status. */
-    atomic_store(&g_gameCardStatus, GameCardStatus_Processing);
 
     /* Read gamecard header. */
     /* This step *will* fail if the running CFW enabled the "nogc" patch. */

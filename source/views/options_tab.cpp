@@ -428,6 +428,19 @@ namespace nxdt::views
         });
 
         this->addView(update_app);
+
+        /* Reset settings. */
+        brls::ListItem *reset_settings = new brls::ListItem("options_tab/reset_settings/label"_i18n, "options_tab/reset_settings/description"_i18n);
+
+        reset_settings->getClickEvent()->subscribe([this](brls::View* view) {
+            if (!this->display_notification) return;
+
+            configResetSettings();
+
+            this->DisplayNotification("options_tab/notifications/settings_reset"_i18n);
+        });
+
+        this->addView(reset_settings);
     }
 
     OptionsTab::~OptionsTab()
