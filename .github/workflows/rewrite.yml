@@ -29,19 +29,27 @@ jobs:
         shell: bash
 
     steps:
+      - name: Set environment variables
+        run: |
+          echo "nxdt_commit=${GITHUB_SHA::7}" >> $GITHUB_ENV
+          echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_ENV
+
+      # Taken from https://github.com/nektos/act/issues/973. Needed when running this workflow locally using Docker + act.
+      - name: Install node (ccache requirement)
+        if: ${{ env.need_node == '1' }}
+        run: |
+          curl -sS https://webi.sh/node | sh
+          echo ~/.local/opt/node/bin >> $GITHUB_PATH
+
       - name: Clone nxdumptool repository
         run: |
           git clone --recurse-submodules https://github.com/DarkMatterCore/nxdumptool .
 
-      - name: Set environment variables
-        run: |
-          echo "NXDT_COMMIT=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      - name: Setup ccache
+        uses: hendrikmuhs/ccache-action@v1.2
 
       - name: Set workspace permissions
         run: chmod 777 -R "$GITHUB_WORKSPACE"
-
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
 
       # ccache invocation is handled in the build script.
       - name: Build nxdumptool-rewrite PoC binary
@@ -62,33 +70,33 @@ jobs:
           popd
           ./build.sh --noconfirm
 
-      #- name: Build nxdumptool-rewrite GUI binary
-      #  run: |
-      #    make -j8 PREFIX="ccache aarch64-none-elf-"
+      - name: Build nxdumptool-rewrite GUI binary
+        run: |
+          make -j8 PREFIX="ccache aarch64-none-elf-"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nxdt_rw_poc-${{ env.NXDT_COMMIT }}.nro
+          name: nxdt_rw_poc-${{ env.nxdt_commit }}.nro
           path: code_templates/tmp/nxdt_rw_poc.nro
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
-          name: nxdt_rw_poc-${{ env.NXDT_COMMIT }}.elf
+          name: nxdt_rw_poc-${{ env.nxdt_commit }}.elf
           path: code_templates/tmp/nxdt_rw_poc.elf
           if-no-files-found: error
 
-      #- uses: actions/upload-artifact@v4
-      #  with:
-      #    name: nxdumptool-rewrite-${{ env.NXDT_COMMIT }}-WIP_UI.nro
-      #    path: nxdumptool.nro
-      #    if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.nro
+          path: nxdumptool.nro
+          if-no-files-found: error
 
-      #- uses: actions/upload-artifact@v4
-      #  with:
-      #    name: nxdumptool-rewrite-${{ env.NXDT_COMMIT }}-WIP_UI.elf
-      #    path: nxdumptool.elf
-      #    if-no-files-found: error
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.elf
+          path: nxdumptool.elf
+          if-no-files-found: error
 
       - name: Upload artifact to prerelease
         uses: ncipollo/release-action@v1
