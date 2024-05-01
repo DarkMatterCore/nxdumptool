@@ -435,7 +435,11 @@ namespace nxdt::views
         reset_settings->getClickEvent()->subscribe([this](brls::View* view) {
             if (!this->display_notification) return;
 
+            /* Reset settings. */
             configResetSettings();
+
+            /* Reset cached output storage value. */
+            this->root_view->SetOutputStorage(ConfigOutputStorage_SdCard);
 
             this->DisplayNotification("options_tab/notifications/settings_reset"_i18n);
         });

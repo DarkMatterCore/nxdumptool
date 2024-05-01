@@ -29,9 +29,9 @@ jobs:
         shell: bash
 
     steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
+      - name: Clone nxdumptool repository
+        run: |
+          git clone --recurse-submodules https://github.com/DarkMatterCore/nxdumptool .
 
       - name: Set environment variables
         run: |
