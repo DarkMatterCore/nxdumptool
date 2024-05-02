@@ -29,50 +29,6 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    OptionsTabUpdateFileDialog::OptionsTabUpdateFileDialog(std::string path, std::string url, bool force_https, std::string success_str) : brls::Dialog(), success_str(success_str)
-    {
-        /* Set content view. */
-        this->update_progress = new DataTransferProgressDisplay();
-        this->setContentView(this->update_progress);
-
-        /* Add cancel button. */
-        this->addButton("generic/cancel"_i18n, [&](brls::View* view) {
-            /* Cancel download task. */
-            this->download_task.Cancel();
-
-            /* Close dialog. */
-            this->close();
-        });
-
-        /* Disable cancelling with B button. */
-        this->setCancelable(false);
-
-        /* Subscribe to the download task. */
-        this->download_task.RegisterListener([&](const nxdt::tasks::DataTransferProgress& progress) {
-            /* Return immediately if the download task was cancelled. */
-            if (this->download_task.IsCancelled()) return;
-
-            /* Update progress. */
-            this->update_progress->SetProgress(progress);
-
-            /* Check if the download task has finished. */
-            if (this->download_task.IsFinished())
-            {
-                /* Stop spinner. */
-                this->update_progress->willDisappear();
-
-                /* Update button label. */
-                this->setButtonText(0, "generic/close"_i18n);
-
-                /* Display notification. */
-                brls::Application::notify(this->download_task.GetResult() ? this->success_str : "options_tab/notifications/update_failed"_i18n);
-            }
-        });
-
-        /* Start download task. */
-        this->download_task.Execute(path, url, force_https);
-    }
-
     OptionsTabUpdateApplicationFrame::OptionsTabUpdateApplicationFrame() : brls::StagedAppletFrame(false)
     {
         /* Set UI properties. */
@@ -381,24 +337,6 @@ namespace nxdt::views
         });
 
         this->addView(unmount_ums_device);
-
-        /* Update NSWDB XML. */
-        brls::ListItem *update_nswdb_xml = new brls::ListItem("options_tab/update_nswdb_xml/label"_i18n, "options_tab/update_nswdb_xml/description"_i18n);
-
-        update_nswdb_xml->getClickEvent()->subscribe([this](brls::View* view) {
-            if (!this->root_view->IsInternetConnectionAvailable())
-            {
-                /* Display a notification if no Internet connection is available. */
-                this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);
-                return;
-            }
-
-            /* Open update dialog. */
-            OptionsTabUpdateFileDialog *dialog = new OptionsTabUpdateFileDialog(NSWDB_XML_PATH, NSWDB_XML_URL, false, "options_tab/notifications/nswdb_xml_updated"_i18n);
-            dialog->open(false);
-        });
-
-        this->addView(update_nswdb_xml);
 
         /* Update application. */
         brls::ListItem *update_app = new brls::ListItem("options_tab/update_app/label"_i18n, "options_tab/update_app/description"_i18n);

@@ -34,12 +34,11 @@ namespace nxdt::tasks
     typedef std::optional<std::string> GameCardDumpTaskError;
 
     /* Generates an image dump out of the inserted gamecard. */
-    class GameCardImageDumpTask: public DataTransferTask<GameCardDumpTaskError, std::string, bool, bool, bool, bool, int>
+    class GameCardImageDumpTask: public DataTransferTask<GameCardDumpTaskError, std::string, bool, bool, bool, bool, bool>
     {
         private:
             std::mutex task_mtx;
-            bool calculate_checksum = false;
-            int checksum_lookup_method = ConfigChecksumLookupMethod_None;
+            bool calculate_checksum = false, lookup_checksum = false;
             u32 gc_img_crc = 0, full_gc_img_crc = 0;
 
         protected:
@@ -49,7 +48,7 @@ namespace nxdt::tasks
 
             /* Runs in the background thread. */
             GameCardDumpTaskError DoInBackground(const std::string& output_path, const bool& prepend_key_area, const bool& keep_certificate, const bool& trim_dump,
-                                                 const bool& calculate_checksum, const int& checksum_lookup_method) override final;
+                                                 const bool& calculate_checksum, const bool& lookup_checksum) override final;
 
         public:
             GameCardImageDumpTask() = default;

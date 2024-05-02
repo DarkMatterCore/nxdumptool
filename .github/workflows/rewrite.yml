@@ -63,36 +63,40 @@ jobs:
           cd "$GITHUB_WORKSPACE/nxdumptool"
           ./build.sh --noconfirm
 
-      - name: Build nxdumptool-rewrite GUI binary
+      - name: Build nxdumptool-rewrite UI binary
         working-directory: nxdumptool
         run: |
           make -j8
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload nxdumptool-rewrite PoC NRO artifact
+        uses: actions/upload-artifact@v4
         with:
           name: nxdt_rw_poc-${{ env.nxdt_commit }}.nro
           path: nxdumptool/code_templates/tmp/nxdt_rw_poc.nro
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload nxdumptool-rewrite PoC ELF artifact
+        uses: actions/upload-artifact@v4
         with:
           name: nxdt_rw_poc-${{ env.nxdt_commit }}.elf
           path: nxdumptool/code_templates/tmp/nxdt_rw_poc.elf
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload nxdumptool-rewrite UI NRO artifact
+        uses: actions/upload-artifact@v4
         with:
           name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.nro
           path: nxdumptool/nxdumptool.nro
           if-no-files-found: error
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload nxdumptool-rewrite UI ELF artifact
+        uses: actions/upload-artifact@v4
         with:
           name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.elf
           path: nxdumptool/nxdumptool.elf
           if-no-files-found: error
 
-      - name: Upload artifact to prerelease
+      - name: Upload nxdumptool-rewrite PoC artifacts to pre-release
         uses: ncipollo/release-action@v1
         with:
           # Only update attachments on "rewrite-prerelease" tag.

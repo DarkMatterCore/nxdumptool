@@ -38,7 +38,7 @@ namespace nxdt::views
             brls::ToggleListItem *keep_certificate = nullptr;
             brls::ToggleListItem *trim_dump = nullptr;
             brls::ToggleListItem *calculate_checksum = nullptr;
-            brls::SelectListItem *checksum_lookup_method = nullptr;
+            brls::ToggleListItem *lookup_checksum = nullptr;
 
         public:
             GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename);

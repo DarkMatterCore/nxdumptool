@@ -25,10 +25,11 @@
 namespace i18n = brls::i18n;    /* For getStr(). */
 using namespace i18n::literals; /* For _i18n. */
 
-#define GAMECARD_TOGGLE_ITEM(name) \
+#define GAMECARD_TOGGLE_ITEM(name, ...) \
 do { \
     this->name = new brls::ToggleListItem("dump_options/gamecard/image/" #name "/label"_i18n, configGetBoolean("gamecard/" #name), \
-                                          "dump_options/gamecard/image/" #name "/description"_i18n, "generic/value_enabled"_i18n, "generic/value_disabled"_i18n); \
+                                          i18n::getStr("dump_options/gamecard/image/" #name "/description", ##__VA_ARGS__), \
+                                          "generic/value_enabled"_i18n, "generic/value_disabled"_i18n); \
     this->name->getClickEvent()->subscribe([](brls::View *view) { \
         brls::ToggleListItem *item = static_cast<brls::ToggleListItem*>(view); \
         configSetBoolean("gamecard/" #name, item->getToggleState()); \
@@ -66,24 +67,8 @@ namespace nxdt::views
         /* "Calculate checksum" toggle. */
         GAMECARD_TOGGLE_ITEM(calculate_checksum);
 
-        /* "Checksum lookup method" dropdown. */
-        this->checksum_lookup_method = new brls::SelectListItem("dump_options/gamecard/image/checksum_lookup_method/label"_i18n, {
-                                                                    "dump_options/gamecard/image/checksum_lookup_method/value_00"_i18n,
-                                                                    "NSWDB",
-                                                                    "No-Intro"
-                                                                }, configGetInteger("gamecard/checksum_lookup_method"),
-                                                                i18n::getStr("dump_options/gamecard/image/checksum_lookup_method/description", "dump_options/gamecard/image/calculate_checksum/label"_i18n,
-                                                                "NSWDB", NSWDB_XML_NAME, "No-Intro"));
-
-        this->checksum_lookup_method->getValueSelectedEvent()->subscribe([this](int selected) {
-            /* Make sure the current value isn't out of bounds. */
-            if (selected < ConfigChecksumLookupMethod_None || selected >= ConfigChecksumLookupMethod_Count) return;
-
-            /* Update configuration. */
-            configSetInteger("gamecard/checksum_lookup_method", selected);
-        });
-
-        this->addView(this->checksum_lookup_method);
+        /* "Lookup checksum" toggle. */
+        GAMECARD_TOGGLE_ITEM(lookup_checksum, "dump_options/gamecard/image/calculate_checksum/label"_i18n, "No-Intro");
 
         /* Register dump button callback. */
         this->RegisterButtonListener([this](brls::View *view) {
@@ -92,7 +77,7 @@ namespace nxdt::views
             bool keep_certificate_val = this->keep_certificate->getToggleState();
             bool trim_dump_val = this->trim_dump->getToggleState();
             bool calculate_checksum_val = this->calculate_checksum->getToggleState();
-            int checksum_lookup_method_val = static_cast<int>(this->checksum_lookup_method->getSelectedValue());
+            bool lookup_checksum_val = this->lookup_checksum->getToggleState();
 
             /* Generate file extension. */
             std::string extension = fmt::format(" [{}][{}][{}].xci", prepend_key_area_val ? "KA" : "NKA", keep_certificate_val ? "C" : "NC", trim_dump_val ? "T" : "NT");
@@ -103,7 +88,7 @@ namespace nxdt::views
 
             /* Display task frame. */
             brls::Application::pushView(new GameCardImageDumpTaskFrame(output_path, prepend_key_area_val, keep_certificate_val, trim_dump_val, calculate_checksum_val,
-                                        checksum_lookup_method_val), brls::ViewAnimation::SLIDE_LEFT, false);
+                                        lookup_checksum_val), brls::ViewAnimation::SLIDE_LEFT, false);
         });
     }
 

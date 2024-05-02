@@ -12,7 +12,7 @@ todo:
     usb: improve cancel mechanism
 
     others: check todo with grep
-    others: dump verification via nswdb / no-intro
+    others: dump verification via no-intro
     others: fatfs browser for emmc partitions
 
 reminder:

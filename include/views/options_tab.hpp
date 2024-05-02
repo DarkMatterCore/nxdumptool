@@ -31,18 +31,6 @@
 
 namespace nxdt::views
 {
-    /* Update file dialog. */
-    class OptionsTabUpdateFileDialog: public brls::Dialog
-    {
-        private:
-            DataTransferProgressDisplay *update_progress = nullptr;
-            nxdt::tasks::DownloadFileTask download_task;
-            std::string success_str;
-
-        public:
-            OptionsTabUpdateFileDialog(std::string path, std::string url, bool force_https, std::string success_str);
-    };
-
     /* Update application frame. */
     class OptionsTabUpdateApplicationFrame: public brls::StagedAppletFrame
     {

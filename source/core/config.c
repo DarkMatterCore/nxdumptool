@@ -228,7 +228,7 @@ end:
 static bool configValidateJsonGameCardObject(const struct json_object *obj)
 {
     bool ret = false, prepend_key_area_found = false, keep_certificate_found = false, trim_dump_found = false, calculate_checksum_found = false;
-    bool checksum_lookup_method_found = false, write_raw_hfs_partition_found = false;
+    bool lookup_checksum_found = false, write_raw_hfs_partition_found = false;
 
     if (!jsonValidateObject(obj)) goto end;
 
@@ -238,12 +238,12 @@ static bool configValidateJsonGameCardObject(const struct json_object *obj)
         CONFIG_VALIDATE_FIELD(Boolean, keep_certificate);
         CONFIG_VALIDATE_FIELD(Boolean, trim_dump);
         CONFIG_VALIDATE_FIELD(Boolean, calculate_checksum);
-        CONFIG_VALIDATE_FIELD(Integer, checksum_lookup_method, ConfigChecksumLookupMethod_None, ConfigChecksumLookupMethod_Count - 1);
+        CONFIG_VALIDATE_FIELD(Boolean, lookup_checksum);
         CONFIG_VALIDATE_FIELD(Boolean, write_raw_hfs_partition);
         goto end;
     }
 
-    ret = (prepend_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && checksum_lookup_method_found && write_raw_hfs_partition_found);
+    ret = (prepend_key_area_found && keep_certificate_found && trim_dump_found && calculate_checksum_found && lookup_checksum_found && write_raw_hfs_partition_found);
 
 end:
     return ret;

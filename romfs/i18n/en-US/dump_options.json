@@ -34,10 +34,9 @@
                 "description": "Calculates one or more CRC32 checksums over the dumped data, depending on the selected configuration. Checksums are useful to verify data integrity. Enabled by default."
             },
 
-            "checksum_lookup_method": {
-                "label": "Checksum lookup method",
-                "description": "If \"{0}\" is enabled, this option determines which lookup method is used to validate the calculated CRC32 checksum at the end of the dump process.\n\nIf \"{1}\" is selected, the calculated checksum will be looked up in \"{2}\", which must have been previously downloaded.\n\nIf \"{3}\" is selected, the calculated checksum will be looked up using an Internet connection and a public HTTP endpoint.",
-                "value_00": "None"
+            "lookup_checksum": {
+                "label": "Lookup calculated checksum",
+                "description": "If \"{0}\" is enabled, this option controls whether the calculated CRC32 checksum should be looked up and validated at the end of the dump process, using an Internet connection and a public HTTP endpoint provided by {1}."
             }
         }
     },

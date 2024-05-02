@@ -30,7 +30,7 @@ using namespace i18n::literals; /* For _i18n. */
 namespace nxdt::tasks
 {
     GameCardDumpTaskError GameCardImageDumpTask::DoInBackground(const std::string& output_path, const bool& prepend_key_area, const bool& keep_certificate, const bool& trim_dump,
-                                                                const bool& calculate_checksum, const int& checksum_lookup_method)
+                                                                const bool& calculate_checksum, const bool& lookup_checksum)
     {
         std::scoped_lock lock(this->task_mtx);
 
@@ -47,10 +47,10 @@ namespace nxdt::tasks
 
         /* Update private variables. */
         this->calculate_checksum = calculate_checksum;
-        this->checksum_lookup_method = checksum_lookup_method;
+        this->lookup_checksum = lookup_checksum;
 
-        LOG_MSG_DEBUG("Starting dump with parameters:\n- Output path: \"%s\".\n- Prepend key area: %u.\n- Keep certificate: %u.\n- Trim dump: %u.\n- Calculate checksum: %u.\n- Checksum lookup method: %d.", \
-                      output_path.c_str(), prepend_key_area, keep_certificate, trim_dump, calculate_checksum, checksum_lookup_method);
+        LOG_MSG_DEBUG("Starting dump with parameters:\n- Output path: \"%s\".\n- Prepend key area: %u.\n- Keep certificate: %u.\n- Trim dump: %u.\n- Calculate checksum: %u.\n- Lookup checksum: %d.", \
+                      output_path.c_str(), prepend_key_area, keep_certificate, trim_dump, calculate_checksum, lookup_checksum);
 
         /* Retrieve gamecard image size. */
         if ((!trim_dump && !gamecardGetTotalSize(&gc_img_size)) || (trim_dump && !gamecardGetTrimmedSize(&gc_img_size)) || !gc_img_size) return "tasks/gamecard/image/get_size_failed"_i18n;

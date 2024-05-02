@@ -18,11 +18,6 @@
         "description": "Safely unmount any USB Mass Storage devices that are currently connected and mounted by {0}.\n\nIf a UMS device has more than one mounted volume, selecting a single one will unmount all volumes from that device.\n\nUMS devices are always safely unmounted at exit."
     },
 
-    "update_nswdb_xml": {
-        "label": "Update NSWDB XML",
-        "description": "Retrieves the latest NSWDB XML, which can be optionally used to validate checksums from gamecard dumps. Requires an Internet connection."
-    },
-
     "update_app": {
         "label": "Update application",
         "description": "Checks if an update is available in nxdumptool's GitHub repository. Requires an Internet connection.",
@@ -45,7 +40,6 @@
         "ums_device_unmount_failed": "Failed to unmount USB Mass Storage device!",
         "no_internet_connection": "Internet connection unavailable. Unable to update.",
         "update_failed": "Update failed! Check the logfile for more info.",
-        "nswdb_xml_updated": "NSWDB XML successfully updated!",
         "is_nso": "The application is running as an NSO. Unable to update.",
         "already_updated": "The application has already been updated. Please reload.",
         "github_json_failed": "Failed to download or parse GitHub release JSON!",

@@ -7,7 +7,7 @@
         "keep_certificate": false,
         "trim_dump": false,
         "calculate_checksum": true,
-        "checksum_lookup_method": 1,
+        "lookup_checksum": true,
         "write_raw_hfs_partition": false
     },
     "nsp": {
