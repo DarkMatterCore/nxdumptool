@@ -32,70 +32,64 @@ jobs:
       - name: Set environment variables
         run: |
           echo "nxdt_commit=${GITHUB_SHA::7}" >> $GITHUB_ENV
-          echo "need_node=$(command -v node >/dev/null 2>&1 && echo 0 || echo 1)" >> $GITHUB_ENV
-
-      # Taken from https://github.com/nektos/act/issues/973. Needed when running this workflow locally using Docker + act.
-      - name: Install node (ccache requirement)
-        if: ${{ env.need_node == '1' }}
-        run: |
-          curl -sS https://webi.sh/node | sh
-          echo ~/.local/opt/node/bin >> $GITHUB_PATH
 
       - name: Clone nxdumptool repository
-        run: |
-          git clone --recurse-submodules https://github.com/DarkMatterCore/nxdumptool .
+        uses: actions/checkout@v4
+        with:
+          path: nxdumptool
+          submodules: recursive
 
-      - name: Setup ccache
-        uses: hendrikmuhs/ccache-action@v1.2
-
-      - name: Set workspace permissions
-        run: chmod 777 -R "$GITHUB_WORKSPACE"
-
-      # ccache invocation is handled in the build script.
       - name: Build nxdumptool-rewrite PoC binary
         id: build
         continue-on-error: true
+        working-directory: nxdumptool
         run: |
+          chmod +x ./build.sh
           ./build.sh --noconfirm
 
+      - name: Clone libnx repository
+        if: ${{ steps.build.outcome == 'failure' }}
+        uses: actions/checkout@v4
+        with:
+          repository: switchbrew/libnx
+          path: libnx
+          submodules: recursive
+
       - name: Install latest libnx commit and retry build
-        id: retry
         if: ${{ steps.build.outcome == 'failure' }}
         run: |
-          pushd /tmp
-          git clone https://github.com/switchbrew/libnx
-          cd libnx
-          make -j8 PREFIX="ccache aarch64-none-elf-"
-          make install
-          popd
+          cd "$GITHUB_WORKSPACE/libnx"
+          make install -j8
+          cd "$GITHUB_WORKSPACE/nxdumptool"
           ./build.sh --noconfirm
 
       - name: Build nxdumptool-rewrite GUI binary
+        working-directory: nxdumptool
         run: |
-          make -j8 PREFIX="ccache aarch64-none-elf-"
+          make -j8
 
       - uses: actions/upload-artifact@v4
         with:
           name: nxdt_rw_poc-${{ env.nxdt_commit }}.nro
-          path: code_templates/tmp/nxdt_rw_poc.nro
+          path: nxdumptool/code_templates/tmp/nxdt_rw_poc.nro
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
           name: nxdt_rw_poc-${{ env.nxdt_commit }}.elf
-          path: code_templates/tmp/nxdt_rw_poc.elf
+          path: nxdumptool/code_templates/tmp/nxdt_rw_poc.elf
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
           name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.nro
-          path: nxdumptool.nro
+          path: nxdumptool/nxdumptool.nro
           if-no-files-found: error
 
       - uses: actions/upload-artifact@v4
         with:
           name: nxdumptool-rewrite-${{ env.nxdt_commit }}-WIP_UI.elf
-          path: nxdumptool.elf
+          path: nxdumptool/nxdumptool.elf
           if-no-files-found: error
 
       - name: Upload artifact to prerelease
@@ -113,6 +107,6 @@ jobs:
           omitBody: True
           omitBodyDuringUpdate: True
           omitNameDuringUpdate: True
-          artifacts: "code_templates/tmp/nxdt_rw_poc.*"
-          #artifacts: "code_templates/tmp/nxdt_rw_poc.*, nxdumptool.*"
+          artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*"
+          #artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*, nxdumptool/nxdumptool.*"
           token: ${{ secrets.GITHUB_TOKEN }}

@@ -25,7 +25,7 @@ set -e
 if [ ${ARG,,} != "--noconfirm" ]; then
     make BUILD_TYPE="$poc_name" -j$(nproc)
 else
-    make BUILD_TYPE="$poc_name" -j8 PREFIX="ccache aarch64-none-elf-"
+    make BUILD_TYPE="$poc_name" -j8
 fi
 
 set +e
