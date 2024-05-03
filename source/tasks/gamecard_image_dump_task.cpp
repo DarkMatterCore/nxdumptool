@@ -83,6 +83,7 @@ namespace nxdt::tasks
         try {
             file = new nxdt::utils::FileWriter(output_path, gc_img_size);
         } catch(const std::string& msg) {
+            LOG_MSG_ERROR("%s", msg.c_str());
             return msg;
         }
 

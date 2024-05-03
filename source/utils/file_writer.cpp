@@ -28,6 +28,14 @@ namespace nxdt::utils
 {
     FileWriter::FileWriter(const std::string& output_path, const size_t& total_size, const u32& nsp_header_size) : output_path(output_path), total_size(total_size), nsp_header_size(nsp_header_size)
     {
+        const char *output_path_str = this->output_path.c_str();
+
+        LOG_MSG_DEBUG("Creating FileWriter object with arguments:\r\n" \
+                      "- output_path: \"%s\".\r\n" \
+                      "- total_size: 0x%lX.\r\n" \
+                      "- nsp_header_size: 0x%X.", \
+                      output_path_str, total_size, nsp_header_size);
+
         /* Determine the storage device based on the input path. */
         this->storage_type = (this->output_path.starts_with(DEVOPTAB_SDMC_DEVICE) ? StorageType::SdCard  :
                              (this->output_path.starts_with('/')                  ? StorageType::UsbHost : StorageType::UmsDevice));
@@ -41,7 +49,7 @@ namespace nxdt::utils
             } else {
                 /* Get UMS device info. */
                 UsbHsFsDevice ums_device{};
-                if (!usbHsFsGetDeviceByPath(this->output_path.c_str(), &ums_device)) throw "utils/file_writer/ums_device_info_error"_i18n;
+                if (!usbHsFsGetDeviceByPath(output_path_str, &ums_device)) throw "utils/file_writer/ums_device_info_error"_i18n;
 
                 /* Determine if we should split the output file based on the UMS device's filesystem type. */
                 this->split_file = (this->total_size > FAT32_FILESIZE_LIMIT && ums_device.fs_type < UsbHsFsDeviceFileSystemType_exFAT);
@@ -51,8 +59,10 @@ namespace nxdt::utils
             }
         }
 
+        LOG_MSG_DEBUG("storage_type: %d | split_file: %u | split_file_part_cnt: %u", this->storage_type, this->split_file, this->split_file_part_cnt);
+
         /* Check free space. */
-        if (auto chk = this->CheckFreeSpace()) throw *chk;
+        if (auto chk = this->CheckFreeSpace()) throw chk.value();
 
         /* Create initial file. */
         if (!this->CreateInitialFile())
@@ -93,8 +103,13 @@ namespace nxdt::utils
         /* Short-circuit: don't perform any free space check if we're dealing with a USB host or if the file size is zero. */
         if (this->storage_type == StorageType::UsbHost || !this->total_size) return {};
 
+        LOG_MSG_DEBUG("Checking free space...");
+
         /* Retrieve free space from the target storage device. */
-        if (!utilsGetFileSystemStatsByPath(this->output_path.c_str(), nullptr, &free_space)) return "utils/file_writer/free_space_check/retrieve_error"_i18n;
+        const char *output_path_str = this->output_path.c_str();
+        if (!utilsGetFileSystemStatsByPath(output_path_str, nullptr, &free_space)) return "utils/file_writer/free_space_check/retrieve_error"_i18n;
+
+        LOG_MSG_DEBUG("Free space in \"%.*s\": 0x%lX.", static_cast<int>(strchr(output_path_str, '/') + 1 - output_path_str), output_path_str, free_space);
 
         /* Perform the actual free space check. */
         bool ret = (free_space > this->total_size);
@@ -112,6 +127,7 @@ namespace nxdt::utils
     {
         if (this->fp)
         {
+            LOG_MSG_DEBUG("Closing current file.");
             fclose(this->fp);
             this->fp = nullptr;
         }
@@ -136,10 +152,13 @@ namespace nxdt::utils
         if (this->storage_type == StorageType::SdCard || !this->split_file)
         {
             /* Open file using the provided output path, but only if we're dealing with the SD card or if we're not dealing with a split file. */
-            this->fp = fopen(this->output_path.c_str(), "wb");
+            const char *output_path_str = this->output_path.c_str();
+            LOG_MSG_DEBUG("Opening output file: \"%s\".", output_path_str);
+            this->fp = fopen(output_path_str, "wb");
         } else {
-            /* Open current part file. */
+            /* Open next part file using our stored part file index. */
             std::string part_file_path = fmt::format("{}/{:02d}", this->output_path, this->split_file_part_idx);
+            LOG_MSG_DEBUG("Opening next part file: \"%s\".", part_file_path.c_str());
             this->fp = fopen(part_file_path.c_str(), "wb");
             if (this->fp)
             {
@@ -152,7 +171,11 @@ namespace nxdt::utils
         }
 
         /* Return immediately if we couldn't open the file in creation mode. */
-        if (!this->fp) return false;
+        if (!this->fp)
+        {
+            LOG_MSG_ERROR("fopen() failed! (%d).", errno);
+            return false;
+        }
 
         /* Close file and return immediately if we're dealing with an empty file. */
         if (!this->file_created && !this->total_size)
@@ -163,23 +186,6 @@ namespace nxdt::utils
 
         /* Disable file stream buffering. */
         setvbuf(this->fp, nullptr, _IONBF, 0);
-
-        /* Truncate file to the right size. */
-        off_t truncate_size = 0;
-
-        if (this->storage_type == StorageType::SdCard || !this->split_file)
-        {
-            truncate_size = static_cast<off_t>(this->total_size);
-        } else {
-            if (this->split_file_part_idx < this->split_file_part_cnt)
-            {
-                truncate_size = static_cast<off_t>(CONCATENATION_FILE_PART_SIZE);
-            } else {
-                truncate_size = static_cast<off_t>(this->total_size - (CONCATENATION_FILE_PART_SIZE * static_cast<u64>(this->split_file_part_cnt - 1)));
-            }
-        }
-
-        ftruncate(fileno(this->fp), truncate_size);
 
         return true;
     }
@@ -194,27 +200,20 @@ namespace nxdt::utils
         if (this->storage_type == StorageType::UsbHost)
         {
             /* Send file properties to USB host. */
+            LOG_MSG_DEBUG("Sending file properties to USB host...");
             if ((!this->nsp_header_size && !usbSendFileProperties(this->total_size, output_path_str)) ||
                 (this->nsp_header_size && !usbSendNspProperties(this->total_size, output_path_str, this->nsp_header_size))) return false;
         } else {
-            /* Check if we're supposed to create a split file. */
-            if (this->split_file)
-            {
-                if (this->storage_type == StorageType::SdCard)
-                {
-                    /* Create directory tree. */
-                    utilsCreateDirectoryTree(output_path_str, false);
+            /* Create directory tree. */
+            /* We'll only create a directory for the last path element if we're dealing with a split file in a FAT-formatted UMS volume. */
+            LOG_MSG_DEBUG("Creating directory tree...");
+            utilsCreateDirectoryTree(output_path_str, this->split_file && this->storage_type == StorageType::UmsDevice);
 
-                    /* Create concatenation file on the SD card. */
-                    if (!utilsCreateConcatenationFile(output_path_str)) return false;
-                } else {
-                    /* Create directory tree, including the last path element. */
-                    /* We'll handle split file creation ourselves at a later point. */
-                    utilsCreateDirectoryTree(output_path_str, true);
-                }
-            } else {
-                /* Create directory tree. */
-                utilsCreateDirectoryTree(output_path_str, false);
+            /* Create concatenation file on the SD card, if needed. */
+            if (this->split_file && this->storage_type == StorageType::SdCard)
+            {
+                LOG_MSG_DEBUG("Creating concatenation file on the SD card...");
+                if (!utilsCreateConcatenationFile(output_path_str)) return false;
             }
 
             /* Open initial file. */
@@ -244,7 +243,13 @@ namespace nxdt::utils
             size_t part_file_write_size = ((this->split_file_part_size + write_size) > CONCATENATION_FILE_PART_SIZE ? (CONCATENATION_FILE_PART_SIZE - this->split_file_part_size) : write_size);
 
             /* Write data to current part file. */
-            if (fwrite(data, 1, part_file_write_size, this->fp) != part_file_write_size) return false;
+            size_t n = fwrite(data, 1, part_file_write_size, this->fp);
+            if (n != part_file_write_size)
+            {
+                LOG_MSG_ERROR("fwrite() failed to write 0x%lX-byte long block at offset 0x%lX to part file #%u (absolute offset 0x%lX).",
+                              part_file_write_size, this->split_file_part_size, this->split_file_part_idx - 1, this->cur_size);
+                return false;
+            }
 
             /* Update part file size. */
             this->split_file_part_size += part_file_write_size;
@@ -258,10 +263,19 @@ namespace nxdt::utils
             if (this->storage_type == StorageType::UsbHost)
             {
                 /* Send data to USB host. */
-                if (!usbSendFileData(data, write_size)) return false;
+                if (!usbSendFileData(data, write_size))
+                {
+                    LOG_MSG_ERROR("Failed to send 0x%lX-byte long block at offset 0x%lX to USB host.", write_size, this->cur_size);
+                    return false;
+                }
             } else {
                 /* Write data to output file. */
-                if (fwrite(data, 1, write_size, this->fp) != write_size) return false;
+                size_t n = fwrite(data, 1, write_size, this->fp);
+                if (n != write_size)
+                {
+                    LOG_MSG_ERROR("fwrite() failed to write 0x%lX-byte long block at offset 0x%lX to output file.", write_size, this->cur_size);
+                    return false;
+                }
             }
 
             /* Update the written data size. */
@@ -322,18 +336,22 @@ namespace nxdt::utils
         {
             if (this->storage_type == StorageType::UsbHost)
             {
+                LOG_MSG_DEBUG("Cancelling USB file transfer...");
                 usbCancelFileTransfer();
             } else {
                 const char *output_path_str = this->output_path.c_str();
 
                 if (this->storage_type == StorageType::SdCard)
                 {
+                    LOG_MSG_DEBUG("Removing concatenation file on the SD card...");
                     utilsRemoveConcatenationFile(output_path_str);
                 } else {
                     if (this->split_file)
                     {
+                        LOG_MSG_DEBUG("Deleting output directory on UMS device...");
                         utilsDeleteDirectoryRecursively(output_path_str);
                     } else {
+                        LOG_MSG_DEBUG("Removing output file on UMS device...");
                         remove(output_path_str);
                     }
                 }
@@ -341,7 +359,11 @@ namespace nxdt::utils
         }
 
         /* Commit SD card filesystem changes, if needed. */
-        if (this->storage_type == StorageType::SdCard) utilsCommitSdCardFileSystemChanges();
+        if (this->storage_type == StorageType::SdCard)
+        {
+            utilsCommitSdCardFileSystemChanges();
+            LOG_MSG_DEBUG("Committed SD card filesystem changes.");
+        }
 
         /* Update flag. */
         this->file_closed = true;

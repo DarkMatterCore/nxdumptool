@@ -35,7 +35,7 @@ static s64 g_logFileOffset = 0;
 static char *g_logBuffer = NULL;
 static size_t g_logBufferLength = 0;
 
-static const char *g_logStrFormat = "[%d-%02d-%02d %02d:%02d:%02d.%09lu] [%s] %s:%d:%s -> ";
+static const char *g_logStrFormat = "[%d-%02d-%02d %02d:%02d:%02d.%09lu] [%s] %s|%d|%s -> ";
 static const char *g_logSessionSeparator = "________________________________________________________________\r\n";
 
 static const char *g_logLevelNames[] = {
@@ -54,6 +54,8 @@ static void _logFlushLogFile(void);
 
 static bool logAllocateLogBuffer(void);
 static bool logOpenLogFile(void);
+
+static void logFormatFunctionName(const char *func_name, char *out, size_t out_size);
 
 static void logWriteStringToNxLink(const char *str);
 
@@ -85,6 +87,9 @@ __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char 
     struct tm ts = {0};
     struct timespec now = {0};
 
+    char formatted_func_name[0x100] = {0};
+    logFormatFunctionName(func_name, formatted_func_name, MAX_ELEMENTS(formatted_func_name));
+
     /* Sanity check. */
     if (dst_cur_size && dst_str_len >= dst_cur_size) return;
 
@@ -99,7 +104,7 @@ __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char 
     ts.tm_mon++;
 
     /* Get formatted string length. */
-    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
+    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, formatted_func_name);
     if (str1_len <= 0) goto end;
 
     str2_len = vsnprintf(NULL, 0, fmt, args);
@@ -128,7 +133,7 @@ __attribute__((format(printf, 7, 8))) void logWriteFormattedStringToBuffer(char 
     }
 
     /* Generate formatted string. */
-    sprintf(dst_ptr + dst_str_len, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
+    sprintf(dst_ptr + dst_str_len, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, formatted_func_name);
     vsprintf(dst_ptr + dst_str_len + (size_t)str1_len, fmt, args);
     strcat(dst_ptr, CRLF);
 
@@ -304,6 +309,9 @@ static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *f
     struct tm ts = {0};
     struct timespec now = {0};
 
+    char formatted_func_name[0x100] = {0};
+    logFormatFunctionName(func_name, formatted_func_name, MAX_ELEMENTS(formatted_func_name));
+
     /* Get current time with nanosecond precision. */
     clock_gettime(CLOCK_REALTIME, &now);
 
@@ -313,7 +321,7 @@ static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *f
     ts.tm_mon++;
 
     /* Get formatted string length. */
-    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
+    str1_len = snprintf(NULL, 0, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, formatted_func_name);
     if (str1_len <= 0) return;
 
     str2_len = vsnprintf(NULL, 0, fmt, args);
@@ -326,12 +334,12 @@ static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *f
     {
         if (g_lastLogMsg) free(g_lastLogMsg);
 
-        tmp_len = (strlen(func_name) + 2);
+        tmp_len = (strlen(formatted_func_name) + 2);
 
         g_lastLogMsg = calloc(tmp_len + (size_t)str2_len + 1, sizeof(char));
         if (g_lastLogMsg)
         {
-            sprintf(g_lastLogMsg, "%s: ", func_name);
+            sprintf(g_lastLogMsg, "%s: ", formatted_func_name);
             vsprintf(g_lastLogMsg + tmp_len, fmt, args);
         }
 
@@ -349,7 +357,7 @@ static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *f
         }
 
         /* Nice and easy string formatting using the log buffer. */
-        sprintf(g_logBuffer + g_logBufferLength, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
+        sprintf(g_logBuffer + g_logBufferLength, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, formatted_func_name);
         vsprintf(g_logBuffer + g_logBufferLength + (size_t)str1_len, fmt, args);
         strcat(g_logBuffer, CRLF);
 
@@ -368,7 +376,7 @@ static void _logWriteFormattedStringToLogFile(bool save, u8 level, const char *f
         if (!tmp_str) return;
 
         /* Generate formatted string. */
-        sprintf(tmp_str, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, func_name);
+        sprintf(tmp_str, g_logStrFormat, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, now.tv_nsec, g_logLevelNames[level], file_name, line, formatted_func_name);
         vsprintf(tmp_str + (size_t)str1_len, fmt, args);
         strcat(tmp_str, CRLF);
 
@@ -491,6 +499,23 @@ static bool logOpenLogFile(void)
     }
 
     return R_SUCCEEDED(rc);
+}
+
+static void logFormatFunctionName(const char *func_name, char *out, size_t out_size)
+{
+    const char *begin = NULL, *end = NULL;
+
+    end = strchr(func_name, '(');
+    if (!end)
+    {
+        snprintf(out, out_size, "%s", func_name);
+        return;
+    }
+
+    begin = memrchr(func_name, ' ', end - func_name);
+    begin = (begin ? (begin + 1) : func_name);
+
+    snprintf(out, out_size, "%.*s", (int)(end - begin), begin);
 }
 
 static void logWriteStringToNxLink(const char *str)
