@@ -82,14 +82,14 @@ namespace nxdt::views
     TitlesTab::TitlesTab(RootView *root_view, bool is_system) : LayeredErrorFrame("titles_tab/no_titles_available"_i18n), root_view(root_view), is_system(is_system)
     {
         /* Populate list. */
-        this->PopulateList(this->root_view->GetApplicationMetadata(this->is_system));
+        this->PopulateList(this->root_view->GetApplicationMetadataInfo(this->is_system));
 
         /* Subscribe to the title event if this is the user titles tab. */
         if (!this->is_system)
         {
-            this->title_task_sub = this->root_view->RegisterTitleMetadataTaskListener([this](const nxdt::tasks::TitleApplicationMetadataVector& app_metadata) {
+            this->title_task_sub = this->root_view->RegisterTitleMetadataTaskListener([this](const nxdt::tasks::TitleApplicationMetadataInfo& app_metadata_info) {
                 /* Update list. */
-                this->PopulateList(app_metadata);
+                this->PopulateList(app_metadata_info);
             });
         }
     }
@@ -100,34 +100,34 @@ namespace nxdt::views
         if (!this->is_system) this->root_view->UnregisterTitleMetadataTaskListener(this->title_task_sub);
     }
 
-    void TitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector& app_metadata)
+    void TitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataInfo& app_metadata_info)
     {
         /* Block user inputs. */
         brls::Application::blockInputs();
 
         /* Populate variables. */
-        size_t app_metadata_count = app_metadata.size();
         bool update_focused_view = this->IsListItemFocused();
         int focus_stack_index = this->GetFocusStackViewIndex();
 
         /* If needed, switch to the error frame *before* cleaning up our list. */
-        if (!app_metadata_count) this->SwitchLayerView(true);
+        if (!app_metadata_info.app_metadata_count) this->SwitchLayerView(true);
 
         /* Clear list. */
         this->list->clear();
         this->list->invalidate(true);
 
         /* Return immediately if we have no application metadata. */
-        if (!app_metadata_count)
+        if (!app_metadata_info.app_metadata_count)
         {
             brls::Application::unblockInputs();
             return;
         }
 
         /* Populate list. */
-        for(const TitleApplicationMetadata *cur_app_metadata : app_metadata)
+        for(u32 i = 0; i < app_metadata_info.app_metadata_count; i++)
         {
             /* Create list item. */
+            const TitleApplicationMetadata *cur_app_metadata = app_metadata_info.app_metadata[i];
             TitlesTabItem *item = new TitlesTabItem(cur_app_metadata, this->is_system);
 
             /* Register click event. */

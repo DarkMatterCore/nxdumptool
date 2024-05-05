@@ -95,9 +95,9 @@ namespace nxdt::views
                 return this->gc_status_task->GetGameCardStatus();
             }
 
-            ALWAYS_INLINE const nxdt::tasks::TitleApplicationMetadataVector& GetApplicationMetadata(bool is_system)
+            ALWAYS_INLINE const nxdt::tasks::TitleApplicationMetadataInfo& GetApplicationMetadataInfo(bool is_system)
             {
-                return this->title_metadata_task->GetApplicationMetadata(is_system);
+                return this->title_metadata_task->GetApplicationMetadataInfo(is_system);
             }
 
             ALWAYS_INLINE const nxdt::tasks::UmsDeviceVector& GetUmsDevices(void)

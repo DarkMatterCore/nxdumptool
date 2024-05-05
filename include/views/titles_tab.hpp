@@ -76,7 +76,7 @@ namespace nxdt::views
             nxdt::tasks::UserTitleEvent::Subscription title_task_sub;
             bool is_system = false;
 
-            void PopulateList(const nxdt::tasks::TitleApplicationMetadataVector& app_metadata);
+            void PopulateList(const nxdt::tasks::TitleApplicationMetadataInfo& app_metadata_info);
 
         public:
             TitlesTab(RootView *root_view, bool is_system);

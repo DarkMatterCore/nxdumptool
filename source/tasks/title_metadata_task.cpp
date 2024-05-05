@@ -30,10 +30,10 @@ namespace nxdt::tasks
         LOG_MSG_DEBUG("Title metadata task started.");
 
         /* Get system metadata entries. */
-        this->PopulateApplicationMetadataVector(true);
+        this->PopulateApplicationMetadataInfo(true);
 
         /* Get user metadata entries. */
-        this->PopulateApplicationMetadataVector(false);
+        this->PopulateApplicationMetadataInfo(false);
 
         /* Start task. */
         brls::RepeatingTask::start();
@@ -41,9 +41,9 @@ namespace nxdt::tasks
 
     TitleMetadataTask::~TitleMetadataTask()
     {
-        /* Clear application metadata vectors. */
-        this->system_metadata.clear();
-        this->user_metadata.clear();
+        /* Free application metadata arrays. */
+        if (this->system_metadata_info.app_metadata) free(this->system_metadata_info.app_metadata);
+        if (this->user_metadata_info.app_metadata) free(this->user_metadata_info.app_metadata);
 
         LOG_MSG_DEBUG("Title metadata task stopped.");
     }
@@ -54,37 +54,27 @@ namespace nxdt::tasks
 
         if (titleIsGameCardInfoUpdated())
         {
-            /* Update user metadata vector. */
-            this->PopulateApplicationMetadataVector(false);
+            /* Update user metadata array. */
+            this->PopulateApplicationMetadataInfo(false);
 
             /* Fire task event. */
-            this->user_title_event.fire(this->user_metadata);
+            this->user_title_event.fire(this->user_metadata_info);
 
             //brls::Application::notify("tasks/notifications/user_titles"_i18n);
             LOG_MSG_DEBUG("Title info updated.");
         }
     }
 
-    void TitleMetadataTask::PopulateApplicationMetadataVector(bool is_system)
+    void TitleMetadataTask::PopulateApplicationMetadataInfo(bool is_system)
     {
-        TitleApplicationMetadata **app_metadata = nullptr;
-        u32 app_metadata_count = 0;
-
-        /* Get pointer to output vector. */
-        TitleApplicationMetadataVector& vector = (is_system ? this->system_metadata : this->user_metadata);
-        vector.clear();
+        /* Get reference to output struct. */
+        TitleApplicationMetadataInfo& info = (is_system ? this->system_metadata_info : this->user_metadata_info);
+        if (info.app_metadata) free(info.app_metadata);
+        info.app_metadata_count = 0;
 
         /* Get application metadata entries. */
-        app_metadata = titleGetApplicationMetadataEntries(is_system, &app_metadata_count);
-        if (app_metadata)
-        {
-            /* Fill output vector. */
-            for(u32 i = 0; i < app_metadata_count; i++) vector.push_back(app_metadata[i]);
+        info.app_metadata = titleGetApplicationMetadataEntries(is_system, &(info.app_metadata_count));
 
-            /* Free application metadata array. */
-            free(app_metadata);
-        }
-
-        LOG_MSG_DEBUG("Retrieved %u %s metadata %s.", app_metadata_count, is_system ? "system" : "user", app_metadata_count == 1 ? "entry" : "entries");
+        LOG_MSG_DEBUG("Retrieved %u %s metadata %s.", info.app_metadata_count, is_system ? "system" : "user", info.app_metadata_count == 1 ? "entry" : "entries");
     }
 }

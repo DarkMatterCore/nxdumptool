@@ -31,23 +31,26 @@
 
 namespace nxdt::tasks
 {
-    /* Used to hold pointers to application metadata entries. */
-    typedef std::vector<TitleApplicationMetadata*> TitleApplicationMetadataVector;
+    /* Used to hold an application metadata array + its number of elements. */
+    typedef struct {
+        TitleApplicationMetadata **app_metadata;
+        u32 app_metadata_count;
+    } TitleApplicationMetadataInfo;
 
     /* Custom event type. */
-    typedef brls::Event<const TitleApplicationMetadataVector&> UserTitleEvent;
+    typedef brls::Event<const TitleApplicationMetadataInfo&> UserTitleEvent;
 
     /* Title metadata task. */
-    /* Its event provides a const reference to a TitleApplicationMetadataVector with metadata for user titles (system titles don't change at runtime). */
+    /* Its event provides a const reference to a TitleApplicationMetadataInfo with metadata for user titles (system titles don't change at runtime). */
     class TitleMetadataTask: public brls::RepeatingTask
     {
         private:
             UserTitleEvent user_title_event;
 
-            TitleApplicationMetadataVector system_metadata{};
-            TitleApplicationMetadataVector user_metadata{};
+            TitleApplicationMetadataInfo system_metadata_info{};
+            TitleApplicationMetadataInfo user_metadata_info{};
 
-            void PopulateApplicationMetadataVector(bool is_system);
+            void PopulateApplicationMetadataInfo(bool is_system);
 
         protected:
             void run(retro_time_t current_time) override;
@@ -57,9 +60,9 @@ namespace nxdt::tasks
             ~TitleMetadataTask();
 
             /* Intentionally left here to let views retrieve title metadata on-demand. */
-            ALWAYS_INLINE const TitleApplicationMetadataVector& GetApplicationMetadata(bool is_system)
+            ALWAYS_INLINE const TitleApplicationMetadataInfo& GetApplicationMetadataInfo(bool is_system)
             {
-                return (is_system ? this->system_metadata : this->user_metadata);
+                return (is_system ? this->system_metadata_info : this->user_metadata_info);
             }
 
             ALWAYS_INLINE UserTitleEvent::Subscription RegisterListener(UserTitleEvent::Callback cb)
