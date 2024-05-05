@@ -59,6 +59,12 @@ static NsApplicationControlData *g_nsAppControlData = NULL;
 static TitleApplicationMetadata **g_systemMetadata = NULL, **g_userMetadata = NULL;
 static u32 g_systemMetadataCount = 0, g_userMetadataCount = 0;
 
+static TitleApplicationMetadata **g_filteredSystemMetadata = NULL, **g_filteredUserMetadata = NULL;
+static u32 g_filteredSystemMetadataCount = 0, g_filteredUserMetadataCount = 0;
+
+static TitleGameCardApplicationMetadata *g_titleGameCardApplicationMetadata = NULL;
+static u32 g_titleGameCardApplicationMetadataCount = 0;
+
 static TitleStorage g_titleStorage[TITLE_STORAGE_COUNT] = {0};
 
 static TitleInfo **g_orphanTitleInfo = NULL;
@@ -552,6 +558,9 @@ static bool titleGenerateMetadataEntriesFromNsRecords(void);
 static TitleApplicationMetadata *titleGenerateDummySystemMetadataEntry(u64 title_id);
 static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApplicationMetadata *out);
 
+static void titleGenerateFilteredApplicationMetadataPointerArray(bool is_system);
+static void titleGenerateGameCardApplicationMetadataArray(void);
+
 NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system, u32 extra_app_count);
 
 NX_INLINE u64 titleGetApplicationIdByContentMetaKey(const NcmContentMetaKey *meta_key);
@@ -579,7 +588,7 @@ static int titleUserApplicationMetadataEntrySortFunction(const void *a, const vo
 static int titleInfoEntrySortFunction(const void *a, const void *b);
 static int titleGameCardApplicationMetadataSortFunction(const void *a, const void *b);
 
-static char *titleGetPatchVersionString(TitleInfo *title_info);
+static char *titleGetDisplayVersionString(TitleInfo *title_info);
 
 bool titleInitialize(void)
 {
@@ -622,6 +631,12 @@ bool titleInitialize(void)
             LOG_MSG_ERROR("Failed to initialize persistent title storages!");
             break;
         }
+
+        /* Generate filtered system application metadata pointer array. */
+        titleGenerateFilteredApplicationMetadataPointerArray(true);
+
+        /* Generate filtered user application metadata pointer array. */
+        titleGenerateFilteredApplicationMetadataPointerArray(false);
 
         /* Create user-mode exit event. */
         ueventCreate(&g_titleGameCardInfoThreadExitEvent, true);
@@ -689,158 +704,65 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id)
 
 TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count)
 {
-    u32 app_count = 0;
-    TitleApplicationMetadata **app_metadata = NULL, **tmp_app_metadata = NULL;
+    TitleApplicationMetadata **dup_filtered_app_metadata = NULL;
 
     SCOPED_LOCK(&g_titleMutex)
     {
-        if (!g_titleInterfaceInit || (is_system && (!g_systemMetadata || !g_systemMetadataCount)) || (!is_system && (!g_userMetadata || !g_userMetadataCount)) || !out_count)
+        TitleApplicationMetadata **filtered_app_metadata = (is_system ? g_filteredSystemMetadata : g_filteredUserMetadata);
+        u32 filtered_app_metadata_count = (is_system ? g_filteredSystemMetadataCount : g_filteredUserMetadataCount);
+
+        if (!g_titleInterfaceInit || !filtered_app_metadata || !filtered_app_metadata_count || !out_count)
         {
             LOG_MSG_ERROR("Invalid parameters!");
             break;
         }
 
-        TitleApplicationMetadata **cached_app_metadata = (is_system ? g_systemMetadata : g_userMetadata);
-        u32 cached_app_metadata_count = (is_system ? g_systemMetadataCount : g_userMetadataCount);
-        bool error = false;
-
-        for(u32 i = 0; i < cached_app_metadata_count; i++)
+        /* Allocate memory for the pointer array. */
+        dup_filtered_app_metadata = malloc(filtered_app_metadata_count * sizeof(TitleApplicationMetadata*));
+        if (!dup_filtered_app_metadata)
         {
-            TitleApplicationMetadata *cur_app_metadata = cached_app_metadata[i];
-            if (!cur_app_metadata) continue;
-
-            /* Skip current metadata entry if content data for this title isn't available. */
-            if ((is_system && !_titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, cur_app_metadata->title_id)) || \
-                (!is_system && !titleIsUserApplicationContentAvailable(cur_app_metadata->title_id))) continue;
-
-            /* Reallocate application metadata pointer array. */
-            tmp_app_metadata = realloc(app_metadata, (app_count + 1) * sizeof(TitleApplicationMetadata*));
-            if (!tmp_app_metadata)
-            {
-                LOG_MSG_ERROR("Failed to reallocate application metadata pointer array!");
-                if (app_metadata) free(app_metadata);
-                app_metadata = NULL;
-                error = true;
-                break;
-            }
-
-            app_metadata = tmp_app_metadata;
-            tmp_app_metadata = NULL;
-
-            /* Set current pointer and increase counter. */
-            app_metadata[app_count++] = cur_app_metadata;
+            LOG_MSG_ERROR("Failed to allocate memory for pointer array duplicate!");
+            break;
         }
 
-        if (error) break;
+        /* Copy application metadata pointers. */
+        memcpy(dup_filtered_app_metadata, filtered_app_metadata, filtered_app_metadata_count * sizeof(TitleApplicationMetadata*));
 
         /* Update output counter. */
-        *out_count = app_count;
-
-        if (!app_metadata || !app_count) LOG_MSG_ERROR("No content data found for %s!", is_system ? "system titles" : "user applications");
+        *out_count = filtered_app_metadata_count;
     }
 
-    return app_metadata;
+    return dup_filtered_app_metadata;
 }
 
-TitleGameCardApplicationMetadataEntry *titleGetGameCardApplicationMetadataEntries(u32 *out_count)
+TitleGameCardApplicationMetadata *titleGetGameCardApplicationMetadataEntries(u32 *out_count)
 {
-    u32 app_count = 0;
-    TitleGameCardApplicationMetadataEntry *gc_app_metadata = NULL, *tmp_gc_app_metadata = NULL;
+    TitleGameCardApplicationMetadata *dup_gc_app_metadata = NULL;
 
     SCOPED_LOCK(&g_titleMutex)
     {
-        TitleStorage *title_storage = &(g_titleStorage[TITLE_STORAGE_INDEX(NcmStorageId_GameCard)]);
-        TitleInfo **titles = title_storage->titles;
-        u32 title_count = title_storage->title_count;
-        bool error = false;
-
-        if (!g_titleInterfaceInit || !g_titleGameCardAvailable || !out_count || !titles || !title_count)
+        if (!g_titleInterfaceInit || !g_titleGameCardAvailable || !g_titleGameCardApplicationMetadata || !g_titleGameCardApplicationMetadataCount || !out_count)
         {
             LOG_MSG_ERROR("Invalid parameters!");
             break;
         }
 
-        /* Loop through our gamecard TitleInfo entries. */
-        for(u32 i = 0; i < title_count; i++)
+        /* Allocate memory for the output array. */
+        dup_gc_app_metadata = malloc(g_titleGameCardApplicationMetadataCount * sizeof(TitleGameCardApplicationMetadata));
+        if (!dup_gc_app_metadata)
         {
-            /* Skip current entry if it's not a user application. */
-            TitleInfo *app_info = titles[i], *patch_info = NULL;
-            if (!app_info || app_info->meta_key.type != NcmContentMetaType_Application) continue;
-
-            u32 app_version = app_info->meta_key.version;
-            u32 dlc_count = 0;
-
-            /* Check if the inserted gamecard holds any bundled patches for the current user application. */
-            /* If so, we'll use the highest patch version available as part of the filename. */
-            for(u32 j = 0; j < title_count; j++)
-            {
-                if (j == i) continue;
-
-                TitleInfo *cur_title_info = titles[j];
-                if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_Patch || \
-                    !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id) || cur_title_info->meta_key.version <= app_version) continue;
-
-                patch_info = cur_title_info;
-                app_version = cur_title_info->meta_key.version;
-            }
-
-            /* Count DLCs available for this application in the inserted gamecard. */
-            for(u32 j = 0; j < title_count; j++)
-            {
-                if (j == i) continue;
-
-                TitleInfo *cur_title_info = titles[j];
-                if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_AddOnContent || \
-                    !titleCheckIfAddOnContentIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id)) continue;
-
-                dlc_count++;
-            }
-
-            /* Reallocate application metadata pointer array. */
-            tmp_gc_app_metadata = realloc(gc_app_metadata, (app_count + 1) * sizeof(TitleGameCardApplicationMetadataEntry));
-            if (!tmp_gc_app_metadata)
-            {
-                LOG_MSG_ERROR("Failed to reallocate application metadata pointer array!");
-                if (gc_app_metadata) free(gc_app_metadata);
-                gc_app_metadata = NULL;
-                error = true;
-                break;
-            }
-
-            gc_app_metadata = tmp_gc_app_metadata;
-            tmp_gc_app_metadata = NULL;
-
-            /* Fill current entry and increase counter. */
-            tmp_gc_app_metadata = &(gc_app_metadata[app_count++]);
-            memset(tmp_gc_app_metadata, 0, sizeof(TitleGameCardApplicationMetadataEntry));
-            tmp_gc_app_metadata->app_metadata = app_info->app_metadata;
-            tmp_gc_app_metadata->version.value = app_version;
-            tmp_gc_app_metadata->dlc_count = dlc_count;
-
-            /* Try to retrieve the display version. */
-            char *version_str = titleGetPatchVersionString(patch_info ? patch_info : app_info);
-            if (version_str)
-            {
-                snprintf(tmp_gc_app_metadata->display_version, MAX_ELEMENTS(tmp_gc_app_metadata->display_version), "%s", version_str);
-                free(version_str);
-            }
+            LOG_MSG_ERROR("Failed to allocate memory for output array!");
+            break;
         }
 
-        if (error) break;
+        /* Copy array data. */
+        memcpy(dup_gc_app_metadata, g_titleGameCardApplicationMetadata, g_titleGameCardApplicationMetadataCount * sizeof(TitleGameCardApplicationMetadata));
 
         /* Update output counter. */
-        *out_count = app_count;
-
-        if (gc_app_metadata && app_count)
-        {
-            /* Reorder title metadata entries by name. */
-            if (app_count > 1) qsort(gc_app_metadata, app_count, sizeof(TitleGameCardApplicationMetadataEntry), &titleGameCardApplicationMetadataSortFunction);
-        } else {
-            LOG_MSG_ERROR("No gamecard content data found for user applications!");
-        }
+        *out_count = g_titleGameCardApplicationMetadataCount;
     }
 
-    return gc_app_metadata;
+    return dup_gc_app_metadata;
 }
 
 TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
@@ -1159,7 +1081,7 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
             snprintf(title_name, MAX_ELEMENTS(title_name), "%s ", title_info->app_metadata->lang_entry.name);
 
             /* Retrieve display version string if we're dealing with a Patch. */
-            char *version_str = (title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetPatchVersionString(title_info) : NULL);
+            char *version_str = (title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetDisplayVersionString(title_info) : NULL);
             if (version_str)
             {
                 title_name_len = strlen(title_name);
@@ -1192,13 +1114,9 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
 
     SCOPED_LOCK(&g_titleMutex)
     {
-        TitleStorage *title_storage = &(g_titleStorage[TITLE_STORAGE_INDEX(NcmStorageId_GameCard)]);
-        TitleInfo **titles = title_storage->titles;
-        u32 title_count = title_storage->title_count;
-
         GameCardHeader gc_header = {0};
-        size_t cur_filename_len = 0, app_name_len = 0;
         char app_name[0x300] = {0};
+        size_t cur_filename_len = 0, app_name_len = 0;
         bool error = false;
 
         if (!g_titleInterfaceInit || !g_titleGameCardAvailable || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
@@ -1208,30 +1126,16 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
             break;
         }
 
-        /* Check if the gamecard title storage is empty. */
+        LOG_MSG_DEBUG("Generating %s gamecard filename...", naming_convention == TitleNamingConvention_Full ? "full" : "ID and version");
+
+        /* Check if we don't have any gamecard application metadata records we can work with. */
         /* This is especially true for Kiosk / Quest gamecards. */
-        if (!titles || !title_count) goto fallback;
+        if (!g_titleGameCardApplicationMetadata || !g_titleGameCardApplicationMetadataCount) goto fallback;
 
-        for(u32 i = 0; i < title_count; i++)
+        /* Loop through our gamecard application metadata entries. */
+        for(u32 i = 0; i < g_titleGameCardApplicationMetadataCount; i++)
         {
-            TitleInfo *app_info = titles[i], *patch_info = NULL;
-            if (!app_info || app_info->meta_key.type != NcmContentMetaType_Application) continue;
-
-            u32 app_version = app_info->meta_key.version;
-
-            /* Check if the inserted gamecard holds any bundled patches for the current user application. */
-            /* If so, we'll use the highest patch version available as part of the filename. */
-            for(u32 j = 0; j < title_count; j++)
-            {
-                if (j == i) continue;
-
-                TitleInfo *cur_title_info = titles[j];
-                if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_Patch || \
-                    !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id) || cur_title_info->meta_key.version <= app_version) continue;
-
-                patch_info = cur_title_info;
-                app_version = cur_title_info->meta_key.version;
-            }
+            const TitleGameCardApplicationMetadata *cur_gc_app_metadata = &(g_titleGameCardApplicationMetadata[i]);
 
             /* Generate current user application name. */
             *app_name = '\0';
@@ -1240,31 +1144,29 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
             {
                 if (cur_filename_len) strcat(app_name, " + ");
 
-                if (app_info->app_metadata && *(app_info->app_metadata->lang_entry.name))
+                if (cur_gc_app_metadata->app_metadata && cur_gc_app_metadata->app_metadata->lang_entry.name[0])
                 {
                     app_name_len = strlen(app_name);
-                    snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", app_info->app_metadata->lang_entry.name);
+                    snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", cur_gc_app_metadata->app_metadata->lang_entry.name);
 
-                    /* Retrieve display version string if the inserted gamecard holds a patch for the current user application. */
-                    char *version_str = (patch_info ? titleGetPatchVersionString(patch_info) : NULL);
-                    if (version_str)
+                    /* Append display version string if the inserted gamecard holds a patch for the current user application. */
+                    if (cur_gc_app_metadata->has_patch && cur_gc_app_metadata->display_version[0])
                     {
                         app_name_len = strlen(app_name);
-                        snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", version_str);
-                        free(version_str);
+                        snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", cur_gc_app_metadata->display_version);
                     }
 
                     if (illegal_char_replace_type) utilsReplaceIllegalCharacters(app_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
                 }
 
                 app_name_len = strlen(app_name);
-                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "[%016lX][v%u]", app_info->meta_key.id, app_version);
+                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "[%016lX][v%u]", cur_gc_app_metadata->app_metadata->title_id, cur_gc_app_metadata->version.value);
             } else
             if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
             {
                 if (cur_filename_len) strcat(app_name, "+");
                 app_name_len = strlen(app_name);
-                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%016lX_v%u", app_info->meta_key.id, app_version);
+                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%016lX_v%u", cur_gc_app_metadata->app_metadata->title_id, cur_gc_app_metadata->version.value);
             }
 
             /* Reallocate output buffer. */
@@ -1330,6 +1232,7 @@ const char *titleGetNcmContentMetaTypeName(u8 content_meta_type)
 
 NX_INLINE void titleFreeApplicationMetadata(void)
 {
+    /* Free cached application metadata. */
     for(u8 i = 0; i < 2; i++)
     {
         TitleApplicationMetadata **cached_app_metadata = (i == 0 ? g_systemMetadata : g_userMetadata);
@@ -1353,6 +1256,20 @@ NX_INLINE void titleFreeApplicationMetadata(void)
 
     g_systemMetadata = g_userMetadata = NULL;
     g_systemMetadataCount = g_userMetadataCount = 0;
+
+    /* Free filtered application metadata. */
+    if (g_filteredSystemMetadata) free(g_filteredSystemMetadata);
+
+    if (g_filteredUserMetadata) free(g_filteredUserMetadata);
+
+    g_filteredSystemMetadata = g_filteredUserMetadata = NULL;
+    g_filteredSystemMetadataCount = g_filteredUserMetadataCount = 0;
+
+    /* Free gamecard application metadata. */
+    if (g_titleGameCardApplicationMetadata) free(g_titleGameCardApplicationMetadata);
+
+    g_titleGameCardApplicationMetadata = NULL;
+    g_titleGameCardApplicationMetadataCount = 0;
 }
 
 static bool titleReallocateApplicationMetadata(u32 extra_app_count, bool is_system, bool free_entries)
@@ -1940,6 +1857,188 @@ static bool titleRetrieveUserApplicationMetadataByTitleId(u64 title_id, TitleApp
     return true;
 }
 
+static void titleGenerateFilteredApplicationMetadataPointerArray(bool is_system)
+{
+    TitleApplicationMetadata **filtered_app_metadata = NULL, **tmp_filtered_app_metadata = NULL;
+    u32 filtered_app_metadata_count = 0;
+
+    TitleApplicationMetadata **cached_app_metadata = (is_system ? g_systemMetadata : g_userMetadata);
+    u32 cached_app_metadata_count = (is_system ? g_systemMetadataCount : g_userMetadataCount);
+
+    /* Reset the right pointer and counter based on the input flag. */
+    if (is_system)
+    {
+        if (g_filteredSystemMetadata)
+        {
+            free(g_filteredSystemMetadata);
+            g_filteredSystemMetadata = NULL;
+        }
+
+        g_filteredSystemMetadataCount = 0;
+    } else {
+        if (g_filteredUserMetadata)
+        {
+            free(g_filteredUserMetadata);
+            g_filteredUserMetadata = NULL;
+        }
+
+        g_filteredUserMetadataCount = 0;
+    }
+
+    /* Make sure we actually have cached application metadata entries we can work with. */
+    if (!cached_app_metadata || !cached_app_metadata_count)
+    {
+        LOG_MSG_ERROR("Cached %s application metadata array is empty!", is_system ? "system" : "user");
+        return;
+    }
+
+    /* Loop through our cached application metadata entries. */
+    for(u32 i = 0; i < cached_app_metadata_count; i++)
+    {
+        TitleApplicationMetadata *cur_app_metadata = cached_app_metadata[i];
+        if (!cur_app_metadata) continue;
+
+        /* Skip current metadata entry if content data for this title isn't available. */
+        if ((is_system && !_titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, cur_app_metadata->title_id)) || \
+            (!is_system && !titleIsUserApplicationContentAvailable(cur_app_metadata->title_id))) continue;
+
+        /* Reallocate filtered application metadata pointer array. */
+        tmp_filtered_app_metadata = realloc(filtered_app_metadata, (filtered_app_metadata_count + 1) * sizeof(TitleApplicationMetadata*));
+        if (!tmp_filtered_app_metadata)
+        {
+            LOG_MSG_ERROR("Failed to reallocate filtered application metadata pointer array!");
+            if (filtered_app_metadata) free(filtered_app_metadata);
+            return;
+        }
+
+        filtered_app_metadata = tmp_filtered_app_metadata;
+        tmp_filtered_app_metadata = NULL;
+
+        /* Set current pointer and increase counter. */
+        filtered_app_metadata[filtered_app_metadata_count++] = cur_app_metadata;
+    }
+
+    if (!filtered_app_metadata || !filtered_app_metadata_count)
+    {
+        LOG_MSG_ERROR("No content data found for %s!", is_system ? "system titles" : "user applications");
+        return;
+    }
+
+    /* Update the right pointer and counter based on the input flag. */
+    if (is_system)
+    {
+        g_filteredSystemMetadata = filtered_app_metadata;
+        g_filteredSystemMetadataCount = filtered_app_metadata_count;
+    } else {
+        g_filteredUserMetadata = filtered_app_metadata;
+        g_filteredUserMetadataCount = filtered_app_metadata_count;
+    }
+}
+
+static void titleGenerateGameCardApplicationMetadataArray(void)
+{
+    TitleStorage *title_storage = &(g_titleStorage[TITLE_STORAGE_INDEX(NcmStorageId_GameCard)]);
+    TitleInfo **titles = title_storage->titles;
+    u32 title_count = title_storage->title_count;
+    TitleGameCardApplicationMetadata *tmp_gc_app_metadata = NULL;
+
+    /* Free gamecard application metadata array. */
+    if (g_titleGameCardApplicationMetadata)
+    {
+        free(g_titleGameCardApplicationMetadata);
+        g_titleGameCardApplicationMetadata = NULL;
+    }
+
+    g_titleGameCardApplicationMetadataCount = 0;
+
+    /* Make sure we actually have gamecard TitleInfo entries we can work with. */
+    if (!titles || !title_count)
+    {
+        LOG_MSG_ERROR("No gamecard TitleInfo entries available!");
+        return;
+    }
+
+    /* Loop through our gamecard TitleInfo entries. */
+    LOG_MSG_DEBUG("Retrieving gamecard application metadata (%u title[s])...", title_count);
+
+    for(u32 i = 0; i < title_count; i++)
+    {
+        /* Skip current entry if it's not a user application. */
+        TitleInfo *app_info = titles[i], *patch_info = NULL;
+        if (!app_info || app_info->meta_key.type != NcmContentMetaType_Application) continue;
+
+        u32 app_version = app_info->meta_key.version;
+        u32 dlc_count = 0;
+
+        /* Check if the inserted gamecard holds any bundled patches for the current user application. */
+        /* If so, we'll use the highest patch version available as part of the filename. */
+        for(u32 j = 0; j < title_count; j++)
+        {
+            if (j == i) continue;
+
+            TitleInfo *cur_title_info = titles[j];
+            if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_Patch || \
+                !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id) || cur_title_info->meta_key.version <= app_version) continue;
+
+            patch_info = cur_title_info;
+            app_version = cur_title_info->meta_key.version;
+        }
+
+        /* Count DLCs available for this application in the inserted gamecard. */
+        for(u32 j = 0; j < title_count; j++)
+        {
+            if (j == i) continue;
+
+            TitleInfo *cur_title_info = titles[j];
+            if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_AddOnContent || \
+                !titleCheckIfAddOnContentIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id)) continue;
+
+            dlc_count++;
+        }
+
+        /* Reallocate application metadata pointer array. */
+        tmp_gc_app_metadata = realloc(g_titleGameCardApplicationMetadata, (g_titleGameCardApplicationMetadataCount + 1) * sizeof(TitleGameCardApplicationMetadata));
+        if (!tmp_gc_app_metadata)
+        {
+            LOG_MSG_ERROR("Failed to reallocate gamecard application metadata array!");
+
+            if (g_titleGameCardApplicationMetadata) free(g_titleGameCardApplicationMetadata);
+            g_titleGameCardApplicationMetadata = NULL;
+            g_titleGameCardApplicationMetadataCount = 0;
+
+            return;
+        }
+
+        g_titleGameCardApplicationMetadata = tmp_gc_app_metadata;
+        tmp_gc_app_metadata = NULL;
+
+        /* Fill current entry and increase counter. */
+        tmp_gc_app_metadata = &(g_titleGameCardApplicationMetadata[g_titleGameCardApplicationMetadataCount++]);
+        memset(tmp_gc_app_metadata, 0, sizeof(TitleGameCardApplicationMetadata));
+        tmp_gc_app_metadata->app_metadata = app_info->app_metadata;
+        tmp_gc_app_metadata->has_patch = (patch_info != NULL);
+        tmp_gc_app_metadata->version.value = app_version;
+        tmp_gc_app_metadata->dlc_count = dlc_count;
+
+        /* Try to retrieve the display version. */
+        char *version_str = titleGetDisplayVersionString(patch_info ? patch_info : app_info);
+        if (version_str)
+        {
+            snprintf(tmp_gc_app_metadata->display_version, MAX_ELEMENTS(tmp_gc_app_metadata->display_version), "%s", version_str);
+            free(version_str);
+        }
+    }
+
+    if (g_titleGameCardApplicationMetadata && g_titleGameCardApplicationMetadataCount)
+    {
+        /* Reorder title metadata entries by name. */
+        if (g_titleGameCardApplicationMetadataCount > 1) qsort(g_titleGameCardApplicationMetadata, g_titleGameCardApplicationMetadataCount, sizeof(TitleGameCardApplicationMetadata),
+                                                               &titleGameCardApplicationMetadataSortFunction);
+    } else {
+        LOG_MSG_ERROR("No gamecard content data found for user applications!");
+    }
+}
+
 NX_INLINE TitleApplicationMetadata *titleFindApplicationMetadataByTitleId(u64 title_id, bool is_system, u32 extra_app_count)
 {
     if (!title_id || (is_system && (!g_systemMetadata || !g_systemMetadataCount)) || (!is_system && (!g_userMetadata || !g_userMetadataCount))) return NULL;
@@ -2388,7 +2487,19 @@ static void titleGameCardInfoThreadFunc(void *arg)
         if (idx == 1) break;
 
         /* Update gamecard title info. */
-        SCOPED_LOCK(&g_titleMutex) g_titleGameCardInfoUpdated = titleRefreshGameCardTitleInfo();
+        SCOPED_LOCK(&g_titleMutex)
+        {
+            g_titleGameCardInfoUpdated = titleRefreshGameCardTitleInfo();
+
+            if (g_titleGameCardInfoUpdated)
+            {
+                /* Generate filtered user application metadata pointer array. */
+                titleGenerateFilteredApplicationMetadataPointerArray(false);
+
+                /* Generate gamecard application metadata array. */
+                titleGenerateGameCardApplicationMetadataArray();
+            }
+        }
     }
 
     /* Update gamecard flags. */
@@ -2793,13 +2904,13 @@ static int titleInfoEntrySortFunction(const void *a, const void *b)
 
 static int titleGameCardApplicationMetadataSortFunction(const void *a, const void *b)
 {
-    const TitleGameCardApplicationMetadataEntry *gc_app_metadata_1 = (const TitleGameCardApplicationMetadataEntry*)a;
-    const TitleGameCardApplicationMetadataEntry *gc_app_metadata_2 = (const TitleGameCardApplicationMetadataEntry*)b;
+    const TitleGameCardApplicationMetadata *gc_app_metadata_1 = (const TitleGameCardApplicationMetadata*)a;
+    const TitleGameCardApplicationMetadata *gc_app_metadata_2 = (const TitleGameCardApplicationMetadata*)b;
 
     return strcasecmp(gc_app_metadata_1->app_metadata->lang_entry.name, gc_app_metadata_2->app_metadata->lang_entry.name);
 }
 
-static char *titleGetPatchVersionString(TitleInfo *title_info)
+static char *titleGetDisplayVersionString(TitleInfo *title_info)
 {
     NcmContentInfo *nacp_content = NULL;
     u8 storage_id = NcmStorageId_None, hfs_partition_type = HashFileSystemPartitionType_None;
@@ -2807,11 +2918,16 @@ static char *titleGetPatchVersionString(TitleInfo *title_info)
     NacpContext nacp_ctx = {0};
     char display_version[0x11] = {0}, *str = NULL;
 
-    if (!title_info || title_info->meta_key.type != NcmContentMetaType_Patch || !(nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0)))
+    if (!title_info || (title_info->meta_key.type != NcmContentMetaType_Application && title_info->meta_key.type != NcmContentMetaType_Patch) || \
+        !(nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0)))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         goto end;
     }
+
+    LOG_MSG_DEBUG("Retrieving display version string for %s \"%s\" (%016lX) in %s...", titleGetNcmContentMetaTypeName(title_info->meta_key.type), \
+                                                                                       title_info->app_metadata->lang_entry.name, title_info->meta_key.id, \
+                                                                                       titleGetNcmStorageIdName(title_info->storage_id));
 
     /* Update parameters. */
     storage_id = title_info->storage_id;

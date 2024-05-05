@@ -58,7 +58,10 @@ namespace nxdt::tasks
             StatusInfoTask();
             ~StatusInfoTask();
 
-            bool IsInternetConnectionAvailable(void);
+            ALWAYS_INLINE bool IsInternetConnectionAvailable(void)
+            {
+                return this->status_info_data.connected;
+            }
 
             ALWAYS_INLINE StatusInfoEvent::Subscription RegisterListener(StatusInfoEvent::Callback cb)
             {

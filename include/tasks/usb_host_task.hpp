@@ -50,7 +50,10 @@ namespace nxdt::tasks
             ~UsbHostTask();
 
             /* Intentionally left here to let views retrieve USB host connection speed on-demand. */
-            const UsbHostSpeed& GetUsbHostSpeed(void);
+            ALWAYS_INLINE const UsbHostSpeed& GetUsbHostSpeed(void)
+            {
+                return this->cur_usb_host_speed;
+            }
 
             ALWAYS_INLINE UsbHostEvent::Subscription RegisterListener(UsbHostEvent::Callback cb)
             {

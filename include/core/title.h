@@ -49,10 +49,11 @@ typedef struct {
 /// Used to display gamecard-specific title information.
 typedef struct {
     TitleApplicationMetadata *app_metadata; ///< User application metadata.
-    Version version;                        ///< Reflects the title version stored in the inserted gamecard.
-    char display_version[32];               ///< Reflects the title display version stored in its NACP.
+    bool has_patch;                         ///< Set to true if a patch is also available in the inserted gamecard for this user application.
+    Version version;                        ///< Reflects the title version stored in the inserted gamecard, either from a base application or a patch.
+    char display_version[32];               ///< Reflects the title display version from the NACP belonging to either a base application or a patch.
     u32 dlc_count;                          ///< Reflects the number of DLCs available for this application in the inserted gamecard.
-} TitleGameCardApplicationMetadataEntry;
+} TitleGameCardApplicationMetadata;
 
 /// Generated using ncm calls.
 /// User applications: the previous/next pointers reference other user applications with the same ID.
@@ -113,10 +114,10 @@ NcmContentStorage *titleGetNcmStorageByStorageId(u8 storage_id);
 /// The allocated buffer must be freed by the caller using free().
 TitleApplicationMetadata **titleGetApplicationMetadataEntries(bool is_system, u32 *out_count);
 
-/// Returns a pointer to a dynamically allocated array of TitleGameCardApplicationMetadataEntry elements generated from gamecard user titles, as well as their count.
+/// Returns a pointer to a dynamically allocated array of TitleGameCardApplicationMetadata elements generated from gamecard user titles, as well as their count.
 /// Returns NULL if an error occurs.
 /// The allocated buffer must be freed by the caller using free().
-TitleGameCardApplicationMetadataEntry *titleGetGameCardApplicationMetadataEntries(u32 *out_count);
+TitleGameCardApplicationMetadata *titleGetGameCardApplicationMetadataEntries(u32 *out_count);
 
 /// Returns a pointer to a dynamically allocated TitleInfo element with a matching storage ID and title ID. Returns NULL if an error occurs.
 /// If NcmStorageId_Any is used, the first entry with a matching title ID is returned.

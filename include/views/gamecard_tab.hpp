@@ -43,9 +43,7 @@ namespace nxdt::views
             std::string raw_filename_full = "";
             std::string raw_filename_id_only = "";
 
-            void ProcessGameCardStatus(GameCardStatus gc_status);
-
-
+            void ProcessGameCardStatus(const GameCardStatus& gc_status);
 
             void PopulateList(void);
             void AddApplicationMetadataItems(void);
@@ -54,8 +52,6 @@ namespace nxdt::views
             void GenerateRawFilenames(void);
             std::string GetFormattedSizeString(GameCardSizeFunc func);
             std::string GetCardIdSetString(const FsGameCardIdSet& card_id_set);
-
-
 
         public:
             GameCardTab(RootView *root_view);

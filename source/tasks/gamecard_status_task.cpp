@@ -28,9 +28,10 @@ namespace nxdt::tasks
     GameCardStatusTask::GameCardStatusTask() : brls::RepeatingTask(REPEATING_TASK_INTERVAL)
     {
         brls::RepeatingTask::start();
-        LOG_MSG_DEBUG("Gamecard task started.");
 
-        this->first_notification = (gamecardGetStatus() >= GameCardStatus_Processing);
+        this->first_notification = (gamecardGetStatus() != GameCardStatus_NotInserted);
+
+        LOG_MSG_DEBUG("Gamecard task started with first_notification = %u.", this->first_notification);
     }
 
     GameCardStatusTask::~GameCardStatusTask()

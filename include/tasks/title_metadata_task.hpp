@@ -57,7 +57,10 @@ namespace nxdt::tasks
             ~TitleMetadataTask();
 
             /* Intentionally left here to let views retrieve title metadata on-demand. */
-            const TitleApplicationMetadataVector& GetApplicationMetadata(bool is_system);
+            ALWAYS_INLINE const TitleApplicationMetadataVector& GetApplicationMetadata(bool is_system)
+            {
+                return (is_system ? this->system_metadata : this->user_metadata);
+            }
 
             ALWAYS_INLINE UserTitleEvent::Subscription RegisterListener(UserTitleEvent::Callback cb)
             {

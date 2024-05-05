@@ -60,7 +60,10 @@ namespace nxdt::tasks
             ~UmsTask();
 
             /* Intentionally left here to let views retrieve UMS device info on-demand. */
-            const UmsDeviceVector& GetUmsDevices(void);
+            ALWAYS_INLINE const UmsDeviceVector& GetUmsDevices(void)
+            {
+                return this->ums_devices_vector;
+            }
 
             ALWAYS_INLINE UmsEvent::Subscription RegisterListener(UmsEvent::Callback cb)
             {

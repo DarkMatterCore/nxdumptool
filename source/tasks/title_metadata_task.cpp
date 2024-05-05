@@ -27,6 +27,8 @@ namespace nxdt::tasks
 {
     TitleMetadataTask::TitleMetadataTask() : brls::RepeatingTask(REPEATING_TASK_INTERVAL)
     {
+        LOG_MSG_DEBUG("Title metadata task started.");
+
         /* Get system metadata entries. */
         this->PopulateApplicationMetadataVector(true);
 
@@ -35,7 +37,6 @@ namespace nxdt::tasks
 
         /* Start task. */
         brls::RepeatingTask::start();
-        LOG_MSG_DEBUG("Title metadata task started.");
     }
 
     TitleMetadataTask::~TitleMetadataTask()
@@ -53,20 +54,15 @@ namespace nxdt::tasks
 
         if (titleIsGameCardInfoUpdated())
         {
-            LOG_MSG_DEBUG("Title info updated.");
-            //brls::Application::notify("tasks/notifications/user_titles"_i18n);
-
             /* Update user metadata vector. */
             this->PopulateApplicationMetadataVector(false);
 
             /* Fire task event. */
             this->user_title_event.fire(this->user_metadata);
-        }
-    }
 
-    const TitleApplicationMetadataVector& TitleMetadataTask::GetApplicationMetadata(bool is_system)
-    {
-        return (is_system ? this->system_metadata : this->user_metadata);
+            //brls::Application::notify("tasks/notifications/user_titles"_i18n);
+            LOG_MSG_DEBUG("Title info updated.");
+        }
     }
 
     void TitleMetadataTask::PopulateApplicationMetadataVector(bool is_system)

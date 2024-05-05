@@ -102,6 +102,9 @@ namespace nxdt::views
 
     void TitlesTab::PopulateList(const nxdt::tasks::TitleApplicationMetadataVector& app_metadata)
     {
+        /* Block user inputs. */
+        brls::Application::blockInputs();
+
         /* Populate variables. */
         size_t app_metadata_count = app_metadata.size();
         bool update_focused_view = this->IsListItemFocused();
@@ -114,8 +117,12 @@ namespace nxdt::views
         this->list->clear();
         this->list->invalidate(true);
 
-        /* Return immediately if we have no user application metadata. */
-        if (!app_metadata_count) return;
+        /* Return immediately if we have no application metadata. */
+        if (!app_metadata_count)
+        {
+            brls::Application::unblockInputs();
+            return;
+        }
 
         /* Populate list. */
         for(const TitleApplicationMetadata *cur_app_metadata : app_metadata)
@@ -126,14 +133,14 @@ namespace nxdt::views
             /* Register click event. */
             item->getClickEvent()->subscribe([](brls::View *view) {
                 TitlesTabItem *item = static_cast<TitlesTabItem*>(view);
-                const TitleApplicationMetadata *app_metadata = item->GetApplicationMetadata();
+                const TitleApplicationMetadata *item_app_metadata = item->GetApplicationMetadata();
                 bool is_system = item->IsSystemTitle();
 
                 /* Create popup. */
                 TitlesTabPopup *popup = nullptr;
 
                 try {
-                    popup = new TitlesTabPopup(app_metadata, is_system);
+                    popup = new TitlesTabPopup(item_app_metadata, is_system);
                 } catch(const std::string& msg) {
                     LOG_MSG_DEBUG("%s", msg.c_str());
                     if (popup) delete popup;
@@ -141,14 +148,14 @@ namespace nxdt::views
                 }
 
                 /* Display popup. */
-                std::string name = std::string(app_metadata->lang_entry.name);
-                std::string tid = fmt::format("{:016X}", app_metadata->title_id);
-                std::string sub_left = (!is_system ? std::string(app_metadata->lang_entry.author) : tid);
+                std::string name = std::string(item_app_metadata->lang_entry.name);
+                std::string tid = fmt::format("{:016X}", item_app_metadata->title_id);
+                std::string sub_left = (!is_system ? std::string(item_app_metadata->lang_entry.author) : tid);
                 std::string sub_right = (!is_system ? tid : "");
 
-                if (app_metadata->icon && app_metadata->icon_size)
+                if (item_app_metadata->icon && item_app_metadata->icon_size)
                 {
-                    brls::PopupFrame::open(name, app_metadata->icon, app_metadata->icon_size, popup, sub_left, sub_right);
+                    brls::PopupFrame::open(name, item_app_metadata->icon, item_app_metadata->icon_size, popup, sub_left, sub_right);
                 } else {
                     brls::PopupFrame::open(name, popup, sub_left, sub_right);
                 }
@@ -164,5 +171,8 @@ namespace nxdt::views
         /* Switch to the list. */
         this->list->invalidate(true);
         this->SwitchLayerView(false, update_focused_view, focus_stack_index < 0);
+
+        /* Unblock user inputs. */
+        brls::Application::unblockInputs();
     }
 }

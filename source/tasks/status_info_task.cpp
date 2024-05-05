@@ -34,11 +34,6 @@ namespace nxdt::tasks
         LOG_MSG_DEBUG("Status info task stopped.");
     }
 
-    bool StatusInfoTask::IsInternetConnectionAvailable(void)
-    {
-        return this->status_info_data.connected;
-    }
-
     void StatusInfoTask::run(retro_time_t current_time)
     {
         brls::RepeatingTask::run(current_time);

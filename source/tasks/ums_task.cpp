@@ -59,11 +59,6 @@ namespace nxdt::tasks
         }
     }
 
-    const UmsDeviceVector& UmsTask::GetUmsDevices(void)
-    {
-        return this->ums_devices_vector;
-    }
-
     void UmsTask::PopulateUmsDeviceVector(void)
     {
         /* Clear UMS device vector. */

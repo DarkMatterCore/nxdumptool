@@ -43,7 +43,7 @@ namespace nxdt::views
         this->list->setMarginBottom(20);
 
         /* Subscribe to the gamecard status event. */
-        this->gc_status_task_sub = this->root_view->RegisterGameCardStatusTaskListener([this](GameCardStatus gc_status) {
+        this->gc_status_task_sub = this->root_view->RegisterGameCardStatusTaskListener([this](const GameCardStatus& gc_status) {
             /* Process gamecard status. */
             this->ProcessGameCardStatus(gc_status);
         });
@@ -58,8 +58,13 @@ namespace nxdt::views
         this->root_view->UnregisterGameCardStatusTaskListener(this->gc_status_task_sub);
     }
 
-    void GameCardTab::ProcessGameCardStatus(GameCardStatus gc_status)
+    void GameCardTab::ProcessGameCardStatus(const GameCardStatus& gc_status)
     {
+        LOG_MSG_DEBUG("Processing gamecard status: %u.", gc_status);
+
+        /* Block user inputs. */
+        brls::Application::blockInputs();
+
         /* Switch to the error layer if gamecard info hasn't been loaded. */
         if (gc_status < GameCardStatus_InsertedAndInfoLoaded) this->SwitchLayerView(true);
 
@@ -90,6 +95,9 @@ namespace nxdt::views
 
         /* Update internal gamecard status. */
         this->gc_status = gc_status;
+
+        /* Unlock user inputs. */
+        brls::Application::unblockInputs();
     }
 
     void GameCardTab::PopulateList(void)
@@ -155,7 +163,7 @@ namespace nxdt::views
 
     void GameCardTab::AddApplicationMetadataItems(void)
     {
-        TitleGameCardApplicationMetadataEntry *gc_app_metadata = nullptr;
+        TitleGameCardApplicationMetadata *gc_app_metadata = nullptr;
         u32 gc_app_metadata_count = 0;
 
         /* Retrieve gamecard application metadata. */
@@ -176,7 +184,7 @@ namespace nxdt::views
         /* Add gamecard application metadata items. */
         for(u32 i = 0; i < gc_app_metadata_count; i++)
         {
-            TitleGameCardApplicationMetadataEntry *cur_gc_app_metadata = &(gc_app_metadata[i]);
+            TitleGameCardApplicationMetadata *cur_gc_app_metadata = &(gc_app_metadata[i]);
 
             /* Create item. */
             TitlesTabItem *title = new TitlesTabItem(cur_gc_app_metadata->app_metadata, false, false);

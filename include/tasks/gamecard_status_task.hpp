@@ -51,6 +51,12 @@ namespace nxdt::tasks
             GameCardStatusTask();
             ~GameCardStatusTask();
 
+            /* Intentionally left here to let views retrieve title metadata on-demand. */
+            ALWAYS_INLINE const GameCardStatus& GetGameCardStatus(void)
+            {
+                return this->cur_gc_status;
+            }
+
             ALWAYS_INLINE GameCardStatusEvent::Subscription RegisterListener(GameCardStatusEvent::Callback cb)
             {
                 return this->gc_status_event.subscribe(cb);
