@@ -1057,10 +1057,10 @@ int main(int argc, char *argv[])
 
     while(appletMainLoop())
     {
-        MenuElement *selected_element = cur_menu->elements[cur_menu->selected];
-        MenuElementOption *selected_element_options = selected_element->element_options;
+        MenuElement *selected_element = ((cur_menu->elements && element_count && cur_menu->selected < element_count) ? cur_menu->elements[cur_menu->selected] : NULL);
+        MenuElementOption *selected_element_options = (selected_element ? selected_element->element_options : NULL);
 
-        if (cur_menu->id == MenuId_UserTitlesSubMenu && selected_element->child_menu)
+        if (cur_menu->id == MenuId_UserTitlesSubMenu && selected_element && selected_element->child_menu)
         {
             /* Set title types child menu pointer if we're currently at the user titles submenu. */
             u32 child_id = selected_element->child_menu->id;
@@ -1081,7 +1081,7 @@ int main(int argc, char *argv[])
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
 
-        if (cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles)
+        if ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && selected_element)
         {
             app_metadata = (TitleApplicationMetadata*)selected_element->userdata;
 
@@ -1213,6 +1213,8 @@ int main(int argc, char *argv[])
             if (titleIsGameCardInfoUpdated())
             {
                 updateTitleList(&g_userTitlesMenu, &g_userTitlesSubMenu, false);
+                if (cur_menu->id == MenuId_UserTitles) element_count = menuGetElementCount(cur_menu);
+                g_userTitlesMenu.selected = g_userTitlesMenu.scroll = 0;
                 data_update = true;
                 break;
             }
@@ -1224,7 +1226,7 @@ int main(int argc, char *argv[])
 
         if (data_update) continue;
 
-        if (btn_down & HidNpadButton_A)
+        if ((btn_down & HidNpadButton_A) && selected_element)
         {
             Menu *child_menu = selected_element->child_menu;
 
@@ -1320,7 +1322,6 @@ int main(int argc, char *argv[])
                 if (!error)
                 {
                     child_menu->parent = cur_menu;
-
                     cur_menu = child_menu;
                     element_count = menuGetElementCount(cur_menu);
                 } else {
