@@ -59,17 +59,17 @@ namespace nxdt::views
     int LayeredErrorFrame::GetFocusStackViewIndex(void)
     {
         size_t cur_list_count = this->list->getViewsCount();
-        std::vector<brls::View*> *focus_stack = brls::Application::getFocusStack();
+        std::vector<brls::View*>& focus_stack = brls::Application::getFocusStack();
 
-        if (cur_list_count && focus_stack)
+        if (cur_list_count)
         {
-            size_t focus_stack_size = focus_stack->size();
+            size_t focus_stack_size = focus_stack.size();
 
             for(size_t i = 0; i < focus_stack_size; i++)
             {
                 for(size_t j = 0; j < cur_list_count; j++)
                 {
-                    if (this->list->getChild(j) == focus_stack->at(i)) return static_cast<int>(i);
+                    if (this->list->getChild(j) == focus_stack.at(i)) return static_cast<int>(i);
                 }
             }
         }
@@ -79,13 +79,12 @@ namespace nxdt::views
 
     bool LayeredErrorFrame::UpdateFocusStackViewAtIndex(int index, brls::View *view)
     {
-        std::vector<brls::View*> *focus_stack = brls::Application::getFocusStack();
-        if (!focus_stack || index < 0 || !view) return false;
+        std::vector<brls::View*>& focus_stack = brls::Application::getFocusStack();
+        size_t focus_stack_size = focus_stack.size();
 
-        size_t focus_stack_size = focus_stack->size();
-        if (index >= static_cast<int>(focus_stack_size)) return false;
+        if (index < 0 || index >= static_cast<int>(focus_stack_size) || !view) return false;
 
-        focus_stack->at(index) = view;
+        focus_stack.at(index) = view;
         LOG_MSG_DEBUG("Focus stack updated.");
 
         return true;

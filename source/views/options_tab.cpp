@@ -144,7 +144,7 @@ namespace nxdt::views
         this->changelog_list->addView(version_lbl);
 
         /* Display release date and commit hash. */
-        brls::Label *release_details_lbl = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("options_tab/update_app/frame/release_details"_i18n, \
+        brls::Label *release_details_lbl = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("options_tab/update_app/frame/release_details", \
                                                            this->json_data.commit_hash, RootView::GetFormattedDateString(this->json_data.date)), true);
         release_details_lbl->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->changelog_list->addView(release_details_lbl);
@@ -286,7 +286,7 @@ namespace nxdt::views
         /*     2. Generate the string vector required by the dropdown. */
         /*     3. Initialize the dropdown and pass a custom callback that will take care of unmounting the selected device. */
         brls::SelectListItem *unmount_ums_device = new brls::SelectListItem("options_tab/unmount_ums_device/label"_i18n, { "dummy" }, 0,
-                                                                            i18n::getStr("options_tab/unmount_ums_device/description"_i18n, APP_TITLE), false);
+                                                                            i18n::getStr("options_tab/unmount_ums_device/description", APP_TITLE), false);
 
         unmount_ums_device->getClickEvent()->unsubscribeAll();
 

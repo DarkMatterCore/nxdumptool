@@ -106,29 +106,31 @@ namespace nxdt::views
         brls::Application::blockInputs();
 
         /* Populate variables. */
+        TitleApplicationMetadata **app_metadata = app_metadata_info.app_metadata;
+        const u32 app_metadata_count = app_metadata_info.app_metadata_count;
+
         bool update_focused_view = this->IsListItemFocused();
         int focus_stack_index = this->GetFocusStackViewIndex();
 
         /* If needed, switch to the error frame *before* cleaning up our list. */
-        if (!app_metadata_info.app_metadata_count) this->SwitchLayerView(true);
+        if (!app_metadata_count) this->SwitchLayerView(true);
 
         /* Clear list. */
         this->list->clear();
         this->list->invalidate(true);
 
         /* Return immediately if we have no application metadata. */
-        if (!app_metadata_info.app_metadata_count)
+        if (!app_metadata_count)
         {
             brls::Application::unblockInputs();
             return;
         }
 
         /* Populate list. */
-        for(u32 i = 0; i < app_metadata_info.app_metadata_count; i++)
+        for(u32 i = 0; i < app_metadata_count; i++)
         {
             /* Create list item. */
-            const TitleApplicationMetadata *cur_app_metadata = app_metadata_info.app_metadata[i];
-            TitlesTabItem *item = new TitlesTabItem(cur_app_metadata, this->is_system);
+            TitlesTabItem *item = new TitlesTabItem(app_metadata[i], this->is_system);
 
             /* Register click event. */
             item->getClickEvent()->subscribe([](brls::View *view) {

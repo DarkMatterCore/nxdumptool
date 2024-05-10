@@ -83,7 +83,7 @@ namespace nxdt::views
                 this->error_frame->SetMessage("gamecard_tab/error_frame/lafw_update_required"_i18n);
                 break;
             case GameCardStatus_InsertedAndInfoNotLoaded:
-                this->error_frame->SetMessage(i18n::getStr("gamecard_tab/error_frame/info_not_loaded"_i18n, GITHUB_NEW_ISSUE_URL));
+                this->error_frame->SetMessage(i18n::getStr("gamecard_tab/error_frame/info_not_loaded", GITHUB_NEW_ISSUE_URL));
                 break;
             case GameCardStatus_InsertedAndInfoLoaded:
                 /* Update list and switch to it. */
@@ -176,7 +176,7 @@ namespace nxdt::views
         this->list->addView(new brls::Header("gamecard_tab/list/user_titles/header"_i18n));
 
         /* Add information about how to work with individual user titles. */
-        brls::Label *user_titles_info = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("gamecard_tab/list/user_titles/info"_i18n, \
+        brls::Label *user_titles_info = new brls::Label(brls::LabelStyle::DESCRIPTION, i18n::getStr("gamecard_tab/list/user_titles/info", \
                                                         "root_view/tabs/user_titles"_i18n), true);
         user_titles_info->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->list->addView(user_titles_info);

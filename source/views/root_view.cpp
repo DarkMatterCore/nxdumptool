@@ -84,7 +84,7 @@ namespace nxdt::views
         this->usb_icon->setVerticalAlign(NVG_ALIGN_TOP);
         this->usb_icon->setParent(this);
 
-        this->ums_counter_lbl = new brls::Label(brls::LabelStyle::SMALL, i18n::getStr("root_view/ums_counter"_i18n, usbHsFsGetPhysicalDeviceCount()));
+        this->ums_counter_lbl = new brls::Label(brls::LabelStyle::SMALL, i18n::getStr("root_view/ums_counter", usbHsFsGetPhysicalDeviceCount()));
         this->ums_counter_lbl->setHorizontalAlign(NVG_ALIGN_RIGHT);
         this->ums_counter_lbl->setVerticalAlign(NVG_ALIGN_TOP);
         this->ums_counter_lbl->setParent(this);
@@ -161,7 +161,7 @@ namespace nxdt::views
         /* Subscribe to UMS event. */
         this->ums_task_sub = this->ums_task->RegisterListener([this](const nxdt::tasks::UmsDeviceVector& ums_devices) {
             /* Update UMS counter label. */
-            this->ums_counter_lbl->setText(i18n::getStr("root_view/ums_counter"_i18n, usbHsFsGetPhysicalDeviceCount()));
+            this->ums_counter_lbl->setText(i18n::getStr("root_view/ums_counter", usbHsFsGetPhysicalDeviceCount()));
 
             /* Update cached output storage value, if needed. */
             if (this->output_storage > ConfigOutputStorage_UsbHost) this->output_storage = ConfigOutputStorage_SdCard;
@@ -170,7 +170,7 @@ namespace nxdt::views
         /* Subscribe to USB host event. */
         this->usb_host_task_sub = this->usb_host_task->RegisterListener([this](UsbHostSpeed usb_host_speed) {
             /* Update USB host speed label. */
-            this->usb_host_speed_lbl->setText(usb_host_speed ? i18n::getStr("root_view/usb_host_speed"_i18n, usb_host_speed) : "root_view/usb_host_not_connected"_i18n);
+            this->usb_host_speed_lbl->setText(usb_host_speed ? i18n::getStr("root_view/usb_host_speed", usb_host_speed) : "root_view/usb_host_not_connected"_i18n);
         });
     }
 
@@ -224,7 +224,7 @@ namespace nxdt::views
             }
         }
 
-        return i18n::getStr("generic/date"_i18n, ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, is_am ? "AM" : "PM");
+        return i18n::getStr("generic/date", ts.tm_year, ts.tm_mon, ts.tm_mday, ts.tm_hour, ts.tm_min, ts.tm_sec, is_am ? "AM" : "PM");
     }
 
     void RootView::draw(NVGcontext* vg, int x, int y, unsigned width, unsigned height, brls::Style* style, brls::FrameContext* ctx)

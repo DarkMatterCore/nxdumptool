@@ -29,9 +29,9 @@ namespace nxdt::tasks
     {
         brls::RepeatingTask::start();
 
-        this->first_notification = (gamecardGetStatus() != GameCardStatus_NotInserted);
+        this->skip_notification = (gamecardGetStatus() != GameCardStatus_NotInserted);
 
-        LOG_MSG_DEBUG("Gamecard task started with first_notification = %u.", this->first_notification);
+        LOG_MSG_DEBUG("Gamecard task started with skip_notification = %u.", this->skip_notification);
     }
 
     GameCardStatusTask::~GameCardStatusTask()
@@ -48,7 +48,10 @@ namespace nxdt::tasks
         {
             LOG_MSG_DEBUG("Gamecard status change triggered: %u.", this->cur_gc_status);
 
-            if (!this->first_notification)
+            /* Fire task event. */
+            this->gc_status_event.fire(this->cur_gc_status);
+
+            if (!this->skip_notification)
             {
                 if (this->prev_gc_status == GameCardStatus_NotInserted && this->cur_gc_status == GameCardStatus_Processing)
                 {
@@ -63,14 +66,11 @@ namespace nxdt::tasks
                     brls::Application::notify("tasks/notifications/gamecard_ejected"_i18n);
                 }
             } else {
-                this->first_notification = false;
+                this->skip_notification = false;
             }
 
             /* Update previous gamecard status. */
             this->prev_gc_status = this->cur_gc_status;
-
-            /* Fire task event. */
-            this->gc_status_event.fire(this->cur_gc_status);
         }
     }
 }

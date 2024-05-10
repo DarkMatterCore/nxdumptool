@@ -70,7 +70,7 @@ int main(int argc, char *argv[])
     } catch (...) {
         std::exception_ptr p = std::current_exception();
         LOG_MSG_ERROR("Exception caught! (%s).", p ? p.__cxa_exception_type()->name() : "unknown");
-        brls::Application::crash(i18n::getStr("generic/exception_caught"_i18n, p ? p.__cxa_exception_type()->name() : "generic/unknown_exception"_i18n));
+        brls::Application::crash(i18n::getStr("generic/exception_caught", p ? p.__cxa_exception_type()->name() : "generic/unknown_exception"_i18n));
         while(brls::Application::mainLoop());
     }
 
