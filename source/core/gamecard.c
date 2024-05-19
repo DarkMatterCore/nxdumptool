@@ -1365,12 +1365,14 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     }
 
     /* Verify Hash FS header (if possible). */
-    if (hash && hash_target_size && (hash_target_offset + hash_target_size) <= hfs_ctx->header_size)
+    /* TODO: enable hash verification on Terra gamecards if we ever find out how to properly calculate matching checksums. */
+    if (hash && hash_target_size && (hash_target_offset + hash_target_size) <= hfs_ctx->header_size && g_gameCardInfoArea.compatibility_type == GameCardCompatibilityType_Normal)
     {
         sha256CalculateHash(hfs_header_hash, hfs_ctx->header + hash_target_offset, hash_target_size);
         if (memcmp(hfs_header_hash, hash, SHA256_HASH_SIZE) != 0)
         {
             LOG_MSG_ERROR("Hash FS header doesn't match expected SHA-256 hash! (\"%s\", offset 0x%lX).", hfs_ctx->name, offset);
+            dump_fs_header = true;
             goto end;
         }
     }
@@ -1395,7 +1397,15 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
 end:
     if (!success && hfs_ctx)
     {
-        if (dump_fs_header) LOG_DATA_DEBUG(&hfs_header, sizeof(HashFileSystemHeader), "Partial Hash FS header dump (\"%s\", offset 0x%lX):", hfs_ctx->name, offset);
+        if (dump_fs_header)
+        {
+            if (hfs_ctx->header)
+            {
+                LOG_DATA_DEBUG(hfs_ctx->header, hfs_ctx->header_size, "Hash FS header dump (\"%s\", offset 0x%lX):", hfs_ctx->name, offset);
+            } else {
+                LOG_DATA_DEBUG(&hfs_header, sizeof(HashFileSystemHeader), "Partial Hash FS header dump (\"%s\", offset 0x%lX):", hfs_ctx->name, offset);
+            }
+        }
 
         if (hfs_ctx->header) free(hfs_ctx->header);
 
