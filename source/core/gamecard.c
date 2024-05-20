@@ -1350,10 +1350,13 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     hfs_ctx->header_size = ALIGN_UP(hfs_ctx->header_size, GAMECARD_PAGE_SIZE);
 
     /* Allocate memory for the full Hash FS header. */
-    hfs_ctx->header = calloc(hfs_ctx->header_size, sizeof(u8));
+    /* If we're dealing with the root partition, we'll reserve an extra byte to accomodate for the compatibility type value. */
+    /* This value is used as a salt when calculating the SHA-256 checksum. */
+    u64 hfs_header_alloc_size = (name ? hfs_ctx->header_size : (hfs_ctx->header_size + 1));
+    hfs_ctx->header = calloc(hfs_header_alloc_size, sizeof(u8));
     if (!hfs_ctx->header)
     {
-        LOG_MSG_ERROR("Unable to allocate 0x%lX bytes buffer for the full Hash FS header! (\"%s\", offset 0x%lX).", hfs_ctx->header_size, hfs_ctx->name, offset);
+        LOG_MSG_ERROR("Unable to allocate 0x%lX bytes buffer for the full Hash FS header! (\"%s\", offset 0x%lX).", hfs_header_alloc_size, hfs_ctx->name, offset);
         goto end;
     }
 
@@ -1365,16 +1368,24 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     }
 
     /* Verify Hash FS header (if possible). */
-    /* TODO: enable hash verification on Terra gamecards if we ever find out how to properly calculate matching checksums. */
-    if (hash && hash_target_size && (hash_target_offset + hash_target_size) <= hfs_ctx->header_size && g_gameCardInfoArea.compatibility_type == GameCardCompatibilityType_Normal)
+    if (hash && hash_target_size && (hash_target_offset + hash_target_size) <= hfs_ctx->header_size)
     {
+        /* Add salt to header and update hash target size if we're dealing with the root partition + a compatibility type other than Normal. */
+        u8 compatibility_type = g_gameCardInfoArea.compatibility_type;
+        bool use_salt = (!name && compatibility_type != GameCardCompatibilityType_Normal);
+        if (use_salt) hfs_ctx->header[hash_target_size++] = compatibility_type;
+
         sha256CalculateHash(hfs_header_hash, hfs_ctx->header + hash_target_offset, hash_target_size);
+
         if (memcmp(hfs_header_hash, hash, SHA256_HASH_SIZE) != 0)
         {
             LOG_MSG_ERROR("Hash FS header doesn't match expected SHA-256 hash! (\"%s\", offset 0x%lX).", hfs_ctx->name, offset);
             dump_fs_header = true;
             goto end;
         }
+
+        /* Remove salt from header. */
+        if (use_salt) hfs_ctx->header[--hash_target_size] = '\0';
     }
 
     /* Fill context. */
