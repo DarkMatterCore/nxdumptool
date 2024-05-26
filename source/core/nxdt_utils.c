@@ -70,7 +70,7 @@ static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
 static u8 g_productModel = SetSysProductModel_Invalid;
 
-static bool g_isDevUnit = false;
+static bool g_isTerraUnit = false, g_isDevUnit = false;
 
 static AppletType g_programAppletType = AppletType_None;
 
@@ -103,7 +103,9 @@ static void _utilsGetCustomFirmwareType(void);
 
 static bool _utilsGetProductModel(void);
 
-static bool _utilsIsDevelopmentUnit(void);
+static bool utilsGetDevelopmentUnitFlag(void);
+
+static bool utilsGetTerraUnitFlag(void);
 
 static bool utilsMountEmmcBisSystemPartitionStorage(void);
 static void utilsUnmountEmmcBisSystemPartitionStorage(void);
@@ -185,12 +187,16 @@ bool utilsInitializeResources(void)
         if (!_utilsGetProductModel()) break;
 
         /* Get development unit flag. */
-        if (!_utilsIsDevelopmentUnit()) break;
+        if (!utilsGetDevelopmentUnitFlag()) break;
+
+        /* Get Terra unit flag. */
+        if (!utilsGetTerraUnitFlag()) break;
 
         /* Get applet type. */
         g_programAppletType = appletGetAppletType();
 
-        LOG_MSG_INFO("Running under %s %s unit in %s mode.", g_isDevUnit ? "development" : "retail", utilsIsMarikoUnit() ? "Mariko" : "Erista", utilsIsAppletMode() ? "applet" : "title override");
+        LOG_MSG_INFO("Running under %s %s unit %s Terra flag in %s mode.", g_isDevUnit ? "development" : "retail", utilsIsMarikoUnit() ? "Mariko" : "Erista", \
+                                                                           g_isTerraUnit ? "with" : "without", utilsIsAppletMode() ? "applet" : "title override");
 
         if (g_appLaunchPath)
         {
@@ -430,6 +436,11 @@ bool utilsIsMarikoUnit(void)
 bool utilsIsDevelopmentUnit(void)
 {
     return g_isDevUnit;
+}
+
+bool utilsIsTerraUnit(void)
+{
+    return g_isTerraUnit;
 }
 
 bool utilsIsAppletMode(void)
@@ -1313,7 +1324,7 @@ static bool _utilsGetProductModel(void)
     return ret;
 }
 
-static bool _utilsIsDevelopmentUnit(void)
+static bool utilsGetDevelopmentUnitFlag(void)
 {
     Result rc = 0;
     bool tmp = false;
@@ -1324,6 +1335,25 @@ static bool _utilsIsDevelopmentUnit(void)
         g_isDevUnit = tmp;
     } else {
         LOG_MSG_ERROR("splIsDevelopment failed! (0x%X).", rc);
+    }
+
+    return R_SUCCEEDED(rc);
+}
+
+static bool utilsGetTerraUnitFlag(void)
+{
+    /* Return right away if we're running under a HOS version that's too low. */
+    if (hosversionBefore(8, 0, 0)) return true;
+
+    Result rc = 0;
+    bool tmp = false;
+
+    rc = setsysGetT(&tmp);
+    if (R_SUCCEEDED(rc))
+    {
+        g_isTerraUnit = tmp;
+    } else {
+        LOG_MSG_ERROR("setsysGetT failed! (0x%X).", rc);
     }
 
     return R_SUCCEEDED(rc);

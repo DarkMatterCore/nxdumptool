@@ -105,6 +105,9 @@ bool utilsIsMarikoUnit(void);
 /// Returns true if the application is running under a development unit.
 bool utilsIsDevelopmentUnit(void);
 
+/// Returns true if the application is running under a unit with the Terra platform flag set.
+bool utilsIsTerraUnit(void);
+
 /// Returns true if the application is running under applet mode.
 bool utilsIsAppletMode(void);
 
