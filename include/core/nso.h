@@ -60,16 +60,17 @@ typedef struct {
 NXDT_ASSERT(NsoSectionInfo, 0x8);
 
 /// This is the start of every NSO.
-/// This is always followed by a NsoModuleName block.
+/// This can be optionally followed by the NSO module name.
+/// If available, the 'module_name_size' member is greater than 1, and the 'module_name_offset' member will usually be set to 0x100 (the size of this header).
 typedef struct {
     u32 magic;                                  ///< "NSO0".
     u32 version;                                ///< Always set to 0.
     u8 reserved_1[0x4];
     u32 flags;                                  ///< NsoFlags.
     NsoSegmentInfo text_segment_info;
-    u32 module_name_offset;                     ///< NsoModuleName block offset.
+    u32 module_name_offset;                     ///< NSO module name offset.
     NsoSegmentInfo rodata_segment_info;
-    u32 module_name_size;                       ///< NsoModuleName block size.
+    u32 module_name_size;                       ///< NSO module name size.
     NsoSegmentInfo data_segment_info;
     u32 bss_size;
     u8 module_id[0x20];                         ///< Also known as build ID.
@@ -87,19 +88,10 @@ typedef struct {
 
 NXDT_ASSERT(NsoHeader, 0x100);
 
-/// Usually placed right after NsoHeader, but its actual offset may vary.
-/// If the 'module_name_size' member from NsoHeader is greater than 1 and the 'name_length' element from NsoModuleName is greater than 0, 'name' will hold the module name.
-typedef struct {
-    u8 name_length;
-    char name[];
-} NsoModuleName;
-
-NXDT_ASSERT(NsoModuleName, 0x1);
-
 /// Placed at the very start of the decompressed .text segment.
 typedef struct {
-    u32 entry_point;
-    u32 mod_offset;     ///< NsoModHeader block offset (relative to the start of this header). Almost always set to 0x8 (the size of this struct).
+    u32 version;        ///< Usually set to 0 or a branch instruction (0x14000002). Set to 1 or 0x14000003 if a NsoNnSdkVersion block is available.
+    s32 mod_offset;     ///< NsoModHeader block offset (relative to the start of this header). Almost always set to 0x8 (the size of this struct).
 } NsoModStart;
 
 NXDT_ASSERT(NsoModStart, 0x8);
@@ -121,6 +113,16 @@ typedef struct  {
 
 NXDT_ASSERT(NsoModHeader, 0x1C);
 
+/// Only available in 17.0.0+ binaries. Holds the nnSdk version used to build this NRO.
+/// This is usually placed right after the NsoModHeader block.
+typedef struct {
+    u32 major;
+    u32 minor;
+    u32 micro;
+} NsoNnSdkVersion;
+
+NXDT_ASSERT(NsoNnSdkVersion, 0xC);
+
 /// Placed at the start of the decompressed .rodata segment + 0x4.
 /// If the 'name_length' element is greater than 0, 'name' will hold the module name.
 typedef struct {
@@ -136,6 +138,7 @@ typedef struct {
     char *nso_filename;                     ///< Pointer to the NSO filename in the Program NCA FS section #0.
     NsoHeader nso_header;                   ///< NSO header.
     char *module_name;                      ///< Pointer to a dynamically allocated buffer that holds the NSO module name, if available. Otherwise, this is set to NULL.
+    NsoNnSdkVersion *nnsdk_version;         ///< Pointer to a dynamically allocated buffer that holds the nnSdk version info, if available. Otherwise, this is set to NULL.
     char *module_info_name;                 ///< Pointer to a dynamically allocated buffer that holds the .rodata module info module name, if available. Otherwise, this is set to NULL.
     char *rodata_api_info_section;          ///< Pointer to a dynamically allocated buffer that holds the .rodata API info section data, if available. Otherwise, this is set to NULL.
                                             ///< Middleware and GuidelineApi entries are retrieved from this section.
@@ -155,6 +158,7 @@ NX_INLINE void nsoFreeContext(NsoContext *nso_ctx)
 {
     if (!nso_ctx) return;
     if (nso_ctx->module_name) free(nso_ctx->module_name);
+    if (nso_ctx->nnsdk_version) free(nso_ctx->nnsdk_version);
     if (nso_ctx->module_info_name) free(nso_ctx->module_info_name);
     if (nso_ctx->rodata_api_info_section) free(nso_ctx->rodata_api_info_section);
     if (nso_ctx->rodata_dynstr_section) free(nso_ctx->rodata_dynstr_section);

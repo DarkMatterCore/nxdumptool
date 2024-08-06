@@ -2810,13 +2810,13 @@ static bool saveGameCardUid(void *userdata)
         goto end;
     }
 
-    crc = crc32Calculate(gc_security_information.specific_data.card_uid, sizeof(gc_security_information.specific_data.card_uid));
+    crc = crc32Calculate(&(gc_security_information.specific_data.card_uid), sizeof(gc_security_information.specific_data.card_uid));
     snprintf(path, MAX_ELEMENTS(path), " (Card UID) (%08X).bin", crc);
 
     filename = generateOutputGameCardFileName("Gamecard", path, true);
     if (!filename) goto end;
 
-    if (!saveFileData(filename, gc_security_information.specific_data.card_uid, sizeof(gc_security_information.specific_data.card_uid))) goto end;
+    if (!saveFileData(filename, &(gc_security_information.specific_data.card_uid), sizeof(gc_security_information.specific_data.card_uid))) goto end;
 
     consolePrint("successfully saved gamecard uid as \"%s\"\n", filename);
     success = true;

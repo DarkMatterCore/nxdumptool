@@ -94,16 +94,44 @@ typedef struct {
 
 NXDT_ASSERT(GameCardKeyArea, 0x1000);
 
+typedef enum {
+    GameCardUidMakerCode_MegaChips = 0,
+    GameCardUidMakerCode_Lapis     = 1,
+    GameCardUidMakerCode_Unknown   = 2,
+    GameCardUidMakerCode_Count     = 3  ///< Total values supported by this enum.
+} GameCardUidMakerCode;
+
+typedef enum {
+    GameCardUidCardType_Rom          = 0,
+    GameCardUidCardType_WritableDev  = 0xFE,
+    GameCardUidCardType_WritableProd = 0xFF,
+    GameCardUidCardType_Count        = 3        ///< Total values supported by this enum.
+} GameCardUidCardType;
+
+typedef struct {
+    u8 maker_code;          ///< GameCardUidMakerCode.
+    u8 version;
+    u8 card_type;           ///< GameCardUidCardType.
+    u8 unique_data[0x9];
+    u32 random;
+    u8 platform_flag;
+    u8 reserved[0xB];
+    FsCardId1 card_id_1;    ///< Are we sure about this?
+    u8 mac[0x20];
+} GameCardUid;
+
+NXDT_ASSERT(GameCardUid, 0x40);
+
 /// Plaintext area. Dumped from FS program memory.
 /// Overall structure may change with each new LAFW version.
 typedef struct {
-    u32 asic_security_mode;     ///< Determines how the Lotus ASIC initialised the gamecard security mode. Usually 0xFFFFFFF9.
-    u32 asic_status;            ///< Bitmask of the internal gamecard interface status. Usually 0x20000000.
+    u32 asic_security_mode; ///< Determines how the Lotus ASIC initialised the gamecard security mode. Usually 0xFFFFFFF9.
+    u32 asic_status;        ///< Bitmask of the internal gamecard interface status. Usually 0x20000000.
     FsCardId1 card_id1;
     FsCardId2 card_id2;
-    u8 card_uid[0x40];
+    GameCardUid card_uid;
     u8 reserved[0x190];
-    u8 asic_session_hash[0x20]; ///< Changes with each gamecard (re)insertion.
+    u8 mac[0x20];           ///< Changes with each gamecard (re)insertion.
 } GameCardSpecificData;
 
 NXDT_ASSERT(GameCardSpecificData, 0x200);

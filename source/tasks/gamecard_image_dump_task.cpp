@@ -97,6 +97,9 @@ namespace nxdt::tasks
             /* Push progress onto the class. */
             progress.xfer_size += sizeof(GameCardKeyArea);
             this->PublishProgress(progress);
+
+            /* Update gamecard image size. */
+            gc_img_size -= sizeof(GameCardKeyArea);
         }
 
         /* Allocate memory buffer for the dump process. */

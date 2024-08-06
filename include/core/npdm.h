@@ -61,7 +61,8 @@ typedef struct {
     u8 process_address_space              : 3;  ///< NpdmProcessAddressSpace.
     u8 optimize_memory_allocation         : 1;
     u8 disable_device_address_space_merge : 1;
-    u8 reserved                           : 2;
+    u8 enable_alias_region_extra_size     : 1;
+    u8 reserved                           : 1;
 } NpdmMetaFlags;
 
 NXDT_ASSERT(NpdmMetaFlags, 0x1);

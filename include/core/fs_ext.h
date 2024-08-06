@@ -84,6 +84,15 @@ typedef struct {
 NXDT_ASSERT(FsCardId1, 0x4);
 
 typedef enum {
+    FsCardId2CardSecurityNumber_Number0 = 0,
+    FsCardId2CardSecurityNumber_Number1 = 1,
+    FsCardId2CardSecurityNumber_Number2 = 2,
+    FsCardId2CardSecurityNumber_Number3 = 3,
+    FsCardId2CardSecurityNumber_Number4 = 4,
+    FsCardId2CardSecurityNumber_Count   = 5     ///< Total values supported by this enum.
+} FsCardId2CardSecurityNumber;
+
+typedef enum {
     FsCardId2CardType_Rom            = 0,
     FsCardId2CardType_WritableDevT1  = 1,
     FsCardId2CardType_WritableProdT1 = 2,
@@ -93,9 +102,9 @@ typedef enum {
 } FsCardId2CardType;
 
 typedef struct {
-    u8 sel_t1_key;      ///< Matches sel_t1_key value from GameCardHeader (usually 0x02).
-    u8 card_type;       ///< FsCardId2CardType.
-    u8 reserved[0x2];   ///< Usually filled with zeroes.
+    u8 card_security_number;    ///< FsCardId2CardSecurityNumber.
+    u8 card_type;               ///< FsCardId2CardType.
+    u8 reserved[0x2];           ///< Usually filled with zeroes.
 } FsCardId2;
 
 NXDT_ASSERT(FsCardId2, 0x4);
