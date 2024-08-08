@@ -89,17 +89,20 @@ typedef struct {
 NXDT_ASSERT(NsoHeader, 0x100);
 
 /// Placed at the very start of the decompressed .text segment.
+/// All offsets are relative to the start of this header, but they only apply to uncompressed + contiguous NSO segments.
 typedef struct {
-    u32 version;        ///< Usually set to 0 or a branch instruction (0x14000002). Set to 1 or 0x14000003 if a NsoNnSdkVersion block is available.
-    s32 mod_offset;     ///< NsoModHeader block offset (relative to the start of this header). Almost always set to 0x8 (the size of this struct).
+    u32 version;                ///< Usually set to 0 or a branch instruction (0x14000002). Set to 1 or 0x14000003 if a NsoNnSdkVersion block is available.
+    s32 mod_offset;             ///< NsoModHeader block offset. Almost always set to 0x8 (the size of this struct), but it could also reference another segment (e.g. .rodata).
+    s32 nnsdk_version_offset;   ///< NsoNnSdkVersion block offset. Only valid if version is set to 1 or 0x14000003.
+    u8 reserved[0x4];
 } NsoModStart;
 
-NXDT_ASSERT(NsoModStart, 0x8);
+NXDT_ASSERT(NsoModStart, 0x10);
 
 /// This is essentially a replacement for the PT_DYNAMIC program header available in ELF binaries.
 /// All offsets are signed 32-bit values relative to the start of this header.
 /// This is usually placed at the start of the decompressed .text segment, right after a NsoModStart block.
-/// However, in some NSOs, it can instead be placed at the start of the decompressed .rodata segment, right after its NsoModuleInfo block.
+/// However, in some NSOs, it can instead be placed at the start of the decompressed .rodata segment, right after its NsoRoDataStart block.
 /// In these cases, the 'mod_offset' value from the NsoModStart block will point to an offset within the .rodata segment.
 typedef struct  {
     u32 magic;                      ///< "MOD0".
@@ -123,14 +126,24 @@ typedef struct {
 
 NXDT_ASSERT(NsoNnSdkVersion, 0xC);
 
-/// Placed at the start of the decompressed .rodata segment + 0x4.
-/// If the 'name_length' element is greater than 0, 'name' will hold the module name.
+/// If 'zero' is 0 and 'path_length' is greater than 0, 'path' will hold the module path.
 typedef struct {
-    u32 name_length;
-    char name[];
-} NsoModuleInfo;
+    u32 zero;           ///< Always 0.
+    u32 path_length;
+    char path[];
+} NsoModulePath;
 
-NXDT_ASSERT(NsoModuleInfo, 0x4);
+NXDT_ASSERT(NsoModulePath, 0x8);
+
+/// Placed at the very start of the decompressed .rodata segment.
+typedef struct {
+    union {
+        u64 data_segment_offset;    ///< Deprecated.
+        NsoModulePath module_path;
+    };
+} NsoRoDataStart;
+
+NXDT_ASSERT(NsoRoDataStart, 0x8);
 
 typedef struct {
     PartitionFileSystemContext *pfs_ctx;    ///< PartitionFileSystemContext for the Program NCA FS section #0, which is where this NSO is stored.
@@ -139,7 +152,7 @@ typedef struct {
     NsoHeader nso_header;                   ///< NSO header.
     char *module_name;                      ///< Pointer to a dynamically allocated buffer that holds the NSO module name, if available. Otherwise, this is set to NULL.
     NsoNnSdkVersion *nnsdk_version;         ///< Pointer to a dynamically allocated buffer that holds the nnSdk version info, if available. Otherwise, this is set to NULL.
-    char *module_info_name;                 ///< Pointer to a dynamically allocated buffer that holds the .rodata module info module name, if available. Otherwise, this is set to NULL.
+    char *module_path;                      ///< Pointer to a dynamically allocated buffer that holds the .rodata module path, if available. Otherwise, this is set to NULL.
     char *rodata_api_info_section;          ///< Pointer to a dynamically allocated buffer that holds the .rodata API info section data, if available. Otherwise, this is set to NULL.
                                             ///< Middleware and GuidelineApi entries are retrieved from this section.
     u64 rodata_api_info_section_size;       ///< .rodata API info section size, if available. Otherwise, this is set to 0. Kept here for convenience - this is part of 'nso_header'.
@@ -159,7 +172,7 @@ NX_INLINE void nsoFreeContext(NsoContext *nso_ctx)
     if (!nso_ctx) return;
     if (nso_ctx->module_name) free(nso_ctx->module_name);
     if (nso_ctx->nnsdk_version) free(nso_ctx->nnsdk_version);
-    if (nso_ctx->module_info_name) free(nso_ctx->module_info_name);
+    if (nso_ctx->module_path) free(nso_ctx->module_path);
     if (nso_ctx->rodata_api_info_section) free(nso_ctx->rodata_api_info_section);
     if (nso_ctx->rodata_dynstr_section) free(nso_ctx->rodata_dynstr_section);
     if (nso_ctx->rodata_dynsym_section) free(nso_ctx->rodata_dynsym_section);

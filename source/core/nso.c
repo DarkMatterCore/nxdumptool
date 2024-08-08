@@ -26,7 +26,7 @@
 
 typedef enum {
     NsoSegmentType_Text   = 0,
-    NsoSegmentType_Rodata = 1,
+    NsoSegmentType_RoData = 1,
     NsoSegmentType_Data   = 2,
     NsoSegmentType_Count  = 3   ///< Total values supported by this enum.
 } NsoSegmentType;
@@ -43,7 +43,7 @@ typedef struct {
 #if LOG_LEVEL < LOG_LEVEL_NONE
 static const char *g_nsoSegmentTypeNames[NsoSegmentType_Count] = {
     [NsoSegmentType_Text]   = ".text",
-    [NsoSegmentType_Rodata] = ".rodata",
+    [NsoSegmentType_RoData] = ".rodata",
     [NsoSegmentType_Data]   = ".data",
 };
 #endif
@@ -55,17 +55,18 @@ static bool nsoGetModuleName(NsoContext *nso_ctx);
 static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, u8 type);
 NX_INLINE void nsoFreeSegment(NsoSegment *segment);
 
-NX_INLINE bool nsoIsNnSdkVersionWithinSegment(const NsoModStart *mod_start, const NsoSegment *segment);
-static bool nsoGetNnSdkVersion(NsoContext *nso_ctx, const NsoModStart *mod_start, const NsoSegment *segment);
+NX_INLINE bool nsoIsNnSdkVersionWithinSegment(const NsoModStart *mod_start, const NsoSegment *segment, u32 nnsdk_version_memory_offset);
+static bool nsoGetNnSdkVersion(NsoContext *nso_ctx, const NsoModStart *mod_start, const NsoSegment *segment, u32 nnsdk_version_memory_offset);
 
-static bool nsoGetModuleInfoName(NsoContext *nso_ctx, const NsoSegment *segment);
+static bool nsoGetModulePath(NsoContext *nso_ctx, const NsoSegment *segment);
 
-static bool nsoGetSectionFromRodataSegment(NsoContext *nso_ctx, const NsoSectionInfo *section_info, const NsoSegment *segment, u8 **out_ptr);
+static bool nsoGetSectionFromRoDataSegment(NsoContext *nso_ctx, const NsoSectionInfo *section_info, const NsoSegment *segment, u8 **out_ptr);
 
 bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, PartitionFileSystemEntry *pfs_entry)
 {
     NsoModStart mod_start = {0};
     NsoSegment segment = {0};
+    u32 nnsdk_version_memory_offset = 0;
     bool success = false, dump_nso_header = false, read_nnsdk_version = false;
 
     if (!out || !pfs_ctx || !ncaStorageIsValidContext(&(pfs_ctx->storage_ctx)) || !pfs_ctx->nca_fs_ctx->nca_ctx || \
@@ -124,7 +125,7 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
 
 #define NSO_GET_RODATA_SECTION(name) \
     do { \
-        if (!nsoGetSectionFromRodataSegment(out, &(out->nso_header.name##_section_info), &segment, (u8**)&(out->rodata_##name##_section))) goto end; \
+        if (!nsoGetSectionFromRoDataSegment(out, &(out->nso_header.name##_section_info), &segment, (u8**)&(out->rodata_##name##_section))) goto end; \
         out->rodata_##name##_section_size = out->nso_header.name##_section_info.size; \
     } while(0)
 
@@ -154,32 +155,37 @@ bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, 
     /* Get NsoModStart block. */
     memcpy(&mod_start, segment.data, sizeof(NsoModStart));
 
-    /* Check if a nnSdk version struct exists within this NRO. */
-    read_nnsdk_version = ((mod_start.version & 1) != 0);
+    /* Check if a NsoNnSdkVersion block exists within this NRO. */
+    read_nnsdk_version = ((mod_start.version & 1) != 0 && mod_start.nnsdk_version_offset >= (s32)sizeof(NsoModStart));
+    if (read_nnsdk_version)
+    {
+        /* Calculate memory offset for the NsoNnSdkVersion block. */
+        nnsdk_version_memory_offset = (segment.info.memory_offset + (u32)mod_start.nnsdk_version_offset);
 
-    /* Check if the nnSdk version struct is located within the .text segment. */
-    /* If so, we'll retrieve it immediately. */
-    if (read_nnsdk_version && nsoIsNnSdkVersionWithinSegment(&mod_start, &segment) && !nsoGetNnSdkVersion(out, &mod_start, &segment)) goto end;
+        /* Check if the NsoNnSdkVersion block is located within the .text segment. */
+        /* If so, we'll retrieve it immediately. */
+        if (nsoIsNnSdkVersionWithinSegment(&mod_start, &segment, nnsdk_version_memory_offset) && !nsoGetNnSdkVersion(out, &mod_start, &segment, nnsdk_version_memory_offset)) goto end;
+    }
 
     /* Get .rodata segment. */
-    if (!nsoGetSegment(out, &segment, NsoSegmentType_Rodata)) goto end;
+    if (!nsoGetSegment(out, &segment, NsoSegmentType_RoData)) goto end;
 
-    /* Check if we didn't read the nnSdk version struct from the .text segment. */
+    /* Check if we didn't read the NsoNnSdkVersion block from the .text segment. */
     if (read_nnsdk_version && !out->nnsdk_version)
     {
-        /* Check if the nnSdk version struct is located within the .rodata segment. */
-        if (!nsoIsNnSdkVersionWithinSegment(&mod_start, &segment))
+        /* Check if the NsoNnSdkVersion block is located within the .rodata segment. */
+        if (!nsoIsNnSdkVersionWithinSegment(&mod_start, &segment, nnsdk_version_memory_offset))
         {
             LOG_MSG_ERROR("nnSdk version struct not located within .text or .rodata segments in NSO \"%s\".", out->nso_filename);
             goto end;
         }
 
-        /* Retrieve nnSdk version struct data from the .rodata segment. */
-        if (!nsoGetNnSdkVersion(out, &mod_start, &segment)) goto end;
+        /* Retrieve NsoNnSdkVersion block from the .rodata segment. */
+        if (!nsoGetNnSdkVersion(out, &mod_start, &segment, nnsdk_version_memory_offset)) goto end;
     }
 
-    /* Get module info name from the .rodata segment. */
-    if (!nsoGetModuleInfoName(out, &segment)) goto end;
+    /* Get module path from the .rodata segment. */
+    if (!nsoGetModulePath(out, &segment)) goto end;
 
     /* Get sections from the .rodata segment. */
     NSO_GET_RODATA_SECTION(api_info);
@@ -238,22 +244,22 @@ static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, u8 type)
     const char *segment_name = g_nsoSegmentTypeNames[type];
 
     const NsoSegmentInfo *segment_info = (type == NsoSegmentType_Text ? &(nso_ctx->nso_header.text_segment_info) : \
-                                         (type == NsoSegmentType_Rodata ? &(nso_ctx->nso_header.rodata_segment_info) : &(nso_ctx->nso_header.data_segment_info)));
+                                         (type == NsoSegmentType_RoData ? &(nso_ctx->nso_header.rodata_segment_info) : &(nso_ctx->nso_header.data_segment_info)));
 
     u32 segment_file_size = (type == NsoSegmentType_Text ? nso_ctx->nso_header.text_file_size : \
-                            (type == NsoSegmentType_Rodata ? nso_ctx->nso_header.rodata_file_size : nso_ctx->nso_header.data_file_size));
+                            (type == NsoSegmentType_RoData ? nso_ctx->nso_header.rodata_file_size : nso_ctx->nso_header.data_file_size));
 
     const u8 *segment_hash = (type == NsoSegmentType_Text ? nso_ctx->nso_header.text_segment_hash : \
-                             (type == NsoSegmentType_Rodata ? nso_ctx->nso_header.rodata_segment_hash : nso_ctx->nso_header.data_segment_hash));
+                             (type == NsoSegmentType_RoData ? nso_ctx->nso_header.rodata_segment_hash : nso_ctx->nso_header.data_segment_hash));
 
     int lz4_res = 0;
     bool compressed = (nso_ctx->nso_header.flags & BIT(type)), verify = (nso_ctx->nso_header.flags & BIT(type + 3));
 
     u8 *buf = NULL;
-    u64 buf_size = (compressed ? LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(segment_info->size) : segment_info->size);
+    u32 buf_size = (compressed ? LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(segment_info->size) : segment_info->size);
 
     u8 *read_ptr = NULL;
-    u64 read_size = (compressed ? segment_file_size : segment_info->size);
+    u32 read_size = (compressed ? segment_file_size : segment_info->size);
 
     u8 hash[SHA256_HASH_SIZE] = {0};
 
@@ -265,7 +271,7 @@ static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, u8 type)
     /* Allocate memory for the segment buffer. */
     if (!(buf = calloc(buf_size, sizeof(u8))))
     {
-        LOG_MSG_ERROR("Failed to allocate 0x%lX bytes for the %s segment in NSO \"%s\"!", buf_size, segment_name, nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to allocate 0x%X bytes for the %s segment in NSO \"%s\"!", buf_size, segment_name, nso_ctx->nso_filename);
         return NULL;
     }
 
@@ -317,13 +323,13 @@ NX_INLINE void nsoFreeSegment(NsoSegment *segment)
     memset(segment, 0, sizeof(NsoSegment));
 }
 
-NX_INLINE bool nsoIsNnSdkVersionWithinSegment(const NsoModStart *mod_start, const NsoSegment *segment)
+NX_INLINE bool nsoIsNnSdkVersionWithinSegment(const NsoModStart *mod_start, const NsoSegment *segment, u32 nnsdk_version_memory_offset)
 {
-    return (mod_start && segment && mod_start->mod_offset >= (s32)segment->info.memory_offset && \
-            (mod_start->mod_offset + (s32)sizeof(NsoModHeader) + (s32)sizeof(NsoNnSdkVersion)) <= (s32)(segment->info.memory_offset + segment->info.size));
+    return (mod_start && segment && nnsdk_version_memory_offset >= segment->info.memory_offset && \
+            (nnsdk_version_memory_offset + sizeof(NsoNnSdkVersion)) <= (segment->info.memory_offset + segment->info.size));
 }
 
-static bool nsoGetNnSdkVersion(NsoContext *nso_ctx, const NsoModStart *mod_start, const NsoSegment *segment)
+static bool nsoGetNnSdkVersion(NsoContext *nso_ctx, const NsoModStart *mod_start, const NsoSegment *segment, u32 nnsdk_version_memory_offset)
 {
     if (!nso_ctx || !mod_start || !segment || !segment->data)
     {
@@ -331,19 +337,18 @@ static bool nsoGetNnSdkVersion(NsoContext *nso_ctx, const NsoModStart *mod_start
         return false;
     }
 
-    /* Return immediately if the nnSdk struct has already been retrieved. */
-    if (nso_ctx->nnsdk_version) return 0;
+    /* Return immediately if the NsoNnSdkVersion block has already been retrieved. */
+    if (nso_ctx->nnsdk_version) return true;
 
-    /* Calculate virtual offset for the nnSdk version struct and check if it is within range. */
-    u32 nnsdk_ver_virt_offset = (u32)(mod_start->mod_offset + (s32)sizeof(NsoModHeader));
-    if (mod_start->mod_offset < (s32)segment->info.memory_offset || (nnsdk_ver_virt_offset + sizeof(NsoNnSdkVersion)) > (segment->info.memory_offset + segment->info.size))
+    /* Make sure we're targetting the right NSO segment. */
+    if (!nsoIsNnSdkVersionWithinSegment(mod_start, segment, nnsdk_version_memory_offset))
     {
         LOG_MSG_ERROR("nnSdk version struct isn't located within %s segment in NSO \"%s\"! ([0x%X, 0x%X] not within [0x%X, 0x%X]).", segment->name, nso_ctx->nso_filename, \
-                      mod_start->mod_offset, nnsdk_ver_virt_offset + (u32)sizeof(NsoNnSdkVersion), segment->info.memory_offset, segment->info.memory_offset + segment->info.size);
+                      nnsdk_version_memory_offset, nnsdk_version_memory_offset + (u32)sizeof(NsoNnSdkVersion), segment->info.memory_offset, segment->info.memory_offset + segment->info.size);
         return false;
     }
 
-    /* Allocate memory for the nnSdk version struct. */
+    /* Allocate memory for the NsoNnSdkVersion block. */
     nso_ctx->nnsdk_version = malloc(sizeof(NsoNnSdkVersion));
     if (!nso_ctx->nnsdk_version)
     {
@@ -351,45 +356,49 @@ static bool nsoGetNnSdkVersion(NsoContext *nso_ctx, const NsoModStart *mod_start
         return false;
     }
 
-    /* Calculate segment-relative offset for the nnSdk version struct and copy its data. */
-    u32 nnsdk_ver_phys_offset = (nnsdk_ver_virt_offset - segment->info.memory_offset);
-    memcpy(nso_ctx->nnsdk_version, segment->data + nnsdk_ver_phys_offset, sizeof(NsoNnSdkVersion));
+    /* Calculate segment-relative offset for the NsoNnSdkVersion block and copy its data. */
+    u32 nnsdk_version_segment_offset = (nnsdk_version_memory_offset - segment->info.memory_offset);
+    memcpy(nso_ctx->nnsdk_version, segment->data + nnsdk_version_segment_offset, sizeof(NsoNnSdkVersion));
 
     LOG_MSG_DEBUG("nnSdk version (NSO \"%s\", %s segment, virtual offset 0x%X, physical offset 0x%X): %u.%u.%u.", nso_ctx->nso_filename, segment->name, \
-                  nnsdk_ver_virt_offset, nnsdk_ver_phys_offset, nso_ctx->nnsdk_version->major, nso_ctx->nnsdk_version->minor, nso_ctx->nnsdk_version->micro);
+                  nnsdk_version_memory_offset, nnsdk_version_segment_offset, nso_ctx->nnsdk_version->major, nso_ctx->nnsdk_version->minor, nso_ctx->nnsdk_version->micro);
 
     return true;
 }
 
-static bool nsoGetModuleInfoName(NsoContext *nso_ctx, const NsoSegment *segment)
+static bool nsoGetModulePath(NsoContext *nso_ctx, const NsoSegment *segment)
 {
-    if (!nso_ctx || !segment || segment->type != NsoSegmentType_Rodata || !segment->data)
+    if (!nso_ctx || !segment || segment->type != NsoSegmentType_RoData || !segment->data)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
-    const NsoModuleInfo *module_info = (const NsoModuleInfo*)(segment->data + 0x4);
-    if (!module_info->name_length || !module_info->name[0]) return true;
+    /* Get data from the start of the .rodata segment. */
+    const NsoRoDataStart *rodata_start = (const NsoRoDataStart*)segment->data;
 
-    /* Allocate memory for the module info name. */
-    nso_ctx->module_info_name = calloc(module_info->name_length + 1, sizeof(char));
-    if (!nso_ctx->module_info_name)
+    /* Perform sanity checks. */
+    if ((nso_ctx->nso_header.text_segment_info.memory_offset + rodata_start->data_segment_offset) == nso_ctx->nso_header.data_segment_info.memory_offset || \
+        rodata_start->module_path.zero != 0 || !rodata_start->module_path.path_length || !rodata_start->module_path.path[0]) return true;
+
+    /* Allocate memory for the module path string. */
+    nso_ctx->module_path = calloc(rodata_start->module_path.path_length + 1, sizeof(char));
+    if (!nso_ctx->module_path)
     {
-        LOG_MSG_ERROR("Failed to allocate memory for NSO \"%s\" module info name!", nso_ctx->nso_filename);
+        LOG_MSG_ERROR("Failed to allocate memory for NSO \"%s\" module path!", nso_ctx->nso_filename);
         return false;
     }
 
-    /* Copy module info name. */
-    sprintf(nso_ctx->module_info_name, "%.*s", (int)module_info->name_length, module_info->name);
-    LOG_MSG_DEBUG("Module info name (NSO \"%s\"): \"%s\".", nso_ctx->nso_filename, nso_ctx->module_info_name);
+    /* Copy module path string. */
+    sprintf(nso_ctx->module_path, "%.*s", (int)rodata_start->module_path.path_length, rodata_start->module_path.path);
+    LOG_MSG_DEBUG("Module path (NSO \"%s\"): \"%s\".", nso_ctx->nso_filename, nso_ctx->module_path);
 
     return true;
 }
 
-static bool nsoGetSectionFromRodataSegment(NsoContext *nso_ctx, const NsoSectionInfo *section_info, const NsoSegment *segment, u8 **out_ptr)
+static bool nsoGetSectionFromRoDataSegment(NsoContext *nso_ctx, const NsoSectionInfo *section_info, const NsoSegment *segment, u8 **out_ptr)
 {
-    if (!nso_ctx || !section_info || !segment || segment->type != NsoSegmentType_Rodata || !segment->data || !out_ptr)
+    if (!nso_ctx || !section_info || !segment || segment->type != NsoSegmentType_RoData || !segment->data || !out_ptr)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;

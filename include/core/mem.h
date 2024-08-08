@@ -32,9 +32,9 @@ extern "C" {
 typedef enum {
     MemoryProgramSegmentType_None   = 0,
     MemoryProgramSegmentType_Text   = BIT(0),
-    MemoryProgramSegmentType_Rodata = BIT(1),
+    MemoryProgramSegmentType_RoData = BIT(1),
     MemoryProgramSegmentType_Data   = BIT(2),
-    MemoryProgramSegmentType_All    = (MemoryProgramSegmentType_Data | MemoryProgramSegmentType_Rodata | MemoryProgramSegmentType_Text),
+    MemoryProgramSegmentType_All    = (MemoryProgramSegmentType_Data | MemoryProgramSegmentType_RoData | MemoryProgramSegmentType_Text),
     MemoryProgramSegmentType_Limit  = (MemoryProgramSegmentType_All + 1)                                                                    ///< Placed here for convenience.
 } MemoryProgramSegmentType;
 
