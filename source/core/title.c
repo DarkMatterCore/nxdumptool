@@ -65,6 +65,8 @@ static u32 g_filteredSystemMetadataCount = 0, g_filteredUserMetadataCount = 0;
 static TitleGameCardApplicationMetadata *g_titleGameCardApplicationMetadata = NULL;
 static u32 g_titleGameCardApplicationMetadataCount = 0;
 
+static char *g_titleGameCardFileNames[TitleNamingConvention_Count] = {NULL};
+
 static TitleStorage g_titleStorage[TITLE_STORAGE_COUNT] = {0};
 
 static TitleInfo **g_orphanTitleInfo = NULL;
@@ -577,6 +579,10 @@ static void titleGameCardInfoThreadFunc(void *arg);
 
 static bool titleRefreshGameCardTitleInfo(void);
 
+NX_INLINE void titleFreeGameCardFileNames(void);
+NX_INLINE void titleGenerateGameCardFileNames(void);
+static char *_titleGenerateGameCardFileName(u8 naming_convention);
+
 static bool titleIsUserApplicationContentAvailable(u64 app_id);
 static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
 
@@ -1060,8 +1066,7 @@ bool titleIsGameCardInfoUpdated(void)
 char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 illegal_char_replace_type)
 {
     if (!title_info || (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || \
-        title_info->meta_key.type > NcmContentMetaType_DataPatch || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
-        (naming_convention == TitleNamingConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
+        title_info->meta_key.type > NcmContentMetaType_DataPatch || naming_convention >= TitleNamingConvention_Count || illegal_char_replace_type >= TitleFileNameIllegalCharReplaceType_Count)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
@@ -1114,101 +1119,23 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
 
     SCOPED_LOCK(&g_titleMutex)
     {
-        GameCardHeader gc_header = {0};
-        char app_name[0x300] = {0};
-        size_t cur_filename_len = 0, app_name_len = 0;
-        bool error = false;
-
-        if (!g_titleInterfaceInit || !g_titleGameCardAvailable || naming_convention > TitleNamingConvention_IdAndVersionOnly || \
-            (naming_convention == TitleNamingConvention_Full && illegal_char_replace_type > TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly))
+        if (!g_titleInterfaceInit || !g_titleGameCardAvailable || naming_convention >= TitleNamingConvention_Count || \
+            illegal_char_replace_type >= TitleFileNameIllegalCharReplaceType_Count || !g_titleGameCardFileNames[naming_convention])
         {
             LOG_MSG_ERROR("Invalid parameters!");
             break;
         }
 
-        LOG_MSG_DEBUG("Generating %s gamecard filename...", naming_convention == TitleNamingConvention_Full ? "full" : "ID and version");
-
-        /* Check if we don't have any gamecard application metadata records we can work with. */
-        /* This is especially true for Kiosk / Quest gamecards. */
-        if (!g_titleGameCardApplicationMetadata || !g_titleGameCardApplicationMetadataCount) goto fallback;
-
-        /* Loop through our gamecard application metadata entries. */
-        for(u32 i = 0; i < g_titleGameCardApplicationMetadataCount; i++)
+        /* Duplicate generated filename. */
+        filename = strdup(g_titleGameCardFileNames[naming_convention]);
+        if (!filename)
         {
-            const TitleGameCardApplicationMetadata *cur_gc_app_metadata = &(g_titleGameCardApplicationMetadata[i]);
-
-            /* Generate current user application name. */
-            *app_name = '\0';
-
-            if (naming_convention == TitleNamingConvention_Full)
-            {
-                if (cur_filename_len) strcat(app_name, " + ");
-
-                if (cur_gc_app_metadata->app_metadata && cur_gc_app_metadata->app_metadata->lang_entry.name[0])
-                {
-                    app_name_len = strlen(app_name);
-                    snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", cur_gc_app_metadata->app_metadata->lang_entry.name);
-
-                    /* Append display version string if the inserted gamecard holds a patch for the current user application. */
-                    if (cur_gc_app_metadata->has_patch && cur_gc_app_metadata->display_version[0])
-                    {
-                        app_name_len = strlen(app_name);
-                        snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", cur_gc_app_metadata->display_version);
-                    }
-
-                    if (illegal_char_replace_type) utilsReplaceIllegalCharacters(app_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
-                }
-
-                app_name_len = strlen(app_name);
-                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "[%016lX][v%u]", cur_gc_app_metadata->app_metadata->title_id, cur_gc_app_metadata->version.value);
-            } else
-            if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
-            {
-                if (cur_filename_len) strcat(app_name, "+");
-                app_name_len = strlen(app_name);
-                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%016lX_v%u", cur_gc_app_metadata->app_metadata->title_id, cur_gc_app_metadata->version.value);
-            }
-
-            /* Reallocate output buffer. */
-            app_name_len = strlen(app_name);
-
-            char *tmp_filename = realloc(filename, (cur_filename_len + app_name_len + 1) * sizeof(char));
-            if (!tmp_filename)
-            {
-                LOG_MSG_ERROR("Failed to reallocate filename buffer!");
-                if (filename) free(filename);
-                filename = NULL;
-                error = true;
-                break;
-            }
-
-            filename = tmp_filename;
-            tmp_filename = NULL;
-
-            /* Concatenate current user application name. */
-            filename[cur_filename_len] = '\0';
-            strcat(filename, app_name);
-            cur_filename_len += app_name_len;
+            LOG_MSG_ERROR("Failed to duplicate generated filename!");
+            break;
         }
 
-fallback:
-        if (!filename && !error)
-        {
-            LOG_MSG_ERROR("Error: the inserted gamecard doesn't hold any user applications!");
-
-            /* Fallback string if no applications can be found. */
-            sprintf(app_name, "gamecard");
-
-            if (gamecardGetHeader(&gc_header))
-            {
-                strcat(app_name, "_");
-                cur_filename_len = strlen(app_name);
-                utilsGenerateHexString(app_name + cur_filename_len, sizeof(app_name) - cur_filename_len, gc_header.package_id, sizeof(gc_header.package_id), false);
-            }
-
-            filename = strdup(app_name);
-            if (!filename) LOG_MSG_ERROR("Failed to duplicate fallback filename!");
-        }
+        /* Replace illegal characters, if requested. */
+        if (illegal_char_replace_type) utilsReplaceIllegalCharacters(filename, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
     }
 
     return filename;
@@ -2491,19 +2418,22 @@ static void titleGameCardInfoThreadFunc(void *arg)
         {
             g_titleGameCardInfoUpdated = titleRefreshGameCardTitleInfo();
 
-            if (g_titleGameCardInfoUpdated)
-            {
-                /* Generate filtered user application metadata pointer array. */
-                titleGenerateFilteredApplicationMetadataPointerArray(false);
+            /* Generate gamecard application metadata array. */
+            titleGenerateGameCardApplicationMetadataArray();
 
-                /* Generate gamecard application metadata array. */
-                titleGenerateGameCardApplicationMetadataArray();
-            }
+            /* Generate gamecard file names. */
+            titleGenerateGameCardFileNames();
+
+            /* Generate filtered user application metadata pointer array. */
+            if (g_titleGameCardInfoUpdated) titleGenerateFilteredApplicationMetadataPointerArray(false);
         }
     }
 
     /* Update gamecard flags. */
     g_titleGameCardAvailable = g_titleGameCardInfoUpdated = false;
+
+    /* Free gamecard file names. */
+    titleFreeGameCardFileNames();
 
     threadExit();
 }
@@ -2647,6 +2577,127 @@ end:
     return success;
 }
 
+NX_INLINE void titleFreeGameCardFileNames(void)
+{
+    for(u8 i = 0; i < TitleNamingConvention_Count; i++)
+    {
+        if (g_titleGameCardFileNames[i])
+        {
+            free(g_titleGameCardFileNames[i]);
+            g_titleGameCardFileNames[i] = NULL;
+        }
+    }
+}
+
+NX_INLINE void titleGenerateGameCardFileNames(void)
+{
+    titleFreeGameCardFileNames();
+
+    if (g_titleGameCardAvailable)
+    {
+        for(u8 i = 0; i < TitleNamingConvention_Count; i++) g_titleGameCardFileNames[i] = _titleGenerateGameCardFileName(i);
+    }
+}
+
+static char *_titleGenerateGameCardFileName(u8 naming_convention)
+{
+    if (naming_convention >= TitleNamingConvention_Count)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
+
+    char *filename = NULL;
+    GameCardHeader gc_header = {0};
+    char app_name[0x300] = {0};
+    size_t cur_filename_len = 0, app_name_len = 0;
+    bool error = false;
+
+    LOG_MSG_DEBUG("Generating %s gamecard filename...", naming_convention == TitleNamingConvention_Full ? "full" : "ID and version");
+
+    /* Check if we don't have any gamecard application metadata records we can work with. */
+    /* This is especially true for Kiosk / Quest gamecards. */
+    if (!g_titleGameCardApplicationMetadata || !g_titleGameCardApplicationMetadataCount) goto fallback;
+
+    /* Loop through our gamecard application metadata entries. */
+    for(u32 i = 0; i < g_titleGameCardApplicationMetadataCount; i++)
+    {
+        const TitleGameCardApplicationMetadata *cur_gc_app_metadata = &(g_titleGameCardApplicationMetadata[i]);
+
+        /* Generate current user application name. */
+        *app_name = '\0';
+
+        if (naming_convention == TitleNamingConvention_Full)
+        {
+            if (cur_filename_len) strcat(app_name, " + ");
+
+            if (cur_gc_app_metadata->app_metadata && cur_gc_app_metadata->app_metadata->lang_entry.name[0])
+            {
+                app_name_len = strlen(app_name);
+                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", cur_gc_app_metadata->app_metadata->lang_entry.name);
+
+                /* Append display version string if the inserted gamecard holds a patch for the current user application. */
+                if (cur_gc_app_metadata->has_patch && cur_gc_app_metadata->display_version[0])
+                {
+                    app_name_len = strlen(app_name);
+                    snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", cur_gc_app_metadata->display_version);
+                }
+            }
+
+            app_name_len = strlen(app_name);
+            snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "[%016lX][v%u]", cur_gc_app_metadata->app_metadata->title_id, cur_gc_app_metadata->version.value);
+        } else
+        if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
+        {
+            if (cur_filename_len) strcat(app_name, "+");
+            app_name_len = strlen(app_name);
+            snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%016lX_v%u", cur_gc_app_metadata->app_metadata->title_id, cur_gc_app_metadata->version.value);
+        }
+
+        /* Reallocate output buffer. */
+        app_name_len = strlen(app_name);
+
+        char *tmp_filename = realloc(filename, (cur_filename_len + app_name_len + 1) * sizeof(char));
+        if (!tmp_filename)
+        {
+            LOG_MSG_ERROR("Failed to reallocate filename buffer!");
+            if (filename) free(filename);
+            filename = NULL;
+            error = true;
+            break;
+        }
+
+        filename = tmp_filename;
+        tmp_filename = NULL;
+
+        /* Concatenate current user application name. */
+        filename[cur_filename_len] = '\0';
+        strcat(filename, app_name);
+        cur_filename_len += app_name_len;
+    }
+
+fallback:
+    if (!filename && !error)
+    {
+        LOG_MSG_ERROR("Error: the inserted gamecard doesn't hold any user applications!");
+
+        /* Fallback string if no applications can be found. */
+        sprintf(app_name, "gamecard");
+
+        if (gamecardGetHeader(&gc_header))
+        {
+            strcat(app_name, "_");
+            cur_filename_len = strlen(app_name);
+            utilsGenerateHexString(app_name + cur_filename_len, sizeof(app_name) - cur_filename_len, gc_header.package_id, sizeof(gc_header.package_id), false);
+        }
+
+        filename = strdup(app_name);
+        if (!filename) LOG_MSG_ERROR("Failed to duplicate fallback filename!");
+    }
+
+    return filename;
+}
+
 static bool titleIsUserApplicationContentAvailable(u64 app_id)
 {
     if (!app_id) return false;
@@ -2704,7 +2755,7 @@ static TitleInfo *_titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id)
         if (out) break;
     }
 
-    if (!out) LOG_MSG_DEBUG("Unable to find title info entry with ID \"%016lX\" in %s.", title_id, titleGetNcmStorageIdName(storage_id));
+    if (!out && storage_id != NcmStorageId_BuiltInSystem) LOG_MSG_DEBUG("Unable to find title info entry with ID \"%016lX\" in %s.", title_id, titleGetNcmStorageIdName(storage_id));
 
     return out;
 }

@@ -35,18 +35,16 @@ typedef struct {
     u8 type;                ///< NsoSegmentType.
     const char *name;       ///< Pointer to a string that holds the segment name.
     NsoSegmentInfo info;    ///< Copied from the NSO header.
-    u8 *data;               ///< Dynamically allocated buffer with the decompressed segment data.
+    u8 *data;               ///< Dynamically allocated buffer for the decompressed segment data.
 } NsoSegment;
 
 /* Global variables. */
 
-#if LOG_LEVEL < LOG_LEVEL_NONE
 static const char *g_nsoSegmentTypeNames[NsoSegmentType_Count] = {
     [NsoSegmentType_Text]   = ".text",
     [NsoSegmentType_RoData] = ".rodata",
     [NsoSegmentType_Data]   = ".data",
 };
-#endif
 
 /* Function prototypes. */
 
