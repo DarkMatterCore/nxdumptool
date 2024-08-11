@@ -24,6 +24,7 @@
 #ifndef __NCA_H__
 #define __NCA_H__
 
+#include "hfs.h"
 #include "tik.h"
 
 #ifdef __cplusplus
@@ -33,9 +34,9 @@ extern "C" {
 #define NCA_FS_HEADER_COUNT                         4
 #define NCA_FULL_HEADER_LENGTH                      (sizeof(NcaHeader) + (sizeof(NcaFsHeader) * NCA_FS_HEADER_COUNT))
 
-#define NCA_NCA0_MAGIC                              0x4E434130                  /* "NCA0". */
-#define NCA_NCA2_MAGIC                              0x4E434132                  /* "NCA2". */
-#define NCA_NCA3_MAGIC                              0x4E434133                  /* "NCA3". */
+#define NCA_NCA0_MAGIC                              0x4E434130                      /* "NCA0". */
+#define NCA_NCA2_MAGIC                              0x4E434132                      /* "NCA2". */
+#define NCA_NCA3_MAGIC                              0x4E434133                      /* "NCA3". */
 
 #define NCA_KEY_AREA_KEY_COUNT                      0x10
 #define NCA_KEY_AREA_SIZE                           (NCA_KEY_AREA_KEY_COUNT * AES_128_KEY_SIZE)
@@ -45,12 +46,12 @@ extern "C" {
 
 #define NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT    5
 
-#define NCA_IVFC_MAGIC                              0x49564643                  /* "IVFC". */
+#define NCA_IVFC_MAGIC                              0x49564643                      /* "IVFC". */
 #define NCA_IVFC_MAX_LEVEL_COUNT                    7
 #define NCA_IVFC_LEVEL_COUNT                        (NCA_IVFC_MAX_LEVEL_COUNT - 1)
 #define NCA_IVFC_BLOCK_SIZE(x)                      (1U << (x))
 
-#define NCA_BKTR_MAGIC                              0x424B5452                  /* "BKTR". */
+#define NCA_BKTR_MAGIC                              0x424B5452                      /* "BKTR". */
 #define NCA_BKTR_VERSION                            1
 
 #define NCA_FS_SECTOR_SIZE                          0x200
@@ -58,7 +59,11 @@ extern "C" {
 
 #define NCA_AES_XTS_SECTOR_SIZE                     0x200
 
-#define NCA_SIGNATURE_AREA_SIZE                     0x200                       /* Signature is calculated starting at the NCA header magic word. */
+#define NCA_SIGNATURE_AREA_SIZE                     0x200                           /* Signature is calculated starting at the NCA header magic word. */
+
+#define NCA_CONTENT_ID_STR_LENGTH                   0x20                            /* Content ID. */
+#define NCA_HFS_REGULAR_NAME_LENGTH                 (NCA_CONTENT_ID_STR_LENGTH + 4) /* Content ID + ".nca". */
+#define NCA_HFS_META_NAME_LENGTH                    (NCA_CONTENT_ID_STR_LENGTH + 9) /* Content ID + ".cnmt.nca". */
 
 typedef enum {
     NcaDistributionType_Download = 0,
@@ -502,6 +507,15 @@ void ncaFreeCryptoBuffer(void);
 /// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
 bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik);
+
+/// Initializes a NCA context using a Hash FS context and a Hash FS file entry.
+/// If the NCA holds a populated Rights ID field, ticket data will need to be retrieved.
+/// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or used to read ticket data that has already been retrieved.
+/// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.
+/// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
+/// Since this function doesn't take in NcmContentMetaKey nor NcmContentInfo arguments, information such as title ID, title version, title type, content type and ID offset won't be available
+/// in the returned NCA context.
+bool ncaInitializeContextByHashFileSystemEntry(NcaContext *out, HashFileSystemContext *hfs_ctx, HashFileSystemEntry *hfs_entry, Ticket *tik);
 
 /// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
 /// Input offset must be relative to the start of the NCA content file.

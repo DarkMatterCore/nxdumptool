@@ -61,15 +61,15 @@ typedef struct {
 /// Add-on contents: the previous/next pointers reference sibling add-on contents.
 /// Add-on content patches: the previous/next pointers reference other patches with the same ID and/or other patches for sibling add-on contents.
 typedef struct _TitleInfo {
-    u8 storage_id;                                  ///< NcmStorageId.
-    NcmContentMetaKey meta_key;                     ///< Used with ncm calls.
-    Version version;                                ///< Holds the same value from meta_key.version.
-    u32 content_count;                              ///< Content info count.
-    NcmContentInfo *content_infos;                  ///< Content info entries from this title.
-    u64 size;                                       ///< Total title size.
-    char size_str[32];                              ///< Total title size string.
-    TitleApplicationMetadata *app_metadata;         ///< User application metadata.
-    struct _TitleInfo *previous, *next;             ///< Linked lists.
+    u8 storage_id;                          ///< NcmStorageId.
+    NcmContentMetaKey meta_key;             ///< Used with ncm calls.
+    Version version;                        ///< Holds the same value from meta_key.version.
+    u32 content_count;                      ///< Content info count.
+    NcmContentInfo *content_infos;          ///< Content info entries from this title.
+    u64 size;                               ///< Total title size.
+    char size_str[32];                      ///< Total title size string.
+    TitleApplicationMetadata *app_metadata; ///< User application metadata.
+    struct _TitleInfo *previous, *next;     ///< Linked lists.
 } TitleInfo;
 
 /// Used to deal with user applications stored in the eMMC, SD card and/or gamecard.

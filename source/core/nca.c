@@ -127,6 +127,8 @@ static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
 
 /* Function prototypes. */
 
+static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, Ticket *tik);
+
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info);
 
 static bool ncaReadDecryptedHeader(NcaContext *ctx);
@@ -178,7 +180,6 @@ void ncaFreeCryptoBuffer(void)
 bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik)
 {
     NcmContentStorage *ncm_storage = NULL;
-    u8 valid_fs_section_cnt = 0;
 
     if (!out || (storage_id != NcmStorageId_GameCard && !(ncm_storage = titleGetNcmStorageByStorageId(storage_id))) || \
         (storage_id == NcmStorageId_GameCard && (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count)) || \
@@ -192,23 +193,17 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     memset(out, 0, sizeof(NcaContext));
 
     /* Fill NCA context. */
-    out->storage_id = storage_id;
-    out->ncm_storage = (out->storage_id != NcmStorageId_GameCard ? ncm_storage : NULL);
-
     out->title_id = meta_key->id;
     out->title_version.value = meta_key->version;
     out->title_type = meta_key->type;
 
     memcpy(&(out->content_id), &(content_info->content_id), sizeof(NcmContentId));
-    utilsGenerateHexString(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c), false);
-
-    utilsGenerateHexString(out->hash_str, sizeof(out->hash_str), out->hash, sizeof(out->hash), false);  /* Placeholder, needs to be manually calculated. */
-
-    out->content_type = content_info->content_type;
-    out->id_offset = content_info->id_offset;
 
     ncmContentInfoSizeToU64(content_info, &(out->content_size));
     utilsGenerateFormattedSizeString((double)out->content_size, out->content_size_str, sizeof(out->content_size_str));
+
+    out->content_type = content_info->content_type;
+    out->id_offset = content_info->id_offset;
 
     if (out->content_size < NCA_FULL_HEADER_LENGTH)
     {
@@ -230,41 +225,50 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         }
     }
 
-    /* Read decrypted NCA header and NCA FS section headers. */
-    if (!ncaReadDecryptedHeader(out))
+    return ncaInitializeContextCommon(out, storage_id, ncm_storage, tik);
+}
+
+bool ncaInitializeContextByHashFileSystemEntry(NcaContext *out, HashFileSystemContext *hfs_ctx, HashFileSystemEntry *hfs_entry, Ticket *tik)
+{
+    if (!out || !hfsIsValidContext(hfs_ctx) || !hfs_entry || hfs_entry->size < NCA_FULL_HEADER_LENGTH)
     {
-        LOG_MSG_ERROR("Failed to read decrypted NCA \"%s\" header!", out->content_id_str);
+        LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
-    if (out->rights_id_available)
-    {
-        Ticket tmp_tik = {0};
-        Ticket *usable_tik = (tik ? tik : &tmp_tik);
+    const char *hfs_entry_name = NULL;
+    size_t hfs_entry_name_len = 0;
 
-        /* Retrieve ticket. */
-        /* This will return true if it has already been retrieved. */
-        if (tikRetrieveTicketByRightsId(usable_tik, &(out->header.rights_id), out->key_generation, out->storage_id == NcmStorageId_GameCard))
-        {
-            /* Copy decrypted titlekey. */
-            memcpy(out->titlekey, usable_tik->dec_titlekey, sizeof(usable_tik->dec_titlekey));
-            out->titlekey_retrieved = true;
-        } else {
-            /* We must proceed even if we have no ticket. The user may just want to copy a raw NCA. */
-            LOG_MSG_ERROR("Error retrieving ticket for NCA \"%s\"!", out->content_id_str);
-        }
+    /* Clear output NCA context. */
+    memset(out, 0, sizeof(NcaContext));
+
+    /* Get Hash FS entry name. */
+    hfs_entry_name = hfsGetEntryName(hfs_ctx, hfs_entry);
+    hfs_entry_name_len = (hfs_entry_name ? strlen(hfs_entry_name) : 0);
+
+    if (!hfs_entry_name || (hfs_entry_name_len != NCA_HFS_REGULAR_NAME_LENGTH && hfs_entry_name_len != NCA_HFS_META_NAME_LENGTH) || \
+        strcmp(hfs_entry_name + hfs_entry_name_len - 4, ".nca") != 0)
+    {
+        LOG_MSG_ERROR("Invalid HFS entry name!");
+        return false;
     }
 
-    /* Parse NCA FS sections. */
-    for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
+    /* Fill NCA context. */
+    utilsParseHexString(&(out->content_id), sizeof(out->content_id), hfs_entry_name, NCA_CONTENT_ID_STR_LENGTH);
+
+    out->content_size = hfs_entry->size;
+    utilsGenerateFormattedSizeString((double)out->content_size, out->content_size_str, sizeof(out->content_size_str));
+
+    if (hfs_entry_name_len == NCA_HFS_META_NAME_LENGTH) out->content_type = NcmContentType_Meta;    /* Set Meta as the content type if we know it. */
+
+    /* Retrieve gamecard NCA offset. */
+    if (!gamecardGetHashFileSystemEntryInfoByName(hfs_ctx->type, hfs_entry_name, &(out->gamecard_offset), NULL))
     {
-        /* Increase valid NCA FS section count if the FS section is valid. */
-        if (ncaInitializeFsSectionContext(out, i)) valid_fs_section_cnt++;
+        LOG_MSG_ERROR("Error retrieving offset for \"%s\" entry in %s hash FS partition!", hfs_entry_name, hfsGetPartitionNameString(hfs_ctx->type));
+        return false;
     }
 
-    if (!valid_fs_section_cnt) LOG_MSG_ERROR("Unable to identify any valid FS sections in NCA \"%s\"!", out->content_id_str);
-
-    return (valid_fs_section_cnt > 0);
+    return ncaInitializeContextCommon(out, NcmStorageId_GameCard, NULL, tik);
 }
 
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
@@ -572,6 +576,61 @@ const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
     }
 
     return str;
+}
+
+static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, Ticket *tik)
+{
+    if (!out || out->content_size < NCA_FULL_HEADER_LENGTH)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    u8 valid_fs_section_cnt = 0;
+
+    /* Fill NCA context. */
+    out->storage_id = storage_id;
+    out->ncm_storage = (out->storage_id != NcmStorageId_GameCard ? ncm_storage : NULL);
+
+    utilsGenerateHexString(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c), false);
+
+    utilsGenerateHexString(out->hash_str, sizeof(out->hash_str), out->hash, sizeof(out->hash), false);  /* Placeholder, needs to be manually calculated. */
+
+    /* Read decrypted NCA header and NCA FS section headers. */
+    if (!ncaReadDecryptedHeader(out))
+    {
+        LOG_MSG_ERROR("Failed to read decrypted NCA \"%s\" header!", out->content_id_str);
+        return false;
+    }
+
+    if (out->rights_id_available)
+    {
+        Ticket tmp_tik = {0};
+        Ticket *usable_tik = (tik ? tik : &tmp_tik);
+
+        /* Retrieve ticket. */
+        /* This will return true if it has already been retrieved. */
+        if (tikRetrieveTicketByRightsId(usable_tik, &(out->header.rights_id), out->key_generation, out->storage_id == NcmStorageId_GameCard))
+        {
+            /* Copy decrypted titlekey. */
+            memcpy(out->titlekey, usable_tik->dec_titlekey, sizeof(usable_tik->dec_titlekey));
+            out->titlekey_retrieved = true;
+        } else {
+            /* We must proceed even if we have no ticket. The user may just want to copy a raw NCA. */
+            LOG_MSG_ERROR("Error retrieving ticket for NCA \"%s\"!", out->content_id_str);
+        }
+    }
+
+    /* Parse NCA FS sections. */
+    for(u8 i = 0; i < NCA_FS_HEADER_COUNT; i++)
+    {
+        /* Increase valid NCA FS section count if the FS section is valid. */
+        if (ncaInitializeFsSectionContext(out, i)) valid_fs_section_cnt++;
+    }
+
+    if (!valid_fs_section_cnt) LOG_MSG_ERROR("Unable to identify any valid FS sections in NCA \"%s\"!", out->content_id_str);
+
+    return (valid_fs_section_cnt > 0);
 }
 
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info)
