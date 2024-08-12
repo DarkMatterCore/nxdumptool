@@ -289,7 +289,7 @@ bool cnmtVerifyContentHash(ContentMetaContext *cnmt_ctx, NcaContext *nca_ctx, co
         /* Check if we got a matching content ID. */
         packaged_content_info = &(cnmt_ctx->packaged_content_info[i]);
 
-        if (!memcmp(packaged_content_info->info.content_id.c, nca_ctx->content_id.c, sizeof(nca_ctx->content_id.c))) break;
+        if (!memcmp(&(packaged_content_info->info.content_id), &(nca_ctx->content_id), sizeof(NcmContentId))) break;
 
         packaged_content_info = NULL;
     }
@@ -465,7 +465,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
             /* Non-Meta NCAs: check if their content IDs are part of the packaged content info entries from the CNMT. */
             for(j = 0; j < cnmt_ctx->packaged_header->content_count; j++)
             {
-                if (!memcmp(cnmt_ctx->packaged_content_info[j].info.content_id.c, cur_nca_ctx->content_id.c, 0x10)) break;
+                if (!memcmp(&(cnmt_ctx->packaged_content_info[j].info.content_id), &(cur_nca_ctx->content_id), sizeof(NcmContentId))) break;
             }
 
             invalid_nca = (j >= cnmt_ctx->packaged_header->content_count);

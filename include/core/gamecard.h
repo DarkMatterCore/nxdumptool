@@ -172,8 +172,8 @@ typedef enum {
 
 typedef enum {
     GameCardFlags_None                             = 0,
-    GameCardFlags_AutoBoot                         = BIT(0),
-    GameCardFlags_HistoryErase                     = BIT(1),
+    GameCardFlags_AutoBoot                         = BIT(0),    ///< The gamecard is capable of autobooting if it's inserted into the console before powering it up.
+    GameCardFlags_HistoryErase                     = BIT(1),    ///< Inserting the gamecard won't add any permanent icons to the HOME menu.
     GameCardFlags_RepairTool                       = BIT(2),
     GameCardFlags_DifferentRegionCupToTerraDevice  = BIT(3),
     GameCardFlags_DifferentRegionCupToGlobalDevice = BIT(4),

@@ -127,7 +127,7 @@ static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
 
 /* Function prototypes. */
 
-static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, Ticket *tik);
+static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, u8 hfs_partition_type, NcmContentStorage *ncm_storage, Ticket *tik);
 
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info);
 
@@ -198,6 +198,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
     out->title_type = meta_key->type;
 
     memcpy(&(out->content_id), &(content_info->content_id), sizeof(NcmContentId));
+    utilsGenerateHexString(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c), false);
 
     ncmContentInfoSizeToU64(content_info, &(out->content_size));
     utilsGenerateFormattedSizeString((double)out->content_size, out->content_size_str, sizeof(out->content_size_str));
@@ -211,21 +212,7 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type,
         return false;
     }
 
-    if (out->storage_id == NcmStorageId_GameCard)
-    {
-        /* Generate gamecard NCA filename. */
-        char nca_filename[0x30] = {0};
-        sprintf(nca_filename, "%s.%s", out->content_id_str, out->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
-
-        /* Retrieve gamecard NCA offset. */
-        if (!gamecardGetHashFileSystemEntryInfoByName(hfs_partition_type, nca_filename, &(out->gamecard_offset), NULL))
-        {
-            LOG_MSG_ERROR("Error retrieving offset for \"%s\" entry in secure hash FS partition!", nca_filename);
-            return false;
-        }
-    }
-
-    return ncaInitializeContextCommon(out, storage_id, ncm_storage, tik);
+    return ncaInitializeContextCommon(out, storage_id, hfs_partition_type, ncm_storage, tik);
 }
 
 bool ncaInitializeContextByHashFileSystemEntry(NcaContext *out, HashFileSystemContext *hfs_ctx, HashFileSystemEntry *hfs_entry, Ticket *tik)
@@ -254,21 +241,16 @@ bool ncaInitializeContextByHashFileSystemEntry(NcaContext *out, HashFileSystemCo
     }
 
     /* Fill NCA context. */
-    utilsParseHexString(&(out->content_id), sizeof(out->content_id), hfs_entry_name, NCA_CONTENT_ID_STR_LENGTH);
+    utilsParseHexString(out->content_id.c, sizeof(out->content_id.c), hfs_entry_name, NCA_CONTENT_ID_STR_LENGTH);
+    snprintf(out->content_id_str, sizeof(out->content_id_str), "%.*s", NCA_CONTENT_ID_STR_LENGTH, hfs_entry_name);
+    //LOG_DATA_DEBUG(&(out->content_id), sizeof(NcmContentId), "Parsed ID (%s):", out->content_id_str);
 
     out->content_size = hfs_entry->size;
     utilsGenerateFormattedSizeString((double)out->content_size, out->content_size_str, sizeof(out->content_size_str));
 
     if (hfs_entry_name_len == NCA_HFS_META_NAME_LENGTH) out->content_type = NcmContentType_Meta;    /* Set Meta as the content type if we know it. */
 
-    /* Retrieve gamecard NCA offset. */
-    if (!gamecardGetHashFileSystemEntryInfoByName(hfs_ctx->type, hfs_entry_name, &(out->gamecard_offset), NULL))
-    {
-        LOG_MSG_ERROR("Error retrieving offset for \"%s\" entry in %s hash FS partition!", hfs_entry_name, hfsGetPartitionNameString(hfs_ctx->type));
-        return false;
-    }
-
-    return ncaInitializeContextCommon(out, NcmStorageId_GameCard, NULL, tik);
+    return ncaInitializeContextCommon(out, NcmStorageId_GameCard, hfs_ctx->type, NULL, tik);
 }
 
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset)
@@ -365,7 +347,7 @@ bool ncaGenerateHierarchicalSha256Patch(NcaFsSectionContext *ctx, const void *da
 void ncaWriteHierarchicalSha256PatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
     if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || \
-        memcmp(patch->content_id.c, ctx->content_id.c, sizeof(NcmContentId)) != 0 || !patch->hash_region_count || \
+        memcmp(&(patch->content_id), &(ctx->content_id), sizeof(NcmContentId)) != 0 || !patch->hash_region_count || \
         patch->hash_region_count > NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
 
     patch->written = true;
@@ -390,7 +372,7 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset)
 {
     if (!ctx || !*(ctx->content_id_str) || ctx->content_size < NCA_FULL_HEADER_LENGTH || !patch || patch->written || \
-        memcmp(patch->content_id.c, ctx->content_id.c, sizeof(NcmContentId)) != 0 || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
+        memcmp(&(patch->content_id), &(ctx->content_id), sizeof(NcmContentId)) != 0 || !buf || !buf_size || (buf_offset + buf_size) > ctx->content_size) return;
 
     patch->written = true;
 
@@ -578,9 +560,9 @@ const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
     return str;
 }
 
-static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, NcmContentStorage *ncm_storage, Ticket *tik)
+static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, u8 hfs_partition_type, NcmContentStorage *ncm_storage, Ticket *tik)
 {
-    if (!out || out->content_size < NCA_FULL_HEADER_LENGTH)
+    if (!out || !*(out->content_id_str) || out->content_size < NCA_FULL_HEADER_LENGTH || (storage_id != NcmStorageId_GameCard && !ncm_storage))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -592,9 +574,21 @@ static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, NcmConten
     out->storage_id = storage_id;
     out->ncm_storage = (out->storage_id != NcmStorageId_GameCard ? ncm_storage : NULL);
 
-    utilsGenerateHexString(out->content_id_str, sizeof(out->content_id_str), out->content_id.c, sizeof(out->content_id.c), false);
-
     utilsGenerateHexString(out->hash_str, sizeof(out->hash_str), out->hash, sizeof(out->hash), false);  /* Placeholder, needs to be manually calculated. */
+
+    if (storage_id == NcmStorageId_GameCard)
+    {
+        /* Generate gamecard NCA filename. */
+        char nca_filename[0x30] = {0};
+        sprintf(nca_filename, "%s.%s", out->content_id_str, out->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
+
+        /* Retrieve gamecard NCA offset. */
+        if (!gamecardGetHashFileSystemEntryInfoByName(hfs_partition_type, nca_filename, &(out->gamecard_offset), NULL))
+        {
+            LOG_MSG_ERROR("Error retrieving offset for \"%s\" entry in %s hash FS partition!", nca_filename, hfsGetPartitionNameString(hfs_partition_type));
+            return false;
+        }
+    }
 
     /* Read decrypted NCA header and NCA FS section headers. */
     if (!ncaReadDecryptedHeader(out))

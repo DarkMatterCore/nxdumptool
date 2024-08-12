@@ -35,14 +35,14 @@ static s64 g_logFileOffset = 0;
 static char *g_logBuffer = NULL;
 static size_t g_logBufferLength = 0;
 
-static const char *g_logStrFormat = "[%d-%02d-%02d %02d:%02d:%02d.%09lu] [%s] %s|%d|%s -> ";
+static const char *g_logStrFormat = "[%d-%02d-%02d %02d:%02d:%02d.%09lu] %s %s|%d|%s -> ";
 static const char *g_logSessionSeparator = "________________________________________________________________\r\n";
 
 static const char *g_logLevelNames[] = {
-    [LOG_LEVEL_DEBUG]   = "DEBUG",
-    [LOG_LEVEL_INFO]    = "INFO",
-    [LOG_LEVEL_WARNING] = "WARNING",
-    [LOG_LEVEL_ERROR]   = "ERROR"
+    [LOG_LEVEL_DEBUG]   = "[DEBUG]  ",
+    [LOG_LEVEL_INFO]    = "[INFO]   ",
+    [LOG_LEVEL_WARNING] = "[WARNING]",
+    [LOG_LEVEL_ERROR]   = "[ERROR]  "
 };
 
 /* Function prototypes. */
