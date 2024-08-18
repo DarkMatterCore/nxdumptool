@@ -91,7 +91,7 @@ bool bfttfInitialize(void)
                 TitleInfo *title_info = NULL;
 
                 /* Get title info. */
-                if (!(title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, font_info->title_id)))
+                if (!(title_info = titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, font_info->title_id)))
                 {
                     LOG_MSG_ERROR("Failed to get title info for %016lX!", font_info->title_id);
                     continue;

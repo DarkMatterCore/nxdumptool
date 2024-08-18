@@ -1264,7 +1264,7 @@ int main(int argc, char *argv[])
                             break;
                         default:
                             /* Get TitleInfo element on demand. */
-                            title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, app_metadata->title_id);
+                            title_info = titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, app_metadata->title_id);
                             break;
                     }
 

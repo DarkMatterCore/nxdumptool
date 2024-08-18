@@ -91,7 +91,7 @@ bool bfsarInitialize(void)
         }
 
         /* Get title info. */
-        if (!(title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, QLAUNCH_TID)))
+        if (!(title_info = titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, QLAUNCH_TID)))
         {
             LOG_MSG_ERROR("Failed to get title info for qlaunch!");
             break;

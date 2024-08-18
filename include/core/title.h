@@ -122,7 +122,7 @@ TitleGameCardApplicationMetadata *titleGetGameCardApplicationMetadataEntries(u32
 /// Returns a pointer to a dynamically allocated TitleInfo element with a matching storage ID and title ID. Returns NULL if an error occurs.
 /// If NcmStorageId_Any is used, the first entry with a matching title ID is returned.
 /// Use titleFreeTitleInfo() to free the returned data.
-TitleInfo *titleGetInfoFromStorageByTitleId(u8 storage_id, u64 title_id);
+TitleInfo *titleGetTitleInfoEntryFromStorageByTitleId(u8 storage_id, u64 title_id);
 
 /// Frees a dynamically allocated TitleInfo element.
 void titleFreeTitleInfo(TitleInfo **info);
@@ -152,7 +152,7 @@ TitleInfo **titleGetOrphanTitles(u32 *out_count);
 void titleFreeOrphanTitles(TitleInfo ***orphan_info);
 
 /// Checks if a gamecard status update has been detected by the background gamecard title info thread (e.g. after a new gamecard has been inserted, of after the current one has been taken out).
-/// If this function returns true and functions such as titleGetInfoFromStorageByTitleId(), titleGetUserApplicationData() or titleGetInfoFromOrphanTitles() have been previously called:
+/// If this function returns true and functions such as titleGetTitleInfoEntryFromStorageByTitleId(), titleGetUserApplicationData() or titleGetInfoFromOrphanTitles() have been previously called:
 ///     1. Their returned data must be freed.
 ///     2. They must be called again.
 bool titleIsGameCardInfoUpdated(void);

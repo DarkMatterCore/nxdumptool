@@ -36,7 +36,7 @@ namespace nxdt::views
             user_ret = titleGetUserApplicationData(title_id, &(this->user_app_data));
         } else {
             /* Get system title info. */
-            this->system_title_info = titleGetInfoFromStorageByTitleId(NcmStorageId_BuiltInSystem, title_id);
+            this->system_title_info = titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, title_id);
         }
 
         /* Make sure we got title information. This should never get triggered. */
