@@ -664,6 +664,76 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
     *ptr2 = '\0';
 }
 
+char *utilsEscapeCharacters(const char *str, const char *chars_to_escape, const char escape_char)
+{
+    size_t str_size = 0, chars_to_escape_size = 0;
+
+    if (!str || !(str_size = strlen(str)) || !chars_to_escape || !(chars_to_escape_size = strlen(chars_to_escape)) || \
+        escape_char < 0x20 || escape_char >= 0x7F || memchr(chars_to_escape, (int)escape_char, chars_to_escape_size))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
+
+    ssize_t units = 0;
+    u32 code = 0, escape_cnt = 0;
+    const u8 *ptr = (const u8*)str;
+    size_t cur_pos = 0, escaped_str_size = 0;
+    char *ret = NULL;
+
+    /* Determine the number of character we need to escape. */
+    while(cur_pos < str_size)
+    {
+        units = decode_utf8(&code, ptr);
+        if (units < 0) break;
+
+        if (memchr(chars_to_escape, (int)code, chars_to_escape_size)) escape_cnt++;
+
+        ptr += units;
+        cur_pos += (size_t)units;
+    }
+
+    /* Short-circuit: check if we don't have to escape anything. */
+    /* If so, we'll just duplicate the provided string and call it a day. */
+    if (!escape_cnt)
+    {
+        ret = strdup(str);
+        goto end;
+    }
+
+    /* Calculate escaped string size. */
+    escaped_str_size = (str_size + escape_cnt);
+
+    /* Allocate memory for the output string. */
+    ret = calloc(sizeof(char), escaped_str_size + 1);
+    if (!ret)
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for the output string! (0x%lX).", escaped_str_size + 1);
+        goto end;
+    }
+
+    /* Reset current position. */
+    ptr = (const u8*)str;
+    cur_pos = 0;
+
+    /* Copy characters and deal with the ones that need to be escaped. */
+    while(cur_pos < escaped_str_size)
+    {
+        units = decode_utf8(&code, ptr);
+        if (units < 0) break;
+
+        if (memchr(chars_to_escape, (int)code, chars_to_escape_size)) ret[cur_pos++] = escape_char;
+
+        for(ssize_t i = 0; i < units; i++) ret[cur_pos + (size_t)i] = ptr[i];
+
+        ptr += units;
+        cur_pos += (size_t)units;
+    }
+
+end:
+    return ret;
+}
+
 void utilsTrimString(char *str)
 {
     size_t strsize = 0;

@@ -1077,6 +1077,7 @@ int main(int argc, char *argv[])
         consolePrint("______________________________\n\n");
         if (cur_menu->parent) consolePrint("press b to go back\n");
         if (g_umsDeviceCount) consolePrint("press x to safely remove all ums devices\n");
+        if ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && element_count) consolePrint("press y to dump csv with title info to the sd card\n");
         consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
@@ -1512,6 +1513,43 @@ int main(int argc, char *argv[])
         {
             for(u32 i = 0; i < g_umsDeviceCount; i++) umsUnmountDevice(&(g_umsDevices[i]));
             updateStorageList();
+        } else
+        if ((btn_down & HidNpadButton_Y) && (cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && element_count)
+        {
+            consoleClear();
+            consolePrint("dumping title info to csv, please wait...\n");
+            consoleRefresh();
+
+            sprintf(path, DEVOPTAB_SDMC_DEVICE "/" OUTDIR "/%s_title_records.csv", cur_menu->id == MenuId_UserTitles ? "user" : "system");
+
+            char *csv_buf = NULL;
+            size_t csv_buf_size = 0;
+            u32 proc_title_cnt = 0;
+
+            csv_buf = titleGenerateTitleRecordsCsv(&csv_buf_size, &proc_title_cnt, cur_menu->id == MenuId_SystemTitles, false);
+            if (csv_buf)
+            {
+                utilsCreateDirectoryTree(path, false);
+
+                FILE *csv_fd = fopen(path, "wb");
+                if (csv_fd)
+                {
+                    fwrite(UTF8_BOM, 1, strlen(UTF8_BOM), csv_fd);
+                    fwrite(csv_buf, 1, csv_buf_size, csv_fd);
+                    fclose(csv_fd);
+
+                    consolePrint("title info dumped to \"%s\". %u title record(s) processed.\n", path, proc_title_cnt);
+                } else {
+                    consolePrint("failed to open \"%s\" for writing\n", path);
+                }
+
+                free(csv_buf);
+            } else {
+                consolePrint("failed to generate csv data\n");
+            }
+
+            consolePrint("press any button to go back");
+            utilsWaitForButtonPress(0);
         } else
         if (((btn_down & (HidNpadButton_L)) || (btn_held & HidNpadButton_ZL)) && (cur_menu->id == MenuId_NSP || cur_menu->id == MenuId_Ticket || cur_menu->id == MenuId_Nca) && title_info->previous)
         {

@@ -128,10 +128,16 @@ void utilsJoinThread(Thread *thread);
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
 /// Replaces illegal filesystem characters in the provided NULL-terminated UTF-8 string with underscores ('_').
-/// If 'ascii_only' is set to true, all codepoints outside of the [0x20,0x7F) range will also be replaced with underscores.
+/// If 'ascii_only' is set to true, all codepoints outside of the [0x20,0x7E] range will also be replaced with underscores.
 /// Replacements are performed on a per-codepoint basis, which means the string size in bytes can be reduced by this function.
 /// Furthermore, if multiple, consecutive illegal characters are found, they will all get replaced by a single underscore.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
+
+/// Returns a pointer to a dynamically allocated copy of the provided string with all required characters escaped using another specific character.
+/// 'chars_to_escape' must represent a NULL-terminated character string with all characters that need to be escaped.
+/// Furthermore, 'escape_char' must represent an ASCII character within the [0x20,0x7E] range, and it must also not be part of 'chars_to_escape'.
+/// Returns NULL if an error occurs.
+char *utilsEscapeCharacters(const char *str, const char *chars_to_escape, const char escape_char);
 
 /// Trims whitespace characters from the provided string.
 void utilsTrimString(char *str);

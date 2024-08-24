@@ -22,7 +22,7 @@ Currently planned changes for this branch include:
 * Plaintext [gamecard CardInfo area](https://switchbrew.org/wiki/XCI#CardHeaderEncryptedData) dumps. :white_check_mark:
 * [Gamecard InitialData](https://switchbrew.org/wiki/XCI#InitialData) area dumps. :white_check_mark:
 * [Gamecard CardIdSet](https://switchbrew.org/wiki/Filesystem_services#GameCardIdSet) dumps. :white_check_mark:
-* [Gamecard Hash FS partition](https://switchbrew.org/wiki/XCI#PartitionFs) dumps (in both extracted and raw inage forms). :white_check_mark:
+* [Gamecard Hash FS partition](https://switchbrew.org/wiki/XCI#PartitionFs) dumps (in both extracted and raw image forms). :white_check_mark:
 * [Lotus ASIC firmware (LAFW) blob](https://switchbrew.org/wiki/Lotus3#User_firmware) dumping from RAM. :white_check_mark:
 * Properly detect if an inserted gamecard requires a LAFW update. :white_check_mark:
 * Nintendo Submission Package (NSP) dumps for both digital and gamecard-based titles.

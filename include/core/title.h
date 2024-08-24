@@ -164,6 +164,15 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
 /// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.
 char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replace_type);
 
+/// Returns a pointer to a dynamically allocated buffer that holds a CSV representation of all available user/system title records, depending on the 'is_system' argument.
+/// 'out_csv_size' must be a valid pointer. It is used to store the size of the allocated buffer.
+/// 'out_proc_title_cnt' may optionally be provided. If available, it will be used to store the number of processed title records.
+/// If 'is_system' is false and 'use_gamecard' is true, gamecard title records will be appended to the output buffer.
+/// Both 'is_system' and 'use_gamecard' may not be set to true at the same time.
+/// Furthermore, if 'is_system' is set to false and orphan titles are available, their records will get appended to the output buffer.
+/// Returns NULL if an error occurs.
+char *titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt, bool is_system, bool use_gamecard);
+
 /// Returns a pointer to a string holding a user-friendly name for the provided NcmStorageId value. Returns NULL if the provided value is invalid.
 const char *titleGetNcmStorageIdName(u8 storage_id);
 

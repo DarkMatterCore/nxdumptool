@@ -600,6 +600,8 @@ static void titleUpdateTitleInfoLinkedLists(void);
 
 static TitleInfo *_titleGetTitleInfoEntryFromStorageByTitleId(u8 storage_id, u64 title_id);
 
+static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
+
 static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
 static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info);
 
@@ -859,68 +861,32 @@ bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
             break;
         }
 
-        bool error = false;
-        TitleInfo *app_info = NULL, *patch_info = NULL, *aoc_info = NULL, *aoc_patch_info = NULL;
+        /* Retrieve user application data. */
+        TitleUserApplicationData user_app_data = {0};
+        if (!_titleGetUserApplicationData(app_id, &user_app_data)) break;
 
         /* Clear output. */
         titleFreeUserApplicationData(out);
 
-#define TITLE_ALLOCATE_USER_APP_DATA(elem, msg, decl) \
-    if (elem##_info && !out->elem##_info) { \
-        out->elem##_info = titleDuplicateTitleInfoFull(elem##_info, NULL, NULL); \
+#define TITLE_DUPLICATE_USER_APP_DATA(elem, msg) \
+    if (user_app_data.elem##_info) { \
+        out->elem##_info = titleDuplicateTitleInfoFull(user_app_data.elem##_info, NULL, NULL); \
         if (!out->elem##_info) { \
             LOG_MSG_ERROR("Failed to duplicate %s info for %016lX!", msg, app_id); \
-            decl; \
+            break; \
         } \
     }
 
-        /* Get info for the first user application title. */
-        app_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_Any, app_id);
-        TITLE_ALLOCATE_USER_APP_DATA(app, "user application", break);
+        /* Duplicate user application data. */
+        TITLE_DUPLICATE_USER_APP_DATA(app, "user application");
+        TITLE_DUPLICATE_USER_APP_DATA(patch, "patch");
+        TITLE_DUPLICATE_USER_APP_DATA(aoc, "add-on content");
+        TITLE_DUPLICATE_USER_APP_DATA(aoc_patch, "add-on content patch");
 
-        /* Get info for the first patch title. */
-        patch_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_Any, titleGetPatchIdByApplicationId(app_id));
-        TITLE_ALLOCATE_USER_APP_DATA(patch, "patch", break);
+#undef TITLE_DUPLICATE_USER_APP_DATA
 
-        /* Get info for the first add-on content and add-on content patch titles. */
-        for(u8 i = NcmStorageId_GameCard; i <= NcmStorageId_SdCard; i++)
-        {
-            if (i == NcmStorageId_BuiltInSystem) continue;
-
-            TitleStorage *title_storage = &(g_titleStorage[TITLE_STORAGE_INDEX(i)]);
-            if (!title_storage->titles || !title_storage->title_count) continue;
-
-            for(u32 j = 0; j < title_storage->title_count; j++)
-            {
-                TitleInfo *title_info = title_storage->titles[j];
-                if (!title_info) continue;
-
-                if (title_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, title_info->meta_key.id))
-                {
-                    aoc_info = title_info;
-                    break;
-                } else
-                if (title_info->meta_key.type == NcmContentMetaType_DataPatch && titleCheckIfDataPatchIdBelongsToApplicationId(app_id, title_info->meta_key.id))
-                {
-                    aoc_patch_info = title_info;
-                    break;
-                }
-            }
-
-            TITLE_ALLOCATE_USER_APP_DATA(aoc, "add-on content", error = true; break);
-
-            TITLE_ALLOCATE_USER_APP_DATA(aoc_patch, "add-on content patch", error = true; break);
-
-            if (out->aoc_info && out->aoc_patch_info) break;
-        }
-
-        if (error) break;
-
-#undef TITLE_ALLOCATE_USER_APP_DATA
-
-        /* Check retrieved title info. */
-        ret = (app_info || patch_info || aoc_info || aoc_patch_info);
-        if (!ret) LOG_MSG_ERROR("Failed to retrieve user application data for ID \"%016lX\"!", app_id);
+        /* Update return value. */
+        ret = true;
     }
 
     /* Clear output. */
@@ -1166,6 +1132,183 @@ char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replac
     }
 
     return filename;
+}
+
+char *titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt, bool is_system, bool use_gamecard)
+{
+    char *csv_buf = NULL;
+    size_t csv_buf_size = 0;
+
+    SCOPED_LOCK(&g_titleMutex)
+    {
+        TitleApplicationMetadata **filtered_app_metadata = (is_system ? g_filteredSystemMetadata : g_filteredUserMetadata);
+        u32 filtered_app_metadata_count = (is_system ? g_filteredSystemMetadataCount : g_filteredUserMetadataCount);
+
+        TitleApplicationMetadata *cur_app_metadata = NULL;
+        TitleUserApplicationData user_app_data = {0};
+        TitleInfo *title_info = NULL;
+        char *escaped_title_name = NULL;
+
+        u32 proc_title_cnt = 0;
+
+        bool success = false;
+
+        if (!g_titleInterfaceInit || !filtered_app_metadata || !filtered_app_metadata_count || !out_csv_size || (is_system && use_gamecard))
+        {
+            LOG_MSG_ERROR("Invalid parameters!");
+            break;
+        }
+
+#define TITLE_CSV_ADD_FMT_STR(fmt, ...) utilsAppendFormattedStringToBuffer(&csv_buf, &csv_buf_size, fmt, ##__VA_ARGS__)
+
+        /* Append CSV header. */
+        if (!TITLE_CSV_ADD_FMT_STR("Name,Type,Title ID,Version,Source Storage,Content Count,Size\r\n")) goto end;
+
+        /* Loop through our filtered application metadata entries. */
+        for(u32 i = 0; i < filtered_app_metadata_count; i++)
+        {
+            /* Get current application metadata entry. */
+            cur_app_metadata = filtered_app_metadata[i];
+            if (!cur_app_metadata) continue;
+
+            /* Escape title name, if needed. */
+            if (strchr(cur_app_metadata->lang_entry.name, ',') != NULL || strchr(cur_app_metadata->lang_entry.name, '"') != NULL)
+            {
+                escaped_title_name = utilsEscapeCharacters(cur_app_metadata->lang_entry.name, "\"", '"');
+                if (!escaped_title_name)
+                {
+                    LOG_MSG_ERROR("Failed to generate escaped title name for %016lX!", cur_app_metadata->title_id);
+                    goto end;
+                }
+            }
+
+            if (is_system)
+            {
+                /* Get title info entry for our current system title. */
+                title_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, cur_app_metadata->title_id);
+                if (!title_info) continue;
+
+                /* Append title name. */
+                if (!TITLE_CSV_ADD_FMT_STR(escaped_title_name ? "\"%s\"," : "%s,", escaped_title_name ? escaped_title_name : cur_app_metadata->lang_entry.name))
+                {
+                    LOG_MSG_ERROR("Failed to append title name for %016lX!", cur_app_metadata->title_id);
+                    goto end;
+                }
+
+                /* Append title record to output CSV buffer. */
+                if (!TITLE_CSV_ADD_FMT_STR("%s,%016lX,%u,%s,%u,%s (%lu bytes)\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
+                                                                                    title_info->version.value, titleGetNcmStorageIdName(title_info->storage_id), \
+                                                                                    title_info->content_count, title_info->size_str, title_info->size))
+                {
+                    LOG_MSG_ERROR("Failed to append title record for %016lX!", cur_app_metadata->title_id);
+                    goto end;
+                }
+
+                /* Increase processed titles counter. */
+                proc_title_cnt++;
+            } else {
+                /* Retrieve user application data. */
+                if (!_titleGetUserApplicationData(cur_app_metadata->title_id, &user_app_data)) continue;
+
+                /* Process all title types available in the retrieved user application data, in order. */
+                for(u8 j = NcmContentMetaType_Application; j <= NcmContentMetaType_DataPatch; j++)
+                {
+                    if (j == NcmContentMetaType_Delta) continue;
+
+                    /* Get the right title info pointer for the current title type. */
+                    title_info = (j == NcmContentMetaType_Application  ? user_app_data.app_info : \
+                                 (j == NcmContentMetaType_Patch        ? user_app_data.patch_info : \
+                                 (j == NcmContentMetaType_AddOnContent ? user_app_data.aoc_info : user_app_data.aoc_patch_info)));
+
+                    /* Process title info linked list. */
+                    while(title_info)
+                    {
+                        /* Skip current entry if we're not supposed to process gamecard-based titles. */
+                        if (title_info->storage_id == NcmStorageId_GameCard && !use_gamecard)
+                        {
+                            title_info = title_info->next;
+                            continue;
+                        }
+
+                        /* Append title name. */
+                        if (!TITLE_CSV_ADD_FMT_STR(escaped_title_name ? "\"%s\"," : "%s,", escaped_title_name ? escaped_title_name : cur_app_metadata->lang_entry.name))
+                        {
+                            LOG_MSG_ERROR("Failed to append title name for %016lX!", cur_app_metadata->title_id);
+                            goto end;
+                        }
+
+                        /* Append title record to output CSV buffer. */
+                        if (!TITLE_CSV_ADD_FMT_STR("%s,%016lX,%u,%s,%u,%s (%lu bytes)\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
+                                                                                            title_info->version.value, titleGetNcmStorageIdName(title_info->storage_id), \
+                                                                                            title_info->content_count, title_info->size_str, title_info->size))
+                        {
+                            LOG_MSG_ERROR("Failed to append title record for %016lX!", cur_app_metadata->title_id);
+                            goto end;
+                        }
+
+                        /* Increase processed titles counter. */
+                        proc_title_cnt++;
+
+                        /* Get next pointer in the current linked list. */
+                        title_info = title_info->next;
+                    }
+                }
+            }
+
+            /* Free escaped title name. */
+            if (escaped_title_name) free(escaped_title_name);
+            escaped_title_name = NULL;
+        }
+
+        /* Check if any orphan titles are available. */
+        if (!is_system && titleAreOrphanTitlesAvailable())
+        {
+            /* Loop through our orphan title entries. */
+            for(u32 i = 0; i < g_orphanTitleInfoCount; i++)
+            {
+                title_info = g_orphanTitleInfo[i];
+                if (!title_info) continue;
+
+                /* Append title record to output CSV buffer. */
+                if (!TITLE_CSV_ADD_FMT_STR("[UNKNOWN],%s,%016lX,%u,%s,%u,%s (%lu bytes)\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
+                                                                                            title_info->version.value, titleGetNcmStorageIdName(title_info->storage_id), \
+                                                                                            title_info->content_count, title_info->size_str, title_info->size))
+                {
+                    LOG_MSG_ERROR("Failed to append orphan title record for %016lX!", cur_app_metadata->title_id);
+                    goto end;
+                }
+
+                /* Increase processed titles counter. */
+                proc_title_cnt++;
+            }
+        }
+
+#undef TITLE_CSV_ADD_FMT_STR
+
+        /* Check if we actually processed any titles. */
+        if (proc_title_cnt)
+        {
+            /* Update output. */
+            *out_csv_size = strlen(csv_buf);
+            if (out_proc_title_cnt) *out_proc_title_cnt = proc_title_cnt;
+
+            /* Update flag. */
+            success = true;
+        } else {
+            LOG_MSG_INFO("No %s titles were processed.", is_system ? "system" : "user");
+        }
+
+end:
+        if (escaped_title_name) free(escaped_title_name);
+
+        if (!success && csv_buf)
+        {
+            free(csv_buf);
+            csv_buf = NULL;
+        }
+    }
+
+    return csv_buf;
 }
 
 const char *titleGetNcmStorageIdName(u8 storage_id)
@@ -2804,42 +2947,35 @@ static bool titleGetContentInfosByGameCardContentMetaContext(TitleGameCardConten
     }
 
     /* Loop through our NcmPackagedContentInfo entries. */
-    for(u32 i = 0; i < content_count; i++)
+    for(u32 i = 0; i < (content_count - 1); i++)
     {
-        if (i == 0)
+        char nca_filename[0x30] = {0};
+        NcmContentInfo *cur_content_info = &(gc_meta_ctx->cnmt_ctx.packaged_content_info[i].info);
+
+        /* Make sure this content exists on the inserted gamecard. */
+        utilsGenerateHexString(nca_filename, sizeof(nca_filename), cur_content_info->content_id.c, sizeof(cur_content_info->content_id.c), false);
+        strcat(nca_filename, cur_content_info->content_type == NcmContentType_Meta ? ".cnmt.nca" : ".nca");
+
+        if (!hfsGetEntryByName(hfs_ctx, nca_filename))
         {
-            /* Reserve the very first content info entry for our Meta NCA. */
-            NcmContentInfo *cur_content_info = &(content_infos[0]);
-
-            memcpy(&(cur_content_info->content_id), &(gc_meta_ctx->nca_ctx.content_id), sizeof(NcmContentId));
-            ncmU64ToContentInfoSize(gc_meta_ctx->nca_ctx.content_size, cur_content_info);
-            cur_content_info->attr = 0;
-            cur_content_info->content_type = NcmContentType_Meta;
-            cur_content_info->id_offset = 0;
-
-            //LOG_DATA_DEBUG(cur_content_info, sizeof(NcmContentInfo), "Forged Meta content record:");
-        } else {
-            char nca_filename[0x30] = {0};
-            NcmContentInfo *cur_content_info = &(gc_meta_ctx->cnmt_ctx.packaged_content_info[i - 1].info);
-
-            /* Make sure this content exists on the inserted gamecard. */
-            utilsGenerateHexString(nca_filename, sizeof(nca_filename), cur_content_info->content_id.c, sizeof(cur_content_info->content_id.c), false);
-            strcat(nca_filename, cur_content_info->content_type == NcmContentType_Meta ? ".cnmt.nca" : ".nca");
-
-            if (!hfsGetEntryByName(hfs_ctx, nca_filename))
-            {
-                LOG_MSG_DEBUG("Unable to locate %s NCA \"%s\" in Hash FS by name (%s partition).", titleGetNcmContentTypeName(cur_content_info->content_type), nca_filename, \
-                                                                                                   hfsGetPartitionNameString(hfs_ctx->type));
-                continue;
-            }
-
-            /* Copy content info data. */
-            memcpy(&(content_infos[available_count]), cur_content_info, sizeof(NcmContentInfo));
+            LOG_MSG_DEBUG("Unable to locate %s NCA \"%s\" in Hash FS by name (%s partition).", titleGetNcmContentTypeName(cur_content_info->content_type), nca_filename, \
+                                                                                                hfsGetPartitionNameString(hfs_ctx->type));
+            continue;
         }
 
-        /* Update available content count. */
-        available_count++;
+        /* Copy content info data and update available content count. */
+        memcpy(&(content_infos[available_count++]), cur_content_info, sizeof(NcmContentInfo));
     }
+
+    /* Reserve the very last content info entry for our Meta NCA. Update the available content count while we're at it. */
+    NcmContentInfo *meta_content_info = &(content_infos[available_count++]);
+    memcpy(&(meta_content_info->content_id), &(gc_meta_ctx->nca_ctx.content_id), sizeof(NcmContentId));
+    ncmU64ToContentInfoSize(gc_meta_ctx->nca_ctx.content_size, meta_content_info);
+    meta_content_info->attr = 0;
+    meta_content_info->content_type = NcmContentType_Meta;
+    meta_content_info->id_offset = 0;
+
+    //LOG_DATA_DEBUG(meta_content_info, sizeof(NcmContentInfo), "Forged Meta content record:");
 
     if (available_count < content_count)
     {
@@ -2979,6 +3115,60 @@ static TitleInfo *_titleGetTitleInfoEntryFromStorageByTitleId(u8 storage_id, u64
     if (!out && storage_id != NcmStorageId_BuiltInSystem) LOG_MSG_DEBUG("Unable to find title info entry with ID \"%016lX\" in %s.", title_id, titleGetNcmStorageIdName(storage_id));
 
     return out;
+}
+
+static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
+{
+    if (!app_id || !out)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    bool ret = false;
+
+    /* Clear output. */
+    memset(out, 0, sizeof(TitleUserApplicationData));
+
+    /* Get info for the first user application title. */
+    out->app_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_Any, app_id);
+
+    /* Get info for the first patch title. */
+    out->patch_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_Any, titleGetPatchIdByApplicationId(app_id));
+
+    /* Get info for the first add-on content and add-on content patch titles. */
+    for(u8 i = NcmStorageId_GameCard; i <= NcmStorageId_SdCard; i++)
+    {
+        if (i == NcmStorageId_BuiltInSystem) continue;
+
+        TitleStorage *title_storage = &(g_titleStorage[TITLE_STORAGE_INDEX(i)]);
+        if (!title_storage->titles || !title_storage->title_count) continue;
+
+        for(u32 j = 0; j < title_storage->title_count; j++)
+        {
+            TitleInfo *title_info = title_storage->titles[j];
+            if (!title_info) continue;
+
+            if (!out->aoc_info && title_info->meta_key.type == NcmContentMetaType_AddOnContent && titleCheckIfAddOnContentIdBelongsToApplicationId(app_id, title_info->meta_key.id))
+            {
+                out->aoc_info = title_info;
+            } else
+            if (!out->aoc_patch_info && title_info->meta_key.type == NcmContentMetaType_DataPatch && titleCheckIfDataPatchIdBelongsToApplicationId(app_id, title_info->meta_key.id))
+            {
+                out->aoc_patch_info = title_info;
+            }
+
+            if (out->aoc_info && out->aoc_patch_info) break;
+        }
+
+        if (out->aoc_info && out->aoc_patch_info) break;
+    }
+
+    /* Check retrieved title info. */
+    ret = (out->app_info || out->patch_info || out->aoc_info || out->aoc_patch_info);
+    if (!ret) LOG_MSG_ERROR("Failed to retrieve user application data for ID \"%016lX\"!", app_id);
+
+    return ret;
 }
 
 static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next)
@@ -3317,11 +3507,11 @@ static bool titleRefreshGameCardTitleInfo(void)
         if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, extra_app_count)) != NULL) continue;
 
         /* Retrieve application metadata. */
-        TitleApplicationMetadata *cur_app_metadata = titleGenerateUserMetadataEntryFromNs(app_id);
-        if (!cur_app_metadata) continue;
+        cur_title_info->app_metadata = titleGenerateUserMetadataEntryFromNs(app_id);
+        if (!cur_title_info->app_metadata) continue;
 
         /* Set application metadata entry pointer. */
-        g_userMetadata[g_userMetadataCount + extra_app_count] = cur_app_metadata;
+        g_userMetadata[g_userMetadataCount + extra_app_count] = cur_title_info->app_metadata;
 
         /* Increase extra application metadata counter. */
         extra_app_count++;
@@ -3397,6 +3587,13 @@ static void titleGenerateGameCardApplicationMetadataArray(void)
         /* Skip current entry if it's not a user application. */
         TitleInfo *app_info = titles[i], *patch_info = NULL;
         if (!app_info || app_info->meta_key.type != NcmContentMetaType_Application) continue;
+
+        /* Don't proceed any further if, for some reason, we were unable to retrieve any metadata for this application. */
+        if (!app_info->app_metadata)
+        {
+            LOG_MSG_WARNING("No application metadata record available for %016lX!", app_info->meta_key.id);
+            continue;
+        }
 
         u32 app_version = app_info->meta_key.version;
         u32 dlc_count = 0;
@@ -3515,6 +3712,7 @@ static char *_titleGenerateGameCardFileName(u8 naming_convention)
     for(u32 i = 0; i < g_titleGameCardApplicationMetadataCount; i++)
     {
         const TitleGameCardApplicationMetadata *cur_gc_app_metadata = &(g_titleGameCardApplicationMetadata[i]);
+        const TitleApplicationMetadata *cur_app_metadata = cur_gc_app_metadata->app_metadata;
 
         /* Generate current user application name. */
         *app_name = '\0';
@@ -3523,10 +3721,10 @@ static char *_titleGenerateGameCardFileName(u8 naming_convention)
         {
             if (cur_filename_len) strcat(app_name, " + ");
 
-            if (cur_gc_app_metadata->app_metadata && cur_gc_app_metadata->app_metadata->lang_entry.name[0])
+            if (cur_app_metadata->lang_entry.name[0])
             {
                 app_name_len = strlen(app_name);
-                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", cur_gc_app_metadata->app_metadata->lang_entry.name);
+                snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%s ", cur_app_metadata->lang_entry.name);
 
                 /* Append display version string if the inserted gamecard holds a patch for the current user application. */
                 if (cur_gc_app_metadata->has_patch && cur_gc_app_metadata->display_version[0])
@@ -3537,13 +3735,13 @@ static char *_titleGenerateGameCardFileName(u8 naming_convention)
             }
 
             app_name_len = strlen(app_name);
-            snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "[%016lX][v%u]", cur_gc_app_metadata->app_metadata->title_id, cur_gc_app_metadata->version.value);
+            snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "[%016lX][v%u]", cur_app_metadata->title_id, cur_gc_app_metadata->version.value);
         } else
         if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
         {
             if (cur_filename_len) strcat(app_name, "+");
             app_name_len = strlen(app_name);
-            snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%016lX_v%u", cur_gc_app_metadata->app_metadata->title_id, cur_gc_app_metadata->version.value);
+            snprintf(app_name + app_name_len, MAX_ELEMENTS(app_name) - app_name_len, "%016lX_v%u", cur_app_metadata->title_id, cur_gc_app_metadata->version.value);
         }
 
         /* Reallocate output buffer. */
