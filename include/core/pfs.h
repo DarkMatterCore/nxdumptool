@@ -97,6 +97,8 @@ bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemE
 bool pfsAddEntryInformationToImageContext(PartitionFileSystemImageContext *ctx, const char *entry_name, u64 entry_size, u32 *out_entry_idx);
 
 /// Updates the name from a Partition FS entry in an existing PartitionFileSystemImageContext, using an entry index and the new entry name.
+/// The new name length must not exceed the previous name length.
+/// Furthermore, if the new name is shorter than the previous name, the rest of the previous name will be preserved.
 bool pfsUpdateEntryNameFromImageContext(PartitionFileSystemImageContext *ctx, u32 entry_idx, const char *new_entry_name);
 
 /// Generates a full Partition FS header from an existing PartitionFileSystemImageContext and writes it to the provided memory buffer.
