@@ -201,8 +201,6 @@ static char *generateOutputLayeredFsFileName(u64 title_id, const char *subdir, c
 
 static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out);
 
-static bool resetSettings(void *userdata);
-
 static bool saveGameCardImage(void *userdata);
 static bool saveGameCardHeader(void *userdata);
 static bool saveGameCardCardInfo(void *userdata);
@@ -312,6 +310,8 @@ static void setNcaFsWriteRawSectionOption(u32 idx);
 
 static u32 getNcaFsUseLayeredFsDirOption(void);
 static void setNcaFsUseLayeredFsDirOption(u32 idx);
+
+static bool resetSettings(void *userdata);
 
 /* Global variables. */
 
@@ -1372,6 +1372,9 @@ int main(int argc, char *argv[])
                     }
 
                     utilsSetLongRunningProcessState(false);
+                } else {
+                    /* Ignore result. */
+                    selected_element->task_func(selected_element->userdata);
                 }
 
                 if (g_appletStatus && show_button_prompt)
@@ -2464,26 +2467,12 @@ static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out)
     return true;
 }
 
-static bool resetSettings(void *userdata)
-{
-    consolePrint("are you sure you want to reset all settings to their default values?\n");
-    consolePrint("press a to proceed, or b to cancel\n\n");
-
-    u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
-    if (btn_down & HidNpadButton_A)
-    {
-        configResetSettings();
-        consolePrint("settings successfully reset\n");
-    }
-
-    return false;
-}
-
 static bool saveGameCardImage(void *userdata)
 {
     NX_IGNORE_ARG(userdata);
 
     u64 gc_size = 0, free_space = 0;
+    char size_str[16] = {0};
 
     u32 key_area_crc = 0;
     GameCardKeyArea gc_key_area = {0};
@@ -2512,7 +2501,8 @@ static bool saveGameCardImage(void *userdata)
 
     shared_thread_data->total_size = gc_size;
 
-    consolePrint("gamecard size: 0x%lX\n", gc_size);
+    utilsGenerateFormattedSizeString((double)gc_size, size_str, sizeof(size_str));
+    consolePrint("gamecard size: 0x%lX (%s)\n", gc_size, size_str);
 
     if (prepend_key_area)
     {
@@ -2528,7 +2518,8 @@ static bool saveGameCardImage(void *userdata)
             xci_thread_data.full_xci_crc = key_area_crc;
         }
 
-        consolePrint("gamecard size (with key area): 0x%lX\n", gc_size);
+        utilsGenerateFormattedSizeString((double)gc_size, size_str, sizeof(size_str));
+        consolePrint("gamecard size (with key area): 0x%lX (%s)\n", gc_size, size_str);
     }
 
     snprintf(path, MAX_ELEMENTS(path), " [%s][%s][%s].xci", prepend_key_area ? "KA" : "NKA", keep_certificate ? "C" : "NC", trim_dump ? "T" : "NT");
@@ -2896,6 +2887,7 @@ end:
 static bool saveGameCardRawHfsPartition(HashFileSystemContext *hfs_ctx)
 {
     u64 free_space = 0;
+    char size_str[16] = {0};
 
     HfsThreadData hfs_thread_data = {0};
     SharedThreadData *shared_thread_data = &(hfs_thread_data.shared_thread_data);
@@ -2908,7 +2900,8 @@ static bool saveGameCardRawHfsPartition(HashFileSystemContext *hfs_ctx)
     hfs_thread_data.hfs_ctx = hfs_ctx;
     shared_thread_data->total_size = hfs_ctx->size;
 
-    consolePrint("raw %s hfs partition size: 0x%lX\n", hfs_ctx->name, hfs_ctx->size);
+    utilsGenerateFormattedSizeString((double)hfs_ctx->size, size_str, sizeof(size_str));
+    consolePrint("raw %s hfs partition size: 0x%lX (%s)\n", hfs_ctx->name, hfs_ctx->size, size_str);
 
     snprintf(path, MAX_ELEMENTS(path), "/%s.hfs0", hfs_ctx->name);
     filename = generateOutputGameCardFileName("HFS/Raw", path, true);
@@ -2998,6 +2991,7 @@ end:
 static bool saveGameCardExtractedHfsPartition(HashFileSystemContext *hfs_ctx)
 {
     u64 data_size = 0;
+    char size_str[16] = {0};
 
     HfsThreadData hfs_thread_data = {0};
     SharedThreadData *shared_thread_data = &(hfs_thread_data.shared_thread_data);
@@ -3019,7 +3013,8 @@ static bool saveGameCardExtractedHfsPartition(HashFileSystemContext *hfs_ctx)
     hfs_thread_data.hfs_ctx = hfs_ctx;
     shared_thread_data->total_size = data_size;
 
-    consolePrint("extracted %s hfs partition size: 0x%lX\n", hfs_ctx->name, data_size);
+    utilsGenerateFormattedSizeString((double)data_size, size_str, sizeof(size_str));
+    consolePrint("extracted %s hfs partition size: 0x%lX (%s)\n", hfs_ctx->name, data_size, size_str);
     consoleRefresh();
 
     success = spanDumpThreads(extractedHfsReadThreadFunc, genericWriteThreadFunc, &hfs_thread_data);
@@ -3360,6 +3355,7 @@ static bool saveNintendoContentArchive(void *userdata)
     u64 free_space = 0;
     char *filename = NULL, subdir[0x20] = {0};
     u32 dev_idx = g_storageMenuElementOption.selected;
+    char size_str[16] = {0};
 
     bool success = false;
 
@@ -3380,7 +3376,8 @@ static bool saveNintendoContentArchive(void *userdata)
 
     shared_thread_data->total_size = nca_thread_data.nca_ctx->content_size;
 
-    consolePrint("nca size: 0x%lX\n", shared_thread_data->total_size);
+    utilsGenerateFormattedSizeString((double)shared_thread_data->total_size, size_str, sizeof(size_str));
+    consolePrint("nca size: 0x%lX (%s)\n", shared_thread_data->total_size, size_str);
 
     snprintf(subdir, MAX_ELEMENTS(subdir), "NCA/%s", nca_thread_data.nca_ctx->storage_id == NcmStorageId_BuiltInSystem ? "System" : "User");
     snprintf(path, MAX_ELEMENTS(path), "/%s.%s", nca_thread_data.nca_ctx->content_id_str, content_info->content_type == NcmContentType_Meta ? "cnmt.nca" : "nca");
@@ -3919,7 +3916,7 @@ static bool fsBrowserDumpFile(const char *dir_path, const FsBrowserEntry *entry,
 
     consoleClear();
     consolePrint("file path: %s\n", path);
-    consolePrint("file size: 0x%lX\n\n", entry->size);
+    consolePrint("file size: 0x%lX (%s)\n\n", entry->size, entry->size_str);
 
     /* Open input file. */
     fs_browser_thread_data.src = fopen(path, "rb");
@@ -4029,6 +4026,7 @@ static bool fsBrowserDumpHighlightedEntries(const char *dir_path, const FsBrowse
 {
     bool append_path_sep = (dir_path[strlen(dir_path) - 1] != '/');
     u64 data_size = 0;
+    char size_str[16] = {0};
 
     FsBrowserHighlightedEntriesThreadData fs_browser_thread_data = {0};
     SharedThreadData *shared_thread_data = &(fs_browser_thread_data.shared_thread_data);
@@ -4071,7 +4069,8 @@ static bool fsBrowserDumpHighlightedEntries(const char *dir_path, const FsBrowse
     fs_browser_thread_data.base_out_path = base_out_path;
     shared_thread_data->total_size = data_size;
 
-    consolePrint("dump size: 0x%lX\n", data_size);
+    utilsGenerateFormattedSizeString((double)data_size, size_str, sizeof(size_str));
+    consolePrint("dump size: 0x%lX (%s)\n", data_size, size_str);
     consoleRefresh();
 
     success = spanDumpThreads(fsBrowserHighlightedEntriesReadThreadFunc, genericWriteThreadFunc, &fs_browser_thread_data);
@@ -4221,6 +4220,7 @@ end:
 static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir)
 {
     u64 free_space = 0;
+    char size_str[16] = {0};
 
     PfsThreadData pfs_thread_data = {0};
     SharedThreadData *shared_thread_data = &(pfs_thread_data.shared_thread_data);
@@ -4240,7 +4240,8 @@ static bool saveRawPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool 
     pfs_thread_data.use_layeredfs_dir = use_layeredfs_dir;
     shared_thread_data->total_size = pfs_ctx->size;
 
-    consolePrint("raw partitionfs section size: 0x%lX\n", pfs_ctx->size);
+    utilsGenerateFormattedSizeString((double)pfs_ctx->size, size_str, sizeof(size_str));
+    consolePrint("raw partitionfs section size: 0x%lX (%s)\n", pfs_ctx->size, size_str);
 
     if (use_layeredfs_dir)
     {
@@ -4343,6 +4344,7 @@ end:
 static bool saveExtractedPartitionFsSection(PartitionFileSystemContext *pfs_ctx, bool use_layeredfs_dir)
 {
     u64 data_size = 0;
+    char size_str[16] = {0};
 
     PfsThreadData pfs_thread_data = {0};
     SharedThreadData *shared_thread_data = &(pfs_thread_data.shared_thread_data);
@@ -4365,7 +4367,8 @@ static bool saveExtractedPartitionFsSection(PartitionFileSystemContext *pfs_ctx,
     pfs_thread_data.use_layeredfs_dir = use_layeredfs_dir;
     shared_thread_data->total_size = data_size;
 
-    consolePrint("extracted partitionfs section size: 0x%lX\n", data_size);
+    utilsGenerateFormattedSizeString((double)data_size, size_str, sizeof(size_str));
+    consolePrint("extracted partitionfs section size: 0x%lX (%s)\n", data_size, size_str);
     consoleRefresh();
 
     success = spanDumpThreads(extractedPartitionFsReadThreadFunc, genericWriteThreadFunc, &pfs_thread_data);
@@ -4377,6 +4380,7 @@ end:
 static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir)
 {
     u64 free_space = 0;
+    char size_str[16] = {0};
 
     RomFsThreadData romfs_thread_data = {0};
     SharedThreadData *shared_thread_data = &(romfs_thread_data.shared_thread_data);
@@ -4396,7 +4400,8 @@ static bool saveRawRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layere
     romfs_thread_data.use_layeredfs_dir = use_layeredfs_dir;
     shared_thread_data->total_size = romfs_ctx->size;
 
-    consolePrint("raw romfs section size: 0x%lX\n", romfs_ctx->size);
+    utilsGenerateFormattedSizeString((double)romfs_ctx->size, size_str, sizeof(size_str));
+    consolePrint("raw romfs section size: 0x%lX (%s)\n", romfs_ctx->size, size_str);
 
     if (use_layeredfs_dir)
     {
@@ -4499,6 +4504,7 @@ end:
 static bool saveExtractedRomFsSection(RomFileSystemContext *romfs_ctx, bool use_layeredfs_dir)
 {
     u64 data_size = 0;
+    char size_str[16] = {0};
 
     RomFsThreadData romfs_thread_data = {0};
     SharedThreadData *shared_thread_data = &(romfs_thread_data.shared_thread_data);
@@ -4521,7 +4527,8 @@ static bool saveExtractedRomFsSection(RomFileSystemContext *romfs_ctx, bool use_
     romfs_thread_data.use_layeredfs_dir = use_layeredfs_dir;
     shared_thread_data->total_size = data_size;
 
-    consolePrint("extracted romfs section size: 0x%lX\n", data_size);
+    utilsGenerateFormattedSizeString((double)data_size, size_str, sizeof(size_str));
+    consolePrint("extracted romfs section size: 0x%lX (%s)\n", data_size, size_str);
     consoleRefresh();
 
     success = spanDumpThreads(extractedRomFsReadThreadFunc, genericWriteThreadFunc, &romfs_thread_data);
@@ -6169,6 +6176,7 @@ static void nspThreadFunc(void *arg)
 
     char entry_name[64] = {0};
     u64 nsp_header_size = 0, nsp_size = 0, nsp_offset = 0;
+    char size_str[16] = {0};
     char *tmp_name = NULL;
 
     Sha256Context clean_sha256_ctx = {0}, dirty_sha256_ctx = {0};
@@ -6553,7 +6561,13 @@ static void nspThreadFunc(void *arg)
     }
 
     nsp_size = (nsp_header_size + pfs_img_ctx.fs_size);
-    consolePrint("nsp header size: 0x%lX | nsp size: 0x%lX\n", nsp_header_size, nsp_size);
+
+    utilsGenerateFormattedSizeString((double)nsp_header_size, size_str, sizeof(size_str));
+    consolePrint("nsp header size: 0x%lX (%s)\n", nsp_header_size, size_str);
+
+    utilsGenerateFormattedSizeString((double)nsp_size, size_str, sizeof(size_str));
+    consolePrint("nsp size: 0x%lX (%s)\n", nsp_size, size_str);
+
     consoleRefresh();
 
     if (dev_idx == 1)
@@ -6665,7 +6679,7 @@ static void nspThreadFunc(void *arg)
                 // validate clean hash
                 if (!cnmtVerifyContentHash(&cnmt_ctx, cur_nca_ctx, clean_sha256_hash))
                 {
-                    consolePrint("sha256 checksum mismatch for nca \"%s\"\n", cur_nca_ctx->content_id_str);
+                    consolePrint("sha256 checksum mismatch for nca \"%s\"\nplease check for corrupted data using the data management menu\n", cur_nca_ctx->content_id_str);
                     goto end;
                 }
             }
@@ -7143,4 +7157,51 @@ static u32 getNcaFsUseLayeredFsDirOption(void)
 static void setNcaFsUseLayeredFsDirOption(u32 idx)
 {
     configSetBoolean("nca_fs/use_layeredfs_dir", (bool)idx);
+}
+
+static bool resetSettings(void *userdata)
+{
+    NX_IGNORE_ARG(userdata);
+
+    consolePrint("are you sure you want to reset all settings to their default values?\n");
+    consolePrint("press a to proceed, or b to cancel\n\n");
+
+    u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
+    if (btn_down & HidNpadButton_A)
+    {
+        configResetSettings();
+
+        MenuElement **element_lists[] = {
+            g_xciMenuElements,
+            g_gameCardHfsDumpMenuElements,
+            g_nspMenuElements,
+            g_ticketMenuElements,
+            g_ncaFsSectionsSubMenuElements,
+            NULL
+        };
+
+        for(u32 i = 0; element_lists[i] != NULL; i++)
+        {
+            MenuElement **cur_element_list = element_lists[i];
+            for(u32 j = 0; cur_element_list[j] != NULL; j++)
+            {
+                MenuElement *cur_element = cur_element_list[j];
+
+                MenuElementOption *cur_options = cur_element->element_options;
+                if (!cur_options) continue;
+
+                cur_options->retrieved = false;
+
+                if (cur_options->getter_func)
+                {
+                    cur_options->selected = cur_options->getter_func();
+                    cur_options->retrieved = true;
+                }
+            }
+        }
+
+        consolePrint("settings successfully reset\n");
+    }
+
+    return false;
 }
