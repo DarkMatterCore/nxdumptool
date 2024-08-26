@@ -1151,6 +1151,9 @@ char *titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt
 
         u32 proc_title_cnt = 0;
 
+        const u8 start_val = (!is_system ? NcmContentMetaType_Application : NcmContentMetaType_Unknown);
+        const u8 end_val = (!is_system ? NcmContentMetaType_DataPatch : NcmContentMetaType_Unknown);
+
         bool success = false;
 
         if (!g_titleInterfaceInit || !filtered_app_metadata || !filtered_app_metadata_count || !out_csv_size || (is_system && use_gamecard))
@@ -1171,6 +1174,18 @@ char *titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt
             cur_app_metadata = filtered_app_metadata[i];
             if (!cur_app_metadata) continue;
 
+            /* Retrieve title info entry if we're dealing with a system title, or user application data if we're dealing with a user title. */
+            if (is_system && !(title_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, cur_app_metadata->title_id)))
+            {
+                LOG_MSG_WARNING("Failed to retrieve title info entry for %016lX!", cur_app_metadata->title_id);
+                continue;
+            } else
+            if (!is_system && !_titleGetUserApplicationData(cur_app_metadata->title_id, &user_app_data))
+            {
+                LOG_MSG_WARNING("Failed to retrieve user application data for %016lX!", cur_app_metadata->title_id);
+                continue;
+            }
+
             /* Escape title name, if needed. */
             if (strchr(cur_app_metadata->lang_entry.name, ',') != NULL || strchr(cur_app_metadata->lang_entry.name, '"') != NULL)
             {
@@ -1182,76 +1197,53 @@ char *titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt
                 }
             }
 
-            if (is_system)
+            /* Process all title types available in the retrieved user application data, in order. */
+            /* Nothing else must be done for system titles. */
+            for(u8 j = start_val; j <= end_val; j++)
             {
-                /* Get title info entry for our current system title. */
-                title_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, cur_app_metadata->title_id);
-                if (!title_info) continue;
+                /* Skip Delta type. */
+                if (j == NcmContentMetaType_Delta) continue;
 
-                /* Append title name. */
-                if (!TITLE_CSV_ADD_FMT_STR(escaped_title_name ? "\"%s\"," : "%s,", escaped_title_name ? escaped_title_name : cur_app_metadata->lang_entry.name))
+                if (!is_system)
                 {
-                    LOG_MSG_ERROR("Failed to append title name for %016lX!", cur_app_metadata->title_id);
-                    goto end;
-                }
-
-                /* Append title record to output CSV buffer. */
-                if (!TITLE_CSV_ADD_FMT_STR("%s,%016lX,%u,%s,%u,%s (%lu bytes)\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
-                                                                                    title_info->version.value, titleGetNcmStorageIdName(title_info->storage_id), \
-                                                                                    title_info->content_count, title_info->size_str, title_info->size))
-                {
-                    LOG_MSG_ERROR("Failed to append title record for %016lX!", cur_app_metadata->title_id);
-                    goto end;
-                }
-
-                /* Increase processed titles counter. */
-                proc_title_cnt++;
-            } else {
-                /* Retrieve user application data. */
-                if (!_titleGetUserApplicationData(cur_app_metadata->title_id, &user_app_data)) continue;
-
-                /* Process all title types available in the retrieved user application data, in order. */
-                for(u8 j = NcmContentMetaType_Application; j <= NcmContentMetaType_DataPatch; j++)
-                {
-                    if (j == NcmContentMetaType_Delta) continue;
-
                     /* Get the right title info pointer for the current title type. */
                     title_info = (j == NcmContentMetaType_Application  ? user_app_data.app_info : \
                                  (j == NcmContentMetaType_Patch        ? user_app_data.patch_info : \
                                  (j == NcmContentMetaType_AddOnContent ? user_app_data.aoc_info : user_app_data.aoc_patch_info)));
+                }
 
-                    /* Process title info linked list. */
-                    while(title_info)
+                /* Process title info linked list. */
+                while(title_info)
+                {
+                    /* Skip current entry if we're not supposed to process gamecard-based titles. */
+                    if (title_info->storage_id == NcmStorageId_GameCard && !use_gamecard)
                     {
-                        /* Skip current entry if we're not supposed to process gamecard-based titles. */
-                        if (title_info->storage_id == NcmStorageId_GameCard && !use_gamecard)
-                        {
-                            title_info = title_info->next;
-                            continue;
-                        }
-
-                        /* Append title name. */
-                        if (!TITLE_CSV_ADD_FMT_STR(escaped_title_name ? "\"%s\"," : "%s,", escaped_title_name ? escaped_title_name : cur_app_metadata->lang_entry.name))
-                        {
-                            LOG_MSG_ERROR("Failed to append title name for %016lX!", cur_app_metadata->title_id);
-                            goto end;
-                        }
-
-                        /* Append title record to output CSV buffer. */
-                        if (!TITLE_CSV_ADD_FMT_STR("%s,%016lX,%u,%s,%u,%s (%lu bytes)\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
-                                                                                            title_info->version.value, titleGetNcmStorageIdName(title_info->storage_id), \
-                                                                                            title_info->content_count, title_info->size_str, title_info->size))
-                        {
-                            LOG_MSG_ERROR("Failed to append title record for %016lX!", cur_app_metadata->title_id);
-                            goto end;
-                        }
-
-                        /* Increase processed titles counter. */
-                        proc_title_cnt++;
-
-                        /* Get next pointer in the current linked list. */
                         title_info = title_info->next;
+                        continue;
                     }
+
+                    /* Append title name. */
+                    if (!TITLE_CSV_ADD_FMT_STR(escaped_title_name ? "\"%s\"," : "%s,", escaped_title_name ? escaped_title_name : cur_app_metadata->lang_entry.name))
+                    {
+                        LOG_MSG_ERROR("Failed to append title name for %016lX!", cur_app_metadata->title_id);
+                        goto end;
+                    }
+
+                    /* Append title record to output CSV buffer. */
+                    if (!TITLE_CSV_ADD_FMT_STR("%s,%016lX,%u,%s,%u,%s (%lu bytes)\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
+                                                                                        title_info->version.value, titleGetNcmStorageIdName(title_info->storage_id), \
+                                                                                        title_info->content_count, title_info->size_str, title_info->size))
+                    {
+                        LOG_MSG_ERROR("Failed to append title record for %016lX!", cur_app_metadata->title_id);
+                        goto end;
+                    }
+
+                    /* Increase processed titles counter. */
+                    proc_title_cnt++;
+
+                    /* Get next pointer in the current linked list. */
+                    /* This is guaranteed to be NULL for system titles. */
+                    title_info = title_info->next;
                 }
             }
 
