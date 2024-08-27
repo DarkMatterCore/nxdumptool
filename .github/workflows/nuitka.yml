@@ -6,6 +6,7 @@ on:
       - rewrite-hostTest
     paths:
       - 'host/**'
+      - '.github/workflows/nuitka.yml'
 
   # Allows you to run this workflow manually from the Actions tab.
   workflow_dispatch:
