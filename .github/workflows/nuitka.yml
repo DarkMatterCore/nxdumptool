@@ -1,0 +1,60 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches:
+      - rewrite-hostTest
+    paths:
+      - 'host/**'
+jobs:
+  build:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: .\host
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v3
+        with:
+          python-version: 3.12.5
+            # 3.12.5 was released on 2024-08-06.
+            # As of Aug. 6, 2024, 3.13 is available.
+            # See https://www.python.org/downloads/ for available versions.
+
+      - name: Install dependencies and build EXE
+        run: .\host\windows_make_standalone.bat
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: "nxdt_host-${{ GITHUB_SHA::7 }}"
+          path: host/nxdt_host.7z
+          if-no-files-found: error
+
+      - name: Double check what files exist.
+        run: dir
+
+#       - name: Upload nxdumptool-rewrite PoC artifacts to pre-release
+#         uses: ncipollo/release-action@v1
+#         with:
+#           # Only update attachments on "rewrite-prerelease" tag.
+#           prerelease: True
+#           tag: "rewrite-prerelease"
+#           updateOnlyUnreleased: True
+#           # Remove old artifacts and replace with new ones.
+#           removeArtifacts: True
+#           replacesArtifacts: True
+#           # Update preferences.
+#           allowUpdates: True
+#           omitBody: True
+#           omitBodyDuringUpdate: True
+#           omitNameDuringUpdate: True
+#           artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*"
+#           #artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*, nxdumptool/nxdumptool.*"
+#           token: ${{ secrets.GITHUB_TOKEN }}
