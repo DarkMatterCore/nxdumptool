@@ -106,7 +106,7 @@ jobs:
           tag: "rewrite-prerelease"
           updateOnlyUnreleased: True
           # Remove old artifacts and replace with new ones.
-          removeArtifacts: True
+          removeArtifacts: False
           replacesArtifacts: True
           # Update preferences.
           allowUpdates: True
