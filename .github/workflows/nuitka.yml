@@ -25,14 +25,14 @@ jobs:
 
     steps:
       - name: Set environment variables.
-       run: |
+        run: |
          # echo "Want the commit to be "$env:github.sha".substring(0,7)"
          #echo 'nxdt_commit="$env:github.sha".substring(0,7)' | Out-File -FilePath $env:GITHUB_ENV -Append
          echo ${env:GITHUB_SHA}
          echo ${env:nxdt_commit}
 
       - name: Print All Environment Variables
-       run: |
+        run: |
          printenv
 
       - name: Checkout repository
