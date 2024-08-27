@@ -27,13 +27,14 @@ jobs:
       - name: Set environment variables.
         run: |
          # echo "Want the commit to be "$env:github.sha".substring(0,7)"
-         #echo 'nxdt_commit="$env:github.sha".substring(0,7)' | Out-File -FilePath $env:GITHUB_ENV -Append
-         echo ${env:GITHUB_SHA}
+         echo nxdt_commit="${{ github.sha }}".substring(0,7)
+         echo nxdt_commit="${{ github.sha }}".substring(0,7) | Out-File -FilePath $env:GITHUB_ENV -Append
+         # echo ${{github.sha}}
          echo ${env:nxdt_commit}
 
-      - name: Print All Environment Variables
-        run: |
-         printenv
+      # - name: Print All Environment Variables
+      #   run: |
+      #    printenv
 
       - name: Checkout repository
         uses: actions/checkout@v4
