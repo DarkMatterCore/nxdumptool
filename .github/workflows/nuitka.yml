@@ -25,8 +25,8 @@ jobs:
     steps:
       - name: Set environment variables.
         run: |
-          echo 'nxdt_commit="${{ "env.GITHUB_SHA".substring(0,7) }}' | Out-File -FilePath $env:GITHUB_ENV -Append
-          echo 'Testing Variable ${{ env.nxdt_commit }}'
+          echo "I want the commit to be "${{env.GITHUB_SHA}}".substring(0,7) }}"
+          echo "nxdt_commit="${{env.GITHUB_SHA}}".substring(0,7)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Checkout repository
         uses: actions/checkout@v4
