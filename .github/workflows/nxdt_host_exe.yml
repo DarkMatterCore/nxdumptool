@@ -18,7 +18,6 @@ jobs:
     defaults:
       run:
         shell: pwsh
-        # working-directory: .\host
 
     steps:
       - name: Set environment variables
@@ -57,7 +56,7 @@ jobs:
           prerelease: True
           tag: "rewrite-prerelease"
           updateOnlyUnreleased: True
-          # Remove old artifacts and replace with new ones.
+          # Replace old artifacts with new ones.
           removeArtifacts: False
           replacesArtifacts: True
           # Update preferences.
