@@ -14,7 +14,7 @@ python -m venv "%venvname%"
 
 "%venvpython%" -m pip install --upgrade nuitka -r requirements-win32.txt
 
-"%venvpython%" -m nuitka --standalone --deployment --disable-console --windows-icon-from-ico=nxdt.ico --enable-plugin=tk-inter nxdt_host.py
+"%venvpython%" -m nuitka --standalone --deployment --windows-console-mode=attach --windows-icon-from-ico=nxdt.ico --enable-plugin=tk-inter nxdt_host.py
 
 del /F /Q nxdt_host.7z
 7z a nxdt_host.7z .\nxdt_host.dist\*
