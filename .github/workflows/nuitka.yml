@@ -42,23 +42,23 @@ jobs:
           if-no-files-found: error
 
       - name: Double check what files exist.
-        run: dir
+        run: dir host
 
-#       - name: Upload nxdumptool-rewrite PoC artifacts to pre-release
-#         uses: ncipollo/release-action@v1
-#         with:
-#           # Only update attachments on "rewrite-prerelease" tag.
-#           prerelease: True
-#           tag: "rewrite-prerelease"
-#           updateOnlyUnreleased: True
-#           # Remove old artifacts and replace with new ones.
-#           removeArtifacts: True
-#           replacesArtifacts: True
-#           # Update preferences.
-#           allowUpdates: True
-#           omitBody: True
-#           omitBodyDuringUpdate: True
-#           omitNameDuringUpdate: True
-#           artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*"
-#           #artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*, nxdumptool/nxdumptool.*"
-#           token: ${{ secrets.GITHUB_TOKEN }}
+#      - name: Upload nxdumptool-rewrite PoC artifacts to pre-release
+#        uses: ncipollo/release-action@v1
+#        with:
+#          # Only update attachments on "rewrite-prerelease" tag.
+#          prerelease: True
+#          tag: "rewrite-prerelease"
+#          updateOnlyUnreleased: True
+#          # Remove old artifacts and replace with new ones.
+#          removeArtifacts: True
+#          replacesArtifacts: True
+#          # Update preferences.
+#          allowUpdates: True
+#          omitBody: True
+#          omitBodyDuringUpdate: True
+#          omitNameDuringUpdate: True
+#          artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*"
+#          #artifacts: "nxdumptool/code_templates/tmp/nxdt_rw_poc.*, nxdumptool/nxdumptool.*"
+#          token: ${{ secrets.GITHUB_TOKEN }}
