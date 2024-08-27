@@ -37,7 +37,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "nxdt_host-${{ GITHUB_SHA::7 }}"
+          name: "nxdt_host-${GITHUB_SHA::7}"
           path: host/nxdt_host.7z
           if-no-files-found: error
 
