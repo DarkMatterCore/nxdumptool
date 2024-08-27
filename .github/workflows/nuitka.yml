@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
 
 env:
-  nxdt_commit: ${{ GITHUB_SHA }}.substring(0,7)
+  nxdt_commit: ${{ env.GITHUB_SHA }}.substring(0,7)
 
 jobs:
   build:
