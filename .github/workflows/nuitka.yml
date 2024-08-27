@@ -2,8 +2,8 @@ name: Build Windows Executable
 
 on:
   push:
-    branches:
-      - rewrite
+    branches: [rewrite]
+
     paths:
       - 'host/**'
       - '.github/workflows/nuitka.yml'
