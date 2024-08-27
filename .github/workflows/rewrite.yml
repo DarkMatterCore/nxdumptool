@@ -21,7 +21,7 @@ env:
   nxdt_commit: ${GITHUB_SHA::7}
 
 jobs:
-  build:
+  build:  
     runs-on: ubuntu-latest
 
     container:
