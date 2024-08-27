@@ -24,11 +24,6 @@ jobs:
         run: |
          echo "nxdt_commit=$("${{ github.sha }}".SubString(0, 7))" >> $env:GITHUB_ENV
 
-      - name: Test environment variables
-        run: |
-         echo "Full Commit Hash Is ${{ github.sha }}"
-         echo "Short Commit Hash Is ${{ env.nxdt_commit }}"
-
       - name: Checkout repository
         uses: actions/checkout@v4
 
