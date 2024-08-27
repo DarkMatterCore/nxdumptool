@@ -21,11 +21,11 @@ jobs:
         # working-directory: .\host
 
     steps:
-      - name: Set environment variables.
+      - name: Set environment variables
         run: |
-         echo "nxdt_commit=$("${{ github.sha }}".SubString(0, 8))" >> $env:GITHUB_ENV
+         echo "nxdt_commit=$("${{ github.sha }}".SubString(0, 7))" >> $env:GITHUB_ENV
 
-      - name: Test environment variables.
+      - name: Test environment variables
         run: |
          echo "Full Commit Hash Is ${{ github.sha }}"
          echo "Short Commit Hash Is ${{ env.nxdt_commit }}"
