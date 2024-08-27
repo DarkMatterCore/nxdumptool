@@ -37,12 +37,9 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: "nxdt_host-${GITHUB_SHA::7}"
-          path: nxdt_host.7z
+          name: nxdt_host-${GITHUB_SHA::7}
+          path: host/nxdt_host.7z
           if-no-files-found: error
-
-      - name: Double check what files exist.
-        run: dir host
 
 #      - name: Upload nxdumptool-rewrite PoC artifacts to pre-release
 #        uses: ncipollo/release-action@v1
