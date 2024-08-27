@@ -30,9 +30,8 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: 3.12.4
-            # 3.12.4 was released on 2024-06-06.
-            # As of 2024-08-06, 3.12.5 is available.
+          python-version: 3.12.5
+            # 3.12.5 was released on 2024-08-06.
             # See https://www.python.org/downloads/ for available versions.
 
       - name: Install dependencies and build EXE
