@@ -32,13 +32,13 @@ jobs:
             # See https://www.python.org/downloads/ for available versions.
 
       - name: Install dependencies and build EXE
-        run: .\host\windows_make_standalone.bat
+        run: .\windows_make_standalone.bat
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: "nxdt_host-${GITHUB_SHA::7}"
-          path: host/nxdt_host.7z
+          path: nxdt_host.7z
           if-no-files-found: error
 
       - name: Double check what files exist.
