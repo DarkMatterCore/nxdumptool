@@ -32,7 +32,8 @@ jobs:
          echo ${env:nxdt_commit}
 
       - name: Print All Environment Variables
-        run: printenv
+       run: |
+         printenv
 
       - name: Checkout repository
         uses: actions/checkout@v4
