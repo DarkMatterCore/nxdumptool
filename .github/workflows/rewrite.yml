@@ -29,9 +29,9 @@ jobs:
         shell: bash
 
     steps:
-
-      - name: Set environment variables.
-        run: echo "nxdt_commit=${GITHUB_SHA::7}" >> $GITHUB_ENV
+      - name: Set environment variables
+        run: |
+          echo "nxdt_commit=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Clone nxdumptool repository
         uses: actions/checkout@v4
