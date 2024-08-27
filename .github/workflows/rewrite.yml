@@ -17,8 +17,7 @@ on:
   # Allows you to run this workflow manually from the Actions tab.
   workflow_dispatch:
 
-env:
-  nxdt_commit: ${GITHUB_SHA::7}
+# env: nxdt_commit: ${GITHUB_SHA::7}
 
 jobs:
   build:  
@@ -32,6 +31,9 @@ jobs:
         shell: bash
 
     steps:
+
+      - name: Set environment variables.
+        run: echo "nxdt_commit=${GITHUB_SHA::7}" >> $GITHUB_ENV
 
       - name: Clone nxdumptool repository
         uses: actions/checkout@v4
