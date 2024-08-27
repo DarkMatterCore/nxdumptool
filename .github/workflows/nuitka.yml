@@ -23,7 +23,7 @@ jobs:
     steps:
       - name: Set environment variables.
         run: |
-         echo "nxdt_commit=${{ env:GITHUB_SHA.Substring(0, 7) }}" >> $env:GITHUB_ENV
+         echo "nxdt_commit=$("${{ github.sha }}".SubString(0, 8))" >> $env:GITHUB_ENV
 
       - name: Test environment variables.
         run: |
