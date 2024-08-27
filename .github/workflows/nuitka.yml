@@ -25,17 +25,9 @@ jobs:
     steps:
       - name: Set environment variables.
         run: |
-         # echo "Want the commit to be "$env:github.sha".substring(0,7)"
-         # echo nxdt_commit="${{ github.sha }}".substring(0,7)
-         # echo nxdt_commit='"${{ github.sha }}".substring(0,7)' | Out-File -FilePath $env:GITHUB_ENV -Append
-         # echo ${{github.sha}}
          echo "nxdt_commit=$("${{ github.sha }}".SubString(0, 8))" >> $env:GITHUB_ENV
          echo "Full Commit Hash Is ${{github.sha}}"
          echo "Short Commit Hash Is ${{ env.nxdt_commit }}"
-
-      # - name: Print All Environment Variables
-      #   run: |
-      #    printenv
 
       - name: Checkout repository
         uses: actions/checkout@v4
