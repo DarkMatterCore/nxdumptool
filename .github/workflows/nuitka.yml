@@ -18,7 +18,7 @@ jobs:
     defaults:
       run:
         shell: pwsh
-        working-directory: .\host
+        # working-directory: .\host
 
     steps:
       - name: Checkout repository
@@ -35,7 +35,7 @@ jobs:
             # See https://www.python.org/downloads/ for available versions.
 
       - name: Install dependencies and build EXE
-        run: .\windows_make_standalone.bat
+        run: .\host\windows_make_standalone.bat
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
