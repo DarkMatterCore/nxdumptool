@@ -40,7 +40,7 @@ jobs:
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: nxdt_host-${{ env.nxdt_commit }}
+          name: nxdt_host-${{ env.nxdt_commit }}.7z
           path: host/nxdt_host.7z
           if-no-files-found: error
 
