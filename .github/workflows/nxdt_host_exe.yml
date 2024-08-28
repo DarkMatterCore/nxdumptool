@@ -1,0 +1,63 @@
+name: Build Host as Windows Executable
+
+on:
+  push:
+    branches: [rewrite]
+
+    paths:
+      - 'host/**'
+      - '.github/workflows/nxdt_host_exe.yml'
+
+  # Allows you to run this workflow manually from the Actions tab.
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - name: Set environment variables
+        run: |
+         echo "nxdt_commit=$("${{ github.sha }}".SubString(0, 7))" >> $env:GITHUB_ENV
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+            # 3.12.5 was released on 2024-08-06.
+            # See https://www.python.org/downloads/ for available versions.
+
+      - name: Install dependencies and build EXE
+        run: .\host\windows_make_standalone.bat
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxdt_host-${{ env.nxdt_commit }}.7z
+          path: host/nxdt_host.7z
+          if-no-files-found: error
+
+      - name: Upload nxdumptool-rewrite PoC artifacts to pre-release
+        uses: ncipollo/release-action@v1
+        with:
+          # Only update attachments on "rewrite-prerelease" tag.
+          prerelease: True
+          tag: "rewrite-prerelease"
+          updateOnlyUnreleased: True
+          # Replace old artifacts with new ones.
+          removeArtifacts: False
+          replacesArtifacts: True
+          # Update preferences.
+          allowUpdates: True
+          omitBody: True
+          omitBodyDuringUpdate: True
+          omitNameDuringUpdate: True
+          artifacts: "host/nxdt_host.7z"
+          token: ${{ secrets.GITHUB_TOKEN }}
