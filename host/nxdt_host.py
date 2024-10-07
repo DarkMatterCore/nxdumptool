@@ -471,10 +471,6 @@ class ProgressBarWindow:
 
         self.total_div = (float(self.total) / self.divisor)
 
-        # Replace our custom rate variable with tqdm's rate_fmt if our unit is set to MiB.
-        if self.unit == 'MiB':
-            self.bar_format = self.bar_format.replace('__custom_rate_fmt__', '{rate_fmt}')
-
         if self.tk_pbar:
             self.tk_pbar.configure(maximum=self.total_div, mode='determinate')
             self.start_time = time.time()
@@ -530,7 +526,7 @@ class ProgressBarWindow:
     def _format_speed(self, cur_time: float, cur_n: int) -> str:
         # Short-circuit: return immediately if our unit is set to MiB. We'll let tqdm do its thing.
         if self.unit == 'MiB':
-            return self.bar_format
+            return self.bar_format.replace('__custom_rate_fmt__', '{rate_fmt}')
 
         # I absolutely hate to roll out my own speed calculation for the UI, but tqdm offers no way to use different units for the progress/total/rate values.
         # Please forgive me.
@@ -545,7 +541,7 @@ class ProgressBarWindow:
         self.prev_n = cur_n
         self.prev_iter_time = cur_time
 
-        return self.bar_format.replace('__custom_rate_fmt__', f'{rate:.2f} MiB/s')
+        return self.bar_format.replace('__custom_rate_fmt__', f'{rate:.2f}MiB/s')
 
     def end(self) -> None:
         self.n = 0
