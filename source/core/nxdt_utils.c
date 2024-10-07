@@ -90,14 +90,17 @@ static const size_t g_illegalFileSystemCharsLength = (MAX_ELEMENTS(g_illegalFile
 static bool g_appUpdated = false;
 
 static const SplConfigItem SplConfigItem_ExosphereApiVersion = (SplConfigItem)65000;
+static const SplConfigItem SplConfigItem_ExosphereEmummcType = (SplConfigItem)65007;
 
 static UtilsExosphereApiVersion g_exosphereApiVersion = {0};
+static bool g_exosphereIsEmummc = false;
 
 /* Function prototypes. */
 
 static void _utilsGetLaunchPath(void);
 
 static bool utilsGetExosphereApiVersion(void);
+static bool utilsGetExosphereEmummcType(void);
 
 static void _utilsGetCustomFirmwareType(void);
 
@@ -157,10 +160,8 @@ bool utilsInitializeResources(void)
 
 #if LOG_LEVEL <= LOG_LEVEL_INFO
         /* Log info messages. */
-        u32 hos_version = hosversionGet();
         LOG_MSG_INFO(APP_TITLE " v" APP_VERSION " starting (" GIT_REV "). Built on " BUILD_TIMESTAMP ".");
         if (g_nxLinkSocketFd >= 0) LOG_MSG_INFO("nxlink enabled! Host IP address: %s.", inet_ntoa(__nxlink_host));
-        LOG_MSG_INFO("Horizon OS version: %u.%u.%u.", HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version));
 #endif
 
         /* Retrieve Exosphère API version. */
@@ -170,18 +171,15 @@ bool utilsInitializeResources(void)
             break;
         }
 
+        /* Retrieve Exosphère emuMMC status. */
+        if (!utilsGetExosphereEmummcType())
+        {
+            LOG_MSG_ERROR("Failed to retrieve Exosphère emuMMC status!");
+            break;
+        }
+
         /* Retrieve custom firmware type. */
         _utilsGetCustomFirmwareType();
-        if (g_customFirmwareType != UtilsCustomFirmwareType_Unknown) LOG_MSG_INFO("Detected %s CFW.", (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : \
-                                                                                  (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : "ReiNX")));
-
-        LOG_MSG_INFO("Exosphère API version info:\r\n" \
-                     "- Release version: %u.%u.%u.\r\n" \
-                     "- PKG1 key generation: %u (0x%02X).\r\n" \
-                     "- Target firmware: %u.%u.%u.", \
-                     g_exosphereApiVersion.ams_ver_major, g_exosphereApiVersion.ams_ver_minor, g_exosphereApiVersion.ams_ver_micro, \
-                     g_exosphereApiVersion.key_generation, !g_exosphereApiVersion.key_generation ? g_exosphereApiVersion.key_generation : (g_exosphereApiVersion.key_generation + 1), \
-                     g_exosphereApiVersion.target_firmware.major, g_exosphereApiVersion.target_firmware.minor, g_exosphereApiVersion.target_firmware.micro);
 
         /* Get product model. */
         if (!_utilsGetProductModel()) break;
@@ -195,8 +193,34 @@ bool utilsInitializeResources(void)
         /* Get applet type. */
         g_programAppletType = appletGetAppletType();
 
-        LOG_MSG_INFO("Running under %s %s unit %s Terra flag in %s mode.", g_isDevUnit ? "development" : "retail", utilsIsMarikoUnit() ? "Mariko" : "Erista", \
-                                                                           g_isTerraUnit ? "with" : "without", utilsIsAppletMode() ? "applet" : "title override");
+#if LOG_LEVEL <= LOG_LEVEL_INFO
+        /* Log info messages. */
+        u32 hos_version = hosversionGet();
+
+        LOG_MSG_INFO("Console info:\r\n" \
+                     "- Horizon OS version: %u.%u.%u.\r\n" \
+                     "- CFW: %s.\r\n" \
+                     "- eMMC type: %s.\r\n" \
+                     "- SoC type: %s\r\n" \
+                     "- Development unit: %s.\r\n" \
+                     "- Terra flag: %s.\r\n" \
+                     "- Execution mode: %s.", \
+                     HOSVER_MAJOR(hos_version), HOSVER_MINOR(hos_version), HOSVER_MICRO(hos_version), \
+                     (g_customFirmwareType == UtilsCustomFirmwareType_Atmosphere ? "Atmosphère" : (g_customFirmwareType == UtilsCustomFirmwareType_SXOS ? "SX OS" : g_customFirmwareType == UtilsCustomFirmwareType_ReiNX ? "ReiNX" : "Unknown")), \
+                     g_exosphereIsEmummc ? "emuMMC" : "sysMMC", \
+                     utilsIsMarikoUnit() ? "Mariko" : "Erista", \
+                     g_isDevUnit ? "yes" : "no", \
+                     g_isTerraUnit ? "yes" : "no", \
+                     utilsIsAppletMode() ? "applet" : "title override");
+
+        LOG_MSG_INFO("Exosphère API version info:\r\n" \
+                     "- Release version: %u.%u.%u.\r\n" \
+                     "- PKG1 key generation: %u (0x%02X).\r\n" \
+                     "- Target firmware: %u.%u.%u.", \
+                     g_exosphereApiVersion.ams_ver_major, g_exosphereApiVersion.ams_ver_minor, g_exosphereApiVersion.ams_ver_micro, \
+                     g_exosphereApiVersion.key_generation, !g_exosphereApiVersion.key_generation ? g_exosphereApiVersion.key_generation : (g_exosphereApiVersion.key_generation + 1), \
+                     g_exosphereApiVersion.target_firmware.major, g_exosphereApiVersion.target_firmware.minor, g_exosphereApiVersion.target_firmware.micro);
+#endif
 
         if (g_appLaunchPath)
         {
@@ -421,6 +445,11 @@ u8 utilsGetAtmosphereKeyGeneration(void)
 void utilsGetAtmosphereTargetFirmware(SdkAddOnVersion *out)
 {
     memcpy(out, &(g_exosphereApiVersion.target_firmware), sizeof(SdkAddOnVersion));
+}
+
+bool utilsGetAtmosphereEmummcStatus(void)
+{
+    return g_exosphereIsEmummc;
 }
 
 u8 utilsGetCustomFirmwareType(void)
@@ -1364,6 +1393,17 @@ static bool utilsGetExosphereApiVersion(void)
 {
     Result rc = splGetConfig(SplConfigItem_ExosphereApiVersion, (u64*)&g_exosphereApiVersion);
     bool ret = R_SUCCEEDED(rc);
+    if (!ret) LOG_MSG_ERROR("splGetConfig failed! (0x%X).", rc);
+    return ret;
+}
+
+/* SMC config item available in Atmosphère and Atmosphère-based CFWs. */
+static bool utilsGetExosphereEmummcType(void)
+{
+    u64 is_emummc = 0;
+    Result rc = splGetConfig(SplConfigItem_ExosphereEmummcType, &is_emummc);
+    bool ret = R_SUCCEEDED(rc);
+    g_exosphereIsEmummc = (ret && is_emummc);
     if (!ret) LOG_MSG_ERROR("splGetConfig failed! (0x%X).", rc);
     return ret;
 }

@@ -96,6 +96,9 @@ u8 utilsGetAtmosphereKeyGeneration(void);
 /// Fills the provided SdkAddOnVersion element with the target firmware set by Atmosphère.
 void utilsGetAtmosphereTargetFirmware(SdkAddOnVersion *out);
 
+/// Returns true if an emuMMC is being used.
+bool utilsGetAtmosphereEmummcStatus(void);
+
 /// Returns a UtilsCustomFirmwareType value.
 u8 utilsGetCustomFirmwareType(void);
 
