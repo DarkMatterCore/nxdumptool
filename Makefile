@@ -100,6 +100,7 @@ CFLAGS		+=	-DBUILD_TIMESTAMP="\"${BUILD_TIMESTAMP}\"" -DBOREALIS_RESOURCES="\"${
 CFLAGS		+=	-fmacro-prefix-map=$(ROOTDIR)=
 
 CXXFLAGS	:=	$(CFLAGS) -std=c++20
+CFLAGS		+=	-std=c23
 
 ASFLAGS		:=	-g $(ARCH)
 LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)

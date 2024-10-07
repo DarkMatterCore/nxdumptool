@@ -46,7 +46,7 @@ struct json_object *jsonParseFromString(const char *str, size_t size)
     if (!str || !*str)
     {
         LOG_MSG_ERROR("Invalid parameters!");
-        return false;
+        return NULL;
     }
 
     /* Calculate string size if it wasn't provided. */

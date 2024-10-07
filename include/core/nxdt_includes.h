@@ -31,6 +31,7 @@
 #include <string.h>
 #include <stddef.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <malloc.h>
 #include <errno.h>
 #include <ctype.h>
