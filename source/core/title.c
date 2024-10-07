@@ -199,19 +199,19 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000040, "nd" },
     { 0x0100000000000041, "ngct" },
     { 0x0100000000000042, "pgl" },
-    { 0x0100000000000043, "sys_applet_unknown_00" },            ///< Placeholder.
-    { 0x0100000000000044, "sys_applet_unknown_01" },            ///< Placeholder.
+    { 0x0100000000000043, "sysmod_unknown_00" },                ///< Placeholder.
+    { 0x0100000000000044, "sysmod_unknown_01" },                ///< Placeholder.
     { 0x0100000000000045, "omm" },
     { 0x0100000000000046, "eth" },
-    { 0x0100000000000047, "sys_applet_unknown_02" },            ///< Placeholder.
-    { 0x0100000000000048, "sys_applet_unknown_03" },            ///< Placeholder.
-    { 0x0100000000000049, "sys_applet_unknown_04" },            ///< Placeholder.
-    { 0x010000000000004A, "sys_applet_unknown_05" },            ///< Placeholder.
-    { 0x010000000000004B, "sys_applet_unknown_06" },            ///< Placeholder.
+    { 0x0100000000000047, "sysmod_unknown_02" },                ///< Placeholder.
+    { 0x0100000000000048, "sysmod_unknown_03" },                ///< Placeholder.
+    { 0x0100000000000049, "sysmod_unknown_04" },                ///< Placeholder.
+    { 0x010000000000004A, "sysmod_unknown_05" },                ///< Placeholder.
+    { 0x010000000000004B, "sysmod_unknown_06" },                ///< Placeholder.
     { 0x010000000000004C, "netTc" },
-    { 0x010000000000004D, "sys_applet_unknown_07" },            ///< Placeholder.
-    { 0x010000000000004E, "sys_applet_unknown_08" },            ///< Placeholder.
-    { 0x010000000000004F, "sys_applet_unknown_09" },            ///< Placeholder.
+    { 0x010000000000004D, "sysmod_unknown_07" },                ///< Placeholder.
+    { 0x010000000000004E, "sysmod_unknown_08" },                ///< Placeholder.
+    { 0x010000000000004F, "sysmod_unknown_09" },                ///< Placeholder.
     { 0x0100000000000050, "ngc" },
     { 0x0100000000000051, "dmgr" },
 
@@ -295,34 +295,34 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000101B, "DummyECApplet" },
     { 0x010000000000101C, "userMigration" },
     { 0x010000000000101D, "EncounterSys" },
-    { 0x010000000000101E, "nim_unknown_00" },                   ///< Placeholder.
-    { 0x010000000000101F, "nim_glue_unknown_00" },              ///< Placeholder.
+    { 0x010000000000101E, "sysapplet_unknown_00" },             ///< Placeholder.
+    { 0x010000000000101F, "sysapplet_unknown_01" },             ///< Placeholder.
     { 0x0100000000001020, "story" },
     { 0x0100000000001021, "systemupdate_pass" },                ///< Placeholder.
     { 0x0100000000001023, "statistics" },                       ///< Placeholder.
     { 0x0100000000001024, "syslog" },                           ///< Placeholder.
-    { 0x0100000000001025, "am_unknown_00" },                    ///< Placeholder.
-    { 0x0100000000001026, "olsc_unknown_00" },                  ///< Placeholder.
-    { 0x0100000000001027, "account_unknown_00" },               ///< Placeholder.
-    { 0x0100000000001028, "ns_unknown_00" },                    ///< Placeholder.
+    { 0x0100000000001025, "sysapplet_unknown_02" },             ///< Placeholder.
+    { 0x0100000000001026, "sysapplet_unknown_03" },             ///< Placeholder.
+    { 0x0100000000001027, "sysapplet_unknown_04" },             ///< Placeholder.
+    { 0x0100000000001028, "sysapplet_unknown_05" },             ///< Placeholder.
     { 0x0100000000001029, "request_count" },                    ///< Placeholder.
-    { 0x010000000000102A, "am_unknown_01" },                    ///< Placeholder.
-    { 0x010000000000102B, "glue_unknown_00" },                  ///< Placeholder.
-    { 0x010000000000102C, "am_unknown_02" },                    ///< Placeholder.
+    { 0x010000000000102A, "sysapplet_unknown_06" },             ///< Placeholder.
+    { 0x010000000000102B, "sysapplet_unknown_07" },             ///< Placeholder.
+    { 0x010000000000102C, "sysapplet_unknown_08" },             ///< Placeholder.
     { 0x010000000000102E, "blacklist" },                        ///< Placeholder.
     { 0x010000000000102F, "content_delivery" },                 ///< Placeholder.
     { 0x0100000000001030, "npns_create_token" },                ///< Placeholder.
-    { 0x0100000000001031, "ns_unknown_01" },                    ///< Placeholder.
-    { 0x0100000000001032, "glue_unknown_01" },                  ///< Placeholder.
+    { 0x0100000000001031, "sysapplet_unknown_09" },             ///< Placeholder.
+    { 0x0100000000001032, "sysapplet_unknown_0a" },             ///< Placeholder.
     { 0x0100000000001033, "promotion" },                        ///< Placeholder.
-    { 0x0100000000001034, "ngct_bcat_unknown_00" },             ///< Placeholder.
-    { 0x0100000000001037, "nim_unknown_01" },                   ///< Placeholder.
+    { 0x0100000000001034, "sysapplet_unknown_0b" },             ///< Placeholder.
+    { 0x0100000000001037, "sysapplet_unknown_0c" },             ///< Placeholder.
     { 0x0100000000001038, "sample" },
     { 0x010000000000103C, "mnpp" },                             ///< Placeholder.
     { 0x010000000000103D, "bsdsocket_setting" },                ///< Placeholder.
     { 0x010000000000103E, "ntf_mission_completed" },            ///< Placeholder.
-    { 0x0100000000001042, "am_unknown_03" },                    ///< Placeholder.
-    { 0x0100000000001043, "am_unknown_04" },                    ///< Placeholder.
+    { 0x0100000000001042, "sysapplet_unknown_0d" },             ///< Placeholder.
+    { 0x0100000000001043, "sysapplet_unknown_0e" },             ///< Placeholder.
     { 0x0100000000001FFF, "EndOceanProgramId" },
 
     /* Development system applets. */
@@ -443,6 +443,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000B1BA, "ProdFwdbgPackage" },
     { 0x010000000000B22A, "scs" },
     { 0x010000000000B22B, "ControllerFirmwareDebug" },
+    { 0x010000000000B23D, "dt0" },
     { 0x010000000000B240, "htc" },
 
     /* Bdk system modules. */
@@ -453,25 +454,27 @@ static const TitleSystemEntry g_systemTitles[] = {
 
     /* New development system modules. */
     { 0x010000000000D609, "dmnt.gen2" },
-    { 0x010000000000D60A, "msm_unknown_00" },                   ///< Placeholder.
-    { 0x010000000000D60B, "msm_unknown_01" },                   ///< Placeholder.
-    { 0x010000000000D60C, "msm_unknown_02" },                   ///< Placeholder.
-    { 0x010000000000D60D, "msm_unknown_03" },                   ///< Placeholder.
-    { 0x010000000000D60E, "msm_unknown_04" },                   ///< Placeholder.
-    { 0x010000000000D610, "msm_unknown_05" },                   ///< Placeholder.
-    { 0x010000000000D611, "msm_unknown_06" },                   ///< Placeholder.
-    { 0x010000000000D612, "msm_unknown_07" },                   ///< Placeholder.
-    { 0x010000000000D613, "msm_unknown_08" },                   ///< Placeholder.
-    { 0x010000000000D614, "msm_unknown_09" },                   ///< Placeholder.
-    { 0x010000000000D615, "msm_unknown_0a" },                   ///< Placeholder.
-    { 0x010000000000D616, "msm_unknown_0b" },                   ///< Placeholder.
-    { 0x010000000000D617, "msm_unknown_0c" },                   ///< Placeholder.
-    { 0x010000000000D619, "msm_unknown_0d" },                   ///< Placeholder.
-    { 0x010000000000D621, "msm_unknown_0e" },                   ///< Placeholder.
+    { 0x010000000000D60A, "dev_sysmod_unknown_00" },            ///< Placeholder.
+    { 0x010000000000D60B, "dev_sysmod_unknown_01" },            ///< Placeholder.
+    { 0x010000000000D60C, "dev_sysmod_unknown_02" },            ///< Placeholder.
+    { 0x010000000000D60D, "dev_sysmod_unknown_03" },            ///< Placeholder.
+    { 0x010000000000D60E, "dev_sysmod_unknown_04" },            ///< Placeholder.
+    { 0x010000000000D610, "dev_sysmod_unknown_05" },            ///< Placeholder.
+    { 0x010000000000D611, "dev_sysmod_unknown_06" },            ///< Placeholder.
+    { 0x010000000000D612, "dev_sysmod_unknown_07" },            ///< Placeholder.
+    { 0x010000000000D613, "dev_sysmod_unknown_08" },            ///< Placeholder.
+    { 0x010000000000D614, "dev_sysmod_unknown_09" },            ///< Placeholder.
+    { 0x010000000000D615, "dev_sysmod_unknown_0a" },            ///< Placeholder.
+    { 0x010000000000D616, "dev_sysmod_unknown_0b" },            ///< Placeholder.
+    { 0x010000000000D617, "dev_sysmod_unknown_0c" },            ///< Placeholder.
+    { 0x010000000000D619, "dev_sysmod_unknown_0d" },            ///< Placeholder.
+    { 0x010000000000D621, "dev_sysmod_unknown_0e" },            ///< Placeholder.
     { 0x010000000000D623, "DevServer" },
-    { 0x010000000000D633, "msm_unknown_0f" },                   ///< Placeholder.
+    { 0x010000000000D633, "dev_sysmod_unknown_0f" },            ///< Placeholder.
     { 0x010000000000D640, "htcnet" },
     { 0x010000000000D65A, "netTcDev" },
+    { 0x010000000000D65B, "dev_sysmod_unknown_10" },            ///< Placeholder.
+    { 0x010000000000D65C, "dev_sysmod_unknown_11" },            ///< Placeholder.
 
     /* System applications. */
     { 0x01008BB00013C000, "flog" },
@@ -2927,7 +2930,7 @@ static bool titleGetContentInfosByGameCardContentMetaContext(TitleGameCardConten
         return false;
     }
 
-    NcmContentInfo *content_infos = NULL, *content_infos_tmp = NULL;
+    NcmContentInfo *content_infos = NULL, *content_infos_tmp = NULL, *meta_content_info = NULL;
     u32 content_count = (gc_meta_ctx->cnmt_ctx.packaged_header->content_count + 1), available_count = 0;
 
     /* Allocate memory for the content infos. */
@@ -2937,6 +2940,16 @@ static bool titleGetContentInfosByGameCardContentMetaContext(TitleGameCardConten
         LOG_MSG_ERROR("Unable to allocate memory for the content infos buffer! (%u content[s]).", content_count);
         return false;
     }
+
+    /* Reserve the very first content info entry for our Meta NCA. Update the available content count while we're at it. */
+    meta_content_info = &(content_infos[available_count++]);
+    memcpy(&(meta_content_info->content_id), &(gc_meta_ctx->nca_ctx.content_id), sizeof(NcmContentId));
+    ncmU64ToContentInfoSize(gc_meta_ctx->nca_ctx.content_size, meta_content_info);
+    meta_content_info->attr = 0;
+    meta_content_info->content_type = NcmContentType_Meta;
+    meta_content_info->id_offset = 0;
+
+    //LOG_DATA_DEBUG(meta_content_info, sizeof(NcmContentInfo), "Forged Meta content record:");
 
     /* Loop through our NcmPackagedContentInfo entries. */
     for(u32 i = 0; i < (content_count - 1); i++)
@@ -2958,16 +2971,6 @@ static bool titleGetContentInfosByGameCardContentMetaContext(TitleGameCardConten
         /* Copy content info data and update available content count. */
         memcpy(&(content_infos[available_count++]), cur_content_info, sizeof(NcmContentInfo));
     }
-
-    /* Reserve the very last content info entry for our Meta NCA. Update the available content count while we're at it. */
-    NcmContentInfo *meta_content_info = &(content_infos[available_count++]);
-    memcpy(&(meta_content_info->content_id), &(gc_meta_ctx->nca_ctx.content_id), sizeof(NcmContentId));
-    ncmU64ToContentInfoSize(gc_meta_ctx->nca_ctx.content_size, meta_content_info);
-    meta_content_info->attr = 0;
-    meta_content_info->content_type = NcmContentType_Meta;
-    meta_content_info->id_offset = 0;
-
-    //LOG_DATA_DEBUG(meta_content_info, sizeof(NcmContentInfo), "Forged Meta content record:");
 
     if (available_count < content_count)
     {
@@ -3304,7 +3307,7 @@ static char *titleGetDisplayVersionString(TitleInfo *title_info)
         !(nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0)))
     {
         LOG_MSG_ERROR("Invalid parameters!");
-        return false;
+        return NULL;
     }
 
     u64 title_id = title_info->meta_key.id;
