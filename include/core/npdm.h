@@ -62,7 +62,7 @@ typedef struct {
     u8 optimize_memory_allocation         : 1;
     u8 disable_device_address_space_merge : 1;
     u8 enable_alias_region_extra_size     : 1;
-    u8 reserved                           : 1;
+    u8 prevent_code_reads                 : 1;
 } NpdmMetaFlags;
 
 NXDT_ASSERT(NpdmMetaFlags, 0x1);
@@ -279,6 +279,15 @@ typedef struct {
 
 NXDT_ASSERT(NpdmSrvAccessControlDescriptorEntry, 0x1);
 
+/// KernelCapability descriptor. Part of the ACID and ACI0 section bodies.
+/// This descriptor is composed of a variable number of u32 entries. Thus, the entry count can be calculated by dividing the KernelCapability descriptor size by 4.
+/// The entry type is identified by a pattern of "01...11" (zero followed by ones) in the low u16, counting from the LSB. The variable number of ones must never exceed 16 (entirety of the low u16).
+typedef struct {
+    u32 value;
+} NpdmKernelCapabilityDescriptorEntry;
+
+NXDT_ASSERT(NpdmKernelCapabilityDescriptorEntry, 0x4);
+
 typedef enum {
     NpdmKernelCapabilityEntryBitmaskSize_ThreadInfo        = 3,
     NpdmKernelCapabilityEntryBitmaskSize_EnableSystemCalls = 4,
@@ -307,8 +316,7 @@ typedef enum {
 
 /// ThreadInfo entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask          : NpdmKernelCapabilityEntryBitmaskSize_ThreadInfo; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_ThreadInfo.
-    u32 padding          : 1;                                               ///< Always set to zero.
+    u32 bitmask          : NpdmKernelCapabilityEntryBitmaskSize_ThreadInfo + 1; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_ThreadInfo.
     u32 lowest_priority  : 6;
     u32 highest_priority : 6;
     u32 min_core_number  : 8;
@@ -534,10 +542,9 @@ typedef enum {
 
 /// EnableSystemCalls entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask         : NpdmKernelCapabilityEntryBitmaskSize_EnableSystemCalls;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_EnableSystemCalls.
-    u32 padding         : 1;                                                        ///< Always set to zero.
-    u32 system_call_ids : 24;                                                       ///< NpdmSystemCallId.
-    u32 index           : 3;                                                        ///< System calls index.
+    u32 bitmask         : NpdmKernelCapabilityEntryBitmaskSize_EnableSystemCalls + 1;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_EnableSystemCalls.
+    u32 system_call_ids : 24;                                                           ///< NpdmSystemCallId.
+    u32 index           : 3;                                                            ///< System calls index.
 } NpdmEnableSystemCalls;
 
 NXDT_ASSERT(NpdmEnableSystemCalls, 0x4);
@@ -548,6 +555,14 @@ typedef enum {
     NpdmPermissionType_Count = 2    ///< Total values supported by this enum.
 } NpdmPermissionType;
 
+typedef struct {
+    u32 bitmask         : NpdmKernelCapabilityEntryBitmaskSize_MemoryMap + 1;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap.
+    u32 begin_address   : 24;                                                   ///< begin_address << 12.
+    u32 permission_type : 1;                                                    ///< NpdmPermissionType.
+} NpdmMemoryMapType1;
+
+NXDT_ASSERT(NpdmMemoryMapType1, 0x4);
+
 typedef enum {
     NpdmMappingType_Io     = 0,
     NpdmMappingType_Static = 1,
@@ -555,20 +570,10 @@ typedef enum {
 } NpdmMappingType;
 
 typedef struct {
-    u32 bitmask         : NpdmKernelCapabilityEntryBitmaskSize_MemoryMap;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap.
-    u32 padding         : 1;                                                ///< Always set to zero.
-    u32 begin_address   : 24;                                               ///< begin_address << 12.
-    u32 permission_type : 1;                                                ///< NpdmPermissionType.
-} NpdmMemoryMapType1;
-
-NXDT_ASSERT(NpdmMemoryMapType1, 0x4);
-
-typedef struct {
-    u32 bitmask      : NpdmKernelCapabilityEntryBitmaskSize_MemoryMap;  ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap.
-    u32 padding      : 1;                                               ///< Always set to zero.
-    u32 size         : 20;                                              ///< size << 12.
+    u32 bitmask      : NpdmKernelCapabilityEntryBitmaskSize_MemoryMap + 1;  ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap.
+    u32 size         : 20;                                                  ///< size << 12.
     u32 reserved     : 4;
-    u32 mapping_type : 1;                                               ///< NpdmMappingType.
+    u32 mapping_type : 1;                                                   ///< NpdmMappingType.
 } NpdmMemoryMapType2;
 
 NXDT_ASSERT(NpdmMemoryMapType2, 0x4);
@@ -586,9 +591,8 @@ NXDT_ASSERT(NpdmMemoryMap, 0x4);
 
 /// IoMemoryMap entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask       : NpdmKernelCapabilityEntryBitmaskSize_IoMemoryMap;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_IoMemoryMap.
-    u32 padding       : 1;                                                  ///< Always set to zero.
-    u32 begin_address : 24;                                                 ///< begin_address << 12.
+    u32 bitmask       : NpdmKernelCapabilityEntryBitmaskSize_IoMemoryMap + 1;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_IoMemoryMap.
+    u32 begin_address : 24;                                                     ///< begin_address << 12.
 } NpdmIoMemoryMap;
 
 NXDT_ASSERT(NpdmIoMemoryMap, 0x4);
@@ -603,24 +607,22 @@ typedef enum {
 
 /// MemoryRegionMap entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask           : NpdmKernelCapabilityEntryBitmaskSize_MemoryRegionMap;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryRegionMap.
-    u32 padding           : 1;                                                      ///< Always set to zero.
-    u32 region_type_0     : 6;                                                      ///< NpdmRegionType.
-    u32 permission_type_0 : 1;                                                      ///< NpdmPermissionType.
-    u32 region_type_1     : 6;                                                      ///< NpdmRegionType.
-    u32 permission_type_1 : 1;                                                      ///< NpdmPermissionType.
-    u32 region_type_2     : 6;                                                      ///< NpdmRegionType.
-    u32 permission_type_2 : 1;                                                      ///< NpdmPermissionType.
+    u32 bitmask           : NpdmKernelCapabilityEntryBitmaskSize_MemoryRegionMap + 1;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryRegionMap.
+    u32 region_type_0     : 6;                                                          ///< NpdmRegionType.
+    u32 permission_type_0 : 1;                                                          ///< NpdmPermissionType.
+    u32 region_type_1     : 6;                                                          ///< NpdmRegionType.
+    u32 permission_type_1 : 1;                                                          ///< NpdmPermissionType.
+    u32 region_type_2     : 6;                                                          ///< NpdmRegionType.
+    u32 permission_type_2 : 1;                                                          ///< NpdmPermissionType.
 } NpdmMemoryRegionMap;
 
 NXDT_ASSERT(NpdmMemoryRegionMap, 0x4);
 
 /// EnableInterrupts entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask            : NpdmKernelCapabilityEntryBitmaskSize_EnableInterrupts; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_EnableInterrupts.
-    u32 padding            : 1;                                                     ///< Always set to zero.
-    u32 interrupt_number_0 : 10;                                                    ///< 0x3FF means empty.
-    u32 interrupt_number_1 : 10;                                                    ///< 0x3FF means empty.
+    u32 bitmask            : NpdmKernelCapabilityEntryBitmaskSize_EnableInterrupts + 1; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_EnableInterrupts.
+    u32 interrupt_number_0 : 10;                                                        ///< 0x3FF means empty.
+    u32 interrupt_number_1 : 10;                                                        ///< 0x3FF means empty.
 } NpdmEnableInterrupts;
 
 NXDT_ASSERT(NpdmEnableInterrupts, 0x4);
@@ -635,9 +637,8 @@ typedef enum {
 /// MiscParams entry for the KernelCapability descriptor.
 /// Defaults to 0 if this entry doesn't exist.
 typedef struct {
-    u32 bitmask      : NpdmKernelCapabilityEntryBitmaskSize_MiscParams; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MiscParams.
-    u32 padding      : 1;                                               ///< Always set to zero.
-    u32 program_type : 3;                                               ///< NpdmProgramType.
+    u32 bitmask      : NpdmKernelCapabilityEntryBitmaskSize_MiscParams + 1; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MiscParams.
+    u32 program_type : 3;                                                   ///< NpdmProgramType.
     u32 reserved     : 15;
 } NpdmMiscParams;
 
@@ -646,18 +647,16 @@ NXDT_ASSERT(NpdmMiscParams, 0x4);
 /// KernelVersion entry for the KernelCapability descriptor.
 /// This is derived from/equivalent to SDK version.
 typedef struct {
-    u32 bitmask       : NpdmKernelCapabilityEntryBitmaskSize_KernelVersion; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_KernelVersion.
-    u32 padding       : 1;                                                  ///< Always set to zero.
-    u32 minor_version : 4;                                                  ///< SDK minor version.
-    u32 major_version : 13;                                                 ///< SDK major version + 4.
+    u32 bitmask       : NpdmKernelCapabilityEntryBitmaskSize_KernelVersion + 1; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_KernelVersion.
+    u32 minor_version : 4;                                                      ///< SDK minor version.
+    u32 major_version : 13;                                                     ///< SDK major version + 4.
 } NpdmKernelVersion;
 
 NXDT_ASSERT(NpdmKernelVersion, 0x4);
 
 /// HandleTableSize entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask           : NpdmKernelCapabilityEntryBitmaskSize_HandleTableSize;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_HandleTableSize.
-    u32 padding           : 1;                                                      ///< Always set to zero.
+    u32 bitmask           : NpdmKernelCapabilityEntryBitmaskSize_HandleTableSize + 1;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_HandleTableSize.
     u32 handle_table_size : 10;
     u32 reserved          : 6;
 } NpdmHandleTableSize;
@@ -666,23 +665,14 @@ NXDT_ASSERT(NpdmHandleTableSize, 0x4);
 
 /// MiscFlags entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask      : NpdmKernelCapabilityEntryBitmaskSize_MiscFlags;  ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MiscFlags.
-    u32 padding      : 1;                                               ///< Always set to zero.
-    u32 enable_debug : 1;
-    u32 force_debug  : 1;
-    u32 reserved     : 13;
+    u32 bitmask          : NpdmKernelCapabilityEntryBitmaskSize_MiscFlags + 1;  ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MiscFlags.
+    u32 enable_debug     : 1;
+    u32 force_debug_prod : 1;
+    u32 force_debug      : 1;
+    u32 reserved         : 12;
 } NpdmMiscFlags;
 
 NXDT_ASSERT(NpdmMiscFlags, 0x4);
-
-/// KernelCapability descriptor. Part of the ACID and ACI0 section bodies.
-/// This descriptor is composed of a variable number of u32 entries. Thus, the entry count can be calculated by dividing the KernelCapability descriptor size by 4.
-/// The entry type is identified by a pattern of "01...11" (zero followed by ones) in the low u16, counting from the LSB. The variable number of ones must never exceed 16 (entirety of the low u16).
-typedef struct {
-    u32 value;
-} NpdmKernelCapabilityDescriptorEntry;
-
-NXDT_ASSERT(NpdmKernelCapabilityDescriptorEntry, 0x4);
 
 typedef struct {
     u8 *raw_data;                                               ///< Pointer to a dynamically allocated buffer that holds the raw NPDM.

@@ -249,7 +249,7 @@ typedef struct {
     u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 reserved_1;
     u8 flags_2;                                     ///< GameCardFlags2.
-    u8 reserved_2[0x2];
+    u16 application_id_list_entry_count;            ///< Number of entries in the application ID list located right before valid_data_end_page (19.0.0+).
     u8 card_info_iv[AES_128_KEY_SIZE];              ///< AES-128-CBC IV for the CardInfo area (reversed).
     u64 partition_fs_header_address;                ///< Root Hash File System header offset.
     u64 partition_fs_header_size;                   ///< Root Hash File System header size.
