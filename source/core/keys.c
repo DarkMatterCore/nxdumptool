@@ -84,13 +84,16 @@ NXDT_ASSERT(EticketRsaDeviceKey, 0x240);
 
 /* Function prototypes. */
 
-static bool keysIsKeyEmpty(const void *key);
+NX_INLINE u8 keysGetHorizonOsKeyGeneration(void);
+
+NX_INLINE bool keysIsKeyEmpty(const void *key);
 
 static int keysGetKeyAndValueFromFile(FILE *f, char **line, char **key, char **value);
 static bool keysParseHexKey(u8 *out, size_t out_size, const char *key, const char *value);
 static bool keysReadKeysFromFile(void);
 
 static bool keysDeriveMasterKeys(void);
+static bool keysDeriveCurrentMasterKey(void);
 static bool keysDeriveNcaHeaderKey(void);
 static bool keysDerivePerGenerationKeys(void);
 static bool keysDeriveGcCardInfoKey(void);
@@ -110,7 +113,30 @@ static bool keysGenerateAesKeyFromAesKek(const u8 *kek_src, u8 key_generation, S
 static bool g_keysetLoaded = false;
 static Mutex g_keysetMutex = 0;
 
-static u8 g_atmosphereKeyGeneration = 0, g_currentMasterKeyIndex = 0;
+/* TODO: update on master key changes. */
+static const u32 g_hosMasterKeyIndexTable[NcaKeyGeneration_Current] = {
+    [NcaKeyGeneration_Since100NUP]      = 0,
+    [NcaKeyGeneration_Since300NUP - 1]  = MAKEHOSVERSION(3, 0, 0),
+    [NcaKeyGeneration_Since301NUP - 1]  = MAKEHOSVERSION(3, 0, 1),
+    [NcaKeyGeneration_Since400NUP - 1]  = MAKEHOSVERSION(4, 0, 0),
+    [NcaKeyGeneration_Since500NUP - 1]  = MAKEHOSVERSION(5, 0, 0),
+    [NcaKeyGeneration_Since600NUP - 1]  = MAKEHOSVERSION(6, 0, 0),
+    [NcaKeyGeneration_Since620NUP - 1]  = MAKEHOSVERSION(6, 2, 0),
+    [NcaKeyGeneration_Since700NUP - 1]  = MAKEHOSVERSION(7, 0, 0),
+    [NcaKeyGeneration_Since810NUP - 1]  = MAKEHOSVERSION(8, 1, 0),
+    [NcaKeyGeneration_Since900NUP - 1]  = MAKEHOSVERSION(9, 0, 0),
+    [NcaKeyGeneration_Since910NUP - 1]  = MAKEHOSVERSION(9, 1, 0),
+    [NcaKeyGeneration_Since1210NUP - 1] = MAKEHOSVERSION(12, 1, 0),
+    [NcaKeyGeneration_Since1300NUP - 1] = MAKEHOSVERSION(13, 0, 0),
+    [NcaKeyGeneration_Since1400NUP - 1] = MAKEHOSVERSION(14, 0, 0),
+    [NcaKeyGeneration_Since1500NUP - 1] = MAKEHOSVERSION(15, 0, 0),
+    [NcaKeyGeneration_Since1600NUP - 1] = MAKEHOSVERSION(16, 0, 0),
+    [NcaKeyGeneration_Since1700NUP - 1] = MAKEHOSVERSION(17, 0, 0),
+    [NcaKeyGeneration_Since1800NUP - 1] = MAKEHOSVERSION(18, 0, 0),
+    [NcaKeyGeneration_Since1900NUP - 1] = MAKEHOSVERSION(19, 0, 0)
+};
+
+static u8 g_atmosphereKeyGeneration = 0, g_currentMasterKeyIndex = 0, g_hosKeyGeneration = 0;
 static bool g_outdatedMasterKeyVectors = false, g_lowMasterKeyRequirement = false;
 
 static SetCalRsa2048DeviceKey g_eTicketRsaDeviceKey = {0};
@@ -136,11 +162,18 @@ bool keysLoadKeyset(void)
         /* Get current master key index. */
         g_currentMasterKeyIndex = (NcaKeyGeneration_Current - 1);
 
-        /* Determine if our master key vectors are outdated. */
-        g_outdatedMasterKeyVectors = (g_atmosphereKeyGeneration > g_currentMasterKeyIndex);
+        /* Get Horizon OS key generation. This also represents an index. */
+        /* If needed, we'll manually adjust it -- it shall never exceed Atmosphère's key generation, for obvious reasons. */
+        g_hosKeyGeneration = keysGetHorizonOsKeyGeneration();
+        if (g_hosKeyGeneration > g_atmosphereKeyGeneration) g_hosKeyGeneration = g_atmosphereKeyGeneration;
 
         /* Determine if we're dealing with a lower master key requirement. */
-        g_lowMasterKeyRequirement = (g_atmosphereKeyGeneration < g_currentMasterKeyIndex);
+        g_lowMasterKeyRequirement = (g_hosKeyGeneration < g_currentMasterKeyIndex);
+
+        /* Determine if our master key vectors are outdated. */
+        g_outdatedMasterKeyVectors = (!g_lowMasterKeyRequirement && g_atmosphereKeyGeneration > g_currentMasterKeyIndex);
+
+        LOG_MSG_DEBUG("AMS key generation: %02X | Last known master key index: %02X | HOS key generation: %02X.", g_atmosphereKeyGeneration, g_currentMasterKeyIndex, g_hosKeyGeneration);
 
         /* Get eTicket RSA device key. */
         Result rc = setcalGetEticketDeviceKey(&g_eTicketRsaDeviceKey);
@@ -176,10 +209,8 @@ bool keysLoadKeyset(void)
         ret = g_keysetLoaded = true;
     }
 
-#if LOG_LEVEL == LOG_LEVEL_DEBUG
-    LOG_DATA_DEBUG(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
-    LOG_DATA_DEBUG(&g_nxKeyset, sizeof(KeysNxKeyset), "NX keyset dump:");
-#endif
+    //LOG_DATA_DEBUG(&g_eTicketRsaDeviceKey, sizeof(SetCalRsa2048DeviceKey), "eTicket RSA device key dump:");
+    //LOG_DATA_DEBUG(&g_nxKeyset, sizeof(KeysNxKeyset), "NX keyset dump:");
 
     return ret;
 }
@@ -306,7 +337,23 @@ const u8 *keysGetGameCardInfoKey(void)
     return ret;
 }
 
-static bool keysIsKeyEmpty(const void *key)
+NX_INLINE u8 keysGetHorizonOsKeyGeneration(void)
+{
+    u32 version = hosversionGet();
+
+    /* Short-circuit: return NcaKeyGeneration_Max if we're running under a HOS version we don't know about. */
+    if (version > g_hosMasterKeyIndexTable[NcaKeyGeneration_Current - 1]) return NcaKeyGeneration_Max;
+
+    /* Look for a matching HOS version entry and return its index as the master key generation. */
+    for(u8 i = (NcaKeyGeneration_Current - 1); i > NcaKeyGeneration_Since100NUP; i--)
+    {
+        if (version >= g_hosMasterKeyIndexTable[i]) return i;
+    }
+
+    return NcaKeyGeneration_Since100NUP;
+}
+
+NX_INLINE bool keysIsKeyEmpty(const void *key)
 {
     const u8 null_key[AES_128_KEY_SIZE] = {0};
     return (memcmp(key, null_key, AES_128_KEY_SIZE) == 0);
@@ -612,7 +659,7 @@ static bool keysReadKeysFromFile(void)
         }
 
         /* Parse master keys, starting with the minimum required one (if dealing with a lower master key requirement) or the last known one. */
-        for(u8 i = (g_lowMasterKeyRequirement ? g_atmosphereKeyGeneration : g_currentMasterKeyIndex); i < NcaKeyGeneration_Max; i++)
+        for(u8 i = (g_lowMasterKeyRequirement ? g_hosKeyGeneration : g_currentMasterKeyIndex); i < NcaKeyGeneration_Max; i++)
         {
             PARSE_HEX_KEY_WITH_INDEX("master_key", i, g_nxKeyset.master_keys[i], break);
         }
@@ -648,15 +695,13 @@ static bool keysReadKeysFromFile(void)
 static bool keysDeriveMasterKeys(void)
 {
     u8 tmp[AES_128_KEY_SIZE] = {0}, current_mkey_index = g_currentMasterKeyIndex;
-    const bool is_dev = utilsIsDevelopmentUnit(), is_mariko = utilsIsMarikoUnit();
+    const bool is_dev = utilsIsDevelopmentUnit();
     bool current_mkey_available = false;
-
-    if (current_mkey_index != g_atmosphereKeyGeneration) LOG_MSG_WARNING("Current key generation mismatch detected (%02X != %02X).", current_mkey_index, g_atmosphereKeyGeneration);
 
     if (g_outdatedMasterKeyVectors)
     {
         /* Our master key vectors are outdated. */
-        /* This means the user is running both a HOS version with a newer master key generation and an Atmosphère release with support for said HOS version. */
+        /* This means the console is running both a HOS version with a newer master key generation and an Atmosphère release with support for said HOS version. */
         /* Not everything is lost, though. We just need to check if we parsed all master keys between the last one we know and the one Atmosphère supports (inclusive range). */
         /* However, since we have no master key vectors for the additional master key(s), we can't reliably test them. */
         current_mkey_available = true;
@@ -680,59 +725,37 @@ static bool keysDeriveMasterKeys(void)
                           g_atmosphereKeyGeneration, current_mkey_index, PRERELEASE_URL, DISCORD_SERVER_URL);
             return false;
         }
-    } else {
+    } else
+    if (g_lowMasterKeyRequirement)
+    {
         /* Our master key vectors are up-to-date. */
-        /* However, we may also be running under a console with an older HOS version and a lower master key generation. */
-        /* If this is the case, we'll need to adjust the current master key index to match Atmosphére's key generation value. */
+        /* However, we are running under a console with an older HOS version and a lower master key generation. */
         /* There really is no point in demanding the most up-to-date master key under lower firmware versions. */
-        if (g_lowMasterKeyRequirement) current_mkey_index = g_atmosphereKeyGeneration;
-
-        /* Now then, just checking if we have the current master key should suffice. */
-        current_mkey_available = !keysIsKeyEmpty(g_nxKeyset.master_keys[current_mkey_index]);
-
-        /* Bail out if we're dealing with a lower master key generation and we don't have its master key. */
-        /* This is because current master key derivation depends on generation-specific master KEKs, and we only hardcode the last known one. */
-        if (!current_mkey_available && g_lowMasterKeyRequirement)
+        /* In other words, we'll need to adjust the current master key index. We'll just look for the highest available master key we can use. */
+        for(u8 i = current_mkey_index; i >= g_hosKeyGeneration; i--)
         {
-            LOG_MSG_ERROR("\"master_key_%02x\" unavailable! Unable to derive lower\r\n" \
-                          "master keys. Please redump your console keys and try again.", current_mkey_index);
+            if (!keysIsKeyEmpty(g_nxKeyset.master_keys[i]))
+            {
+                current_mkey_index = i;
+                current_mkey_available = true;
+                break;
+            }
+        }
+
+        /* Try to derive the current master key as a last resort if we couldn't find a valid master key. */
+        /* If that fails too, we'll just bail out. */
+        if (!current_mkey_available && !keysDeriveCurrentMasterKey())
+        {
+            LOG_MSG_ERROR("HOS key generation (%02X) is lower than the last known\r\n" \
+                          "key generation (%02X). Furthermore, none of the master keys within that\r\n" \
+                          "range was available in the keys file. Current master key derivation\r\n" \
+                          "also failed. Please redump your console keys and try again.", g_hosKeyGeneration, current_mkey_index);
             return false;
         }
-    }
-
-    /* Derive current master key if it's not populated. */
-    /* We should only enter this conditional block if Atmosphère's key generation matches our last known master key generation. */
-    if (!current_mkey_available)
-    {
-        LOG_MSG_WARNING("Current master key (%02X) unavailable. It will be derived.", current_mkey_index);
-
-        /* Derive the current master KEK. */
-        if (is_mariko)
-        {
-            if (!g_marikoKekAvailable)
-            {
-                LOG_MSG_ERROR("\"mariko_kek\" unavailable! Unable to derive current\r\n" \
-                              "master key. You may need to manually derive it using PartialAesKeyCrack,\r\n" \
-                              "and/or redump your console keys. Please try again afterwards.");
-                return false;
-            }
-
-            /* Derive the current master KEK using the hardcoded Mariko master KEK source and the Mariko KEK. */
-            aes128EcbCrypt(tmp, is_dev ? g_marikoMasterKekSourceDev : g_marikoMasterKekSourceProd, g_nxKeyset.mariko_kek, false);
-        } else {
-            if (!g_tsecRootKeyAvailable)
-            {
-                LOG_MSG_ERROR("\"tsec_root_key_%02x\" unavailable! Unable to derive\r\n" \
-                              "current master key. Please redump your console keys and try again.", TSEC_ROOT_KEY_VERSION);
-                return false;
-            }
-
-            /* Derive the current master KEK using the hardcoded Erista master KEK source and the TSEC root key. */
-            aes128EcbCrypt(tmp, g_eristaMasterKekSource, g_nxKeyset.tsec_root_key, false);
-        }
-
-        /* Derive the current master key using the hardcoded master key source and the current master KEK. */
-        aes128EcbCrypt(g_nxKeyset.master_keys[current_mkey_index], g_masterKeySource, tmp, false);
+    } else {
+        /* Our master key vectors are up-to-date and we're running under an up-to-date Atmosphère build / HOS version. */
+        /* We'll just try to derive the current master key -- if it's already available, this will return true immediately. */
+        if (!keysDeriveCurrentMasterKey()) return false;
     }
 
     /* Derive all lower master keys using the current master key and the master key vectors. */
@@ -747,6 +770,47 @@ static bool keysDeriveMasterKeys(void)
                             "Please redump your console keys and try again.", current_mkey_index);
 
     return ret;
+}
+
+static bool keysDeriveCurrentMasterKey(void)
+{
+    u8 master_kek[AES_128_KEY_SIZE] = {0};
+    const bool is_dev = utilsIsDevelopmentUnit(), is_mariko = utilsIsMarikoUnit();
+
+    /* Make sure we don't already have the current master key. */
+    if (!keysIsKeyEmpty(g_nxKeyset.master_keys[g_currentMasterKeyIndex])) return true;
+
+    LOG_MSG_WARNING("Current master key (%02X) unavailable. It will be derived.", g_currentMasterKeyIndex);
+
+    /* Derive the current master KEK. */
+    if (is_mariko)
+    {
+        if (!g_marikoKekAvailable)
+        {
+            LOG_MSG_ERROR("\"mariko_kek\" unavailable! Unable to derive current\r\n" \
+                            "master key. You may need to manually derive it using PartialAesKeyCrack,\r\n" \
+                            "and/or redump your console keys. Please try again afterwards.");
+            return false;
+        }
+
+        /* Derive the current master KEK using the hardcoded Mariko master KEK source and the Mariko KEK. */
+        aes128EcbCrypt(master_kek, is_dev ? g_marikoMasterKekSourceDev : g_marikoMasterKekSourceProd, g_nxKeyset.mariko_kek, false);
+    } else {
+        if (!g_tsecRootKeyAvailable)
+        {
+            LOG_MSG_ERROR("\"tsec_root_key_%02x\" unavailable! Unable to derive\r\n" \
+                            "current master key. Please redump your console keys and try again.", TSEC_ROOT_KEY_VERSION);
+            return false;
+        }
+
+        /* Derive the current master KEK using the hardcoded Erista master KEK source and the TSEC root key. */
+        aes128EcbCrypt(master_kek, g_eristaMasterKekSource, g_nxKeyset.tsec_root_key, false);
+    }
+
+    /* Derive the current master key using the hardcoded master key source and the current master KEK. */
+    aes128EcbCrypt(g_nxKeyset.master_keys[g_currentMasterKeyIndex], g_masterKeySource, master_kek, false);
+
+    return true;
 }
 
 static bool keysDeriveNcaHeaderKey(void)

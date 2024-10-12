@@ -201,7 +201,7 @@ bool utilsInitializeResources(void)
                      "- Horizon OS version: %u.%u.%u.\r\n" \
                      "- CFW: %s.\r\n" \
                      "- eMMC type: %s.\r\n" \
-                     "- SoC type: %s\r\n" \
+                     "- SoC type: %s.\r\n" \
                      "- Development unit: %s.\r\n" \
                      "- Terra flag: %s.\r\n" \
                      "- Execution mode: %s.", \
