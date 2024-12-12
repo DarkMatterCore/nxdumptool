@@ -109,14 +109,14 @@ typedef enum {
 } GameCardUidCardType;
 
 typedef struct {
-    u8 maker_code;          ///< GameCardUidMakerCode.
+    u8 maker_code;              ///< GameCardUidMakerCode.
     u8 version;
-    u8 card_type;           ///< GameCardUidCardType.
+    u8 card_type;               ///< GameCardUidCardType.
     u8 unique_data[0x9];
     u32 random;
     u8 platform_flag;
     u8 reserved[0xB];
-    FsCardId1 card_id_1;    ///< Are we sure about this?
+    FsCardId1 card_id_1_mirror; ///< This field mirrors bit 5 of FsCardId1MemoryType.
     u8 mac[0x20];
 } GameCardUid;
 
