@@ -36,13 +36,13 @@ extern "C" {
 #define DEVOPTAB_MOUNT_NAME_LENGTH      32  // Including NULL terminator.
 
 #define DEVOPTAB_INIT_ERROR_STATE       r->_errno = 0
+#define DEVOPTAB_SET_ERROR(x)           r->_errno = (x)
+#define DEVOPTAB_IS_ERROR_SET           (r->_errno != 0)
+
 #define DEVOPTAB_DECL_DEV_CTX           DevoptabDeviceContext *dev_ctx = (DevoptabDeviceContext*)r->deviceData
 #define DEVOPTAB_DECL_FS_CTX(type)      type *fs_ctx = (type*)dev_ctx->fs_ctx
 #define DEVOPTAB_DECL_FILE_STATE(type)  type *file = (type*)fd
 #define DEVOPTAB_DECL_DIR_STATE(type)   type *dir = (type*)dirState->dirStruct
-
-#define DEVOPTAB_SET_ERROR(x)           r->_errno = (x)
-#define DEVOPTAB_IS_ERROR_SET           (r->_errno != 0)
 
 #define DEVOPTAB_EXIT                   goto end
 #define DEVOPTAB_SET_ERROR_AND_EXIT(x)  \

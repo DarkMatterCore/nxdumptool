@@ -593,7 +593,8 @@ void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
         units = decode_utf8(&code, ptr1);
         if (units < 0) break;
 
-        if (memchr(g_illegalFileSystemChars, (int)code, g_illegalFileSystemCharsLength) || code < 0x20 || (!ascii_only && code == 0x7F) || (ascii_only && code >= 0x7F))
+        if (code < 0x20 || (!ascii_only && code == 0x7F) || (ascii_only && code >= 0x7F) || \
+            (units == 1 && memchr(g_illegalFileSystemChars, (int)code, g_illegalFileSystemCharsLength)))
         {
             if (!repl)
             {
@@ -618,7 +619,7 @@ char *utilsEscapeCharacters(const char *str, const char *chars_to_escape, const 
     size_t str_size = 0, chars_to_escape_size = 0;
 
     if (!str || !(str_size = strlen(str)) || !chars_to_escape || !(chars_to_escape_size = strlen(chars_to_escape)) || \
-        escape_char < 0x20 || escape_char >= 0x7F || memchr(chars_to_escape, (int)escape_char, chars_to_escape_size))
+        escape_char < 0x20 || escape_char >= 0x7F)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
@@ -630,13 +631,13 @@ char *utilsEscapeCharacters(const char *str, const char *chars_to_escape, const 
     size_t cur_pos = 0, escaped_str_size = 0;
     char *ret = NULL;
 
-    /* Determine the number of character we need to escape. */
+    /* Determine the number of characters we need to escape. */
     while(cur_pos < str_size)
     {
         units = decode_utf8(&code, ptr);
         if (units < 0) break;
 
-        if (memchr(chars_to_escape, (int)code, chars_to_escape_size)) escape_cnt++;
+        if (units == 1 && memchr(chars_to_escape, (int)code, chars_to_escape_size)) escape_cnt++;
 
         ptr += units;
         cur_pos += (size_t)units;
@@ -671,7 +672,7 @@ char *utilsEscapeCharacters(const char *str, const char *chars_to_escape, const 
         units = decode_utf8(&code, ptr);
         if (units < 0) break;
 
-        if (memchr(chars_to_escape, (int)code, chars_to_escape_size)) ret[cur_pos++] = escape_char;
+        if (units == 1 && memchr(chars_to_escape, (int)code, chars_to_escape_size)) ret[cur_pos++] = escape_char;
 
         for(ssize_t i = 0; i < units; i++) ret[cur_pos + (size_t)i] = ptr[i];
 

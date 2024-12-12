@@ -225,7 +225,7 @@ static int fatdev_stat(struct _reent *r, const char *file, struct stat *st)
     FAT_DEV_INIT_FS_ACCESS;
 
     /* Sanity check. */
-    if (!file || !st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (!st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     /* Get fixed path. */
     if (!(file = fatdev_get_fixed_path(r, file, fs_ctx))) DEVOPTAB_EXIT;
@@ -421,7 +421,7 @@ static const char *fatdev_get_fixed_path(struct _reent *r, const char *path, FAT
     /* Generate fixed path. */
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wformat-truncation"
-    snprintf(g_fatDevicePathBuffer, sizeof(g_fatDevicePathBuffer), "%s%s", name, path);
+    snprintf(g_fatDevicePathBuffer, MAX_ELEMENTS(g_fatDevicePathBuffer), "%s%s", name, path);
 #pragma GCC diagnostic pop
 
     //LOG_MSG_DEBUG("Fixed path: \"%s\".", g_fatDevicePathBuffer);

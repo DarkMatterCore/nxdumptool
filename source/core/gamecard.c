@@ -377,8 +377,9 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
         if (!g_gameCardInterfaceInit || atomic_load(&g_gameCardStatus) != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
 
         /* Read the gamecard certificate using the official IPC call. */
-        Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out, sizeof(FsGameCardCertificate), (s64)sizeof(FsGameCardCertificate));
-        if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%X)", rc);
+        size_t out_size = 0;
+        Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out, sizeof(FsGameCardCertificate), (s64*)&out_size, (s64)sizeof(FsGameCardCertificate));
+        if (R_FAILED(rc) || out_size != sizeof(FsGameCardCertificate)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%X, 0x%lX).", rc, out_size);
 
         ret = R_SUCCEEDED(rc);
     }

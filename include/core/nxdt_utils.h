@@ -133,9 +133,9 @@ __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(ch
 /// Furthermore, if multiple, consecutive illegal characters are found, they will all get replaced by a single underscore.
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only);
 
-/// Returns a pointer to a dynamically allocated copy of the provided string with all required characters escaped using another specific character.
-/// 'chars_to_escape' must represent a NULL-terminated character string with all characters that need to be escaped.
-/// Furthermore, 'escape_char' must represent an ASCII character within the [0x20,0x7E] range, and it must also not be part of 'chars_to_escape'.
+/// Returns a pointer to a dynamically allocated copy of the provided UTF-8 string with all required characters escaped using another specific character.
+/// 'chars_to_escape' must represent a NULL-terminated character string with all ASCII characters that need to be escaped.
+/// Furthermore, 'escape_char' must represent an ASCII character within the [0x20,0x7E] range.
 /// Returns NULL if an error occurs.
 char *utilsEscapeCharacters(const char *str, const char *chars_to_escape, const char escape_char);
 
