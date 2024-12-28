@@ -95,7 +95,7 @@ typedef struct {
 NXDT_ASSERT(GameCardKeyArea, 0x1000);
 
 typedef enum {
-    GameCardUidMakerCode_MegaChips = 0,
+    GameCardUidMakerCode_MegaChips = 0, // Macronix.
     GameCardUidMakerCode_Lapis     = 1,
     GameCardUidMakerCode_Unknown   = 2,
     GameCardUidMakerCode_Count     = 3  ///< Total values supported by this enum.

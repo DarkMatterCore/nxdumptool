@@ -46,7 +46,7 @@ typedef struct {
 NXDT_ASSERT(FsGameCardCertificate, 0x200);
 
 typedef enum {
-    FsCardId1MakerCode_MegaChips = 0xC2,
+    FsCardId1MakerCode_MegaChips = 0xC2,    ///< Macronix.
     FsCardId1MakerCode_Lapis     = 0xAE,
     FsCardId1MakerCode_Unknown   = 0x36     ///< Seen in TLoZ:TotK, SMBW and other modern releases.
 } FsCardId1MakerCode;
