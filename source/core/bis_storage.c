@@ -181,7 +181,7 @@ static bool bisStorageMountPartition(u8 bis_partition_id)
     BisStorageFatFsContext *bis_fatfs_ctx = NULL;
     Result rc = 0;
     FRESULT fr = FR_OK;
-    bool success = false;
+    bool success = false, empty_partition = false;
 
     /* Check if we have already mounted this eMMC partition. */
     if (BIS_STORAGE_FATFS_CTX(bis_partition_id))
@@ -222,6 +222,11 @@ static bool bisStorageMountPartition(u8 bis_partition_id)
     if (fr != FR_OK)
     {
         LOG_MSG_ERROR("Failed to mount %s partition via FatFs! (%u).", bis_fatfs_ctx->gpt_name, fr);
+
+        /* Add an exception for partitions that don't hold a valid FAT volume. */
+        /* TODO: find out why some of these partitions are empty in some consoles. */
+        if (fr == FR_NO_FILESYSTEM) empty_partition = true;
+
         goto end;
     }
 
@@ -240,6 +245,7 @@ end:
     {
         bisStorageFreeFatFsContext(&bis_fatfs_ctx);
         BIS_STORAGE_FATFS_CTX(bis_partition_id) = NULL;
+        if (empty_partition) success = true;
     }
 
     return success;

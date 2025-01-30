@@ -331,6 +331,7 @@ g_taskbar: Any = None
 g_usbEpIn: Any = None
 g_usbEpOut: Any = None
 g_usbEpMaxPacketSize: int = 0
+g_usbVersion: str = ''
 
 g_nxdtVersionMajor: int = 0
 g_nxdtVersionMinor: int = 0
@@ -634,7 +635,7 @@ def utilsGetSizeUnitAndDivisor(size: int) -> tuple[str, int]:
     return ret
 
 def usbGetDeviceEndpoints() -> bool:
-    global g_usbEpIn, g_usbEpOut, g_usbEpMaxPacketSize
+    global g_usbEpIn, g_usbEpOut, g_usbEpMaxPacketSize, g_usbVersion
 
     assert g_logger is not None
 
@@ -642,7 +643,6 @@ def usbGetDeviceEndpoints() -> bool:
     prev_dev: usb.core.Device | None = None
     usb_ep_in_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_IN
     usb_ep_out_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_OUT
-    usb_version = 0
 
     if g_cliMode:
         g_logger.info(SERVER_START_MSG)
@@ -706,12 +706,12 @@ def usbGetDeviceEndpoints() -> bool:
 
         # Save endpoint max packet size and USB version.
         g_usbEpMaxPacketSize = g_usbEpIn.wMaxPacketSize
-        usb_version = cur_dev.bcdUSB
+        g_usbVersion = f'{cur_dev.bcdUSB >> 8}.{(cur_dev.bcdUSB & 0xFF) >> 4}'
 
         break
 
     g_logger.debug(f'Successfully retrieved USB endpoints! (bus {cur_dev.bus}, address {cur_dev.address}).')
-    g_logger.debug(f'Max packet size: 0x{g_usbEpMaxPacketSize:X} (USB {usb_version >> 8}.{(usb_version & 0xFF) >> 4}).\n')
+    g_logger.debug(f'Max packet size: 0x{g_usbEpMaxPacketSize:X}. BCD USB: 0x{cur_dev.bcdUSB:04X}.\n')
 
     if g_cliMode:
         g_logger.info(SERVER_STOP_MSG)
@@ -770,7 +770,7 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
     g_nxdtAbiVersionMinor = (abi_version & 0x0F)
 
     # Print client info.
-    g_logger.info(f'Client info: {USB_DEV_PRODUCT} v{g_nxdtVersionMajor}.{g_nxdtVersionMinor}.{g_nxdtVersionMicro}, USB ABI v{g_nxdtAbiVersionMajor}.{g_nxdtAbiVersionMinor} (commit {g_nxdtGitCommit}).\n')
+    g_logger.info(f'Client info: {USB_DEV_PRODUCT} v{g_nxdtVersionMajor}.{g_nxdtVersionMinor}.{g_nxdtVersionMicro}, USB ABI v{g_nxdtAbiVersionMajor}.{g_nxdtAbiVersionMinor} (commit {g_nxdtGitCommit}), USB {g_usbVersion}.\n')
 
     # Check if we support this ABI version.
     if (g_nxdtAbiVersionMajor != USB_ABI_VERSION_MAJOR) or (g_nxdtAbiVersionMinor != USB_ABI_VERSION_MINOR):
@@ -792,8 +792,9 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
     g_logger.debug(f'Received SendFileProperties ({USB_CMD_SEND_FILE_PROPERTIES:02X}) command.')
 
     # Parse command block.
-    (file_size, filename_length, nsp_header_size, raw_filename) = struct.unpack_from(f'<QII{USB_FILE_PROPERTIES_MAX_NAME_LENGTH}s', cmd_block, 0)
-    filename = raw_filename.decode('utf-8').strip('\x00')
+    (file_size, filename_length, nsp_header_size) = struct.unpack_from('<QII', cmd_block, 0)
+    raw_filename = struct.unpack_from(f'<{filename_length}s', cmd_block, 16)[0]
+    filename = raw_filename.decode('utf-8')
 
     # Print info.
     dbg_str = f'File size: 0x{file_size:X} | Filename length: 0x{filename_length:X}'
@@ -956,12 +957,12 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
 
         # Check if we're dealing with a CancelFileTransfer command.
         if chunk_size == USB_CMD_HEADER_SIZE:
-            (magic, cmd_id, _) = struct.unpack_from('<4sII', chunk, 0)
-            if (magic == USB_MAGIC_WORD) and (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER):
+            (magic, cmd_id, cmd_block_size, _) = struct.unpack_from('<4sIII', chunk, 0)
+            if (magic == USB_MAGIC_WORD) and (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER) and (cmd_block_size == 0):
                 # Cancel file transfer.
                 cancelTransfer()
 
-                g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command.')
+                g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command:\n{bytes.hex(chunk, " ", 1)}\n')
                 g_logger.warning('Transfer cancelled.')
 
                 # Let the command handler take care of sending the status response for us.
@@ -998,7 +999,7 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
 def usbHandleCancelFileTransfer(cmd_block: bytes) -> int:
     assert g_logger is not None
 
-    g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_START_SESSION:02X}) command.')
+    g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command.')
 
     if g_nspTransferMode:
         if (g_nspSize > USB_TRANSFER_THRESHOLD) and (g_progressBarWindow is not None):
@@ -1112,8 +1113,10 @@ def usbCommandHandler() -> None:
             g_logger.error(f'Failed to read 0x{USB_CMD_HEADER_SIZE:X}-byte long command header!')
             break
 
+        g_logger.debug(f'Received command header data:\n{bytes.hex(cmd_header, " ", 1)}\n')
+
         # Parse command header.
-        (magic, cmd_id, cmd_block_size) = struct.unpack_from('<4sII', cmd_header, 0)
+        (magic, cmd_id, cmd_block_size, _) = struct.unpack_from('<4sIII', cmd_header, 0)
 
         # Read command block right away (if needed).
         # nxdumptool expects us to read it right after sending the command header.
@@ -1129,6 +1132,8 @@ def usbCommandHandler() -> None:
             if (not cmd_block) or (len(cmd_block) != cmd_block_size):
                 g_logger.error(f'Failed to read 0x{cmd_block_size:X}-byte long command block for command ID {cmd_id:02X}!')
                 break
+
+            g_logger.debug(f'Received command block data:\n{bytes.hex(cmd_block, " ", 1)}\n')
 
         # Verify magic word.
         if magic != USB_MAGIC_WORD:
@@ -1146,6 +1151,7 @@ def usbCommandHandler() -> None:
         # Verify command block size.
         if (cmd_id == USB_CMD_START_SESSION and cmd_block_size != USB_CMD_BLOCK_SIZE_START_SESSION) or \
            (cmd_id == USB_CMD_SEND_FILE_PROPERTIES and cmd_block_size != USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES) or \
+           (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER and cmd_block_size) or \
            (cmd_id == USB_CMD_SEND_NSP_HEADER and not cmd_block_size) or \
            (cmd_id == USB_CMD_START_EXTRACTED_FS_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP):
             g_logger.error(f'Invalid command block size for command ID {cmd_id:02X}! (0x{cmd_block_size:X}).\n')

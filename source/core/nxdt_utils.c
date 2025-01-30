@@ -1066,35 +1066,52 @@ char *utilsGeneratePath(const char *prefix, const char *filename, const char *ex
         /* Get current path element size. */
         size_t element_size = (ptr2 ? (size_t)(ptr2 - ptr1) : (path_len - (size_t)(ptr1 - path)));
 
-        /* Get UTF-8 string limit. */
-        /* Use our max filename length as the byte count limit. */
-        size_t last_cp_pos = utilsGetUtf8StringLimit(ptr1, element_size, max_filename_len);
-        if (last_cp_pos < element_size)
+        /* Short-circuit: proceed onto the next path element right away if the current one fits within our max filename length. */
+        if (element_size <= max_filename_len)
         {
-            if (ptr2)
-            {
-                /* Truncate current element by moving the rest of the path to the current position. */
-                memmove(ptr1 + last_cp_pos, ptr2, path_len - (size_t)(ptr2 - path));
-
-                /* Update pointer. */
-                ptr2 -= (element_size - last_cp_pos);
-            } else
-            if (use_extension)
-            {
-                /* Truncate last element. Make sure to preserve the provided file extension. */
-                if (extension_len >= last_cp_pos)
-                {
-                    LOG_MSG_ERROR("File extension length is >= truncated filename length! (0x%lX >= 0x%lX).", extension_len, last_cp_pos);
-                    goto end;
-                }
-
-                memmove(ptr1 + last_cp_pos - extension_len, ptr1 + element_size - extension_len, extension_len);
-            }
-
-            path_len -= (element_size - last_cp_pos);
-            path[path_len] = '\0';
+            /* Update pointer. */
+            ptr1 = ptr2;
+            continue;
         }
 
+        /* Get UTF-8 string limit. */
+        /* We'll use our max filename length as the byte count limit. */
+        /* Make sure to preserve the file extension if it was provided and if we're dealing with the last path element. */
+        size_t byte_limit = ((ptr2 || !use_extension) ? max_filename_len : (max_filename_len - extension_len));
+
+        size_t last_cp_pos = utilsGetUtf8StringLimit(ptr1, element_size, byte_limit);
+        if (last_cp_pos > byte_limit)
+        {
+            /* Something went terribly wrong somewhere. */
+            LOG_MSG_ERROR("Unable to appropiately determine last UTF-8 codepoint position for path element \"%.*s\" in \"%s\" (%lu >= %lu).", (int)element_size, ptr1, path, last_cp_pos, byte_limit);
+            goto end;
+        }
+
+        /* Prepare variables for path truncation. */
+        char *ptr3 = NULL;
+        size_t move_size = 0, diff = (element_size - last_cp_pos);
+
+        if (ptr2)
+        {
+            ptr3 = ptr2;
+            move_size = (path_len - (size_t)(ptr2 - path));
+            ptr2 = (ptr1 + last_cp_pos);
+        } else
+        if (use_extension)
+        {
+            ptr3 = (ptr1 + element_size - extension_len);
+            move_size = extension_len;
+            diff -= extension_len;
+        }
+
+        /* Truncate path element by moving the rest of the path string to the last UTF-8 codepoint position, if needed. */
+        if (ptr3 && move_size) memmove(ptr1 + last_cp_pos, ptr3, move_size);
+
+        /* Update path length. */
+        path_len -= diff;
+        path[path_len] = '\0';
+
+        /* Update pointer. */
         ptr1 = ptr2;
     }
 
@@ -1546,24 +1563,30 @@ static size_t utilsGetUtf8StringLimit(const char *str, size_t str_size, size_t b
 {
     if (!str || !*str || !str_size || !byte_limit) return 0;
 
+    /* Short-circuit: return immediately if we have enough space to hold the full string. */
     if (byte_limit > str_size) return str_size;
 
     u32 code = 0;
     ssize_t units = 0;
-    size_t cur_pos = 0, last_cp_pos = 0;
-    const u8 *str_u8 = (const u8*)str;
+    size_t cur_pos = 0;
+    const u8 *ptr = (const u8*)str;
 
-    while(cur_pos < str_size && cur_pos < byte_limit)
-    {
-        units = decode_utf8(&code, str_u8 + cur_pos);
+    do {
+        /* Decode current codepoint. */
+        units = decode_utf8(&code, ptr);
+        if (units < 0) break;
+
+        /* Calculate new position within the input string. */
+        /* Bail out immediately if we have exceeded a size limitation. */
         size_t new_pos = (cur_pos + (size_t)units);
-        if (units < 0 || !code || new_pos > str_size) break;
+        if (new_pos > str_size || new_pos > byte_limit) break;
 
+        /* Update current position. */
         cur_pos = new_pos;
-        if (cur_pos < byte_limit) last_cp_pos = cur_pos;
-    }
+        ptr += units;
+    } while(code != 0);
 
-    return last_cp_pos;
+    return cur_pos;
 }
 
 static char utilsConvertHexDigitToBinary(char c)
