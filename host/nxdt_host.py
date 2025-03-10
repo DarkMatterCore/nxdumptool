@@ -653,13 +653,13 @@ def usbGetDeviceEndpoints() -> bool:
             '/opt/homebrew/lib/libusb-1.0.dylib',  # Apple Silicon Homebrew
             '/usr/lib/libusb-1.0.dylib'  # System location
         ]
-        
+
         for path in possible_paths:
             if os.path.exists(path):
                 g_logger.debug(f'Using libusb from: {path}')
                 backend = usb.backend.libusb1.get_backend(find_library=lambda x: path)
                 break
-                
+
         if not backend:
             g_logger.error('Could not find libusb library. Please install it using: brew install libusb')
             return False
