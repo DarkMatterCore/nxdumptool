@@ -21,3 +21,6 @@ host/nxdumptool
 # TODO: remove this after the PoC builds are no longer needed.
 main.cpp
 /code_templates/tmp/*
+
+# macOS
+*.DS_Store

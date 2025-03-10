@@ -46,6 +46,7 @@ import time
 import struct
 import usb.core
 import usb.util
+import usb.backend.libusb1
 import warnings
 import base64
 
@@ -644,6 +645,25 @@ def usbGetDeviceEndpoints() -> bool:
     usb_ep_in_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_IN
     usb_ep_out_lambda = lambda ep: usb.util.endpoint_direction(ep.bEndpointAddress) == usb.util.ENDPOINT_OUT
 
+    # Try to find libusb backend explicitly on macOS
+    backend = None
+    if platform.system() == 'Darwin':
+        possible_paths = [
+            '/usr/local/lib/libusb-1.0.dylib',  # Intel Homebrew
+            '/opt/homebrew/lib/libusb-1.0.dylib',  # Apple Silicon Homebrew
+            '/usr/lib/libusb-1.0.dylib'  # System location
+        ]
+
+        for path in possible_paths:
+            if os.path.exists(path):
+                g_logger.debug(f'Using libusb from: {path}')
+                backend = usb.backend.libusb1.get_backend(find_library=lambda x: path)
+                break
+
+        if not backend:
+            g_logger.error('Could not find libusb library. Please install it using: brew install libusb')
+            return False
+
     if g_cliMode:
         g_logger.info(SERVER_START_MSG)
 
@@ -658,7 +678,10 @@ def usbGetDeviceEndpoints() -> bool:
         # Find a connected USB device with a matching VID/PID pair.
         # Using == here to compare both device instances would also compare the backend, so we'll just compare certain elements manually.
         try:
-            cur_dev = usb.core.find(find_all=False, idVendor=USB_DEV_VID, idProduct=USB_DEV_PID)
+            if backend:
+                cur_dev = usb.core.find(find_all=False, idVendor=USB_DEV_VID, idProduct=USB_DEV_PID, backend=backend)
+            else:
+                cur_dev = usb.core.find(find_all=False, idVendor=USB_DEV_VID, idProduct=USB_DEV_PID)
         except:
             if not g_cliMode:
                 utilsLogException(traceback.format_exc())
@@ -667,6 +690,8 @@ def usbGetDeviceEndpoints() -> bool:
 
             if g_isWindows:
                 g_logger.error('Try reinstalling the libusbK driver using Zadig.')
+            elif backend:
+                g_logger.error('On macOS, make sure libusb is installed: brew install libusb')
 
             return False
 
