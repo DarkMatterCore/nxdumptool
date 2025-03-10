@@ -690,7 +690,7 @@ def usbGetDeviceEndpoints() -> bool:
 
             if g_isWindows:
                 g_logger.error('Try reinstalling the libusbK driver using Zadig.')
-            else:
+            elif backend:
                 g_logger.error('On macOS, make sure libusb is installed: brew install libusb')
 
             return False
