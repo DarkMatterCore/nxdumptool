@@ -31,17 +31,18 @@
 extern "C" {
 #endif
 
-#define GAMECARD_HEAD_MAGIC             0x48454144                      /* "HEAD". */
+#define GAMECARD_HEAD_MAGIC                 0x48454144                      /* "HEAD". */
 
-#define GAMECARD_PAGE_SIZE              0x200
-#define GAMECARD_PAGE_OFFSET(x)         ((u64)(x) * GAMECARD_PAGE_SIZE)
+#define GAMECARD_PAGE_SIZE                  0x200
+#define GAMECARD_PAGE_OFFSET(x)             ((u64)(x) * GAMECARD_PAGE_SIZE)
 
-#define GAMECARD_UPDATE_TID             SYSTEM_UPDATE_TID
+#define GAMECARD_UPDATE_TID                 SYSTEM_UPDATE_TID
 
-#define GAMECARD_HEADER2_OFFSET         0x200
-#define GAMECARD_HEADER2_CERT_OFFSET    0x400
+#define GAMECARD_HEADER2_OFFSET             0x200
+#define GAMECARD_HEADER2_CERT_OFFSET        0x400
+#define GAMECARD_HEADER2_CERT_PUBKEY_OFFSET 0x800
 
-#define GAMECARD_CERT_OFFSET            0x7000
+#define GAMECARD_CERT_OFFSET                0x7000
 
 /// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
 typedef struct {
@@ -110,7 +111,7 @@ typedef enum {
 
 typedef struct {
     u8 maker_code;              ///< GameCardUidMakerCode.
-    u8 version;
+    u8 version;                 ///< TODO: determine whether this matches GameCardVersion or not.
     u8 card_type;               ///< GameCardUidCardType.
     u8 unique_data[0x9];
     u32 random;
@@ -171,23 +172,23 @@ typedef enum {
 } GameCardRomSize;
 
 typedef enum {
+    GameCardVersion_Default     = 0,
+    GameCardVersion_Unknown1    = 1,
+    GameCardVersion_Unknown2    = 2,
+    GameCardVersion_T2Supported = 3,
+    GameCardVersion_Count       = 4     ///< Total values supported by this enum.
+} GameCardVersion;
+
+typedef enum {
     GameCardFlags_None                             = 0,
     GameCardFlags_AutoBoot                         = BIT(0),    ///< The gamecard is capable of autobooting if it's inserted into the console before powering it up.
     GameCardFlags_HistoryErase                     = BIT(1),    ///< Inserting the gamecard won't add any permanent icons to the HOME menu.
     GameCardFlags_RepairTool                       = BIT(2),
     GameCardFlags_DifferentRegionCupToTerraDevice  = BIT(3),
     GameCardFlags_DifferentRegionCupToGlobalDevice = BIT(4),
-    GameCardFlags_HasCa10Certificate               = BIT(7),
+    GameCardFlags_CardHeaderSignKey                = BIT(7),
     GameCardFlags_Count                            = 6          ///< Total values supported by this enum.
 } GameCardFlags;
-
-/// Available in HOS 18.0.0+.
-typedef enum {
-    GameCardFlags2_None     = 0,
-    GameCardFlags2_T1       = 1,
-    GameCardFlags2_T2       = 2,
-    GameCardFlags2_Count    = 3     ///< Total values supported by this enum.
-} GameCardFlags2;
 
 typedef enum {
     GameCardSelSec_ForT1 = 1,
@@ -243,13 +244,11 @@ typedef struct {
     u32 backup_area_start_page;                     ///< Always 0xFFFFFFFF.
     GameCardKeyIndex key_index;
     u8 rom_size;                                    ///< GameCardRomSize.
-    u8 version;                                     ///< Always 0x00.
+    u8 version;                                     ///< GameCardVersion.
     u8 flags;                                       ///< GameCardFlags.
     u8 package_id[0x8];                             ///< Used for challenge-response authentication.
     u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
-    u8 reserved_1;
-    u8 flags_2;                                     ///< GameCardFlags2.
-    u16 application_id_list_entry_count;            ///< Number of entries in the application ID list located right before valid_data_end_page (19.0.0+).
+    u8 reserved_1[0x4];
     u8 card_info_iv[AES_128_KEY_SIZE];              ///< AES-128-CBC IV for the CardInfo area (reversed).
     u64 partition_fs_header_address;                ///< Root Hash File System header offset.
     u64 partition_fs_header_size;                   ///< Root Hash File System header size.
@@ -266,29 +265,65 @@ NXDT_ASSERT(GameCardHeader, 0x200);
 
 /// Encrypted using AES-128-CBC.
 typedef struct {
-    u8 unknown[0x40];
-    u8 header_hash[SHA256_HASH_SIZE];
-    u8 reserved[0x10];
-} GameCardHeader2EncryptedData;
+    u64 fw_version;                     ///< GameCardFwVersion.
+    u32 acc_ctrl_1;                     ///< GameCardAccCtrl1.
+    u32 wait_1_time_read;               ///< Always 0x1388.
+    u32 wait_2_time_read;               ///< Always 0.
+    u32 wait_1_time_write;              ///< Always 0.
+    u32 wait_2_time_write;              ///< Always 0.
+    Version fw_mode;                    ///< Current SDK version.
+    Version upp_version;                ///< Bundled system update version.
+    u8 compatibility_type;              ///< GameCardCompatibilityType.
+    u8 reserved_1[0x3];
+    u64 upp_hash;                       ///< Checksum for the update partition. The exact way it's calculated is currently unknown.
+    u64 upp_id;                         ///< Must match GAMECARD_UPDATE_TID.
+    u8 reserved_2[0x8];
+    u8 header_hash[SHA256_HASH_SIZE];   ///< SHA-256 hash for the GameCardHeader block.
+    u8 reserved_3[0x10];
+} GameCardInfo2;
 
-NXDT_ASSERT(GameCardHeader2EncryptedData, 0x70);
+NXDT_ASSERT(GameCardInfo2, 0x70);
 
 /// Placed immediately after the `GameCardHeader` section.
 typedef struct {
     u8 signature[0x100];                            ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the header.
-    u8 unknown[0x90];
-    GameCardHeader2EncryptedData encrypted_data;
+    u32 magic;                                      ///< "HEAD".
+    u32 rom_area_start_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
+    u32 backup_area_start_page;                     ///< Always 0xFFFFFFFF.
+    GameCardKeyIndex key_index;
+    u8 rom_size;                                    ///< GameCardRomSize.
+    u8 version;                                     ///< GameCardVersion.
+    u8 flags;                                       ///< GameCardFlags.
+    u8 package_id[0x8];                             ///< Used for challenge-response authentication.
+    u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
+    u8 sign_key_index;                              ///< 20.0.0+. TODO: add enum with values.
+    u8 flags_2;                                     ///< 18.0.0+. TODO: add enum with values.
+    u16 application_id_list_entry_count;            ///< Number of entries in the application ID list located right before valid_data_end_page (19.0.0+).
+    u8 card_info_iv[AES_128_KEY_SIZE];              ///< AES-128-CBC IV for the CardInfo area (reversed).
+    u64 partition_fs_header_address;                ///< Root Hash File System header offset.
+    u64 partition_fs_header_size;                   ///< Root Hash File System header size.
+    u8 partition_fs_header_hash[SHA256_HASH_SIZE];
+    u8 initial_data_hash[SHA256_HASH_SIZE];
+    u32 sel_sec;                                    ///< GameCardSelSec.
+    u32 sel_t1_key;                                 ///< Always 0x02.
+    u32 sel_key;                                    ///< Always 0x00.
+    u32 lim_area_page;                              ///< Expressed in GAMECARD_PAGE_SIZE units.
+    GameCardInfo2 card_info_2;
 } GameCardHeader2;
 
 NXDT_ASSERT(GameCardHeader2, 0x200);
 
 /// Placed immediately after the `GameCardHeader2` section.
 typedef struct {
-    u8 signature[0x100];    ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the data from 0x100 to 0x300.
-    u8 unknown_1[0x30];
-    u8 modulus[0x100];      ///< RSA modulus used to verify the signature from GameCardHeader2.
-    u8 exponent[0x4];       ///< RSA exponent used to verify the signature from GameCardHeader2.
-    u8 unknown_2[0x1CC];
+    u8 signature[0x100];        ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the data from 0x100 to 0x300.
+    u32 magic;                  ///< TODO: add more info.
+    u32 version;                ///< TODO: add more info.
+    u8 unknown[0x8];
+    u8 sign_key_index;          ///< TODO: add enum with values.
+    u8 reserved_1[0x1F];
+    u8 public_key[0x100];       ///< RSA modulus used to verify the signature from GameCardHeader2.
+    u8 public_exponent[0x3];    ///< RSA exponent used to verify the signature from GameCardHeader2.
+    u8 reserved_2[0x1CD];
 } GameCardHeader2Certificate;
 
 NXDT_ASSERT(GameCardHeader2Certificate, 0x400);

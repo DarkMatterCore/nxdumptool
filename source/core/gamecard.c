@@ -82,6 +82,7 @@ static GameCardInfo g_gameCardInfoArea = {0};
 
 static GameCardHeader2 g_gameCardHeader2 = {0};
 static GameCardHeader2Certificate g_gameCardHeader2Cert = {0};
+static u8 g_gameCardHeader2CertPublicKey[RSA2048_PUBKEY_SIZE] = {0};
 
 static u64 g_gameCardNormalAreaSize = 0, g_gameCardSecureAreaSize = 0, g_gameCardTotalSize = 0;
 static u64 g_gameCardCapacity = 0;
@@ -855,6 +856,7 @@ static void gamecardFreeInfo(bool clear_status)
 
     memset(&g_gameCardHeader2, 0, sizeof(GameCardHeader2));
     memset(&g_gameCardHeader2Cert, 0, sizeof(GameCardHeader2Certificate));
+    memset(g_gameCardHeader2CertPublicKey, 0, sizeof(g_gameCardHeader2CertPublicKey));
 
     g_gameCardNormalAreaSize = g_gameCardSecureAreaSize = g_gameCardTotalSize = 0;
 
@@ -913,7 +915,7 @@ static bool gamecardReadHeader(void)
     }
 
     /* Check if a Header2 area is available. */
-    if (g_gameCardHeader.flags & GameCardFlags_HasCa10Certificate)
+    if (g_gameCardHeader.flags & GameCardFlags_CardHeaderSignKey)
     {
         /* Read the Header2 area. */
         rc = fsStorageRead(&g_gameCardStorage, GAMECARD_HEADER2_OFFSET, &g_gameCardHeader2, sizeof(GameCardHeader2));
@@ -935,13 +937,25 @@ static bool gamecardReadHeader(void)
 
         LOG_DATA_DEBUG(&g_gameCardHeader2Cert, sizeof(GameCardHeader2Certificate), "Gamecard Header2Certificate dump:");
 
+        /* Read the Header2Certificate public key. */
+        rc = fsStorageRead(&g_gameCardStorage, GAMECARD_HEADER2_CERT_PUBKEY_OFFSET, g_gameCardHeader2CertPublicKey, sizeof(g_gameCardHeader2CertPublicKey));
+        if (R_FAILED(rc))
+        {
+            LOG_MSG_ERROR("fsStorageRead failed to read gamecard Header2Certificate public key! (0x%X).", rc);
+            return false;
+        }
+
+        LOG_DATA_DEBUG(&g_gameCardHeader2Cert, sizeof(GameCardHeader2Certificate), "Gamecard Header2Certificate public key dump:");
+
         /* Verify the signature from the Header2 area. */
-        if (!rsa2048VerifySha256BasedPkcs1v15Signature(&(g_gameCardHeader2.unknown), sizeof(GameCardHeader2) - MEMBER_SIZE(GameCardHeader2, signature), g_gameCardHeader2.signature, \
-                                                       g_gameCardHeader2Cert.modulus, g_gameCardHeader2Cert.exponent, sizeof(g_gameCardHeader2Cert.exponent)))
+        if (!rsa2048VerifySha256BasedPkcs1v15Signature(&(g_gameCardHeader2.magic), sizeof(GameCardHeader2) - MEMBER_SIZE(GameCardHeader2, signature), g_gameCardHeader2.signature, \
+                                                       g_gameCardHeader2Cert.public_key, g_gameCardHeader2Cert.public_exponent, sizeof(g_gameCardHeader2Cert.public_exponent)))
         {
             LOG_MSG_ERROR("Gamecard Header2 signature verification failed!");
             return false;
         }
+
+        /* TODO: add Header2Certificate signature verification. */
 
         // TODO: remove this once anyone comes across a gamecard with an actual Header2 area.
         // Public non-static functions to retrieve both the Header2 and the Header2Certificate areas will be implemented afterwards.

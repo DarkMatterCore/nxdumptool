@@ -262,6 +262,8 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000831, "PlatformConfigAula" },
     { 0x0100000000000832, "CradleFirmwareAula" },               ///< Placeholder.
     { 0x0100000000000835, "NewErrorMessage" },                  ///< Placeholder.
+    { 0x0100000000000859, "sysdata_unknown_00" },               ///< Placeholder.
+    { 0x010000000000085C, "sysdata_unknown_01" },               ///< Placeholder.
 
     /* System applets. */
     /* Meta + Program NCAs. */
@@ -323,6 +325,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000103E, "ntf_mission_completed" },            ///< Placeholder.
     { 0x0100000000001042, "sysapplet_unknown_0d" },             ///< Placeholder.
     { 0x0100000000001043, "sysapplet_unknown_0e" },             ///< Placeholder.
+    { 0x0100000000001048, "splay" },
     { 0x0100000000001FFF, "EndOceanProgramId" },
 
     /* Development system applets. */

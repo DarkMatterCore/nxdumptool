@@ -196,6 +196,12 @@ typedef enum {
     NpdmFsAccessControlFlags_MoveCacheStorage               = BITL(36),
     NpdmFsAccessControlFlags_DeviceTreeBlob                 = BITL(37),
     NpdmFsAccessControlFlags_NotifyErrorContextServiceReady = BITL(38),
+    NpdmFsAccessControlFlags_CalibrationSystemData          = BITL(39),
+    NpdmFsAccessControlFlags_CalibrationLog                 = BITL(40),
+    NpdmFsAccessControlFlags_StorageSecure                  = BITL(41),
+    NpdmFsAccessControlFlags_StorageControl                 = BITL(42),
+    NpdmFsAccessControlFlags_GameCardReport                 = BITL(43),
+    NpdmFsAccessControlFlags_MarkBeforeEraseBis             = BITL(44),
     NpdmFsAccessControlFlags_Debug                          = BITL(62),
     NpdmFsAccessControlFlags_FullPermission                 = BITL(63),
     NpdmFsAccessControlFlags_Count                          = 64        ///< Total values supported by this enum.

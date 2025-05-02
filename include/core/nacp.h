@@ -354,6 +354,12 @@ typedef struct {
 
 NXDT_ASSERT(NacpAccessibleLaunchRequiredVersion, 0x40);
 
+typedef enum {
+    NacpAlbumFileExport_Allow = 0,
+    NacpAlbumFileExport_Deny  = 1,
+    NacpAlbumFileExport_Count = 2   ///< Total values supported by this enum.
+} NacpAlbumFileExport;
+
 typedef struct {
     NacpTitle title[0x10];
     char isbn[0x25];
@@ -408,7 +414,10 @@ typedef struct {
     u8 repair;                                                                                      ///< NacpRepair.
     u8 program_index;
     u8 required_network_service_license_on_launch;                                                  ///< NacpRequiredNetworkServiceLicenseOnLaunch.
-    u8 reserved_2[0x4];
+    u8 application_error_code_prefix;                                                               ///< TODO: add values.
+    u8 reserved_2;
+    u8 acd_index;                                                                                   ///< TODO: add values.
+    u8 application_platform;                                                                        ///< TODO: add values.
     NacpNeighborDetectionClientConfiguration neighbor_detection_client_configuration;
     NacpJitConfiguration jit_configuration;
     NacpRequiredAddOnContentsSetBinaryDescriptor required_add_on_contents_set_binary_descriptor;
@@ -418,7 +427,10 @@ typedef struct {
     u8 contents_availability_transition_policy;                                                     ///< NacpContentsAvailabilityTransitionPolicy.
     u8 reserved_3[0x4];
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
-    u8 reserved_4[0xBB8];
+    u8 reserved_4[0x90];
+    u8 album_file_export;                                                                           ///< NacpAlbumFileExport.
+    u8 reserved_5[0x727];
+    u8 platform_specific_region[0x400];                                                             ///< TODO: add structure.
 } _NacpStruct;
 
 NXDT_ASSERT(_NacpStruct, 0x4000);
@@ -498,6 +510,7 @@ const char *nacpGetRequiredNetworkServiceLicenseOnLaunchString(u8 required_netwo
 const char *nacpGetCrashScreenshotForProdString(u8 crash_screenshot_for_prod);
 const char *nacpGetCrashScreenshotForDevString(u8 crash_screenshot_for_dev);
 const char *nacpGetContentsAvailabilityTransitionPolicyString(u8 contents_availability_transition_policy);
+const char *nacpGetAlbumFileExportString(u8 album_file_export);
 
 /// Helper inline functions.
 

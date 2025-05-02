@@ -216,6 +216,11 @@ static const char *g_nacpContentsAvailabilityTransitionPolicyStrings[NacpContent
     "Changeable"
 };
 
+static const char *g_nacpAlbumFileExportStrings[NacpAlbumFileExport_Count] = {
+    "Allow",
+    "Deny"
+};
+
 /* Function prototypes. */
 
 NX_INLINE bool nacpCheckBitflagField(const void *flag, u8 flag_bitcount, u8 idx);
@@ -857,6 +862,23 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
                              nacpGetRuntimeUpgradeString(nacp->runtime_upgrade), \
                              (nacp->supporting_limited_application_licenses & NacpSupportingLimitedApplicationLicenses_Demo) ? "Demo" : "None")) goto end;
 
+    /* ApplicationErrorCodePrefix. */
+    if (!NACP_ADD_U16("ApplicationErrorCodePrefix", nacp->application_error_code_prefix, false, false)) goto end;
+
+    /* AcdIndex. */
+    if (!NACP_ADD_U16("AcdIndex", nacp->acd_index, false, false)) goto end;
+
+    /* InitialProgramIndex. */
+    /* TODO: find out differences with ProgramIndex and/or if it's actually a different field within the NACP struct. */
+    if (!NACP_ADD_U16("InitialProgramIndex", nacp->program_index, false, false)) goto end;
+
+    /* AlbumFileExport. */
+    if (!NACP_ADD_ENUM("AlbumFileExport", nacp->album_file_export, nacpGetAlbumFileExportString)) goto end;
+
+    /* ApplicationPlatform. */
+    /* TODO: make sure this is how it gets written. */
+    if (!NACP_ADD_U16("ApplicationPlatform", nacp->application_platform, false, false)) goto end;
+
     if (!(success = NACP_ADD_FMT_STR_T1("</Application>"))) goto end;
 
     /* Update NACP context. */
@@ -1008,6 +1030,11 @@ const char *nacpGetContentsAvailabilityTransitionPolicyString(u8 contents_availa
 {
     return (contents_availability_transition_policy < NacpContentsAvailabilityTransitionPolicy_Count ? \
             g_nacpContentsAvailabilityTransitionPolicyStrings[contents_availability_transition_policy] : g_unknownString);
+}
+
+const char *nacpGetAlbumFileExportString(u8 album_file_export)
+{
+    return (album_file_export < NacpAlbumFileExport_Count ? g_nacpAlbumFileExportStrings[album_file_export] : g_unknownString);
 }
 
 NX_INLINE bool nacpCheckBitflagField(const void *flag, u8 flag_bitcount, u8 idx)
