@@ -270,7 +270,7 @@ namespace nxdt::views
 
         naming_convention->getValueSelectedEvent()->subscribe([](int selected) {
             /* Make sure the current value isn't out of bounds. */
-            if (selected < 0 || selected > static_cast<int>(TitleNamingConvention_Count)) return;
+            if (selected < 0 || selected >= static_cast<int>(TitleNamingConvention_Count)) return;
 
             /* Update configuration. */
             configSetInteger("naming_convention", selected);

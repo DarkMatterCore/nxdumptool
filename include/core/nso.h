@@ -33,7 +33,7 @@ extern "C" {
 #define NSO_HEADER_MAGIC    0x4E534F30  /* "NSO0". */
 #define NSO_MOD_MAGIC       0x4D4F4430  /* "MOD0". */
 
-typedef enum {
+typedef enum : u32 {
     NsoFlags_None         = 0,
     NsoFlags_TextCompress = BIT(0), ///< Determines if .text segment is LZ4-compressed.
     NsoFlags_RoCompress   = BIT(1), ///< Determines if .rodata segment is LZ4-compressed.
@@ -66,7 +66,7 @@ typedef struct {
     u32 magic;                                  ///< "NSO0".
     u32 version;                                ///< Always set to 0.
     u8 reserved_1[0x4];
-    u32 flags;                                  ///< NsoFlags.
+    NsoFlags flags;
     NsoSegmentInfo text_segment_info;
     u32 module_name_offset;                     ///< NSO module name offset.
     NsoSegmentInfo rodata_segment_info;
@@ -74,9 +74,9 @@ typedef struct {
     NsoSegmentInfo data_segment_info;
     u32 bss_size;
     u8 module_id[0x20];                         ///< Also known as build ID.
-    u32 text_file_size;                         ///< .text segment compressed size (if NsoFlags_TextCompress is enabled).
-    u32 rodata_file_size;                       ///< .rodata segment compressed size (if NsoFlags_RoCompress is enabled).
-    u32 data_file_size;                         ///< .data segment compressed size (if NsoFlags_DataCompress is enabled).
+    u32 text_file_size;                         ///< .text segment compressed size (if NsoFlags_TextCompress is set).
+    u32 rodata_file_size;                       ///< .rodata segment compressed size (if NsoFlags_RoCompress is set).
+    u32 data_file_size;                         ///< .data segment compressed size (if NsoFlags_DataCompress is set).
     u8 reserved_2[0x1C];
     NsoSectionInfo api_info_section_info;
     NsoSectionInfo dynstr_section_info;

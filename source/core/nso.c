@@ -24,7 +24,7 @@
 
 /* Type definitions. */
 
-typedef enum {
+typedef enum : u8 {
     NsoSegmentType_Text   = 0,
     NsoSegmentType_RoData = 1,
     NsoSegmentType_Data   = 2,
@@ -32,7 +32,7 @@ typedef enum {
 } NsoSegmentType;
 
 typedef struct {
-    u8 type;                ///< NsoSegmentType.
+    NsoSegmentType type;
     const char *name;       ///< Pointer to a string that holds the segment name.
     NsoSegmentInfo info;    ///< Copied from the NSO header.
     u8 *data;               ///< Dynamically allocated buffer for the decompressed segment data.
@@ -50,7 +50,7 @@ static const char *g_nsoSegmentTypeNames[NsoSegmentType_Count] = {
 
 static bool nsoGetModuleName(NsoContext *nso_ctx);
 
-static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, u8 type);
+static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType type);
 NX_INLINE void nsoFreeSegment(NsoSegment *segment);
 
 NX_INLINE bool nsoIsNnSdkVersionWithinSegment(const NsoModStart *mod_start, const NsoSegment *segment, u32 nnsdk_version_memory_offset);
@@ -231,7 +231,7 @@ static bool nsoGetModuleName(NsoContext *nso_ctx)
     return true;
 }
 
-static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, u8 type)
+static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType type)
 {
     if (!nso_ctx || !out || type >= NsoSegmentType_Count)
     {

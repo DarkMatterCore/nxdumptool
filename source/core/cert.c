@@ -42,7 +42,7 @@ static bool certOpenEsCertSaveFile(void);
 static void certCloseEsCertSaveFile(void);
 
 static bool _certRetrieveCertificateByName(Certificate *dst, const char *name);
-static u8 certGetCertificateType(void *data, u64 data_size);
+static CertType certGetCertificateType(void *data, u64 data_size);
 
 static bool _certRetrieveCertificateChainBySignatureIssuer(CertificateChain *dst, const char *issuer);
 static u32 certGetCertificateCountInSignatureIssuer(const char *issuer);
@@ -278,7 +278,7 @@ static bool _certRetrieveCertificateByName(Certificate *dst, const char *name)
     return true;
 }
 
-static u8 certGetCertificateType(void *data, u64 data_size)
+static CertType certGetCertificateType(void *data, u64 data_size)
 {
     if (!data || data_size < SIGNED_CERT_MIN_SIZE || data_size > SIGNED_CERT_MAX_SIZE)
     {
@@ -286,8 +286,9 @@ static u8 certGetCertificateType(void *data, u64 data_size)
         return CertType_None;
     }
 
-    u32 sig_type = 0, pub_key_type = 0;
-    u8 type = CertType_None;
+    SignatureType sig_type = SignatureType_Invalid;
+    CertPubKeyType pub_key_type = CertPubKeyType_Invalid;
+    CertType type = CertType_None;
 
     /* Get signature and public key types. */
     sig_type = signatureGetTypeFromSignedBlob(data, true);

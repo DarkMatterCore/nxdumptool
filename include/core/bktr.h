@@ -68,7 +68,7 @@ typedef struct {
 NXDT_ASSERT(BucketTreeOffsetNode, BKTR_NODE_SIZE);
 
 /// IndirectStorage-related elements.
-typedef enum {
+typedef enum : u32 {
     BucketTreeIndirectStorageIndex_Original = 0,
     BucketTreeIndirectStorageIndex_Patch    = 1,
     BucketTreeIndirectStorageIndex_Count    = 2     ///< Total values supported by this enum.
@@ -78,14 +78,14 @@ typedef enum {
 typedef struct {
     u64 virtual_offset;
     u64 physical_offset;
-    u32 storage_index;      ///< BucketTreeIndirectStorageIndex.
+    BucketTreeIndirectStorageIndex storage_index;
 } BucketTreeIndirectStorageEntry;
 #pragma pack(pop)
 
 NXDT_ASSERT(BucketTreeIndirectStorageEntry, BKTR_INDIRECT_ENTRY_SIZE);
 
 /// AesCtrExStorage-related elements.
-typedef enum {
+typedef enum : u8 {
     BucketTreeAesCtrExStorageEncryption_Enabled  = 0,
     BucketTreeAesCtrExStorageEncryption_Disabled = 1,
     BucketTreeAesCtrExStorageEncryption_Count    = 2    ///< Total values supported by this enum.
@@ -93,7 +93,7 @@ typedef enum {
 
 typedef struct {
     u64 offset;
-    u8 encryption;      ///< BucketTreeAesCtrExStorageEncryption.
+    BucketTreeAesCtrExStorageEncryption encryption;
     u8 reserved[0x3];
     u32 generation;
 } BucketTreeAesCtrExStorageEntry;
@@ -101,7 +101,7 @@ typedef struct {
 NXDT_ASSERT(BucketTreeAesCtrExStorageEntry, BKTR_AES_CTR_EX_ENTRY_SIZE);
 
 /// CompressedStorage-related elements.
-typedef enum {
+typedef enum : u8 {
     BucketTreeCompressedStorageCompressionType_None  = 0,
     BucketTreeCompressedStorageCompressionType_Zero  = 1,
     BucketTreeCompressedStorageCompressionType_2     = 2,
@@ -111,11 +111,11 @@ typedef enum {
 
 typedef struct {
     s64 virtual_offset;
-    s64 physical_offset;    ///< Must be aligned to BKTR_COMPRESSION_PHYS_ALIGNMENT.
-    u8 compression_type;    ///< BucketTreeCompressedStorageCompressionType.
-    s8 compression_level;   ///< Must be within the range [BKTR_COMPRESSION_LEVEL_MIN, BKTR_COMPRESSION_LEVEL_MAX].
+    s64 physical_offset;                                            ///< Must be aligned to BKTR_COMPRESSION_PHYS_ALIGNMENT.
+    BucketTreeCompressedStorageCompressionType compression_type;
+    s8 compression_level;                                           ///< Must be within the range [BKTR_COMPRESSION_LEVEL_MIN, BKTR_COMPRESSION_LEVEL_MAX].
     u8 reserved[0x2];
-    u32 physical_size;      ///< Compressed data size.
+    u32 physical_size;                                              ///< Compressed data size.
 } BucketTreeCompressedStorageEntry;
 
 NXDT_ASSERT(BucketTreeCompressedStorageEntry, BKTR_COMPRESSED_ENTRY_SIZE);
@@ -142,7 +142,7 @@ typedef struct {
 
 NXDT_ASSERT(BucketTreeTable, BKTR_NODE_SIZE);
 
-typedef enum {
+typedef enum : u8 {
     BucketTreeStorageType_Indirect   = 0,   ///< Uses two substorages: index 0 (points to the base NCA) and index 1 (AesCtrEx storage).
                                             ///< All reads within storage index 0 use the calculated physical offsets for data decryption.
     BucketTreeStorageType_AesCtrEx   = 1,   ///< Used as storage index 1 for BucketTreeStorageType_Indirect.
@@ -152,7 +152,7 @@ typedef enum {
     BucketTreeStorageType_Count      = 4    ///< Total values supported by this enum.
 } BucketTreeStorageType;
 
-typedef enum {
+typedef enum : u8 {
     BucketTreeSubStorageType_Regular    = 0,    ///< Body storage with None, XTS or CTR crypto. Most common substorage type, used in all title types.
                                                 ///< May be used as substorage for all other BucketTreeStorage types.
     BucketTreeSubStorageType_Indirect   = 1,    ///< Indirect storage. Only used in patches. May be used as substorage for BucketTreeStorageType_Compressed only.
@@ -168,13 +168,13 @@ typedef struct _BucketTreeContext BucketTreeContext;
 typedef struct {
     u8 index;                           ///< Substorage index.
     NcaFsSectionContext *nca_fs_ctx;    ///< NCA FS section context. Used to perform operations on the target NCA.
-    u8 type;                            ///< BucketTreeSubStorageType.
+    BucketTreeSubStorageType type;
     BucketTreeContext *bktr_ctx;        ///< BucketTreeContext related to this storage. Only used if type > BucketTreeSubStorageType_Regular.
 } BucketTreeSubStorage;
 
 struct _BucketTreeContext {
     NcaFsSectionContext *nca_fs_ctx;                                ///< NCA FS section context. Used to perform operations on the target NCA.
-    u8 storage_type;                                                ///< BucketTreeStorageType.
+    BucketTreeStorageType storage_type;
     BucketTreeTable *storage_table;                                 ///< Pointer to the dynamically allocated Bucket Tree Table for this storage.
     u64 node_size;                                                  ///< Node size for this type of Bucket Tree storage.
     u64 entry_size;                                                 ///< Size of each individual entry within BucketTreeEntryNode.
@@ -189,7 +189,7 @@ struct _BucketTreeContext {
 
 /// Initializes a Bucket Tree context using the provided NCA FS section context and a storage type.
 /// 'storage_type' may only be BucketTreeStorageType_Indirect, BucketTreeStorageType_AesCtrEx or BucketTreeStorageType_Sparse.
-bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type);
+bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, BucketTreeStorageType storage_type);
 
 /// Initializes a Bucket Tree context with type BucketTreeStorageType_Compressed using the provided BucketTreeSubStorage.
 bool bktrInitializeCompressedStorageContext(BucketTreeContext *out, BucketTreeSubStorage *substorage);

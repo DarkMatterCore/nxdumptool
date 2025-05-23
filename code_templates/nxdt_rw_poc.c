@@ -2143,7 +2143,7 @@ void updateNcaFsSectionsList(NcaUserData *nca_user_data)
 
     /* Initialize NCA context. */
     g_ncaFsSectionsMenuCtx = calloc(1, sizeof(NcaContext));
-    if (!ncaInitializeContext(g_ncaFsSectionsMenuCtx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+    if (!ncaInitializeContext(g_ncaFsSectionsMenuCtx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None), \
                               &(title_info->meta_key), content_info, NULL)) return;
 
     /* Generate menu elements. */
@@ -3175,6 +3175,8 @@ static bool saveConsoleLafwBlob(void *userdata)
 
     u64 lafw_version = 0;
     LotusAsicFirmwareBlob lafw_blob = {0};
+    LotusAsicFirmwareType fw_type = LotusAsicFirmwareType_Invalid;
+    LotusAsicDeviceType dev_type = LotusAsicDeviceType_Invalid;
     bool success = false;
     u32 crc = 0;
     char *filename = NULL;
@@ -3186,21 +3188,23 @@ static bool saveConsoleLafwBlob(void *userdata)
         goto end;
     }
 
-    fw_type_str = gamecardGetLafwTypeString(lafw_blob.fw_type);
+    fw_type = gamecardGetLafwType(&lafw_blob);
+    fw_type_str = gamecardGetLafwTypeString(fw_type);
     if (!fw_type_str) fw_type_str = "Unknown";
 
-    dev_type_str = gamecardGetLafwDeviceTypeString(lafw_blob.device_type);
+    dev_type = gamecardGetLafwDeviceType(&lafw_blob);
+    dev_type_str = gamecardGetLafwDeviceTypeString(dev_type);
     if (!dev_type_str) dev_type_str = "Unknown";
 
     consolePrint("get console lafw blob ok\n");
 
-    crc = crc32Calculate(&lafw_blob, sizeof(LotusAsicFirmwareBlob));
+    crc = crc32Calculate(&lafw_blob, sizeof(lafw_blob));
     snprintf(path, MAX_ELEMENTS(path), "LAFW (%s) (%s) (v%lu) (%08X).bin", fw_type_str, dev_type_str, lafw_version, crc);
 
     filename = generateOutputGameCardFileName(NULL, path, false);
     if (!filename) goto end;
 
-    if (!saveFileData(filename, &lafw_blob, sizeof(LotusAsicFirmwareBlob))) goto end;
+    if (!saveFileData(filename, &lafw_blob, sizeof(lafw_blob))) goto end;
 
     consolePrint("successfully saved lafw blob as \"%s\"\n", filename);
     success = true;
@@ -3382,7 +3386,7 @@ static bool saveTicket(void *userdata)
     }
 
     /* Initialize NCA context. */
-    if (!ncaInitializeContext(nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+    if (!ncaInitializeContext(nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None), \
                               &(title_info->meta_key), content_info, &tik))
     {
         consolePrint("nca initialize ctx failed\n");
@@ -3459,7 +3463,7 @@ static bool saveNintendoContentArchive(void *userdata)
     }
 
     /* Initialize NCA context. */
-    if (!ncaInitializeContext(nca_thread_data.nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+    if (!ncaInitializeContext(nca_thread_data.nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None), \
                               &(title_info->meta_key), content_info, NULL))
     {
         consolePrint("nca initialize ctx failed\n");
@@ -4341,7 +4345,7 @@ static bool initializeNcaFsContext(void *userdata, u8 *out_section_type, bool *o
             goto end;
         }
 
-        if (!ncaInitializeContext(base_patch_nca_ctx, g_ncaBasePatchTitleInfo->storage_id, (g_ncaBasePatchTitleInfo->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+        if (!ncaInitializeContext(base_patch_nca_ctx, g_ncaBasePatchTitleInfo->storage_id, (g_ncaBasePatchTitleInfo->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None), \
                                   &(g_ncaBasePatchTitleInfo->meta_key), base_patch_content_info, NULL))
         {
             consolePrint("failed to initialize base/patch nca ctx!\n");
@@ -6685,7 +6689,7 @@ static void nspThreadFunc(void *arg)
     // set meta nca as the last nca
     meta_nca_ctx = &(nca_ctx[title_info->content_count - 1]);
 
-    if (!ncaInitializeContext(meta_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+    if (!ncaInitializeContext(meta_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None), \
                               &(title_info->meta_key), titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Meta, 0), &tik))
     {
         consolePrint("meta nca initialize ctx failed\n");
@@ -6713,7 +6717,7 @@ static void nspThreadFunc(void *arg)
         if (content_info->content_type == NcmContentType_Meta) continue;
 
         NcaContext *cur_nca_ctx = &(nca_ctx[j]);
-        if (!ncaInitializeContext(cur_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0), \
+        if (!ncaInitializeContext(cur_nca_ctx, title_info->storage_id, (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None), \
                                   &(title_info->meta_key), content_info, &tik))
         {
             consolePrint("%s #%u initialize nca ctx failed\n", titleGetNcmContentTypeName(content_info->content_type), content_info->id_offset);

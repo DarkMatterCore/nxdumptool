@@ -31,47 +31,50 @@
 extern "C" {
 #endif
 
-#define NCA_FS_HEADER_COUNT                         4
-#define NCA_FULL_HEADER_LENGTH                      (sizeof(NcaHeader) + (sizeof(NcaFsHeader) * NCA_FS_HEADER_COUNT))
+#define NCA_FS_HEADER_COUNT                                                     4
+#define NCA_FULL_HEADER_LENGTH                                                  (sizeof(NcaHeader) + (sizeof(NcaFsHeader) * NCA_FS_HEADER_COUNT))
 
-#define NCA_NCA0_MAGIC                              0x4E434130                      /* "NCA0". */
-#define NCA_NCA2_MAGIC                              0x4E434132                      /* "NCA2". */
-#define NCA_NCA3_MAGIC                              0x4E434133                      /* "NCA3". */
+#define NCA_NCA0_MAGIC                                                          0x4E434130                      /* "NCA0". */
+#define NCA_NCA2_MAGIC                                                          0x4E434132                      /* "NCA2". */
+#define NCA_NCA3_MAGIC                                                          0x4E434133                      /* "NCA3". */
 
-#define NCA_KEY_AREA_KEY_COUNT                      0x10
-#define NCA_KEY_AREA_SIZE                           (NCA_KEY_AREA_KEY_COUNT * AES_128_KEY_SIZE)
+#define NCA_KEY_AREA_KEY_COUNT                                                  0x10
+#define NCA_KEY_AREA_SIZE                                                       (NCA_KEY_AREA_KEY_COUNT * AES_128_KEY_SIZE)
 
-#define NCA_KEY_AREA_USED_KEY_COUNT                 3
-#define NCA_KEY_AREA_USED_SIZE                      (NCA_KEY_AREA_USED_KEY_COUNT * AES_128_KEY_SIZE)
+#define NCA_KEY_AREA_USED_KEY_COUNT                                             3
+#define NCA_KEY_AREA_USED_SIZE                                                  (NCA_KEY_AREA_USED_KEY_COUNT * AES_128_KEY_SIZE)
 
-#define NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT    5
+#define NCA_HIERARCHICAL_SHA256_MAX_REGION_COUNT                                5
 
-#define NCA_IVFC_MAGIC                              0x49564643                      /* "IVFC". */
-#define NCA_IVFC_MAX_LEVEL_COUNT                    7
-#define NCA_IVFC_LEVEL_COUNT                        (NCA_IVFC_MAX_LEVEL_COUNT - 1)
-#define NCA_IVFC_BLOCK_SIZE(x)                      (1U << (x))
+#define NCA_IVFC_MAGIC                                                          0x49564643                      /* "IVFC". */
+#define NCA_IVFC_MAX_LEVEL_COUNT                                                7
+#define NCA_IVFC_LEVEL_COUNT                                                    (NCA_IVFC_MAX_LEVEL_COUNT - 1)
+#define NCA_IVFC_BLOCK_SIZE(x)                                                  (1U << (x))
 
-#define NCA_BKTR_MAGIC                              0x424B5452                      /* "BKTR". */
-#define NCA_BKTR_VERSION                            1
+#define NCA_BKTR_MAGIC                                                          0x424B5452                      /* "BKTR". */
+#define NCA_BKTR_VERSION                                                        1
 
-#define NCA_FS_SECTOR_SIZE                          0x200
-#define NCA_FS_SECTOR_OFFSET(x)                     ((u64)(x) * NCA_FS_SECTOR_SIZE)
+#define NCA_FS_SECTOR_SIZE                                                      0x200
+#define NCA_FS_SECTOR_OFFSET(x)                                                 ((u64)(x) * NCA_FS_SECTOR_SIZE)
 
-#define NCA_AES_XTS_SECTOR_SIZE                     0x200
+#define NCA_AES_XTS_SECTOR_SIZE                                                 0x200
 
-#define NCA_SIGNATURE_AREA_SIZE                     0x200                           /* Signature is calculated starting at the NCA header magic word. */
+#define NCA_SIGNATURE_AREA_SIZE                                                 0x200                           /* Signature is calculated starting at the NCA header magic word. */
 
-#define NCA_CONTENT_ID_STR_LENGTH                   0x20                            /* Content ID. */
-#define NCA_HFS_REGULAR_NAME_LENGTH                 (NCA_CONTENT_ID_STR_LENGTH + 4) /* Content ID + ".nca". */
-#define NCA_HFS_META_NAME_LENGTH                    (NCA_CONTENT_ID_STR_LENGTH + 9) /* Content ID + ".cnmt.nca". */
+#define NCA_CONTENT_ID_STR_LENGTH                                               0x20                            /* Content ID. */
+#define NCA_HFS_REGULAR_NAME_LENGTH                                             (NCA_CONTENT_ID_STR_LENGTH + 4) /* Content ID + ".nca". */
+#define NCA_HFS_META_NAME_LENGTH                                                (NCA_CONTENT_ID_STR_LENGTH + 9) /* Content ID + ".cnmt.nca". */
 
-typedef enum {
+#define NCA_INIT_CTX(out, storage_id, meta_key, content_info, tik)              ncaInitializeContext(out, storage_id, HashFileSystemPartitionType_None, meta_key, content_info, tik)
+#define NCA_INIT_GC_CTX(out, hfs_partition_type, meta_key, content_info, tik)   ncaInitializeContext(out, NcmStorageId_GameCard, hfs_partition_type, meta_key, content_info, tik)
+
+typedef enum : u8 {
     NcaDistributionType_Download = 0,
     NcaDistributionType_GameCard = 1,
     NcaDistributionType_Count    = 2    ///< Total values supported by this enum.
 } NcaDistributionType;
 
-typedef enum {
+typedef enum : u8 {
     NcaContentType_Program    = 0,
     NcaContentType_Meta       = 1,
     NcaContentType_Control    = 2,
@@ -81,48 +84,7 @@ typedef enum {
     NcaContentType_Count      = 6   ///< Total values supported by this enum.
 } NcaContentType;
 
-/// 'NcaKeyGeneration_Current' will always point to the last known key generation value.
-/// TODO: update on master key changes.
-typedef enum {
-    NcaKeyGeneration_Since100NUP  = 0,                              ///< 1.0.0 - 2.3.0.
-    NcaKeyGeneration_Since300NUP  = 2,                              ///< 3.0.0.
-    NcaKeyGeneration_Since301NUP  = 3,                              ///< 3.0.1 - 3.0.2.
-    NcaKeyGeneration_Since400NUP  = 4,                              ///< 4.0.0 - 4.1.0.
-    NcaKeyGeneration_Since500NUP  = 5,                              ///< 5.0.0 - 5.1.0.
-    NcaKeyGeneration_Since600NUP  = 6,                              ///< 6.0.0 - 6.1.0.
-    NcaKeyGeneration_Since620NUP  = 7,                              ///< 6.2.0.
-    NcaKeyGeneration_Since700NUP  = 8,                              ///< 7.0.0 - 8.0.1.
-    NcaKeyGeneration_Since810NUP  = 9,                              ///< 8.1.0 - 8.1.1.
-    NcaKeyGeneration_Since900NUP  = 10,                             ///< 9.0.0 - 9.0.1.
-    NcaKeyGeneration_Since910NUP  = 11,                             ///< 9.1.0 - 12.0.3.
-    NcaKeyGeneration_Since1210NUP = 12,                             ///< 12.1.0.
-    NcaKeyGeneration_Since1300NUP = 13,                             ///< 13.0.0 - 13.2.1.
-    NcaKeyGeneration_Since1400NUP = 14,                             ///< 14.0.0 - 14.1.2.
-    NcaKeyGeneration_Since1500NUP = 15,                             ///< 15.0.0 - 15.0.1.
-    NcaKeyGeneration_Since1600NUP = 16,                             ///< 16.0.0 - 16.1.0.
-    NcaKeyGeneration_Since1700NUP = 17,                             ///< 17.0.0 - 17.0.1.
-    NcaKeyGeneration_Since1800NUP = 18,                             ///< 18.0.0 - 18.1.0.
-    NcaKeyGeneration_Since1900NUP = 19,                             ///< 19.0.0 - 19.0.1.
-    NcaKeyGeneration_Since2000NUP = 20,                             ///< 20.0.0+.
-    NcaKeyGeneration_Current      = NcaKeyGeneration_Since2000NUP,
-    NcaKeyGeneration_Max          = 32
-} NcaKeyGeneration;
 
-typedef enum {
-    NcaKeyAreaEncryptionKeyIndex_Application = 0,
-    NcaKeyAreaEncryptionKeyIndex_Ocean       = 1,
-    NcaKeyAreaEncryptionKeyIndex_System      = 2,
-    NcaKeyAreaEncryptionKeyIndex_Count       = 3    ///< Total values supported by this enum.
-} NcaKeyAreaEncryptionKeyIndex;
-
-/// 'NcaSignatureKeyGeneration_Current' will always point to the last known key generation value.
-/// TODO: update on signature keygen changes.
-typedef enum {
-    NcaSignatureKeyGeneration_Since100NUP = 0,                                      ///< 1.0.0 - 8.1.1.
-    NcaSignatureKeyGeneration_Since900NUP = 1,                                      ///< 9.0.0+.
-    NcaSignatureKeyGeneration_Current     = NcaSignatureKeyGeneration_Since900NUP,
-    NcaSignatureKeyGeneration_Max         = (NcaSignatureKeyGeneration_Current + 1)
-} NcaSignatureKeyGeneration;
 
 typedef struct {
     u32 start_sector;   ///< Expressed in NCA_FS_SECTOR_SIZE sectors.
@@ -159,35 +121,35 @@ NXDT_ASSERT(NcaEncryptedKeyArea, NCA_KEY_AREA_SIZE);
 
 /// First 0x400 bytes from every NCA.
 typedef struct {
-    u8 main_signature[0x100];                               ///< RSA-2048-PSS with SHA-256 signature over header using a fixed key.
-    u8 acid_signature[0x100];                               ///< RSA-2048-PSS with SHA-256 signature over header using the ACID public key from the NPDM in ExeFS. Only used in Program NCAs.
-    u32 magic;                                              ///< "NCA0" / "NCA2" / "NCA3".
-    u8 distribution_type;                                   ///< NcaDistributionType.
-    u8 content_type;                                        ///< NcaContentType.
-    u8 key_generation_old;                                  ///< NcaKeyGeneration. Only uses NcaKeyGeneration_Since100NUP and NcaKeyGeneration_Since300NUP values.
-    u8 kaek_index;                                          ///< NcaKeyAreaEncryptionKeyIndex.
+    u8 main_signature[0x100];                                   ///< RSA-2048-PSS with SHA-256 signature over header using a fixed key.
+    u8 acid_signature[0x100];                                   ///< RSA-2048-PSS with SHA-256 signature over header using the ACID public key from the NPDM in ExeFS. Only used in Program NCAs.
+    u32 magic;                                                  ///< "NCA0" / "NCA2" / "NCA3".
+    NcaDistributionType distribution_type;
+    NcaContentType content_type;
+    NcaKeyGeneration key_generation_old;                        ///< Only uses NcaKeyGeneration_Since100NUP and NcaKeyGeneration_Since300NUP values.
+    NcaKeyAreaEncryptionKeyIndex kaek_index;
     u64 content_size;
     u64 program_id;
     u32 content_index;
     Version sdk_addon_version;
-    u8 key_generation;                                      ///< NcaKeyGeneration. Uses NcaKeyGeneration_Since301NUP or greater values.
-    u8 main_signature_key_generation;                       ///< NcaSignatureKeyGeneration.
+    NcaKeyGeneration key_generation;                            ///< Uses NcaKeyGeneration_Since301NUP or greater values.
+    NcaSignatureKeyGeneration main_signature_key_generation;
     u8 reserved[0xE];
-    FsRightsId rights_id;                                   ///< Used for titlekey crypto.
-    NcaFsInfo fs_info[NCA_FS_HEADER_COUNT];                 ///< Start and end sectors for each NCA FS section.
-    NcaFsHeaderHash fs_header_hash[NCA_FS_HEADER_COUNT];    ///< SHA-256 hashes calculated over each NCA FS section header.
+    FsRightsId rights_id;                                       ///< Used for titlekey crypto.
+    NcaFsInfo fs_info[NCA_FS_HEADER_COUNT];                     ///< Start and end sectors for each NCA FS section.
+    NcaFsHeaderHash fs_header_hash[NCA_FS_HEADER_COUNT];        ///< SHA-256 hashes calculated over each NCA FS section header.
     NcaEncryptedKeyArea encrypted_key_area;
 } NcaHeader;
 
 NXDT_ASSERT(NcaHeader, 0x400);
 
-typedef enum {
+typedef enum : u8 {
     NcaFsType_RomFs       = 0,
     NcaFsType_PartitionFs = 1,
     NcaFsType_Count       = 2   ///< Total values supported by this enum.
 } NcaFsType;
 
-typedef enum {
+typedef enum : u8 {
     NcaHashType_Auto                      = 0,
     NcaHashType_None                      = 1,  ///< Possibly used by all filesystem types.
     NcaHashType_HierarchicalSha256        = 2,  ///< Used by NcaFsType_PartitionFs.
@@ -198,7 +160,7 @@ typedef enum {
     NcaHashType_Count                     = 7   ///< Total values supported by this enum.
 } NcaHashType;
 
-typedef enum {
+typedef enum : u8 {
     NcaEncryptionType_Auto                  = 0,
     NcaEncryptionType_None                  = 1,
     NcaEncryptionType_AesXts                = 2,
@@ -209,7 +171,7 @@ typedef enum {
     NcaEncryptionType_Count                 = 7     ///< Total values supported by this enum.
 } NcaEncryptionType;
 
-typedef enum {
+typedef enum : u8 {
     NcaMetaDataHashType_None                      = 0,
     NcaMetaDataHashType_HierarchicalIntegrity     = 1,
     NcaMetaDataHashType_HierarchicalIntegritySha3 = 2,
@@ -353,10 +315,10 @@ NXDT_ASSERT(NcaMetaDataHashDataInfo, 0x30);
 /// NCA0 place the FS headers at the start sector from the NcaFsInfo entries.
 typedef struct {
     u16 version;
-    u8 fs_type;                                 ///< NcaFsType.
-    u8 hash_type;                               ///< NcaHashType.
-    u8 encryption_type;                         ///< NcaEncryptionType.
-    u8 metadata_hash_type;                      ///< NcaMetaDataHashType.
+    NcaFsType fs_type;
+    NcaHashType hash_type;
+    NcaEncryptionType encryption_type;
+    NcaMetaDataHashType metadata_hash_type;
     u8 reserved_1[0x2];
     NcaHashData hash_data;
     NcaPatchInfo patch_info;
@@ -369,7 +331,7 @@ typedef struct {
 
 NXDT_ASSERT(NcaFsHeader, 0x200);
 
-typedef enum {
+typedef enum : u8 {
     NcaFsSectionType_PartitionFs = 0,   ///< NcaFsType_PartitionFs + NcaHashType_HierarchicalSha256 OR NcaHashType_HierarchicalSha3256 + NcaEncryptionType_AesCtr OR NcaEncryptionType_AesCtrSkipLayerHash.
     NcaFsSectionType_RomFs       = 1,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity OR NcaHashType_HierarchicalIntegritySha3 + NcaEncryptionType_AesCtr OR NcaEncryptionType_AesCtrSkipLayerHash.
     NcaFsSectionType_PatchRomFs  = 2,   ///< NcaFsType_RomFs + NcaHashType_HierarchicalIntegrity OR NcaHashType_HierarchicalIntegritySha3 + NcaEncryptionType_AesCtrEx OR NcaEncryptionType_AesCtrExSkipLayerHash.
@@ -392,9 +354,9 @@ typedef struct {
     u64 section_offset;                 ///< Relative to the start of the NCA content file. Placed here for convenience.
     u64 section_size;                   ///< Placed here for convenience.
     char section_size_str[0x10];        ///< Placed here for convenience.
-    u8 hash_type;                       ///< NcaHashType.
-    u8 encryption_type;                 ///< NcaEncryptionType.
-    u8 section_type;                    ///< NcaFsSectionType.
+    NcaHashType hash_type;
+    NcaEncryptionType encryption_type;
+    NcaFsSectionType section_type;
 
     ///< PatchInfo-related fields.
     bool has_patch_indirect_layer;      ///< Set to true if this NCA FS section has an Indirect patch layer.
@@ -422,7 +384,7 @@ typedef struct {
     bool header_written;                ///< Set to true after this FS section header has been written to an output dump.
 } NcaFsSectionContext;
 
-typedef enum {
+typedef enum : u8 {
     NcaVersion_Nca0  = 0,
     NcaVersion_Nca2  = 1,
     NcaVersion_Nca3  = 2,
@@ -453,11 +415,11 @@ struct _NcaContext {
     char content_id_str[0x21];
     u8 hash[SHA256_HASH_SIZE];                          ///< Manually calculated (if needed).
     char hash_str[SHA256_HASH_STR_SIZE];
-    u8 format_version;                                  ///< NcaVersion.
+    NcaVersion format_version;
     u8 content_type;                                    ///< NcmContentType. Retrieved from NcmContentInfo.
     u64 content_size;                                   ///< Retrieved from NcmContentInfo.
     char content_size_str[0x10];                        ///< Placed here for convenience.
-    u8 key_generation;                                  ///< NcaKeyGeneration. Retrieved from the decrypted header.
+    NcaKeyGeneration key_generation;                    ///< Retrieved from the decrypted header.
     u8 id_offset;                                       ///< Retrieved from NcmContentInfo.
     bool rights_id_available;
     bool titlekey_retrieved;
@@ -508,7 +470,7 @@ void ncaFreeCryptoBuffer(void);
 /// If the 'tik' argument points to a valid Ticket element, it will either be updated (if it's empty) or used to read ticket data that has already been retrieved.
 /// If the 'tik' argument is NULL, the function will just retrieve the necessary ticket data on its own.
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik);
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, HashFileSystemPartitionType hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik);
 
 /// Initializes a NCA context using a Hash FS context and a Hash FS file entry.
 /// If the NCA holds a populated Rights ID field, ticket data will need to be retrieved.

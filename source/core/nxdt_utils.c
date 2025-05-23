@@ -67,7 +67,7 @@ static FsFileSystem *g_sdCardFileSystem = NULL;
 
 static int g_nxLinkSocketFd = -1;
 
-static u8 g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
+static UtilsCustomFirmwareType g_customFirmwareType = UtilsCustomFirmwareType_Unknown;
 
 static u8 g_productModel = SetSysProductModel_Invalid;
 
@@ -377,7 +377,7 @@ bool utilsGetAtmosphereEmummcStatus(void)
     return g_exosphereIsEmummc;
 }
 
-u8 utilsGetCustomFirmwareType(void)
+UtilsCustomFirmwareType utilsGetCustomFirmwareType(void)
 {
     return g_customFirmwareType;
 }

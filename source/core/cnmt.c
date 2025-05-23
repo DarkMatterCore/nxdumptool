@@ -444,7 +444,7 @@ bool cnmtGenerateAuthoringToolXml(ContentMetaContext *cnmt_ctx, NcaContext *nca_
     /* ContentMetaAttribute. */
     for(i = 0; i < ContentMetaAttribute_Count; i++)
     {
-        if (!(cnmt_ctx->packaged_header->content_meta_attribute & (u8)BIT(i))) continue;
+        if (!(cnmt_ctx->packaged_header->content_meta_attribute & (ContentMetaAttribute)BIT(i))) continue;
         if (!CNMT_ADD_FMT_STR("  <ContentMetaAttribute>%s</ContentMetaAttribute>\n", g_cnmtAttributeStrings[i])) goto end;
         count++;
     }

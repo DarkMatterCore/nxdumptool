@@ -45,7 +45,7 @@ typedef struct {
 } UtilsScopedLock;
 
 /// Used to determine which CFW is the application running under.
-typedef enum {
+typedef enum : u8 {
     UtilsCustomFirmwareType_Unknown    = 0,
     UtilsCustomFirmwareType_Atmosphere = 1,
     UtilsCustomFirmwareType_SXOS       = 2,
@@ -99,8 +99,8 @@ void utilsGetAtmosphereTargetFirmware(SdkAddOnVersion *out);
 /// Returns true if an emuMMC is being used.
 bool utilsGetAtmosphereEmummcStatus(void);
 
-/// Returns a UtilsCustomFirmwareType value.
-u8 utilsGetCustomFirmwareType(void);
+/// Returns the custom firmware type being used.
+UtilsCustomFirmwareType utilsGetCustomFirmwareType(void);
 
 /// Returns true if the application is running under a Mariko unit.
 bool utilsIsMarikoUnit(void);

@@ -29,7 +29,7 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum : u32 {
     SmcKeyType_Default           = 0,   ///< Also known as "aes_kek_generation_source".
     SmcKeyType_NormalOnly        = 1,
     SmcKeyType_RecoveryOnly      = 2,
@@ -37,7 +37,7 @@ typedef enum {
     SmcKeyType_Count             = 4    ///< Total values supported by this enum.
 } SmcKeyType;
 
-typedef enum {
+typedef enum : u32 {
     SmcSealKey_LoadAesKey                = 0,
     SmcSealKey_DecryptDeviceUniqueData   = 1,
     SmcSealKey_ImportLotusKey            = 2,
@@ -50,12 +50,12 @@ typedef enum {
 
 typedef struct {
     union {
-        u32 value;                      ///< Can be used with spl calls.
+        u32 value;                          ///< Can be used with spl calls.
         struct {
-            u32 is_device_unique : 1;
-            u32 key_type_idx     : 4;   ///< SmcKeyType.
-            u32 seal_key_idx     : 3;   ///< SmcSealKey.
-            u32 reserved         : 24;
+            u32 is_device_unique    : 1;
+            SmcKeyType key_type_idx : 4;
+            SmcSealKey seal_key_idx : 3;
+            u32 reserved            : 24;
         } fields;
     };
 } SmcGenerateAesKekOption;
@@ -64,9 +64,9 @@ NXDT_ASSERT(SmcGenerateAesKekOption, 0x4);
 
 /// Helper inline functions.
 
-NX_INLINE void smcPrepareGenerateAesKekOption(bool is_device_unique, u32 key_type_idx, u32 seal_key_idx, SmcGenerateAesKekOption *out)
+NX_INLINE void smcPrepareGenerateAesKekOption(bool is_device_unique, SmcKeyType key_type_idx, SmcSealKey seal_key_idx, SmcGenerateAesKekOption *out)
 {
-    if (key_type_idx >= SmcKeyType_Count || seal_key_idx >= SmcSealKey_Count) return;
+    if (key_type_idx >= SmcKeyType_Count || seal_key_idx >= SmcSealKey_Count || !out) return;
 
     out->fields.is_device_unique = (u32)(is_device_unique & 1);
     out->fields.key_type_idx = key_type_idx;

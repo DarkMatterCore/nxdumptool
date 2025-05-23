@@ -40,23 +40,21 @@ namespace nxdt::utils
         this->storage_type = (this->output_path.starts_with(DEVOPTAB_SDMC_DEVICE) ? StorageType::SdCard  :
                              (this->output_path.starts_with('/')                  ? StorageType::UsbHost : StorageType::UmsDevice));
 
-        if (this->storage_type != StorageType::UsbHost)
+        if (this->storage_type == StorageType::SdCard)
         {
-            if (this->storage_type == StorageType::SdCard)
-            {
-                /* Always split big files if we're dealing with the SD card. */
-                this->split_file = (this->total_size > FAT32_FILESIZE_LIMIT);
-            } else {
-                /* Get UMS device info. */
-                UsbHsFsDevice ums_device{};
-                if (!usbHsFsGetDeviceByPath(output_path_str, &ums_device)) throw "utils/file_writer/ums_device_info_error"_i18n;
+            /* Always split big files if we're dealing with the SD card. */
+            this->split_file = (this->total_size > FAT32_FILESIZE_LIMIT);
+        } else
+        if (this->storage_type == StorageType::UmsDevice) {
+            /* Get UMS device info. */
+            UsbHsFsDevice ums_device{};
+            if (!usbHsFsGetDeviceByPath(output_path_str, &ums_device)) throw "utils/file_writer/ums_device_info_error"_i18n;
 
-                /* Determine if we should split the output file based on the UMS device's filesystem type. */
-                this->split_file = (this->total_size > FAT32_FILESIZE_LIMIT && ums_device.fs_type < UsbHsFsDeviceFileSystemType_exFAT);
+            /* Determine if we should split the output file based on the UMS device's filesystem type. */
+            this->split_file = (this->total_size > FAT32_FILESIZE_LIMIT && ums_device.fs_type < UsbHsFsDeviceFileSystemType_exFAT);
 
-                /* Calculate the number of part files we'll need, if applicable. */
-                if (this->split_file) this->split_file_part_cnt = static_cast<u8>(ceil(static_cast<double>(this->total_size) / static_cast<double>(CONCATENATION_FILE_PART_SIZE)));
-            }
+            /* Calculate the number of part files we'll need, if applicable. */
+            if (this->split_file) this->split_file_part_cnt = static_cast<u8>(ceil(static_cast<double>(this->total_size) / static_cast<double>(CONCATENATION_FILE_PART_SIZE)));
         }
 
         LOG_MSG_DEBUG("storage_type: %d | split_file: %u | split_file_part_cnt: %u", this->storage_type, this->split_file, this->split_file_part_cnt);

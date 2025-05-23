@@ -34,7 +34,7 @@ extern "C" {
 #define USB_TRANSFER_BUFFER_SIZE    0x800000    /* 8 MiB. */
 
 /// Used to indicate the USB speed selected by the host device.
-typedef enum {
+typedef enum : u8 {
     UsbHostSpeed_None       = 0,
     UsbHostSpeed_FullSpeed  = 1,    ///< USB 1.x.
     UsbHostSpeed_HighSpeed  = 2,    ///< USB 2.0.
@@ -52,8 +52,7 @@ void usbExit(void);
 void *usbAllocatePageAlignedBuffer(size_t size);
 
 /// Used to check if the console has been connected to a USB host device and if a valid USB session has been established.
-/// Returns a value from the UsbHostSpeed enum.
-u8 usbIsReady(void);
+UsbHostSpeed usbIsReady(void);
 
 /// Sends file properties to the host device before starting a file data transfer. If needed, it must be called before usbSendFileData().
 /// 'file_size' may be zero if an empty file shall be created, in which case no file data transfer will be necessary.

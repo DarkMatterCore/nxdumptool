@@ -74,8 +74,9 @@ bool systemUpdateInitialize(void)
 
         /* Initialize NCA context. */
         /* Don't allow invalid NCA signatures. */
-        if (!ncaInitializeContext(g_systemUpdateNcaContext, g_systemUpdateTitleInfo->storage_id, 0, &(g_systemUpdateTitleInfo->meta_key), \
-            titleGetContentInfoByTypeAndIdOffset(g_systemUpdateTitleInfo, NcmContentType_Meta, 0), NULL) || !g_systemUpdateNcaContext->valid_main_signature)
+        NcmContentInfo *content_info = titleGetContentInfoByTypeAndIdOffset(g_systemUpdateTitleInfo, NcmContentType_Meta, 0);
+        if (!NCA_INIT_CTX(g_systemUpdateNcaContext, g_systemUpdateTitleInfo->storage_id, &(g_systemUpdateTitleInfo->meta_key), content_info, NULL) || \
+            !g_systemUpdateNcaContext->valid_main_signature)
         {
             LOG_MSG_ERROR("Failed to initialize SystemUpdate Meta NCA context!");
             goto end;
@@ -350,7 +351,7 @@ static bool systemUpdateProcessContentRecords(SystemUpdateDumpContext *ctx, Titl
         }
 
         /* Initialize current NCA context. */
-        if (!ncaInitializeContext(*cur_nca_ctx, title_info->storage_id, 0, &(title_info->meta_key), cur_content_info, NULL) || !(*cur_nca_ctx)->valid_main_signature)
+        if (!NCA_INIT_CTX(*cur_nca_ctx, title_info->storage_id, &(title_info->meta_key), cur_content_info, NULL) || !(*cur_nca_ctx)->valid_main_signature)
         {
             LOG_MSG_ERROR("Failed to initialize NCA context! (title %016lX, content #%u).", title_info->meta_key.id, i);
             goto end;

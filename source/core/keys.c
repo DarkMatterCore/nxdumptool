@@ -23,7 +23,6 @@
 
 #include <core/nxdt_utils.h>
 #include <core/keys.h>
-#include <core/nca.h>
 #include <core/rsa.h>
 #include <core/aes.h>
 #include <core/smc.h>
@@ -133,7 +132,8 @@ static const u32 g_hosMasterKeyIndexTable[NcaKeyGeneration_Current] = {
     [NcaKeyGeneration_Since1600NUP - 1] = MAKEHOSVERSION(16, 0, 0),
     [NcaKeyGeneration_Since1700NUP - 1] = MAKEHOSVERSION(17, 0, 0),
     [NcaKeyGeneration_Since1800NUP - 1] = MAKEHOSVERSION(18, 0, 0),
-    [NcaKeyGeneration_Since1900NUP - 1] = MAKEHOSVERSION(19, 0, 0)
+    [NcaKeyGeneration_Since1900NUP - 1] = MAKEHOSVERSION(19, 0, 0),
+    [NcaKeyGeneration_Since2000NUP - 1] = MAKEHOSVERSION(20, 0, 0)
 };
 
 static u8 g_atmosphereKeyGeneration = 0, g_currentMasterKeyIndex = 0, g_hosKeyGeneration = 0;
@@ -227,7 +227,7 @@ const u8 *keysGetNcaHeaderKey(void)
     return ret;
 }
 
-const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation)
+const u8 *keysGetNcaKeyAreaEncryptionKey(NcaKeyAreaEncryptionKeyIndex kaek_index, NcaKeyGeneration key_generation)
 {
     const u8 *ret = NULL;
     const u8 mkey_index = (key_generation ? (key_generation - 1) : key_generation);
@@ -297,7 +297,7 @@ bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *o
     return ret;
 }
 
-const u8 *keysGetTicketCommonKey(u8 key_generation)
+const u8 *keysGetTicketCommonKey(NcaKeyGeneration key_generation)
 {
     const u8 *ret = NULL;
     const u8 mkey_index = (key_generation ? (key_generation - 1) : key_generation);
@@ -970,7 +970,9 @@ static bool keysTestEticketRsaDeviceKey(const void *e, const void *d, const void
 static bool keysGenerateAesKek(const u8 *kek_src, u8 key_generation, SmcGenerateAesKekOption option, u8 *out_kek)
 {
     const bool is_device_unique = (option.fields.is_device_unique == 1);
-    const u8 key_type_idx = option.fields.key_type_idx, seal_key_idx = option.fields.seal_key_idx, mkey_index = (key_generation ? (key_generation - 1) : key_generation);
+    const SmcKeyType key_type_idx = option.fields.key_type_idx;
+    const SmcSealKey seal_key_idx = option.fields.seal_key_idx;
+    const u8 mkey_index = (key_generation ? (key_generation - 1) : key_generation);
 
     if (!kek_src || key_generation > NcaKeyGeneration_Max || is_device_unique || key_type_idx >= SmcKeyType_Count || seal_key_idx >= SmcSealKey_Count || \
         option.fields.reserved != 0 || !out_kek)

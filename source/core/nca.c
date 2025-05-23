@@ -127,7 +127,7 @@ static const u8 g_nca0KeyAreaHash[SHA256_HASH_SIZE] = {
 
 /* Function prototypes. */
 
-static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, u8 hfs_partition_type, NcmContentStorage *ncm_storage, Ticket *tik);
+static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, HashFileSystemPartitionType hfs_partition_type, NcmContentStorage *ncm_storage, Ticket *tik);
 
 NX_INLINE bool ncaIsFsInfoEntryValid(NcaFsInfo *fs_info);
 
@@ -137,7 +137,7 @@ static bool ncaKeyAreaCrypt(NcaContext *ctx, bool encrypt);
 static bool ncaVerifyMainSignature(NcaContext *ctx);
 
 NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx);
-NX_INLINE u8 ncaGetKeyGenerationValue(NcaContext *ctx);
+NX_INLINE NcaKeyGeneration ncaGetKeyGenerationValue(NcaContext *ctx);
 NX_INLINE bool ncaCheckRightsIdAvailability(NcaContext *ctx);
 
 static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx);
@@ -177,7 +177,7 @@ void ncaFreeCryptoBuffer(void)
     }
 }
 
-bool ncaInitializeContext(NcaContext *out, u8 storage_id, u8 hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik)
+bool ncaInitializeContext(NcaContext *out, u8 storage_id, HashFileSystemPartitionType hfs_partition_type, const NcmContentMetaKey *meta_key, const NcmContentInfo *content_info, Ticket *tik)
 {
     NcmContentStorage *ncm_storage = NULL;
 
@@ -560,7 +560,7 @@ const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx)
     return str;
 }
 
-static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, u8 hfs_partition_type, NcmContentStorage *ncm_storage, Ticket *tik)
+static bool ncaInitializeContextCommon(NcaContext *out, u8 storage_id, HashFileSystemPartitionType hfs_partition_type, NcmContentStorage *ncm_storage, Ticket *tik)
 {
     if (!out || !*(out->content_id_str) || out->content_size < NCA_FULL_HEADER_LENGTH || (storage_id != NcmStorageId_GameCard && !ncm_storage))
     {
@@ -785,7 +785,7 @@ static bool ncaVerifyMainSignature(NcaContext *ctx)
         return false;
     }
 
-    u8 key_generation = ctx->header.main_signature_key_generation;
+    NcaSignatureKeyGeneration key_generation = ctx->header.main_signature_key_generation;
     if (key_generation > NcaSignatureKeyGeneration_Current)
     {
         LOG_MSG_ERROR("Unsupported key generation value! (0x%02X).", key_generation);
@@ -813,9 +813,9 @@ NX_INLINE bool ncaIsVersion0KeyAreaEncrypted(NcaContext *ctx)
     return (memcmp(nca0_key_area_hash, g_nca0KeyAreaHash, SHA256_HASH_SIZE) != 0);
 }
 
-NX_INLINE u8 ncaGetKeyGenerationValue(NcaContext *ctx)
+NX_INLINE NcaKeyGeneration ncaGetKeyGenerationValue(NcaContext *ctx)
 {
-    if (!ctx) return 0;
+    if (!ctx) return NcaKeyGeneration_Since100NUP;
     return (ctx->header.key_generation > ctx->header.key_generation_old ? ctx->header.key_generation : ctx->header.key_generation_old);
 }
 

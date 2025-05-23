@@ -30,7 +30,7 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum : u8 {
     NcaStorageBaseStorageType_Invalid    = 0,   ///< Placeholder.
     NcaStorageBaseStorageType_Regular    = 1,
     NcaStorageBaseStorageType_Sparse     = 2,
@@ -41,12 +41,12 @@ typedef enum {
 
 /// Used to perform multi-layered reads within a single NCA FS section.
 typedef struct {
-    u8 base_storage_type;                   ///< NcaStorageBaseStorageType.
-    NcaFsSectionContext *nca_fs_ctx;        ///< NCA FS section context used to initialize this context.
-    BucketTreeContext *sparse_storage;      ///< Sparse storage context.
-    BucketTreeContext *aes_ctr_ex_storage;  ///< AesCtrEx storage context.
-    BucketTreeContext *indirect_storage;    ///< Indirect storage context.
-    BucketTreeContext *compressed_storage;  ///< Compressed storage context.
+    NcaStorageBaseStorageType base_storage_type;
+    NcaFsSectionContext *nca_fs_ctx;                ///< NCA FS section context used to initialize this context.
+    BucketTreeContext *sparse_storage;              ///< Sparse storage context.
+    BucketTreeContext *aes_ctr_ex_storage;          ///< AesCtrEx storage context.
+    BucketTreeContext *indirect_storage;            ///< Indirect storage context.
+    BucketTreeContext *compressed_storage;          ///< Compressed storage context.
 } NcaStorageContext;
 
 /// Initializes a NCA storage context using a NCA FS section context, optionally providing a pointer to a base NcaStorageContext.

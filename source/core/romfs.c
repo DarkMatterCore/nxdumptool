@@ -493,7 +493,7 @@ end:
     return file_entry;
 }
 
-bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type)
+bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size, RomFileSystemPathIllegalCharReplaceType illegal_char_replace_type)
 {
     size_t path_len = 0;
     u64 dir_offset = ROMFS_VOID_ENTRY;
@@ -598,7 +598,7 @@ end:
     return success;
 }
 
-bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type)
+bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, RomFileSystemPathIllegalCharReplaceType illegal_char_replace_type)
 {
     size_t path_len = 0;
     RomFileSystemDirectoryEntry *dir_entry = NULL;

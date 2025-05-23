@@ -24,7 +24,7 @@
 
 /* Function prototypes. */
 
-static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type);
+static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFsSectionContext *nca_fs_ctx, BucketTreeStorageType storage_type);
 static bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, NcaStorageContext *base_ctx);
 static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx);
 
@@ -225,7 +225,7 @@ void ncaStorageFreeContext(NcaStorageContext *ctx)
     memset(ctx, 0, sizeof(NcaStorageContext));
 }
 
-static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type)
+static bool ncaStorageInitializeBucketTreeContext(BucketTreeContext **out, NcaFsSectionContext *nca_fs_ctx, BucketTreeStorageType storage_type)
 {
     if (!out || !nca_fs_ctx || storage_type >= BucketTreeStorageType_Count)
     {

@@ -21,7 +21,7 @@
  */
 
 #include <core/nxdt_utils.h>
-#include <core/nca.h>
+#include <core/tik.h>
 #include <core/cert.h>
 #include <core/save.h>
 #include <core/es.h>
@@ -100,18 +100,18 @@ static bool tikFixTamperedCommonTicket(Ticket *tik);
 static bool tikVerifyRsa2048Sha256Signature(const TikCommonBlock *tik_common_block, u64 hash_area_size, const u8 *signature);
 
 static bool tikGetEncryptedTitleKey(Ticket *tik);
-static bool tikGetDecryptedTitleKey(void *dst, const void *src, u8 key_generation);
+static bool tikGetDecryptedTitleKey(void *dst, const void *src, NcaKeyGeneration key_generation);
 
-static bool tikGetTitleKeyTypeForRightsId(const FsRightsId *id, u8 *out);
+static bool tikGetTitleKeyTypeForRightsId(const FsRightsId *id, TikTitleKeyType *out);
 static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count, bool personalized);
 
-static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u8 titlekey_type, u64 *out_offset);
-static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u8 titlekey_type, u64 ticket_offset);
+static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, TikTitleKeyType titlekey_type, u64 *out_offset);
+static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, TikTitleKeyType titlekey_type, u64 ticket_offset);
 static bool tikDecryptVolatileTicket(u8 *buf, u64 ticket_offset);
 
-static bool tikGetTicketTypeAndSize(void *data, u64 data_size, u8 *out_type, u64 *out_size);
+static bool tikGetTicketTypeAndSize(void *data, u64 data_size, TikType *out_type, u64 *out_size);
 
-bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, u8 key_generation, bool use_gamecard)
+bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, NcaKeyGeneration key_generation, bool use_gamecard)
 {
     if (!dst || !id || key_generation > NcaKeyGeneration_Max)
     {
@@ -141,7 +141,7 @@ bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, u8 key_gener
 
     if ((old_key_gen && key_gen_rid) || (!old_key_gen && key_gen_rid != key_generation))
     {
-        LOG_MSG_ERROR("Invalid rights ID key generation! Got 0x%02X, expected 0x%02X.", key_gen_rid, old_key_gen ? 0 : key_generation);
+        LOG_MSG_ERROR("Invalid rights ID key generation! Got 0x%02X, expected 0x%02X.", key_gen_rid, old_key_gen ? NcaKeyGeneration_Since100NUP : key_generation);
         goto end;
     }
 
@@ -194,7 +194,7 @@ bool tikConvertPersonalizedTicketToCommonTicket(Ticket *tik, u8 **out_raw_cert_c
 {
     TikCommonBlock *tik_common_block = NULL;
 
-    u32 sig_type = 0;
+    SignatureType sig_type = 0;
     u8 *signature = NULL;
     u64 signature_size = 0;
 
@@ -319,7 +319,7 @@ static bool tikRetrieveTicketFromEsSaveDataByRightsId(Ticket *dst, const FsRight
         return false;
     }
 
-    u8 titlekey_type = 0;
+    TikTitleKeyType titlekey_type = 0;
 
     const char *mount_name = NULL;
     char savefile_path[64] = {0};
@@ -402,7 +402,7 @@ static bool tikFixTamperedCommonTicket(Ticket *tik)
 {
     TikCommonBlock *tik_common_block = NULL;
 
-    u32 sig_type = 0;
+    SignatureType sig_type = 0;
     bool dev_cert = false;
     TikSigRsa2048 *tik_data = NULL;
     u64 hash_area_size = 0;
@@ -537,7 +537,7 @@ static bool tikGetEncryptedTitleKey(Ticket *tik)
     return success;
 }
 
-static bool tikGetDecryptedTitleKey(void *dst, const void *src, u8 key_generation)
+static bool tikGetDecryptedTitleKey(void *dst, const void *src, NcaKeyGeneration key_generation)
 {
     if (!dst || !src)
     {
@@ -559,7 +559,7 @@ static bool tikGetDecryptedTitleKey(void *dst, const void *src, u8 key_generatio
     return true;
 }
 
-static bool tikGetTitleKeyTypeForRightsId(const FsRightsId *id, u8 *out)
+static bool tikGetTitleKeyTypeForRightsId(const FsRightsId *id, TikTitleKeyType *out)
 {
     if (!id || !out)
     {
@@ -571,7 +571,7 @@ static bool tikGetTitleKeyTypeForRightsId(const FsRightsId *id, u8 *out)
     FsRightsId *rights_ids = NULL;
     bool found = false;
 
-    for(u8 i = TikTitleKeyType_Common; i < TikTitleKeyType_Count; i++)
+    for(TikTitleKeyType i = TikTitleKeyType_Common; i < TikTitleKeyType_Count; i++)
     {
         /* Get all rights IDs for the current titlekey type. */
         if (!tikRetrieveRightsIdsByTitleKeyType(&rights_ids, &count, i == TikTitleKeyType_Personalized))
@@ -661,7 +661,7 @@ end:
     return success;
 }
 
-static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u8 titlekey_type, u64 *out_offset)
+static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, TikTitleKeyType titlekey_type, u64 *out_offset)
 {
     if (!save_ctx || !buf || !buf_size || (buf_size % sizeof(TikListEntry)) != 0 || !id || titlekey_type >= TikTitleKeyType_Count || !out_offset)
     {
@@ -742,7 +742,7 @@ end:
     return success;
 }
 
-static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, u8 titlekey_type, u64 ticket_offset)
+static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, TikTitleKeyType titlekey_type, u64 ticket_offset)
 {
     if (!save_ctx || !buf || buf_size < SIGNED_TIK_MAX_SIZE || !id || titlekey_type >= TikTitleKeyType_Count || (ticket_offset % SIGNED_TIK_MAX_SIZE) != 0)
     {
@@ -871,7 +871,7 @@ end:
     return success;
 }
 
-static bool tikGetTicketTypeAndSize(void *data, u64 data_size, u8 *out_type, u64 *out_size)
+static bool tikGetTicketTypeAndSize(void *data, u64 data_size, TikType *out_type, u64 *out_size)
 {
     if (!data || data_size < SIGNED_TIK_MIN_SIZE || data_size > SIGNED_TIK_MAX_SIZE || !out_type || !out_size)
     {
@@ -879,9 +879,9 @@ static bool tikGetTicketTypeAndSize(void *data, u64 data_size, u8 *out_type, u64
         return false;
     }
 
-    u32 sig_type = 0;
+    SignatureType sig_type = 0;
     u64 signed_ticket_size = 0;
-    u8 type = TikType_None;
+    TikType type = TikType_None;
     bool success = false;
 
     /* Get signature type and signed ticket size. */

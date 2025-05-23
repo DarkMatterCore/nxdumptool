@@ -56,7 +56,7 @@
 
 /* Type definitions. */
 
-typedef enum {
+typedef enum : u32 {
     UsbCommandType_StartSession         = 0,
     UsbCommandType_SendFileProperties   = 1,
     UsbCommandType_CancelFileTransfer   = 2,
@@ -69,7 +69,7 @@ typedef enum {
 
 typedef struct {
     u32 magic;
-    u32 cmd;
+    UsbCommandType cmd;
     u32 cmd_block_size;
     u8 reserved[0x4];
 } UsbCommandHeader;
@@ -105,7 +105,7 @@ typedef struct {
 
 NXDT_ASSERT(UsbCommandStartExtractedFsDump, 0x310);
 
-typedef enum {
+typedef enum : u32 {
     ///< Expected response code.
     UsbStatusType_Success               = 0,
 
@@ -126,7 +126,7 @@ typedef enum {
 
 typedef struct {
     u32 magic;
-    u32 status;             ///< UsbStatusType.
+    UsbStatusType status;
     u16 max_packet_size;    ///< USB host endpoint max packet size.
     u8 reserved[0x6];
 } UsbStatus;
@@ -219,10 +219,10 @@ static void usbDetectionThreadFunc(void *arg);
 static bool usbStartSession(void);
 static void usbEndSession(void);
 
-NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size);
+NX_INLINE void usbPrepareCommandHeader(UsbCommandType cmd, u32 cmd_block_size);
 static bool usbSendCommand(void);
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-static void usbLogStatusDetail(u32 status);
+static void usbLogStatusDetail(UsbStatusType status);
 #endif
 
 NX_INLINE bool usbAllocateTransferBuffer(void);
@@ -323,9 +323,9 @@ void *usbAllocatePageAlignedBuffer(size_t size)
     return memalign(USB_TRANSFER_ALIGNMENT, size);
 }
 
-u8 usbIsReady(void)
+UsbHostSpeed usbIsReady(void)
 {
-    u8 ret = UsbHostSpeed_None;
+    UsbHostSpeed ret = UsbHostSpeed_None;
     u16 max_packet_size = atomic_load(&g_usbEndpointMaxPacketSize);
 
     switch(max_packet_size)
@@ -685,7 +685,7 @@ static void usbEndSession(void)
     usbSendCommand();
 }
 
-NX_INLINE void usbPrepareCommandHeader(u32 cmd, u32 cmd_block_size)
+NX_INLINE void usbPrepareCommandHeader(UsbCommandType cmd, u32 cmd_block_size)
 {
     if (cmd >= UsbCommandType_Count) return;
     UsbCommandHeader *cmd_header = (UsbCommandHeader*)g_usbTransferBuffer;
@@ -710,7 +710,7 @@ static bool usbSendCommand(void)
 #endif
 
     UsbStatus *cmd_status = (UsbStatus*)g_usbTransferBuffer;
-    u32 status = UsbStatusType_Success;
+    UsbStatusType status = UsbStatusType_Success;
 
     bool ret = false, zlt_required = false, cmd_block_written = false;
 
@@ -793,7 +793,7 @@ end:
 }
 
 #if LOG_LEVEL <= LOG_LEVEL_INFO
-static void usbLogStatusDetail(u32 status)
+static void usbLogStatusDetail(UsbStatusType status)
 {
     switch(status)
     {

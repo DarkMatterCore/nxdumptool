@@ -149,7 +149,7 @@ namespace nxdt::views
         /* Set ListItem callbacks. */
         dump_card_image->getClickEvent()->subscribe([this](brls::View *view) {
             /* Display gamecard image dump options. */
-            std::string& raw_filename = (configGetInteger("naming_convention") == TitleNamingConvention_Full ? raw_filename_full : raw_filename_id_only);
+            std::string& raw_filename = (configGetInteger("naming_convention") == static_cast<int>(TitleNamingConvention_Full) ? raw_filename_full : raw_filename_id_only);
             brls::Application::pushView(new GameCardImageDumpOptionsFrame(this->root_view, raw_filename), brls::ViewAnimation::SLIDE_LEFT);
         });
 
@@ -237,6 +237,7 @@ namespace nxdt::views
         GAMECARD_TAB_TABLE_PROPERTY(compatibility_type);
         GAMECARD_TAB_TABLE_PROPERTY(package_id);
         GAMECARD_TAB_TABLE_PROPERTY(card_id_set);
+        GAMECARD_TAB_TABLE_PROPERTY(flags);
 
         /* Set table row values. */
         capacity->setValue(this->GetFormattedSizeString(&gamecardGetRomCapacity));
@@ -285,13 +286,13 @@ namespace nxdt::views
                                                                          upp_version.major_relstep, upp_version.minor_relstep, upp_version.value));
         }
 
-        const u64 fw_version = card_info.fw_version;
+        const GameCardFwVersion fw_version = card_info.fw_version;
         lafw_version->setValue(fmt::format("{} ({})", fw_version, fw_version >= GameCardFwVersion_Count ? "generic/unknown"_i18n : gamecardGetRequiredHosVersionString(fw_version)));
 
         const SdkAddOnVersion fw_mode = card_info.fw_mode.sdk_addon_version;
         sdk_version->setValue(fmt::format("{}.{}.{}-{} (v{})", fw_mode.major, fw_mode.minor, fw_mode.micro, fw_mode.relstep, fw_mode.value));
 
-        u8 compat_type = card_info.compatibility_type;
+        const GameCardCompatibilityType compat_type = card_info.compatibility_type;
         compatibility_type->setValue(fmt::format("{} ({})",
                                                  compat_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n : gamecardGetCompatibilityTypeString(compat_type), compat_type));
 
@@ -300,6 +301,8 @@ namespace nxdt::views
         package_id->setValue(std::string(package_id_str));
 
         card_id_set->setValue(this->GetCardIdSetString(card_id_set_data));
+
+        flags->setValue(fmt::format("0x{:02X}", card_header.flags));
 
         this->list->addView(properties_table);
     }

@@ -25,7 +25,8 @@
             "sdk_version": "SDK version",
             "compatibility_type": "Compatibility type",
             "package_id": "Package ID",
-            "card_id_set": "Card ID Set"
+            "card_id_set": "Card ID Set",
+            "flags": "Flags"
         },
 
         "dump_options": "Dump options",

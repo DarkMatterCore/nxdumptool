@@ -40,7 +40,7 @@ namespace nxdt::tasks
     {
         brls::RepeatingTask::run(current_time);
 
-        this->cur_usb_host_speed = static_cast<UsbHostSpeed>(usbIsReady());
+        this->cur_usb_host_speed = usbIsReady();
         if (this->cur_usb_host_speed != this->prev_usb_host_speed)
         {
             LOG_MSG_DEBUG("USB host speed changed: %u.", this->cur_usb_host_speed);

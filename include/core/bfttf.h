@@ -30,7 +30,7 @@ extern "C" {
 #endif
 
 /// Loosely based on PlSharedFontType.
-typedef enum {
+typedef enum : u8 {
     BfttfFontType_Standard             = 0, ///< Japan, US and Europe.
     BfttfFontType_NintendoExt          = 1, ///< Extended Nintendo. This font contains special, Nintendo-specific characters, which aren't available in the other fonts.
     BfttfFontType_Korean               = 2, ///< Korean (Hangul).
@@ -42,9 +42,9 @@ typedef enum {
 
 /// Loosely based on PlFontData.
 typedef struct {
-    u8 type;        ///< BfttfFontType.
-    u32 size;       ///< Decoded BFTFF font size.
-    void *address;  ///< Font data address.
+    BfttfFontType type;
+    u32 size;           ///< Decoded BFTFF font size.
+    void *address;      ///< Font data address.
 } BfttfFontData;
 
 /// Initializes the BFTTF interface.
@@ -53,8 +53,8 @@ bool bfttfInitialize(void);
 /// Closes the BFTTF interface.
 void bfttfExit(void);
 
-/// Returns a specific BFTTF font using the provided BfttfFontType.
-bool bfttfGetFontByType(BfttfFontData *font, u8 font_type);
+/// Returns a specific BFTTF font using the provided BfttfFontType value.
+bool bfttfGetFontByType(BfttfFontData *font, BfttfFontType font_type);
 
 #ifdef __cplusplus
 }

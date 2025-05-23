@@ -399,7 +399,7 @@ int main(int argc, char *argv[])
                 consolePrint("nacp xml succeeded (%s | id offset #%u)\n", cur_nca_ctx->content_id_str, cur_nca_ctx->id_offset);
 
                 //sprintf(path, "sdmc:/at_xml/%016lX/%s.nacp", app_metadata[selected_idx]->title_id, cur_nca_ctx->content_id_str);
-                //writeFile(cur_nacp_ctx->data, sizeof(_NacpStruct), path);
+                //writeFile(cur_nacp_ctx->data, sizeof(NsApplicationControlProperty), path);
 
                 sprintf(path, "sdmc:/at_xml/%016lX/%s.nacp.xml", app_metadata[selected_idx]->title_id, cur_nca_ctx->content_id_str);
                 writeFile(cur_nacp_ctx->authoring_tool_xml, cur_nacp_ctx->authoring_tool_xml_size, path);

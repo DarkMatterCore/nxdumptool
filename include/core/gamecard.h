@@ -44,6 +44,9 @@ extern "C" {
 
 #define GAMECARD_CERT_OFFSET                0x7000
 
+#define LAFW_MAGIC                          0x4C414657                      /* "LAFW". */
+#define LAFW_FW_TYPE_ENABLED_FLAG           0xFF
+
 /// Encrypted using AES-128-ECB with the common titlekek generator key (stored in the .rodata segment from the Lotus firmware).
 typedef struct {
     union {
@@ -95,14 +98,14 @@ typedef struct {
 
 NXDT_ASSERT(GameCardKeyArea, 0x1000);
 
-typedef enum {
+typedef enum : u8 {
     GameCardUidMakerCode_MegaChips = 0, // Macronix.
     GameCardUidMakerCode_Lapis     = 1,
     GameCardUidMakerCode_Unknown   = 2,
     GameCardUidMakerCode_Count     = 3  ///< Total values supported by this enum.
 } GameCardUidMakerCode;
 
-typedef enum {
+typedef enum : u8 {
     GameCardUidCardType_Rom          = 0,
     GameCardUidCardType_WritableDev  = 0xFE,
     GameCardUidCardType_WritableProd = 0xFF,
@@ -110,14 +113,14 @@ typedef enum {
 } GameCardUidCardType;
 
 typedef struct {
-    u8 maker_code;              ///< GameCardUidMakerCode.
-    u8 version;                 ///< TODO: determine whether this matches GameCardVersion or not.
-    u8 card_type;               ///< GameCardUidCardType.
+    GameCardUidMakerCode maker_code;
+    u8 version;                         ///< TODO: determine whether this matches GameCardVersion or not.
+    GameCardUidCardType card_type;
     u8 unique_data[0x9];
     u32 random;
     u8 platform_flag;
     u8 reserved[0xB];
-    FsCardId1 card_id_1_mirror; ///< This field mirrors bit 5 of FsCardId1MemoryType.
+    FsCardId1 card_id_1_mirror;         ///< This field mirrors bit 5 of FsCardId1MemoryType.
     u8 mac[0x20];
 } GameCardUid;
 
@@ -149,20 +152,20 @@ typedef struct {
 
 NXDT_ASSERT(GameCardSecurityInformation, 0x800);
 
-typedef enum {
+typedef enum : u8 {
     GameCardKekIndex_Version0      = 0,
     GameCardKekIndex_VersionForDev = 1,
     GameCardKekIndex_Count         = 2  ///< Total values supported by this enum.
 } GameCardKekIndex;
 
 typedef struct {
-    u8 kek_index          : 4;  ///< GameCardKekIndex.
-    u8 titlekey_dec_index : 4;
+    GameCardKekIndex kek_index : 4;
+    u8 titlekey_dec_index      : 4;
 } GameCardKeyIndex;
 
 NXDT_ASSERT(GameCardKeyIndex, 0x1);
 
-typedef enum {
+typedef enum : u8 {
     GameCardRomSize_1GiB  = 0xFA,
     GameCardRomSize_2GiB  = 0xF8,
     GameCardRomSize_4GiB  = 0xF0,
@@ -171,7 +174,7 @@ typedef enum {
     GameCardRomSize_32GiB = 0xE2
 } GameCardRomSize;
 
-typedef enum {
+typedef enum : u8 {
     GameCardVersion_Default     = 0,
     GameCardVersion_Unknown1    = 1,
     GameCardVersion_Unknown2    = 2,
@@ -179,7 +182,7 @@ typedef enum {
     GameCardVersion_Count       = 4     ///< Total values supported by this enum.
 } GameCardVersion;
 
-typedef enum {
+typedef enum : u8 {
     GameCardFlags_None                             = 0,
     GameCardFlags_AutoBoot                         = BIT(0),    ///< The gamecard is capable of autobooting if it's inserted into the console before powering it up.
     GameCardFlags_HistoryErase                     = BIT(1),    ///< Inserting the gamecard won't add any permanent icons to the HOME menu.
@@ -190,13 +193,13 @@ typedef enum {
     GameCardFlags_Count                            = 6          ///< Total values supported by this enum.
 } GameCardFlags;
 
-typedef enum {
+typedef enum : u32 {
     GameCardSelSec_ForT1 = 1,
     GameCardSelSec_ForT2 = 2,
     GameCardSelSec_Count = 2    ///< Total values supported by this enum.
 } GameCardSelSec;
 
-typedef enum {
+typedef enum : u64 {
     GameCardFwVersion_ForDev       = 0,
     GameCardFwVersion_Since100NUP  = 1, ///< upp_version >= 0 (0.0.0-0.0) in GameCardInfo.
     GameCardFwVersion_Since400NUP  = 2, ///< upp_version >= 268435456 (4.0.0-0.0) in GameCardInfo.
@@ -206,12 +209,12 @@ typedef enum {
     GameCardFwVersion_Count        = 6  ///< Total values supported by this enum.
 } GameCardFwVersion;
 
-typedef enum {
+typedef enum : u32 {
     GameCardAccCtrl1_25MHz = 0xA10011,
     GameCardAccCtrl1_50MHz = 0xA10010   ///< GameCardRomSize_8GiB or greater.
 } GameCardAccCtrl1;
 
-typedef enum {
+typedef enum : u8 {
     GameCardCompatibilityType_Normal = 0,
     GameCardCompatibilityType_Terra  = 1,
     GameCardCompatibilityType_Count  = 2    ///< Total values supported by this enum.
@@ -219,18 +222,18 @@ typedef enum {
 
 /// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under HOS 9.0.0+) and the IV from `GameCardHeader`.
 typedef struct {
-    u64 fw_version;         ///< GameCardFwVersion.
-    u32 acc_ctrl_1;         ///< GameCardAccCtrl1.
-    u32 wait_1_time_read;   ///< Always 0x1388.
-    u32 wait_2_time_read;   ///< Always 0.
-    u32 wait_1_time_write;  ///< Always 0.
-    u32 wait_2_time_write;  ///< Always 0.
-    Version fw_mode;        ///< Current SDK version.
-    Version upp_version;    ///< Bundled system update version.
-    u8 compatibility_type;  ///< GameCardCompatibilityType.
+    GameCardFwVersion fw_version;
+    GameCardAccCtrl1 acc_ctrl_1;
+    u32 wait_1_time_read;                           ///< Always 0x1388.
+    u32 wait_2_time_read;                           ///< Always 0.
+    u32 wait_1_time_write;                          ///< Always 0.
+    u32 wait_2_time_write;                          ///< Always 0.
+    Version fw_mode;                                ///< Current SDK version.
+    Version upp_version;                            ///< Bundled system update version.
+    GameCardCompatibilityType compatibility_type;
     u8 reserved_1[0x3];
-    u64 upp_hash;           ///< Checksum for the update partition. The exact way it's calculated is currently unknown.
-    u64 upp_id;             ///< Must match GAMECARD_UPDATE_TID.
+    u64 upp_hash;                                   ///< Checksum for the update partition. The exact way it's calculated is currently unknown.
+    u64 upp_id;                                     ///< Must match GAMECARD_UPDATE_TID.
     u8 reserved_2[0x38];
 } GameCardInfo;
 
@@ -243,9 +246,9 @@ typedef struct {
     u32 rom_area_start_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u32 backup_area_start_page;                     ///< Always 0xFFFFFFFF.
     GameCardKeyIndex key_index;
-    u8 rom_size;                                    ///< GameCardRomSize.
-    u8 version;                                     ///< GameCardVersion.
-    u8 flags;                                       ///< GameCardFlags.
+    GameCardRomSize rom_size;
+    GameCardVersion version;
+    GameCardFlags flags;
     u8 package_id[0x8];                             ///< Used for challenge-response authentication.
     u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 reserved_1[0x4];
@@ -254,7 +257,7 @@ typedef struct {
     u64 partition_fs_header_size;                   ///< Root Hash File System header size.
     u8 partition_fs_header_hash[SHA256_HASH_SIZE];
     u8 initial_data_hash[SHA256_HASH_SIZE];
-    u32 sel_sec;                                    ///< GameCardSelSec.
+    GameCardSelSec sel_sec;
     u32 sel_t1_key;                                 ///< Always 0x02.
     u32 sel_key;                                    ///< Always 0x00.
     u32 lim_area_page;                              ///< Expressed in GAMECARD_PAGE_SIZE units.
@@ -265,20 +268,20 @@ NXDT_ASSERT(GameCardHeader, 0x200);
 
 /// Encrypted using AES-128-CBC.
 typedef struct {
-    u64 fw_version;                     ///< GameCardFwVersion.
-    u32 acc_ctrl_1;                     ///< GameCardAccCtrl1.
-    u32 wait_1_time_read;               ///< Always 0x1388.
-    u32 wait_2_time_read;               ///< Always 0.
-    u32 wait_1_time_write;              ///< Always 0.
-    u32 wait_2_time_write;              ///< Always 0.
-    Version fw_mode;                    ///< Current SDK version.
-    Version upp_version;                ///< Bundled system update version.
-    u8 compatibility_type;              ///< GameCardCompatibilityType.
+    GameCardFwVersion fw_version;
+    GameCardAccCtrl1 acc_ctrl_1;
+    u32 wait_1_time_read;                           ///< Always 0x1388.
+    u32 wait_2_time_read;                           ///< Always 0.
+    u32 wait_1_time_write;                          ///< Always 0.
+    u32 wait_2_time_write;                          ///< Always 0.
+    Version fw_mode;                                ///< Current SDK version.
+    Version upp_version;                            ///< Bundled system update version.
+    GameCardCompatibilityType compatibility_type;
     u8 reserved_1[0x3];
-    u64 upp_hash;                       ///< Checksum for the update partition. The exact way it's calculated is currently unknown.
-    u64 upp_id;                         ///< Must match GAMECARD_UPDATE_TID.
+    u64 upp_hash;                                   ///< Checksum for the update partition. The exact way it's calculated is currently unknown.
+    u64 upp_id;                                     ///< Must match GAMECARD_UPDATE_TID.
     u8 reserved_2[0x8];
-    u8 header_hash[SHA256_HASH_SIZE];   ///< SHA-256 hash for the GameCardHeader block.
+    u8 header_hash[SHA256_HASH_SIZE];               ///< SHA-256 hash for the GameCardHeader block.
     u8 reserved_3[0x10];
 } GameCardInfo2;
 
@@ -291,9 +294,9 @@ typedef struct {
     u32 rom_area_start_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u32 backup_area_start_page;                     ///< Always 0xFFFFFFFF.
     GameCardKeyIndex key_index;
-    u8 rom_size;                                    ///< GameCardRomSize.
-    u8 version;                                     ///< GameCardVersion.
-    u8 flags;                                       ///< GameCardFlags.
+    GameCardRomSize rom_size;
+    GameCardVersion version;
+    GameCardFlags flags;
     u8 package_id[0x8];                             ///< Used for challenge-response authentication.
     u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 sign_key_index;                              ///< 20.0.0+. TODO: add enum with values.
@@ -304,7 +307,7 @@ typedef struct {
     u64 partition_fs_header_size;                   ///< Root Hash File System header size.
     u8 partition_fs_header_hash[SHA256_HASH_SIZE];
     u8 initial_data_hash[SHA256_HASH_SIZE];
-    u32 sel_sec;                                    ///< GameCardSelSec.
+    GameCardSelSec sel_sec;
     u32 sel_t1_key;                                 ///< Always 0x02.
     u32 sel_key;                                    ///< Always 0x00.
     u32 lim_area_page;                              ///< Expressed in GAMECARD_PAGE_SIZE units.
@@ -328,7 +331,7 @@ typedef struct {
 
 NXDT_ASSERT(GameCardHeader2Certificate, 0x400);
 
-typedef enum {
+typedef enum : u8 {
     GameCardStatus_NotInserted                     = 0, ///< No gamecard is inserted.
     GameCardStatus_Processing                      = 1, ///< A gamecard has been inserted and it's being processed.
     GameCardStatus_NoGameCardPatchEnabled          = 2, ///< A gamecard has been inserted, but the running CFW enabled the "nogc" patch at boot.
@@ -340,40 +343,45 @@ typedef enum {
     GameCardStatus_Count                           = 6  ///< Total values supported by this enum.
 } GameCardStatus;
 
-typedef enum {
-    LotusAsicFirmwareType_ReadFw    = 0xFF,
-    LotusAsicFirmwareType_ReadDevFw = 0xFFFF,
-    LotusAsicFirmwareType_WriterFw  = 0xFFFFFF,
-    LotusAsicFirmwareType_RmaFw     = 0xFFFFFFFF
+/// Plaintext Lotus ASIC firmware (LAFW) blob. Dumped from FS program memory.
+typedef struct {
+    u8 signature[0x100];
+    u32 magic;                  ///< "LAFW".
+    u8 prod_fw_flag;
+    u8 dev_fw_flag;
+    u8 writer_fw_flag;
+    u8 reserved_1[0x9];
+    struct {
+        u64 fw_version : 62;    ///< Stored using a bitmask.
+        u64 is_prod    : 1;
+        u64 is_dev     : 1;
+    };
+    u32 fw_size;
+    u8 reserved_2[0x4];
+    u8 fw_iv[AES_128_KEY_SIZE];
+    u8 lotus3_device_id[0x10];  ///< "IDIDIDIDIDIDIDID".
+    u8 reserved_3[0x40];
+    u8 fw_data[0x7680];         ///< Encrypted.
+} LotusAsicFirmwareBlob;
+
+NXDT_ASSERT(LotusAsicFirmwareBlob, 0x7800);
+
+typedef enum : u8 {
+    LotusAsicFirmwareType_ReadFw    = 0,
+    LotusAsicFirmwareType_ReadDevFw = 1,
+    LotusAsicFirmwareType_WriterFw  = 2,
+    LotusAsicFirmwareType_Invalid   = 3,    ///< Placeholder.
+    LotusAsicFirmwareType_Count     = 4     ///< Total values supported by this enum.
 } LotusAsicFirmwareType;
 
-typedef enum {
+typedef enum : u8 {
     LotusAsicDeviceType_Test     = 0,
     LotusAsicDeviceType_Dev      = 1,
     LotusAsicDeviceType_Prod     = 2,
     LotusAsicDeviceType_Prod2Dev = 3,
-    LotusAsicDeviceType_Count    = 4    ///< Total values supported by this enum.
+    LotusAsicDeviceType_Invalid  = 4,
+    LotusAsicDeviceType_Count    = 5    ///< Total values supported by this enum.
 } LotusAsicDeviceType;
-
-/// Plaintext Lotus ASIC firmware (LAFW) blob. Dumped from FS program memory.
-typedef struct {
-    u8 signature[0x100];
-    u32 magic;                      ///< "LAFW".
-    u32 fw_type;                    ///< LotusAsicFirmwareType.
-    u8 reserved_1[0x8];
-    struct {
-        u64 fw_version  : 62;       ///< Stored using a bitmask.
-        u64 device_type : 2;        ///< LotusAsicDeviceType.
-    };
-    u32 data_size;
-    u8 reserved_2[0x4];
-    u8 data_iv[AES_128_KEY_SIZE];
-    char placeholder_str[0x10];     ///< "IDIDIDIDIDIDIDID".
-    u8 reserved_3[0x40];
-    u8 data[0x7680];
-} LotusAsicFirmwareBlob;
-
-NXDT_ASSERT(LotusAsicFirmwareBlob, 0x7800);
 
 /// Initializes data needed to access raw gamecard storage areas.
 /// Also spans a background thread to automatically detect gamecard status changes and to cache data from the inserted gamecard.
@@ -388,7 +396,7 @@ void gamecardExit(void);
 UEvent *gamecardGetStatusChangeUserEvent(void);
 
 /// Returns the current GameCardStatus value.
-u8 gamecardGetStatus(void);
+GameCardStatus gamecardGetStatus(void);
 
 /// Fills the provided GameCardSecurityInformation pointer.
 /// This area can't be read using gamecardReadStorage().
@@ -432,28 +440,34 @@ bool gamecardGetBundledFirmwareUpdateVersion(Version *out);
 
 /// Fills the provided HashFileSystemContext pointer using information from the requested Hash FS partition.
 /// Hash FS functions can be used on the retrieved HashFileSystemContext. hfsFreeContext() must be used to free the underlying data from the filled context.
-bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemContext *out);
+bool gamecardGetHashFileSystemContext(HashFileSystemPartitionType hfs_partition_type, HashFileSystemContext *out);
 
 /// One-shot function to retrieve meaningful information from a Hash FS entry by name without using gamecardGetHashFileSystemContext() + Hash FS functions.
 /// 'out_offset' or 'out_size' may be set to NULL, but at least one of them must be a valid pointer. The returned offset is always relative to the start of the gamecard image.
 /// If you need to get entry information by index, just retrieve the Hash FS context for the target partition and use Hash FS functions on it.
-bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size);
+bool gamecardGetHashFileSystemEntryInfoByName(HashFileSystemPartitionType hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size);
+
+/// Returns a LotusAsicFirmwareType value for the provided LAFW blob.
+LotusAsicFirmwareType gamecardGetLafwType(LotusAsicFirmwareBlob *lafw_blob);
+
+/// Returns a LotusAsicDeviceType value for the provided LAFW blob.
+LotusAsicDeviceType gamecardGetLafwDeviceType(LotusAsicFirmwareBlob *lafw_blob);
 
 /// Takes a GameCardFwVersion value. Returns a pointer to a string that represents the minimum HOS version that matches the provided LAFW version.
 /// Returns NULL if the provided value is out of range.
-const char *gamecardGetRequiredHosVersionString(u64 fw_version);
+const char *gamecardGetRequiredHosVersionString(GameCardFwVersion fw_version);
 
 /// Takes a GameCardCompatibilityType value. Returns a pointer to a string that represents the provided compatibility type.
 /// Returns NULL if the provided value is out of range.
-const char *gamecardGetCompatibilityTypeString(u8 compatibility_type);
+const char *gamecardGetCompatibilityTypeString(GameCardCompatibilityType compatibility_type);
 
 /// Takes a LotusAsicFirmwareType value. Returns a pointer to a string that represents the provided LAFW type.
 /// Returns NULL if the provided value is invalid.
-const char *gamecardGetLafwTypeString(u32 fw_type);
+const char *gamecardGetLafwTypeString(LotusAsicFirmwareType fw_type);
 
 /// Takes a LotusAsicDeviceType value. Returns a pointer to a string that represents the provided LAFW device type.
 /// Returns NULL if the provided value is out of range.
-const char *gamecardGetLafwDeviceTypeString(u64 device_type);
+const char *gamecardGetLafwDeviceTypeString(LotusAsicDeviceType device_type);
 
 #ifdef __cplusplus
 }

@@ -20,8 +20,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/* Last updated on: 2024-03-31. */
-/* Current key generation: NcaKeyGeneration_Since1800NUP (18 / 11). */
+/* Last updated on: 2025-05-02. */
+/* Current key generation: NcaKeyGeneration_Since2000NUP (20 / 0x14). */
 
 #pragma once
 

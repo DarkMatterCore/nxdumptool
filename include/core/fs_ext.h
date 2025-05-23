@@ -45,13 +45,13 @@ typedef struct {
 
 NXDT_ASSERT(FsGameCardCertificate, 0x200);
 
-typedef enum {
+typedef enum : u8 {
     FsCardId1MakerCode_MegaChips = 0xC2,    ///< Macronix.
     FsCardId1MakerCode_Lapis     = 0xAE,
     FsCardId1MakerCode_Unknown   = 0x36     ///< Seen in TLoZ:TotK, SMBW and other modern releases.
 } FsCardId1MakerCode;
 
-typedef enum {
+typedef enum : u8 {
     FsCardId1MemoryType_None       = 0,
     FsCardId1MemoryType_CardModeT1 = BIT(0),
     FsCardId1MemoryType_CardModeT2 = BIT(1),
@@ -75,15 +75,15 @@ typedef enum {
 } FsCardId1MemoryType;
 
 typedef struct {
-    u8 maker_code;      ///< FsCardId1MakerCode.
-    u8 memory_capacity; ///< Matches GameCardRomSize.
-    u8 reserved;        ///< Known values: 0x00, 0x01, 0x02, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0C, 0x0D, 0x0E, 0x80.
-    u8 memory_type;     ///< FsCardId1MemoryType.
+    FsCardId1MakerCode maker_code;
+    u8 memory_capacity;                 ///< Matches GameCardRomSize.
+    u8 reserved;                        ///< Known values: 0x00, 0x01, 0x02, 0x06, 0x07, 0x08, 0x09, 0x0A, 0x0C, 0x0D, 0x0E, 0x80.
+    FsCardId1MemoryType memory_type;
 } FsCardId1;
 
 NXDT_ASSERT(FsCardId1, 0x4);
 
-typedef enum {
+typedef enum : u8 {
     FsCardId2CardSecurityNumber_Number0 = 0,
     FsCardId2CardSecurityNumber_Number1 = 1,
     FsCardId2CardSecurityNumber_Number2 = 2,
@@ -92,7 +92,7 @@ typedef enum {
     FsCardId2CardSecurityNumber_Count   = 5     ///< Total values supported by this enum.
 } FsCardId2CardSecurityNumber;
 
-typedef enum {
+typedef enum : u8 {
     FsCardId2CardType_Rom            = 0,
     FsCardId2CardType_WritableDevT1  = 1,
     FsCardId2CardType_WritableProdT1 = 2,
@@ -102,9 +102,9 @@ typedef enum {
 } FsCardId2CardType;
 
 typedef struct {
-    u8 card_security_number;    ///< FsCardId2CardSecurityNumber.
-    u8 card_type;               ///< FsCardId2CardType.
-    u8 reserved[0x2];           ///< Usually filled with zeroes.
+    FsCardId2CardSecurityNumber card_security_number;
+    FsCardId2CardType card_type;
+    u8 reserved[0x2];                                   ///< Usually filled with zeroes.
 } FsCardId2;
 
 NXDT_ASSERT(FsCardId2, 0x4);

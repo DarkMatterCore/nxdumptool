@@ -128,7 +128,6 @@ static const char *g_filenameTypeStrings[] = {
 };
 
 /* Info retrieved from https://switchbrew.org/wiki/Title_list. */
-/* Titles bundled with the kernel are excluded. */
 static const TitleSystemEntry g_systemTitles[] = {
     /* System modules. */
     /* Meta + Program NCAs. */
@@ -562,7 +561,7 @@ NX_INLINE bool titleInitializePersistentTitleStorages(void);
 NX_INLINE void titleCloseTitleStorages(void);
 
 static bool titleInitializeTitleStorage(u8 storage_id);
-static bool titleInitializeGameCardTitleStorageByHashFileSystem(u8 hfs_partition_type);
+static bool titleInitializeGameCardTitleStorageByHashFileSystem(HashFileSystemPartitionType hfs_partition_type);
 static void titleCloseTitleStorage(u8 storage_id);
 static bool titleReallocateTitleInfoFromStorage(TitleStorage *title_storage, u32 extra_title_count, bool free_entries);
 
@@ -623,7 +622,7 @@ static void titleGenerateGameCardApplicationMetadataArray(void);
 
 NX_INLINE void titleGenerateGameCardFileNames(void);
 NX_INLINE void titleFreeGameCardFileNames(void);
-static char *_titleGenerateGameCardFileName(u8 naming_convention);
+static char *_titleGenerateGameCardFileName(TitleNamingConvention naming_convention);
 
 static int titleSystemMetadataSortFunction(const void *a, const void *b);
 static int titleUserMetadataSortFunction(const void *a, const void *b);
@@ -1062,7 +1061,7 @@ bool titleIsGameCardInfoUpdated(void)
     return ret;
 }
 
-char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 illegal_char_replace_type)
+char *titleGenerateFileName(TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type)
 {
     if (!title_info || (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || \
         title_info->meta_key.type > NcmContentMetaType_DataPatch || naming_convention >= TitleNamingConvention_Count || illegal_char_replace_type >= TitleFileNameIllegalCharReplaceType_Count)
@@ -1112,7 +1111,7 @@ char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 ille
     return filename;
 }
 
-char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replace_type)
+char *titleGenerateGameCardFileName(TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type)
 {
     char *filename = NULL;
 
@@ -1539,7 +1538,7 @@ end:
     return success;
 }
 
-static bool titleInitializeGameCardTitleStorageByHashFileSystem(u8 hfs_partition_type)
+static bool titleInitializeGameCardTitleStorageByHashFileSystem(HashFileSystemPartitionType hfs_partition_type)
 {
     if (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count)
     {
@@ -2022,14 +2021,14 @@ static bool titleGetApplicationControlDataFromControlNca(TitleInfo *title_info, 
     }
 
     u8 storage_id = title_info->storage_id;
-    u8 hfs_partition_type = (storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None);
+    HashFileSystemPartitionType hfs_partition_type = (storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None);
 
     NcaContext *nca_ctx = NULL;
     NacpContext nacp_ctx = {0};
 
     Result rc = 0;
     NacpLanguageEntry *lang_entry = NULL;
-    u8 lang_id = NacpLanguage_AmericanEnglish;  /* Fallback value. */
+    NacpLanguage lang_id = NacpLanguage_AmericanEnglish;    /* Fallback value. */
 
     NacpIconContext *icon_ctx = NULL;
 
@@ -2069,7 +2068,7 @@ static bool titleGetApplicationControlDataFromControlNca(TitleInfo *title_info, 
     }
 
     /* Determine language ID from the selected entry. */
-    for(u8 i = NacpLanguage_AmericanEnglish; i < NacpLanguage_Count; i++)
+    for(NacpLanguage i = NacpLanguage_AmericanEnglish; i < NacpLanguage_Count; i++)
     {
         /* Don't proceed any further if no language entry was retrieved. */
         if (!lang_entry) break;
@@ -3312,7 +3311,8 @@ static char *titleGetDisplayVersionString(TitleInfo *title_info)
         return NULL;
     }
 
-    u8 storage_id = title_info->storage_id, hfs_partition_type = (storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : 0);
+    u8 storage_id = title_info->storage_id;
+    HashFileSystemPartitionType hfs_partition_type = (storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None);
     NcaContext *nca_ctx = NULL;
     NacpContext nacp_ctx = {0};
     char display_version[0x11] = {0}, *str = NULL;
@@ -3668,13 +3668,13 @@ NX_INLINE void titleGenerateGameCardFileNames(void)
 
     if (g_titleGameCardAvailable)
     {
-        for(u8 i = 0; i < TitleNamingConvention_Count; i++) g_titleGameCardFileNames[i] = _titleGenerateGameCardFileName(i);
+        for(TitleNamingConvention i = 0; i < TitleNamingConvention_Count; i++) g_titleGameCardFileNames[i] = _titleGenerateGameCardFileName(i);
     }
 }
 
 NX_INLINE void titleFreeGameCardFileNames(void)
 {
-    for(u8 i = 0; i < TitleNamingConvention_Count; i++)
+    for(TitleNamingConvention i = 0; i < TitleNamingConvention_Count; i++)
     {
         if (g_titleGameCardFileNames[i])
         {
@@ -3684,7 +3684,7 @@ NX_INLINE void titleFreeGameCardFileNames(void)
     }
 }
 
-static char *_titleGenerateGameCardFileName(u8 naming_convention)
+static char *_titleGenerateGameCardFileName(TitleNamingConvention naming_convention)
 {
     if (naming_convention >= TitleNamingConvention_Count)
     {

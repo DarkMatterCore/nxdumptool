@@ -58,7 +58,7 @@ typedef struct {
     u64 virtual_offset;
     u32 ctr_val;
     bool aes_ctr_ex_crypt;
-    u8 parent_storage_type; ///< BucketTreeStorageType.
+    BucketTreeStorageType parent_storage_type;
 } BucketTreeSubStorageReadParams;
 
 /* Global variables. */
@@ -75,7 +75,7 @@ static const char *g_bktrStorageTypeNames[] = {
 /* Function prototypes. */
 
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
-static const char *bktrGetStorageTypeName(u8 storage_type);
+static const char *bktrGetStorageTypeName(BucketTreeStorageType storage_type);
 #endif
 
 static bool bktrInitializeIndirectStorageContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, bool is_sparse);
@@ -90,7 +90,7 @@ static bool bktrGetCompressedStorageEntryExtents(BucketTreeVisitor *visitor, u64
 static bool bktrReadCompressedStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset);
 
 static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubStorageReadParams *params);
-NX_INLINE void bktrInitializeSubStorageReadParams(BucketTreeSubStorageReadParams *out, void *buffer, u64 offset, u64 size, u64 virtual_offset, u32 ctr_val, bool aes_ctr_ex_crypt, u8 parent_storage_type);
+NX_INLINE void bktrInitializeSubStorageReadParams(BucketTreeSubStorageReadParams *out, void *buffer, u64 offset, u64 size, u64 virtual_offset, u32 ctr_val, bool aes_ctr_ex_crypt, BucketTreeStorageType parent_storage_type);
 
 static bool bktrVerifyBucketInfo(NcaBucketInfo *bucket, u64 node_size, u64 entry_size, u64 *out_node_storage_size, u64 *out_entry_storage_size);
 static bool bktrValidateTableOffsetNode(const BucketTreeTable *table, u64 node_size, u64 entry_size, u32 entry_count, u64 *out_start_offset, u64 *out_end_offset);
@@ -135,7 +135,7 @@ NX_INLINE bool bktrVisitorIsValid(BucketTreeVisitor *visitor);
 NX_INLINE bool bktrVisitorCanMoveNext(BucketTreeVisitor *visitor);
 static bool bktrVisitorMoveNext(BucketTreeVisitor *visitor);
 
-bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, u8 storage_type)
+bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, BucketTreeStorageType storage_type)
 {
     if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || nca_fs_ctx->section_type >= NcaFsSectionType_Invalid || !nca_fs_ctx->nca_ctx || \
         (nca_fs_ctx->nca_ctx->rights_id_available && !nca_fs_ctx->nca_ctx->titlekey_retrieved) || storage_type == BucketTreeStorageType_Compressed || \
@@ -501,7 +501,7 @@ end:
 }
 
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
-static const char *bktrGetStorageTypeName(u8 storage_type)
+static const char *bktrGetStorageTypeName(BucketTreeStorageType storage_type)
 {
     return (storage_type < BucketTreeStorageType_Count ? g_bktrStorageTypeNames[storage_type] : NULL);
 }
@@ -1204,7 +1204,7 @@ static bool bktrReadSubStorage(BucketTreeSubStorage *substorage, BucketTreeSubSt
     return success;
 }
 
-NX_INLINE void bktrInitializeSubStorageReadParams(BucketTreeSubStorageReadParams *out, void *buffer, u64 offset, u64 size, u64 virtual_offset, u32 ctr_val, bool aes_ctr_ex_crypt, u8 parent_storage_type)
+NX_INLINE void bktrInitializeSubStorageReadParams(BucketTreeSubStorageReadParams *out, void *buffer, u64 offset, u64 size, u64 virtual_offset, u32 ctr_val, bool aes_ctr_ex_crypt, BucketTreeStorageType parent_storage_type)
 {
     out->buffer = buffer;
     out->offset = offset;

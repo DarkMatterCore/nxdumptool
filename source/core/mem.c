@@ -82,7 +82,8 @@ static bool memRetrieveProgramMemory(MemoryLocation *location, bool is_segment)
 
     u32 page_info = 0;
     u64 addr = 0, last_text_addr = 0;
-    u8 segment = MemoryProgramSegmentType_Text, mem_type = 0;
+    MemoryProgramSegmentType segment = MemoryProgramSegmentType_Text;
+    u8 mem_type = 0;
     u8 *tmp = NULL;
 
     bool success = true;

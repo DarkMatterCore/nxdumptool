@@ -26,6 +26,8 @@
 #ifndef __KEYS_H__
 #define __KEYS_H__
 
+#include "nca_key_enums.h"
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -38,7 +40,7 @@ bool keysLoadKeyset(void);
 const u8 *keysGetNcaHeaderKey(void);
 
 /// Returns a pointer to an AES-128-ECB NCA key area encryption key using the provided key area encryption key index and key generation values, or NULL if keydata hasn't been loaded.
-const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation);
+const u8 *keysGetNcaKeyAreaEncryptionKey(NcaKeyAreaEncryptionKeyIndex kaek_index, NcaKeyGeneration key_generation);
 
 /// Decrypts a RSA-OAEP wrapped titlekey using console-specific keydata.
 /// 'rsa_wrapped_titlekey' must have a size of at least 0x100 bytes. 'out_titlekey' must have a size of at least AES_128_KEY_SIZE.
@@ -46,7 +48,7 @@ const u8 *keysGetNcaKeyAreaEncryptionKey(u8 kaek_index, u8 key_generation);
 bool keysDecryptRsaOaepWrappedTitleKey(const void *rsa_wrapped_titlekey, void *out_titlekey);
 
 /// Returns a pointer to an AES-128-ECB ticket common key using the provided key generation value, or NULL if keydata hasn't been loaded.
-const u8 *keysGetTicketCommonKey(u8 key_generation);
+const u8 *keysGetTicketCommonKey(NcaKeyGeneration key_generation);
 
 /// Returns a pointer to the AES-128-CBC CardInfo area key for gamecard headers, or NULL if keydata hasn't been loaded.
 const u8 *keysGetGameCardInfoKey(void);

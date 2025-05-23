@@ -26,7 +26,7 @@
 
 /* Type definitions. */
 
-typedef enum {
+typedef enum : u8 {
     DevoptabDeviceType_PartitionFileSystem = 0,
     DevoptabDeviceType_HashFileSystem      = 1,
     DevoptabDeviceType_RomFileSystem       = 2,
@@ -46,7 +46,7 @@ const devoptab_t *hfsdev_get_devoptab();
 const devoptab_t *romfsdev_get_devoptab();
 const devoptab_t *fatdev_get_devoptab();
 
-static bool devoptabMountDevice(void *fs_ctx, const char *name, u8 type);
+static bool devoptabMountDevice(void *fs_ctx, const char *name, DevoptabDeviceType type);
 static DevoptabDeviceContext *devoptabFindDevice(const char *name);
 static void devoptabResetDevice(DevoptabDeviceContext *dev_ctx);
 
@@ -155,7 +155,7 @@ void devoptabControlMutex(bool lock)
     }
 }
 
-static bool devoptabMountDevice(void *fs_ctx, const char *name, u8 type)
+static bool devoptabMountDevice(void *fs_ctx, const char *name, DevoptabDeviceType type)
 {
     if (!fs_ctx || !name || !*name || type >= DevoptabDeviceType_Count)
     {

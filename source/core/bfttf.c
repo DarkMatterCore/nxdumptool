@@ -100,8 +100,8 @@ bool bfttfInitialize(void)
                 /* Initialize NCA context. */
                 /* NCA contexts don't need to be freed beforehand. */
                 /* Don't allow invalid NCA signatures. */
-                bool nca_ctx_init = (ncaInitializeContext(nca_ctx, NcmStorageId_BuiltInSystem, 0, &(title_info->meta_key), \
-                                                          titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0), NULL) && nca_ctx->valid_main_signature);
+                NcmContentInfo *content_info = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0);
+                bool nca_ctx_init = (NCA_INIT_CTX(nca_ctx, NcmStorageId_BuiltInSystem, &(title_info->meta_key), content_info, NULL) && nca_ctx->valid_main_signature);
 
                 /* Free title info. */
                 titleFreeTitleInfo(&title_info);
@@ -206,7 +206,7 @@ void bfttfExit(void)
     }
 }
 
-bool bfttfGetFontByType(BfttfFontData *font_data, u8 font_type)
+bool bfttfGetFontByType(BfttfFontData *font_data, BfttfFontType font_type)
 {
     if (!font_data || font_type >= BfttfFontType_Count)
     {

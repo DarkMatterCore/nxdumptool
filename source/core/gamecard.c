@@ -34,17 +34,15 @@
 
 #define GAMECARD_STORAGE_AREA_NAME(x)           ((x) == GameCardStorageArea_Normal ? "normal" : ((x) == GameCardStorageArea_Secure ? "secure" : "none"))
 
-#define LAFW_MAGIC                              0x4C414657              /* "LAFW". */
-
 /* Type definitions. */
 
-typedef enum {
+typedef enum : u8 {
     GameCardStorageArea_None   = 0,
     GameCardStorageArea_Normal = 1,
     GameCardStorageArea_Secure = 2
 } GameCardStorageArea;
 
-typedef enum {
+typedef enum : u64 {
     GameCardCapacity_1GiB  = BITL(30),
     GameCardCapacity_2GiB  = BITL(31),
     GameCardCapacity_4GiB  = BITL(32),
@@ -74,7 +72,7 @@ static atomic_uchar g_gameCardStatus = GameCardStatus_NotInserted;
 
 static FsGameCardHandle g_gameCardHandle = {0};
 static FsStorage g_gameCardStorage = {0};
-static u8 g_gameCardCurrentStorageArea = GameCardStorageArea_None;
+static GameCardStorageArea g_gameCardCurrentStorageArea = GameCardStorageArea_None;
 static u8 *g_gameCardReadBuf = NULL;
 
 static GameCardHeader g_gameCardHeader = {0};
@@ -111,11 +109,19 @@ static const char *g_gameCardCompatibilityTypeStrings[GameCardCompatibilityType_
     [GameCardCompatibilityType_Terra]  = "Terra"
 };
 
+static const char *g_lafwTypeStrings[LotusAsicFirmwareType_Count] = {
+    [LotusAsicFirmwareType_ReadFw]    = "ReadFw",
+    [LotusAsicFirmwareType_ReadDevFw] = "ReadDevFw",
+    [LotusAsicFirmwareType_WriterFw]  = "WriterFw",
+    [LotusAsicFirmwareType_Invalid]   = "Invalid"
+};
+
 static const char *g_lafwDeviceTypeStrings[LotusAsicDeviceType_Count] = {
     [LotusAsicDeviceType_Test]     = "Test",
     [LotusAsicDeviceType_Dev]      = "Dev",
     [LotusAsicDeviceType_Prod]     = "Prod",
-    [LotusAsicDeviceType_Prod2Dev] = "Prod2Dev"
+    [LotusAsicDeviceType_Prod2Dev] = "Prod2Dev",
+    [LotusAsicDeviceType_Invalid]  = "Invalid"
 };
 
 /* Function prototypes. */
@@ -139,15 +145,15 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out);
 
 static bool gamecardGetHandleAndStorage(u32 partition);
 
-static bool gamecardOpenStorageArea(u8 area);
+static bool gamecardOpenStorageArea(GameCardStorageArea area);
 static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset);
 static void gamecardCloseStorageArea(void);
 
 static bool gamecardGetStorageAreasSizes(void);
-NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size);
+NX_INLINE GameCardCapacity gamecardGetCapacityFromRomSizeValue(GameCardRomSize rom_size);
 
 static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size);
-static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition_type);
+static HashFileSystemContext *_gamecardGetHashFileSystemContext(HashFileSystemPartitionType hfs_partition_type);
 
 bool gamecardInitialize(void)
 {
@@ -284,7 +290,7 @@ UEvent *gamecardGetStatusChangeUserEvent(void)
     return event;
 }
 
-u8 gamecardGetStatus(void)
+GameCardStatus gamecardGetStatus(void)
 {
     return atomic_load(&g_gameCardStatus);
 }
@@ -448,7 +454,7 @@ bool gamecardGetBundledFirmwareUpdateVersion(Version *out)
     return ret;
 }
 
-bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemContext *out)
+bool gamecardGetHashFileSystemContext(HashFileSystemPartitionType hfs_partition_type, HashFileSystemContext *out)
 {
     if (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count || !out)
     {
@@ -498,7 +504,7 @@ bool gamecardGetHashFileSystemContext(u8 hfs_partition_type, HashFileSystemConte
     return ret;
 }
 
-bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size)
+bool gamecardGetHashFileSystemEntryInfoByName(HashFileSystemPartitionType hfs_partition_type, const char *entry_name, u64 *out_offset, u64 *out_size)
 {
     if (hfs_partition_type < HashFileSystemPartitionType_Root || hfs_partition_type >= HashFileSystemPartitionType_Count || !entry_name || !*entry_name || (!out_offset && !out_size))
     {
@@ -529,42 +535,66 @@ bool gamecardGetHashFileSystemEntryInfoByName(u8 hfs_partition_type, const char 
     return ret;
 }
 
-const char *gamecardGetRequiredHosVersionString(u64 fw_version)
+LotusAsicFirmwareType gamecardGetLafwType(LotusAsicFirmwareBlob *lafw_blob)
+{
+    if (!lafw_blob || lafw_blob->prod_fw_flag != LAFW_FW_TYPE_ENABLED_FLAG)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return LotusAsicFirmwareType_Invalid;
+    }
+
+    LotusAsicFirmwareType ret = LotusAsicFirmwareType_Invalid;
+
+    if (lafw_blob->dev_fw_flag == LAFW_FW_TYPE_ENABLED_FLAG)
+    {
+        ret = (lafw_blob->writer_fw_flag == LAFW_FW_TYPE_ENABLED_FLAG ? LotusAsicFirmwareType_WriterFw : LotusAsicFirmwareType_ReadDevFw);
+    } else
+    if (lafw_blob->writer_fw_flag != LAFW_FW_TYPE_ENABLED_FLAG)
+    {
+        ret = LotusAsicFirmwareType_ReadFw;
+    }
+
+    return ret;
+}
+
+LotusAsicDeviceType gamecardGetLafwDeviceType(LotusAsicFirmwareBlob *lafw_blob)
+{
+    if (!lafw_blob)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return LotusAsicDeviceType_Invalid;
+    }
+
+    LotusAsicDeviceType ret = LotusAsicDeviceType_Test;
+
+    if (lafw_blob->is_prod)
+    {
+        ret = (lafw_blob->is_dev ? LotusAsicDeviceType_Prod2Dev : LotusAsicDeviceType_Prod);
+    } else
+    if (lafw_blob->is_dev)
+    {
+        ret = LotusAsicDeviceType_Dev;
+    }
+
+    return ret;
+}
+
+const char *gamecardGetRequiredHosVersionString(GameCardFwVersion fw_version)
 {
     return (fw_version < GameCardFwVersion_Count ? g_gameCardHosVersionStrings[fw_version] : NULL);
 }
 
-const char *gamecardGetCompatibilityTypeString(u8 compatibility_type)
+const char *gamecardGetCompatibilityTypeString(GameCardCompatibilityType compatibility_type)
 {
     return (compatibility_type < GameCardCompatibilityType_Count ? g_gameCardCompatibilityTypeStrings[compatibility_type] : NULL);
 }
 
-const char *gamecardGetLafwTypeString(u32 fw_type)
+const char *gamecardGetLafwTypeString(LotusAsicFirmwareType fw_type)
 {
-    const char *type = NULL;
-
-    switch(fw_type)
-    {
-        case LotusAsicFirmwareType_ReadFw:
-            type = "ReadFw";
-            break;
-        case LotusAsicFirmwareType_ReadDevFw:
-            type = "ReadDevFw";
-            break;
-        case LotusAsicFirmwareType_WriterFw:
-            type = "WriterFw";
-            break;
-        case LotusAsicFirmwareType_RmaFw:
-            type = "RmaFw";
-            break;
-        default:
-            break;
-    }
-
-    return type;
+    return (fw_type < LotusAsicFirmwareType_Count ? g_lafwTypeStrings[fw_type] : NULL);
 }
 
-const char *gamecardGetLafwDeviceTypeString(u64 device_type)
+const char *gamecardGetLafwDeviceTypeString(LotusAsicDeviceType device_type)
 {
     return (device_type < LotusAsicDeviceType_Count ? g_lafwDeviceTypeStrings[device_type] : NULL);
 }
@@ -598,9 +628,12 @@ static bool gamecardReadLotusAsicFirmwareBlob(void)
         if ((g_fsProgramMemory.data_size - offset) < sizeof(LotusAsicFirmwareBlob)) break;
 
         LotusAsicFirmwareBlob *lafw_blob = (LotusAsicFirmwareBlob*)(g_fsProgramMemory.data + offset);
-        u32 magic = __builtin_bswap32(lafw_blob->magic), fw_type = lafw_blob->fw_type;
+        if (__builtin_bswap32(lafw_blob->magic) != LAFW_MAGIC) continue;
 
-        if (magic == LAFW_MAGIC && ((!dev_unit && fw_type == LotusAsicFirmwareType_ReadFw) || (dev_unit && fw_type == LotusAsicFirmwareType_ReadDevFw)))
+        LOG_DATA_DEBUG(lafw_blob, sizeof(LotusAsicFirmwareBlob) - MEMBER_SIZE(LotusAsicFirmwareBlob, fw_data), "Found potential LAFW blob at 0x%lX within FS .data segment. Header dump:", offset);
+
+        LotusAsicFirmwareType fw_type = gamecardGetLafwType(lafw_blob);
+        if (((!dev_unit && fw_type == LotusAsicFirmwareType_ReadFw) || (dev_unit && fw_type == LotusAsicFirmwareType_ReadDevFw)))
         {
             /* Jackpot. */
             memcpy(g_lafwBlob, lafw_blob, sizeof(LotusAsicFirmwareBlob));
@@ -776,7 +809,7 @@ static void gamecardLoadInfo(void)
     }
 
     /* Get gamecard capacity. */
-    g_gameCardCapacity = gamecardGetCapacityFromRomSizeValue(g_gameCardHeader.rom_size);
+    g_gameCardCapacity = (u64)gamecardGetCapacityFromRomSizeValue(g_gameCardHeader.rom_size);
     if (!g_gameCardCapacity)
     {
         LOG_MSG_ERROR("Invalid gamecard capacity value! (0x%02X).", g_gameCardHeader.rom_size);
@@ -1096,7 +1129,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
     return R_SUCCEEDED(rc);
 }
 
-static bool gamecardOpenStorageArea(u8 area)
+static bool gamecardOpenStorageArea(GameCardStorageArea area)
 {
     u8 status = atomic_load(&g_gameCardStatus);
 
@@ -1139,7 +1172,7 @@ static bool gamecardReadStorageArea(void *out, u64 read_size, u64 offset)
 
     Result rc = 0;
     u8 *out_u8 = (u8*)out;
-    u8 area = (offset < g_gameCardNormalAreaSize ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
+    GameCardStorageArea area = (offset < g_gameCardNormalAreaSize ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
     bool success = false;
 
     /* Handle reads that span both the normal and secure gamecard storage areas. */
@@ -1227,7 +1260,7 @@ static bool gamecardGetStorageAreasSizes(void)
     {
         Result rc = 0;
         u64 area_size = 0;
-        u8 area = (i == 0 ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
+        GameCardStorageArea area = (i == 0 ? GameCardStorageArea_Normal : GameCardStorageArea_Secure);
 
         if (!gamecardOpenStorageArea(area))
         {
@@ -1258,9 +1291,9 @@ static bool gamecardGetStorageAreasSizes(void)
     return true;
 }
 
-NX_INLINE u64 gamecardGetCapacityFromRomSizeValue(u8 rom_size)
+NX_INLINE GameCardCapacity gamecardGetCapacityFromRomSizeValue(GameCardRomSize rom_size)
 {
-    u64 capacity = 0;
+    GameCardCapacity capacity = 0;
 
     switch(rom_size)
     {
@@ -1324,7 +1357,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     /* Determine Hash FS partition type. */
     for(i = HashFileSystemPartitionType_Root; i < HashFileSystemPartitionType_Count; i++)
     {
-        const char *hfs_partition_name = hfsGetPartitionNameString((u8)i);
+        const char *hfs_partition_name = hfsGetPartitionNameString((HashFileSystemPartitionType)i);
         if (hfs_partition_name && !strcmp(hfs_partition_name, hfs_ctx->name)) break;
     }
 
@@ -1444,7 +1477,7 @@ end:
     return hfs_ctx;
 }
 
-static HashFileSystemContext *_gamecardGetHashFileSystemContext(u8 hfs_partition_type)
+static HashFileSystemContext *_gamecardGetHashFileSystemContext(HashFileSystemPartitionType hfs_partition_type)
 {
     HashFileSystemContext *hfs_ctx = NULL;
 

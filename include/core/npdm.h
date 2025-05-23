@@ -41,14 +41,14 @@ extern "C" {
 
 /// 'NpdmSignatureKeyGeneration_Current' will always point to the last known key generation value.
 /// TODO: update on signature keygen changes.
-typedef enum {
+typedef enum : u8 {
     NpdmSignatureKeyGeneration_Since100NUP = 0,                                         ///< 1.0.0 - 8.1.1.
     NpdmSignatureKeyGeneration_Since900NUP = 1,                                         ///< 9.0.0+.
     NpdmSignatureKeyGeneration_Current     = NpdmSignatureKeyGeneration_Since900NUP,
     NpdmSignatureKeyGeneration_Max         = (NpdmSignatureKeyGeneration_Current + 1)
 } NpdmSignatureKeyGeneration;
 
-typedef enum {
+typedef enum : u8 {
     NpdmProcessAddressSpace_AddressSpace32Bit           = 0,
     NpdmProcessAddressSpace_AddressSpace64BitOld        = 1,
     NpdmProcessAddressSpace_AddressSpace32BitNoReserved = 2,
@@ -57,12 +57,12 @@ typedef enum {
 } NpdmProcessAddressSpace;
 
 typedef struct {
-    u8 is_64bit_instruction               : 1;
-    u8 process_address_space              : 3;  ///< NpdmProcessAddressSpace.
-    u8 optimize_memory_allocation         : 1;
-    u8 disable_device_address_space_merge : 1;
-    u8 enable_alias_region_extra_size     : 1;
-    u8 prevent_code_reads                 : 1;
+    u8 is_64bit_instruction                       : 1;
+    NpdmProcessAddressSpace process_address_space : 3;
+    u8 optimize_memory_allocation                 : 1;
+    u8 disable_device_address_space_merge         : 1;
+    u8 enable_alias_region_extra_size             : 1;
+    u8 prevent_code_reads                         : 1;
 } NpdmMetaFlags;
 
 NXDT_ASSERT(NpdmMetaFlags, 0x1);
@@ -70,29 +70,29 @@ NXDT_ASSERT(NpdmMetaFlags, 0x1);
 /// This is the start of every NPDM file.
 /// This is followed by ACID and ACI0 sections, both with variable offsets and sizes.
 typedef struct {
-    u32 magic;                          ///< "NPDM".
-    u8 acid_signature_key_generation;   ///< NpdmSignatureKeyGeneration.
+    u32 magic;                                                  ///< "NPDM".
+    NpdmSignatureKeyGeneration acid_signature_key_generation;
     u8 reserved_1[0x7];
     NpdmMetaFlags flags;
     u8 reserved_2;
-    u8 main_thread_priority;            ///< Must not exceed NPDM_MAIN_THREAD_MAX_PRIORITY.
-    u8 main_thread_core_number;         ///< Must not exceed NPDM_MAIN_THREAD_MAX_CORE_NUMBER.
+    u8 main_thread_priority;                                    ///< Must not exceed NPDM_MAIN_THREAD_MAX_PRIORITY.
+    u8 main_thread_core_number;                                 ///< Must not exceed NPDM_MAIN_THREAD_MAX_CORE_NUMBER.
     u8 reserved_3[0x4];
-    u32 system_resource_size;           ///< Must not exceed NPDM_SYSTEM_RESOURCE_MAX_SIZE.
+    u32 system_resource_size;                                   ///< Must not exceed NPDM_SYSTEM_RESOURCE_MAX_SIZE.
     Version version;
-    u32 main_thread_stack_size;         ///< Must be aligned to NPDM_MAIN_THREAD_STACK_SIZE_ALIGNMENT.
-    char name[0x10];                    ///< Usually set to "Application".
-    char product_code[0x10];            ///< Usually zeroed out.
+    u32 main_thread_stack_size;                                 ///< Must be aligned to NPDM_MAIN_THREAD_STACK_SIZE_ALIGNMENT.
+    char name[0x10];                                            ///< Usually set to "Application".
+    char product_code[0x10];                                    ///< Usually zeroed out.
     u8 reserved_4[0x30];
-    u32 aci_offset;                     ///< Offset value relative to the start of this header.
+    u32 aci_offset;                                             ///< Offset value relative to the start of this header.
     u32 aci_size;
-    u32 acid_offset;                    ///< Offset value relative to the start of this header.
+    u32 acid_offset;                                            ///< Offset value relative to the start of this header.
     u32 acid_size;
 } NpdmMetaHeader;
 
 NXDT_ASSERT(NpdmMetaHeader, 0x80);
 
-typedef enum {
+typedef enum : u32 {
     NpdmMemoryRegion_Application     = 0,
     NpdmMemoryRegion_Applet          = 1,
     NpdmMemoryRegion_SecureSystem    = 2,
@@ -105,10 +105,10 @@ typedef enum {
 } NpdmMemoryRegion;
 
 typedef struct {
-    u32 production           : 1;
-    u32 unqualified_approval : 1;
-    u32 memory_region        : 4;   ///< NpdmMemoryRegion.
-    u32 reserved             : 26;
+    u32 production                 : 1;
+    u32 unqualified_approval       : 1;
+    NpdmMemoryRegion memory_region : 4;
+    u32 reserved                   : 26;
 } NpdmAcidFlags;
 
 NXDT_ASSERT(NpdmAcidFlags, 0x4);
@@ -155,7 +155,7 @@ typedef struct {
 
 NXDT_ASSERT(NpdmAciHeader, 0x40);
 
-typedef enum {
+typedef enum : u64 {
     NpdmFsAccessControlFlags_None                           = 0,
     NpdmFsAccessControlFlags_ApplicationInfo                = BITL(0),
     NpdmFsAccessControlFlags_BootModeControl                = BITL(1),
@@ -217,7 +217,7 @@ typedef struct {
     u8 content_owner_id_count;
     u8 save_data_owner_id_count;
     u8 reserved;
-    u64 flags;                      ///< NpdmFsAccessControlFlags.
+    NpdmFsAccessControlFlags flags;
     u64 content_owner_id_min;
     u64 content_owner_id_max;
     u64 save_data_owner_id_min;
@@ -236,7 +236,7 @@ NXDT_ASSERT(NpdmFsAccessControlDescriptor, 0x2C);
 typedef struct {
     u8 version;
     u8 reserved_1[0x3];
-    u64 flags;                          ///< NpdmFsAccessControlFlags.
+    NpdmFsAccessControlFlags flags;
     u32 content_owner_info_offset;      ///< Relative to the start of this block. Only valid if 'content_owner_info_size' is greater than 0.
     u32 content_owner_info_size;
     u32 save_data_owner_info_offset;    ///< Relative to the start of this block. Only valid if 'save_data_owner_info_size' is greater than 0.
@@ -256,7 +256,7 @@ typedef struct {
 
 NXDT_ASSERT(NpdmFsAccessControlDataContentOwnerBlock, 0x4);
 
-typedef enum {
+typedef enum : u8 {
     NpdmAccessibility_None      = 0,
     NpdmAccessibility_Read      = BIT(0),
     NpdmAccessibility_Write     = BIT(1),
@@ -268,7 +268,7 @@ typedef enum {
 /// If available, this block is padded to a 0x4-byte boundary and followed by 'save_data_owner_id_count' save data owner IDs.
 typedef struct {
     u32 save_data_owner_id_count;
-    u8 accessibility[];             ///< 'save_data_owner_id_count' NpdmAccessibility fields.
+    NpdmAccessibility accessibility[];  ///< 'save_data_owner_id_count' accessibility fields.
 } NpdmFsAccessControlDataSaveDataOwnerBlock;
 
 NXDT_ASSERT(NpdmFsAccessControlDataSaveDataOwnerBlock, 0x4);
@@ -294,7 +294,7 @@ typedef struct {
 
 NXDT_ASSERT(NpdmKernelCapabilityDescriptorEntry, 0x4);
 
-typedef enum {
+typedef enum : u8 {
     NpdmKernelCapabilityEntryBitmaskSize_ThreadInfo        = 3,
     NpdmKernelCapabilityEntryBitmaskSize_EnableSystemCalls = 4,
     NpdmKernelCapabilityEntryBitmaskSize_MemoryMap         = 6,
@@ -307,7 +307,7 @@ typedef enum {
     NpdmKernelCapabilityEntryBitmaskSize_MiscFlags         = 16
 } NpdmKernelCapabilityEntryBitmaskSize;
 
-typedef enum {
+typedef enum : u32 {
     NpdmKernelCapabilityEntryBitmaskPattern_ThreadInfo        = BIT(NpdmKernelCapabilityEntryBitmaskSize_ThreadInfo)        - 1,
     NpdmKernelCapabilityEntryBitmaskPattern_EnableSystemCalls = BIT(NpdmKernelCapabilityEntryBitmaskSize_EnableSystemCalls) - 1,
     NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap         = BIT(NpdmKernelCapabilityEntryBitmaskSize_MemoryMap)         - 1,
@@ -332,7 +332,7 @@ typedef struct {
 NXDT_ASSERT(NpdmThreadInfo, 0x4);
 
 /// System call table.
-typedef enum {
+typedef enum : u32 {
     NpdmSystemCallId_None                           = 0,
 
     ///< System calls for index 0.
@@ -548,38 +548,36 @@ typedef enum {
 
 /// EnableSystemCalls entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask         : NpdmKernelCapabilityEntryBitmaskSize_EnableSystemCalls + 1;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_EnableSystemCalls.
-    u32 system_call_ids : 24;                                                           ///< NpdmSystemCallId.
-    u32 index           : 3;                                                            ///< System calls index.
+    u32 bitmask                      : NpdmKernelCapabilityEntryBitmaskSize_EnableSystemCalls + 1;  ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_EnableSystemCalls.
+    NpdmSystemCallId system_call_ids : 24;
+    u32 index                        : 3;                                                           ///< System calls index.
 } NpdmEnableSystemCalls;
 
 NXDT_ASSERT(NpdmEnableSystemCalls, 0x4);
 
-typedef enum {
-    NpdmPermissionType_RW    = 0,
-    NpdmPermissionType_RO    = 1,
-    NpdmPermissionType_Count = 2    ///< Total values supported by this enum.
+typedef enum : u32 {
+    NpdmPermissionType_RW = 0,
+    NpdmPermissionType_RO = 1
 } NpdmPermissionType;
 
 typedef struct {
-    u32 bitmask         : NpdmKernelCapabilityEntryBitmaskSize_MemoryMap + 1;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap.
-    u32 begin_address   : 24;                                                   ///< begin_address << 12.
-    u32 permission_type : 1;                                                    ///< NpdmPermissionType.
+    u32 bitmask                        : NpdmKernelCapabilityEntryBitmaskSize_MemoryMap + 1;    ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap.
+    u32 begin_address                  : 24;                                                    ///< begin_address << 12.
+    NpdmPermissionType permission_type : 1;
 } NpdmMemoryMapType1;
 
 NXDT_ASSERT(NpdmMemoryMapType1, 0x4);
 
-typedef enum {
+typedef enum : u32 {
     NpdmMappingType_Io     = 0,
-    NpdmMappingType_Static = 1,
-    NpdmMappingType_Count  = 2  ///< Total values supported by this enum.
+    NpdmMappingType_Static = 1
 } NpdmMappingType;
 
 typedef struct {
-    u32 bitmask      : NpdmKernelCapabilityEntryBitmaskSize_MemoryMap + 1;  ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap.
-    u32 size         : 20;                                                  ///< size << 12.
-    u32 reserved     : 4;
-    u32 mapping_type : 1;                                                   ///< NpdmMappingType.
+    u32 bitmask                  : NpdmKernelCapabilityEntryBitmaskSize_MemoryMap + 1;  ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryMap.
+    u32 size                     : 20;                                                  ///< size << 12.
+    u32 reserved                 : 4;
+    NpdmMappingType mapping_type : 1;
 } NpdmMemoryMapType2;
 
 NXDT_ASSERT(NpdmMemoryMapType2, 0x4);
@@ -603,7 +601,7 @@ typedef struct {
 
 NXDT_ASSERT(NpdmIoMemoryMap, 0x4);
 
-typedef enum {
+typedef enum : u32 {
     NpdmRegionType_NoMapping         = 0,
     NpdmRegionType_KernelTraceBuffer = 1,
     NpdmRegionType_OnMemoryBootImage = 2,
@@ -613,13 +611,13 @@ typedef enum {
 
 /// MemoryRegionMap entry for the KernelCapability descriptor.
 typedef struct {
-    u32 bitmask           : NpdmKernelCapabilityEntryBitmaskSize_MemoryRegionMap + 1;   ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryRegionMap.
-    u32 region_type_0     : 6;                                                          ///< NpdmRegionType.
-    u32 permission_type_0 : 1;                                                          ///< NpdmPermissionType.
-    u32 region_type_1     : 6;                                                          ///< NpdmRegionType.
-    u32 permission_type_1 : 1;                                                          ///< NpdmPermissionType.
-    u32 region_type_2     : 6;                                                          ///< NpdmRegionType.
-    u32 permission_type_2 : 1;                                                          ///< NpdmPermissionType.
+    u32 bitmask                          : NpdmKernelCapabilityEntryBitmaskSize_MemoryRegionMap + 1;    ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MemoryRegionMap.
+    NpdmRegionType region_type_0         : 6;
+    NpdmPermissionType permission_type_0 : 1;
+    NpdmRegionType region_type_1         : 6;
+    NpdmPermissionType permission_type_1 : 1;
+    NpdmRegionType region_type_2         : 6;
+    NpdmPermissionType permission_type_2 : 1;
 } NpdmMemoryRegionMap;
 
 NXDT_ASSERT(NpdmMemoryRegionMap, 0x4);
@@ -633,7 +631,7 @@ typedef struct {
 
 NXDT_ASSERT(NpdmEnableInterrupts, 0x4);
 
-typedef enum {
+typedef enum : u32 {
     NpdmProgramType_System      = 0,
     NpdmProgramType_Application = 1,
     NpdmProgramType_Applet      = 2,
@@ -643,9 +641,9 @@ typedef enum {
 /// MiscParams entry for the KernelCapability descriptor.
 /// Defaults to 0 if this entry doesn't exist.
 typedef struct {
-    u32 bitmask      : NpdmKernelCapabilityEntryBitmaskSize_MiscParams + 1; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MiscParams.
-    u32 program_type : 3;                                                   ///< NpdmProgramType.
-    u32 reserved     : 15;
+    u32 bitmask                  : NpdmKernelCapabilityEntryBitmaskSize_MiscParams + 1; ///< Always set to NpdmKernelCapabilityEntryBitmaskPattern_MiscParams.
+    NpdmProgramType program_type : 3;
+    u32 reserved                 : 15;
 } NpdmMiscParams;
 
 NXDT_ASSERT(NpdmMiscParams, 0x4);
@@ -716,7 +714,7 @@ NX_INLINE bool npdmIsValidContext(NpdmContext *npdm_ctx)
             ((npdm_ctx->aci_header->kernel_capability_size && npdm_ctx->aci_kc_descriptor) || (!npdm_ctx->aci_header->kernel_capability_size && !npdm_ctx->aci_kc_descriptor)));
 }
 
-/// Returns a value that can be loooked up in the NpdmKernelCapabilityEntryBitmaskPattern enum.
+/// Returns a value that can be looked up in the NpdmKernelCapabilityEntryBitmaskPattern enum.
 NX_INLINE u32 npdmGetKernelCapabilityDescriptorEntryBitmaskPattern(NpdmKernelCapabilityDescriptorEntry *entry)
 {
     return (entry ? (((entry->value + 1) & ~entry->value) - 1) : 0);

@@ -145,7 +145,7 @@ end:
     return ret;
 }
 
-const char *hfsGetPartitionNameString(u8 hfs_partition_type)
+const char *hfsGetPartitionNameString(HashFileSystemPartitionType hfs_partition_type)
 {
     return ((hfs_partition_type > HashFileSystemPartitionType_None && hfs_partition_type < HashFileSystemPartitionType_Count) ? \
             g_hfsPartitionNames[HFS_PARTITION_NAME_INDEX(hfs_partition_type)] : NULL);

@@ -29,7 +29,7 @@
 extern "C" {
 #endif
 
-typedef enum {
+typedef enum : u8 {
     MemoryProgramSegmentType_None   = 0,
     MemoryProgramSegmentType_Text   = BIT(0),
     MemoryProgramSegmentType_RoData = BIT(1),
@@ -40,7 +40,7 @@ typedef enum {
 
 typedef struct {
     u64 program_id;
-    u8 mask;        ///< MemoryProgramSegmentType. Used with memRetrieveProgramMemorySegment(). Ignored in memRetrieveFullProgramMemory().
+    MemoryProgramSegmentType mask;  ///< Used with memRetrieveProgramMemorySegment(). Ignored in memRetrieveFullProgramMemory().
     u8 *data;
     u64 data_size;
 } MemoryLocation;

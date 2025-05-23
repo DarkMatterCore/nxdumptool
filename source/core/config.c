@@ -210,7 +210,7 @@ static bool configValidateJsonRootObject(const struct json_object *obj)
     json_object_object_foreach(obj, key, val)
     {
         CONFIG_VALIDATE_FIELD(Boolean, overclock);
-        CONFIG_VALIDATE_FIELD(Integer, naming_convention, TitleNamingConvention_Full, TitleNamingConvention_Count - 1);
+        CONFIG_VALIDATE_FIELD(Integer, naming_convention, (int)TitleNamingConvention_Full, (int)TitleNamingConvention_Count - 1);
         CONFIG_VALIDATE_FIELD(Integer, output_storage, ConfigOutputStorage_SdCard, ConfigOutputStorage_Count - 1);
         CONFIG_VALIDATE_OBJECT(GameCard, gamecard);
         CONFIG_VALIDATE_OBJECT(Nsp, nsp);

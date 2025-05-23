@@ -81,7 +81,7 @@ typedef struct {
     TitleInfo *aoc_patch_info;  ///< Pointer to a TitleInfo element for the first detected add-on content patch entry matching the provided application ID.
 } TitleUserApplicationData;
 
-typedef enum {
+typedef enum : u8 {
     TitleNamingConvention_Full             = 0, ///< Individual titles: "{Name} [{Id}][v{Version}][{Type}]".
                                                 ///< Gamecards: "{Name1} [{Id1}][v{Version1}] + ... + {NameN} [{IdN}][v{VersionN}]".
     TitleNamingConvention_IdAndVersionOnly = 1, ///< Individual titles: "{Id}_v{Version}_{Type}".
@@ -89,7 +89,7 @@ typedef enum {
     TitleNamingConvention_Count            = 2  ///< Total values supported by this enum.
 } TitleNamingConvention;
 
-typedef enum {
+typedef enum : u8 {
     TitleFileNameIllegalCharReplaceType_None               = 0,
     TitleFileNameIllegalCharReplaceType_IllegalFsChars     = 1,
     TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly = 2,
@@ -158,11 +158,11 @@ void titleFreeOrphanTitles(TitleInfo ***orphan_info);
 bool titleIsGameCardInfoUpdated(void);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps. Returns NULL if an error occurs.
-char *titleGenerateFileName(TitleInfo *title_info, u8 naming_convention, u8 illegal_char_replace_type);
+char *titleGenerateFileName(TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output gamecard dumps. Returns NULL if an error occurs.
 /// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.
-char *titleGenerateGameCardFileName(u8 naming_convention, u8 illegal_char_replace_type);
+char *titleGenerateGameCardFileName(TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a CSV representation of all available user/system title records, depending on the 'is_system' argument.
 /// 'out_csv_size' must be a valid pointer. It is used to store the size of the allocated buffer.

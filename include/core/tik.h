@@ -25,6 +25,7 @@
 #define __TIK_H__
 
 #include "signature.h"
+#include "nca_key_enums.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -43,13 +44,13 @@ typedef struct { \
 } TikSig##sigtype; \
 NXDT_ASSERT(TikSig##sigtype, tiksize);
 
-typedef enum {
+typedef enum : u8 {
     TikTitleKeyType_Common       = 0,
     TikTitleKeyType_Personalized = 1,
     TikTitleKeyType_Count        = 2    ///< Total values supported by this enum.
 } TikTitleKeyType;
 
-typedef enum {
+typedef enum : u8 {
     TikLicenseType_Permanent    = 0,
     TikLicenseType_Demo         = 1,
     TikLicenseType_Trial        = 2,
@@ -59,7 +60,7 @@ typedef enum {
     TikLicenseType_Count        = 6     ///< Total values supported by this enum.
 } TikLicenseType;
 
-typedef enum {
+typedef enum : u16 {
     TikPropertyMask_None                 = 0,
     TikPropertyMask_PreInstallation      = BIT(0),  ///< Determines if the title comes pre-installed on the device. Most likely unused -- a remnant from previous ticket formats.
     TikPropertyMask_SharedTitle          = BIT(1),  ///< Determines if the title holds shared contents only. Most likely unused -- a remnant from previous ticket formats.
@@ -74,12 +75,12 @@ typedef enum {
 typedef struct {
     char issuer[0x40];
     u8 titlekey_block[0x100];
-    u8 format_version;          ///< Always matches TIK_FORMAT_VERSION.
-    u8 titlekey_type;           ///< TikTitleKeyType.
+    u8 format_version;                  ///< Always matches TIK_FORMAT_VERSION.
+    TikTitleKeyType titlekey_type;
     u16 ticket_version;
-    u8 license_type;            ///< TikLicenseType.
-    u8 key_generation;          ///< NcaKeyGeneration.
-    u16 property_mask;          ///< TikPropertyMask.
+    TikLicenseType license_type;
+    NcaKeyGeneration key_generation;
+    TikPropertyMask property_mask;
     u8 reserved[0x8];
     u64 ticket_id;
     u64 device_id;
@@ -97,7 +98,7 @@ NXDT_ASSERT(TikCommonBlock, 0x180);
 /// These are only used if the sect_* fields from the common block are non-zero (other than 'sect_hdr_offset').
 /// Each ESV2 section record is followed by a 'record_count' number of ESV1 records, each one of 'record_size' size.
 
-typedef enum {
+typedef enum : u16 {
     TikSectionType_None               = 0,
     TikSectionType_Permanent          = 1,
     TikSectionType_Subscription       = 2,
@@ -113,7 +114,7 @@ typedef struct {
     u32 record_size;
     u32 section_size;
     u16 record_count;
-    u16 section_type;   ///< TikSectionType.
+    TikSectionType section_type;
 } TikESV2SectionRecord;
 
 /// Used with TikSectionType_Permanent.
@@ -162,7 +163,7 @@ GENERATE_TIK_STRUCT(Ecc480, 0x200);     /// ECC signature.
 GENERATE_TIK_STRUCT(Hmac160, 0x1C0);    /// HMAC signature.
 
 /// Ticket type.
-typedef enum {
+typedef enum : u8 {
     TikType_None        = 0,
     TikType_SigRsa4096  = 1,
     TikType_SigRsa2048  = 2,
@@ -173,21 +174,21 @@ typedef enum {
 
 /// Used to store ticket type, size and raw data, as well as titlekey data.
 typedef struct {
-    u8 type;                        ///< TikType.
-    u64 size;                       ///< Raw ticket size.
-    u8 data[SIGNED_TIK_MAX_SIZE];   ///< Raw ticket data.
-    u8 key_generation;              ///< NcaKeyGeneration.
-    u8 enc_titlekey[0x10];          ///< Titlekey with titlekek crypto (RSA-OAEP unwrapped if dealing with a TikTitleKeyType_Personalized ticket).
-    char enc_titlekey_str[0x21];    ///< Character string representation of enc_titlekey.
-    u8 dec_titlekey[0x10];          ///< Titlekey without titlekek crypto. Ready to use for NCA FS section decryption.
-    char dec_titlekey_str[0x21];    ///< Character string representation of dec_titlekey.
-    char rights_id_str[0x21];       ///< Character string representation of the rights ID from the ticket.
+    TikType type;
+    u64 size;                           ///< Raw ticket size.
+    u8 data[SIGNED_TIK_MAX_SIZE];       ///< Raw ticket data.
+    NcaKeyGeneration key_generation;
+    u8 enc_titlekey[0x10];              ///< Titlekey with titlekek crypto (RSA-OAEP unwrapped if dealing with a TikTitleKeyType_Personalized ticket).
+    char enc_titlekey_str[0x21];        ///< Character string representation of enc_titlekey.
+    u8 dec_titlekey[0x10];              ///< Titlekey without titlekek crypto. Ready to use for NCA FS section decryption.
+    char dec_titlekey_str[0x21];        ///< Character string representation of dec_titlekey.
+    char rights_id_str[0x21];           ///< Character string representation of the rights ID from the ticket.
 } Ticket;
 
 /// Retrieves a ticket from either the ES ticket system savedata file (eMMC BIS System partition) or the secure Hash FS partition from an inserted gamecard.
 /// Both the input rights ID and key generation values must have been retrieved from a NCA that depends on the desired ticket.
 /// Titlekey is also RSA-OAEP unwrapped (if needed) and titlekek-decrypted right away.
-bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, u8 key_generation, bool use_gamecard);
+bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, NcaKeyGeneration key_generation, bool use_gamecard);
 
 /// Converts a TikTitleKeyType_Personalized ticket into a TikTitleKeyType_Common ticket and optionally generates a raw certificate chain for the new signature issuer.
 /// Bear in mind the 'size' member from the Ticket parameter will be updated by this function to remove any possible references to ESV1/ESV2 records.

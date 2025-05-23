@@ -133,7 +133,7 @@ typedef struct {
     NcaHierarchicalIntegrityPatch cur_format_patch; ///< Used with NCA2/NCA3 RomFS sections.
 } RomFileSystemFileEntryPatch;
 
-typedef enum {
+typedef enum : u8 {
     RomFileSystemPathIllegalCharReplaceType_None               = 0,
     RomFileSystemPathIllegalCharReplaceType_IllegalFsChars     = 1,
     RomFileSystemPathIllegalCharReplaceType_KeepAsciiCharsOnly = 2,
@@ -169,10 +169,10 @@ RomFileSystemDirectoryEntry *romfsGetDirectoryEntryByPath(RomFileSystemContext *
 RomFileSystemFileEntry *romfsGetFileEntryByPath(RomFileSystemContext *ctx, const char *path);
 
 /// Generates a path string from a RomFS directory entry.
-bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type);
+bool romfsGeneratePathFromDirectoryEntry(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry, char *out_path, size_t out_path_size, RomFileSystemPathIllegalCharReplaceType illegal_char_replace_type);
 
 /// Generates a path string from a RomFS file entry.
-bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, u8 illegal_char_replace_type);
+bool romfsGeneratePathFromFileEntry(RomFileSystemContext *ctx, RomFileSystemFileEntry *file_entry, char *out_path, size_t out_path_size, RomFileSystemPathIllegalCharReplaceType illegal_char_replace_type);
 
 /// Checks if a RomFS file entry is updated by the Patch RomFS.
 /// Only works if the provided RomFileSystemContext was initialized as a Patch RomFS context.

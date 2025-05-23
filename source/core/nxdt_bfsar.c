@@ -107,8 +107,8 @@ bool bfsarInitialize(void)
 
         /* Initialize NCA context. */
         /* Don't allow invalid NCA signatures. */
-        if (!ncaInitializeContext(nca_ctx, title_info->storage_id, 0, &(title_info->meta_key), titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Program, 0), NULL) || \
-            !nca_ctx->valid_main_signature)
+        NcmContentInfo *content_info = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Program, 0);
+        if (!NCA_INIT_CTX(nca_ctx, title_info->storage_id, &(title_info->meta_key), content_info, NULL) || !nca_ctx->valid_main_signature)
         {
             LOG_MSG_ERROR("Failed to initialize qlaunch Program NCA context!");
             break;

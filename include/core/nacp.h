@@ -39,14 +39,14 @@ typedef struct {
 
 NXDT_ASSERT(NacpTitle, 0x300);
 
-typedef enum {
+typedef enum : u8 {
     NacpStartupUserAccount_None                                       = 0,
     NacpStartupUserAccount_Required                                   = 1,
     NacpStartupUserAccount_RequiredWithNetworkServiceAccountAvailable = 2,
     NacpStartupUserAccount_Count                                      = 3   ///< Total values supported by this enum.
 } NacpStartupUserAccount;
 
-typedef enum {
+typedef enum : u8 {
     NacpUserAccountSwitchLock_Disable = 0,
     NacpUserAccountSwitchLock_Enable  = 1,
     NacpUserAccountSwitchLock_Count   = 2,  ///< Total values supported by this enum.
@@ -57,13 +57,13 @@ typedef enum {
     NacpTouchScreenUsage_Required     = 2
 } NacpUserAccountSwitchLock;
 
-typedef enum {
+typedef enum : u8 {
     NacpAddOnContentRegistrationType_AllOnLaunch = 0,
     NacpAddOnContentRegistrationType_OnDemand    = 1,
     NacpAddOnContentRegistrationType_Count       = 2    ///< Total values supported by this enum.
 } NacpAddOnContentRegistrationType;
 
-typedef enum {
+typedef enum : u32 {
     NacpAttribute_None                     = 0,
     NacpAttribute_Demo                     = BIT(0),
     NacpAttribute_RetailInteractiveDisplay = BIT(1),
@@ -72,7 +72,7 @@ typedef enum {
 } NacpAttribute;
 
 /// Indexes used to access NACP Title structs.
-typedef enum {
+typedef enum : u8 {
     NacpLanguage_AmericanEnglish      = 0,
     NacpLanguage_BritishEnglish       = 1,
     NacpLanguage_Japanese             = 2,
@@ -96,7 +96,7 @@ typedef enum {
     NacpLanguage_Chinese              = NacpLanguage_SimplifiedChinese
 } NacpLanguage;
 
-typedef enum {
+typedef enum : u32 {
     NacpSupportedLanguage_None                 = 0,
     NacpSupportedLanguage_AmericanEnglish      = BIT(NacpLanguage_AmericanEnglish),
     NacpSupportedLanguage_BritishEnglish       = BIT(NacpLanguage_BritishEnglish),
@@ -121,19 +121,19 @@ typedef enum {
     NacpSupportedLanguage_Chinese              = NacpSupportedLanguage_SimplifiedChinese
 } NacpSupportedLanguage;
 
-typedef enum {
+typedef enum : u32 {
     NacpParentalControl_None              = 0,
     NacpParentalControl_FreeCommunication = BIT(0),
     NacpParentalControl_Count             = 1       ///< Total values supported by this enum.
 } NacpParentalControl;
 
-typedef enum {
+typedef enum : u8 {
     NacpScreenshot_Allow = 0,
     NacpScreenshot_Deny  = 1,
     NacpScreenshot_Count = 2    ///< Total values supported by this enum.
 } NacpScreenshot;
 
-typedef enum {
+typedef enum : u8 {
     NacpVideoCapture_Disable = 0,
     NacpVideoCapture_Manual  = 1,
     NacpVideoCapture_Enable  = 2,
@@ -144,13 +144,13 @@ typedef enum {
     NacpVideoCapture_Allow   = NacpVideoCapture_Manual
 } NacpVideoCapture;
 
-typedef enum {
+typedef enum : u8 {
     NacpDataLossConfirmation_None     = 0,
     NacpDataLossConfirmation_Required = 1,
     NacpDataLossConfirmation_Count    = 2   ///< Total values supported by this enum.
 } NacpDataLossConfirmation;
 
-typedef enum {
+typedef enum : u8 {
     NacpPlayLogPolicy_Open    = 0,
     NacpPlayLogPolicy_LogOnly = 1,
     NacpPlayLogPolicy_None    = 2,
@@ -162,7 +162,7 @@ typedef enum {
 } NacpPlayLogPolicy;
 
 /// Indexes used to access NACP RatingAge info.
-typedef enum {
+typedef enum : u8 {
     NacpRatingAgeOrganization_CERO         = 0,
     NacpRatingAgeOrganization_GRACGCRB     = 1,
     NacpRatingAgeOrganization_GSRMR        = 2,
@@ -198,34 +198,34 @@ typedef struct {
 
 NXDT_ASSERT(NacpRatingAge, 0x20);
 
-typedef enum {
+typedef enum : u8 {
     NacpLogoType_LicensedByNintendo    = 0,
     NacpLogoType_DistributedByNintendo = 1, ///< Removed.
     NacpLogoType_Nintendo              = 2,
     NacpLogoType_Count                 = 3  ///< Total values supported by this enum.
 } NacpLogoType;
 
-typedef enum {
+typedef enum : u8 {
     NacpLogoHandling_Auto   = 0,
     NacpLogoHandling_Manual = 1,
     NacpLogoHandling_Count  = 2     ///< Total values supported by this enum.
 } NacpLogoHandling;
 
-typedef enum {
+typedef enum : u8 {
     NacpRuntimeAddOnContentInstall_Deny                                       = 0,
     NacpRuntimeAddOnContentInstall_AllowAppend                                = 1,
     NacpRuntimeAddOnContentInstall_AllowAppendButDontDownloadWhenUsingNetwork = 2,
     NacpRuntimeAddOnContentInstall_Count                                      = 3   ///< Total values supported by this enum.
 } NacpRuntimeAddOnContentInstall;
 
-typedef enum {
+typedef enum : u8 {
     NacpRuntimeParameterDelivery_Always                   = 0,
     NacpRuntimeParameterDelivery_AlwaysIfUserStateMatched = 1,
     NacpRuntimeParameterDelivery_OnRestart                = 2,
     NacpRuntimeParameterDelivery_Count                    = 3   ///< Total values supported by this enum.
 } NacpRuntimeParameterDelivery;
 
-typedef enum {
+typedef enum : u8 {
     NacpAppropriateAgeForChina_None  = 0,
     NacpAppropriateAgeForChina_Age8  = 1,
     NacpAppropriateAgeForChina_Age12 = 2,
@@ -233,83 +233,82 @@ typedef enum {
     NacpAppropriateAgeForChina_Count = 4    ///< Total values supported by this enum.
 } NacpAppropriateAgeForChina;
 
-typedef enum {
+typedef enum : u8 {
     NacpUndecidedParameter75b8b_A     = 0,
     NacpUndecidedParameter75b8b_B     = 1,
     NacpUndecidedParameter75b8b_Count = 2   ///< Total values supported by this enum.
 } NacpUndecidedParameter75b8b;
 
-typedef enum {
+typedef enum : u8 {
     NacpCrashReport_Deny  = 0,
     NacpCrashReport_Allow = 1,
     NacpCrashReport_Count = 2   ///< Total values supported by this enum.
 } NacpCrashReport;
 
-typedef enum {
+typedef enum : u8 {
     NacpHdcp_None     = 0,
     NacpHdcp_Required = 1,
     NacpHdcp_Count    = 2   ///< Total values supported by this enum.
 } NacpHdcp;
 
-typedef enum {
+typedef enum : u8 {
     NacpStartupUserAccountOption_None       = 0,
     NacpStartupUserAccountOption_IsOptional = BIT(0),
     NacpStartupUserAccountOption_Count      = 1         ///< Total values supported by this enum.
 } NacpStartupUserAccountOption;
 
-typedef enum {
+typedef enum : u8 {
     NacpRuntimeUpgrade_Deny  = 0,
     NacpRuntimeUpgrade_Allow = 1,
     NacpRuntimeUpgrade_Count = 2    ///< Total values supported by this enum.
 } NacpRuntimeUpgrade;
 
-typedef enum {
+typedef enum : u32 {
     NacpSupportingLimitedApplicationLicenses_None  = 0,
     NacpSupportingLimitedApplicationLicenses_Demo  = BIT(0),
     NacpSupportingLimitedApplicationLicenses_Count = 1          ///< Total values supported by this enum.
 } NacpSupportingLimitedApplicationLicenses;
 
-typedef enum {
+typedef enum : u8 {
     NacpPlayLogQueryCapability_None      = 0,
     NacpPlayLogQueryCapability_WhiteList = 1,
     NacpPlayLogQueryCapability_All       = 2,
     NacpPlayLogQueryCapability_Count     = 3    ///< Total values supported by this enum.
 } NacpPlayLogQueryCapability;
 
-typedef enum {
+typedef enum : u8 {
     NacpRepair_None                   = 0,
     NacpRepair_SuppressGameCardAccess = BIT(0),
     NacpRepair_Count                  = 1       ///< Total values supported by this enum.
 } NacpRepair;
 
-typedef enum {
+typedef enum : u8 {
     NacpRequiredNetworkServiceLicenseOnLaunch_None   = 0,
     NacpRequiredNetworkServiceLicenseOnLaunch_Common = BIT(0),
     NacpRequiredNetworkServiceLicenseOnLaunch_Count  = 1        ///< Total values supported by this enum.
 } NacpRequiredNetworkServiceLicenseOnLaunch;
 
-typedef enum {
-    NacpJitConfigurationFlag_None    = 0,
-    NacpJitConfigurationFlag_Enabled = BITL(0),
-    NacpJitConfigurationFlag_Count   = 1            ///< Total values supported by this enum.
+typedef enum : u64 {
+    NacpJitConfigurationFlag_None      = 0,
+    NacpJitConfigurationFlag_IsEnabled = BITL(0),
+    NacpJitConfigurationFlag_Count     = 1          ///< Total values supported by this enum.
 } NacpJitConfigurationFlag;
 
 typedef struct {
-    u64 jit_configuration_flag; ///< NacpJitConfigurationFlag.
+    NacpJitConfigurationFlag jit_configuration_flag;
     u64 memory_size;
 } NacpJitConfiguration;
 
 NXDT_ASSERT(NacpJitConfiguration, 0x10);
 
-typedef enum {
+typedef enum : u16 {
     NacpRequiredAddOnContentsSetDescriptorFlag_None     = 0,
-    NacpRequiredAddOnContentsSetDescriptorFlag_Continue = 1,
-    NacpRequiredAddOnContentsSetDescriptorFlag_Count    = 2     ///< Total values supported by this enum.
+    NacpRequiredAddOnContentsSetDescriptorFlag_Continue = 1
 } NacpRequiredAddOnContentsSetDescriptorFlag;
 
 typedef struct {
-    u16 index : 15;
-    u16 flag  : 1;  ///< NacpRequiredAddOnContentsSetDescriptorFlag.
+    u16 index                                       : 15;
+    NacpRequiredAddOnContentsSetDescriptorFlag flag : 1;
 } NacpRequiredAddOnContentsSetDescriptor;
 
 NXDT_ASSERT(NacpRequiredAddOnContentsSetDescriptor, 0x2);
@@ -320,25 +319,25 @@ typedef struct {
 
 NXDT_ASSERT(NacpRequiredAddOnContentsSetBinaryDescriptor, 0x40);
 
-typedef enum {
+typedef enum : u8 {
     NacpPlayReportPermission_None            = 0,
     NacpPlayReportPermission_TargetMarketing = BIT(0),
     NacpPlayReportPermission_Count           = 1        ///< Total values supported by this enum.
 } NacpPlayReportPermission;
 
-typedef enum {
+typedef enum : u8 {
     NacpCrashScreenshotForProd_Deny  = 0,
     NacpCrashScreenshotForProd_Allow = 1,
     NacpCrashScreenshotForProd_Count = 2    ///< Total values supported by this enum.
 } NacpCrashScreenshotForProd;
 
-typedef enum {
+typedef enum : u8 {
     NacpCrashScreenshotForDev_Deny  = 0,
     NacpCrashScreenshotForDev_Allow = 1,
     NacpCrashScreenshotForDev_Count = 2     ///< Total values supported by this enum.
 } NacpCrashScreenshotForDev;
 
-typedef enum {
+typedef enum : u8 {
     NacpContentsAvailabilityTransitionPolicy_NoPolicy   = 0,
     NacpContentsAvailabilityTransitionPolicy_Stable     = 1,
     NacpContentsAvailabilityTransitionPolicy_Changeable = 2,
@@ -354,25 +353,25 @@ typedef struct {
 
 NXDT_ASSERT(NacpAccessibleLaunchRequiredVersion, 0x40);
 
-typedef enum {
+typedef enum : u8 {
     NacpAlbumFileExport_Allow = 0,
     NacpAlbumFileExport_Deny  = 1,
     NacpAlbumFileExport_Count = 2   ///< Total values supported by this enum.
 } NacpAlbumFileExport;
 
 typedef struct {
-    NacpTitle title[0x10];
+    NacpTitle title[NacpLanguage_Count];
     char isbn[0x25];
-    u8 startup_user_account;                                                                        ///< NacpStartupUserAccount.
-    u8 user_account_switch_lock;                                                                    ///< NacpUserAccountSwitchLock.
-    u8 add_on_content_registration_type;                                                            ///< NacpAddOnContentRegistrationType.
-    u32 attribute;                                                                                  ///< NacpAttribute.
-    u32 supported_language;                                                                         ///< NacpSupportedLanguage.
-    u32 parental_control;                                                                           ///< NacpParentalControl.
-    u8 screenshot;                                                                                  ///< NacpScreenshot.
-    u8 video_capture;                                                                               ///< NacpVideoCapture.
-    u8 data_loss_confirmation;                                                                      ///< NacpDataLossConfirmation.
-    u8 play_log_policy;                                                                             ///< NacpPlayLogPolicy.
+    NacpStartupUserAccount startup_user_account;
+    NacpUserAccountSwitchLock user_account_switch_lock;
+    NacpAddOnContentRegistrationType add_on_content_registration_type;
+    NacpAttribute attribute;
+    NacpSupportedLanguage supported_language;
+    NacpParentalControl parental_control;
+    NacpScreenshot screenshot;
+    NacpVideoCapture video_capture;
+    NacpDataLossConfirmation data_loss_confirmation;
+    NacpPlayLogPolicy play_log_policy;
     u64 presence_group_id;
     NacpRatingAge rating_age;
     char display_version[0x10];
@@ -385,17 +384,17 @@ typedef struct {
     s64 bcat_delivery_cache_storage_size;
     char application_error_code_category[0x8];
     u64 local_communication_id[0x8];
-    u8 logo_type;                                                                                   ///< NacpLogoType.
-    u8 logo_handling;                                                                               ///< NacpLogoHandling.
-    u8 runtime_add_on_content_install;                                                              ///< NacpRuntimeAddOnContentInstall.
-    u8 runtime_parameter_delivery;                                                                  ///< NacpRuntimeParameterDelivery.
-    u8 appropriate_age_for_china;                                                                   ///< NacpAppropriateAgeForChina.
-    u8 undecided_parameter_75b8b;                                                                   ///< NacpUndecidedParameter75b8b.
-    u8 crash_report;                                                                                ///< NacpCrashReport.
-    u8 hdcp;                                                                                        ///< NacpHdcp.
+    NacpLogoType logo_type;
+    NacpLogoHandling logo_handling;
+    NacpRuntimeAddOnContentInstall runtime_add_on_content_install;
+    NacpRuntimeParameterDelivery runtime_parameter_delivery;
+    NacpAppropriateAgeForChina appropriate_age_for_china;
+    NacpUndecidedParameter75b8b undecided_parameter_75b8b;
+    NacpCrashReport crash_report;
+    NacpHdcp hdcp;
     u64 seed_for_pseudo_device_id;
     char bcat_passphrase[0x41];
-    u8 startup_user_account_option;                                                                 ///< NacpStartupUserAccountOption.
+    NacpStartupUserAccountOption startup_user_account_option;
     u8 reserved_for_user_account_save_data_operation[0x6];
     s64 user_account_save_data_size_max;
     s64 user_account_save_data_journal_size_max;
@@ -407,13 +406,13 @@ typedef struct {
     s64 cache_storage_data_and_journal_size_max;
     u16 cache_storage_index_max;
     u8 reserved_1;
-    u8 runtime_upgrade;                                                                             ///< NacpRuntimeUpgrade.
-    u32 supporting_limited_application_licenses;                                                    ///< NacpSupportingLimitedApplicationLicenses.
+    NacpRuntimeUpgrade runtime_upgrade;
+    NacpSupportingLimitedApplicationLicenses supporting_limited_application_licenses;
     u64 play_log_queryable_application_id[0x10];
-    u8 play_log_query_capability;                                                                   ///< NacpPlayLogQueryCapability.
-    u8 repair;                                                                                      ///< NacpRepair.
+    NacpPlayLogQueryCapability play_log_query_capability;
+    NacpRepair repair;
     u8 program_index;
-    u8 required_network_service_license_on_launch;                                                  ///< NacpRequiredNetworkServiceLicenseOnLaunch.
+    NacpRequiredNetworkServiceLicenseOnLaunch required_network_service_license_on_launch;
     u8 application_error_code_prefix;                                                               ///< TODO: add values.
     u8 reserved_2;
     u8 acd_index;                                                                                   ///< TODO: add values.
@@ -421,24 +420,24 @@ typedef struct {
     NacpNeighborDetectionClientConfiguration neighbor_detection_client_configuration;
     NacpJitConfiguration jit_configuration;
     NacpRequiredAddOnContentsSetBinaryDescriptor required_add_on_contents_set_binary_descriptor;
-    u8 play_report_permission;                                                                      ///< NacpPlayReportPermission.
-    u8 crash_screenshot_for_prod;                                                                   ///< NacpCrashScreenshotForProd.
-    u8 crash_screenshot_for_dev;                                                                    ///< NacpCrashScreenshotForDev.
-    u8 contents_availability_transition_policy;                                                     ///< NacpContentsAvailabilityTransitionPolicy.
+    NacpPlayReportPermission play_report_permission;
+    NacpCrashScreenshotForProd crash_screenshot_for_prod;
+    NacpCrashScreenshotForDev crash_screenshot_for_dev;
+    NacpContentsAvailabilityTransitionPolicy contents_availability_transition_policy;
     u8 reserved_3[0x4];
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
     u8 reserved_4[0x90];
-    u8 album_file_export;                                                                           ///< NacpAlbumFileExport.
+    NacpAlbumFileExport album_file_export;
     u8 reserved_5[0x727];
     u8 platform_specific_region[0x400];                                                             ///< TODO: add structure.
-} _NacpStruct;
+} NsApplicationControlProperty;
 
-NXDT_ASSERT(_NacpStruct, 0x4000);
+NXDT_ASSERT(NsApplicationControlProperty, 0x4000);
 
 typedef struct {
-    u8 language;    ///< NacpLanguage.
-    u64 icon_size;  ///< JPG icon size. Must not exceed NACP_MAX_ICON_SIZE.
-    u8 *icon_data;  ///< Pointer to a dynamically allocated buffer that holds the JPG icon data.
+    NacpLanguage language;
+    u64 icon_size;          ///< JPG icon size. Must not exceed NACP_MAX_ICON_SIZE.
+    u8 *icon_data;          ///< Pointer to a dynamically allocated buffer that holds the JPG icon data.
 } NacpIconContext;
 
 typedef struct {
@@ -447,7 +446,7 @@ typedef struct {
     RomFileSystemFileEntry *romfs_file_entry;   ///< RomFileSystemFileEntry for the NACP in the Control NCA FS section #0. Used to generate a RomFileSystemFileEntryPatch if needed.
     RomFileSystemFileEntryPatch nca_patch;      ///< RomFileSystemFileEntryPatch generated if NACP modifications are needed. Used to seamlessly replace Control NCA data while writing it.
                                                 ///< Bear in mind that generating a patch modifies the NCA context.
-    _NacpStruct *data;                          ///< Pointer to a dynamically allocated buffer that holds the full NACP.
+    NsApplicationControlProperty *data;         ///< Pointer to a dynamically allocated buffer that holds the full NACP.
     u8 data_hash[SHA256_HASH_SIZE];             ///< SHA-256 checksum calculated over the whole NACP. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
     u8 icon_count;                              ///< NACP icon count. May be zero if no icons are available.
     NacpIconContext *icon_ctx;                  ///< Pointer to a dynamically allocated buffer that holds 'icon_count' NACP icon contexts. May be NULL if no icons are available.
@@ -481,36 +480,44 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
 ///     * NacpSupportedLanguage
 ///     * NacpParentalControl
 ///     * NacpStartupUserAccountOption
+///     * NacpSupportingLimitedApplicationLicenses
 ///     * NacpRepair
+///     * NacpRequiredNetworkServiceLicenseOnLaunch
+///     * NacpJitConfigurationFlag
+///     * NacpPlayReportPermission
 /// Then, the provided value must be a 0-based index to the desired flag and not a bitmask from its enum (e.g. NacpAttribute_RetailInteractiveDisplay -> use 1 instead).
-const char *nacpGetLanguageString(u8 language); /// Can also be used for NacpSupportedLanguage flags with values from the NacpLanguage enum.
-const char *nacpGetStartupUserAccountString(u8 startup_user_account);
-const char *nacpGetUserAccountSwitchLockString(u8 user_account_switch_lock);
-const char *nacpGetAddOnContentRegistrationTypeString(u8 add_on_content_registration_type);
+
+const char *nacpGetLanguageString(NacpLanguage language); /// Can also be used for NacpSupportedLanguage flags with values from the NacpLanguage enum.
+const char *nacpGetStartupUserAccountString(NacpStartupUserAccount startup_user_account);
+const char *nacpGetUserAccountSwitchLockString(NacpUserAccountSwitchLock user_account_switch_lock);
+const char *nacpGetAddOnContentRegistrationTypeString(NacpAddOnContentRegistrationType add_on_content_registration_type);
 const char *nacpGetAttributeString(u8 attribute);
 const char *nacpGetParentalControlString(u8 parental_control);
-const char *nacpGetScreenshotString(u8 screenshot);
-const char *nacpGetVideoCaptureString(u8 video_capture);
-const char *nacpGetDataLossConfirmationString(u8 data_loss_confirmation);
-const char *nacpGetPlayLogPolicyString(u8 play_log_policy);
-const char *nacpGetRatingAgeOrganizationString(u8 rating_age_organization);
-const char *nacpGetLogoTypeString(u8 logo_type);
-const char *nacpGetLogoHandlingString(u8 logo_handling);
-const char *nacpGetRuntimeAddOnContentInstallString(u8 runtime_add_on_content_install);
-const char *nacpGetRuntimeParameterDeliveryString(u8 runtime_parameter_delivery);
-const char *nacpGetAppropriateAgeForChina(u8 appropriate_age_for_china);
-const char *nacpGetUndecidedParameter75b8bString(u8 undecided_parameter_75b8b);
-const char *nacpGetCrashReportString(u8 crash_report);
-const char *nacpGetHdcpString(u8 hdcp);
+const char *nacpGetScreenshotString(NacpScreenshot screenshot);
+const char *nacpGetVideoCaptureString(NacpVideoCapture video_capture);
+const char *nacpGetDataLossConfirmationString(NacpDataLossConfirmation data_loss_confirmation);
+const char *nacpGetPlayLogPolicyString(NacpPlayLogPolicy play_log_policy);
+const char *nacpGetRatingAgeOrganizationString(NacpRatingAgeOrganization rating_age_organization);
+const char *nacpGetLogoTypeString(NacpLogoType logo_type);
+const char *nacpGetLogoHandlingString(NacpLogoHandling logo_handling);
+const char *nacpGetRuntimeAddOnContentInstallString(NacpRuntimeAddOnContentInstall runtime_add_on_content_install);
+const char *nacpGetRuntimeParameterDeliveryString(NacpRuntimeParameterDelivery runtime_parameter_delivery);
+const char *nacpGetAppropriateAgeForChina(NacpAppropriateAgeForChina appropriate_age_for_china);
+const char *nacpGetUndecidedParameter75b8bString(NacpUndecidedParameter75b8b undecided_parameter_75b8b);
+const char *nacpGetCrashReportString(NacpCrashReport crash_report);
+const char *nacpGetHdcpString(NacpHdcp hdcp);
 const char *nacpGetStartupUserAccountOptionString(u8 startup_user_account_option);
-const char *nacpGetRuntimeUpgradeString(u8 runtime_upgrade);
-const char *nacpGetPlayLogQueryCapabilityString(u8 play_log_query_capability);
+const char *nacpGetRuntimeUpgradeString(NacpRuntimeUpgrade runtime_upgrade);
+const char *nacpGetSupportingLimitedApplicationLicensesString(u8 supporting_limited_application_licenses);
+const char *nacpGetPlayLogQueryCapabilityString(NacpPlayLogQueryCapability play_log_query_capability);
 const char *nacpGetRepairString(u8 repair);
 const char *nacpGetRequiredNetworkServiceLicenseOnLaunchString(u8 required_network_service_license_on_launch);
-const char *nacpGetCrashScreenshotForProdString(u8 crash_screenshot_for_prod);
-const char *nacpGetCrashScreenshotForDevString(u8 crash_screenshot_for_dev);
-const char *nacpGetContentsAvailabilityTransitionPolicyString(u8 contents_availability_transition_policy);
-const char *nacpGetAlbumFileExportString(u8 album_file_export);
+const char *nacpGetJitConfigurationFlagString(u8 jit_configuration_flag);
+const char *nacpGetPlayReportPermissionString(u8 play_report_permission);
+const char *nacpGetCrashScreenshotForProdString(NacpCrashScreenshotForProd crash_screenshot_for_prod);
+const char *nacpGetCrashScreenshotForDevString(NacpCrashScreenshotForDev crash_screenshot_for_dev);
+const char *nacpGetContentsAvailabilityTransitionPolicyString(NacpContentsAvailabilityTransitionPolicy contents_availability_transition_policy);
+const char *nacpGetAlbumFileExportString(NacpAlbumFileExport album_file_export);
 
 /// Helper inline functions.
 
