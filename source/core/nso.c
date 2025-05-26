@@ -267,7 +267,7 @@ static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType t
     nsoFreeSegment(out);
 
     /* Allocate memory for the segment buffer. */
-    if (!(buf = calloc(buf_size, sizeof(u8))))
+    if (!(buf = calloc(1, buf_size)))
     {
         LOG_MSG_ERROR("Failed to allocate 0x%X bytes for the %s segment in NSO \"%s\"!", buf_size, segment_name, nso_ctx->nso_filename);
         return NULL;

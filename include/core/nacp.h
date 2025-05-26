@@ -436,8 +436,8 @@ NXDT_ASSERT(NsApplicationControlProperty, 0x4000);
 
 typedef struct {
     NacpLanguage language;
-    u64 icon_size;          ///< JPG icon size. Must not exceed NACP_MAX_ICON_SIZE.
-    u8 *icon_data;          ///< Pointer to a dynamically allocated buffer that holds the JPG icon data.
+    u64 icon_size;          ///< JPEG icon size. Must not exceed NACP_MAX_ICON_SIZE.
+    u8 *icon_data;          ///< Pointer to a dynamically allocated buffer that holds the JPEG icon data.
 } NacpIconContext;
 
 typedef struct {

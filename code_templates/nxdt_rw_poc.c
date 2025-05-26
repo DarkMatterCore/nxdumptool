@@ -1116,6 +1116,12 @@ int main(int argc, char *argv[])
 
     int ret = EXIT_SUCCESS;
 
+    consoleInit(NULL);
+
+    consoleClear();
+    consolePrint("please wait...");
+    consoleRefresh();
+
     if (!utilsInitializeResources())
     {
         ret = EXIT_FAILURE;
@@ -1127,8 +1133,6 @@ int main(int argc, char *argv[])
     /* Individual Joy-Cons not supported. */
     padConfigureInput(8, HidNpadStyleSet_NpadFullCtrl);
     padInitializeWithMask(&g_padState, 0x1000000FFUL);
-
-    consoleInit(NULL);
 
     updateStorageList();
 

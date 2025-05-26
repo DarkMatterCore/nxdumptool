@@ -17,6 +17,7 @@ host/nxdumptool
 *.7z
 *.code-workspace
 *.csv
+*.bin
 
 # TODO: remove this after the PoC builds are no longer needed.
 main.cpp

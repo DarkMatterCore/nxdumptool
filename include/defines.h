@@ -107,6 +107,9 @@
 #define LOG_BUF_SIZE                    0x400000                                                        /* 4 MiB. */
 #define LOG_FORCE_FLUSH                 0                                                               /* Forces a log buffer flush each time the logfile is written to. */
 
+#define TITLE_CACHE_FILE_NAME           "title_cache.bin"
+#define TITLE_CACHE_PATH                DEVOPTAB_SDMC_DEVICE HBMENU_BASE_PATH TITLE_CACHE_FILE_NAME
+
 #define BIS_FAT_PARTITION_COUNT         4
 
 /// Reference: https://docs.microsoft.com/en-us/windows/win32/fileio/filesystem-functionality-comparison#limits.
