@@ -44,11 +44,10 @@ typedef struct { \
 NXDT_ASSERT(CertSig##sigtype##PubKey##pubkeytype, certsize);
 
 typedef enum : u32 {
-    CertPubKeyType_Invalid = 0, ///< Placeholder.
-    CertPubKeyType_Rsa4096 = 1,
-    CertPubKeyType_Rsa2048 = 2,
-    CertPubKeyType_Ecc480  = 3,
-    CertPubKeyType_Count   = 4  ///< Total values supported by this enum.
+    CertPubKeyType_Rsa4096 = 0,
+    CertPubKeyType_Rsa2048 = 1,
+    CertPubKeyType_Ecc480  = 2,
+    CertPubKeyType_Count   = 3  ///< Total values supported by this enum.
 } CertPubKeyType;
 
 /// Placed after the certificate signature block.
@@ -161,7 +160,7 @@ u8 *certRetrieveRawCertificateChainFromGameCardByRightsId(const FsRightsId *id, 
 
 NX_INLINE bool certIsValidPublicKeyType(CertPubKeyType type)
 {
-    return (type > CertPubKeyType_Invalid && type < CertPubKeyType_Count);
+    return (type < CertPubKeyType_Count);
 }
 
 NX_INLINE u64 certGetPublicKeySizeByType(CertPubKeyType type)
@@ -180,7 +179,7 @@ NX_INLINE u64 certGetPublicKeyBlockSizeByType(CertPubKeyType type)
 
 NX_INLINE CertPubKeyType certGetPublicKeyTypeFromCommonBlock(CertCommonBlock *cert_common_block)
 {
-    return (cert_common_block ? __builtin_bswap32(cert_common_block->pub_key_type) : CertPubKeyType_Invalid);
+    return (cert_common_block ? __builtin_bswap32(cert_common_block->pub_key_type) : CertPubKeyType_Count);
 }
 
 /// Helper inline functions for signed certificate blobs.
@@ -198,7 +197,7 @@ NX_INLINE bool certIsValidSignedCertBlob(void *buf)
 
 NX_INLINE CertPubKeyType certGetPublicKeyTypeFromSignedCertBlob(void *buf)
 {
-    return (certIsValidSignedCertBlob(buf) ? certGetPublicKeyTypeFromCommonBlock(certGetCommonBlockFromSignedCertBlob(buf)) : CertPubKeyType_Invalid);
+    return (certIsValidSignedCertBlob(buf) ? certGetPublicKeyTypeFromCommonBlock(certGetCommonBlockFromSignedCertBlob(buf)) : CertPubKeyType_Count);
 }
 
 NX_INLINE u64 certGetPublicKeySizeFromSignedCertBlob(void *buf)
@@ -248,7 +247,7 @@ NX_INLINE CertCommonBlock *certGetCommonBlockFromCertificate(Certificate *cert)
 
 NX_INLINE CertPubKeyType certGetPublicKeyTypeFromCertificate(Certificate *cert)
 {
-    return (certIsValidCertificate(cert) ? certGetPublicKeyTypeFromSignedCertBlob(cert->data) : CertPubKeyType_Invalid);
+    return (certIsValidCertificate(cert) ? certGetPublicKeyTypeFromSignedCertBlob(cert->data) : CertPubKeyType_Count);
 }
 
 NX_INLINE u64 certGetPublicKeySizeFromCertificate(Certificate *cert)

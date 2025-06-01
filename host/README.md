@@ -263,7 +263,7 @@ This is because the `PFS0` header from NSPs holds the filenames for all file ent
 
 NCA filenames represent the first half of the NCA SHA-256 checksum, in lowercase. This fact alone makes it impossible to send a NSP header right from the beginning -- SHA-256 checksums are calculated by nxdumptool while dumping each NCA.
 
-#### Zero Length Termination (ZLT)
+### Zero Length Termination (ZLT)
 
 As per USB bulk transfer specification, when a USB host/device receives a data packet smaller than the endpoint max packet size, it shall consider the transfer is complete and no more data packets are left. This is called a transaction completion mechanism.
 

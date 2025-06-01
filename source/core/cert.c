@@ -287,7 +287,7 @@ static CertType certGetCertificateType(void *data, u64 data_size)
     }
 
     SignatureType sig_type = SignatureType_Invalid;
-    CertPubKeyType pub_key_type = CertPubKeyType_Invalid;
+    CertPubKeyType pub_key_type = CertPubKeyType_Count;
     CertType type = CertType_None;
 
     /* Get signature and public key types. */
