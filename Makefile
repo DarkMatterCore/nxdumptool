@@ -85,6 +85,7 @@ ROMFS       		:=	romfs
 BOREALIS_PATH		:=	libs/borealis
 BOREALIS_RESOURCES	:=	romfs:/
 
+NXTC_PATH			:=	$(ROOTDIR)/libs/libnxtc
 USBHSFS_PATH		:=	$(ROOTDIR)/libs/libusbhsfs
 
 #---------------------------------------------------------------------------------
@@ -92,7 +93,7 @@ USBHSFS_PATH		:=	$(ROOTDIR)/libs/libusbhsfs
 #---------------------------------------------------------------------------------
 ARCH		:=	-march=armv8-a+crc+crypto -mtune=cortex-a57 -mtp=soft -fPIE
 
-CFLAGS		:=	-g -Wall -Werror -O2 -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
+CFLAGS		:=	-g -Wall -Werror -O2 -flto -ffunction-sections $(ARCH) $(DEFINES) $(INCLUDE) -D__SWITCH__
 CFLAGS		+=	-DVERSION_MAJOR=${VERSION_MAJOR} -DVERSION_MINOR=${VERSION_MINOR} -DVERSION_MICRO=${VERSION_MICRO}
 CFLAGS		+=	-DAPP_TITLE="\"${APP_TITLE}\"" -DAPP_AUTHOR="\"${APP_AUTHOR}\"" -DAPP_VERSION="\"${APP_VERSION}\""
 CFLAGS		+=	-DGIT_BRANCH="\"${GIT_BRANCH}\"" -DGIT_COMMIT="\"${GIT_COMMIT}\"" -DGIT_REV="\"${GIT_REV}\""
@@ -105,13 +106,13 @@ CFLAGS		+=	-std=c23
 ASFLAGS		:=	-g $(ARCH)
 LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -ljson-c -lz -lusbhsfs -lntfs-3g -llwext4 -lnx
+LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -ljson-c -lz -lnxtc -lusbhsfs -lntfs-3g -llwext4 -lnx
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing
 # include and lib
 #---------------------------------------------------------------------------------
-LIBDIRS	:= $(PORTLIBS) $(LIBNX) $(USBHSFS_PATH)
+LIBDIRS	:= $(PORTLIBS) $(LIBNX) $(NXTC_PATH) $(USBHSFS_PATH)
 
 include $(ROOTDIR)/$(BOREALIS_PATH)/library/borealis.mk
 
@@ -207,9 +208,12 @@ endif
 #---------------------------------------------------------------------------------
 all: $(BUILD)
 
-$(BUILD): usbhsfs
+$(BUILD): nxtc usbhsfs
 	@[ -d $@ ] || mkdir -p $@
 	@MSYS2_ARG_CONV_EXCL="-D;$(MSYS2_ARG_CONV_EXCL)" $(MAKE) --no-print-directory -C $(BUILD) -f $(CURDIR)/Makefile
+
+nxtc:
+	@$(MAKE) --no-print-directory -C $(NXTC_PATH) release
 
 usbhsfs:
 	@$(MAKE) --no-print-directory -C $(USBHSFS_PATH) BUILD_TYPE=GPL release
@@ -224,6 +228,7 @@ else
 endif
 
 clean_all: clean
+	@$(MAKE) --no-print-directory -C $(NXTC_PATH) clean
 	@$(MAKE) --no-print-directory -C $(USBHSFS_PATH) clean
 
 #---------------------------------------------------------------------------------

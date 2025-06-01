@@ -59,16 +59,16 @@ namespace nxdt::views
         }
     }
 
-    TitlesTabItem::TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system, bool click_anim) : brls::ListItem(std::string(app_metadata->lang_entry.name), "", ""), \
+    TitlesTabItem::TitlesTabItem(const TitleApplicationMetadata *app_metadata, bool is_system, bool click_anim) : brls::ListItem(std::string(app_metadata->name), "", ""), \
                                                                                                                   app_metadata(app_metadata), \
                                                                                                                   is_system(is_system), \
                                                                                                                   click_anim(click_anim)
     {
         /* Set sublabel. */
-        if (!this->is_system) this->setSubLabel(std::string(app_metadata->lang_entry.author));
+        if (!this->is_system) this->setSubLabel(std::string(app_metadata->publisher));
 
         /* Set thumbnail (if needed). */
-        if (app_metadata->icon && app_metadata->icon_size) this->setThumbnail(app_metadata->icon, app_metadata->icon_size);
+        if (app_metadata->icon_data && app_metadata->icon_size) this->setThumbnail(static_cast<u8*>(app_metadata->icon_data), app_metadata->icon_size);
 
         /* Set value. */
         this->setValue(fmt::format("{:016X}", this->app_metadata->title_id), false, false);
@@ -150,14 +150,14 @@ namespace nxdt::views
                 }
 
                 /* Display popup. */
-                std::string name = std::string(item_app_metadata->lang_entry.name);
+                std::string name = std::string(item_app_metadata->name);
                 std::string tid = fmt::format("{:016X}", item_app_metadata->title_id);
-                std::string sub_left = (!is_system ? std::string(item_app_metadata->lang_entry.author) : tid);
+                std::string sub_left = (!is_system ? std::string(item_app_metadata->publisher) : tid);
                 std::string sub_right = (!is_system ? tid : "");
 
-                if (item_app_metadata->icon && item_app_metadata->icon_size)
+                if (item_app_metadata->icon_data && item_app_metadata->icon_size)
                 {
-                    brls::PopupFrame::open(name, item_app_metadata->icon, item_app_metadata->icon_size, popup, sub_left, sub_right);
+                    brls::PopupFrame::open(name, static_cast<u8*>(item_app_metadata->icon_data), item_app_metadata->icon_size, popup, sub_left, sub_right);
                 } else {
                     brls::PopupFrame::open(name, popup, sub_left, sub_right);
                 }

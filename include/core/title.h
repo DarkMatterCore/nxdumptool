@@ -24,6 +24,8 @@
 #ifndef __TITLE_H__
 #define __TITLE_H__
 
+#include <nxtc.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -37,21 +39,15 @@ extern "C" {
 
 #define TITLE_DELTA_ID_OFFSET               (u64)0xC00
 
-/// Generated using ns application records and/or ncm content meta keys.
-/// Used by the UI to display title lists.
-typedef struct {
-    u64 title_id;                   ///< Title ID from the application / system title this data belongs to.
-    NacpLanguageEntry lang_entry;   ///< UTF-8 strings in the console language.
-    u32 icon_size;                  ///< JPEG icon size.
-    u8 *icon;                       ///< JPEG icon data.
-} TitleApplicationMetadata;
+/// Define TitleApplicationMetadata type alias.
+typedef NxTitleCacheApplicationMetadata TitleApplicationMetadata;
 
 /// Used to display gamecard-specific title information.
 typedef struct {
     TitleApplicationMetadata *app_metadata; ///< User application metadata.
     bool has_patch;                         ///< Set to true if a patch is also available in the inserted gamecard for this user application.
     Version version;                        ///< Reflects the title version stored in the inserted gamecard, either from a base application or a patch.
-    char display_version[32];               ///< Reflects the title display version from the NACP belonging to either a base application or a patch.
+    char display_version[0x20];             ///< Reflects the title display version from the NACP belonging to either a base application or a patch.
     u32 dlc_count;                          ///< Reflects the number of DLCs available for this application in the inserted gamecard.
 } TitleGameCardApplicationMetadata;
 
@@ -67,7 +63,7 @@ typedef struct _TitleInfo {
     u32 content_count;                      ///< Content info count.
     NcmContentInfo *content_infos;          ///< Content info entries from this title.
     u64 size;                               ///< Total title size.
-    char size_str[32];                      ///< Total title size string.
+    char size_str[0x20];                    ///< Total title size string.
     TitleApplicationMetadata *app_metadata; ///< User application metadata.
     struct _TitleInfo *previous, *next;     ///< Linked lists.
 } TitleInfo;

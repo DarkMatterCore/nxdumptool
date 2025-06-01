@@ -1191,8 +1191,8 @@ int main(int argc, char *argv[])
             if (!is_system)
             {
                 consolePrint("title info:\n\n");
-                consolePrint("name: %s\n", app_metadata->lang_entry.name);
-                consolePrint("publisher: %s\n", app_metadata->lang_entry.author);
+                consolePrint("name: %s\n", app_metadata->name);
+                consolePrint("publisher: %s\n", app_metadata->publisher);
                 if (cur_menu->id == MenuId_UserTitlesSubMenu || cur_menu->id == MenuId_NspTitleTypes || cur_menu->id == MenuId_TicketTitleTypes || \
                     cur_menu->id == MenuId_NcaTitleTypes) consolePrint("title id: %016lX\n", app_metadata->title_id);
                 consolePrint("______________________________\n\n");
@@ -1209,7 +1209,7 @@ int main(int argc, char *argv[])
                 }
 
                 consolePrint("selected title info:\n\n");
-                if (is_system) consolePrint("name: %s\n", app_metadata->lang_entry.name);
+                if (is_system) consolePrint("name: %s\n", app_metadata->name);
                 consolePrint("title id: %016lX\n", title_info->meta_key.id);
                 consolePrint("type: %s\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type));
                 consolePrint("source storage: %s\n", titleGetNcmStorageIdName(title_info->storage_id));
@@ -1935,7 +1935,7 @@ void updateTitleList(Menu *menu, Menu *submenu, bool is_system)
             if (!elements[idx]) continue;
         }
 
-        elements[idx]->str = cur_app_metadata->lang_entry.name;
+        elements[idx]->str = cur_app_metadata->name;
         elements[idx]->child_menu = submenu;
         elements[idx]->userdata = cur_app_metadata;
 
@@ -3241,8 +3241,8 @@ static bool saveNintendoSubmissionPackage(void *userdata)
 
     if (app_metadata)
     {
-        consolePrint("name: %s\n", app_metadata->lang_entry.name);
-        consolePrint("publisher: %s\n", app_metadata->lang_entry.author);
+        consolePrint("name: %s\n", app_metadata->name);
+        consolePrint("publisher: %s\n", app_metadata->publisher);
     }
 
     consolePrint("source storage: %s\n", titleGetNcmStorageIdName(title_info->storage_id));
