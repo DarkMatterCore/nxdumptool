@@ -677,8 +677,10 @@ end:
 static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 read_size, u64 offset)
 {
     BucketTreeContext *ctx = visitor->bktr_ctx;
+
     bool is_sparse = (ctx->storage_type == BucketTreeStorageType_Sparse);
-    bool missing_original_storage = !bktrIsValidSubStorage(&(ctx->substorages[0]));
+    bool original_storage_available = bktrIsValidSubStorage(&(ctx->substorages[0]));
+    bool aes_ctr_ex_storage_available = (!is_sparse && bktrIsValidSubStorage(&(ctx->substorages[1])) && ctx->substorages[1].type == BucketTreeSubStorageType_AesCtrEx);
 
     BucketTreeIndirectStorageEntry cur_entry = {0};
     BucketTreeSubStorageReadParams params = {0};
@@ -686,10 +688,9 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
 
     bool success = false;
 
-    if (!out || (is_sparse && (missing_original_storage || ctx->substorages[0].type != BucketTreeSubStorageType_Regular)) || \
-        (!is_sparse && (!bktrIsValidSubStorage(&(ctx->substorages[1])) || ctx->substorages[1].type != BucketTreeSubStorageType_AesCtrEx || \
-        (!missing_original_storage && (ctx->substorages[0].type == BucketTreeSubStorageType_Indirect || ctx->substorages[0].type == BucketTreeSubStorageType_AesCtrEx || \
-        ctx->substorages[0].type >= BucketTreeSubStorageType_Count)))) || (offset + read_size) > ctx->end_offset)
+    if (!out || (is_sparse && (!original_storage_available || ctx->substorages[0].type != BucketTreeSubStorageType_Regular)) || \
+        (!is_sparse && original_storage_available && (ctx->substorages[0].type == BucketTreeSubStorageType_Indirect || ctx->substorages[0].type == BucketTreeSubStorageType_AesCtrEx || \
+        ctx->substorages[0].type >= BucketTreeSubStorageType_Count)) || (offset + read_size) > ctx->end_offset)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -723,7 +724,7 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
 
         if (cur_entry.storage_index == BucketTreeIndirectStorageIndex_Original)
         {
-            if (!missing_original_storage)
+            if (original_storage_available)
             {
                 /* Retrieve data from the original data storage. */
                 /* This must either be a Regular/Sparse/Compressed storage from the base NCA (Indirect) or a Regular storage from this very same NCA (Sparse). */
@@ -737,7 +738,12 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
                 goto end;
             }
         } else {
-            if (!is_sparse)
+            if (is_sparse)
+            {
+                /* Fill output buffer with zeroes (SparseStorage's ZeroStorage). */
+                memset(out_ptr, 0, indirect_block_read_size);
+            } else
+            if (aes_ctr_ex_storage_available)
             {
                 /* Retrieve data from the Indirect data storage. */
                 /* This must always be the AesCtrEx storage within this very same NCA (Indirect). */
@@ -747,8 +753,8 @@ static bool bktrReadIndirectStorage(BucketTreeVisitor *visitor, void *out, u64 r
                     goto end;
                 }
             } else {
-                /* Fill output buffer with zeroes (SparseStorage's ZeroStorage). */
-                memset(out_ptr, 0, indirect_block_read_size);
+                LOG_MSG_ERROR("Error: attempting to read 0x%lX-byte long chunk from missing AesCtrEx storage at offset 0x%lX!", indirect_block_read_size, indirect_block_read_offset);
+                goto end;
             }
         }
 
@@ -765,7 +771,7 @@ end:
 
 static bool bktrInitializeAesCtrExStorageContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx)
 {
-    if (nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || !nca_fs_ctx->header.patch_info.aes_ctr_ex_bucket.size)
+    if (nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || !nca_fs_ctx->has_patch_aes_ctr_ex_layer)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;

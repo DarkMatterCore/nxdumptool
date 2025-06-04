@@ -976,20 +976,10 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     /* Determine FS section type. */
     switch(fs_ctx->header.fs_type)
     {
-        case NcaFsType_PartitionFs:
-            if ((fs_ctx->hash_type == NcaHashType_None && fs_ctx->encryption_type < NcaEncryptionType_AesCtrEx) || \
-                ((fs_ctx->hash_type == NcaHashType_HierarchicalSha256 || fs_ctx->hash_type == NcaHashType_HierarchicalSha3256) && \
-                (fs_ctx->encryption_type < NcaEncryptionType_AesCtrEx || fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash)))
-            {
-                /* Partition FS with None, XTS or CTR encryption. */
-                fs_ctx->section_type = NcaFsSectionType_PartitionFs;
-            }
-
-            break;
         case NcaFsType_RomFs:
             if (fs_ctx->hash_type == NcaHashType_None || fs_ctx->hash_type == NcaHashType_HierarchicalIntegrity || fs_ctx->hash_type == NcaHashType_HierarchicalIntegritySha3)
             {
-                if (fs_ctx->has_patch_indirect_layer && fs_ctx->has_patch_aes_ctr_ex_layer && \
+                if (fs_ctx->has_patch_indirect_layer && \
                     (fs_ctx->encryption_type == NcaEncryptionType_None || fs_ctx->encryption_type == NcaEncryptionType_AesCtrEx || \
                     (fs_ctx->encryption_type == NcaEncryptionType_AesCtrExSkipLayerHash && fs_ctx->hash_type != NcaHashType_None)))
                 {
@@ -1011,14 +1001,29 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
             }
 
             break;
+        case NcaFsType_PartitionFs:
+            if ((fs_ctx->hash_type == NcaHashType_None && fs_ctx->encryption_type < NcaEncryptionType_AesCtrEx) || \
+                ((fs_ctx->hash_type == NcaHashType_HierarchicalSha256 || fs_ctx->hash_type == NcaHashType_HierarchicalSha3256) && \
+                (fs_ctx->encryption_type < NcaEncryptionType_AesCtrEx || fs_ctx->encryption_type == NcaEncryptionType_AesCtrSkipLayerHash)))
+            {
+                /* Partition FS with None, XTS or CTR encryption. */
+                fs_ctx->section_type = NcaFsSectionType_PartitionFs;
+            }
+
+            break;
         default:
             break;
     }
 
     if (fs_ctx->section_type >= NcaFsSectionType_Invalid)
     {
-        LOG_DATA_ERROR(&(fs_ctx->header), sizeof(NcaFsHeader), "Unable to determine section type for FS section #%u in \"%s\" (0x%02X, 0x%02X). Skipping FS section. FS header dump:", \
-                       section_idx, nca_ctx->content_id_str, fs_ctx->hash_type, fs_ctx->encryption_type);
+        u8 flags = (((u8)fs_ctx->has_patch_indirect_layer << 3) | ((u8)fs_ctx->has_patch_aes_ctr_ex_layer << 2) | ((u8)fs_ctx->has_sparse_layer << 1) | (u8)fs_ctx->has_compression_layer);
+
+        LOG_MSG_ERROR("Unable to determine section type for FS section #%u in \"%s\" (FS type 0x%02X, hash type 0x%02X, encryption type 0x%02X, flags 0x%02X). Skipping FS section.", \
+                      section_idx, nca_ctx->content_id_str, fs_ctx->header.fs_type, fs_ctx->hash_type, fs_ctx->encryption_type, flags);
+
+        LOG_DATA_ERROR(&(fs_ctx->header), sizeof(NcaFsHeader), "FS header dump:");
+
         goto end;
     }
 
@@ -1387,7 +1392,7 @@ static bool _ncaReadAesCtrExStorage(NcaFsSectionContext *ctx, void *out, u64 rea
 {
     if (!g_ncaCryptoBuffer || !ctx || !ctx->enabled || !ctx->nca_ctx || ctx->section_idx >= NCA_FS_HEADER_COUNT || ctx->section_offset < sizeof(NcaHeader) || \
         ctx->section_type != NcaFsSectionType_PatchRomFs || (ctx->encryption_type != NcaEncryptionType_None && ctx->encryption_type != NcaEncryptionType_AesCtrEx && \
-        ctx->encryption_type != NcaEncryptionType_AesCtrExSkipLayerHash) || !out || !read_size || (offset + read_size) > ctx->section_size)
+        ctx->encryption_type != NcaEncryptionType_AesCtrExSkipLayerHash) || !ctx->has_patch_aes_ctr_ex_layer || !out || !read_size || (offset + read_size) > ctx->section_size)
     {
         LOG_MSG_ERROR("Invalid NCA FS section header parameters!");
         return false;

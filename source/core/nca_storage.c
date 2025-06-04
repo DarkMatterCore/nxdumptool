@@ -31,7 +31,7 @@ static bool ncaStorageInitializeCompressedStorageBucketTreeContext(NcaStorageCon
 bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nca_fs_ctx, NcaStorageContext *base_ctx)
 {
     if (!out || !nca_fs_ctx || !nca_fs_ctx->enabled || (nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs && \
-        (!nca_fs_ctx->has_patch_indirect_layer || !nca_fs_ctx->has_patch_aes_ctr_ex_layer || nca_fs_ctx->has_sparse_layer)))
+        (!nca_fs_ctx->has_patch_indirect_layer || nca_fs_ctx->has_sparse_layer)))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -58,19 +58,27 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
         out->base_storage_type = NcaStorageBaseStorageType_Sparse;
     }
 
-    /* Check if both AesCtrEx and Indirect layers are available. */
+    /* Check if we're dealing with a Patch RomFS section. */
     if (nca_fs_ctx->section_type == NcaFsSectionType_PatchRomFs)
     {
-        /* Initialize AesCtrEx and Indirect layers. */
-        if (!ncaStorageInitializeBucketTreeContext(&(out->aes_ctr_ex_storage), nca_fs_ctx, BucketTreeStorageType_AesCtrEx) || \
-            !ncaStorageInitializeBucketTreeContext(&(out->indirect_storage), nca_fs_ctx, BucketTreeStorageType_Indirect)) goto end;
+        /* Initialize Indirect layer. */
+        if (!ncaStorageInitializeBucketTreeContext(&(out->indirect_storage), nca_fs_ctx, BucketTreeStorageType_Indirect)) goto end;
 
-        /* Set AesCtrEx layer's substorage (plain NCA reads). */
-        if (!bktrSetRegularSubStorage(out->aes_ctr_ex_storage, nca_fs_ctx)) goto end;
+        /* Set Indirect layer substorage #0 (base storage). */
+        if (base_ctx && !ncaStorageSetPatchOriginalSubStorage(out, base_ctx)) goto end;
 
-        /* Set Indirect layer's substorages (Base + AesCtrEx). */
-        if (!ncaStorageSetPatchOriginalSubStorage(out, base_ctx) || \
-            !bktrSetBucketTreeSubStorage(out->indirect_storage, out->aes_ctr_ex_storage, 1)) goto end;
+        /* Check if an AesCtrEx layer is available. */
+        if (nca_fs_ctx->has_patch_aes_ctr_ex_layer)
+        {
+            /* Initialize AesCtrEx layer. */
+            if (!ncaStorageInitializeBucketTreeContext(&(out->aes_ctr_ex_storage), nca_fs_ctx, BucketTreeStorageType_AesCtrEx)) goto end;
+
+            /* Set AesCtrEx layer's substorage (plain NCA reads). */
+            if (!bktrSetRegularSubStorage(out->aes_ctr_ex_storage, nca_fs_ctx)) goto end;
+
+            /* Set Indirect layer substorage #1 (AesCtrEx layer). */
+            if (!bktrSetBucketTreeSubStorage(out->indirect_storage, out->aes_ctr_ex_storage, 1)) goto end;
+        }
 
         /* Update base storage type. */
         out->base_storage_type = NcaStorageBaseStorageType_Indirect;
@@ -266,22 +274,17 @@ static bool ncaStorageSetPatchOriginalSubStorage(NcaStorageContext *patch_ctx, N
     NcaFsSectionContext *patch_nca_fs_ctx = NULL, *base_nca_fs_ctx = NULL;
     NcaContext *patch_nca_ctx = NULL, *base_nca_ctx = NULL;
 
-    bool missing_base_ctx = !ncaStorageIsValidContext(base_ctx);
-
     bool success = false;
 
-    if (!patch_ctx || !patch_ctx->indirect_storage || !patch_ctx->aes_ctr_ex_storage || !(patch_nca_fs_ctx = patch_ctx->indirect_storage->nca_fs_ctx) || \
-        patch_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || !(patch_nca_ctx = patch_nca_fs_ctx->nca_ctx) || \
-        (!missing_base_ctx && (!(base_nca_fs_ctx = base_ctx->nca_fs_ctx) || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || !(base_nca_ctx = base_nca_fs_ctx->nca_ctx) || \
+    if (!patch_ctx || !patch_ctx->indirect_storage || !(patch_nca_fs_ctx = patch_ctx->indirect_storage->nca_fs_ctx) || \
+        patch_nca_fs_ctx->section_type != NcaFsSectionType_PatchRomFs || !(patch_nca_ctx = patch_nca_fs_ctx->nca_ctx) || !ncaStorageIsValidContext(base_ctx) || \
+        !(base_nca_fs_ctx = base_ctx->nca_fs_ctx) || base_nca_fs_ctx->section_type != NcaFsSectionType_RomFs || !(base_nca_ctx = base_nca_fs_ctx->nca_ctx) || \
         patch_nca_ctx->header.program_id != base_nca_ctx->header.program_id || patch_nca_ctx->header.content_type != base_nca_ctx->header.content_type || \
-        patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version.value < base_nca_ctx->title_version.value)))
+        patch_nca_ctx->id_offset != base_nca_ctx->id_offset || patch_nca_ctx->title_version.value < base_nca_ctx->title_version.value)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
-
-    /* Return immediately if we passed all patch context checks, but we're missing a base context. */
-    if (missing_base_ctx) return true;
 
     /* Set original substorage. */
     switch(base_ctx->base_storage_type)
