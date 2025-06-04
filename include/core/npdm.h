@@ -61,7 +61,7 @@ typedef struct {
     NpdmProcessAddressSpace process_address_space : 3;
     u8 optimize_memory_allocation                 : 1;
     u8 disable_device_address_space_merge         : 1;
-    u8 enable_alias_region_extra_size             : 1;
+    u8 enable_address_sanitizer                   : 1;
     u8 prevent_code_reads                         : 1;
 } NpdmMetaFlags;
 
@@ -70,7 +70,7 @@ NXDT_ASSERT(NpdmMetaFlags, 0x1);
 /// This is the start of every NPDM file.
 /// This is followed by ACID and ACI0 sections, both with variable offsets and sizes.
 typedef struct {
-    u32 magic;                                                  ///< "NPDM".
+    u32 magic;                                                  ///< "META".
     NpdmSignatureKeyGeneration acid_signature_key_generation;
     u8 reserved_1[0x7];
     NpdmMetaFlags flags;
@@ -140,7 +140,7 @@ NXDT_ASSERT(NpdmAcidHeader, 0x240);
 /// This is the start of an ACI0 section.
 /// This is followed by a FsAccessControl data block, as well as SrvAccessControl and KernelCapability descriptors, each one aligned to a 0x10 byte boundary using zero padding (if needed).
 typedef struct {
-    u32 magic;
+    u32 magic;                      ///< "ACI0".
     u8 reserved_1[0xC];
     u64 program_id;
     u8 reserved_2[0x8];

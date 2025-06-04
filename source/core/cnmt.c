@@ -33,7 +33,8 @@
 static const char *g_cnmtAttributeStrings[ContentMetaAttribute_Count] = {
     "IncludesExFatDriver",
     "Rebootless",
-    "Compacted"
+    "Compacted",
+    "ProperProgramExists"
 };
 
 /* Function prototypes. */
