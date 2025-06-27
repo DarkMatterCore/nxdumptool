@@ -34,6 +34,11 @@
         "description": "Resets all settings to their default values, including the ones not reflected in this menu (e.g. dump options, etc.)."
     },
 
+    "wipe_local_title_cache": {
+        "label": "Wipe local title cache",
+        "description": "Completely wipes the local title cache file from the SD card. Useful if you intentionally want to force a complete cache renewal for some reason."
+    },
+
     "notifications": {
         "no_ums_devices": "No USB Mass Storage devices available.",
         "ums_device_unmount_success": "USB Mass Storage device successfully unmounted!",
@@ -45,6 +50,7 @@
         "github_json_failed": "Failed to download or parse GitHub release JSON!",
         "up_to_date": "The application is up to date!",
         "app_updated": "Application successfully updated! Please reload for the changes to take effect.",
-        "settings_reset": "User settings have been reset."
+        "settings_reset": "User settings have been reset.",
+        "wipe_local_title_cache": "Title cache wiped. Please reload the application to rebuild it."
     }
 }

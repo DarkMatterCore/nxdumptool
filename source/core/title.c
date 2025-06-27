@@ -261,8 +261,8 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x0100000000000829, "PlatformConfigCalcio" },
     { 0x0100000000000830, "NgWordT" },
     { 0x0100000000000831, "PlatformConfigAula" },
-    { 0x0100000000000832, "CradleFirmwareAula" },               ///< Placeholder.
-    { 0x0100000000000835, "NewErrorMessage" },                  ///< Placeholder.
+    { 0x0100000000000832, "CradleFirmware" },
+    { 0x0100000000000835, "ErrorMessageUtf8" },
     { 0x0100000000000859, "sysdata_unknown_00" },               ///< Placeholder.
     { 0x010000000000085C, "sysdata_unknown_01" },               ///< Placeholder.
 
@@ -474,6 +474,7 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000D619, "dev_sysmod_unknown_0d" },            ///< Placeholder.
     { 0x010000000000D621, "dev_sysmod_unknown_0e" },            ///< Placeholder.
     { 0x010000000000D623, "DevServer" },
+    { 0x010000000000D62F, "WlanControlDaemon" },
     { 0x010000000000D633, "dev_sysmod_unknown_0f" },            ///< Placeholder.
     { 0x010000000000D640, "htcnet" },
     { 0x010000000000D65A, "netTcDev" },
@@ -567,6 +568,8 @@ static bool titleInitializeGameCardTitleStorageByHashFileSystem(HashFileSystemPa
 static void titleCloseTitleStorage(u8 storage_id);
 static bool titleReallocateTitleInfoFromStorage(TitleStorage *title_storage, u32 extra_title_count, bool free_entries);
 
+static void titleInitializeApplicationMetadataPointersWithinTitleStorage(u8 storage_id);
+
 NX_INLINE void titleFreeOrphanTitleInfoEntries(void);
 static void titleAddOrphanTitleInfoEntry(TitleInfo *orphan_title);
 
@@ -580,7 +583,7 @@ static TitleApplicationMetadata *titleGenerateUserMetadataEntryFromControlNca(Ti
 static bool titleGetApplicationControlDataFromNs(u64 title_id, NsApplicationControlData *out_control_data, u64 *out_control_data_size);
 static bool titleGetApplicationControlDataFromControlNca(TitleInfo *title_info, NsApplicationControlData *out_control_data, u64 *out_control_data_size);
 
-static TitleApplicationMetadata *titleInitializeUserMetadataEntryFromControlData(u64 title_id, const NsApplicationControlData *control_data, u64 control_data_size);
+static TitleApplicationMetadata *titleInitializeUserMetadataEntryFromApplicationControlData(u64 title_id, const NsApplicationControlData *control_data, u64 control_data_size);
 
 static void titleGenerateFilteredApplicationMetadataPointerArray(bool is_system);
 static bool titleIsUserApplicationContentAvailable(u64 app_id);
@@ -592,8 +595,8 @@ NX_INLINE u64 titleGetApplicationIdByContentMetaKey(const NcmContentMetaKey *met
 static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_storage);
 static bool titleGenerateTitleInfoEntriesByHashFileSystemForGameCardTitleStorage(TitleStorage *title_storage, HashFileSystemContext *hfs_ctx);
 
-static TitleInfo *titleGenerateTitleInfoEntry(u8 storage_id, const NcmContentMetaKey *meta_key, NcmContentInfo *content_infos, u32 content_count, bool force_init_app_metadata);
-static bool titleInitializeApplicationMetadataForTitleInfo(TitleInfo *title_info);
+static TitleInfo *titleGenerateTitleInfoEntry(u8 storage_id, const NcmContentMetaKey *meta_key, NcmContentInfo *content_infos, u32 content_count);
+static bool titleInitializeApplicationMetadataForTitleInfoEntry(TitleInfo *title_info);
 
 static bool titleGetMetaKeysFromContentDatabase(NcmContentMetaDatabase *ncm_db, NcmContentMetaKey **out_meta_keys, u32 *out_meta_key_count);
 static bool titleGetContentInfosByMetaKey(NcmContentMetaDatabase *ncm_db, const NcmContentMetaKey *meta_key, NcmContentInfo **out_content_infos, u32 *out_content_count);
@@ -606,6 +609,7 @@ static bool titleGetContentInfosByGameCardContentMetaContext(TitleGameCardConten
 static void titleUpdateTitleInfoLinkedLists(void);
 
 static TitleInfo *_titleGetTitleInfoEntryFromStorageByTitleId(u8 storage_id, u64 title_id);
+static TitleInfo *titleGetLatestAvailablePatchForUserTitle(u8 storage_id, const TitleInfo *user_title);
 
 static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
 
@@ -630,7 +634,6 @@ static int titleSystemMetadataSortFunction(const void *a, const void *b);
 static int titleUserMetadataSortFunction(const void *a, const void *b);
 static int titleInfoSortFunction(const void *a, const void *b);
 static int titleGameCardApplicationMetadataSortFunction(const void *a, const void *b);
-static int titleGameCardContentMetaContextSortFunction(const void *a, const void *b);
 
 bool titleInitialize(void)
 {
@@ -1075,8 +1078,7 @@ bool titleIsGameCardInfoUpdated(void)
 
 char *titleGenerateFileName(TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type)
 {
-    if (!title_info || (title_info->meta_key.type > NcmContentMetaType_BootImagePackageSafe && title_info->meta_key.type < NcmContentMetaType_Application) || \
-        title_info->meta_key.type > NcmContentMetaType_DataPatch || naming_convention >= TitleNamingConvention_Count || illegal_char_replace_type >= TitleFileNameIllegalCharReplaceType_Count)
+    if (!titleIsValidInfoBlock(title_info) || naming_convention >= TitleNamingConvention_Count || illegal_char_replace_type >= TitleFileNameIllegalCharReplaceType_Count)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return NULL;
@@ -1320,6 +1322,15 @@ end:
     return csv_buf;
 }
 
+void titleWipeLocalCache(void)
+{
+    SCOPED_LOCK(&g_titleMutex)
+    {
+        /* Wipe local title cache. */
+        if (g_titleInterfaceInit) nxtcWipeCache();
+    }
+}
+
 const char *titleGetNcmStorageIdName(u8 storage_id)
 {
     return (storage_id <= NcmStorageId_Any ? g_titleNcmStorageIdNames[storage_id] : NULL);
@@ -1429,6 +1440,7 @@ end:
 
 NX_INLINE bool titleInitializePersistentTitleStorages(void)
 {
+    /* Initialize persistent title storages and populate them with TitleInfo elements. */
     for(u8 i = NcmStorageId_BuiltInSystem; i <= NcmStorageId_SdCard; i++)
     {
         if (!titleInitializeTitleStorage(i))
@@ -1437,6 +1449,18 @@ NX_INLINE bool titleInitializePersistentTitleStorages(void)
             return false;
         }
     }
+
+    /* Initialize TitleApplicationMetadata pointers in TitleInfo elements within the populated title storages. */
+    /* This is done in a separate loop to make sure all TitleInfo data from all persistent title storages is loaded beforehand because we may have to load application metadata by hand from Control NCAs. */
+    /* If this ends up being the case, we will prefer using application metadata from updates. */
+    for(u8 i = NcmStorageId_BuiltInSystem; i <= NcmStorageId_SdCard; i++) titleInitializeApplicationMetadataPointersWithinTitleStorage(i);
+
+    /* Flush title cache file. */
+    nxtcFlushCacheFile();
+
+    /* Update linked lists for user applications, patches and add-on contents. */
+    /* This will also keep track of orphan titles -- titles with no available application metadata. */
+    titleUpdateTitleInfoLinkedLists();
 
 #if LOG_LEVEL <= LOG_LEVEL_INFO
 #define ORPHAN_INFO_LOG(fmt, ...) utilsAppendFormattedStringToBuffer(&orphan_info_buf, &orphan_info_buf_size, fmt, ##__VA_ARGS__)
@@ -1679,6 +1703,22 @@ static bool titleReallocateTitleInfoFromStorage(TitleStorage *title_storage, u32
 
 end:
     return success;
+}
+
+static void titleInitializeApplicationMetadataPointersWithinTitleStorage(u8 storage_id)
+{
+    if (storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_SdCard)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return;
+    }
+
+    /* Get title storage. */
+    TitleStorage *title_storage = &(g_titleStorage[TITLE_STORAGE_INDEX(storage_id)]);
+    if (!title_storage->titles || !*(title_storage->titles) || !title_storage->title_count) return;
+
+    /* Retrieve application metadata for the title info entries within this storage. */
+    for(u32 i = 0; i < title_storage->title_count; i++) titleInitializeApplicationMetadataForTitleInfoEntry(title_storage->titles[i]);
 }
 
 NX_INLINE void titleFreeOrphanTitleInfoEntries(void)
@@ -1948,7 +1988,7 @@ static TitleApplicationMetadata *titleGenerateUserMetadataEntryFromNs(u64 title_
     }
 
     /* Initialize application metadata entry using the control data we just retrieved. */
-    app_metadata = titleInitializeUserMetadataEntryFromControlData(title_id, g_nsAppControlData, control_data_size);
+    app_metadata = titleInitializeUserMetadataEntryFromApplicationControlData(title_id, g_nsAppControlData, control_data_size);
     if (!app_metadata) LOG_MSG_ERROR("Failed to generate application metadata entry for %016lX!", title_id);
 
 end:
@@ -1975,7 +2015,7 @@ static TitleApplicationMetadata *titleGenerateUserMetadataEntryFromControlNca(Ti
     }
 
     /* Initialize application metadata entry using the control data we just retrieved. */
-    app_metadata = titleInitializeUserMetadataEntryFromControlData(app_id, g_nsAppControlData, control_data_size);
+    app_metadata = titleInitializeUserMetadataEntryFromApplicationControlData(app_id, g_nsAppControlData, control_data_size);
     if (!app_metadata) LOG_MSG_ERROR("Failed to generate application metadata entry for %016lX!", title_info->meta_key.id);
 
 end:
@@ -2130,7 +2170,7 @@ end:
     return success;
 }
 
-static TitleApplicationMetadata *titleInitializeUserMetadataEntryFromControlData(u64 title_id, const NsApplicationControlData *control_data, u64 control_data_size)
+static TitleApplicationMetadata *titleInitializeUserMetadataEntryFromApplicationControlData(u64 title_id, const NsApplicationControlData *control_data, u64 control_data_size)
 {
     if (!title_id || !control_data || control_data_size < sizeof(NacpStruct))
     {
@@ -2144,7 +2184,7 @@ static TitleApplicationMetadata *titleInitializeUserMetadataEntryFromControlData
     /* Update title cache using the control data we have. */
     if (!nxtcAddEntry(title_id, &(control_data->nacp), icon_size, control_data->icon, false)) return NULL;
 
-    /* Get application metadata from our cache. */
+    /* Retrieve application metadata from our cache. */
     return nxtcGetApplicationMetadataEntryById(title_id);
 }
 
@@ -2344,8 +2384,7 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
         }
 
         /* Generate TitleInfo entry. */
-        /* Force control data retrieval from a Control NCA if we're under HOS 20.0.0+ and we don't have application metadata for the current title. */
-        title_info = titleGenerateTitleInfoEntry(storage_id, cur_meta_key, content_infos, content_count, !g_useNsControlData);
+        title_info = titleGenerateTitleInfoEntry(storage_id, cur_meta_key, content_infos, content_count);
         if (!title_info)
         {
             LOG_MSG_ERROR("Failed to generate TitleInfo entry for %016lX!", cur_meta_key->id);
@@ -2375,10 +2414,6 @@ static bool titleGenerateTitleInfoEntriesForTitleStorage(TitleStorage *title_sto
 
     /* Sort title info entries by title ID, version and storage ID. */
     if (title_storage->title_count > 1) qsort(title_storage->titles, title_storage->title_count, sizeof(TitleInfo*), &titleInfoSortFunction);
-
-    /* Update linked lists for user applications, patches and add-on contents. */
-    /* This will also keep track of orphan titles - titles with no available application metadata. */
-    titleUpdateTitleInfoLinkedLists();
 
     /* Update flag. */
     success = true;
@@ -2442,8 +2477,7 @@ static bool titleGenerateTitleInfoEntriesByHashFileSystemForGameCardTitleStorage
         }
 
         /* Generate TitleInfo entry. */
-        /* Always force control data retrieval from a Control NCA under this specific scenario. */
-        title_info = titleGenerateTitleInfoEntry(NcmStorageId_GameCard, meta_key, content_infos, content_count, true);
+        title_info = titleGenerateTitleInfoEntry(NcmStorageId_GameCard, meta_key, content_infos, content_count);
         if (!title_info)
         {
             LOG_MSG_ERROR("Failed to generate TitleInfo entry for %016lX! (%s partition).", meta_key->id, hfsGetPartitionNameString(hfs_ctx->type));
@@ -2474,9 +2508,6 @@ static bool titleGenerateTitleInfoEntriesByHashFileSystemForGameCardTitleStorage
     /* Sort title info entries by title ID, version and storage ID. */
     if (title_storage->title_count > 1) qsort(title_storage->titles, title_storage->title_count, sizeof(TitleInfo*), &titleInfoSortFunction);
 
-    /* Update linked lists for user applications, patches and add-on contents. */
-    titleUpdateTitleInfoLinkedLists();
-
     /* Update flag. */
     success = true;
 
@@ -2489,7 +2520,7 @@ end:
     return success;
 }
 
-static TitleInfo *titleGenerateTitleInfoEntry(u8 storage_id, const NcmContentMetaKey *meta_key, NcmContentInfo *content_infos, u32 content_count, bool force_init_app_metadata)
+static TitleInfo *titleGenerateTitleInfoEntry(u8 storage_id, const NcmContentMetaKey *meta_key, NcmContentInfo *content_infos, u32 content_count)
 {
     if (storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_SdCard || !meta_key || !meta_key->id || !content_infos || !content_count)
     {
@@ -2524,26 +2555,10 @@ static TitleInfo *titleGenerateTitleInfoEntry(u8 storage_id, const NcmContentMet
     title_info->size = title_size;
     utilsGenerateFormattedSizeString((double)title_size, title_info->size_str, sizeof(title_info->size_str));
 
-    /* Retrieve application metadata. */
-    if (storage_id == NcmStorageId_BuiltInSystem)
-    {
-        /* If no application metadata entry is found, titleGetSystemMetadataEntry() will take care of generating a dummy one. */
-        title_info->app_metadata = titleGetSystemMetadataEntry(meta_key->id);
-    } else {
-        /* Dig through what we have. */
-        u64 app_id = titleGetApplicationIdByContentMetaKey(meta_key);
-        title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, 0);
-        if (!title_info->app_metadata && force_init_app_metadata)
-        {
-            /* Manually retrieve application metadata for this title. */
-            titleInitializeApplicationMetadataForTitleInfo(title_info);
-        }
-    }
-
     return title_info;
 }
 
-static bool titleInitializeApplicationMetadataForTitleInfo(TitleInfo *title_info)
+static bool titleInitializeApplicationMetadataForTitleInfoEntry(TitleInfo *title_info)
 {
     if (!title_info || !title_info->meta_key.id)
     {
@@ -2552,36 +2567,58 @@ static bool titleInitializeApplicationMetadataForTitleInfo(TitleInfo *title_info
     }
 
     u64 app_id = titleGetApplicationIdByContentMetaKey(&(title_info->meta_key));
-    bool use_control_nca = (title_info->meta_key.type == NcmContentMetaType_Application || title_info->meta_key.type == NcmContentMetaType_Patch);
     TitleApplicationMetadata *app_metadata = NULL;
-    bool success = false;
+    bool is_gamecard = (title_info->storage_id == NcmStorageId_GameCard), prefer_ns = (g_useNsControlData && is_gamecard), success = false;
 
-    /* Return immediately if an application metadata pointer was already set. */
+    /* Short-circuit: return immediately if an application metadata pointer was already set. */
     if (title_info->app_metadata)
     {
         success = true;
         goto end;
     }
 
-    /* Retrieve application metadata from our cache. */
-    app_metadata = nxtcGetApplicationMetadataEntryById(app_id);
-    if (!app_metadata)
+    /* Short-circuit: return immediately if we're able to retrieve an application metadata pointer from our local data. */
+    if (title_info->storage_id == NcmStorageId_BuiltInSystem)
     {
-        /* Retrieve application metadata from this title's Control NCA, if possible. */
-        app_metadata = (use_control_nca ? titleGenerateUserMetadataEntryFromControlNca(title_info) : NULL);
-        if (!app_metadata && !g_useNsControlData)
-        {
-            /* Fallback to using ns control data under HOS 20.0.0+ if nothing else worked. */
-            app_metadata = titleGenerateUserMetadataEntryFromNs(app_id);
-        }
-    }
-
-    if (!app_metadata)
+        /* If no application metadata entry is found, titleGetSystemMetadataEntry() will take care of generating a dummy one. */
+        success = ((title_info->app_metadata = titleGetSystemMetadataEntry(title_info->meta_key.id)) != NULL);
+        goto end;
+    } else
+    if ((title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, 0)) != NULL)
     {
-        LOG_MSG_ERROR("Failed to initialize application metadata for %016lX!", title_info->meta_key.id);
+        success = true;
         goto end;
     }
 
+    /* Try to retrieve application metadata from our cache. */
+    app_metadata = nxtcGetApplicationMetadataEntryById(app_id);
+    if (!app_metadata)
+    {
+        if (prefer_ns)
+        {
+            /* Try to retrieve application metadata via ns if we're running under HOS < 20.0.0 *and* we're dealing with a gamecard title. */
+            app_metadata = titleGenerateUserMetadataEntryFromNs(app_id);
+            if (app_metadata) goto app_realloc;
+        }
+
+        /* Find the latest available update for the provided title. We'll use to retrieve data from its Control NCA. */
+        /* We'll fallback to a user application if we can't find an update. */
+        TitleInfo *control_title_info = titleGetLatestAvailablePatchForUserTitle(NcmStorageId_Any, title_info);
+        if (!control_title_info) control_title_info = (title_info->meta_key.type == NcmContentMetaType_Application ? title_info : _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_Any, app_id));
+
+        /* Try to retrieve application metadata from a Control NCA. */
+        /* We'll fallback to using ns control data as a last resort, but only if our initial precondition wasn't met. */
+        app_metadata = (control_title_info ? titleGenerateUserMetadataEntryFromControlNca(control_title_info) : NULL);
+        if (!app_metadata && !prefer_ns) app_metadata = titleGenerateUserMetadataEntryFromNs(app_id);
+    }
+
+    if (!app_metadata)
+    {
+        LOG_MSG_ERROR("Failed to initialize application metadata for %016lX! (is_gamecard %u, use_ns_control_data %u, prefer_ns %u).", title_info->meta_key.id, is_gamecard, g_useNsControlData, prefer_ns);
+        goto end;
+    }
+
+app_realloc:
     /* Reallocate application metadata pointer array. */
     if (!titleReallocateApplicationMetadata(1, false, false))
     {
@@ -2851,10 +2888,6 @@ static bool titleGetGameCardContentMetaContexts(HashFileSystemContext *hfs_ctx, 
 
     if (gc_meta_ctx_count)
     {
-        /* Sort gamecard Content Meta contexts in descendent order. */
-        /* This is done to make sure control data from patches is processed first. */
-        if (gc_meta_ctx_count > 1) qsort(gc_meta_ctxs, gc_meta_ctx_count, sizeof(TitleGameCardContentMetaContext), &titleGameCardContentMetaContextSortFunction);
-
         /* Update output. */
         *out_gc_meta_ctxs = gc_meta_ctxs;
         *out_gc_meta_ctx_count = gc_meta_ctx_count;
@@ -3069,6 +3102,44 @@ static TitleInfo *_titleGetTitleInfoEntryFromStorageByTitleId(u8 storage_id, u64
     }
 
     if (!out && storage_id != NcmStorageId_BuiltInSystem) LOG_MSG_DEBUG("Unable to find title info entry with ID \"%016lX\" in %s.", title_id, titleGetNcmStorageIdName(storage_id));
+
+    return out;
+}
+
+static TitleInfo *titleGetLatestAvailablePatchForUserTitle(u8 storage_id, const TitleInfo *user_title)
+{
+    if (storage_id < NcmStorageId_GameCard || storage_id > NcmStorageId_Any || storage_id == NcmStorageId_BuiltInSystem || !titleIsValidInfoBlock(user_title) || \
+        user_title->meta_key.type < NcmContentMetaType_Application || (user_title->meta_key.type > NcmContentMetaType_AddOnContent && user_title->meta_key.type != NcmContentMetaType_DataPatch))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
+
+    TitleInfo *out = NULL;
+
+    u64 app_id = titleGetApplicationIdByContentMetaKey(&(user_title->meta_key));
+    u64 patch_id = titleGetPatchIdByApplicationId(app_id);
+    u32 version = 0;
+
+    u8 start_idx = (storage_id == NcmStorageId_Any ? TITLE_STORAGE_INDEX(NcmStorageId_GameCard) : TITLE_STORAGE_INDEX(storage_id));
+    u8 max_val = (storage_id == NcmStorageId_Any ? TITLE_STORAGE_INDEX(NcmStorageId_SdCard) : start_idx);
+
+    for(u8 i = start_idx; i <= max_val; i++)
+    {
+        TitleStorage *title_storage = &(g_titleStorage[i]);
+        if (title_storage->storage_id == NcmStorageId_BuiltInSystem || !title_storage->titles || !*(title_storage->titles) || !title_storage->title_count) continue;
+
+        for(u32 j = 0; j < title_storage->title_count; j++)
+        {
+            TitleInfo *title_info = title_storage->titles[j];
+            if (title_info && title_info->meta_key.id == patch_id && title_info->meta_key.type == NcmContentMetaType_Patch && title_info->version.value > version)
+            {
+                version = title_info->version.value;
+                out = title_info;
+                break;
+            }
+        }
+    }
 
     return out;
 }
@@ -3368,6 +3439,7 @@ static void titleGameCardInfoThreadFunc(void *arg)
         /* Update gamecard title info. */
         SCOPED_LOCK(&g_titleMutex)
         {
+            /* Refresh gamecard-storage-specific data. */
             g_titleGameCardInfoUpdated = titleRefreshGameCardTitleInfo();
 
             /* Generate gamecard application metadata array. */
@@ -3392,10 +3464,7 @@ static void titleGameCardInfoThreadFunc(void *arg)
 
 static bool titleRefreshGameCardTitleInfo(void)
 {
-    TitleStorage *title_storage = NULL;
-    TitleInfo **titles = NULL;
-    u32 title_count = 0, gamecard_app_count = 0, extra_app_count = 0;
-    bool status = false, success = false, cleanup = true, free_entries = false, hfs_init = false;
+    bool status = false, success = false, cleanup = true;
 
     /* Retrieve current gamecard status. */
     status = (gamecardGetStatus() == GameCardStatus_InsertedAndInfoLoaded);
@@ -3409,93 +3478,23 @@ static bool titleRefreshGameCardTitleInfo(void)
     if (!titleInitializeTitleStorage(NcmStorageId_GameCard))
     {
         /* Try to initialize the gamecard title storage manually. */
-        if (!(hfs_init = titleInitializeGameCardTitleStorageByHashFileSystem(HashFileSystemPartitionType_Secure)))
+        /* Especially useful for Kiosk / Quest gamecards. */
+        if (!titleInitializeGameCardTitleStorageByHashFileSystem(HashFileSystemPartitionType_Secure))
         {
             LOG_MSG_ERROR("Failed to initialize gamecard title storage!");
             goto end;
         }
     }
 
-    /* Get gamecard title storage info. */
-    title_storage = &(g_titleStorage[TITLE_STORAGE_INDEX(NcmStorageId_GameCard)]);
-    titles = title_storage->titles;
-    title_count = title_storage->title_count;
+    /* Initialize TitleApplicationMetadata pointers in TitleInfo elements within our gamecard title storage. */
+    titleInitializeApplicationMetadataPointersWithinTitleStorage(NcmStorageId_GameCard);
 
-    /* Verify title count. */
-    if (!title_count)
-    {
-        LOG_MSG_ERROR("Gamecard title count is zero!");
-        goto end;
-    }
+    /* Flush title cache file. */
+    nxtcFlushCacheFile();
 
-    /* Get gamecard user application count. */
-    for(u32 i = 0; i < title_count; i++)
-    {
-        TitleInfo *cur_title_info = titles[i];
-        if (cur_title_info && cur_title_info->meta_key.type == NcmContentMetaType_Application) gamecard_app_count++;
-    }
-
-    /* Return immediately if there are no user applications, if we initialized the gamecard storage using a Hash FS or if we're running under HOS 20.0.0+. */
-    if (!gamecard_app_count || hfs_init || !g_useNsControlData)
-    {
-        success = true;
-        cleanup = false;
-        goto end;
-    }
-
-    /* Reallocate application metadata pointer array. */
-    if (!titleReallocateApplicationMetadata(gamecard_app_count, false, false))
-    {
-        LOG_MSG_ERROR("Failed to reallocate application metadata pointer array for gamecard user applications!");
-        goto end;
-    }
-
-    free_entries = true;
-
-    /* Retrieve application metadata via ns for any new gamecard user applications. */
-    for(u32 i = 0; i < title_count; i++)
-    {
-        TitleInfo *cur_title_info = titles[i];
-        if (!cur_title_info) continue;
-
-        /* Do not proceed if application metadata has already been retrieved, or if we can successfully retrieve it. */
-        u64 app_id = titleGetApplicationIdByContentMetaKey(&(cur_title_info->meta_key));
-        if (cur_title_info->app_metadata != NULL || (cur_title_info->app_metadata = titleFindApplicationMetadataByTitleId(app_id, false, extra_app_count)) != NULL) continue;
-
-        /* Retrieve application metadata from our cache. */
-        cur_title_info->app_metadata = nxtcGetApplicationMetadataEntryById(app_id);
-        if (!cur_title_info->app_metadata)
-        {
-            /* Retrieve application metadata via ns. */
-            cur_title_info->app_metadata = titleGenerateUserMetadataEntryFromNs(app_id);
-            if (!cur_title_info->app_metadata) continue;
-        }
-
-        /* Set application metadata entry pointer. */
-        g_userMetadata[g_userMetadataCount + extra_app_count] = cur_title_info->app_metadata;
-
-        /* Increase extra application metadata counter. */
-        extra_app_count++;
-    }
-
-    if (extra_app_count)
-    {
-        /* Update application metadata count. */
-        g_userMetadataCount += extra_app_count;
-
-        /* Sort application metadata entries by name. */
-        if (g_userMetadataCount > 1) qsort(g_userMetadata, g_userMetadataCount, sizeof(TitleApplicationMetadata*), &titleUserMetadataSortFunction);
-
-        /* Flush title cache file. */
-        nxtcFlushCacheFile();
-
-        /* Update linked lists for user applications, patches and add-on contents. */
-        /* This will take care of orphan titles we might now have application metadata for. */
-        titleUpdateTitleInfoLinkedLists();
-    }
-
-    /* Free extra allocated pointers if we didn't use them. */
-    if (extra_app_count < gamecard_app_count) titleReallocateApplicationMetadata(0, false, false);
+    /* Update linked lists for user applications, patches and add-on contents. */
+    /* This will take care of orphan titles we might now have application metadata for. */
+    titleUpdateTitleInfoLinkedLists();
 
     /* Update flags. */
     success = true;
@@ -3505,17 +3504,8 @@ end:
     /* Update gamecard status. */
     g_titleGameCardAvailable = status;
 
-    /* Free previously allocated application metadata pointers. Ignore return value. */
-    if (!success && free_entries) titleReallocateApplicationMetadata(extra_app_count, false, true);
-
-    if (cleanup)
-    {
-        /* Close gamecard title storage. */
-        titleCloseTitleStorage(NcmStorageId_GameCard);
-
-        /* Update linked lists for user applications, patches and add-on contents. */
-        titleUpdateTitleInfoLinkedLists();
-    }
+    /* Close gamecard title storage, if needed. */
+    if (cleanup) titleCloseTitleStorage(NcmStorageId_GameCard);
 
     return success;
 }
@@ -3559,24 +3549,12 @@ static void titleGenerateGameCardApplicationMetadataArray(void)
             continue;
         }
 
-        u32 app_version = app_info->meta_key.version;
-        u32 dlc_count = 0;
-
-        /* Check if the inserted gamecard holds any bundled patches for the current user application. */
-        /* If so, we'll use the highest patch version available as part of the filename. */
-        for(u32 j = 0; j < title_count; j++)
-        {
-            if (j == i) continue;
-
-            TitleInfo *cur_title_info = titles[j];
-            if (!cur_title_info || cur_title_info->meta_key.type != NcmContentMetaType_Patch || \
-                !titleCheckIfPatchIdBelongsToApplicationId(app_info->meta_key.id, cur_title_info->meta_key.id) || cur_title_info->meta_key.version < app_version) continue;
-
-            patch_info = cur_title_info;
-            app_version = cur_title_info->meta_key.version;
-        }
+        /* Get the latest available update for this user application within the inserted gamecard. */
+        patch_info = titleGetLatestAvailablePatchForUserTitle(NcmStorageId_GameCard, app_info);
+        u32 app_version = (patch_info ? patch_info->meta_key.version : app_info->meta_key.version);
 
         /* Count DLCs available for this application in the inserted gamecard. */
+        u32 dlc_count = 0;
         for(u32 j = 0; j < title_count; j++)
         {
             if (j == i) continue;
@@ -3611,7 +3589,7 @@ static void titleGenerateGameCardApplicationMetadataArray(void)
         tmp_gc_app_metadata->version.value = app_version;
         tmp_gc_app_metadata->dlc_count = dlc_count;
 
-        /* Try to retrieve the display version. */
+        /* Try to retrieve the display version string. */
         char *version_str = titleGetDisplayVersionString(patch_info ? patch_info : app_info);
         if (version_str)
         {
@@ -3815,39 +3793,4 @@ static int titleGameCardApplicationMetadataSortFunction(const void *a, const voi
     const TitleGameCardApplicationMetadata *gc_app_metadata_2 = (const TitleGameCardApplicationMetadata*)b;
 
     return strcasecmp(gc_app_metadata_1->app_metadata->name, gc_app_metadata_2->app_metadata->name);
-}
-
-static int titleGameCardContentMetaContextSortFunction(const void *a, const void *b)
-{
-    const TitleGameCardContentMetaContext *gc_meta_ctx_1 = (const TitleGameCardContentMetaContext*)a;
-    const TitleGameCardContentMetaContext *gc_meta_ctx_2 = (const TitleGameCardContentMetaContext*)b;
-
-    if (gc_meta_ctx_1->meta_key.type < gc_meta_ctx_2->meta_key.type)
-    {
-        return 1;
-    } else
-    if (gc_meta_ctx_1->meta_key.type > gc_meta_ctx_2->meta_key.type)
-    {
-        return -1;
-    }
-
-    if (gc_meta_ctx_1->meta_key.id < gc_meta_ctx_2->meta_key.id)
-    {
-        return 1;
-    } else
-    if (gc_meta_ctx_1->meta_key.id > gc_meta_ctx_2->meta_key.id)
-    {
-        return -1;
-    }
-
-    if (gc_meta_ctx_1->meta_key.version < gc_meta_ctx_2->meta_key.version)
-    {
-        return 1;
-    } else
-    if (gc_meta_ctx_1->meta_key.version > gc_meta_ctx_2->meta_key.version)
-    {
-        return -1;
-    }
-
-    return 0;
 }

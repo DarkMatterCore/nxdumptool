@@ -213,6 +213,10 @@ static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out);
 static bool saveGameCardImage(void *userdata);
 static bool saveGameCardHeader(void *userdata);
 static bool saveGameCardCardInfo(void *userdata);
+static bool saveGameCardHeader2(void *userdata);
+static bool saveGameCardCardInfo2(void *userdata);
+static bool saveGameCardHeader2Certificate(void *userdata);
+static bool saveGameCardHeader2CertificatePublicKey(void *userdata);
 static bool saveGameCardCertificate(void *userdata);
 static bool saveGameCardInitialData(void *userdata);
 static bool saveGameCardSpecificData(void *userdata);
@@ -328,6 +332,8 @@ static u32 getNcaFsUseLayeredFsDirOption(void);
 static void setNcaFsUseLayeredFsDirOption(u32 idx);
 
 static bool resetSettings(void *userdata);
+
+static bool wipeLocalTitleCache(void *userdata);
 
 /* Global variables. */
 
@@ -575,6 +581,34 @@ static MenuElement *g_gameCardMenuElements[] = {
         .str = "dump gamecard cardinfo (optional)",
         .child_menu = NULL,
         .task_func = &saveGameCardCardInfo,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "dump gamecard header 2 (optional)",
+        .child_menu = NULL,
+        .task_func = &saveGameCardHeader2,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "dump gamecard cardinfo 2 (optional)",
+        .child_menu = NULL,
+        .task_func = &saveGameCardCardInfo2,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "dump gamecard header 2 certificate (optional)",
+        .child_menu = NULL,
+        .task_func = &saveGameCardHeader2Certificate,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "dump gamecard header 2 certificate public key (optional)",
+        .child_menu = NULL,
+        .task_func = &saveGameCardHeader2CertificatePublicKey,
         .element_options = NULL,
         .userdata = NULL
     },
@@ -1090,6 +1124,13 @@ static MenuElement *g_rootMenuElements[] = {
         .str = "reset settings",
         .child_menu = NULL,
         .task_func = &resetSettings,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "wipe local title cache (nxtc.bin)",
+        .child_menu = NULL,
+        .task_func = &wipeLocalTitleCache,
         .element_options = NULL,
         .userdata = NULL
     },
@@ -2342,6 +2383,9 @@ static bool waitForGameCard(void)
         case GameCardStatus_LotusAsicFirmwareUpdateRequired:
             consolePrint("gamecard controller firmware update required, please update your console\n");
             break;
+        case GameCardStatus_OunceGameCardInserted:
+            consolePrint("switch 2 gamecard detected, please take it out and use switch 1 or\nswitch 2 edition gamecards only\n");
+            break;
         case GameCardStatus_InsertedAndInfoNotLoaded:
             consolePrint("unexpected I/O error occurred, please check the logfile\n");
             break;
@@ -2580,7 +2624,10 @@ static bool saveGameCardImage(void *userdata)
     char *filename = NULL;
     u32 dev_idx = g_storageMenuElementOption.selected;
 
-    bool prepend_key_area = (bool)getGameCardPrependKeyAreaOption();
+    bool is_t2 = false;
+    gamecardIsT2(&is_t2);
+
+    bool prepend_key_area = (!is_t2 && (bool)getGameCardPrependKeyAreaOption());
     bool keep_certificate = (bool)getGameCardKeepCertificateOption();
     bool trim_dump = (bool)getGameCardTrimDumpOption();
     bool calculate_checksum = (bool)getGameCardCalculateChecksumOption();
@@ -2792,6 +2839,174 @@ end:
     return success;
 }
 
+static bool saveGameCardHeader2(void *userdata)
+{
+    NX_IGNORE_ARG(userdata);
+
+    GameCardHeader2 gc_header_2 = {0};
+    bool is_t2 = false, success = false;
+    u32 crc = 0;
+    char *filename = NULL;
+
+    gamecardIsT2(&is_t2);
+
+    if (!is_t2)
+    {
+        consolePrint("header 2 areas are unavailable in t1 gamecards!\n");
+        return false;
+    }
+
+    if (!gamecardGetHeader2(&gc_header_2))
+    {
+        consolePrint("failed to get gamecard header 2\n");
+        goto end;
+    }
+
+    consolePrint("get gamecard header 2 ok\n");
+
+    crc = crc32Calculate(&gc_header_2, sizeof(GameCardHeader2));
+    snprintf(path, MAX_ELEMENTS(path), " (Header2) (%08X).bin", crc);
+
+    filename = generateOutputGameCardFileName(GAMECARD_SUBDIR, path, true);
+    if (!filename) goto end;
+
+    if (!saveFileData(filename, &gc_header_2, sizeof(GameCardHeader2))) goto end;
+
+    consolePrint("successfully saved header 2 as \"%s\"\n", filename);
+    success = true;
+
+end:
+    if (filename) free(filename);
+
+    return success;
+}
+
+static bool saveGameCardCardInfo2(void *userdata)
+{
+    NX_IGNORE_ARG(userdata);
+
+    GameCardInfo2 gc_cardinfo_2 = {0};
+    bool is_t2 = false, success = false;
+    u32 crc = 0;
+    char *filename = NULL;
+
+    gamecardIsT2(&is_t2);
+
+    if (!is_t2)
+    {
+        consolePrint("header 2 areas are unavailable in t1 gamecards!\n");
+        return false;
+    }
+
+    if (!gamecardGetPlaintextCardInfo2Area(&gc_cardinfo_2))
+    {
+        consolePrint("failed to get gamecard cardinfo 2\n");
+        goto end;
+    }
+
+    consolePrint("get gamecard cardinfo 2 ok\n");
+
+    crc = crc32Calculate(&gc_cardinfo_2, sizeof(GameCardInfo2));
+    snprintf(path, MAX_ELEMENTS(path), " (CardInfo2) (%08X).bin", crc);
+
+    filename = generateOutputGameCardFileName(GAMECARD_SUBDIR, path, true);
+    if (!filename) goto end;
+
+    if (!saveFileData(filename, &gc_cardinfo_2, sizeof(GameCardInfo2))) goto end;
+
+    consolePrint("successfully saved cardinfo 2 dump as \"%s\"\n", filename);
+    success = true;
+
+end:
+    if (filename) free(filename);
+
+    return success;
+}
+
+static bool saveGameCardHeader2Certificate(void *userdata)
+{
+    NX_IGNORE_ARG(userdata);
+
+    GameCardHeader2Certificate gc_header_2_cert = {0};
+    bool is_t2 = false, success = false;
+    u32 crc = 0;
+    char *filename = NULL;
+
+    gamecardIsT2(&is_t2);
+
+    if (!is_t2)
+    {
+        consolePrint("header 2 areas are unavailable in t1 gamecards!\n");
+        return false;
+    }
+
+    if (!gamecardGetHeader2Certificate(&gc_header_2_cert))
+    {
+        consolePrint("failed to get gamecard header 2 certificate\n");
+        goto end;
+    }
+
+    consolePrint("get gamecard header 2 certificate ok\n");
+
+    crc = crc32Calculate(&gc_header_2_cert, sizeof(GameCardHeader2Certificate));
+    snprintf(path, MAX_ELEMENTS(path), " (Header2Certificate) (%08X).bin", crc);
+
+    filename = generateOutputGameCardFileName(GAMECARD_SUBDIR, path, true);
+    if (!filename) goto end;
+
+    if (!saveFileData(filename, &gc_header_2_cert, sizeof(GameCardHeader2Certificate))) goto end;
+
+    consolePrint("successfully saved header 2 certificate dump as \"%s\"\n", filename);
+    success = true;
+
+end:
+    if (filename) free(filename);
+
+    return success;
+}
+
+static bool saveGameCardHeader2CertificatePublicKey(void *userdata)
+{
+    NX_IGNORE_ARG(userdata);
+
+    u8 gc_header_2_cert_pub_key[0x100] = {0};
+    bool is_t2 = false, success = false;
+    u32 crc = 0;
+    char *filename = NULL;
+
+    gamecardIsT2(&is_t2);
+
+    if (!is_t2)
+    {
+        consolePrint("header 2 areas are unavailable in t1 gamecards!\n");
+        return false;
+    }
+
+    if (!gamecardGetHeader2CertificatePublicKey(gc_header_2_cert_pub_key))
+    {
+        consolePrint("failed to get gamecard header 2 certificate public key\n");
+        goto end;
+    }
+
+    consolePrint("get gamecard header 2 certificate public key ok\n");
+
+    crc = crc32Calculate(gc_header_2_cert_pub_key, sizeof(gc_header_2_cert_pub_key));
+    snprintf(path, MAX_ELEMENTS(path), " (Header2CertificatePubKey) (%08X).bin", crc);
+
+    filename = generateOutputGameCardFileName(GAMECARD_SUBDIR, path, true);
+    if (!filename) goto end;
+
+    if (!saveFileData(filename, gc_header_2_cert_pub_key, sizeof(gc_header_2_cert_pub_key))) goto end;
+
+    consolePrint("successfully saved header 2 certificate public key dump as \"%s\"\n", filename);
+    success = true;
+
+end:
+    if (filename) free(filename);
+
+    return success;
+}
+
 static bool saveGameCardCertificate(void *userdata)
 {
     NX_IGNORE_ARG(userdata);
@@ -2831,9 +3046,17 @@ static bool saveGameCardInitialData(void *userdata)
     NX_IGNORE_ARG(userdata);
 
     GameCardSecurityInformation gc_security_information = {0};
-    bool success = false;
+    bool is_t2 = false, success = false;
     u32 crc = 0;
     char *filename = NULL;
+
+    gamecardIsT2(&is_t2);
+
+    if (is_t2)
+    {
+        consolePrint("initial data areas are unavailable in t2 gamecards!\n");
+        return false;
+    }
 
     if (!dumpGameCardSecurityInformation(&gc_security_information)) goto end;
 
@@ -7650,6 +7873,23 @@ static bool resetSettings(void *userdata)
         }
 
         consolePrint("settings successfully reset\n");
+    }
+
+    return false;
+}
+
+static bool wipeLocalTitleCache(void *userdata)
+{
+    NX_IGNORE_ARG(userdata);
+
+    consolePrint("are you sure you want to wipe the local title cache?\n");
+    consolePrint("press a to proceed, or b to cancel\n\n");
+
+    u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
+    if (btn_down & HidNpadButton_A)
+    {
+        titleWipeLocalCache();
+        consolePrint("local title cache successfully wiped\nplease reload the application to regenerate the title cache\n");
     }
 
     return false;

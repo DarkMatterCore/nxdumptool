@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env py -3
 
 """
  * nxdt_host.py

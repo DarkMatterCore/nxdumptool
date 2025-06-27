@@ -29,7 +29,203 @@ using namespace i18n::literals; /* For _i18n. */
 
 namespace nxdt::views
 {
-    OptionsTabUpdateApplicationFrame::OptionsTabUpdateApplicationFrame() : brls::StagedAppletFrame(false)
+    OptionsTab::OptionsTab(RootView *root_view) : brls::List(), root_view(root_view)
+    {
+        /* Set custom spacing. */
+        this->setSpacing(this->getSpacing() / 2);
+        this->setMarginBottom(20);
+
+        /* Information about actual dump options. */
+        brls::Label *dump_options_info = new brls::Label(brls::LabelStyle::DESCRIPTION, "options_tab/dump_options_info"_i18n, true);
+        dump_options_info->setHorizontalAlign(NVG_ALIGN_CENTER);
+        this->addView(dump_options_info);
+
+        /* Overclock. */
+        brls::ToggleListItem *overclock = new brls::ToggleListItem("options_tab/overclock/label"_i18n, configGetBoolean("overclock"), \
+                                                                   "options_tab/overclock/description"_i18n, "generic/value_enabled"_i18n, \
+                                                                   "generic/value_disabled"_i18n);
+
+        overclock->getClickEvent()->subscribe([](brls::View* view) {
+            /* Get current value. */
+            brls::ToggleListItem *item = static_cast<brls::ToggleListItem*>(view);
+            bool value = item->getToggleState();
+
+            /* Update configuration. */
+            configSetBoolean("overclock", value);
+
+            LOG_MSG_DEBUG("Overclock setting changed by user.");
+        });
+
+        this->addView(overclock);
+
+        /* Naming convention. */
+        brls::SelectListItem *naming_convention = new brls::SelectListItem("options_tab/naming_convention/label"_i18n, {
+                                                                               "options_tab/naming_convention/value_00"_i18n,
+                                                                               "options_tab/naming_convention/value_01"_i18n
+                                                                           }, static_cast<unsigned>(configGetInteger("naming_convention")),
+                                                                           "options_tab/naming_convention/description"_i18n);
+
+        naming_convention->getValueSelectedEvent()->subscribe([](int selected) {
+            /* Make sure the current value isn't out of bounds. */
+            if (selected < 0 || selected >= static_cast<int>(TitleNamingConvention_Count)) return;
+
+            /* Update configuration. */
+            configSetInteger("naming_convention", selected);
+
+            LOG_MSG_DEBUG("Naming convention setting changed by user.");
+        });
+
+        this->addView(naming_convention);
+
+        /* Unmount USB Mass Storage devices. */
+        /* We will replace its default click event with a new one that will: */
+        /*     1. Check if any UMS devices are available before displaying the dropdown and display a notification if there are none. */
+        /*     2. Generate the string vector required by the dropdown. */
+        /*     3. Initialize the dropdown and pass a custom callback that will take care of unmounting the selected device. */
+        brls::SelectListItem *unmount_ums_device = new brls::SelectListItem("options_tab/unmount_ums_device/label"_i18n, { "dummy" }, 0,
+                                                                            i18n::getStr("options_tab/unmount_ums_device/description", APP_TITLE), false);
+
+        unmount_ums_device->getClickEvent()->unsubscribeAll();
+
+        unmount_ums_device->getClickEvent()->subscribe([this](brls::View* view) {
+            if (this->last_notification_src == NotificationSource_UnmountUms) return;
+
+            if (this->ums_devices.empty())
+            {
+                /* Display a notification if we haven't mounted any UMS devices at all. */
+                this->DisplayNotification("options_tab/notifications/no_ums_devices"_i18n, NotificationSource_UnmountUms);
+                return;
+            }
+
+            /* Generate values vector for the dropdown. */
+            std::vector<std::string> values{};
+            for(nxdt::tasks::UmsDeviceVectorEntry ums_device_entry : this->ums_devices) values.push_back(ums_device_entry.second);
+
+            /* Display dropdown. */
+            brls::SelectListItem *unmount_ums_device = static_cast<brls::SelectListItem*>(view);
+
+            brls::Dropdown::open(unmount_ums_device->getLabel(), values, [this](int idx) {
+                /* Make sure the current value isn't out of bounds. */
+                if (idx < 0 || idx >= static_cast<int>(this->ums_devices.size())) return;
+
+                /* Unmount UMS device. */
+                if (umsUnmountDevice(this->ums_devices.at(idx).first))
+                {
+                    this->DisplayNotification("options_tab/notifications/ums_device_unmount_success"_i18n, NotificationSource_UnmountUms);
+                } else {
+                    this->DisplayNotification("options_tab/notifications/ums_device_unmount_failed"_i18n, NotificationSource_UnmountUms);
+                }
+            });
+        });
+
+        /* Manually update UMS devices vector. */
+        this->ums_devices = this->root_view->GetUmsDevices();
+
+        /* Subscribe to the UMS device event. */
+        this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this, unmount_ums_device](const nxdt::tasks::UmsDeviceVector& ums_devices) {
+            /* Update UMS devices vector. */
+            this->ums_devices = ums_devices;
+
+            /* Generate values vector for the dropdown. */
+            std::vector<std::string> values{};
+            for(nxdt::tasks::UmsDeviceVectorEntry ums_device_entry : this->ums_devices) values.push_back(ums_device_entry.second);
+
+            /* Update SelectListItem values. */
+            /* If the dropdown menu is already being displayed, it'll be reloaded or popped from the view stack, depending on whether the provided vector is empty or not. */
+            unmount_ums_device->updateValues(values);
+        });
+
+        this->addView(unmount_ums_device);
+
+        /* Update application. */
+        brls::ListItem *update_app = new brls::ListItem("options_tab/update_app/label"_i18n, "options_tab/update_app/description"_i18n);
+
+        update_app->getClickEvent()->subscribe([this](brls::View* view) {
+            if (this->last_notification_src == NotificationSource_UpdateApplication) return;
+
+            if (envIsNso())
+            {
+                /* Display a notification if we're running as a NSO. */
+                this->DisplayNotification("options_tab/notifications/is_nso"_i18n, NotificationSource_UpdateApplication);
+                return;
+            } else
+            if (!this->root_view->IsInternetConnectionAvailable())
+            {
+                /* Display a notification if no Internet connection is available. */
+                this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n, NotificationSource_UpdateApplication);
+                return;
+            } else
+            if (utilsGetApplicationUpdatedState())
+            {
+                /* Display a notification if the application has already been updated. */
+                this->DisplayNotification("options_tab/notifications/already_updated"_i18n, NotificationSource_UpdateApplication);
+                return;
+            }
+
+            /* Display update frame. */
+            brls::Application::pushView(new OptionsTabUpdateApplicationFrame(this), brls::ViewAnimation::SLIDE_LEFT, false);
+        });
+
+        this->addView(update_app);
+
+        /* Reset settings. */
+        brls::ListItem *reset_settings = new brls::ListItem("options_tab/reset_settings/label"_i18n, "options_tab/reset_settings/description"_i18n);
+
+        reset_settings->getClickEvent()->subscribe([this](brls::View* view) {
+            if (this->last_notification_src == NotificationSource_ResetSettings) return;
+
+            /* Reset settings. */
+            configResetSettings();
+
+            /* Reset cached output storage value. */
+            this->root_view->SetOutputStorage(ConfigOutputStorage_SdCard);
+
+            this->DisplayNotification("options_tab/notifications/settings_reset"_i18n, NotificationSource_ResetSettings);
+        });
+
+        this->addView(reset_settings);
+
+        /* Wipe local title cache. */
+        brls::ListItem *wipe_local_title_cache = new brls::ListItem("options_tab/wipe_local_title_cache/label"_i18n, "options_tab/wipe_local_title_cache/description"_i18n);
+
+        wipe_local_title_cache->getClickEvent()->subscribe([this](brls::View* view) {
+            if (this->last_notification_src == NotificationSource_WipeLocalTitleCache) return;
+
+            /* Wipe local title cache. */
+            titleWipeLocalCache();
+
+            this->DisplayNotification("options_tab/notifications/wipe_local_title_cache"_i18n, NotificationSource_WipeLocalTitleCache);
+        });
+
+        this->addView(wipe_local_title_cache);
+    }
+
+    OptionsTab::~OptionsTab()
+    {
+        this->root_view->UnregisterUmsTaskListener(this->ums_task_sub);
+
+        this->ums_devices.clear();
+
+        brls::menu_timer_kill(&(this->notification_timer));
+    }
+
+    void OptionsTab::DisplayNotification(const std::string& str, NotificationSource new_notification_src)
+    {
+        if (str.empty() || this->last_notification_src != NotificationSource_None || new_notification_src == NotificationSource_None || \
+            this->last_notification_src == new_notification_src) return;
+
+        brls::Application::notify(str);
+        this->last_notification_src = new_notification_src;
+
+        this->notification_timer_ctx.duration = brls::Application::getStyle()->AnimationDuration.notificationTimeout;
+        this->notification_timer_ctx.cb = [this](void *userdata) { this->last_notification_src = NotificationSource_None; };
+        this->notification_timer_ctx.tick = [](void*){};
+        this->notification_timer_ctx.userdata = nullptr;
+
+        brls::menu_timer_start(&(this->notification_timer), &(this->notification_timer_ctx));
+    }
+
+    OptionsTabUpdateApplicationFrame::OptionsTabUpdateApplicationFrame(OptionsTab *options_tab) : brls::StagedAppletFrame(false), options_tab(options_tab)
     {
         /* Set UI properties. */
         this->setTitle("options_tab/update_app/label"_i18n);
@@ -86,7 +282,7 @@ namespace nxdt::views
             if (!notification.empty())
             {
                 /* Display notification. */
-                brls::Application::notify(notification);
+                this->options_tab->DisplayNotification(notification, OptionsTab::NotificationSource_UpdateApplication);
 
                 /* Pop view. */
                 this->onCancel();
@@ -217,7 +413,8 @@ namespace nxdt::views
                     if (ret) utilsSetApplicationUpdatedState();
 
                     /* Display notification. */
-                    brls::Application::notify(ret ? "options_tab/notifications/app_updated"_i18n : "options_tab/notifications/update_failed"_i18n);
+                    std::string notification = (ret ? "options_tab/notifications/app_updated"_i18n : "options_tab/notifications/update_failed"_i18n);
+                    this->options_tab->DisplayNotification(notification, OptionsTab::NotificationSource_UpdateApplication);
                 }
 
                 /* Pop view. */
@@ -230,182 +427,5 @@ namespace nxdt::views
 
         /* Go to the next stage. */
         this->nextStage();
-    }
-
-    OptionsTab::OptionsTab(RootView *root_view) : brls::List(), root_view(root_view)
-    {
-        /* Set custom spacing. */
-        this->setSpacing(this->getSpacing() / 2);
-        this->setMarginBottom(20);
-
-        /* Information about actual dump options. */
-        brls::Label *dump_options_info = new brls::Label(brls::LabelStyle::DESCRIPTION, "options_tab/dump_options_info"_i18n, true);
-        dump_options_info->setHorizontalAlign(NVG_ALIGN_CENTER);
-        this->addView(dump_options_info);
-
-        /* Overclock. */
-        brls::ToggleListItem *overclock = new brls::ToggleListItem("options_tab/overclock/label"_i18n, configGetBoolean("overclock"), \
-                                                                   "options_tab/overclock/description"_i18n, "generic/value_enabled"_i18n, \
-                                                                   "generic/value_disabled"_i18n);
-
-        overclock->getClickEvent()->subscribe([](brls::View* view) {
-            /* Get current value. */
-            brls::ToggleListItem *item = static_cast<brls::ToggleListItem*>(view);
-            bool value = item->getToggleState();
-
-            /* Update configuration. */
-            configSetBoolean("overclock", value);
-
-            LOG_MSG_DEBUG("Overclock setting changed by user.");
-        });
-
-        this->addView(overclock);
-
-        /* Naming convention. */
-        brls::SelectListItem *naming_convention = new brls::SelectListItem("options_tab/naming_convention/label"_i18n, {
-                                                                               "options_tab/naming_convention/value_00"_i18n,
-                                                                               "options_tab/naming_convention/value_01"_i18n
-                                                                           }, static_cast<unsigned>(configGetInteger("naming_convention")),
-                                                                           "options_tab/naming_convention/description"_i18n);
-
-        naming_convention->getValueSelectedEvent()->subscribe([](int selected) {
-            /* Make sure the current value isn't out of bounds. */
-            if (selected < 0 || selected >= static_cast<int>(TitleNamingConvention_Count)) return;
-
-            /* Update configuration. */
-            configSetInteger("naming_convention", selected);
-
-            LOG_MSG_DEBUG("Naming convention setting changed by user.");
-        });
-
-        this->addView(naming_convention);
-
-        /* Unmount USB Mass Storage devices. */
-        /* We will replace its default click event with a new one that will: */
-        /*     1. Check if any UMS devices are available before displaying the dropdown and display a notification if there are none. */
-        /*     2. Generate the string vector required by the dropdown. */
-        /*     3. Initialize the dropdown and pass a custom callback that will take care of unmounting the selected device. */
-        brls::SelectListItem *unmount_ums_device = new brls::SelectListItem("options_tab/unmount_ums_device/label"_i18n, { "dummy" }, 0,
-                                                                            i18n::getStr("options_tab/unmount_ums_device/description", APP_TITLE), false);
-
-        unmount_ums_device->getClickEvent()->unsubscribeAll();
-
-        unmount_ums_device->getClickEvent()->subscribe([this](brls::View* view) {
-            if (this->ums_devices.empty())
-            {
-                /* Display a notification if we haven't mounted any UMS devices at all. */
-                this->DisplayNotification("options_tab/notifications/no_ums_devices"_i18n);
-                return;
-            }
-
-            /* Generate values vector for the dropdown. */
-            std::vector<std::string> values{};
-            for(nxdt::tasks::UmsDeviceVectorEntry ums_device_entry : this->ums_devices) values.push_back(ums_device_entry.second);
-
-            /* Display dropdown. */
-            brls::SelectListItem *unmount_ums_device = static_cast<brls::SelectListItem*>(view);
-
-            brls::Dropdown::open(unmount_ums_device->getLabel(), values, [this](int idx) {
-                /* Make sure the current value isn't out of bounds. */
-                if (idx < 0 || idx >= static_cast<int>(this->ums_devices.size())) return;
-
-                /* Unmount UMS device. */
-                if (umsUnmountDevice(this->ums_devices.at(idx).first))
-                {
-                    this->DisplayNotification("options_tab/notifications/ums_device_unmount_success"_i18n);
-                } else {
-                    this->DisplayNotification("options_tab/notifications/ums_device_unmount_failed"_i18n);
-                }
-            });
-        });
-
-        /* Manually update UMS devices vector. */
-        this->ums_devices = this->root_view->GetUmsDevices();
-
-        /* Subscribe to the UMS device event. */
-        this->ums_task_sub = this->root_view->RegisterUmsTaskListener([this, unmount_ums_device](const nxdt::tasks::UmsDeviceVector& ums_devices) {
-            /* Update UMS devices vector. */
-            this->ums_devices = ums_devices;
-
-            /* Generate values vector for the dropdown. */
-            std::vector<std::string> values{};
-            for(nxdt::tasks::UmsDeviceVectorEntry ums_device_entry : this->ums_devices) values.push_back(ums_device_entry.second);
-
-            /* Update SelectListItem values. */
-            /* If the dropdown menu is already being displayed, it'll be reloaded or popped from the view stack, depending on whether the provided vector is empty or not. */
-            unmount_ums_device->updateValues(values);
-        });
-
-        this->addView(unmount_ums_device);
-
-        /* Update application. */
-        brls::ListItem *update_app = new brls::ListItem("options_tab/update_app/label"_i18n, "options_tab/update_app/description"_i18n);
-
-        update_app->getClickEvent()->subscribe([this](brls::View* view) {
-            if (envIsNso())
-            {
-                /* Display a notification if we're running as a NSO. */
-                this->DisplayNotification("options_tab/notifications/is_nso"_i18n);
-                return;
-            } else
-            if (!this->root_view->IsInternetConnectionAvailable())
-            {
-                /* Display a notification if no Internet connection is available. */
-                this->DisplayNotification("options_tab/notifications/no_internet_connection"_i18n);
-                return;
-            } else
-            if (utilsGetApplicationUpdatedState())
-            {
-                /* Display a notification if the application has already been updated. */
-                this->DisplayNotification("options_tab/notifications/already_updated"_i18n);
-                return;
-            }
-
-            /* Display update frame. */
-            brls::Application::pushView(new OptionsTabUpdateApplicationFrame(), brls::ViewAnimation::SLIDE_LEFT, false);
-        });
-
-        this->addView(update_app);
-
-        /* Reset settings. */
-        brls::ListItem *reset_settings = new brls::ListItem("options_tab/reset_settings/label"_i18n, "options_tab/reset_settings/description"_i18n);
-
-        reset_settings->getClickEvent()->subscribe([this](brls::View* view) {
-            if (!this->display_notification) return;
-
-            /* Reset settings. */
-            configResetSettings();
-
-            /* Reset cached output storage value. */
-            this->root_view->SetOutputStorage(ConfigOutputStorage_SdCard);
-
-            this->DisplayNotification("options_tab/notifications/settings_reset"_i18n);
-        });
-
-        this->addView(reset_settings);
-    }
-
-    OptionsTab::~OptionsTab()
-    {
-        this->root_view->UnregisterUmsTaskListener(this->ums_task_sub);
-
-        this->ums_devices.clear();
-
-        brls::menu_timer_kill(&(this->notification_timer));
-    }
-
-    void OptionsTab::DisplayNotification(const std::string& str)
-    {
-        if (str.empty() || !this->display_notification) return;
-
-        brls::Application::notify(str);
-        this->display_notification = false;
-
-        this->notification_timer_ctx.duration = brls::Application::getStyle()->AnimationDuration.notificationTimeout;
-        this->notification_timer_ctx.cb = [this](void *userdata) { this->display_notification = true; };
-        this->notification_timer_ctx.tick = [](void*){};
-        this->notification_timer_ctx.userdata = nullptr;
-
-        brls::menu_timer_start(&(this->notification_timer), &(this->notification_timer_ctx));
     }
 }

@@ -353,6 +353,25 @@ typedef struct {
 
 NXDT_ASSERT(NacpAccessibleLaunchRequiredVersion, 0x40);
 
+typedef struct {
+    u8 priority;
+    u8 reserved_1[0x7];
+    u16 aoc_index;
+    u8 reserved_2[0x6];
+} NacpApplicationControlDataConditionData;
+
+NXDT_ASSERT(NacpApplicationControlDataConditionData, 0x10);
+
+#pragma pack(push, 1)
+typedef struct {
+    u64 type;                                           ///< TODO: add enum with values.
+    NacpApplicationControlDataConditionData data[0x8];
+    u8 count;
+} NacpApplicationControlDataCondition;
+#pragma pack(pop)
+
+NXDT_ASSERT(NacpApplicationControlDataCondition, 0x89);
+
 typedef enum : u8 {
     NacpAlbumFileExport_Allow = 0,
     NacpAlbumFileExport_Deny  = 1,
@@ -413,10 +432,10 @@ typedef struct {
     NacpRepair repair;
     u8 program_index;
     NacpRequiredNetworkServiceLicenseOnLaunch required_network_service_license_on_launch;
-    u8 application_error_code_prefix;                                                               ///< TODO: add values.
+    u8 application_error_code_prefix;                                                               ///< TODO: add enum with values.
     u8 reserved_2;
-    u8 acd_index;                                                                                   ///< TODO: add values.
-    u8 application_platform;                                                                        ///< TODO: add values.
+    u8 acd_index;                                                                                   ///< Application Control Data index. Used to access `Acd_{idx}` subdirectories within the Control NCA RomFS.
+    u8 apparent_platform;                                                                           ///< TODO: add enum with values.
     NacpNeighborDetectionClientConfiguration neighbor_detection_client_configuration;
     NacpJitConfiguration jit_configuration;
     NacpRequiredAddOnContentsSetBinaryDescriptor required_add_on_contents_set_binary_descriptor;
@@ -426,9 +445,17 @@ typedef struct {
     NacpContentsAvailabilityTransitionPolicy contents_availability_transition_policy;
     u8 reserved_3[0x4];
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
-    u8 reserved_4[0x90];
+    NacpApplicationControlDataCondition application_control_data_condition;                         ///< Used for Switch 2 upgrade packs, which are distributed as AddOnContent titles.
+    u8 initial_program_index;
+    u8 reserved_4[0x2];
+    u8 accessible_program_index_flags[0x4];                                                         ///< TODO: add structure / enum.
     NacpAlbumFileExport album_file_export;
-    u8 reserved_5[0x727];
+    u8 reserved_5[0x7];
+    u8 save_data_certificate_bytes[0x80];                                                           ///< TODO: add structure.
+    u8 has_in_game_voice_chat;                                                                      ///< TODO: add enum with values.
+    u8 reserved_6[0x3];
+    u8 supported_extra_add_on_content_flag[0x4];                                                    ///< TODO: add structure / enum.
+    u8 reserved_7[0x698];
     u8 platform_specific_region[0x400];                                                             ///< TODO: add structure.
 } NsApplicationControlProperty;
 

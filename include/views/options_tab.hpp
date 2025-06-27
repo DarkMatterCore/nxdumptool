@@ -31,10 +31,39 @@
 
 namespace nxdt::views
 {
+    class OptionsTab: public brls::List
+    {
+        public:
+            typedef enum : u8 {
+                NotificationSource_None                = 0,
+                NotificationSource_UnmountUms          = 1,
+                NotificationSource_UpdateApplication   = 2,
+                NotificationSource_ResetSettings       = 3,
+                NotificationSource_WipeLocalTitleCache = 4
+            } NotificationSource;
+
+            OptionsTab(RootView *root_view);
+            ~OptionsTab();
+
+            void DisplayNotification(const std::string& str, NotificationSource new_notification_src);
+
+        private:
+            RootView *root_view = nullptr;
+
+            nxdt::tasks::UmsDeviceVector ums_devices{};
+            nxdt::tasks::UmsEvent::Subscription ums_task_sub;
+
+            NotificationSource last_notification_src = NotificationSource_None;
+            brls::menu_timer_t notification_timer = 0.0f;
+            brls::menu_timer_ctx_entry_t notification_timer_ctx{};
+    };
+
     /* Update application frame. */
     class OptionsTabUpdateApplicationFrame: public brls::StagedAppletFrame
     {
         private:
+            OptionsTab *options_tab = nullptr;
+
             nxdt::tasks::DownloadDataTask json_task;
             char *json_buf = nullptr;
             size_t json_buf_size = 0;
@@ -54,26 +83,8 @@ namespace nxdt::views
             bool onCancel(void) override;
 
         public:
-            OptionsTabUpdateApplicationFrame();
+            OptionsTabUpdateApplicationFrame(OptionsTab *options_tab);
             ~OptionsTabUpdateApplicationFrame();
-    };
-
-    class OptionsTab: public brls::List
-    {
-        private:
-            RootView *root_view = nullptr;
-
-            nxdt::tasks::UmsDeviceVector ums_devices{};
-            nxdt::tasks::UmsEvent::Subscription ums_task_sub;
-
-            bool display_notification = true;
-            brls::menu_timer_t notification_timer = 0.0f;
-            brls::menu_timer_ctx_entry_t notification_timer_ctx{};
-
-            void DisplayNotification(const std::string& str);
-        public:
-            OptionsTab(RootView *root_view);
-            ~OptionsTab();
     };
 }
 

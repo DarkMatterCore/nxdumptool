@@ -887,9 +887,9 @@ bool nacpGenerateAuthoringToolXml(NacpContext *nacp_ctx, u32 version, u32 requir
     /* AlbumFileExport. */
     if (!NACP_ADD_ENUM("AlbumFileExport", nacp->album_file_export, nacpGetAlbumFileExportString)) goto end;
 
-    /* ApplicationPlatform. */
+    /* ApparentPlatform. */
     /* TODO: make sure this is how it gets written. */
-    if (!NACP_ADD_U16("ApplicationPlatform", nacp->application_platform, false, false)) goto end;
+    if (!NACP_ADD_U16("ApparentPlatform", nacp->apparent_platform, false, false)) goto end;
 
     if (!(success = NACP_ADD_FMT_STR_T1("</Application>"))) goto end;
 

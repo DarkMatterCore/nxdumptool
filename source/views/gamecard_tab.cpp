@@ -26,6 +26,7 @@
 #include <utils/scope_guard.hpp>
 
 #define GAMECARD_TAB_TABLE_PROPERTY(name)           brls::TableRow *name = properties_table->addRow(brls::TableRowType::BODY, i18n::getStr("gamecard_tab/list/properties_table/" #name))
+#define GAMECARD_TAB_TABLE_PROPERTY_T2(name)        brls::TableRow *name##_2 = properties_table->addRow(brls::TableRowType::BODY, fmt::format("{} (T2)", i18n::getStr("gamecard_tab/list/properties_table/" #name)))
 
 #define GAMECARD_TAB_LISTITEM_ELEMENT(name, ...)    \
 brls::ListItem *name = new brls::ListItem(i18n::getStr("gamecard_tab/list/" #name "/label"), i18n::getStr("gamecard_tab/list/" #name "/description", ##__VA_ARGS__)); \
@@ -82,6 +83,9 @@ namespace nxdt::views
             case GameCardStatus_LotusAsicFirmwareUpdateRequired:
                 this->error_frame->SetMessage("gamecard_tab/error_frame/lafw_update_required"_i18n);
                 break;
+            case GameCardStatus_OunceGameCardInserted:
+                this->error_frame->SetMessage("gamecard_tab/error_frame/ounce_gc_inserted"_i18n);
+                break;
             case GameCardStatus_InsertedAndInfoNotLoaded:
                 this->error_frame->SetMessage(i18n::getStr("gamecard_tab/error_frame/info_not_loaded", GITHUB_NEW_ISSUE_URL));
                 break;
@@ -118,6 +122,9 @@ namespace nxdt::views
         launch_error_info->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->list->addView(launch_error_info);
 
+        /* Check if we're dealing with a T2 gamecard. */
+        gamecardIsT2(&(this->card_is_t2));
+
         /* Add gamecard application metadata information. */
         this->AddApplicationMetadataItems();
 
@@ -135,12 +142,27 @@ namespace nxdt::views
         advanced_disclaimer->setHorizontalAlign(NVG_ALIGN_CENTER);
         this->list->addView(advanced_disclaimer);
 
-        GAMECARD_TAB_LISTITEM_ELEMENT(dump_initial_data);
+        this->list->addView(new brls::ListItemGroupSpacing(true));
+
+        if (!this->card_is_t2)
+        {
+            GAMECARD_TAB_LISTITEM_ELEMENT(dump_initial_data);
+        }
+
         GAMECARD_TAB_LISTITEM_ELEMENT(dump_certificate, GAMECARD_CERT_OFFSET / GAMECARD_PAGE_SIZE);
         GAMECARD_TAB_LISTITEM_ELEMENT(dump_card_id_set);
         GAMECARD_TAB_LISTITEM_ELEMENT(dump_card_uid);
         GAMECARD_TAB_LISTITEM_ELEMENT(dump_header, 0);
         GAMECARD_TAB_LISTITEM_ELEMENT(dump_plaintext_cardinfo);
+
+        if (this->card_is_t2)
+        {
+            GAMECARD_TAB_LISTITEM_ELEMENT(dump_header_2, GAMECARD_HEADER2_OFFSET / GAMECARD_PAGE_SIZE);
+            GAMECARD_TAB_LISTITEM_ELEMENT(dump_plaintext_cardinfo_2);
+            GAMECARD_TAB_LISTITEM_ELEMENT(dump_header_2_cert, GAMECARD_HEADER2_CERT_OFFSET / GAMECARD_PAGE_SIZE);
+            GAMECARD_TAB_LISTITEM_ELEMENT(dump_header_2_cert_pub_key, GAMECARD_HEADER2_CERT_PUBKEY_OFFSET / GAMECARD_PAGE_SIZE);
+        }
+
         GAMECARD_TAB_LISTITEM_ELEMENT(dump_specific_data);
         GAMECARD_TAB_LISTITEM_ELEMENT(dump_hfs_partitions);
         GAMECARD_TAB_LISTITEM_ELEMENT(browse_hfs_partitions);
@@ -150,7 +172,7 @@ namespace nxdt::views
         dump_card_image->getClickEvent()->subscribe([this](brls::View *view) {
             /* Display gamecard image dump options. */
             std::string& raw_filename = (configGetInteger("naming_convention") == static_cast<int>(TitleNamingConvention_Full) ? raw_filename_full : raw_filename_id_only);
-            brls::Application::pushView(new GameCardImageDumpOptionsFrame(this->root_view, raw_filename), brls::ViewAnimation::SLIDE_LEFT);
+            brls::Application::pushView(new GameCardImageDumpOptionsFrame(this->root_view, raw_filename, this->card_is_t2), brls::ViewAnimation::SLIDE_LEFT);
         });
 
         /* Update focus stack, if needed. */
@@ -215,19 +237,34 @@ namespace nxdt::views
 
     void GameCardTab::AddPropertiesTable(void)
     {
-        GameCardHeader card_header{};
-        GameCardInfo card_info{};
         FsGameCardIdSet card_id_set_data{};
 
+        GameCardHeader card_header{};
+        GameCardInfo card_info{};
+
+        GameCardHeader2 card_header_2{};
+        GameCardInfo2 card_info_2{};
+
+        char package_id_str[0x11] = {0};
+
         /* Get gamecard data. */
+        gamecardGetCardIdSet(&card_id_set_data);
+
         gamecardGetHeader(&card_header);
         gamecardGetPlaintextCardInfoArea(&card_info);
-        gamecardGetCardIdSet(&card_id_set_data);
+
+        if (this->card_is_t2)
+        {
+            gamecardGetHeader2(&card_header_2);
+            gamecardGetPlaintextCardInfo2Area(&card_info_2);
+        }
 
         /* Populate gamecard properties table. */
         this->list->addView(new brls::Header("gamecard_tab/list/properties_table/header"_i18n));
 
         FocusableTable *properties_table = new FocusableTable(true, false);
+
+        GAMECARD_TAB_TABLE_PROPERTY(card_version);
         GAMECARD_TAB_TABLE_PROPERTY(capacity);
         GAMECARD_TAB_TABLE_PROPERTY(total_size);
         GAMECARD_TAB_TABLE_PROPERTY(trimmed_size);
@@ -239,7 +276,19 @@ namespace nxdt::views
         GAMECARD_TAB_TABLE_PROPERTY(card_id_set);
         GAMECARD_TAB_TABLE_PROPERTY(flags);
 
+        if (this->card_is_t2)
+        {
+            /* Populate T2-exclusive table values. */
+            GAMECARD_TAB_TABLE_PROPERTY_T2(package_id);
+            utilsGenerateHexString(package_id_str, sizeof(package_id_str), card_header_2.package_id, sizeof(card_header_2.package_id), true);
+            package_id_2->setValue(std::string(package_id_str));
+
+            GAMECARD_TAB_TABLE_PROPERTY_T2(flags);
+            flags_2->setValue(fmt::format("0x{:02X}", card_header_2.flags_2));
+        }
+
         /* Set table row values. */
+        card_version->setValue(fmt::format("{} ({})", card_header.version, gamecardGetVersionString(card_header.version)));
         capacity->setValue(this->GetFormattedSizeString(&gamecardGetRomCapacity));
         total_size->setValue(this->GetFormattedSizeString(&gamecardGetTotalSize));
         trimmed_size->setValue(this->GetFormattedSizeString(&gamecardGetTrimmedSize));
@@ -286,17 +335,16 @@ namespace nxdt::views
                                                                          upp_version.major_relstep, upp_version.minor_relstep, upp_version.value));
         }
 
-        const GameCardFwVersion fw_version = card_info.fw_version;
+        const GameCardFwVersion fw_version = (this->card_is_t2 ? card_info_2.fw_version : card_info.fw_version);
         lafw_version->setValue(fmt::format("{} ({})", fw_version, fw_version >= GameCardFwVersion_Count ? "generic/unknown"_i18n : gamecardGetRequiredHosVersionString(fw_version)));
 
-        const SdkAddOnVersion fw_mode = card_info.fw_mode.sdk_addon_version;
+        const SdkAddOnVersion fw_mode = (this->card_is_t2 ? card_info_2.fw_mode.sdk_addon_version : card_info.fw_mode.sdk_addon_version);
         sdk_version->setValue(fmt::format("{}.{}.{}-{} (v{})", fw_mode.major, fw_mode.minor, fw_mode.micro, fw_mode.relstep, fw_mode.value));
 
-        const GameCardCompatibilityType compat_type = card_info.compatibility_type;
+        const GameCardCompatibilityType compat_type = (this->card_is_t2 ? card_info_2.compatibility_type : card_info.compatibility_type);
         compatibility_type->setValue(fmt::format("{} ({})",
                                                  compat_type >= GameCardCompatibilityType_Count ? "generic/unknown"_i18n : gamecardGetCompatibilityTypeString(compat_type), compat_type));
 
-        char package_id_str[0x11] = {0};
         utilsGenerateHexString(package_id_str, sizeof(package_id_str), card_header.package_id, sizeof(card_header.package_id), true);
         package_id->setValue(std::string(package_id_str));
 

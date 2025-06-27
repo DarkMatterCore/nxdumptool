@@ -40,6 +40,8 @@ namespace nxdt::views
             nxdt::tasks::GameCardStatusEvent::Subscription gc_status_task_sub;
             GameCardStatus gc_status = GameCardStatus_NotInserted;
 
+            bool card_is_t2 = false;
+
             std::string raw_filename_full = "";
             std::string raw_filename_id_only = "";
 

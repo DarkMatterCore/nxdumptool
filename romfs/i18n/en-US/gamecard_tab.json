@@ -4,6 +4,7 @@
         "processing": "Processing gamecard, please wait…",
         "nogc_enabled": "A gamecard has been inserted, but the \"nogc\" patch is enabled.\nNothing at all can be done with the inserted gamecard.\nDisabling this patch *will* update the Lotus ASIC firmware if it's outdated.\nConsider disabling this patch if you wish to use gamecard dumping features.",
         "lafw_update_required": "A gamecard has been inserted, but a Lotus ASIC firmware update is required.\nUpdate your console using the inserted gamecard and try again.",
+        "ounce_gc_inserted": "A Switch 2 gamecard has been inserted.\nPlease take it out and use Switch 1 or Switch 2 Edition gamecards only.",
         "info_not_loaded": "A gamecard has been inserted, but an unexpected I/O error occurred.\nPlease report this issue at \"{0}\"."
     },
 
@@ -17,6 +18,7 @@
 
         "properties_table": {
             "header": "Gamecard properties",
+            "card_version": "Gamecard version",
             "capacity": "Capacity",
             "total_size": "Total size",
             "trimmed_size": "Trimmed size",
@@ -40,7 +42,7 @@
 
         "dump_initial_data": {
             "label": "Dump InitialData area",
-            "description": "The InitialData area holds cryptographic information used by the Lotus ASIC to communicate with the gamecard.\n\nIt can't be dumped through normal means — it's not part of the storage areas from gamecard images."
+            "description": "The InitialData area holds cryptographic information used by the Lotus ASIC to communicate with the gamecard.\n\nIt can't be dumped through normal means — it's not part of the storage areas from gamecard images.\n\nThis area is unavailable in T2 gamecards."
         },
 
         "dump_certificate": {
@@ -66,6 +68,26 @@
         "dump_plaintext_cardinfo": {
             "label": "Dump plaintext CardInfo area",
             "description": "The CardInfo area holds information such as the bundled system update version and the Lotus ASIC firmware version required by the gamecard.\n\nThis area is part of the gamecard header, but it's always encrypted."
+        },
+
+        "dump_header_2": {
+            "label": "Dump gamecard header 2",
+            "description": "Exclusive to T2 gamecards. If available, it's stored at page {0}."
+        },
+
+        "dump_plaintext_cardinfo_2": {
+            "label": "Dump plaintext CardInfo2 area",
+            "description": "Exclusive to T2 gamecards. This area is part of the gamecard header 2, but it's always encrypted."
+        },
+
+        "dump_header_2_cert": {
+            "label": "Dump gamecard header 2 certificate",
+            "description": "Exclusive to T2 gamecards. Used to verify gamecard header 2's signature. If available, it's stored at page {0}."
+        },
+
+        "dump_header_2_cert_pub_key": {
+            "label": "Dump gamecard header 2 certificate public key",
+            "description": "Exclusive to T2 gamecards. Used to verify gamecard header 2 certificate's signature. If available, it's stored at page {0}."
         },
 
         "dump_specific_data": {

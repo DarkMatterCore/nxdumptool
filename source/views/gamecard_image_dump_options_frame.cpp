@@ -40,8 +40,8 @@ do { \
 
 namespace nxdt::views
 {
-    GameCardImageDumpOptionsFrame::GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename) :
-        DumpOptionsFrame(root_view, "gamecard_tab/list/dump_card_image/label"_i18n, std::string(GAMECARD_SUBDIR), raw_filename)
+    GameCardImageDumpOptionsFrame::GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename, bool card_is_t2) :
+        DumpOptionsFrame(root_view, "gamecard_tab/list/dump_card_image/label"_i18n, std::string(GAMECARD_SUBDIR), raw_filename), card_is_t2(card_is_t2)
     {
         /* Subscribe to the gamecard task event. */
         this->gc_task_sub = this->root_view->RegisterGameCardStatusTaskListener([this](const GameCardStatus& gc_status) {
@@ -56,7 +56,11 @@ namespace nxdt::views
         });
 
         /* "Prepend KeyArea data" toggle. */
-        GAMECARD_TOGGLE_ITEM(prepend_key_area);
+        /* Skip it if we're dealing with a T2 gamecard. */
+        if (!this->card_is_t2)
+        {
+            GAMECARD_TOGGLE_ITEM(prepend_key_area);
+        }
 
         /* "Keep certificate" toggle. */
         GAMECARD_TOGGLE_ITEM(keep_certificate);
@@ -73,7 +77,7 @@ namespace nxdt::views
         /* Register dump button callback. */
         this->RegisterButtonListener([this](brls::View *view) {
             /* Retrieve configuration values set by the user. */
-            bool prepend_key_area_val = this->prepend_key_area->getToggleState();
+            bool prepend_key_area_val = (this->prepend_key_area ? this->prepend_key_area->getToggleState() : false);
             bool keep_certificate_val = this->keep_certificate->getToggleState();
             bool trim_dump_val = this->trim_dump->getToggleState();
             bool calculate_checksum_val = this->calculate_checksum->getToggleState();

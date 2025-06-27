@@ -132,7 +132,7 @@ void titleFreeUserApplicationData(TitleUserApplicationData *user_app_data);
 
 /// Takes an input TitleInfo object with meta type NcmContentMetaType_AddOnContent or NcmContentMetaType_DataPatch.
 /// Returns a linked list of TitleInfo elements with title IDs matching the corresponding base/patch title ID, depending on the meta type of the input TitleInfo object.
-/// Particularly useful to display add-on-content base/patch titles related to a specific add-on-content (patch) entry.
+/// Particularly useful to display add-on-content patch titles related to a specific add-on-content base entry, or viceversa.
 /// Use titleFreeTitleInfo() to free the returned data.
 TitleInfo *titleGetAddOnContentBaseOrPatchList(TitleInfo *title_info);
 
@@ -169,6 +169,10 @@ char *titleGenerateGameCardFileName(TitleNamingConvention naming_convention, Tit
 /// Returns NULL if an error occurs.
 char *titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt, bool is_system, bool use_gamecard);
 
+/// Wrapper for nxtcWipeCache(). Completely wipes the internal title cache and deletes the title cache file from the SD card.
+/// Use with caution.
+void titleWipeLocalCache(void);
+
 /// Returns a pointer to a string holding a user-friendly name for the provided NcmStorageId value. Returns NULL if the provided value is invalid.
 const char *titleGetNcmStorageIdName(u8 storage_id);
 
@@ -180,7 +184,7 @@ const char *titleGetNcmContentMetaTypeName(u8 content_meta_type);
 
 /// Miscellaneous functions.
 
-NX_INLINE bool titleIsValidInfoBlock(TitleInfo *title_info)
+NX_INLINE bool titleIsValidInfoBlock(const TitleInfo *title_info)
 {
     return (title_info && title_info->storage_id >= NcmStorageId_GameCard && title_info->storage_id <= NcmStorageId_SdCard && title_info->meta_key.id && \
            ((title_info->meta_key.type >= NcmContentMetaType_SystemProgram && title_info->meta_key.type <= NcmContentMetaType_BootImagePackageSafe) || \

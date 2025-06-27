@@ -34,6 +34,8 @@ namespace nxdt::views
             nxdt::tasks::GameCardStatusEvent::Subscription gc_task_sub;
             brls::VoidEvent gc_ejected_event;
 
+            bool card_is_t2 = false;
+
             brls::ToggleListItem *prepend_key_area = nullptr;
             brls::ToggleListItem *keep_certificate = nullptr;
             brls::ToggleListItem *trim_dump = nullptr;
@@ -41,7 +43,7 @@ namespace nxdt::views
             brls::ToggleListItem *lookup_checksum = nullptr;
 
         public:
-            GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename);
+            GameCardImageDumpOptionsFrame(RootView *root_view, std::string raw_filename, bool card_is_t2);
             ~GameCardImageDumpOptionsFrame();
 
             ALWAYS_INLINE brls::VoidEvent::Subscription RegisterGameCardEjectionListener(brls::VoidEvent::Callback cb)

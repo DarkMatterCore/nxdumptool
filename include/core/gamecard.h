@@ -32,6 +32,7 @@ extern "C" {
 #endif
 
 #define GAMECARD_HEAD_MAGIC                 0x48454144                      /* "HEAD". */
+#define GAMECARD_CHVC_MAGIC                 0x43485643                      /* "CHVC". */
 
 #define GAMECARD_PAGE_SIZE                  0x200
 #define GAMECARD_PAGE_OFFSET(x)             ((u64)(x) * GAMECARD_PAGE_SIZE)
@@ -114,13 +115,13 @@ typedef enum : u8 {
 
 typedef struct {
     GameCardUidMakerCode maker_code;
-    u8 version;                         ///< TODO: determine whether this matches GameCardVersion or not.
+    u8 version;
     GameCardUidCardType card_type;
     u8 unique_data[0x9];
     u32 random;
-    u8 platform_flag;
+    u8 platform_flag;                   ///< TODO: add enum with values.
     u8 reserved[0xB];
-    FsCardId1 card_id_1_mirror;         ///< This field mirrors bit 5 of FsCardId1MemoryType.
+    FsCardId1 card_id1_mirror;          ///< This field mirrors bit 5 of FsCardId1MemoryType.
     u8 mac[0x20];
 } GameCardUid;
 
@@ -146,8 +147,10 @@ NXDT_ASSERT(GameCardSpecificData, 0x200);
 typedef struct {
     GameCardSpecificData specific_data;
     FsGameCardCertificate certificate;
-    u8 reserved[0x200];
-    GameCardInitialData initial_data;
+    union {
+        GameCardInitialData initial_data;   ///< Available with T1 gamecards.
+        u8 unknown[0x200];                  ///< Available with T2 gamecards.
+    };
 } GameCardSecurityInformation;
 
 NXDT_ASSERT(GameCardSecurityInformation, 0x800);
@@ -220,9 +223,9 @@ typedef enum : u8 {
     GameCardCompatibilityType_Count  = 2    ///< Total values supported by this enum.
 } GameCardCompatibilityType;
 
-/// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under HOS 9.0.0+) and the IV from `GameCardHeader`.
+/// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under HOS 9.0.0+) and the reversed IV from `GameCardHeader`.
 typedef struct {
-    GameCardFwVersion fw_version;
+    GameCardFwVersion fw_version;                   ///< T1: GameCardFwVersion value. T2: set to UINT64_MAX.
     GameCardAccCtrl1 acc_ctrl_1;
     u32 wait_1_time_read;                           ///< Always 0x1388.
     u32 wait_2_time_read;                           ///< Always 0.
@@ -241,7 +244,7 @@ NXDT_ASSERT(GameCardInfo, 0x70);
 
 /// Placed after the `GameCardKeyArea` section.
 typedef struct {
-    u8 signature[0x100];                            ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the header.
+    u8 signature[0x100];                            ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the header. Verified with Ca10Modulus.
     u32 magic;                                      ///< "HEAD".
     u32 rom_area_start_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u32 backup_area_start_page;                     ///< Always 0xFFFFFFFF.
@@ -256,9 +259,9 @@ typedef struct {
     u64 partition_fs_header_address;                ///< Root Hash File System header offset.
     u64 partition_fs_header_size;                   ///< Root Hash File System header size.
     u8 partition_fs_header_hash[SHA256_HASH_SIZE];
-    u8 initial_data_hash[SHA256_HASH_SIZE];
+    u8 initial_data_hash[SHA256_HASH_SIZE];         ///< T1: GameCardInitialData checksum. T2: all zeroes.
     GameCardSelSec sel_sec;
-    u32 sel_t1_key;                                 ///< Always 0x02.
+    u32 sel_t1_key;                                 ///< T1: always 0x02. T2: always 0x00.
     u32 sel_key;                                    ///< Always 0x00.
     u32 lim_area_page;                              ///< Expressed in GAMECARD_PAGE_SIZE units.
     GameCardInfo card_info;
@@ -266,7 +269,7 @@ typedef struct {
 
 NXDT_ASSERT(GameCardHeader, 0x200);
 
-/// Encrypted using AES-128-CBC.
+/// Encrypted using AES-128-CBC with the XCI header key (found in FS program memory under HOS 9.0.0+) and the reversed IV from `GameCardHeader2`.
 typedef struct {
     GameCardFwVersion fw_version;
     GameCardAccCtrl1 acc_ctrl_1;
@@ -287,9 +290,9 @@ typedef struct {
 
 NXDT_ASSERT(GameCardInfo2, 0x70);
 
-/// Placed immediately after the `GameCardHeader` section.
+/// Placed immediately after the `GameCardHeader` section in T2 gamecards.
 typedef struct {
-    u8 signature[0x100];                            ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the header.
+    u8 signature[0x100];                            ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the header. Verified with Ca10Modulus.
     u32 magic;                                      ///< "HEAD".
     u32 rom_area_start_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u32 backup_area_start_page;                     ///< Always 0xFFFFFFFF.
@@ -297,7 +300,7 @@ typedef struct {
     GameCardRomSize rom_size;
     GameCardVersion version;
     GameCardFlags flags;
-    u8 package_id[0x8];                             ///< Used for challenge-response authentication.
+    u8 package_id[0x8];                             ///< Used for challenge-response authentication. Differs from the Package ID value in GameCardHeader.
     u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 sign_key_index;                              ///< 20.0.0+. TODO: add enum with values.
     u8 flags_2;                                     ///< 18.0.0+. TODO: add enum with values.
@@ -306,7 +309,7 @@ typedef struct {
     u64 partition_fs_header_address;                ///< Root Hash File System header offset.
     u64 partition_fs_header_size;                   ///< Root Hash File System header size.
     u8 partition_fs_header_hash[SHA256_HASH_SIZE];
-    u8 initial_data_hash[SHA256_HASH_SIZE];
+    u8 initial_data_hash[SHA256_HASH_SIZE];         ///< All zeroes.
     GameCardSelSec sel_sec;
     u32 sel_t1_key;                                 ///< Always 0x02.
     u32 sel_key;                                    ///< Always 0x00.
@@ -317,12 +320,13 @@ typedef struct {
 NXDT_ASSERT(GameCardHeader2, 0x200);
 
 /// Placed immediately after the `GameCardHeader2` section.
+/// Immediately followed by a 0x100-byte long RSA public key that's used to verify this certificate's signature.
 typedef struct {
-    u8 signature[0x100];        ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the data from 0x100 to 0x300.
-    u32 magic;                  ///< TODO: add more info.
-    u32 version;                ///< TODO: add more info.
+    u8 signature[0x100];        ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the data from 0x100 to 0x300. Verified with Ca10CertificateModulus.
+    u32 magic;                  ///< "CHVC".
+    u32 version;                ///< Always set to 1.
     u8 unknown[0x8];
-    u8 sign_key_index;          ///< TODO: add enum with values.
+    u8 sign_key_index;          ///< Matches sign_key_index field from GameCardHeader2. TODO: add enum with values.
     u8 reserved_1[0x1F];
     u8 public_key[0x100];       ///< RSA modulus used to verify the signature from GameCardHeader2.
     u8 public_exponent[0x3];    ///< RSA exponent used to verify the signature from GameCardHeader2.
@@ -338,9 +342,11 @@ typedef enum : u8 {
                                                         ///< This triggers an error whenever fsDeviceOperatorGetGameCardHandle is called. Nothing at all can be done with the inserted gamecard.
     GameCardStatus_LotusAsicFirmwareUpdateRequired = 3, ///< A gamecard has been inserted, but a LAFW update is needed before being able to read the secure storage area.
                                                         ///< Operations on the normal storage area are still possible, though.
-    GameCardStatus_InsertedAndInfoNotLoaded        = 4, ///< A gamecard has been inserted, but an unexpected error unrelated to both "nogc" patch and LAFW version occurred.
-    GameCardStatus_InsertedAndInfoLoaded           = 5, ///< A gamecard has been inserted and all required information could be successfully retrieved from it.
-    GameCardStatus_Count                           = 6  ///< Total values supported by this enum.
+    GameCardStatus_OunceGameCardInserted           = 4, ///< A Switch 2 gamecard has been inserted. Access to the secure storage area is completely blocked off.
+                                                        ///< Operations on the fake normal storage area presented by the gamecard are still possible, though.
+    GameCardStatus_InsertedAndInfoNotLoaded        = 5, ///< A gamecard has been inserted, but an unexpected error unrelated to both "nogc" patch and LAFW version occurred.
+    GameCardStatus_InsertedAndInfoLoaded           = 6, ///< A gamecard has been inserted and all required information could be successfully retrieved from it.
+    GameCardStatus_Count                           = 7  ///< Total values supported by this enum.
 } GameCardStatus;
 
 /// Plaintext Lotus ASIC firmware (LAFW) blob. Dumped from FS program memory.
@@ -398,11 +404,11 @@ UEvent *gamecardGetStatusChangeUserEvent(void);
 /// Returns the current GameCardStatus value.
 GameCardStatus gamecardGetStatus(void);
 
-/// Fills the provided GameCardSecurityInformation pointer.
+/// Fills the provided GameCardSecurityInformation element.
 /// This area can't be read using gamecardReadStorage().
 bool gamecardGetSecurityInformation(GameCardSecurityInformation *out);
 
-/// Fills the provided FsGameCardIdSet pointer.
+/// Fills the provided FsGameCardIdSet element.
 /// This area can't be read using gamecardReadStorage().
 bool gamecardGetCardIdSet(FsGameCardIdSet *out);
 
@@ -410,20 +416,43 @@ bool gamecardGetCardIdSet(FsGameCardIdSet *out);
 /// 'out_lafw_blob' or 'out_lafw_version' may be set to NULL, but at least one of them must be a valid pointer.
 bool gamecardGetLotusAsicFirmwareBlob(LotusAsicFirmwareBlob *out_lafw_blob, u64 *out_lafw_version);
 
+/// Used to determine whether the inserted gamecard uses the T2 security scheme (extra header + certificate).
+bool gamecardIsT2(bool *out);
+
 /// Used to read raw data from the inserted gamecard. Supports unaligned reads.
 /// All required handles, changes between normal <-> secure storage areas and proper offset calculations are managed internally.
 /// 'offset' + 'read_size' must not exceed the value returned by gamecardGetTotalSize().
 bool gamecardReadStorage(void *out, u64 read_size, u64 offset);
 
-/// Fills the provided GameCardHeader pointer.
-/// This area can also be read using gamecardReadStorage(), starting at offset 0.
+/// Fills the provided GameCardHeader element.
+/// This area can also be read using gamecardReadStorage(), starting at offset 0x0.
 bool gamecardGetHeader(GameCardHeader *out);
 
-/// Fills the provided GameCardInfo pointer.
+/// Fills the provided GameCardInfo element.
 bool gamecardGetPlaintextCardInfoArea(GameCardInfo *out);
 
-/// Fills the provided FsGameCardCertificate pointer.
-/// This area can also be read using gamecardReadStorage(), starting at GAMECARD_CERT_OFFSET.
+/// Fills the provided GameCardHeader2 element.
+/// This area can also be read using gamecardReadStorage(), starting at offset 0x200.
+/// Only usable if the inserted gamecard relies on the T2 security scheme.
+bool gamecardGetHeader2(GameCardHeader2 *out);
+
+/// Fills the provided GameCardInfo2 element.
+/// Only usable if the inserted gamecard relies on the T2 security scheme.
+bool gamecardGetPlaintextCardInfo2Area(GameCardInfo2 *out);
+
+/// Fills the provided GameCardHeader2Certificate element.
+/// This area can also be read using gamecardReadStorage(), starting at offset 0x400.
+/// Only usable if the inserted gamecard relies on the T2 security scheme.
+bool gamecardGetHeader2Certificate(GameCardHeader2Certificate *out);
+
+/// Fills the provided buffer with the public key from the GameCardHeader2Certificate area. This key matches Ca10CertificateModulus from FS.
+/// The provided buffer must have a capacity of at least 0x100 bytes.
+/// This area can also be read using gamecardReadStorage(), starting at offset 0x800.
+/// Only usable if the inserted gamecard relies on the T2 security scheme.
+bool gamecardGetHeader2CertificatePublicKey(void *out);
+
+/// Fills the provided FsGameCardCertificate element.
+/// This area can also be read using gamecardReadStorage(), starting at offset 0x7000.
 bool gamecardGetCertificate(FsGameCardCertificate *out);
 
 /// Fills the provided u64 pointer with the total gamecard size, which is the size taken by both Normal and Secure storage areas.
@@ -435,10 +464,10 @@ bool gamecardGetTrimmedSize(u64 *out);
 /// Fills the provided u64 pointer with the gamecard ROM capacity, based on the GameCardRomSize value from the header. Not the same as gamecardGetTotalSize().
 bool gamecardGetRomCapacity(u64 *out);
 
-/// Fills the provided Version pointer with the bundled firmware update version in the inserted gamecard.
+/// Fills the provided Version element with the bundled firmware update version in the inserted gamecard.
 bool gamecardGetBundledFirmwareUpdateVersion(Version *out);
 
-/// Fills the provided HashFileSystemContext pointer using information from the requested Hash FS partition.
+/// Fills the provided HashFileSystemContext element using information from the requested Hash FS partition.
 /// Hash FS functions can be used on the retrieved HashFileSystemContext. hfsFreeContext() must be used to free the underlying data from the filled context.
 bool gamecardGetHashFileSystemContext(HashFileSystemPartitionType hfs_partition_type, HashFileSystemContext *out);
 
@@ -452,6 +481,10 @@ LotusAsicFirmwareType gamecardGetLafwType(LotusAsicFirmwareBlob *lafw_blob);
 
 /// Returns a LotusAsicDeviceType value for the provided LAFW blob.
 LotusAsicDeviceType gamecardGetLafwDeviceType(LotusAsicFirmwareBlob *lafw_blob);
+
+/// Takes a GameCardVersion value. Returns a pointer to a string that represents the provided version value.
+/// Returns NULL if the provided value is out of range.
+const char *gamecardGetVersionString(GameCardVersion version);
 
 /// Takes a GameCardFwVersion value. Returns a pointer to a string that represents the minimum HOS version that matches the provided LAFW version.
 /// Returns NULL if the provided value is out of range.

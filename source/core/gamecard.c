@@ -78,12 +78,20 @@ static u8 *g_gameCardReadBuf = NULL;
 static GameCardHeader g_gameCardHeader = {0};
 static GameCardInfo g_gameCardInfoArea = {0};
 
+static bool g_gameCardIsT2 = false;
+
 static GameCardHeader2 g_gameCardHeader2 = {0};
+static GameCardInfo2 g_gameCardInfo2Area = {0};
+
 static GameCardHeader2Certificate g_gameCardHeader2Cert = {0};
 static u8 g_gameCardHeader2CertPublicKey[RSA2048_PUBKEY_SIZE] = {0};
 
+static const u8 g_gameCardCaPublicExponent[3] = { 0x01, 0x00, 0x01 }; /// Used to verify multiple gamecard signatures.
+
 static u64 g_gameCardNormalAreaSize = 0, g_gameCardSecureAreaSize = 0, g_gameCardTotalSize = 0;
 static u64 g_gameCardCapacity = 0;
+
+static FsGameCardIdSet g_gameCardIdSet = {0};
 
 static u32 g_gameCardHfsCount = 0;
 static HashFileSystemContext **g_gameCardHfsCtx = NULL;
@@ -93,6 +101,13 @@ static MemoryLocation g_fsProgramMemory = {
     .mask = 0,
     .data = NULL,
     .data_size = 0
+};
+
+static const char *g_gameCardVersionStrings[GameCardVersion_Count] = {
+    [GameCardVersion_Default]     = "Default",
+    [GameCardVersion_Unknown1]    = "Unknown1",
+    [GameCardVersion_Unknown2]    = "Unknown2",
+    [GameCardVersion_T2Supported] = "T2Supported"
 };
 
 static const char *g_gameCardHosVersionStrings[GameCardFwVersion_Count] = {
@@ -139,7 +154,9 @@ static void gamecardFreeInfo(bool clear_status);
 
 static bool gamecardReadHeader(void);
 
-static bool _gamecardGetPlaintextCardInfoArea(void);
+static bool _gamecardGetPlaintextCardInfoArea(bool use_t2_data);
+
+static void _gamecardGetCardIdSet(void);
 
 static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out);
 
@@ -311,12 +328,8 @@ bool gamecardGetCardIdSet(FsGameCardIdSet *out)
 
     SCOPED_LOCK(&g_gameCardMutex)
     {
-        if (!g_gameCardInterfaceInit || atomic_load(&g_gameCardStatus) != GameCardStatus_InsertedAndInfoLoaded || !out) break;
-
-        Result rc = fsDeviceOperatorGetGameCardIdSet(&g_deviceOperator, out, sizeof(FsGameCardIdSet), (s64)sizeof(FsGameCardIdSet));
-        if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardIdSet failed! (0x%X)", rc);
-
-        ret = R_SUCCEEDED(rc);
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && out);
+        if (ret) memcpy(out, &g_gameCardIdSet, sizeof(FsGameCardIdSet));
     }
 
     return ret;
@@ -337,6 +350,19 @@ bool gamecardGetLotusAsicFirmwareBlob(LotusAsicFirmwareBlob *out_lafw_blob, u64 
         if (out_lafw_version) *out_lafw_version = g_lafwVersion;
 
         ret = true;
+    }
+
+    return ret;
+}
+
+bool gamecardIsT2(bool *out)
+{
+    bool ret = false;
+
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && out);
+        if (ret) *out = g_gameCardIsT2;
     }
 
     return ret;
@@ -370,6 +396,58 @@ bool gamecardGetPlaintextCardInfoArea(GameCardInfo *out)
     {
         ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && out);
         if (ret) memcpy(out, &g_gameCardInfoArea, sizeof(GameCardInfo));
+    }
+
+    return ret;
+}
+
+bool gamecardGetHeader2(GameCardHeader2 *out)
+{
+    bool ret = false;
+
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && g_gameCardIsT2 && out);
+        if (ret) memcpy(out, &g_gameCardHeader2, sizeof(GameCardHeader2));
+    }
+
+    return ret;
+}
+
+bool gamecardGetPlaintextCardInfo2Area(GameCardInfo2 *out)
+{
+    bool ret = false;
+
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && g_gameCardIsT2 && out);
+        if (ret) memcpy(out, &g_gameCardInfo2Area, sizeof(GameCardInfo2));
+    }
+
+    return ret;
+}
+
+bool gamecardGetHeader2Certificate(GameCardHeader2Certificate *out)
+{
+    bool ret = false;
+
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && g_gameCardIsT2 && out);
+        if (ret) memcpy(out, &g_gameCardHeader2Cert, sizeof(GameCardHeader2Certificate));
+    }
+
+    return ret;
+}
+
+bool gamecardGetHeader2CertificatePublicKey(void *out)
+{
+    bool ret = false;
+
+    SCOPED_LOCK(&g_gameCardMutex)
+    {
+        ret = (g_gameCardInterfaceInit && atomic_load(&g_gameCardStatus) == GameCardStatus_InsertedAndInfoLoaded && g_gameCardIsT2 && out);
+        if (ret) memcpy(out, g_gameCardHeader2CertPublicKey, sizeof(g_gameCardHeader2CertPublicKey));
     }
 
     return ret;
@@ -577,6 +655,11 @@ LotusAsicDeviceType gamecardGetLafwDeviceType(LotusAsicFirmwareBlob *lafw_blob)
     }
 
     return ret;
+}
+
+const char *gamecardGetVersionString(GameCardVersion version)
+{
+    return (version < GameCardVersion_Count ? g_gameCardVersionStrings[version] : NULL);
 }
 
 const char *gamecardGetRequiredHosVersionString(GameCardFwVersion fw_version)
@@ -790,13 +873,29 @@ static void gamecardLoadInfo(void)
     if (!gamecardReadHeader()) goto end;
 
     /* Get decrypted CardInfo area from header. */
-    if (!_gamecardGetPlaintextCardInfoArea()) goto end;
+    if (!_gamecardGetPlaintextCardInfoArea(false)) goto end;
+
+    /* Get decrypted CardInfo2 area from Header2 (if available). */
+    if (g_gameCardIsT2 && !_gamecardGetPlaintextCardInfoArea(true)) goto end;
+
+    /* Get gamecard ID set. */
+    _gamecardGetCardIdSet();
 
     /* Check if we meet the Lotus ASIC firmware (LAFW) version requirement. */
-    if (g_lafwVersion < g_gameCardInfoArea.fw_version)
+    u64 fw_version = (g_gameCardIsT2 ? g_gameCardInfo2Area.fw_version : g_gameCardInfoArea.fw_version);
+    if (g_lafwVersion < fw_version)
     {
-        LOG_MSG_ERROR("LAFW version doesn't meet gamecard requirement! (%lu < %lu).", g_lafwVersion, g_gameCardInfoArea.fw_version);
-        atomic_store(&g_gameCardStatus, GameCardStatus_LotusAsicFirmwareUpdateRequired);
+        bool is_ounce_gc = (g_gameCardIsT2 && g_gameCardHeader2.flags_2 == 0x03); // TODO: find out the exact meaning of this.
+
+        if (is_ounce_gc)
+        {
+            LOG_MSG_ERROR("Switch 2 gamecard detected!");
+            atomic_store(&g_gameCardStatus, GameCardStatus_OunceGameCardInserted);
+        } else {
+            LOG_MSG_ERROR("LAFW version doesn't meet gamecard requirement! (%lu < %lu).", g_lafwVersion, fw_version);
+            atomic_store(&g_gameCardStatus, GameCardStatus_LotusAsicFirmwareUpdateRequired);
+        }
+
         goto end;
     }
 
@@ -888,8 +987,14 @@ static void gamecardFreeInfo(bool clear_status)
     memset(&g_gameCardInfoArea, 0, sizeof(GameCardInfo));
 
     memset(&g_gameCardHeader2, 0, sizeof(GameCardHeader2));
+    memset(&g_gameCardInfo2Area, 0, sizeof(GameCardInfo2));
+
     memset(&g_gameCardHeader2Cert, 0, sizeof(GameCardHeader2Certificate));
     memset(g_gameCardHeader2CertPublicKey, 0, sizeof(g_gameCardHeader2CertPublicKey));
+
+    memset(&g_gameCardIdSet, 0, sizeof(FsGameCardIdSet));
+
+    g_gameCardIsT2 = false;
 
     g_gameCardNormalAreaSize = g_gameCardSecureAreaSize = g_gameCardTotalSize = 0;
 
@@ -954,11 +1059,18 @@ static bool gamecardReadHeader(void)
         rc = fsStorageRead(&g_gameCardStorage, GAMECARD_HEADER2_OFFSET, &g_gameCardHeader2, sizeof(GameCardHeader2));
         if (R_FAILED(rc))
         {
-            LOG_MSG_ERROR("fsStorageRead failed to read gamecard Header2 area! (0x%X).", rc);
+            LOG_MSG_ERROR("fsStorageRead failed to read gamecard header 2! (0x%X).", rc);
             return false;
         }
 
-        LOG_DATA_DEBUG(&g_gameCardHeader2, sizeof(GameCardHeader2), "Gamecard Header2 dump:");
+        LOG_DATA_DEBUG(&g_gameCardHeader2, sizeof(GameCardHeader2), "Gamecard header 2 dump:");
+
+        /* Check magic word from gamecard header. */
+        if (__builtin_bswap32(g_gameCardHeader2.magic) != GAMECARD_HEAD_MAGIC)
+        {
+            LOG_MSG_ERROR("Invalid gamecard header 2 magic word! (0x%08X).", __builtin_bswap32(g_gameCardHeader2.magic));
+            return false;
+        }
 
         /* Read the Header2Certificate area. */
         rc = fsStorageRead(&g_gameCardStorage, GAMECARD_HEADER2_CERT_OFFSET, &g_gameCardHeader2Cert, sizeof(GameCardHeader2Certificate));
@@ -970,17 +1082,35 @@ static bool gamecardReadHeader(void)
 
         LOG_DATA_DEBUG(&g_gameCardHeader2Cert, sizeof(GameCardHeader2Certificate), "Gamecard Header2Certificate dump:");
 
+        /* Check magic word from Header2Certificate area. */
+        if (__builtin_bswap32(g_gameCardHeader2Cert.magic) != GAMECARD_CHVC_MAGIC)
+        {
+            LOG_MSG_ERROR("Invalid gamecard header 2 certificate magic word! (0x%08X).", __builtin_bswap32(g_gameCardHeader2Cert.magic));
+            return false;
+        }
+
         /* Read the Header2Certificate public key. */
-        rc = fsStorageRead(&g_gameCardStorage, GAMECARD_HEADER2_CERT_PUBKEY_OFFSET, g_gameCardHeader2CertPublicKey, sizeof(g_gameCardHeader2CertPublicKey));
+        /* Be careful not to perform an unaligned read here. */
+        u8 page[GAMECARD_PAGE_SIZE] = {0};
+        rc = fsStorageRead(&g_gameCardStorage, GAMECARD_HEADER2_CERT_PUBKEY_OFFSET, page, sizeof(page));
         if (R_FAILED(rc))
         {
             LOG_MSG_ERROR("fsStorageRead failed to read gamecard Header2Certificate public key! (0x%X).", rc);
             return false;
         }
 
-        LOG_DATA_DEBUG(&g_gameCardHeader2Cert, sizeof(GameCardHeader2Certificate), "Gamecard Header2Certificate public key dump:");
+        memcpy(g_gameCardHeader2CertPublicKey, page, sizeof(g_gameCardHeader2CertPublicKey));
+        LOG_DATA_DEBUG(g_gameCardHeader2CertPublicKey, sizeof(g_gameCardHeader2CertPublicKey), "Gamecard Header2Certificate public key dump:");
 
-        /* Verify the signature from the Header2 area. */
+        /* Verify the Header2Certificate area signature. */
+        if (!rsa2048VerifySha256BasedPkcs1v15Signature(&(g_gameCardHeader2Cert.magic), sizeof(GameCardHeader2Certificate) - MEMBER_SIZE(GameCardHeader2Certificate, signature), g_gameCardHeader2Cert.signature, \
+                                                       g_gameCardHeader2CertPublicKey, g_gameCardCaPublicExponent, sizeof(g_gameCardCaPublicExponent)))
+        {
+            LOG_MSG_ERROR("Gamecard Header2Certificate signature verification failed!");
+            return false;
+        }
+
+        /* Verify the Header2 area signature. */
         if (!rsa2048VerifySha256BasedPkcs1v15Signature(&(g_gameCardHeader2.magic), sizeof(GameCardHeader2) - MEMBER_SIZE(GameCardHeader2, signature), g_gameCardHeader2.signature, \
                                                        g_gameCardHeader2Cert.public_key, g_gameCardHeader2Cert.public_exponent, sizeof(g_gameCardHeader2Cert.public_exponent)))
         {
@@ -988,21 +1118,22 @@ static bool gamecardReadHeader(void)
             return false;
         }
 
-        /* TODO: add Header2Certificate signature verification. */
-
-        // TODO: remove this once anyone comes across a gamecard with an actual Header2 area.
-        // Public non-static functions to retrieve both the Header2 and the Header2Certificate areas will be implemented afterwards.
-        // For the time being, we will force an error.
-        return false;
+        /* Set T2 flag. */
+        g_gameCardIsT2 = true;
     }
 
     return true;
 }
 
-static bool _gamecardGetPlaintextCardInfoArea(void)
+static bool _gamecardGetPlaintextCardInfoArea(bool use_t2_data)
 {
+    const u8 *card_info_iv = (use_t2_data ? g_gameCardHeader2.card_info_iv : g_gameCardHeader.card_info_iv);
+    const void *card_info_area = (use_t2_data ? (void*)&(g_gameCardHeader2.card_info_2) : (void*)&(g_gameCardHeader.card_info));
+    size_t card_info_area_size = (use_t2_data ? sizeof(GameCardInfo2) : sizeof(GameCardInfo));
+    void *out_plaintext_card_info_area = (use_t2_data ? (void*)&g_gameCardInfo2Area : (void*)&g_gameCardInfoArea);
+
     const u8 *card_info_key = NULL;
-    u8 card_info_iv[AES_128_KEY_SIZE] = {0};
+    u8 reversed_card_info_iv[AES_128_KEY_SIZE] = {0};
     Aes128CbcContext aes_ctx = {0};
 
     /* Retrieve CardInfo area key. */
@@ -1014,17 +1145,28 @@ static bool _gamecardGetPlaintextCardInfoArea(void)
     }
 
     /* Reverse CardInfo IV. */
-    for(u8 i = 0; i < AES_128_KEY_SIZE; i++) card_info_iv[i] = g_gameCardHeader.card_info_iv[AES_128_KEY_SIZE - i - 1];
+    for(u8 i = 0; i < AES_128_KEY_SIZE; i++) reversed_card_info_iv[i] = card_info_iv[AES_128_KEY_SIZE - i - 1];
 
     /* Initialize AES-128-CBC context. */
-    aes128CbcContextCreate(&aes_ctx, card_info_key, card_info_iv, false);
+    aes128CbcContextCreate(&aes_ctx, card_info_key, reversed_card_info_iv, false);
 
     /* Decrypt CardInfo area. */
-    aes128CbcDecrypt(&aes_ctx, &g_gameCardInfoArea, &(g_gameCardHeader.card_info), sizeof(GameCardInfo));
+    aes128CbcDecrypt(&aes_ctx, out_plaintext_card_info_area, card_info_area, card_info_area_size);
 
-    LOG_DATA_DEBUG(&g_gameCardInfoArea, sizeof(GameCardInfo), "Gamecard CardInfo area dump:");
+    LOG_DATA_DEBUG(out_plaintext_card_info_area, card_info_area_size, "Gamecard %s area dump:", use_t2_data ? "CardInfo2" : "CardInfo");
 
     return true;
+}
+
+static void _gamecardGetCardIdSet(void)
+{
+    Result rc = fsDeviceOperatorGetGameCardIdSet(&g_deviceOperator, &g_gameCardIdSet, sizeof(FsGameCardIdSet), (s64)sizeof(FsGameCardIdSet));
+    if (R_SUCCEEDED(rc))
+    {
+        LOG_DATA_DEBUG(&g_gameCardIdSet, sizeof(FsGameCardIdSet), "Card ID set dump:");
+    } else {
+        LOG_MSG_ERROR("fsDeviceOperatorGetGameCardIdSet failed! (0x%X)", rc);
+    }
 }
 
 static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
@@ -1035,8 +1177,15 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
         return false;
     }
 
+    bool found = false;
+    FsCardId1 id1_mirror = {0};
+    u8 tmp_hash[SHA256_HASH_SIZE] = {0};
+
     /* Clear output. */
     memset(out, 0, sizeof(GameCardSecurityInformation));
+
+    /* Generate expected ID1 mirror value for the lookup process. */
+    id1_mirror.memory_type = (g_gameCardIdSet.id1.memory_type & FsCardId1MemoryType_IsLate);
 
     /* Open secure storage area. */
     if (!gamecardOpenStorageArea(GameCardStorageArea_Secure))
@@ -1044,9 +1193,6 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
         LOG_MSG_ERROR("Failed to open secure storage area!");
         return false;
     }
-
-    bool found = false;
-    u8 tmp_hash[SHA256_HASH_SIZE] = {0};
 
     /* Retrieve full FS program memory dump. */
     if (!memRetrieveFullProgramMemory(&g_fsProgramMemory))
@@ -1058,20 +1204,26 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
     /* Look for the initial data block in the FS memory dump using the package ID and the initial data hash from the gamecard header. */
     for(u64 offset = 0; offset < g_fsProgramMemory.data_size; offset++)
     {
-        if ((g_fsProgramMemory.data_size - offset) < sizeof(GameCardInitialData)) break;
+        if ((g_fsProgramMemory.data_size - offset) < sizeof(GameCardSecurityInformation)) break;
 
-        if (memcmp(g_fsProgramMemory.data + offset, g_gameCardHeader.package_id, sizeof(g_gameCardHeader.package_id)) != 0) continue;
+        GameCardSecurityInformation *gc_security_information = (GameCardSecurityInformation*)(g_fsProgramMemory.data + offset);
 
-        sha256CalculateHash(tmp_hash, g_fsProgramMemory.data + offset, sizeof(GameCardInitialData));
+        /* Check gamecard ID1 and ID2 values in GameCardSpecificData, as well as the ID1 mirror field from GameCardUid. */
+        if (gc_security_information->specific_data.card_id1.value != g_gameCardIdSet.id1.value || gc_security_information->specific_data.card_id2.value != g_gameCardIdSet.id2.value || \
+            gc_security_information->specific_data.card_uid.card_id1_mirror.value != id1_mirror.value) continue;
 
-        if (!memcmp(tmp_hash, g_gameCardHeader.initial_data_hash, SHA256_HASH_SIZE))
+        if (!g_gameCardIsT2)
         {
-            /* Jackpot. */
-            memcpy(out, g_fsProgramMemory.data + offset + sizeof(GameCardInitialData) - sizeof(GameCardSecurityInformation), sizeof(GameCardSecurityInformation));
-
-            found = true;
-            break;
+            /* Verify initial data hash if we're dealing with a T1 gamecard. */
+            sha256CalculateHash(tmp_hash, &(gc_security_information->initial_data), sizeof(GameCardInitialData));
+            if (memcmp(tmp_hash, g_gameCardHeader.initial_data_hash, SHA256_HASH_SIZE) != 0) continue;
         }
+
+        /* Jackpot. */
+        memcpy(out, gc_security_information, sizeof(GameCardSecurityInformation));
+        found = true;
+
+        break;
     }
 
     /* Free FS memory dump. */
@@ -1085,7 +1237,7 @@ static bool gamecardGetHandleAndStorage(u32 partition)
     u8 status = atomic_load(&g_gameCardStatus);
 
     if (partition > 1 || (status < GameCardStatus_LotusAsicFirmwareUpdateRequired && status != GameCardStatus_Processing) || \
-        (status == GameCardStatus_LotusAsicFirmwareUpdateRequired && partition == 1))
+        ((status == GameCardStatus_LotusAsicFirmwareUpdateRequired || status == GameCardStatus_OunceGameCardInserted) && partition == 1))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
@@ -1134,7 +1286,8 @@ static bool gamecardOpenStorageArea(GameCardStorageArea area)
     u8 status = atomic_load(&g_gameCardStatus);
 
     if ((area != GameCardStorageArea_Normal && area != GameCardStorageArea_Secure) || (status < GameCardStatus_LotusAsicFirmwareUpdateRequired && \
-        status != GameCardStatus_Processing) || (status == GameCardStatus_LotusAsicFirmwareUpdateRequired && area == GameCardStorageArea_Secure))
+        status != GameCardStatus_Processing) || ((status == GameCardStatus_LotusAsicFirmwareUpdateRequired || status == GameCardStatus_OunceGameCardInserted) && \
+        area == GameCardStorageArea_Secure))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
