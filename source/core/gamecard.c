@@ -464,9 +464,16 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
         /* Read the gamecard certificate using the official IPC call. */
         size_t out_size = 0;
         Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out, sizeof(FsGameCardCertificate), (s64*)&out_size, (s64)sizeof(FsGameCardCertificate));
-        if (R_FAILED(rc) || out_size != sizeof(FsGameCardCertificate)) LOG_MSG_ERROR("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%X, 0x%lX).", rc, out_size);
+        ret = (R_SUCCEEDED(rc) && out_size == sizeof(FsGameCardCertificate));
 
-        ret = R_SUCCEEDED(rc);
+        if (!ret)
+        {
+            LOG_MSG_ERROR("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%X, 0x%lX).", rc, out_size);
+
+            /* Manually read the gamecard certificate from the normal storage area. */
+            ret = gamecardReadStorageArea(out, sizeof(FsGameCardCertificate), GAMECARD_CERT_OFFSET);
+            if (!ret) LOG_MSG_ERROR("Failed to read gamecard certificate!");
+        }
     }
 
     return ret;
@@ -523,9 +530,17 @@ bool gamecardGetBundledFirmwareUpdateVersion(Version *out)
         u32 update_version = 0;
 
         Result rc = fsDeviceOperatorUpdatePartitionInfo(&g_deviceOperator, &g_gameCardHandle, &update_version, &update_id);
-        if (R_FAILED(rc)) LOG_MSG_ERROR("fsDeviceOperatorUpdatePartitionInfo failed! (0x%X)", rc);
-
         ret = (R_SUCCEEDED(rc) && update_id == GAMECARD_UPDATE_TID);
+
+        if (!ret)
+        {
+            LOG_MSG_ERROR("fsDeviceOperatorUpdatePartitionInfo failed! (0x%X, %016lX).", rc, update_id);
+
+            /* Manually copy the update version from the cached CardInfo area. */
+            update_version = (g_gameCardIsT2 ? g_gameCardInfo2Area.upp_version.value : g_gameCardInfoArea.upp_version.value);
+            ret = true;
+        }
+
         if (ret) out->value = update_version;
     }
 
