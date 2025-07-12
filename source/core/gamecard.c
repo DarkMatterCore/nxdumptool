@@ -461,17 +461,22 @@ bool gamecardGetCertificate(FsGameCardCertificate *out)
     {
         if (!g_gameCardInterfaceInit || atomic_load(&g_gameCardStatus) != GameCardStatus_InsertedAndInfoLoaded || !g_gameCardHandle.value || !out) break;
 
+        /* Clear output. */
+        memset(out, 0, sizeof(FsGameCardCertificate));
+
         /* Read the gamecard certificate using the official IPC call. */
         size_t out_size = 0;
-        Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out, sizeof(FsGameCardCertificate), (s64*)&out_size, (s64)sizeof(FsGameCardCertificate));
-        ret = (R_SUCCEEDED(rc) && out_size == sizeof(FsGameCardCertificate));
+        size_t read_size = GAMECARD_CERT_SIZE(g_gameCardIsT2);
+
+        Result rc = fsDeviceOperatorGetGameCardDeviceCertificate(&g_deviceOperator, &g_gameCardHandle, out, sizeof(FsGameCardCertificate), (s64*)&out_size, read_size);
+        ret = (R_SUCCEEDED(rc) && out_size == read_size);
 
         if (!ret)
         {
-            LOG_MSG_ERROR("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%X, 0x%lX).", rc, out_size);
+            LOG_MSG_ERROR("fsDeviceOperatorGetGameCardDeviceCertificate failed! (0x%X, 0x%lX, 0x%lX).", rc, read_size, out_size);
 
             /* Manually read the gamecard certificate from the normal storage area. */
-            ret = gamecardReadStorageArea(out, sizeof(FsGameCardCertificate), GAMECARD_CERT_OFFSET);
+            ret = gamecardReadStorageArea(out, read_size, GAMECARD_CERT_OFFSET);
             if (!ret) LOG_MSG_ERROR("Failed to read gamecard certificate!");
         }
     }
@@ -1193,14 +1198,10 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
     }
 
     bool found = false;
-    FsCardId1 id1_mirror = {0};
     u8 tmp_hash[SHA256_HASH_SIZE] = {0};
 
     /* Clear output. */
     memset(out, 0, sizeof(GameCardSecurityInformation));
-
-    /* Generate expected ID1 mirror value for the lookup process. */
-    id1_mirror.memory_type = (g_gameCardIdSet.id1.memory_type & FsCardId1MemoryType_IsLate);
 
     /* Open secure storage area. */
     if (!gamecardOpenStorageArea(GameCardStorageArea_Secure))
@@ -1222,10 +1223,15 @@ static bool gamecardReadSecurityInformation(GameCardSecurityInformation *out)
         if ((g_fsProgramMemory.data_size - offset) < sizeof(GameCardSecurityInformation)) break;
 
         GameCardSecurityInformation *gc_security_information = (GameCardSecurityInformation*)(g_fsProgramMemory.data + offset);
+        FsCardId1 *card_id1 = &(gc_security_information->specific_data.card_id1);
+        FsCardId2 *card_id2 = &(gc_security_information->specific_data.card_id2);
 
-        /* Check gamecard ID1 and ID2 values in GameCardSpecificData, as well as the ID1 mirror field from GameCardUid. */
-        if (gc_security_information->specific_data.card_id1.value != g_gameCardIdSet.id1.value || gc_security_information->specific_data.card_id2.value != g_gameCardIdSet.id2.value || \
-            gc_security_information->specific_data.card_uid.card_id1_mirror.value != id1_mirror.value) continue;
+        /* Check gamecard ID1 and ID2 values in GameCardSpecificData. */
+        if (card_id1->value != g_gameCardIdSet.id1.value || card_id2->value != g_gameCardIdSet.id2.value) continue;
+
+        LOG_DATA_DEBUG(gc_security_information, sizeof(GameCardSpecificData) - (MEMBER_SIZE(GameCardSpecificData, reserved) + MEMBER_SIZE(GameCardSpecificData, mac)), \
+                       "Found potential SecurityInformation block at 0x%lX within full FS program memory for %s Card IDs \"%08X%08X\". Header dump:", \
+                       offset, g_gameCardIsT2 ? "T2" : "T1", __builtin_bswap32(card_id1->value), __builtin_bswap32(card_id2->value));
 
         if (!g_gameCardIsT2)
         {

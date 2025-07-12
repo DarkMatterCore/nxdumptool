@@ -30,7 +30,7 @@ using namespace i18n::literals; /* For _i18n. */
 namespace nxdt::tasks
 {
     GameCardDumpTaskError GameCardImageDumpTask::DoInBackground(const std::string& output_path, const bool& prepend_key_area, const bool& keep_certificate, const bool& trim_dump,
-                                                                const bool& calculate_checksum, const bool& lookup_checksum)
+                                                                const bool& calculate_checksum, const bool& lookup_checksum, const bool& card_is_t2)
     {
         std::scoped_lock lock(this->task_mtx);
 
@@ -38,7 +38,7 @@ namespace nxdt::tasks
         GameCardSecurityInformation gc_security_information{};
 
         u32 gc_key_area_crc = 0;
-        size_t gc_img_size = 0;
+        size_t gc_img_size = 0, gc_cert_size = GAMECARD_CERT_SIZE(card_is_t2);
 
         nxdt::utils::FileWriter *file = nullptr;
         void *buf = nullptr;
@@ -49,8 +49,8 @@ namespace nxdt::tasks
         this->calculate_checksum = calculate_checksum;
         this->lookup_checksum = lookup_checksum;
 
-        LOG_MSG_DEBUG("Starting dump with parameters:\n- Output path: \"%s\".\n- Prepend key area: %u.\n- Keep certificate: %u.\n- Trim dump: %u.\n- Calculate checksum: %u.\n- Lookup checksum: %d.", \
-                      output_path.c_str(), prepend_key_area, keep_certificate, trim_dump, calculate_checksum, lookup_checksum);
+        LOG_MSG_DEBUG("Starting dump with parameters:\n- Output path: \"%s\".\n- Prepend key area: %u.\n- Keep certificate: %u.\n- Trim dump: %u.\n- Calculate checksum: %u.\n- Lookup checksum: %d.\n- Is T2 Card: %d.", \
+                      output_path.c_str(), prepend_key_area, keep_certificate, trim_dump, calculate_checksum, lookup_checksum, card_is_t2);
 
         /* Retrieve gamecard image size. */
         if ((!trim_dump && !gamecardGetTotalSize(&gc_img_size)) || (trim_dump && !gamecardGetTrimmedSize(&gc_img_size)) || !gc_img_size) return "tasks/gamecard/image/get_size_failed"_i18n;
@@ -121,7 +121,7 @@ namespace nxdt::tasks
             if (!gamecardReadStorage(buf, blksize, offset)) return i18n::getStr("tasks/gamecard/image/io_failed", "generic/read"_i18n, blksize, offset);
 
             /* Remove certificate, if needed. */
-            if (!keep_certificate && offset == 0) memset(static_cast<u8*>(buf) + GAMECARD_CERT_OFFSET, 0xFF, sizeof(FsGameCardCertificate));
+            if (!keep_certificate && offset == 0) memset(static_cast<u8*>(buf) + GAMECARD_CERT_OFFSET, 0xFF, gc_cert_size);
 
             /* Update image checksum. */
             if (calculate_checksum)

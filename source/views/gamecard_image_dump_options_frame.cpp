@@ -77,7 +77,8 @@ namespace nxdt::views
         /* Register dump button callback. */
         this->RegisterButtonListener([this](brls::View *view) {
             /* Retrieve configuration values set by the user. */
-            bool prepend_key_area_val = (this->prepend_key_area ? this->prepend_key_area->getToggleState() : false);
+            bool card_is_t2 = this->card_is_t2;
+            bool prepend_key_area_val = ((this->card_is_t2 && this->prepend_key_area) ? this->prepend_key_area->getToggleState() : false);
             bool keep_certificate_val = this->keep_certificate->getToggleState();
             bool trim_dump_val = this->trim_dump->getToggleState();
             bool calculate_checksum_val = this->calculate_checksum->getToggleState();
@@ -92,7 +93,7 @@ namespace nxdt::views
 
             /* Display task frame. */
             brls::Application::pushView(new GameCardImageDumpTaskFrame(output_path, prepend_key_area_val, keep_certificate_val, trim_dump_val, calculate_checksum_val,
-                                        lookup_checksum_val), brls::ViewAnimation::SLIDE_LEFT, false);
+                                        lookup_checksum_val, card_is_t2), brls::ViewAnimation::SLIDE_LEFT, false);
         });
     }
 

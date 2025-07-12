@@ -44,6 +44,7 @@ extern "C" {
 #define GAMECARD_HEADER2_CERT_PUBKEY_OFFSET 0x800
 
 #define GAMECARD_CERT_OFFSET                0x7000
+#define GAMECARD_CERT_SIZE(IS_T2)           ((IS_T2) ? sizeof(FsGameCardT2Certificate) : (sizeof(FsGameCardT1Certificate) - MEMBER_SIZE(FsGameCardT1Certificate, padding)))
 
 #define LAFW_MAGIC                          0x4C414657                      /* "LAFW". */
 #define LAFW_FW_TYPE_ENABLED_FLAG           0xFF
@@ -121,7 +122,7 @@ typedef struct {
     u32 random;
     u8 platform_flag;                   ///< TODO: add enum with values.
     u8 reserved[0xB];
-    FsCardId1 card_id1_mirror;          ///< This field mirrors bit 5 of FsCardId1MemoryType.
+    FsCardId1 card_id1_mirror;          ///< This field mirrors bit 5 of FsCardId1MemoryType (not always the case?).
     u8 mac[0x20];
 } GameCardUid;
 

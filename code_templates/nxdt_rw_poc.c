@@ -105,6 +105,7 @@ typedef struct
 typedef struct {
     SharedThreadData shared_thread_data;
     u32 xci_crc, full_xci_crc;
+    bool is_t2;
 } XciThreadData;
 
 typedef struct {
@@ -2624,10 +2625,9 @@ static bool saveGameCardImage(void *userdata)
     char *filename = NULL;
     u32 dev_idx = g_storageMenuElementOption.selected;
 
-    bool is_t2 = false;
-    gamecardIsT2(&is_t2);
+    gamecardIsT2(&(xci_thread_data.is_t2));
 
-    bool prepend_key_area = (!is_t2 && (bool)getGameCardPrependKeyAreaOption());
+    bool prepend_key_area = (!xci_thread_data.is_t2 && (bool)getGameCardPrependKeyAreaOption());
     bool keep_certificate = (bool)getGameCardKeepCertificateOption();
     bool trim_dump = (bool)getGameCardTrimDumpOption();
     bool calculate_checksum = (bool)getGameCardCalculateChecksumOption();
@@ -3012,9 +3012,12 @@ static bool saveGameCardCertificate(void *userdata)
     NX_IGNORE_ARG(userdata);
 
     FsGameCardCertificate gc_cert = {0};
-    bool success = false;
+    bool is_t2 = false, success = false;
+    size_t cert_size = 0;
     u32 crc = 0;
     char *filename = NULL;
+
+    gamecardIsT2(&is_t2);
 
     if (!gamecardGetCertificate(&gc_cert))
     {
@@ -3024,13 +3027,15 @@ static bool saveGameCardCertificate(void *userdata)
 
     consolePrint("get gamecard certificate ok\n");
 
-    crc = crc32Calculate(&gc_cert, sizeof(FsGameCardCertificate));
+    cert_size = GAMECARD_CERT_SIZE(is_t2);
+
+    crc = crc32Calculate(&gc_cert, cert_size);
     snprintf(path, MAX_ELEMENTS(path), " (Certificate) (%08X).bin", crc);
 
     filename = generateOutputGameCardFileName(GAMECARD_SUBDIR, path, true);
     if (!filename) goto end;
 
-    if (!saveFileData(filename, &gc_cert, sizeof(FsGameCardCertificate))) goto end;
+    if (!saveFileData(filename, &gc_cert, cert_size)) goto end;
 
     consolePrint("successfully saved certificate as \"%s\"\n", filename);
     success = true;
@@ -4982,6 +4987,8 @@ static void xciReadThreadFunc(void *arg)
     bool keep_certificate = (bool)getGameCardKeepCertificateOption();
     bool calculate_checksum = (bool)getGameCardCalculateChecksumOption();
 
+    size_t cert_size = GAMECARD_CERT_SIZE(xci_thread_data->is_t2);
+
     for(u64 offset = 0, blksize = BLOCK_SIZE; offset < shared_thread_data->total_size; offset += blksize)
     {
         if (blksize > (shared_thread_data->total_size - offset)) blksize = (shared_thread_data->total_size - offset);
@@ -5002,7 +5009,7 @@ static void xciReadThreadFunc(void *arg)
         }
 
         /* Remove certificate */
-        if (!keep_certificate && offset == 0) memset((u8*)buf1 + GAMECARD_CERT_OFFSET, 0xFF, sizeof(FsGameCardCertificate));
+        if (!keep_certificate && offset == 0) memset((u8*)buf1 + GAMECARD_CERT_OFFSET, 0xFF, cert_size);
 
         /* Update checksum */
         if (calculate_checksum)
