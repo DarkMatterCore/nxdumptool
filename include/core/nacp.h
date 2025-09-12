@@ -288,6 +288,17 @@ typedef enum : u8 {
     NacpRequiredNetworkServiceLicenseOnLaunch_Count  = 1        ///< Total values supported by this enum.
 } NacpRequiredNetworkServiceLicenseOnLaunch;
 
+typedef enum : u8 {
+    NacpApplicationErrorCodePrefix_NX    = 2,
+    NacpApplicationErrorCodePrefix_Ounce = 3
+} NacpApplicationErrorCodePrefix;
+
+typedef enum : u8 {
+    NacpApparentPlatform_NX    = 0,
+    NacpApparentPlatform_Ounce = 1,
+    NacpApparentPlatform_Count = 2  ///< Total values supported by this enum.
+} NacpApparentPlatform;
+
 typedef enum : u64 {
     NacpJitConfigurationFlag_None      = 0,
     NacpJitConfigurationFlag_IsEnabled = BITL(0),
@@ -432,10 +443,10 @@ typedef struct {
     NacpRepair repair;
     u8 program_index;
     NacpRequiredNetworkServiceLicenseOnLaunch required_network_service_license_on_launch;
-    u8 application_error_code_prefix;                                                               ///< TODO: add enum with values.
+    NacpApplicationErrorCodePrefix application_error_code_prefix;
     u8 reserved_2;
     u8 acd_index;                                                                                   ///< Application Control Data index. Used to access `Acd_{idx}` subdirectories within the Control NCA RomFS.
-    u8 apparent_platform;                                                                           ///< TODO: add enum with values.
+    NacpApparentPlatform apparent_platform;
     NacpNeighborDetectionClientConfiguration neighbor_detection_client_configuration;
     NacpJitConfiguration jit_configuration;
     NacpRequiredAddOnContentsSetBinaryDescriptor required_add_on_contents_set_binary_descriptor;

@@ -193,7 +193,7 @@ Size: 0x310 bytes.
 |--------|-------|---------------|----------------------------------------------------------------|
 |  0x000 | 0x008 | `uint64_t`    | Extracted FS dump size.                                        |
 |  0x008 | 0x301 | `char[769]`   | UTF-8 encoded extracted FS root path (NULL-terminated string). |
-|  0x309 | 0x006 | `uint8_t[6]`  | Reserved.                                                      |
+|  0x309 | 0x007 | `uint8_t[7]`  | Reserved.                                                      |
 
 Sent right before dumping a Switch FS in extracted form (e.g. HFS, PFS, RomFS) using multiple [SendFileProperties](#sendfileproperties) commands in succession.
 

@@ -905,11 +905,10 @@ static void gamecardLoadInfo(void)
     u64 fw_version = (g_gameCardIsT2 ? g_gameCardInfo2Area.fw_version : g_gameCardInfoArea.fw_version);
     if (g_lafwVersion < fw_version)
     {
-        bool is_ounce_gc = (g_gameCardIsT2 && g_gameCardHeader2.flags_2 == 0x03); // TODO: find out the exact meaning of this.
-
+        bool is_ounce_gc = (g_gameCardIsT2 && (g_gameCardHeader2.flags_2 & GameCardFlags2_HasSecureContent) != 0);
         if (is_ounce_gc)
         {
-            LOG_MSG_ERROR("Switch 2 gamecard detected!");
+            LOG_MSG_WARNING("Switch 2 gamecard detected!");
             atomic_store(&g_gameCardStatus, GameCardStatus_OunceGameCardInserted);
         } else {
             LOG_MSG_ERROR("LAFW version doesn't meet gamecard requirement! (%lu < %lu).", g_lafwVersion, fw_version);

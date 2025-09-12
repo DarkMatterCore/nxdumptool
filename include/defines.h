@@ -70,6 +70,8 @@
 #define ES_SYSMODULE_TID                (u64)0x0100000000000033
 #define SYSTEM_VERSION_TID              (u64)0x0100000000000809
 #define SYSTEM_UPDATE_TID               (u64)0x0100000000000816
+#define BOOTPKG_EXFAT_TID               (u64)0x010000000000081B
+#define BOOTPKG_EXFAT_SAFE_TID          (u64)0x010000000000081C
 #define QLAUNCH_TID                     (u64)0x0100000000001000
 
 #define FAT32_FILESIZE_LIMIT            (u64)UINT32_MAX                                                 /* 4 GiB - 1 (4294967295 bytes). */

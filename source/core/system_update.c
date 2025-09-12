@@ -290,7 +290,14 @@ static bool systemUpdateProcessContentMetaInfo(SystemUpdateDumpContext *ctx, con
     title_info = titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, content_meta_info->id);
     if (!title_info)
     {
-        LOG_MSG_ERROR("Failed to get TitleInfo entry for ID %016lX!", content_meta_info->id);
+        /* Skip exFAT firmware titles if they're not available. */
+        if (content_meta_info->id == BOOTPKG_EXFAT_TID || content_meta_info->id == BOOTPKG_EXFAT_SAFE_TID)
+        {
+            success = true;
+        } else {
+            LOG_MSG_ERROR("Failed to get TitleInfo entry for ID %016lX!", content_meta_info->id);
+        }
+
         goto end;
     }
 

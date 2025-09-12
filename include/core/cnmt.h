@@ -39,12 +39,15 @@ typedef enum : u8 {
     ContentMetaAttribute_Rebootless          = BIT(1),
     ContentMetaAttribute_Compacted           = BIT(2),  ///< One or more NCAs use SparseInfo data.
     ContentMetaAttribute_ProperProgramExists = BIT(3),
-    ContentMetaAttribute_Count               = 4        ///< Total values supported by this enum.
+    ContentMetaAttribute_Unknown1            = BIT(4),
+    ContentMetaAttribute_Unknown2            = BIT(5),
+    ContentMetaAttribute_Count               = 6        ///< Total values supported by this enum.
 } ContentMetaAttribute;
 
 typedef enum : u8 {
     ContentMetaPlatform_Nx    = 0,
-    ContentMetaPlatform_Count = 1   ///< Total values supported by this enum.
+    ContentMetaPlatform_Ounce = 1,
+    ContentMetaPlatform_Count = 2   ///< Total values supported by this enum.
 } ContentMetaPlatform;
 
 typedef enum : u8 {

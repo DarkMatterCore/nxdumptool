@@ -291,6 +291,13 @@ typedef struct {
 
 NXDT_ASSERT(GameCardInfo2, 0x70);
 
+typedef enum : u8 {
+    GameCardFlags2_None               = 0,
+    GameCardFlags2_IsSecondCardHeader = BIT(0), ///< Always enabled.
+    GameCardFlags2_HasSecureContent   = BIT(1), ///< Only enabled in Ounce gamecards.
+    GameCardFlags2_Count              = 2       ///< Total values supported by this enum.
+} GameCardFlags2;
+
 /// Placed immediately after the `GameCardHeader` section in T2 gamecards.
 typedef struct {
     u8 signature[0x100];                            ///< RSA-2048-PKCS#1 v1.5 with SHA-256 signature over the rest of the header. Verified with Ca10Modulus.
@@ -304,7 +311,7 @@ typedef struct {
     u8 package_id[0x8];                             ///< Used for challenge-response authentication. Differs from the Package ID value in GameCardHeader.
     u32 valid_data_end_page;                        ///< Expressed in GAMECARD_PAGE_SIZE units.
     u8 sign_key_index;                              ///< 20.0.0+. TODO: add enum with values.
-    u8 flags_2;                                     ///< 18.0.0+. TODO: add enum with values.
+    GameCardFlags2 flags_2;                         ///< 18.0.0+.
     u16 application_id_list_entry_count;            ///< Number of entries in the application ID list located right before valid_data_end_page (19.0.0+).
     u8 card_info_iv[AES_128_KEY_SIZE];              ///< AES-128-CBC IV for the CardInfo area (reversed).
     u64 partition_fs_header_address;                ///< Root Hash File System header offset.
