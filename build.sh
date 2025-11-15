@@ -1,47 +1,72 @@
 #!/bin/bash
+
 ARG=${1:-'--confirm'}
 
-cd "$(dirname "${BASH_SOURCE[0]}")"
+USE_EXIT_CONFIRMATION=$([ ${ARG,,} != "--noconfirm" ] && echo "true" || echo "false")
+NUM_PROC=$([ $USE_EXIT_CONFIRMATION == "true" ] && echo $(nproc) || echo 8)
 
-# Clean-up from last build
-rm -rf ./code_templates/tmp
-mkdir ./code_templates/tmp
+POC_NAME="nxdt_rw_poc"
+POC_PATH="./code_templates/$POC_NAME.c"
 
-mv ./source/main.cpp ./main.cpp
+pre_build_clean_up() {
+    rm -rf ./code_templates/tmp
+    mkdir ./code_templates/tmp
 
-make clean_all
+    mv ./source/main.cpp ./main.cpp
 
-# Build PoC
-poc_name="nxdt_rw_poc"
-poc_path="./code_templates/$poc_name.c"
+    >&2 make clean_all
+}
 
-rm -f ./source/main.c
-cp $poc_path ./source/main.c
+post_build_clean_up() {
+    >&2 make BUILD_TYPE="$POC_NAME" clean
+    >&2 make clean_all
 
-cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$poc_name.jpg
+    rm -f ./source/main.c ./romfs/icon/$POC_NAME.jpg
+    mv -f ./main.cpp ./source/main.cpp
+}
 
-set -e
+build() {
+    rm -f ./source/main.c
+    cp $POC_PATH ./source/main.c
+    cp ./romfs/icon/nxdumptool.jpg ./romfs/icon/$POC_NAME.jpg
 
-if [ ${ARG,,} != "--noconfirm" ]; then
-    make BUILD_TYPE="$poc_name" -j$(nproc)
-else
-    make BUILD_TYPE="$poc_name" -j8
-fi
+    >&2 make BUILD_TYPE="$POC_NAME" -j$NUM_PROC
+    local ret=$?
 
-set +e
+    if [[ $ret -eq 0 ]]; then
+        mv -f ./$POC_NAME.nro ./code_templates/tmp/$POC_NAME.nro
+        mv -f ./$POC_NAME.elf ./code_templates/tmp/$POC_NAME.elf
+        echo 0
+    else
+        echo 1
+    fi
+}
 
-rm -f ./romfs/icon/$poc_name.jpg
+bail_out() {
+    if [ $USE_EXIT_CONFIRMATION == "true" ]; then
+        read -rsp $'Press any key to continue...\n' -n 1 key
+    fi
+    exit $1
+}
 
-mv -f ./$poc_name.nro ./code_templates/tmp/$poc_name.nro
-mv -f ./$poc_name.elf ./code_templates/tmp/$poc_name.elf
+main() {
+    # Make sure we're in the right directory
+    cd "$(dirname "${BASH_SOURCE[0]}")"
 
-# Post build clean-up
-make BUILD_TYPE="$poc_name" clean
-make clean_all
+    # Pre-build clean-up
+    pre_build_clean_up
 
-rm -f ./source/main.c
-mv -f ./main.cpp ./source/main.cpp
+    # Build PoC
+    local ret="$(build)"
+    if [[ $ret -ne 0 ]]; then
+        bail_out $ret
+    fi
 
-if [ ${ARG,,} != "--noconfirm" ]; then
-    read -rsp $'Press any key to continue...\n' -n 1 key
-fi
+    # Post build clean-up
+    post_build_clean_up
+
+    # Exit
+    bail_out 0
+}
+
+main

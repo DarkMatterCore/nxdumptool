@@ -107,8 +107,10 @@ typedef enum : u32 {
 typedef struct {
     u32 production                 : 1;
     u32 unqualified_approval       : 1;
-    NpdmMemoryRegion memory_region : 4;
-    u32 reserved                   : 26;
+    NpdmMemoryRegion memory_region : 4;     ///< [5.0.0+].
+    u32 reserved_1                 : 1;     ///< Unused?
+    u32 load_browser_core_dll      : 1;     ///< [21.0.0+].
+    u32 reserved_2                 : 24;
 } NpdmAcidFlags;
 
 NXDT_ASSERT(NpdmAcidFlags, 0x4);
