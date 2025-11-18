@@ -66,7 +66,7 @@ typedef enum : u16 {
     TikPropertyMask_SharedTitle          = BIT(1),  ///< Determines if the title holds shared contents only. Most likely unused -- a remnant from previous ticket formats.
     TikPropertyMask_AllContents          = BIT(2),  ///< Determines if the content index mask shall be bypassed. Most likely unused -- a remnant from previous ticket formats.
     TikPropertyMask_DeviceLinkIndepedent = BIT(3),  ///< Determines if the console should *not* connect to the Internet to verify if the title's being used by the primary console.
-    TikPropertyMask_Volatile             = BIT(4),  ///< Determines if the ticket copy inside ticket.bin is available after reboot. Can be encrypted.
+    TikPropertyMask_Volatile             = BIT(4),  ///< Determines if the ticket copy inside ticket.bin is wiped after a reboot and/or a certain amount of time. Can be encrypted.
     TikPropertyMask_ELicenseRequired     = BIT(5),  ///< Determines if the console should connect to the Internet to perform license verification.
     TikPropertyMask_Count                = 6        ///< Total values supported by this enum.
 } TikPropertyMask;

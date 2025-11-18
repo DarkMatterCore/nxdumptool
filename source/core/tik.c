@@ -41,6 +41,9 @@
 #define TIK_COMMON_CERT_NAME                        "XS00000020"
 #define TIK_DEV_CERT_ISSUER                         "CA00000004"
 
+#define ES_COMMON_TICKET_BIN_PATH                   "escommon:/" TIK_DB_SAVEFILE_STORAGE_PATH
+#define ES_PERSONALIZED_TICKET_BIN_PATH             "espersonalized:/" TIK_DB_SAVEFILE_STORAGE_PATH
+
 /* Type definitions. */
 
 /// Used to parse ticket_list.bin entries.
@@ -53,12 +56,21 @@ typedef struct {
 
 NXDT_ASSERT(TikListEntry, 0x20);
 
-/// 9.x+ CTR key entry in ES .data segment. Used to store CTR key/IV data for encrypted volatile tickets in ticket.bin and/or encrypted entries in ticket_list.bin.
+/// Determines the type of volatile ticket derivation process to carry out.
+/// TODO: update whenever a new volatile ticket obfuscation method is discovered.
+typedef enum : u8 {
+    TikVolatileTicketType_None         = 0,
+    TikVolatileTicketType_Since900NUP  = 1, ///< 9.0.0 - 20.5.0.
+    TikVolatileTicketType_Since2100NUP = 2, ///< 21.0.0+.
+    TikVolatileTicketType_Count        = 3  ///< Total values supported by this enum.
+} TikVolatileTicketType;
+
+/// HOS 9.0.0+ CTR key entry in ES .data segment. Used to store CTR key/IV data for encrypted volatile tickets in ticket.bin and/or encrypted entries in ticket_list.bin.
 /// This is always stored in pairs. The first entry holds the key/IV for the encrypted volatile ticket, while the second entry holds the key/IV for the encrypted entry in ticket_list.bin.
 /// First index in this list is always 0.
 typedef struct {
     u32 idx;                    ///< Entry index.
-    u8 key[AES_128_KEY_SIZE];   ///< AES-128-CTR key.
+    u8 key[AES_128_KEY_SIZE];   ///< AES-128-CTR key. Randomly generated.
     u8 ctr[AES_128_KEY_SIZE];   ///< AES-128-CTR counter/IV. Always zeroed out.
 } TikEsCtrKeyEntry9x;
 
@@ -72,6 +84,15 @@ typedef struct {
 } TikEsCtrKeyPattern9x;
 
 NXDT_ASSERT(TikEsCtrKeyPattern9x, 0x28);
+
+/// HOS 21.0.0+ CTR key entry in ES .data segment. Used to store CTR key/IV data for encrypted volatile tickets in ticket.bin and/or encrypted entries in ticket_list.bin.
+typedef struct {
+    u8 path_hash[SHA256_HASH_SIZE]; ///< Path to file inside a specific ES savedata file that holds the encrypted data.
+    u8 key[AES_128_KEY_SIZE];       ///< AES-128-CTR key. Randomly generated.
+    u8 ctr[AES_128_KEY_SIZE];       ///< AES-128-CTR counter/IV. Randomly generated.
+} TikEsCtrKeyEntry21x;
+
+NXDT_ASSERT(TikEsCtrKeyEntry21x, 0x40);
 
 /* Global variables. */
 
@@ -91,6 +112,14 @@ static MemoryLocation g_esMemoryLocation = {
     .data_size = 0
 };
 
+static const char *g_esCommonTicketBinPath = ES_COMMON_TICKET_BIN_PATH;
+static u8 g_esCommonTicketBinPathHash[SHA256_HASH_SIZE] = {0};
+static bool g_esCommonTicketBinPathHashCalculated = false;
+
+static const char *g_esPersonalizedTicketBinPath = ES_PERSONALIZED_TICKET_BIN_PATH;
+static u8 g_esPersonalizedTicketBinPathHash[SHA256_HASH_SIZE] = {0};
+static bool g_esPersonalizedTicketBinPathHashCalculated = false;
+
 /* Function prototypes. */
 
 static bool tikRetrieveTicketFromGameCardByRightsId(Ticket *dst, const FsRightsId *id);
@@ -107,9 +136,14 @@ static bool tikRetrieveRightsIdsByTitleKeyType(FsRightsId **out, u32 *out_count,
 
 static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, TikTitleKeyType titlekey_type, u64 *out_offset);
 static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, TikTitleKeyType titlekey_type, u64 ticket_offset);
-static bool tikDecryptVolatileTicket(u8 *buf, u64 ticket_offset);
+
+static bool tikPrepareCtrContextFor9xVolatileTicket(Aes128CtrContext *out_ctr_ctx, u64 es_mem_offset, u64 ticket_offset);
+static bool tikPrepareCtrContextFor21xVolatileTicket(Aes128CtrContext *out_ctr_ctx, u64 es_mem_offset, TikTitleKeyType titlekey_type);
+static TikCommonBlock *tikDecryptVolatileTicket(u8 *buf, TikTitleKeyType titlekey_type, u64 ticket_offset);
 
 static bool tikGetTicketTypeAndSize(void *data, u64 data_size, TikType *out_type, u64 *out_size);
+
+NX_INLINE bool tikIsPlaintextTicket(void *buf);
 
 bool tikRetrieveTicketByRightsId(Ticket *dst, const FsRightsId *id, NcaKeyGeneration key_generation, bool use_gamecard)
 {
@@ -755,7 +789,7 @@ static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u
 
     TikCommonBlock *tik_common_block = NULL;
 
-    bool is_volatile = false, success = false;
+    bool success = false;
 
 #if LOG_LEVEL <= LOG_LEVEL_ERROR
     const char *tik_titlekey_type_str = g_tikTitleKeyTypeStrings[titlekey_type];
@@ -783,22 +817,26 @@ static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u
         goto end;
     }
 
-    /* Get ticket common block. */
-    tik_common_block = tikGetCommonBlockFromSignedTicketBlob(buf);
-
     /* Check if we're dealing with a volatile (encrypted) ticket. */
-    is_volatile = (!tik_common_block || strncmp(tik_common_block->issuer, "Root-", 5) != 0);
-    if (is_volatile)
+    /* If so, let's try to decrypt it. */
+    tik_common_block = (tikIsPlaintextTicket(buf) ? tikGetCommonBlockFromSignedTicketBlob(buf) : tikDecryptVolatileTicket(buf, titlekey_type, ticket_offset));
+    if (!tik_common_block)
     {
-        /* Attempt to decrypt the ticket. */
-        if (!tikDecryptVolatileTicket(buf, ticket_offset))
-        {
-            LOG_MSG_ERROR("Unable to decrypt volatile ticket at offset 0x%lX in \"%s\" from ES %s ticket system save!", ticket_offset, TIK_DB_SAVEFILE_STORAGE_PATH, tik_titlekey_type_str);
-            goto end;
-        }
+        LOG_MSG_ERROR("Unable to decrypt volatile ticket at offset 0x%lX in \"%s\" from ES %s ticket system save!", ticket_offset, TIK_DB_SAVEFILE_STORAGE_PATH, tik_titlekey_type_str);
 
-        /* Get ticket common block. */
-        tik_common_block = tikGetCommonBlockFromSignedTicketBlob(buf);
+        /*char tik_path[FS_MAX_PATH] = {0}, rights_id_str[33] = {0};
+        utilsGenerateHexString(rights_id_str, sizeof(rights_id_str), id, sizeof(FsRightsId), true);
+        snprintf(tik_path, sizeof(tik_path), DEVOPTAB_SDMC_DEVICE "/%s_enc.tik", rights_id_str);
+
+        FILE *fd = fopen(tik_path, "wb");
+        if (fd)
+        {
+            fwrite(buf, 1, SIGNED_TIK_MAX_SIZE, fd);
+            fclose(fd);
+            utilsCommitSdCardFileSystemChanges();
+        }*/
+
+        goto end;
     }
 
     /* Check if the rights ID from the ticket common block matches the one we're looking for. */
@@ -808,25 +846,93 @@ end:
     return success;
 }
 
-static bool tikDecryptVolatileTicket(u8 *buf, u64 ticket_offset)
+static bool tikPrepareCtrContextFor9xVolatileTicket(Aes128CtrContext *out_ctr_ctx, u64 es_mem_offset, u64 ticket_offset)
 {
-    if (!buf || (ticket_offset % SIGNED_TIK_MAX_SIZE) != 0)
+    if (!g_esMemoryLocation.data || !g_esMemoryLocation.data_size || !out_ctr_ctx || es_mem_offset >= g_esMemoryLocation.data_size || (g_esMemoryLocation.data_size - es_mem_offset) < (sizeof(TikEsCtrKeyEntry9x) * 2))
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
-    Aes128CtrContext ctr_ctx = {0};
-    u8 null_ctr[AES_128_KEY_SIZE] = {0}, ctr[AES_128_KEY_SIZE] = {0}, dec_tik[SIGNED_TIK_MAX_SIZE] = {0};
-    TikCommonBlock *tik_common_block = NULL;
-    bool success = false;
+    u8 null_key[AES_128_KEY_SIZE] = {0}, ctr[AES_128_KEY_SIZE] = {0};
+
+    /* Check if the key indexes are valid. idx2 should always be equal to idx + 1. */
+    TikEsCtrKeyPattern9x *pattern = (TikEsCtrKeyPattern9x*)(g_esMemoryLocation.data + es_mem_offset);
+    if (pattern->idx2 != (pattern->idx1 + 1)) return false;
+
+    /* Make sure the key is not null and the CTR is. */
+    TikEsCtrKeyEntry9x *key_entry = (TikEsCtrKeyEntry9x*)pattern;
+    if (!memcmp(key_entry->key, null_key, sizeof(null_key)) || memcmp(key_entry->ctr, null_key, sizeof(null_key)) != 0) return false;
+
+    /* Initialize AES-128-CTR context using this data. Let the caller handle the actual decryption. */
+    memset(out_ctr_ctx, 0, sizeof(Aes128CtrContext));
+    aes128CtrInitializePartialCtr(ctr, key_entry->ctr, ticket_offset);
+    aes128CtrContextCreate(out_ctr_ctx, key_entry->key, ctr);
+
+    return true;
+}
+
+static bool tikPrepareCtrContextFor21xVolatileTicket(Aes128CtrContext *out_ctr_ctx, u64 es_mem_offset, TikTitleKeyType titlekey_type)
+{
+    if (!g_esMemoryLocation.data || !g_esMemoryLocation.data_size || !out_ctr_ctx || es_mem_offset >= g_esMemoryLocation.data_size || (g_esMemoryLocation.data_size - es_mem_offset) < sizeof(TikEsCtrKeyEntry21x) || \
+        titlekey_type >= TikTitleKeyType_Count)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    u8 null_key[AES_128_KEY_SIZE] = {0};
+
+    /* Make sure the path hashes have been calculated. */
+    if (!g_esCommonTicketBinPathHashCalculated)
+    {
+        sha256CalculateHash(g_esCommonTicketBinPathHash, g_esCommonTicketBinPath, strlen(g_esCommonTicketBinPath));
+        LOG_DATA_DEBUG(g_esCommonTicketBinPathHash, sizeof(g_esCommonTicketBinPathHash), "Hash for path \"%s\":", g_esCommonTicketBinPath);
+        g_esCommonTicketBinPathHashCalculated = true;
+    }
+
+    if (!g_esPersonalizedTicketBinPathHashCalculated)
+    {
+        sha256CalculateHash(g_esPersonalizedTicketBinPathHash, g_esPersonalizedTicketBinPath, strlen(g_esPersonalizedTicketBinPath));
+        LOG_DATA_DEBUG(g_esPersonalizedTicketBinPathHash, sizeof(g_esPersonalizedTicketBinPathHash), "Hash for path \"%s\":", g_esPersonalizedTicketBinPath);
+        g_esPersonalizedTicketBinPathHashCalculated = true;
+    }
+
+    /* Check if we're dealing with a valid entry. Null keys and/or IVs are not allowed here. */
+    TikEsCtrKeyEntry21x *key_entry = (TikEsCtrKeyEntry21x*)(g_esMemoryLocation.data + es_mem_offset);
+    if ((titlekey_type == TikTitleKeyType_Common && memcmp(key_entry->path_hash, g_esCommonTicketBinPathHash, sizeof(g_esCommonTicketBinPathHash)) != 0) || \
+        (titlekey_type == TikTitleKeyType_Personalized && memcmp(key_entry->path_hash, g_esPersonalizedTicketBinPathHash, sizeof(g_esPersonalizedTicketBinPathHash)) != 0) || \
+        !memcmp(key_entry->key, null_key, sizeof(null_key)) || !memcmp(key_entry->ctr, null_key, sizeof(null_key))) return false;
+
+    /* Initialize AES-128-CTR context using this data. Let the caller handle the actual decryption. */
+    memset(out_ctr_ctx, 0, sizeof(Aes128CtrContext));
+    aes128CtrContextCreate(out_ctr_ctx, key_entry->key, key_entry->ctr);
+
+    return true;
+}
+
+static TikCommonBlock *tikDecryptVolatileTicket(u8 *buf, TikTitleKeyType titlekey_type, u64 ticket_offset)
+{
+    if (!buf || titlekey_type >= TikTitleKeyType_Count || (ticket_offset % SIGNED_TIK_MAX_SIZE) != 0)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
 
     /* Don't proceed if HOS version isn't at least 9.0.0. */
     if (!hosversionAtLeast(9, 0, 0))
     {
         LOG_MSG_ERROR("Unable to retrieve ES key entry for volatile tickets under HOS versions below 9.0.0!");
-        goto end;
+        return NULL;
     }
+
+    Aes128CtrContext ctr_ctx = {0};
+    TikVolatileTicketType volatile_tik_type = TikVolatileTicketType_None;
+    u8 dec_tik[SIGNED_TIK_MAX_SIZE] = {0};
+    TikCommonBlock *tik_common_block = NULL;
+
+    /* Determine volatile ticket type based on the installed HOS version. */
+    volatile_tik_type = (hosversionAtLeast(21, 0, 0) ? TikVolatileTicketType_Since2100NUP : TikVolatileTicketType_Since900NUP);
 
     /* Retrieve ES program memory. */
     if (!memRetrieveFullProgramMemory(&g_esMemoryLocation))
@@ -838,37 +944,49 @@ static bool tikDecryptVolatileTicket(u8 *buf, u64 ticket_offset)
     /* Retrieve the CTR key/IV from ES program memory in order to decrypt this ticket. */
     for(u64 i = 0; i < g_esMemoryLocation.data_size; i++)
     {
-        if ((g_esMemoryLocation.data_size - i) < (sizeof(TikEsCtrKeyEntry9x) * 2)) break;
+        /* Don't proceed any further if there's not enough data left to process. */
+        const size_t remaining = (g_esMemoryLocation.data_size - i);
+        if ((volatile_tik_type == TikVolatileTicketType_Since2100NUP && remaining < sizeof(TikEsCtrKeyEntry21x)) || \
+            (volatile_tik_type == TikVolatileTicketType_Since900NUP  && remaining < (sizeof(TikEsCtrKeyEntry9x) * 2))) break;
 
-        /* Check if the key indexes are valid. idx2 should always be an odd number equal to idx + 1. */
-        TikEsCtrKeyPattern9x *pattern = (TikEsCtrKeyPattern9x*)(g_esMemoryLocation.data + i);
-        if (pattern->idx2 != (pattern->idx1 + 1) || !(pattern->idx2 & 1)) continue;
+        /* Prepare AES-128-CTR context based on our expected volatile ticket type. */
+        bool proceed = (volatile_tik_type == TikVolatileTicketType_Since2100NUP ? tikPrepareCtrContextFor21xVolatileTicket(&ctr_ctx, i, titlekey_type) : \
+                                                                                  tikPrepareCtrContextFor9xVolatileTicket(&ctr_ctx, i, ticket_offset));
+        if (!proceed) continue;
 
-        /* Check if the key is not null and if the CTR is. */
-        TikEsCtrKeyEntry9x *key_entry = (TikEsCtrKeyEntry9x*)pattern;
-        if (!memcmp(key_entry->key, null_ctr, sizeof(null_ctr)) || memcmp(key_entry->ctr, null_ctr, sizeof(null_ctr)) != 0) continue;
-
-        /* Check if we can decrypt the current ticket with this data. */
-        memset(&ctr_ctx, 0, sizeof(Aes128CtrContext));
-        aes128CtrInitializePartialCtr(ctr, key_entry->ctr, ticket_offset);
-        aes128CtrContextCreate(&ctr_ctx, key_entry->key, ctr);
+        /* Decrypt the ticket using the retrieved keydata. */
         aes128CtrCrypt(&ctr_ctx, dec_tik, buf, SIGNED_TIK_MAX_SIZE);
 
         /* Check if we successfully decrypted this ticket. */
-        if ((tik_common_block = tikGetCommonBlockFromSignedTicketBlob(dec_tik)) != NULL && !strncmp(tik_common_block->issuer, "Root-", 5))
+        if (tikIsPlaintextTicket(dec_tik))
         {
+            /* Copy plaintext ticket back to the input buffer. */
             memcpy(buf, dec_tik, SIGNED_TIK_MAX_SIZE);
-            success = true;
+
+            /* Update output pointer. */
+            tik_common_block = tikGetCommonBlockFromSignedTicketBlob(buf);
+
             break;
         }
     }
 
-    if (!success) LOG_MSG_ERROR("Unable to find ES memory key entry!");
+    if (!tik_common_block)
+    {
+        LOG_MSG_ERROR("Unable to find ES memory key entry!");
+
+        /*FILE *fd = fopen("sdmc:/es.bin", "wb");
+        if (fd)
+        {
+            fwrite(g_esMemoryLocation.data, 1, g_esMemoryLocation.data_size, fd);
+            fclose(fd);
+            utilsCommitSdCardFileSystemChanges();
+        }*/
+    }
 
 end:
     memFreeMemoryLocation(&g_esMemoryLocation);
 
-    return success;
+    return tik_common_block;
 }
 
 static bool tikGetTicketTypeAndSize(void *data, u64 data_size, TikType *out_type, u64 *out_size)
@@ -926,4 +1044,10 @@ static bool tikGetTicketTypeAndSize(void *data, u64 data_size, TikType *out_type
 
 end:
     return success;
+}
+
+NX_INLINE bool tikIsPlaintextTicket(void *buf)
+{
+    TikCommonBlock *tik_common_block = tikGetCommonBlockFromSignedTicketBlob(buf);
+    return (tik_common_block != NULL && !strncmp(tik_common_block->issuer, "Root-", 5));
 }
