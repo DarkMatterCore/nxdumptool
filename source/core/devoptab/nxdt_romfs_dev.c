@@ -119,7 +119,7 @@ static int romfsdev_open(struct _reent *r, void *fd, const char *path, int flags
     ROMFS_DEV_INIT_FS_ACCESS;
 
     /* Validate input. */
-    if (!file || (flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EROFS);
+    if ((flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EROFS);
 
     /* Get truncated path. */
     if (!(path = romfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
@@ -141,9 +141,6 @@ static int romfsdev_close(struct _reent *r, void *fd)
 {
     ROMFS_DEV_INIT_FILE_VARS;
 
-    /* Sanity check. */
-    if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
-
     //LOG_MSG_DEBUG("Closing file \"%.*s\" from \"%s:\".", (int)file->file_entry->name_length, file->file_entry->name, dev_ctx->name);
 
     /* Reset file descriptor. */
@@ -160,7 +157,7 @@ static ssize_t romfsdev_read(struct _reent *r, void *fd, char *ptr, size_t len)
     ROMFS_DEV_INIT_FS_ACCESS;
 
     /* Sanity check. */
-    if (!file || !ptr || !len) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (!ptr || !len) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     /*LOG_MSG_DEBUG("Reading 0x%lX byte(s) at offset 0x%lX from file \"%.*s\" in \"%s:\".", len, file->data_offset, (int)file->file_entry->name_length, file->file_entry->name, \
                                                                                           dev_ctx->name);*/
@@ -181,9 +178,6 @@ static off_t romfsdev_seek(struct _reent *r, void *fd, off_t pos, int dir)
     off_t offset = 0;
 
     ROMFS_DEV_INIT_FILE_VARS;
-
-    /* Sanity check. */
-    if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     /* Find the offset to seek from. */
     switch(dir)
@@ -225,7 +219,7 @@ static int romfsdev_fstat(struct _reent *r, void *fd, struct stat *st)
     ROMFS_DEV_INIT_FS_ACCESS;
 
     /* Sanity check. */
-    if (!file || !st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (!st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     //LOG_MSG_DEBUG("Getting stats for file \"%.*s\" in \"%s:\".", (int)file->file_entry->name_length, file->file_entry->name, dev_ctx->name);
 
@@ -239,6 +233,7 @@ end:
 
 static int romfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 {
+    RomFileSystemDirectoryEntry *dir_entry = NULL;
     RomFileSystemFileEntry *file_entry = NULL;
 
     DEVOPTAB_INIT_VARS;
@@ -252,11 +247,19 @@ static int romfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 
     //LOG_MSG_DEBUG("Getting file stats for \"%s:%s\".", dev_ctx->name, file);
 
-    /* Get information about the requested RomFS file entry. */
-    if (!(file_entry = romfsGetFileEntryByPath(fs_ctx, file))) DEVOPTAB_SET_ERROR_AND_EXIT(ENOENT);
+    /* Get information about the requested RomFS file/dir entry. */
+    if ((dir_entry = romfsGetDirectoryEntryByPath(fs_ctx, file)))
+    {
+        /* Fill directory stat info. */
+        romfsdev_fill_dir_stat(st, fs_ctx, dir_entry, dev_ctx->mount_time);
+    } else
+    if ((file_entry = romfsGetFileEntryByPath(fs_ctx, file)))
+    {
+        /* Fill file stat info. */
+        romfsdev_fill_file_stat(st, fs_ctx, file_entry, dev_ctx->mount_time);
+    }
 
-    /* Fill stat info. */
-    romfsdev_fill_file_stat(st, fs_ctx, file_entry, dev_ctx->mount_time);
+    if (!dir_entry && !file_entry) DEVOPTAB_SET_ERROR(ENOENT);
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -326,7 +329,7 @@ static int romfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename
 
         /* Fill directory entry. */
         romfsdev_fill_dir_stat(filestat, fs_ctx, dir_entry, dev_ctx->mount_time);
-        strcpy(filename, dir->state == 0 ? "." : "..");
+        sprintf(filename, "%s", dir->state == 0 ? "." : "..");
 
         /* Update state. */
         dir->state++;
@@ -419,7 +422,7 @@ static int romfsdev_statvfs(struct _reent *r, const char *path, struct statvfs *
     buf->f_ffree = 0;
     buf->f_favail = 0;
     buf->f_fsid = 0;
-    buf->f_flag = ST_NOSUID;
+    buf->f_flag = (ST_NOSUID | ST_RDONLY);
     buf->f_namemax = FS_MAX_PATH;
 
 end:
@@ -429,6 +432,8 @@ end:
 
 static const char *romfsdev_get_truncated_path(struct _reent *r, const char *path)
 {
+    DEVOPTAB_INIT_ERROR_STATE;
+
     const u8 *p = (const u8*)path;
     ssize_t units = 0;
     u32 code = 0;

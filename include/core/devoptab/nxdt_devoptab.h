@@ -35,14 +35,16 @@ extern "C" {
 
 #define DEVOPTAB_MOUNT_NAME_LENGTH      32  // Including NULL terminator.
 
-#define DEVOPTAB_INIT_ERROR_STATE       r->_errno = 0
-#define DEVOPTAB_SET_ERROR(x)           r->_errno = (x)
-#define DEVOPTAB_IS_ERROR_SET           (r->_errno != 0)
+// Using errno automatically takes care of updating r->_errno as well.
+#define DEVOPTAB_INIT_ERROR_STATE       int _errno = 0; \
+                                        errno = 0
+#define DEVOPTAB_SET_ERROR(x)           _errno = errno = (x)
+#define DEVOPTAB_IS_ERROR_SET           (_errno != 0)
 
 #define DEVOPTAB_DECL_DEV_CTX           DevoptabDeviceContext *dev_ctx = (DevoptabDeviceContext*)r->deviceData
 #define DEVOPTAB_DECL_FS_CTX(type)      type *fs_ctx = (type*)dev_ctx->fs_ctx
 #define DEVOPTAB_DECL_FILE_STATE(type)  type *file = (type*)fd
-#define DEVOPTAB_DECL_DIR_STATE(type)   type *dir = (type*)dirState->dirStruct
+#define DEVOPTAB_DECL_DIR_STATE(type)   type *dir = (dirState ? (type*)dirState->dirStruct : NULL)
 
 #define DEVOPTAB_EXIT                   goto end
 #define DEVOPTAB_SET_ERROR_AND_EXIT(x)  \
@@ -54,7 +56,7 @@ do { \
 #define DEVOPTAB_RETURN_INT(x)          return (DEVOPTAB_IS_ERROR_SET ? -1 : (x))
 #define DEVOPTAB_RETURN_PTR(x)          return (DEVOPTAB_IS_ERROR_SET ? NULL : (x))
 #define DEVOPTAB_RETURN_BOOL            return (DEVOPTAB_IS_ERROR_SET ? false : true)
-#define DEVOPTAB_RETURN_UNSUPPORTED_OP  r->_errno = ENOSYS; \
+#define DEVOPTAB_RETURN_UNSUPPORTED_OP  errno = ENOSYS; \
                                         return -1
 
 #define DEVOPTAB_INIT_VARS              devoptabControlMutex(true); \
@@ -62,12 +64,13 @@ do { \
                                         DEVOPTAB_DECL_DEV_CTX; \
                                         if (!dev_ctx->initialized) DEVOPTAB_SET_ERROR_AND_EXIT(ENODEV)
 
-#define DEVOPTAB_INIT_FILE_VARS(type)   DEVOPTAB_INIT_VARS; \
-                                        DEVOPTAB_DECL_FILE_STATE(type)
+#define DEVOPTAB_INIT_FILE_VARS(type)   DEVOPTAB_DECL_FILE_STATE(type); \
+                                        DEVOPTAB_INIT_VARS; \
+                                        if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL)
 
-#define DEVOPTAB_INIT_DIR_VARS(type)    DEVOPTAB_INIT_VARS; \
-                                        if (!dirState) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL); \
-                                        DEVOPTAB_DECL_DIR_STATE(type)
+#define DEVOPTAB_INIT_DIR_VARS(type)    DEVOPTAB_DECL_DIR_STATE(type); \
+                                        DEVOPTAB_INIT_VARS; \
+                                        if (!dir) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL)
 
 #define DEVOPTAB_DEINIT_VARS            devoptabControlMutex(false)
 

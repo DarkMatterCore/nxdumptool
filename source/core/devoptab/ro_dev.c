@@ -24,6 +24,7 @@
 
 ssize_t rodev_write(struct _reent *r, void *fd, const char *ptr, size_t len)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(fd);
     NX_IGNORE_ARG(ptr);
     NX_IGNORE_ARG(len);
@@ -33,6 +34,7 @@ ssize_t rodev_write(struct _reent *r, void *fd, const char *ptr, size_t len)
 
 int rodev_fstat(struct _reent *r, void *fd, struct stat *st)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(fd);
     NX_IGNORE_ARG(st);
 
@@ -41,6 +43,7 @@ int rodev_fstat(struct _reent *r, void *fd, struct stat *st)
 
 int rodev_link(struct _reent *r, const char *existing, const char *newLink)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(existing);
     NX_IGNORE_ARG(newLink);
 
@@ -49,6 +52,7 @@ int rodev_link(struct _reent *r, const char *existing, const char *newLink)
 
 int rodev_unlink(struct _reent *r, const char *name)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(name);
 
     DEVOPTAB_RETURN_UNSUPPORTED_OP;
@@ -56,6 +60,7 @@ int rodev_unlink(struct _reent *r, const char *name)
 
 int rodev_chdir(struct _reent *r, const char *name)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(name);
 
     DEVOPTAB_RETURN_UNSUPPORTED_OP;
@@ -63,6 +68,7 @@ int rodev_chdir(struct _reent *r, const char *name)
 
 int rodev_rename(struct _reent *r, const char *oldName, const char *newName)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(oldName);
     NX_IGNORE_ARG(newName);
 
@@ -71,6 +77,7 @@ int rodev_rename(struct _reent *r, const char *oldName, const char *newName)
 
 int rodev_mkdir(struct _reent *r, const char *path, int mode)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(path);
     NX_IGNORE_ARG(mode);
 
@@ -79,6 +86,7 @@ int rodev_mkdir(struct _reent *r, const char *path, int mode)
 
 int rodev_ftruncate(struct _reent *r, void *fd, off_t len)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(fd);
     NX_IGNORE_ARG(len);
 
@@ -87,6 +95,7 @@ int rodev_ftruncate(struct _reent *r, void *fd, off_t len)
 
 int rodev_fsync(struct _reent *r, void *fd)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(fd);
 
     DEVOPTAB_RETURN_UNSUPPORTED_OP;
@@ -94,6 +103,7 @@ int rodev_fsync(struct _reent *r, void *fd)
 
 int rodev_chmod(struct _reent *r, const char *path, mode_t mode)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(path);
     NX_IGNORE_ARG(mode);
 
@@ -102,6 +112,7 @@ int rodev_chmod(struct _reent *r, const char *path, mode_t mode)
 
 int rodev_fchmod(struct _reent *r, void *fd, mode_t mode)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(fd);
     NX_IGNORE_ARG(mode);
 
@@ -110,6 +121,7 @@ int rodev_fchmod(struct _reent *r, void *fd, mode_t mode)
 
 int rodev_rmdir(struct _reent *r, const char *name)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(name);
 
     DEVOPTAB_RETURN_UNSUPPORTED_OP;
@@ -117,6 +129,7 @@ int rodev_rmdir(struct _reent *r, const char *name)
 
 int rodev_utimes(struct _reent *r, const char *filename, const struct timeval times[2])
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(filename);
     NX_IGNORE_ARG(times);
 
@@ -125,6 +138,7 @@ int rodev_utimes(struct _reent *r, const char *filename, const struct timeval ti
 
 long rodev_fpathconf(struct _reent *r, void *fd, int name)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(fd);
     NX_IGNORE_ARG(name);
 
@@ -133,6 +147,7 @@ long rodev_fpathconf(struct _reent *r, void *fd, int name)
 
 long rodev_pathconf(struct _reent *r, const char *path, int name)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(path);
     NX_IGNORE_ARG(name);
 
@@ -141,6 +156,7 @@ long rodev_pathconf(struct _reent *r, const char *path, int name)
 
 int rodev_symlink(struct _reent *r, const char *target, const char *linkpath)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(target);
     NX_IGNORE_ARG(linkpath);
 
@@ -149,6 +165,7 @@ int rodev_symlink(struct _reent *r, const char *target, const char *linkpath)
 
 ssize_t rodev_readlink(struct _reent *r, const char *path, char *buf, size_t bufsiz)
 {
+    NX_IGNORE_ARG(r);
     NX_IGNORE_ARG(path);
     NX_IGNORE_ARG(buf);
     NX_IGNORE_ARG(bufsiz);

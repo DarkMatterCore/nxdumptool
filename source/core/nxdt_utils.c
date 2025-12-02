@@ -36,7 +36,7 @@
 
 /* Type definitions. */
 
-/* Reference: https://github.com/Atmosphere-NX/Atmosphere/blob/master/exosphere/program/source/smc/secmon_smc_info.hpp. */
+/// Reference: https://github.com/Atmosphere-NX/Atmosphere/blob/master/exosphere/program/source/smc/secmon_smc_info.cpp.
 typedef struct {
     SdkAddOnVersion target_firmware;
     u8 key_generation;

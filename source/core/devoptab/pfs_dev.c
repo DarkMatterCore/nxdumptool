@@ -113,7 +113,7 @@ static int pfsdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     PFS_DEV_INIT_FS_ACCESS;
 
     /* Validate input. */
-    if (!file || (flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EROFS);
+    if ((flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EROFS);
 
     /* Get truncated path. */
     if (!(path = pfsdev_get_truncated_path(r, path))) DEVOPTAB_EXIT;
@@ -136,9 +136,6 @@ static int pfsdev_close(struct _reent *r, void *fd)
 {
     PFS_DEV_INIT_FILE_VARS;
 
-    /* Sanity check. */
-    if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
-
     //LOG_MSG_DEBUG("Closing \"%s:/%s\".", dev_ctx->name, file->name);
 
     /* Reset file descriptor. */
@@ -155,7 +152,7 @@ static ssize_t pfsdev_read(struct _reent *r, void *fd, char *ptr, size_t len)
     PFS_DEV_INIT_FS_ACCESS;
 
     /* Sanity check. */
-    if (!file || !ptr || !len) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (!ptr || !len) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     //LOG_MSG_DEBUG("Reading 0x%lX byte(s) at offset 0x%lX from \"%s:/%s\".", len, file->offset, dev_ctx->name, file->name);
 
@@ -175,9 +172,6 @@ static off_t pfsdev_seek(struct _reent *r, void *fd, off_t pos, int dir)
     off_t offset = 0;
 
     PFS_DEV_INIT_FILE_VARS;
-
-    /* Sanity check. */
-    if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     /* Find the offset to seek from. */
     switch(dir)
@@ -218,7 +212,7 @@ static int pfsdev_fstat(struct _reent *r, void *fd, struct stat *st)
     PFS_DEV_INIT_FILE_VARS;
 
     /* Sanity check. */
-    if (!file || !st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (!st) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     //LOG_MSG_DEBUG("Getting file stats for \"%s:/%s\".", dev_ctx->name, file->name);
 
@@ -318,7 +312,7 @@ static int pfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
         filestat->st_mode = (S_IFDIR | S_IRUSR | S_IRGRP | S_IROTH);
         filestat->st_atime = filestat->st_mtime = filestat->st_ctime = dev_ctx->mount_time;
 
-        strcpy(filename, dir->state == 0 ? "." : "..");
+        sprintf(filename, "%s", dir->state == 0 ? "." : "..");
 
         /* Update state. */
         dir->state++;
@@ -334,7 +328,7 @@ static int pfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
     if (strlen(fname) > NAME_MAX) DEVOPTAB_SET_ERROR_AND_EXIT(ENAMETOOLONG);
 
     /* Copy filename. */
-    strcpy(filename, fname);
+    sprintf(filename, "%s", fname);
 
     /* Fill stat info. */
     pfsdev_fill_stat(filestat, dir->index, pfs_entry, dev_ctx->mount_time);
@@ -390,7 +384,7 @@ static int pfsdev_statvfs(struct _reent *r, const char *path, struct statvfs *bu
     buf->f_ffree = 0;
     buf->f_favail = 0;
     buf->f_fsid = 0;
-    buf->f_flag = ST_NOSUID;
+    buf->f_flag = (ST_NOSUID | ST_RDONLY);
     buf->f_namemax = FS_MAX_PATH;
 
 end:
@@ -400,6 +394,8 @@ end:
 
 static const char *pfsdev_get_truncated_path(struct _reent *r, const char *path)
 {
+    DEVOPTAB_INIT_ERROR_STATE;
+
     const u8 *p = (const u8*)path;
     ssize_t units = 0;
     u32 code = 0;

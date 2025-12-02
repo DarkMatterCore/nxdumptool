@@ -138,7 +138,10 @@ static bool tikGetTicketEntryOffsetFromTicketList(save_ctx_t *save_ctx, u8 *buf,
 static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u64 buf_size, const FsRightsId *id, TikTitleKeyType titlekey_type, u64 ticket_offset);
 
 static bool tikPrepareCtrContextFor9xVolatileTicket(Aes128CtrContext *out_ctr_ctx, u64 es_mem_offset, u64 ticket_offset);
+
 static bool tikPrepareCtrContextFor21xVolatileTicket(Aes128CtrContext *out_ctr_ctx, u64 es_mem_offset, TikTitleKeyType titlekey_type);
+NX_INLINE void tikCalculate21xVolatileTicketPathHash(const char *path, u8 *path_hash, bool *is_hash_calculated);
+
 static TikCommonBlock *tikDecryptVolatileTicket(u8 *buf, TikTitleKeyType titlekey_type, u64 ticket_offset);
 
 static bool tikGetTicketTypeAndSize(void *data, u64 data_size, TikType *out_type, u64 *out_size);
@@ -884,19 +887,8 @@ static bool tikPrepareCtrContextFor21xVolatileTicket(Aes128CtrContext *out_ctr_c
     u8 null_key[AES_128_KEY_SIZE] = {0};
 
     /* Make sure the path hashes have been calculated. */
-    if (!g_esCommonTicketBinPathHashCalculated)
-    {
-        sha256CalculateHash(g_esCommonTicketBinPathHash, g_esCommonTicketBinPath, strlen(g_esCommonTicketBinPath));
-        LOG_DATA_DEBUG(g_esCommonTicketBinPathHash, sizeof(g_esCommonTicketBinPathHash), "Hash for path \"%s\":", g_esCommonTicketBinPath);
-        g_esCommonTicketBinPathHashCalculated = true;
-    }
-
-    if (!g_esPersonalizedTicketBinPathHashCalculated)
-    {
-        sha256CalculateHash(g_esPersonalizedTicketBinPathHash, g_esPersonalizedTicketBinPath, strlen(g_esPersonalizedTicketBinPath));
-        LOG_DATA_DEBUG(g_esPersonalizedTicketBinPathHash, sizeof(g_esPersonalizedTicketBinPathHash), "Hash for path \"%s\":", g_esPersonalizedTicketBinPath);
-        g_esPersonalizedTicketBinPathHashCalculated = true;
-    }
+    tikCalculate21xVolatileTicketPathHash(g_esCommonTicketBinPath, g_esCommonTicketBinPathHash, &g_esCommonTicketBinPathHashCalculated);
+    tikCalculate21xVolatileTicketPathHash(g_esPersonalizedTicketBinPath, g_esPersonalizedTicketBinPathHash, &g_esPersonalizedTicketBinPathHashCalculated);
 
     /* Check if we're dealing with a valid entry. Null keys and/or IVs are not allowed here. */
     TikEsCtrKeyEntry21x *key_entry = (TikEsCtrKeyEntry21x*)(g_esMemoryLocation.data + es_mem_offset);
@@ -909,6 +901,14 @@ static bool tikPrepareCtrContextFor21xVolatileTicket(Aes128CtrContext *out_ctr_c
     aes128CtrContextCreate(out_ctr_ctx, key_entry->key, key_entry->ctr);
 
     return true;
+}
+
+NX_INLINE void tikCalculate21xVolatileTicketPathHash(const char *path, u8 *path_hash, bool *is_hash_calculated)
+{
+    if (*is_hash_calculated) return;
+    sha256CalculateHash(path_hash, path, strlen(path));
+    LOG_DATA_DEBUG(path_hash, SHA256_HASH_SIZE, "Hash for path \"%s\":", path);
+    *is_hash_calculated = true;
 }
 
 static TikCommonBlock *tikDecryptVolatileTicket(u8 *buf, TikTitleKeyType titlekey_type, u64 ticket_offset)
@@ -974,7 +974,7 @@ static TikCommonBlock *tikDecryptVolatileTicket(u8 *buf, TikTitleKeyType titleke
     {
         LOG_MSG_ERROR("Unable to find ES memory key entry!");
 
-        /*FILE *fd = fopen("sdmc:/es.bin", "wb");
+        /*FILE *fd = fopen(DEVOPTAB_SDMC_DEVICE "/es.bin", "wb");
         if (fd)
         {
             fwrite(g_esMemoryLocation.data, 1, g_esMemoryLocation.data_size, fd);

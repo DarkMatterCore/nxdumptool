@@ -27,8 +27,8 @@
 
 /* Helper macros. */
 
-#define FAT_DEV_INIT_FILE_VARS  DEVOPTAB_INIT_FILE_VARS(FIL)
-#define FAT_DEV_INIT_DIR_VARS   DEVOPTAB_INIT_DIR_VARS(FDIR)
+#define FAT_DEV_INIT_FILE_VARS  DEVOPTAB_INIT_FILE_VARS(FFFIL)
+#define FAT_DEV_INIT_DIR_VARS   DEVOPTAB_INIT_DIR_VARS(FFDIR)
 #define FAT_DEV_INIT_FS_ACCESS  DEVOPTAB_DECL_FS_CTX(FATFS)
 
 /* Function prototypes. */
@@ -48,6 +48,8 @@ static const char *fatdev_get_fixed_path(struct _reent *r, const char *path, FAT
 
 static void fatdev_fill_stat(struct stat *st, const FILINFO *info);
 
+static void fatdev_time_fat2posix(const WORD fat_date, const WORD fat_time, time_t *out_posix_ts);
+
 static int fatdev_translate_error(FRESULT res);
 
 /* Global variables. */
@@ -56,7 +58,7 @@ __thread char g_fatDevicePathBuffer[FS_MAX_PATH] = {0};
 
 static const devoptab_t fatdev_devoptab = {
     .name         = NULL,
-    .structSize   = sizeof(FIL),
+    .structSize   = sizeof(FFFIL),
     .open_r       = fatdev_open,
     .close_r      = fatdev_close,
     .write_r      = rodev_write,        ///< Supported by FatFs, but disabled on purpose.
@@ -69,7 +71,7 @@ static const devoptab_t fatdev_devoptab = {
     .chdir_r      = rodev_chdir,        ///< No need to deal with cwd shenanigans, so we won't support it.
     .rename_r     = rodev_rename,       ///< Supported by FatFs, but disabled on purpose.
     .mkdir_r      = rodev_mkdir,        ///< Supported by FatFs, but disabled on purpose.
-    .dirStateSize = sizeof(FDIR),
+    .dirStateSize = sizeof(FFDIR),
     .diropen_r    = fatdev_diropen,
     .dirreset_r   = fatdev_dirreset,
     .dirnext_r    = fatdev_dirnext,
@@ -105,7 +107,7 @@ static int fatdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     FAT_DEV_INIT_FS_ACCESS;
 
     /* Validate input. */
-    if (!file || (flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EROFS);
+    if ((flags & (O_WRONLY | O_RDWR | O_APPEND | O_CREAT | O_TRUNC | O_EXCL))) DEVOPTAB_SET_ERROR_AND_EXIT(EROFS);
 
     /* Get fixed path. */
     if (!(path = fatdev_get_fixed_path(r, path, fs_ctx))) DEVOPTAB_EXIT;
@@ -113,7 +115,7 @@ static int fatdev_open(struct _reent *r, void *fd, const char *path, int flags, 
     //LOG_MSG_DEBUG("Opening \"%s\" with flags 0x%X (volume \"%s:\").", path, fatdev_flags, dev_ctx->name);
 
     /* Reset file descriptor. */
-    memset(file, 0, sizeof(FIL));
+    memset(file, 0, sizeof(FFFIL));
 
     /* Open file. */
     res = f_open(file, path, fatdev_flags);
@@ -130,9 +132,6 @@ static int fatdev_close(struct _reent *r, void *fd)
 
     FAT_DEV_INIT_FILE_VARS;
 
-    /* Sanity check. */
-    if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
-
     //LOG_MSG_DEBUG("Closing file from \"%u:\" (volume \"%s:\").", file->obj.fs->pdrv, dev_ctx->name);
 
     /* Close file. */
@@ -140,7 +139,7 @@ static int fatdev_close(struct _reent *r, void *fd)
     if (res != FR_OK) DEVOPTAB_SET_ERROR_AND_EXIT(fatdev_translate_error(res));
 
     /* Reset file descriptor. */
-    memset(file, 0, sizeof(FIL));
+    memset(file, 0, sizeof(FFFIL));
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -155,7 +154,7 @@ static ssize_t fatdev_read(struct _reent *r, void *fd, char *ptr, size_t len)
     FAT_DEV_INIT_FILE_VARS;
 
     /* Sanity check. */
-    if (!file || !ptr || !len) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
+    if (!ptr || !len) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     /* Check if the file was opened with read access. */
     if (!(file->flag & FA_READ)) DEVOPTAB_SET_ERROR_AND_EXIT(EBADF);
@@ -177,9 +176,6 @@ static off_t fatdev_seek(struct _reent *r, void *fd, off_t pos, int dir)
     FRESULT res = FR_OK;
 
     FAT_DEV_INIT_FILE_VARS;
-
-    /* Sanity check. */
-    if (!file) DEVOPTAB_SET_ERROR_AND_EXIT(EINVAL);
 
     /* Find the offset to seek from. */
     switch(dir)
@@ -258,7 +254,7 @@ static DIR_ITER *fatdev_diropen(struct _reent *r, DIR_ITER *dirState, const char
     //LOG_MSG_DEBUG("Opening directory \"%s\" (volume \"%s:\").", path, dev_ctx->name);
 
     /* Reset directory state. */
-    memset(dir, 0, sizeof(FDIR));
+    memset(dir, 0, sizeof(FFDIR));
 
     /* Open directory. */
     res = f_opendir(dir, path);
@@ -310,7 +306,7 @@ static int fatdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, 
     if (info.fname[0])
     {
         /* Copy filename. */
-        strcpy(filename, info.fname);
+        sprintf(filename, "%s", info.fname);
 
         /* Fill stat info. */
         fatdev_fill_stat(filestat, &info);
@@ -337,7 +333,7 @@ static int fatdev_dirclose(struct _reent *r, DIR_ITER *dirState)
     if (res != FR_OK) DEVOPTAB_SET_ERROR_AND_EXIT(fatdev_translate_error(res));
 
     /* Reset directory state. */
-    memset(dir, 0, sizeof(FDIR));
+    memset(dir, 0, sizeof(FFDIR));
 
 end:
     DEVOPTAB_DEINIT_VARS;
@@ -368,7 +364,7 @@ static int fatdev_statvfs(struct _reent *r, const char *path, struct statvfs *bu
     buf->f_ffree = 0;
     buf->f_favail = 0;
     buf->f_fsid = 0;
-    buf->f_flag = ST_NOSUID;
+    buf->f_flag = (ST_NOSUID | ST_RDONLY);
     buf->f_namemax = FF_LFN_BUF;
 
 end:
@@ -378,6 +374,8 @@ end:
 
 static const char *fatdev_get_fixed_path(struct _reent *r, const char *path, FATFS *fatfs)
 {
+    DEVOPTAB_INIT_ERROR_STATE;
+
     const u8 *p = (const u8*)path;
     ssize_t units = 0;
     u32 code = 0;
@@ -432,8 +430,6 @@ end:
 
 static void fatdev_fill_stat(struct stat *st, const FILINFO *info)
 {
-    struct tm timeinfo = {0};
-
     /* Clear stat struct. */
     memset(st, 0, sizeof(struct stat));
 
@@ -450,19 +446,36 @@ static void fatdev_fill_stat(struct stat *st, const FILINFO *info)
         st->st_mode = (S_IFREG | S_IRUSR | S_IRGRP | S_IROTH);
     }
 
-    /* Convert date/time into an actual UTC POSIX timestamp using the system local time. */
-    timeinfo.tm_year = (((info->fdate >> 9) & 0x7F) + 80);  /* DOS time: offset since 1980. POSIX time: offset since 1900. */
-    timeinfo.tm_mon = (((info->fdate >> 5) & 0xF) - 1);     /* DOS time: 1-12 range (inclusive). POSIX time: 0-11 range (inclusive). */
-    timeinfo.tm_mday = (info->fdate & 0x1F);
-    timeinfo.tm_hour = ((info->ftime >> 11) & 0x1F);
-    timeinfo.tm_min = ((info->ftime >> 5) & 0x3F);
-    timeinfo.tm_sec = ((info->ftime & 0x1F) << 1);          /* DOS time: 2-second intervals with a 0-29 range (inclusive, 58 seconds max). POSIX time: 0-59 range (inclusive). */
+    /* Convert FAT timestamps into POSIX timestamps. */
+    //fatdev_time_fat2posix(info->acdate, info->actime, &(st->st_atim.tv_sec));
+    fatdev_time_fat2posix(info->fdate, info->ftime, &(st->st_mtim.tv_sec));
+    fatdev_time_fat2posix(info->crdate, info->crtime, &(st->st_ctim.tv_sec));
 
-    st->st_atime = 0;                   /* Not returned by FatFs + only available under exFAT. */
-    st->st_mtime = mktime(&timeinfo);
-    st->st_ctime = 0;                   /* Not returned by FatFs + only available under exFAT. */
+    /* Store FAT-specific file flags. */
+    st->st_spare4[0] = (long)info->fattrib;
 
     //LOG_MSG_DEBUG("DOS timestamp: 0x%04X%04X. Generated POSIX timestamp: %lu.", info->fdate, info->ftime, st->st_mtime);
+}
+
+static void fatdev_time_fat2posix(const WORD fat_date, const WORD fat_time, time_t *out_posix_ts)
+{
+    if (!out_posix_ts) return;
+
+    struct tm timeinfo = {0};
+
+    /* Convert date/time into an actual UTC POSIX timestamp using the system local time. */
+    timeinfo.tm_year = (((fat_date >> 9) & 0x7F) + 80); /* DOS time: offset since 1980. POSIX time: offset since 1900. */
+    timeinfo.tm_mon = (((fat_date >> 5) & 0xF) - 1);    /* DOS time: 1-12 range (inclusive). POSIX time: 0-11 range (inclusive). */
+    timeinfo.tm_mday = (fat_date & 0x1F);
+    timeinfo.tm_hour = ((fat_time >> 11) & 0x1F);
+    timeinfo.tm_min = ((fat_time >> 5) & 0x3F);
+    timeinfo.tm_sec = ((fat_time & 0x1F) << 1);         /* DOS time: 2-second intervals with a 0-29 range (inclusive, 58 seconds max). POSIX time: 0-59 range (inclusive). */
+
+    *out_posix_ts = mktime(&timeinfo);
+
+    /*LOG_MSG_DEBUG("Converted DOS timestamp 0x%04X%04X (%u-%02u-%02u %02u:%02u:%02u) into POSIX timestamp %lu.", fat_date, fat_time, timeinfo.tm_year + 1900, timeinfo.tm_mon + 1, \
+                                                                                                                timeinfo.tm_mday, timeinfo.tm_hour, timeinfo.tm_min, timeinfo.tm_sec, \
+                                                                                                                *out_posix_ts);*/
 }
 
 static int fatdev_translate_error(FRESULT res)
