@@ -278,7 +278,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         goto end;
     }
 
-    LOG_MSG_INFO("Found 'control.nacp' entry in Control NCA \"%s\".", nca_ctx->content_id_str);
+    //LOG_MSG_INFO("Found 'control.nacp' entry in Control NCA \"%s\".", nca_ctx->content_id_str);
 
     /* Verify NACP size. */
     if (out->romfs_file_entry->size != sizeof(NsApplicationControlProperty))
@@ -315,7 +315,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         /* Check if the current language is supported. */
         if (!nacpCheckBitflagField(&(out->data->supported_language), sizeof(out->data->supported_language) * 8, (u8)i))
         {
-            LOG_MSG_DEBUG("\"%s\" language not supported (flag 0x%08X, index %u).", language_str, out->data->supported_language, i);
+            //LOG_MSG_DEBUG("\"%s\" language not supported (flag 0x%08X, index %u).", language_str, out->data->supported_language, i);
             continue;
         }
 
@@ -325,7 +325,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
         /* Retrieve RomFS file entry for this icon. */
         if (!(icon_entry = romfsGetFileEntryByPath(&(out->romfs_ctx), icon_path)))
         {
-            LOG_MSG_DEBUG("\"%s\" file entry not found (flag 0x%08X, index %u).", icon_path, out->data->supported_language, i);
+            //LOG_MSG_DEBUG("\"%s\" file entry not found (flag 0x%08X, index %u).", icon_path, out->data->supported_language, i);
             continue;
         }
 

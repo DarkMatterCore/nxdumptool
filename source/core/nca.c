@@ -206,6 +206,24 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, HashFileSystemPartitio
     out->content_type = content_info->content_type;
     out->id_offset = content_info->id_offset;
 
+#if LOG_LEVEL <= LOG_LEVEL_INFO
+    char info_str[0x400] = {0};
+    size_t info_str_len = 0;
+
+#define NCA_INFO_STR_APPEND(fmt, ...)   \
+do { \
+    snprintf(info_str + info_str_len, MAX_ELEMENTS(info_str) - info_str_len, fmt, ##__VA_ARGS__); \
+    info_str_len = strlen(info_str); \
+} while(0)
+
+    NCA_INFO_STR_APPEND("Initializing NCA context for %s NCA \"%s\" in %s (", titleGetNcmContentTypeName(content_info->content_type), out->content_id_str, titleGetNcmStorageIdName(storage_id));
+    if (storage_id == NcmStorageId_GameCard) { NCA_INFO_STR_APPEND("%s partition, ", hfsGetPartitionNameString(hfs_partition_type)); }
+    NCA_INFO_STR_APPEND("title ID %016lX, version %u, title type %s, size 0x%lX, ID offset %u).", meta_key->id, meta_key->version, titleGetNcmContentMetaTypeName(meta_key->type), out->content_size, content_info->id_offset);
+    LOG_MSG_INFO("%s", info_str);
+
+#undef NCA_INFO_STR_APPEND
+#endif
+
     if (out->content_size < NCA_FULL_HEADER_LENGTH)
     {
         LOG_MSG_ERROR("Invalid size for NCA \"%s\"!", out->content_id_str);
@@ -249,6 +267,8 @@ bool ncaInitializeContextByHashFileSystemEntry(NcaContext *out, HashFileSystemCo
     utilsGenerateFormattedSizeString((double)out->content_size, out->content_size_str, sizeof(out->content_size_str));
 
     if (hfs_entry_name_len == NCA_HFS_META_NAME_LENGTH) out->content_type = NcmContentType_Meta;    /* Set Meta as the content type if we know it. */
+
+    LOG_MSG_INFO("Initializing NCA context for \"%s\" in Gamecard %s partition (size 0x%lX).", hfs_entry_name, hfs_ctx->name, out->content_size);
 
     return ncaInitializeContextCommon(out, NcmStorageId_GameCard, hfs_ctx->type, NULL, tik);
 }
@@ -866,7 +886,7 @@ static bool ncaInitializeFsSectionContext(NcaContext *nca_ctx, u32 section_idx)
     /* Don't proceed if this NCA FS section isn't populated. */
     if (!ncaIsFsInfoEntryValid(fs_info))
     {
-        LOG_MSG_DEBUG("Invalid FsInfo entry for section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
+        //LOG_MSG_DEBUG("Invalid FsInfo entry for section #%u in \"%s\". Skipping FS section.", section_idx, nca_ctx->content_id_str);
         goto end;
     }
 

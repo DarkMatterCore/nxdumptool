@@ -4172,7 +4172,7 @@ static bool fsBrowser(const char *mount_name, const char *base_out_path)
             /* Reset counter. */
             highlighted = 0;
         } else
-        if (((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown))) && entries_count)
+        if (((btn_down & HidNpadButton_Down) || (btn_held & HidNpadButton_StickLDown)) && entries_count)
         {
             selected++;
 
@@ -4191,7 +4191,7 @@ static bool fsBrowser(const char *mount_name, const char *base_out_path)
                 scroll++;
             }
         } else
-        if (((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp))) && entries_count)
+        if (((btn_down & HidNpadButton_Up) || (btn_held & HidNpadButton_StickLUp)) && entries_count)
         {
             selected--;
 
@@ -4209,6 +4209,18 @@ static bool fsBrowser(const char *mount_name, const char *base_out_path)
             {
                 scroll--;
             }
+        } else
+        if ((btn_held & HidNpadButton_StickRDown) && entries_count)
+        {
+            selected += page_size;
+            if (selected >= entries_count) selected = (entries_count - 1);
+            scroll = (selected - (selected % page_size));
+        } else
+        if ((btn_held & HidNpadButton_StickRUp) && entries_count)
+        {
+            selected -= page_size;
+            if (selected >= (UINT32_MAX - page_size) && selected <= UINT32_MAX) selected = 0;
+            scroll = (selected - (selected % page_size));
         } else
         if (btn_down & HidNpadButton_Plus)
         {

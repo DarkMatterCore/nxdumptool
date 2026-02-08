@@ -827,7 +827,8 @@ static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u
     {
         LOG_MSG_ERROR("Unable to decrypt volatile ticket at offset 0x%lX in \"%s\" from ES %s ticket system save!", ticket_offset, TIK_DB_SAVEFILE_STORAGE_PATH, tik_titlekey_type_str);
 
-        /*char tik_path[FS_MAX_PATH] = {0}, rights_id_str[33] = {0};
+#if LOG_LEVEL == LOG_LEVEL_DEBUG
+        char tik_path[FS_MAX_PATH] = {0}, rights_id_str[33] = {0};
         utilsGenerateHexString(rights_id_str, sizeof(rights_id_str), id, sizeof(FsRightsId), true);
         snprintf(tik_path, sizeof(tik_path), DEVOPTAB_SDMC_DEVICE "/%s_enc.tik", rights_id_str);
 
@@ -837,7 +838,8 @@ static bool tikRetrieveTicketEntryFromTicketBin(save_ctx_t *save_ctx, u8 *buf, u
             fwrite(buf, 1, SIGNED_TIK_MAX_SIZE, fd);
             fclose(fd);
             utilsCommitSdCardFileSystemChanges();
-        }*/
+        }
+#endif
 
         goto end;
     }
@@ -974,13 +976,15 @@ static TikCommonBlock *tikDecryptVolatileTicket(u8 *buf, TikTitleKeyType titleke
     {
         LOG_MSG_ERROR("Unable to find ES memory key entry!");
 
-        /*FILE *fd = fopen(DEVOPTAB_SDMC_DEVICE "/es.bin", "wb");
+#if LOG_LEVEL == LOG_LEVEL_DEBUG
+        FILE *fd = fopen(DEVOPTAB_SDMC_DEVICE "/es.bin", "wb");
         if (fd)
         {
             fwrite(g_esMemoryLocation.data, 1, g_esMemoryLocation.data_size, fd);
             fclose(fd);
             utilsCommitSdCardFileSystemChanges();
-        }*/
+        }
+#endif
     }
 
 end:

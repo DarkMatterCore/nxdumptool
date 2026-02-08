@@ -677,7 +677,7 @@ bool titleInitialize(void)
         }
 
         /* Initialize persistent title storages (BuiltInSystem, BuiltInUser, SdCard). */
-        /* The background gamecard title thread will take care of initializing the gamecard title storage. */
+        /* The background gamecard title thread will take care of (de)initializing the gamecard title storage. */
         if (!titleInitializePersistentTitleStorages())
         {
             LOG_MSG_ERROR("Failed to initialize persistent title storages!");
@@ -2880,9 +2880,9 @@ static bool titleGetGameCardContentMetaContexts(HashFileSystemContext *hfs_ctx, 
         }
 
         /* Manually fill content meta key using CNMT info. */
-        meta_key->id = cnmt_ctx->packaged_header->title_id;
-        meta_key->version = cnmt_ctx->packaged_header->version.value;
-        meta_key->type = cnmt_ctx->packaged_header->content_meta_type;
+        meta_key->id = nca_ctx->title_id = cnmt_ctx->packaged_header->title_id;
+        meta_key->version = nca_ctx->title_version.value = cnmt_ctx->packaged_header->version.value;
+        meta_key->type = nca_ctx->title_type = cnmt_ctx->packaged_header->content_meta_type;
         meta_key->install_type = cnmt_ctx->packaged_header->content_install_type;
     }
 
