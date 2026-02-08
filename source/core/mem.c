@@ -256,8 +256,9 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
     }
 
     Result rc = 0;
-    u64 pid = 0, d[8] = {0};
+    u64 pid = 0;
     Handle debug_handle = INVALID_HANDLE;
+    DebugEventInfo debug_event = {0};
 
     u32 i = 0, num_processes = 0;
     u64 *pids = NULL;
@@ -316,11 +317,11 @@ static bool memRetrieveDebugHandleFromProgramById(Handle *out, u64 program_id)
 
             /* Get debug event using the debug handle. */
             /* This will let us know the program ID for the current process ID. */
-            rc = svcGetDebugEvent((u8*)&d, debug_handle);
+            rc = svcGetDebugEvent(&debug_event, debug_handle);
             if (R_SUCCEEDED(rc))
             {
                 /* Jackpot. */
-                if (d[2] == program_id) break;
+                if (debug_event.type == DebugEventType_CreateProcess && debug_event.info.create_process.program_id == program_id) break;
             } else {
                 MEMLOG_DEBUG("svcGetDebugEvent failed for debug handle 0x%X! (0x%X).", debug_handle, rc);
             }
