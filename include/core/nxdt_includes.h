@@ -57,6 +57,9 @@
 /* Internet operations. */
 #include <arpa/inet.h>
 
+/* Zlib. */
+#include <zlib.h>
+
 /* Global defines. */
 #include "../defines.h"
 

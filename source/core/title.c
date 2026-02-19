@@ -2105,7 +2105,7 @@ static bool titleGetApplicationControlDataFromControlNca(TitleInfo *title_info, 
     }
 
     /* Get language entry. */
-    rc = nacpGetLanguageEntry((NacpStruct*)nacp_ctx.data, &lang_entry);
+    rc = nacpGetLanguageEntry((NacpStruct*)nacp_ctx.titles, &lang_entry);
     if (R_FAILED(rc))
     {
         LOG_MSG_ERROR("nacpGetLanguageEntry failed! (0x%X).", rc);
@@ -2118,7 +2118,7 @@ static bool titleGetApplicationControlDataFromControlNca(TitleInfo *title_info, 
         /* Don't proceed any further if no language entry was retrieved. */
         if (!lang_entry) break;
 
-        NacpTitle *cur_title = &(nacp_ctx.data->title[i]);
+        NacpTitle *cur_title = &(nacp_ctx.titles[i]);
         if (cur_title == (NacpTitle*)lang_entry)
         {
             lang_id = i;
@@ -2182,6 +2182,7 @@ static TitleApplicationMetadata *titleInitializeUserMetadataEntryFromApplication
     size_t icon_size = (u32)(control_data_size - sizeof(NacpStruct));
 
     /* Update title cache using the control data we have. */
+    /* If the control data uses compresses title strings, they will also be taken care of here. */
     if (!nxtcAddEntry(title_id, &(control_data->nacp), icon_size, control_data->icon, false)) return NULL;
 
     /* Retrieve application metadata from our cache. */
