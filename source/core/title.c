@@ -869,6 +869,20 @@ void titleFreeTitleInfo(TitleInfo **info)
     *info = NULL;
 }
 
+TitleInfo *titleDuplicateTitleInfoEntry(const TitleInfo *title_info)
+{
+    if (!title_info || !titleIsValidInfoBlock(title_info)) return NULL;
+
+    TitleInfo *ret = NULL;
+
+    SCOPED_LOCK(&g_titleMutex)
+    {
+        ret = titleDuplicateTitleInfo((TitleInfo*)title_info);
+    }
+
+    return ret;
+}
+
 bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
 {
     bool ret = false;
