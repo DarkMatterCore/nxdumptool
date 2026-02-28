@@ -243,6 +243,7 @@ static bool browseGameCardHfsPartition(void *userdata);
 static bool saveConsoleLafwBlob(void *userdata);
 
 static bool addNintendoSubmissionPackageToQueue(void *userdata);
+static bool addAllAvailableNintendoSubmissionPackagesToQueue(void *userdata);
 static bool startNintendoSubmissionPackageQueue(void *userdata);
 static bool clearNintendoSubmissionPackageQueue(void *userdata);
 static bool removeNintendoSubmissionPackageQueueEntry(void *userdata);
@@ -1087,6 +1088,13 @@ static MenuElement *g_titleTypesMenuElements[] = {
         .element_options = NULL,
         .userdata = &g_metaTypeAOCPatch
     },
+    &(MenuElement){
+        .str = "add all available to nsp queue",
+        .child_menu = NULL,
+        .task_func = &addAllAvailableNintendoSubmissionPackagesToQueue,
+        .element_options = NULL,
+        .userdata = NULL // Dynamically set to a TitleUserApplicationData object when needed
+    },
     NULL
 };
 
@@ -1368,6 +1376,8 @@ int main(int argc, char *argv[])
             g_titleTypesMenuElements[2]->child_menu = g_titleTypesMenuElements[3]->child_menu = (child_id == MenuId_NspTitleTypes ? &g_nspMenu : \
                                                                                                 (child_id == MenuId_TicketTitleTypes ? &g_ticketMenu : \
                                                                                                 (child_id == MenuId_NcaTitleTypes ? &g_ncaMenu : NULL)));
+
+            g_titleTypesMenuElements[4]->userdata = (child_id == MenuId_NspTitleTypes ? &user_app_data : NULL);
         }
 
         consoleClear();
@@ -1645,6 +1655,7 @@ int main(int argc, char *argv[])
             {
                 bool show_button_prompt = true;
                 bool is_queue_management_action = (selected_element->task_func == &addNintendoSubmissionPackageToQueue ||
+                                                   selected_element->task_func == &addAllAvailableNintendoSubmissionPackagesToQueue ||
                                                    selected_element->task_func == &clearNintendoSubmissionPackageQueue ||
                                                    selected_element->task_func == &removeNintendoSubmissionPackageQueueEntry);
                 bool is_queue_management_context = ((cur_menu->id == MenuId_Nsp && cur_menu->selected == 1) ||
@@ -1798,6 +1809,7 @@ int main(int argc, char *argv[])
                 titleFreeUserApplicationData(&user_app_data);
                 g_titleTypesMenuElements[0]->child_menu = g_titleTypesMenuElements[1]->child_menu = \
                 g_titleTypesMenuElements[2]->child_menu = g_titleTypesMenuElements[3]->child_menu = NULL;
+                g_titleTypesMenuElements[4]->userdata = NULL;
             } else
             if (cur_menu->id == MenuId_NspTitleTypes || cur_menu->id == MenuId_TicketTitleTypes || cur_menu->id == MenuId_NcaTitleTypes)
             {
@@ -2306,6 +2318,91 @@ static bool addNintendoSubmissionPackageToQueue(void *userdata)
     return true;
 }
 
+static bool addAllAvailableNintendoSubmissionPackagesToQueue(void *userdata)
+{
+    TitleUserApplicationData *user_app_data = (TitleUserApplicationData*)userdata;
+    if (!user_app_data)
+    {
+        consolePrint("invalid user application data\n");
+        return false;
+    }
+
+    consolePrint("warning: this will queue all available nsp dump targets for the selected title\n");
+    consolePrint("including base app, latest update, all dlc and dlc updates\n");
+    consolePrint("press a to proceed, or b to cancel\n\n");
+
+    u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
+    if (!(btn_down & HidNpadButton_A))
+    {
+        consolePrint("bulk queue add cancelled\n");
+        return false;
+    }
+
+    u32 queued_before = g_nspDumpQueueCount;
+
+    if (user_app_data->app_info) addNintendoSubmissionPackageToQueue(user_app_data->app_info);
+
+    if (user_app_data->patch_info)
+    {
+        u32 patch_idx = 0, patch_count = 0;
+        TitleInfo *latest_patch = getLatestTitleInfo(user_app_data->patch_info, &patch_idx, &patch_count);
+        if (latest_patch) addNintendoSubmissionPackageToQueue(latest_patch);
+    }
+
+    for(TitleInfo *cur = user_app_data->aoc_info; cur; cur = cur->next)
+    {
+        addNintendoSubmissionPackageToQueue(cur);
+    }
+
+    if (user_app_data->aoc_patch_info)
+    {
+        typedef struct {
+            u64 id;
+            TitleInfo *latest;
+        } LatestPatchEntry;
+
+        LatestPatchEntry *latest_entries = NULL;
+        u32 latest_count = 0;
+
+        for(TitleInfo *cur = user_app_data->aoc_patch_info; cur; cur = cur->next)
+        {
+            bool found = false;
+
+            for(u32 i = 0; i < latest_count; i++)
+            {
+                if (latest_entries[i].id == cur->meta_key.id)
+                {
+                    found = true;
+                    if (cur->version.value > latest_entries[i].latest->version.value) latest_entries[i].latest = cur;
+                    break;
+                }
+            }
+
+            if (!found)
+            {
+                LatestPatchEntry *tmp = realloc(latest_entries, (latest_count + 1) * sizeof(LatestPatchEntry));
+                if (!tmp) break;
+
+                latest_entries = tmp;
+                latest_entries[latest_count].id = cur->meta_key.id;
+                latest_entries[latest_count].latest = cur;
+                latest_count++;
+            }
+        }
+
+        for(u32 i = 0; i < latest_count; i++) addNintendoSubmissionPackageToQueue(latest_entries[i].latest);
+
+        if (latest_entries) free(latest_entries);
+    }
+
+    u32 queued_after = g_nspDumpQueueCount;
+    u32 added_count = (queued_after >= queued_before ? (queued_after - queued_before) : 0);
+
+    consolePrint("bulk queue add finished: %u item(s) added\n", added_count);
+
+    return (added_count > 0);
+}
+
 static bool startNintendoSubmissionPackageQueue(void *userdata)
 {
     NX_IGNORE_ARG(userdata);
@@ -2318,7 +2415,7 @@ static bool startNintendoSubmissionPackageQueue(void *userdata)
 
     u32 success_count = 0, fail_count = 0;
 
-    for(u32 i = 0; i < g_nspDumpQueueCount; i++)
+    for(u32 i = 0; i < g_nspDumpQueueCount;)
     {
         NspQueueEntry *entry = &(g_nspDumpQueue[i]);
         u32 title_idx = 0, title_count = 0;
@@ -2371,14 +2468,32 @@ static bool startNintendoSubmissionPackageQueue(void *userdata)
         if (ret)
         {
             success_count++;
+
+            if (i < (g_nspDumpQueueCount - 1)) memmove(&(g_nspDumpQueue[i]), &(g_nspDumpQueue[i + 1]), (g_nspDumpQueueCount - i - 1) * sizeof(NspQueueEntry));
+
+            g_nspDumpQueueCount--;
+
+            if (!g_nspDumpQueueCount)
+            {
+                free(g_nspDumpQueue);
+                g_nspDumpQueue = NULL;
+                break;
+            }
+
+            NspQueueEntry *new_queue = realloc(g_nspDumpQueue, g_nspDumpQueueCount * sizeof(NspQueueEntry));
+            if (new_queue) g_nspDumpQueue = new_queue;
         } else {
             fail_count++;
+            i++;
         }
 
         if (!g_appletStatus) break;
     }
 
+    updateNspQueueViewList();
+
     consolePrint("\nqueue done: %u succeeded, %u failed\n", success_count, fail_count);
+    consolePrint("queue remaining: %u\n", g_nspDumpQueueCount);
 
     return (success_count > 0 && !fail_count);
 }
