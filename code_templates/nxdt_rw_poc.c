@@ -1693,10 +1693,6 @@ int main(int argc, char *argv[])
                                                    selected_element->task_func == &addAllAvailableNintendoSubmissionPackagesToQueue ||
                                                    selected_element->task_func == &clearNintendoSubmissionPackageQueue ||
                                                    selected_element->task_func == &removeNintendoSubmissionPackageQueueEntry);
-                bool is_queue_management_context = ((cur_menu->id == MenuId_Nsp && cur_menu->selected == 1) ||
-                                                   (cur_menu->id == MenuId_NspQueue && cur_menu->selected == 1) ||
-                                                   (cur_menu->id == MenuId_NspQueueView));
-                bool skip_dump_path = (is_queue_management_action || is_queue_management_context);
 
                 consoleClear();
 
@@ -1717,7 +1713,7 @@ int main(int argc, char *argv[])
                     /* Update free space. */
                     if (!useUsbHost()) updateStorageList();
                 } else
-                if (skip_dump_path)
+                if (is_queue_management_action)
                 {
                     /* Ignore result for queue-only management actions. */
                     selected_element->task_func(selected_element->userdata);
@@ -2418,7 +2414,7 @@ static bool addNintendoSubmissionPackageToQueue(void *userdata)
         return false;
     }
 
-    if (title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_DataPatch)
+    if (title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_DataPatch || title_info->meta_key.type == NcmContentMetaType_Delta)
     {
         consolePrint("invalid title type for nsp queue\n");
         return false;

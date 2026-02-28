@@ -124,6 +124,7 @@ TitleInfo *titleGetTitleInfoEntryFromStorageByTitleId(u8 storage_id, u64 title_i
 void titleFreeTitleInfo(TitleInfo **info);
 
 /// Returns a pointer to a dynamically allocated TitleInfo element that is a duplicate of the provided one. Returns NULL if an error occurs.
+/// Use titleFreeTitleInfo() to free the returned data.
 TitleInfo *titleDuplicateTitleInfoEntry(const TitleInfo *title_info);
 
 /// Populates a TitleUserApplicationData element with dynamically allocated data using a user application ID.

@@ -614,7 +614,7 @@ static TitleInfo *titleGetLatestAvailablePatchForUserTitle(u8 storage_id, const 
 static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
 
 static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
-static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info);
+static TitleInfo *_titleDuplicateTitleInfo(TitleInfo *title_info);
 
 static char *titleGetDisplayVersionString(TitleInfo *title_info);
 
@@ -877,7 +877,7 @@ TitleInfo *titleDuplicateTitleInfoEntry(const TitleInfo *title_info)
 
     SCOPED_LOCK(&g_titleMutex)
     {
-        ret = titleDuplicateTitleInfo((TitleInfo*)title_info);
+        ret = _titleDuplicateTitleInfo((TitleInfo*)title_info);
     }
 
     return ret;
@@ -980,7 +980,7 @@ TitleInfo *titleGetAddOnContentBaseOrPatchList(TitleInfo *title_info)
             }
 
             /* Duplicate current entry. */
-            tmp = titleDuplicateTitleInfo(aoc_info);
+            tmp = _titleDuplicateTitleInfo(aoc_info);
             if (!tmp)
             {
                 LOG_MSG_ERROR("Failed to duplicate TitleInfo object!");
@@ -3225,7 +3225,7 @@ static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *
     bool dup_previous = false, dup_next = false, success = false;
 
     /* Duplicate TitleInfo object. */
-    title_info_dup = titleDuplicateTitleInfo(title_info);
+    title_info_dup = _titleDuplicateTitleInfo(title_info);
     if (!title_info_dup)
     {
         LOG_MSG_ERROR("Failed to duplicate TitleInfo object!");
@@ -3290,7 +3290,7 @@ end:
     return title_info_dup;
 }
 
-static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info)
+static TitleInfo *_titleDuplicateTitleInfo(TitleInfo *title_info)
 {
     if (!titleIsValidInfoBlock(title_info))
     {
