@@ -613,10 +613,10 @@ static TitleInfo *titleGetLatestAvailablePatchForUserTitle(u8 storage_id, const 
 
 static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
 
-static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
-static TitleInfo *_titleDuplicateTitleInfo(TitleInfo *title_info);
+static TitleInfo *titleDuplicateTitleInfoFull(const TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
+static TitleInfo *_titleDuplicateTitleInfo(const TitleInfo *title_info);
 
-static char *titleGetDisplayVersionString(TitleInfo *title_info);
+static char *titleGetDisplayVersionString(const TitleInfo *title_info);
 
 static bool titleCreateGameCardInfoThread(void);
 static void titleDestroyGameCardInfoThread(void);
@@ -869,18 +869,9 @@ void titleFreeTitleInfo(TitleInfo **info)
     *info = NULL;
 }
 
-TitleInfo *titleDuplicateTitleInfoEntry(const TitleInfo *title_info)
+TitleInfo *titleDuplicateTitleInfo(const TitleInfo *title_info, bool dup_linked_lists)
 {
-    if (!title_info || !titleIsValidInfoBlock(title_info)) return NULL;
-
-    TitleInfo *ret = NULL;
-
-    SCOPED_LOCK(&g_titleMutex)
-    {
-        ret = _titleDuplicateTitleInfo((TitleInfo*)title_info);
-    }
-
-    return ret;
+    return (dup_linked_lists ? titleDuplicateTitleInfoFull(title_info, NULL, NULL) : _titleDuplicateTitleInfo(title_info));
 }
 
 bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
@@ -1090,7 +1081,7 @@ bool titleIsGameCardInfoUpdated(void)
     return ret;
 }
 
-char *titleGenerateFileName(TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type)
+char *titleGenerateFileName(const TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type)
 {
     if (!titleIsValidInfoBlock(title_info) || naming_convention >= TitleNamingConvention_Count || illegal_char_replace_type >= TitleFileNameIllegalCharReplaceType_Count)
     {
@@ -3213,7 +3204,7 @@ static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *o
     return ret;
 }
 
-static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next)
+static TitleInfo *titleDuplicateTitleInfoFull(const TitleInfo *title_info, TitleInfo *previous, TitleInfo *next)
 {
     if (!titleIsValidInfoBlock(title_info))
     {
@@ -3290,7 +3281,7 @@ end:
     return title_info_dup;
 }
 
-static TitleInfo *_titleDuplicateTitleInfo(TitleInfo *title_info)
+static TitleInfo *_titleDuplicateTitleInfo(const TitleInfo *title_info)
 {
     if (!titleIsValidInfoBlock(title_info))
     {
@@ -3346,7 +3337,7 @@ end:
     return title_info_dup;
 }
 
-static char *titleGetDisplayVersionString(TitleInfo *title_info)
+static char *titleGetDisplayVersionString(const TitleInfo *title_info)
 {
     NcmContentInfo *nacp_content = NULL;
 

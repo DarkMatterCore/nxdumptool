@@ -124,8 +124,9 @@ TitleInfo *titleGetTitleInfoEntryFromStorageByTitleId(u8 storage_id, u64 title_i
 void titleFreeTitleInfo(TitleInfo **info);
 
 /// Returns a pointer to a dynamically allocated TitleInfo element that is a duplicate of the provided one. Returns NULL if an error occurs.
+/// If 'dup_linked_lists' is true, the internal linked lists will be duplicated as well. Otherwise, their pointers will be set to NULL.
 /// Use titleFreeTitleInfo() to free the returned data.
-TitleInfo *titleDuplicateTitleInfoEntry(const TitleInfo *title_info);
+TitleInfo *titleDuplicateTitleInfo(const TitleInfo *title_info, bool dup_linked_lists);
 
 /// Populates a TitleUserApplicationData element with dynamically allocated data using a user application ID.
 /// Use titleFreeUserApplicationData() to free the populated data.
@@ -158,7 +159,7 @@ void titleFreeOrphanTitles(TitleInfo ***orphan_info);
 bool titleIsGameCardInfoUpdated(void);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output title dumps. Returns NULL if an error occurs.
-char *titleGenerateFileName(TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type);
+char *titleGenerateFileName(const TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type);
 
 /// Returns a pointer to a dynamically allocated buffer that holds a filename string suitable for output gamecard dumps. Returns NULL if an error occurs.
 /// A valid gamecard must be inserted, and title info must have been loaded from it accordingly.
@@ -318,7 +319,7 @@ NX_INLINE u32 titleGetContentCountByType(TitleInfo *info, u8 content_type)
     return cnt;
 }
 
-NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, u8 content_type, u8 id_offset)
+NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(const TitleInfo *info, u8 content_type, u8 id_offset)
 {
     if (!info || !info->content_count || !info->content_infos || content_type > NcmContentType_DeltaFragment) return NULL;
 
@@ -331,7 +332,7 @@ NX_INLINE NcmContentInfo *titleGetContentInfoByTypeAndIdOffset(TitleInfo *info, 
     return NULL;
 }
 
-NX_INLINE u32 titleGetCountFromInfoBlock(TitleInfo *title_info)
+NX_INLINE u32 titleGetCountFromInfoBlock(const TitleInfo *title_info)
 {
     if (!title_info) return 0;
 

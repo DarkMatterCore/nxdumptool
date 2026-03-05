@@ -204,12 +204,12 @@ void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *
 
 void freeNspQueueViewList(void);
 void updateNspQueueViewList(void);
+
 void freeNspDumpQueue(void);
-static bool addNspQueueEntry(TitleInfo *title_info);
-static void removeNspQueueEntryByIndex(u32 idx);
-static bool isQueueEligibleTitle(const TitleInfo *title_info);
-static bool shouldPreferTitleForQueue(const TitleInfo *candidate, const TitleInfo *current);
-static TitleInfo *getBestQueueCandidateFromChain(TitleInfo *title_info);
+static bool addNspDumpQueueEntry(TitleInfo *title_info);
+static void removeNspDumpQueueEntryByIndex(u32 idx);
+
+static inline bool isTitleStorageMediumEligibleForNspDumpQueue(const TitleInfo *title_info);
 
 NX_INLINE bool useUsbHost(void);
 
@@ -827,6 +827,7 @@ static Menu g_nspMenu = {
 
 static MenuElement **g_nspQueueViewMenuElements = NULL;
 
+// Dynamically populated using g_nspQueueViewMenuElements.
 static Menu g_nspQueueViewMenu = {
     .id = MenuId_NspQueueView,
     .parent = NULL,
@@ -1089,7 +1090,7 @@ static MenuElement *g_nspTitleTypesMenuElements[] = {
         .userdata = &g_metaTypeAOCPatch
     },
     &(MenuElement){
-        .str = "add all available to nsp queue",
+        .str = "add all available titles to nsp queue",
         .child_menu = NULL,
         .task_func = &addAllAvailableNintendoSubmissionPackagesToQueue,
         .element_options = NULL,
@@ -1385,6 +1386,7 @@ int main(int argc, char *argv[])
 
     while(appletMainLoop())
     {
+        /* Clamp selection on NSP queue list because it could have been changed. */
         if (cur_menu->id == MenuId_NspQueueView)
         {
             element_count = menuGetElementCount(cur_menu);
@@ -1409,10 +1411,10 @@ int main(int argc, char *argv[])
             g_nspTitleTypesMenuElements[0]->child_menu = g_nspTitleTypesMenuElements[1]->child_menu = \
             g_nspTitleTypesMenuElements[2]->child_menu = g_nspTitleTypesMenuElements[3]->child_menu = target_menu;
 
+            g_nspTitleTypesMenuElements[4]->userdata = (child_id == MenuId_NspTitleTypes ? &user_app_data : NULL);
+
             g_titleTypesMenuElements[0]->child_menu = g_titleTypesMenuElements[1]->child_menu = \
             g_titleTypesMenuElements[2]->child_menu = g_titleTypesMenuElements[3]->child_menu = target_menu;
-
-            g_nspTitleTypesMenuElements[4]->userdata = (child_id == MenuId_NspTitleTypes ? &user_app_data : NULL);
         }
 
         consoleClear();
@@ -1467,8 +1469,7 @@ int main(int argc, char *argv[])
                 consolePrint("size: %s\n", title_info->size_str);
                 consolePrint("______________________________\n\n");
 
-                if (cur_menu->id == MenuId_Nsp) g_nspMenuElements[0]->userdata = title_info;
-                if (cur_menu->id == MenuId_Nsp) g_nspMenuElements[1]->userdata = title_info;
+                if (cur_menu->id == MenuId_Nsp) g_nspMenuElements[0]->userdata = g_nspMenuElements[1]->userdata = title_info;
 
                 if (cur_menu->id == MenuId_Ticket) g_ticketMenuElements[0]->userdata = title_info;
 
@@ -1500,11 +1501,13 @@ int main(int argc, char *argv[])
                 }
             }
         } else
-        if (cur_menu->id == MenuId_GameCard) {
+        if (cur_menu->id == MenuId_GameCard)
+        {
             consolePrint("For a full gamecard image: dump XCI, initial data, certificate, id set and uid.\n");
             consolePrint("______________________________\n\n");
         } else
-        if (cur_menu->id == MenuId_NspQueue || cur_menu->id == MenuId_NspQueueView) {
+        if (cur_menu->id == MenuId_NspQueue || cur_menu->id == MenuId_NspQueueView)
+        {
             consolePrint("nsp queue status:\n\n");
             consolePrint("queued items: %u\n", g_nspDumpQueueCount);
             if (cur_menu->id == MenuId_NspQueueView) consolePrint("press a on an entry to remove it from the queue\n");
@@ -1596,10 +1599,6 @@ int main(int argc, char *argv[])
                     error = !titleGetUserApplicationData(app_metadata->title_id, &user_app_data);
                     if (error) consolePrint("\nfailed to get user application data for %016lX!\n", app_metadata->title_id);
                 } else
-                if (child_menu->id == MenuId_NspQueueView)
-                {
-                    updateNspQueueViewList();
-                } else
                 if (child_menu->id == MenuId_Nsp || child_menu->id == MenuId_Ticket || child_menu->id == MenuId_Nca)
                 {
                     u32 title_type = (cur_menu->id != MenuId_SystemTitles ? *((u32*)selected_element->userdata) : NcmContentMetaType_Unknown);
@@ -1626,7 +1625,13 @@ int main(int argc, char *argv[])
 
                     if (title_info)
                     {
-                        title_info = getLatestTitleInfo(title_info, &title_info_idx, &title_info_count);
+                        if (title_info->meta_key.type == NcmContentMetaType_Patch || title_info->meta_key.type == NcmContentMetaType_DataPatch)
+                        {
+                            title_info = getLatestTitleInfo(title_info, &title_info_idx, &title_info_count);
+                        } else {
+                            title_info_idx = 0;
+                            title_info_count = titleGetCountFromInfoBlock(title_info);
+                        }
 
                         if (child_menu->id == MenuId_Nca)
                         {
@@ -1673,6 +1678,10 @@ int main(int argc, char *argv[])
                         consolePrint("can't dump an invalid nca fs section!\n");
                         error = true;
                     }
+                } else
+                if (child_menu->id == MenuId_NspQueueView)
+                {
+                    updateNspQueueViewList();
                 }
 
                 if (!error)
@@ -1689,10 +1698,6 @@ int main(int argc, char *argv[])
             if (selected_element->task_func)
             {
                 bool show_button_prompt = true;
-                bool is_queue_management_action = (selected_element->task_func == &addNintendoSubmissionPackageToQueue ||
-                                                   selected_element->task_func == &addAllAvailableNintendoSubmissionPackagesToQueue ||
-                                                   selected_element->task_func == &clearNintendoSubmissionPackageQueue ||
-                                                   selected_element->task_func == &removeNintendoSubmissionPackageQueueEntry);
 
                 consoleClear();
 
@@ -1712,11 +1717,6 @@ int main(int argc, char *argv[])
 
                     /* Update free space. */
                     if (!useUsbHost()) updateStorageList();
-                } else
-                if (is_queue_management_action)
-                {
-                    /* Ignore result for queue-only management actions. */
-                    selected_element->task_func(selected_element->userdata);
                 } else
                 if (cur_menu->id > MenuId_Root)
                 {
@@ -1838,8 +1838,10 @@ int main(int argc, char *argv[])
             if (cur_menu->id == MenuId_UserTitlesSubMenu)
             {
                 titleFreeUserApplicationData(&user_app_data);
+
                 g_nspTitleTypesMenuElements[0]->child_menu = g_nspTitleTypesMenuElements[1]->child_menu = \
                 g_nspTitleTypesMenuElements[2]->child_menu = g_nspTitleTypesMenuElements[3]->child_menu = NULL;
+
                 g_nspTitleTypesMenuElements[4]->userdata = NULL;
 
                 g_titleTypesMenuElements[0]->child_menu = g_titleTypesMenuElements[1]->child_menu = \
@@ -1859,10 +1861,6 @@ int main(int argc, char *argv[])
             {
                 g_ticketMenuElements[0]->userdata = NULL;
             } else
-            if (cur_menu->id == MenuId_NspQueueView)
-            {
-                freeNspQueueViewList();
-            } else
             if (cur_menu->id == MenuId_Nca)
             {
                 freeNcaList();
@@ -1880,6 +1878,10 @@ int main(int argc, char *argv[])
             if (cur_menu->id == MenuId_NcaFsSectionsSubMenu)
             {
                 freeNcaBasePatchList();
+            } else
+            if (cur_menu->id == MenuId_NspQueueView)
+            {
+                freeNspQueueViewList();
             }
 
             cur_menu = cur_menu->parent;
@@ -2204,6 +2206,7 @@ void updateTitleList(Menu *menu, Menu *submenu, bool is_system)
 
     /* Allocate buffer. */
     elements = calloc(app_count + 1, sizeof(MenuElement*)); // NULL terminator
+    if (!elements) goto end;
 
     /* Generate menu elements. */
     for(u32 i = 0; i < app_count; i++)
@@ -2252,69 +2255,60 @@ void freeNspQueueViewList(void)
 void updateNspQueueViewList(void)
 {
     u32 idx = 0;
+    MenuElement **elements = NULL;
 
+    /* Free all previously allocated data. */
     freeNspQueueViewList();
 
+    /* Don't proceed any further if there's no actual queue to work with. */
     if (!g_nspDumpQueueCount || !g_nspDumpQueue) return;
 
-    g_nspQueueViewMenuElements = calloc(g_nspDumpQueueCount + 1, sizeof(MenuElement*));
-    if (!g_nspQueueViewMenuElements) return;
+    /* Allocate buffer. */
+    elements = calloc(g_nspDumpQueueCount + 1, sizeof(MenuElement*)); // NULL terminator
+    if (!elements) return;
 
+    /* Generate menu elements. */
     for(u32 i = 0; i < g_nspDumpQueueCount; i++)
     {
         const TitleInfo *title_info = g_nspDumpQueue[i];
-        const char *type_str = (title_info ? titleGetNcmContentMetaTypeName(title_info->meta_key.type) : NULL);
+        if (!title_info) continue;
+
         char *label = NULL;
         u32 *entry_idx = NULL;
 
-        g_nspQueueViewMenuElements[idx] = calloc(1, sizeof(MenuElement));
-        if (!g_nspQueueViewMenuElements[idx]) continue;
+        if (!elements[idx])
+        {
+            elements[idx] = calloc(1, sizeof(MenuElement));
+            if (!elements[idx]) continue;
+        }
 
-        label = calloc(1, 0x400);
+        label = titleGenerateFileName(title_info, TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
         entry_idx = calloc(1, sizeof(u32));
 
         if (!label || !entry_idx)
         {
             if (label) free(label);
             if (entry_idx) free(entry_idx);
-            free(g_nspQueueViewMenuElements[idx]);
-            g_nspQueueViewMenuElements[idx] = NULL;
             continue;
         }
 
         *entry_idx = i;
 
-        snprintf(label, 0x400, "remove: %s [%016lX] (%s)", \
-             (title_info && title_info->app_metadata && title_info->app_metadata->name[0] ? title_info->app_metadata->name : "unknown"), \
-             (title_info ? title_info->meta_key.id : 0), \
-             (type_str ? type_str : "unknown"));
-
         g_nspQueueViewMenuElements[idx]->str = label;
-        g_nspQueueViewMenuElements[idx]->child_menu = NULL;
         g_nspQueueViewMenuElements[idx]->task_func = &removeNintendoSubmissionPackageQueueEntry;
-        g_nspQueueViewMenuElements[idx]->element_options = NULL;
         g_nspQueueViewMenuElements[idx]->userdata = entry_idx;
 
         idx++;
     }
 
-    if (!idx)
-    {
-        freeNspQueueViewList();
-        return;
-    }
-
-    g_nspQueueViewMenu.elements = g_nspQueueViewMenuElements;
+    g_nspQueueViewMenu.elements = g_nspQueueViewMenuElements = elements;
 }
 
 void freeNspDumpQueue(void)
 {
     if (g_nspDumpQueue)
     {
-        for(u32 i = 0; i < g_nspDumpQueueCount; i++)
-        {
-            if (g_nspDumpQueue[i]) titleFreeTitleInfo(&(g_nspDumpQueue[i]));
-        }
+        for(u32 i = 0; i < g_nspDumpQueueCount; i++) titleFreeTitleInfo(&(g_nspDumpQueue[i]));
 
         free(g_nspDumpQueue);
         g_nspDumpQueue = NULL;
@@ -2324,13 +2318,14 @@ void freeNspDumpQueue(void)
     g_nspDumpQueueCapacity = 0;
 }
 
-static bool addNspQueueEntry(TitleInfo *title_info)
+static bool addNspDumpQueueEntry(TitleInfo *title_info)
 {
     if (!title_info) return false;
 
     if (g_nspDumpQueueCount >= g_nspDumpQueueCapacity)
     {
-        u32 new_capacity = (g_nspDumpQueueCapacity ? (g_nspDumpQueueCapacity * 2) : 8);
+        size_t new_capacity = (g_nspDumpQueueCapacity ? (g_nspDumpQueueCapacity * 2) : 8);
+
         TitleInfo **new_queue = realloc(g_nspDumpQueue, new_capacity * sizeof(TitleInfo*));
         if (!new_queue) return false;
 
@@ -2342,52 +2337,16 @@ static bool addNspQueueEntry(TitleInfo *title_info)
     return true;
 }
 
-static bool isQueueEligibleTitle(const TitleInfo *title_info)
+static inline bool isTitleStorageMediumEligibleForNspDumpQueue(const TitleInfo *title_info)
 {
-    if (!title_info) return false;
-
-    return (title_info->storage_id == NcmStorageId_BuiltInUser || title_info->storage_id == NcmStorageId_SdCard);
+    return (title_info && (title_info->storage_id == NcmStorageId_GameCard || title_info->storage_id == NcmStorageId_BuiltInUser || title_info->storage_id == NcmStorageId_SdCard));
 }
 
-static bool shouldPreferTitleForQueue(const TitleInfo *candidate, const TitleInfo *current)
-{
-    if (!candidate) return false;
-    if (!current) return true;
-
-    bool candidate_eligible = isQueueEligibleTitle(candidate);
-    bool current_eligible = isQueueEligibleTitle(current);
-
-    if (candidate_eligible && !current_eligible) return true;
-    if (!candidate_eligible) return false;
-
-    if (candidate->version.value > current->version.value) return true;
-    if (candidate->version.value < current->version.value) return false;
-
-    return (candidate->storage_id == NcmStorageId_SdCard && current->storage_id == NcmStorageId_BuiltInUser);
-}
-
-static TitleInfo *getBestQueueCandidateFromChain(TitleInfo *title_info)
-{
-    if (!title_info) return NULL;
-
-    TitleInfo *best = NULL;
-
-    TitleInfo *cur = title_info;
-    while(cur->previous) cur = cur->previous;
-
-    for(; cur; cur = cur->next)
-    {
-        if (shouldPreferTitleForQueue(cur, best)) best = cur;
-    }
-
-    return best;
-}
-
-static void removeNspQueueEntryByIndex(u32 idx)
+static void removeNspDumpQueueEntryByIndex(u32 idx)
 {
     if (!g_nspDumpQueue || idx >= g_nspDumpQueueCount) return;
 
-    if (g_nspDumpQueue[idx]) titleFreeTitleInfo(&(g_nspDumpQueue[idx]));
+    titleFreeTitleInfo(&(g_nspDumpQueue[idx]));
 
     if (idx < (g_nspDumpQueueCount - 1)) memmove(&(g_nspDumpQueue[idx]), &(g_nspDumpQueue[idx + 1]), (g_nspDumpQueueCount - idx - 1) * sizeof(TitleInfo*));
 
@@ -2405,64 +2364,61 @@ static bool addNintendoSubmissionPackageToQueue(void *userdata)
 {
     if (!userdata) return false;
 
-    TitleInfo *title_info = (TitleInfo*)userdata;
-    TitleInfo *queue_title_info = NULL;
+    TitleInfo *title_info = NULL;
+    bool success = false;
 
-    if (!isQueueEligibleTitle(title_info))
+    title_info = titleDuplicateTitleInfo((TitleInfo*)userdata, false);
+    if (!title_info)
     {
-        consolePrint("queue only supports user-installed titles (nand/sd)\n");
-        return false;
+        consolePrint("failed to duplicate title info for queue\n");
+        goto end;
+    }
+
+    if (!isTitleStorageMediumEligibleForNspDumpQueue(title_info))
+    {
+        consolePrint("queue only supports emmc, sd card and/or gamecard titles\n");
+        goto end;
     }
 
     if (title_info->meta_key.type < NcmContentMetaType_Application || title_info->meta_key.type > NcmContentMetaType_DataPatch || title_info->meta_key.type == NcmContentMetaType_Delta)
     {
         consolePrint("invalid title type for nsp queue\n");
-        return false;
+        goto end;
     }
 
     for(u32 i = 0; i < g_nspDumpQueueCount; i++)
     {
         TitleInfo *entry = g_nspDumpQueue[i];
-        if (entry && entry->meta_key.id == title_info->meta_key.id && entry->meta_key.type == title_info->meta_key.type)
+        if (!entry || entry->meta_key.id != title_info->meta_key.id || entry->meta_key.type != title_info->meta_key.type) continue;
+
+        if (entry->version.value >= title_info->version.value)
         {
-            if (!shouldPreferTitleForQueue(title_info, entry))
-            {
-                consolePrint("title already queued\n");
-                return false;
-            }
-
-            queue_title_info = titleDuplicateTitleInfoEntry(title_info);
-            if (!queue_title_info)
-            {
-                consolePrint("failed to duplicate title info for queue\n");
-                return false;
-            }
-
-            titleFreeTitleInfo(&(g_nspDumpQueue[i]));
-            g_nspDumpQueue[i] = queue_title_info;
-
-            consolePrint("updated queued title %016lX to a newer preferred entry\n", title_info->meta_key.id);
-            return true;
+            consolePrint("title %016lX with equal or greater version already queued (v%u >= v%u)\n", entry->meta_key.id, entry->version.value, title_info->version.value);
+            goto end;
         }
+
+        consolePrint("updating queued title %016lX to a newer preferred entry (v%u -> v%u)\n", entry->meta_key.id, entry->version.value, title_info->version.value);
+
+        titleFreeTitleInfo(&(g_nspDumpQueue[i]));
+        g_nspDumpQueue[i] = title_info;
+        success = true;
+
+        goto end;
     }
 
-    queue_title_info = titleDuplicateTitleInfoEntry(title_info);
-    if (!queue_title_info)
+    if (!addNspDumpQueueEntry(title_info))
     {
-        consolePrint("failed to duplicate title info for queue\n");
-        return false;
-    }
-
-    if (!addNspQueueEntry(queue_title_info))
-    {
-        titleFreeTitleInfo(&queue_title_info);
         consolePrint("failed to expand nsp queue\n");
-        return false;
+        goto end;
     }
 
-    consolePrint("queued title %016lX (%u item(s) total)\n", title_info->meta_key.id, g_nspDumpQueueCount);
+    consolePrint("queued %s title %016lX v%u (%u item[s] total)\n", titleGetNcmStorageIdName(title_info->storage_id), title_info->meta_key.id, title_info->meta_key.version, g_nspDumpQueueCount);
+    success = true;
 
-    return true;
+end:
+    if (!success) titleFreeTitleInfo(&title_info);
+
+    return success;
 }
 
 static bool addAllAvailableNintendoSubmissionPackagesToQueue(void *userdata)
@@ -2474,119 +2430,53 @@ static bool addAllAvailableNintendoSubmissionPackagesToQueue(void *userdata)
         return false;
     }
 
-    consolePrint("warning: this will queue all available nsp dump targets for the selected title\n");
-    consolePrint("including base app, latest update, all dlc and dlc updates\n");
+    consolePrint("warning: this will queue all available nsp dump targets for the selected user\n");
+    consolePrint("title entry, including base app, latest update, all dlc and dlc updates\n");
     consolePrint("press a to proceed, or b to cancel\n\n");
 
     u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
-    if (!(btn_down & HidNpadButton_A))
+    if (btn_down & HidNpadButton_B)
     {
         consolePrint("bulk queue add cancelled\n");
         return false;
     }
 
-    u32 queued_before = g_nspDumpQueueCount;
+    TitleInfo *latest_app = getLatestTitleInfo(user_app_data->app_info, NULL, NULL);
+    if (latest_app) addNintendoSubmissionPackageToQueue(latest_app);
 
-    TitleInfo *best_app = getBestQueueCandidateFromChain(user_app_data->app_info);
-    if (best_app) addNintendoSubmissionPackageToQueue(best_app);
+    TitleInfo *latest_patch = getLatestTitleInfo(user_app_data->patch_info, NULL, NULL);
+    if (latest_patch) addNintendoSubmissionPackageToQueue(latest_patch);
 
-    TitleInfo *best_patch = getBestQueueCandidateFromChain(user_app_data->patch_info);
-    if (best_patch) addNintendoSubmissionPackageToQueue(best_patch);
+    u64 cur_id = 0;
+    u32 added = 0;
 
-    if (user_app_data->aoc_info)
+    for(TitleInfo *entry = user_app_data->aoc_info; entry; entry = entry->next)
     {
-        typedef struct {
-            u64 id;
-            TitleInfo *best;
-        } BestAocEntry;
+        /* Entries are ordered by TID and version. */
+        if (entry->meta_key.id == cur_id) continue;
 
-        BestAocEntry *best_entries = NULL;
-        u32 best_count = 0;
+        cur_id = entry->meta_key.id;
 
-        for(TitleInfo *cur = user_app_data->aoc_info; cur; cur = cur->next)
-        {
-            bool found = false;
-
-            for(u32 i = 0; i < best_count; i++)
-            {
-                if (best_entries[i].id == cur->meta_key.id)
-                {
-                    found = true;
-                    if (shouldPreferTitleForQueue(cur, best_entries[i].best)) best_entries[i].best = cur;
-                    break;
-                }
-            }
-
-            if (!found)
-            {
-                BestAocEntry *tmp = realloc(best_entries, (best_count + 1) * sizeof(BestAocEntry));
-                if (!tmp) break;
-
-                best_entries = tmp;
-                best_entries[best_count].id = cur->meta_key.id;
-                best_entries[best_count].best = cur;
-                best_count++;
-            }
-        }
-
-        for(u32 i = 0; i < best_count; i++)
-        {
-            if (best_entries[i].best && isQueueEligibleTitle(best_entries[i].best)) addNintendoSubmissionPackageToQueue(best_entries[i].best);
-        }
-
-        if (best_entries) free(best_entries);
+        TitleInfo *latest_aoc = getLatestTitleInfo(entry, NULL, NULL);
+        if (latest_aoc && addNintendoSubmissionPackageToQueue(latest_aoc)) added++;
     }
 
-    if (user_app_data->aoc_patch_info)
+    cur_id = 0;
+
+    for(TitleInfo *entry = user_app_data->aoc_patch_info; entry; entry = entry->next)
     {
-        typedef struct {
-            u64 id;
-            TitleInfo *latest;
-        } LatestPatchEntry;
+        /* Entries are ordered by TID and version. */
+        if (entry->meta_key.id == cur_id) continue;
 
-        LatestPatchEntry *latest_entries = NULL;
-        u32 latest_count = 0;
+        cur_id = entry->meta_key.id;
 
-        for(TitleInfo *cur = user_app_data->aoc_patch_info; cur; cur = cur->next)
-        {
-            bool found = false;
-
-            for(u32 i = 0; i < latest_count; i++)
-            {
-                if (latest_entries[i].id == cur->meta_key.id)
-                {
-                    found = true;
-                    if (shouldPreferTitleForQueue(cur, latest_entries[i].latest)) latest_entries[i].latest = cur;
-                    break;
-                }
-            }
-
-            if (!found)
-            {
-                LatestPatchEntry *tmp = realloc(latest_entries, (latest_count + 1) * sizeof(LatestPatchEntry));
-                if (!tmp) break;
-
-                latest_entries = tmp;
-                latest_entries[latest_count].id = cur->meta_key.id;
-                latest_entries[latest_count].latest = cur;
-                latest_count++;
-            }
-        }
-
-        for(u32 i = 0; i < latest_count; i++)
-        {
-            if (latest_entries[i].latest && isQueueEligibleTitle(latest_entries[i].latest)) addNintendoSubmissionPackageToQueue(latest_entries[i].latest);
-        }
-
-        if (latest_entries) free(latest_entries);
+        TitleInfo *latest_aoc_patch = getLatestTitleInfo(entry, NULL, NULL);
+        if (latest_aoc_patch && addNintendoSubmissionPackageToQueue(latest_aoc_patch)) added++;
     }
 
-    u32 queued_after = g_nspDumpQueueCount;
-    u32 added_count = (queued_after >= queued_before ? (queued_after - queued_before) : 0);
+    consolePrint("bulk queue add finished: %u item(s) added\n", added);
 
-    consolePrint("bulk queue add finished: %u item(s) added\n", added_count);
-
-    return (added_count > 0);
+    return (added > 0);
 }
 
 static bool startNintendoSubmissionPackageQueue(void *userdata)
@@ -2604,6 +2494,7 @@ static bool startNintendoSubmissionPackageQueue(void *userdata)
     for(u32 i = 0; i < g_nspDumpQueueCount;)
     {
         TitleInfo *queue_title_info = g_nspDumpQueue[i];
+        if (!queue_title_info) continue;
 
         consoleClear();
         consolePrint("queued nsp dump %u/%u\n", i + 1, g_nspDumpQueueCount);
@@ -2611,7 +2502,7 @@ static bool startNintendoSubmissionPackageQueue(void *userdata)
         if (saveNintendoSubmissionPackage(queue_title_info))
         {
             success_count++;
-            removeNspQueueEntryByIndex(i);
+            removeNspDumpQueueEntryByIndex(i);
             if (!g_nspDumpQueueCount) break;
         } else {
             fail_count++;
@@ -2622,9 +2513,8 @@ static bool startNintendoSubmissionPackageQueue(void *userdata)
     updateNspQueueViewList();
 
     consolePrint("\nqueue done: %u succeeded, %u failed\n", success_count, fail_count);
-    consolePrint("queue remaining: %u\n", g_nspDumpQueueCount);
 
-    return (success_count > 0 && !fail_count);
+    return (success_count && !fail_count);
 }
 
 static bool clearNintendoSubmissionPackageQueue(void *userdata)
@@ -2650,7 +2540,7 @@ static bool clearNintendoSubmissionPackageQueue(void *userdata)
         consolePrint("nsp queue cleared\n");
     }
 
-    return false;
+    return true;
 }
 
 static bool removeNintendoSubmissionPackageQueueEntry(void *userdata)
@@ -2660,23 +2550,18 @@ static bool removeNintendoSubmissionPackageQueueEntry(void *userdata)
     u32 idx = *((u32*)userdata);
     if (idx >= g_nspDumpQueueCount) return false;
 
-    removeNspQueueEntryByIndex(idx);
+    removeNspDumpQueueEntryByIndex(idx);
 
     updateNspQueueViewList();
 
     consolePrint("queue entry removed\n");
 
-    return false;
+    return true;
 }
 
 static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *out_count)
 {
-    if (!title_info || !out_idx || !out_count || (title_info->meta_key.type != NcmContentMetaType_Patch && title_info->meta_key.type != NcmContentMetaType_DataPatch))
-    {
-        if (out_idx) *out_idx = 0;
-        if (out_count) *out_count = titleGetCountFromInfoBlock(title_info);
-        return title_info;
-    }
+    if (!titleIsValidInfoBlock(title_info)) return NULL;
 
     u32 idx = 0, count = 1;
     TitleInfo *cur_info = title_info->previous, *out = title_info;
@@ -2685,7 +2570,7 @@ static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *o
     {
         count++;
 
-        if (cur_info->version.value > out->version.value)
+        if (cur_info->meta_key.id == out->meta_key.id && cur_info->version.value > out->version.value)
         {
             out = cur_info;
             idx = count;
@@ -2702,7 +2587,7 @@ static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *o
     {
         count++;
 
-        if (cur_info->version.value > out->version.value)
+        if (cur_info->meta_key.id == out->meta_key.id && cur_info->version.value > out->version.value)
         {
             out = cur_info;
             idx = (count - 1);
@@ -2711,8 +2596,8 @@ static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *o
         cur_info = cur_info->next;
     }
 
-    *out_idx = idx;
-    *out_count = count;
+    if (out_idx) *out_idx = idx;
+    if (out_count) *out_count = count;
 
     return out;
 }
