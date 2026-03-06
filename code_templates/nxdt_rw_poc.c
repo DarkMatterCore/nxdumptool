@@ -1698,6 +1698,15 @@ int main(int argc, char *argv[])
             if (selected_element->task_func)
             {
                 bool show_button_prompt = true;
+                /* For queue management actions, we want to show the button prompt 
+                and wait for a button press before going back to the queue view, 
+                but we don't want to wait for USB or show the "please wait" message 
+                since these actions are usually very fast and waiting for USB or 
+                showing the message could be disruptive. */
+                bool is_queue_management_action = (selected_element->task_func == &addNintendoSubmissionPackageToQueue ||
+                                                   selected_element->task_func == &addAllAvailableNintendoSubmissionPackagesToQueue ||
+                                                   selected_element->task_func == &clearNintendoSubmissionPackageQueue ||
+                                                   selected_element->task_func == &removeNintendoSubmissionPackageQueueEntry);
 
                 consoleClear();
 
@@ -1718,7 +1727,7 @@ int main(int argc, char *argv[])
                     /* Update free space. */
                     if (!useUsbHost()) updateStorageList();
                 } else
-                if (cur_menu->id > MenuId_Root)
+                if (cur_menu->id > MenuId_Root && !is_queue_management_action)
                 {
                     /* Wait for USB session (if needed). */
                     if (useUsbHost() && !waitForUsb())
@@ -2294,9 +2303,9 @@ void updateNspQueueViewList(void)
 
         *entry_idx = i;
 
-        g_nspQueueViewMenuElements[idx]->str = label;
-        g_nspQueueViewMenuElements[idx]->task_func = &removeNintendoSubmissionPackageQueueEntry;
-        g_nspQueueViewMenuElements[idx]->userdata = entry_idx;
+        elements[idx]->str = label;
+        elements[idx]->task_func = &removeNintendoSubmissionPackageQueueEntry;
+        elements[idx]->userdata = entry_idx;
 
         idx++;
     }
