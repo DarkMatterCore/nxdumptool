@@ -386,6 +386,7 @@ static MenuElement g_storageMenuElement = {
 static TitleInfo **g_nspDumpQueue = NULL;
 static u32 g_nspDumpQueueCount = 0;
 static u32 g_nspDumpQueueCapacity = 0;
+static bool g_lastNspDumpUserCancelled = false;
 
 static MenuElementOption g_nspSetDownloadDistributionMenuElementOption = {
     .selected = 0,
@@ -2499,6 +2500,7 @@ static bool startNintendoSubmissionPackageQueue(void *userdata)
     }
 
     u32 success_count = 0, fail_count = 0;
+    bool queue_cancelled = false;
 
     for(u32 i = 0; i < g_nspDumpQueueCount;)
     {
@@ -2514,12 +2516,25 @@ static bool startNintendoSubmissionPackageQueue(void *userdata)
             removeNspDumpQueueEntryByIndex(i);
             if (!g_nspDumpQueueCount) break;
         } else {
+            if (g_lastNspDumpUserCancelled)
+            {
+                queue_cancelled = true;
+                break;
+            }
+
             fail_count++;
             i++;
         }
     }
 
     updateNspQueueViewList();
+
+    if (queue_cancelled)
+    {
+        consolePrint("\nqueue cancelled by user\n");
+        consolePrint("completed: %u | failed: %u | remaining: %u\n", success_count, fail_count, g_nspDumpQueueCount);
+        return false;
+    }
 
     consolePrint("\nqueue done: %u succeeded, %u failed\n", success_count, fail_count);
 
@@ -4024,6 +4039,8 @@ static bool saveNintendoSubmissionPackage(void *userdata)
 {
     if (!userdata) return false;
 
+    g_lastNspDumpUserCancelled = false;
+
     TitleInfo *title_info = (TitleInfo*)userdata;
     TitleApplicationMetadata *app_metadata = title_info->app_metadata;
 
@@ -4139,6 +4156,7 @@ static bool saveNintendoSubmissionPackage(void *userdata)
     } else
     if (nsp_thread_data.transfer_cancelled)
     {
+        g_lastNspDumpUserCancelled = true;
         consolePrint("process cancelled\n");
     } else {
         start = (time(NULL) - start);
