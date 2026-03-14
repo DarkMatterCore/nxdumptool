@@ -1699,14 +1699,14 @@ int main(int argc, char *argv[])
             if (selected_element->task_func)
             {
                 bool show_button_prompt = true;
-                /* For queue management actions, we want to show the button prompt 
-                and wait for a button press before going back to the queue view, 
-                but we don't want to wait for USB or show the "please wait" message 
-                since these actions are usually very fast and waiting for USB or 
+                /* For queue management actions, we want to show the button prompt
+                and wait for a button press before going back to the queue view,
+                but we don't want to wait for USB or show the "please wait" message
+                since these actions are usually very fast and waiting for USB or
                 showing the message could be disruptive. */
-                bool is_queue_management_action = (selected_element->task_func == &addNintendoSubmissionPackageToQueue ||
-                                                   selected_element->task_func == &addAllAvailableNintendoSubmissionPackagesToQueue ||
-                                                   selected_element->task_func == &clearNintendoSubmissionPackageQueue ||
+                bool is_queue_management_action = (selected_element->task_func == &addNintendoSubmissionPackageToQueue || \
+                                                   selected_element->task_func == &addAllAvailableNintendoSubmissionPackagesToQueue || \
+                                                   selected_element->task_func == &clearNintendoSubmissionPackageQueue || \
                                                    selected_element->task_func == &removeNintendoSubmissionPackageQueueEntry);
 
                 consoleClear();
@@ -1730,22 +1730,29 @@ int main(int argc, char *argv[])
                 } else
                 if (cur_menu->id > MenuId_Root && !is_queue_management_action)
                 {
-                    /* Wait for USB session (if needed). */
-                    if (useUsbHost() && !waitForUsb())
+                    if (selected_element->task_func != &startNintendoSubmissionPackageQueue || (g_nspDumpQueueCount && g_nspDumpQueue))
                     {
-                        if (g_appletStatus) continue;
-                        break;
+                        /* Wait for USB session (if needed). */
+                        if (useUsbHost() && !waitForUsb())
+                        {
+                            if (g_appletStatus) continue;
+                            break;
+                        }
+
+                        /* Run task. */
+                        utilsSetLongRunningProcessState(true);
+
+                        if (selected_element->task_func(selected_element->userdata))
+                        {
+                            if (!useUsbHost()) updateStorageList(); // update free space
+                        }
+
+                        utilsSetLongRunningProcessState(false);
+                    } else {
+                        /* Don't proceed any further if there's no queue to work with. */
+                        /* There's no point in waiting for a USB connection if there's nothing to do afterwards. */
+                        consolePrint("nsp queue is empty\n");
                     }
-
-                    /* Run task. */
-                    utilsSetLongRunningProcessState(true);
-
-                    if (selected_element->task_func(selected_element->userdata))
-                    {
-                        if (!useUsbHost()) updateStorageList(); // update free space
-                    }
-
-                    utilsSetLongRunningProcessState(false);
                 } else {
                     /* Ignore result. */
                     selected_element->task_func(selected_element->userdata);
@@ -1759,7 +1766,7 @@ int main(int argc, char *argv[])
                 }
             }
         } else
-        if (((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown))) && element_count)
+        if (((btn_down & HidNpadButton_Down) || (btn_held & HidNpadButton_StickLDown)) && element_count)
         {
             cur_menu->selected++;
 
@@ -1778,7 +1785,7 @@ int main(int argc, char *argv[])
                 cur_menu->scroll++;
             }
         } else
-        if (((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp))) && element_count)
+        if (((btn_down & HidNpadButton_Up) || (btn_held & HidNpadButton_StickLUp)) && element_count)
         {
             cur_menu->selected--;
 
@@ -1796,6 +1803,18 @@ int main(int argc, char *argv[])
             {
                 cur_menu->scroll--;
             }
+        } else
+        if (((btn_down & (HidNpadButton_Right | HidNpadButton_StickLRight | HidNpadButton_StickRRight)) || (btn_held & HidNpadButton_StickRDown)) && element_count && !selected_element_options)
+        {
+            cur_menu->selected += page_size;
+            if (cur_menu->selected >= element_count) cur_menu->selected = (element_count - 1);
+            cur_menu->scroll = (cur_menu->selected - (cur_menu->selected % page_size));
+        } else
+        if (((btn_down & (HidNpadButton_Left | HidNpadButton_StickLLeft | HidNpadButton_StickRLeft)) || (btn_held & HidNpadButton_StickRUp)) && element_count && !selected_element_options)
+        {
+            cur_menu->selected -= page_size;
+            if (cur_menu->selected >= (UINT32_MAX - page_size) && cur_menu->selected <= UINT32_MAX) cur_menu->selected = 0;
+            cur_menu->scroll = (cur_menu->selected - (cur_menu->selected % page_size));
         } else
         if ((btn_down & (HidNpadButton_Right | HidNpadButton_StickLRight | HidNpadButton_StickRRight)) && selected_element_options)
         {
