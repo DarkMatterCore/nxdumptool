@@ -1412,7 +1412,8 @@ int main(int argc, char *argv[])
         if ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && element_count)
         {
             consolePrint("press y to dump csv with title info to the sd card\n");
-            consolePrint("press zl + zr to add all titles to the nsp dump queue\n");
+            if (cur_menu->id == MenuId_UserTitles) 
+                consolePrint("press zl + zr to add all titles to the nsp dump queue\n");
         }
         consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
@@ -1972,7 +1973,7 @@ int main(int argc, char *argv[])
                 g_ncaMenuElements[i]->task_func = (g_ncaMenuRawMode ? &saveNintendoContentArchive : NULL);
             }
         } else
-        if ((btn_down & (HidNpadButton_ZL | HidNpadButton_ZR)) && cur_menu->id == MenuId_UserTitles && element_count)
+        if ((btn_down & HidNpadButton_ZL) && (btn_down & HidNpadButton_ZR) && cur_menu->id == MenuId_UserTitles && element_count)
         {
             addAllUserTitlesToNspDumpQueueViewList(element_count);
         } else
