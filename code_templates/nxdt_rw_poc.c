@@ -2314,7 +2314,43 @@ static int nspDumpQueueViewListEntrySortFunction(const void *a, const void *b)
     const MenuElement *menu_element_1 = *((const MenuElement**)a);
     const MenuElement *menu_element_2 = *((const MenuElement**)b);
 
-    return strcasecmp(menu_element_1->str, menu_element_2->str);
+    const TitleInfo* title_info_1 = (const TitleInfo*)menu_element_1->userdata;
+    const TitleInfo* title_info_2 = (const TitleInfo*)menu_element_2->userdata;
+
+    if (title_info_1->app_metadata && title_info_2->app_metadata)
+    {
+        int ret = strcasecmp(title_info_1->app_metadata->name, title_info_2->app_metadata->name);
+        if (ret != 0) return ret;
+    }
+
+    if (title_info_1->meta_key.type < title_info_2->meta_key.type)
+    {
+        return -1;
+    } else
+    if (title_info_1->meta_key.type > title_info_2->meta_key.type)
+    {
+        return 1;
+    }
+
+    if (title_info_1->meta_key.id < title_info_2->meta_key.id)
+    {
+        return -1;
+    } else
+    if (title_info_1->meta_key.id > title_info_2->meta_key.id)
+    {
+        return 1;
+    }
+
+    if (title_info_1->version.value < title_info_2->version.value)
+    {
+        return -1;
+    } else
+    if (title_info_1->version.value > title_info_2->version.value)
+    {
+        return 1;
+    }
+
+    return 0;
 }
 
 static void removeNspDumpQueueViewListEntryByTitleInfoPtr(TitleInfo *title_info)
