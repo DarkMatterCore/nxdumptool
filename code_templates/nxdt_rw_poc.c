@@ -32,9 +32,10 @@
 #include <core/system_update.h>
 #include <core/bis_storage.h>
 
-#define BLOCK_SIZE      USB_TRANSFER_BUFFER_SIZE
-#define WAIT_TIME_LIMIT 30
-#define OUTDIR          APP_TITLE
+#define DEFAULT_PAGE_SIZE   20
+#define BLOCK_SIZE          USB_TRANSFER_BUFFER_SIZE
+#define WAIT_TIME_LIMIT     30
+#define OUTDIR              APP_TITLE
 
 /* Type definitions. */
 
@@ -87,7 +88,9 @@ typedef enum {
     MenuId_SystemTitles         = 15,
     MenuId_SystemUpdate         = 16,
     MenuId_BrowseEmmc           = 17,
-    MenuId_Count                = 18
+    MenuId_NspQueue             = 18,
+    MenuId_NspQueueView         = 19,
+    MenuId_Count                = 20
 } MenuId;
 
 typedef struct
@@ -200,6 +203,12 @@ void updateNcaFsSectionsList(NcaUserData *nca_user_data);
 void freeNcaBasePatchList(void);
 void updateNcaBasePatchList(TitleUserApplicationData *user_app_data, TitleInfo *title_info, NcaFsSectionContext *nca_fs_ctx);
 
+static void freeNspQueueViewList(void);
+static bool expandNspQueueViewList(TitleInfo *title_info);
+static int nspDumpQueueViewListEntrySortFunction(const void *a, const void *b);
+static void removeNspDumpQueueViewListEntryByTitleInfoPtr(TitleInfo *title_info);
+static void addAllUserTitlesToNspDumpQueueViewList(const u32 user_titles_count);
+
 NX_INLINE bool useUsbHost(void);
 
 static bool waitForGameCard(void);
@@ -231,6 +240,14 @@ static bool browseGameCardHfsPartition(void *userdata);
 static bool saveConsoleLafwBlob(void *userdata);
 
 static bool saveNintendoSubmissionPackage(void *userdata);
+
+static bool addTitleToNintendoSubmissionPackageQueue(TitleInfo *title_info, bool print_err_only);
+static bool addTitleToNintendoSubmissionPackageQueueByUserAction(void *userdata);
+static u32 addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueue(TitleUserApplicationData *user_app_data, bool print_err_only);
+static bool addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueueByUserAction(void *userdata);
+static bool startNintendoSubmissionPackageQueueDump(void *userdata);
+static bool clearNintendoSubmissionPackageQueue(void *userdata);
+static bool removeNintendoSubmissionPackageQueueEntry(void *userdata);
 
 static bool saveTicket(void *userdata);
 
@@ -364,6 +381,72 @@ static MenuElement g_storageMenuElement = {
     .task_func = NULL,
     .element_options = &g_storageMenuElementOption,
     .userdata = NULL
+};
+
+static bool g_lastNspDumpUserCancelled = false;
+
+static MenuElementOption g_nspSetDownloadDistributionMenuElementOption = {
+    .selected = 0,
+    .retrieved = false,
+    .getter_func = &getNspSetDownloadDistributionOption,
+    .setter_func = &setNspSetDownloadDistributionOption,
+    .options = g_noYesStrings
+};
+
+static MenuElementOption g_nspRemoveConsoleDataMenuElementOption = {
+    .selected = 0,
+    .retrieved = false,
+    .getter_func = &getNspRemoveConsoleDataOption,
+    .setter_func = &setNspRemoveConsoleDataOption,
+    .options = g_noYesStrings
+};
+
+static MenuElementOption g_nspRemoveTitlekeyCryptoMenuElementOption = {
+    .selected = 0,
+    .retrieved = false,
+    .getter_func = &getNspRemoveTitlekeyCryptoOption,
+    .setter_func = &setNspRemoveTitlekeyCryptoOption,
+    .options = g_noYesStrings
+};
+
+static MenuElementOption g_nspDisableLinkedAccountRequirementMenuElementOption = {
+    .selected = 1,
+    .retrieved = false,
+    .getter_func = &getNspDisableLinkedAccountRequirementOption,
+    .setter_func = &setNspDisableLinkedAccountRequirementOption,
+    .options = g_noYesStrings
+};
+
+static MenuElementOption g_nspEnableScreenshotsMenuElementOption = {
+    .selected = 1,
+    .retrieved = false,
+    .getter_func = &getNspEnableScreenshotsOption,
+    .setter_func = &setNspEnableScreenshotsOption,
+    .options = g_noYesStrings
+};
+
+static MenuElementOption g_nspEnableVideoCaptureMenuElementOption = {
+    .selected = 1,
+    .retrieved = false,
+    .getter_func = &getNspEnableVideoCaptureOption,
+    .setter_func = &setNspEnableVideoCaptureOption,
+    .options = g_noYesStrings
+};
+
+static MenuElementOption g_nspDisableHdcpMenuElementOption = {
+    .selected = 1,
+    .retrieved = false,
+    .getter_func = &getNspDisableHdcpOption,
+    .setter_func = &setNspDisableHdcpOption,
+    .options = g_noYesStrings
+};
+
+static MenuElementOption g_nspGenerateAuthoringToolDataMenuElementOption = {
+    .selected = 1,
+    .retrieved = false,
+    .getter_func = &getNspGenerateAuthoringToolDataOption,
+    .setter_func = &setNspGenerateAuthoringToolDataOption,
+    .options = g_noYesStrings
 };
 
 static MenuElement *g_xciMenuElements[] = {
@@ -666,107 +749,66 @@ static MenuElement *g_nspMenuElements[] = {
         .userdata = NULL    // Dynamically set to the TitleInfo object from the title to dump
     },
     &(MenuElement){
+        .str = "add selected title to nsp queue",
+        .child_menu = NULL,
+        .task_func = &addTitleToNintendoSubmissionPackageQueueByUserAction,
+        .element_options = NULL,
+        .userdata = NULL    // Dynamically set to the TitleInfo object from the title to queue
+    },
+    &(MenuElement){
         .str = "nca: set content distribution type to \"download\"",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 0,
-            .retrieved = false,
-            .getter_func = &getNspSetDownloadDistributionOption,
-            .setter_func = &setNspSetDownloadDistributionOption,
-            .options = g_noYesStrings
-        },
+        .element_options = &g_nspSetDownloadDistributionMenuElementOption,
         .userdata = NULL
     },
     &(MenuElement){
         .str = "tik: remove console specific data",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 0,
-            .retrieved = false,
-            .getter_func = &getNspRemoveConsoleDataOption,
-            .setter_func = &setNspRemoveConsoleDataOption,
-            .options = g_noYesStrings
-        },
+        .element_options = &g_nspRemoveConsoleDataMenuElementOption,
         .userdata = NULL
     },
     &(MenuElement){
         .str = "nca/tik: remove titlekey crypto (overrides previous option)",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 0,
-            .retrieved = false,
-            .getter_func = &getNspRemoveTitlekeyCryptoOption,
-            .setter_func = &setNspRemoveTitlekeyCryptoOption,
-            .options = g_noYesStrings
-        },
+        .element_options = &g_nspRemoveTitlekeyCryptoMenuElementOption,
         .userdata = NULL
     },
     &(MenuElement){
         .str = "nacp: disable linked account requirement",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 1,
-            .retrieved = false,
-            .getter_func = &getNspDisableLinkedAccountRequirementOption,
-            .setter_func = &setNspDisableLinkedAccountRequirementOption,
-            .options = g_noYesStrings
-        },
+        .element_options = &g_nspDisableLinkedAccountRequirementMenuElementOption,
         .userdata = NULL
     },
     &(MenuElement){
         .str = "nacp: enable screenshots",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 1,
-            .retrieved = false,
-            .getter_func = &getNspEnableScreenshotsOption,
-            .setter_func = &setNspEnableScreenshotsOption,
-            .options = g_noYesStrings
-        },
+        .element_options = &g_nspEnableScreenshotsMenuElementOption,
         .userdata = NULL
     },
     &(MenuElement){
         .str = "nacp: enable video capture",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 1,
-            .retrieved = false,
-            .getter_func = &getNspEnableVideoCaptureOption,
-            .setter_func = &setNspEnableVideoCaptureOption,
-            .options = g_noYesStrings
-        },
+        .element_options = &g_nspEnableVideoCaptureMenuElementOption,
         .userdata = NULL
     },
     &(MenuElement){
         .str = "nacp: disable hdcp",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 1,
-            .retrieved = false,
-            .getter_func = &getNspDisableHdcpOption,
-            .setter_func = &setNspDisableHdcpOption,
-            .options = g_noYesStrings
-        },
+        .element_options = &g_nspDisableHdcpMenuElementOption,
         .userdata = NULL
     },
     &(MenuElement){
         .str = "nsp: generate authoringtool data",
         .child_menu = NULL,
         .task_func = NULL,
-        .element_options = &(MenuElementOption){
-            .selected = 1,
-            .retrieved = false,
-            .getter_func = &getNspGenerateAuthoringToolDataOption,
-            .setter_func = &setNspGenerateAuthoringToolDataOption,
-            .options = g_noYesStrings
-        },
+        .element_options = &g_nspGenerateAuthoringToolDataMenuElementOption,
         .userdata = NULL
     },
     &g_storageMenuElement,
@@ -779,6 +821,107 @@ static Menu g_nspMenu = {
     .selected = 0,
     .scroll = 0,
     .elements = g_nspMenuElements
+};
+
+static u32 g_nspQueueViewMenuElementCount = 0;
+
+// Dynamically populated via user actions.
+static Menu g_nspQueueViewMenu = {
+    .id = MenuId_NspQueueView,
+    .parent = NULL,
+    .selected = 0,
+    .scroll = 0,
+    .elements = NULL
+};
+
+static MenuElement *g_nspQueueMenuElements[] = {
+    &(MenuElement){
+        .str = "start queued nsp dump",
+        .child_menu = NULL,
+        .task_func = &startNintendoSubmissionPackageQueueDump,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "clear nsp queue",
+        .child_menu = NULL,
+        .task_func = &clearNintendoSubmissionPackageQueue,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "view / remove queued items",
+        .child_menu = &g_nspQueueViewMenu,
+        .task_func = NULL,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "nca: set content distribution type to \"download\"",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_nspSetDownloadDistributionMenuElementOption,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "tik: remove console specific data",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_nspRemoveConsoleDataMenuElementOption,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "nca/tik: remove titlekey crypto (overrides previous option)",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_nspRemoveTitlekeyCryptoMenuElementOption,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "nacp: disable linked account requirement",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_nspDisableLinkedAccountRequirementMenuElementOption,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "nacp: enable screenshots",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_nspEnableScreenshotsMenuElementOption,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "nacp: enable video capture",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_nspEnableVideoCaptureMenuElementOption,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "nacp: disable hdcp",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_nspDisableHdcpMenuElementOption,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "nsp: generate authoringtool data",
+        .child_menu = NULL,
+        .task_func = NULL,
+        .element_options = &g_nspGenerateAuthoringToolDataMenuElementOption,
+        .userdata = NULL
+    },
+    &g_storageMenuElement,
+    NULL
+};
+
+static Menu g_nspQueueMenu = {
+    .id = MenuId_NspQueue,
+    .parent = NULL,
+    .selected = 0,
+    .scroll = 0,
+    .elements = g_nspQueueMenuElements
 };
 
 static MenuElement *g_ticketMenuElements[] = {
@@ -915,6 +1058,45 @@ static u32 g_metaTypePatch = NcmContentMetaType_Patch;
 static u32 g_metaTypeAOC = NcmContentMetaType_AddOnContent;
 static u32 g_metaTypeAOCPatch = NcmContentMetaType_DataPatch;
 
+static MenuElement *g_nspTitleTypesMenuElements[] = {
+    &(MenuElement){
+        .str = "dump base application",
+        .child_menu = NULL, // Dynamically set
+        .task_func = NULL,
+        .element_options = NULL,
+        .userdata = &g_metaTypeApplication
+    },
+    &(MenuElement){
+        .str = "dump update",
+        .child_menu = NULL, // Dynamically set
+        .task_func = NULL,
+        .element_options = NULL,
+        .userdata = &g_metaTypePatch
+    },
+    &(MenuElement){
+        .str = "dump dlc",
+        .child_menu = NULL, // Dynamically set
+        .task_func = NULL,
+        .element_options = NULL,
+        .userdata = &g_metaTypeAOC
+    },
+    &(MenuElement){
+        .str = "dump dlc update",
+        .child_menu = NULL, // Dynamically set
+        .task_func = NULL,
+        .element_options = NULL,
+        .userdata = &g_metaTypeAOCPatch
+    },
+    &(MenuElement){
+        .str = "add all available titles to nsp queue",
+        .child_menu = NULL,
+        .task_func = &addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueueByUserAction,
+        .element_options = NULL,
+        .userdata = NULL // Dynamically set to a TitleUserApplicationData object when needed
+    },
+    NULL
+};
+
 static MenuElement *g_titleTypesMenuElements[] = {
     &(MenuElement){
         .str = "dump base application",
@@ -955,7 +1137,7 @@ static MenuElement *g_userTitlesSubMenuElements[] = {
             .parent = NULL,
             .selected = 0,
             .scroll = 0,
-            .elements = g_titleTypesMenuElements
+            .elements = g_nspTitleTypesMenuElements
         },
         .task_func = NULL,
         .element_options = NULL,
@@ -1182,7 +1364,7 @@ int main(int argc, char *argv[])
     updateTitleList(&g_systemTitlesMenu, &g_ncaMenu, true);
 
     Menu *cur_menu = &g_rootMenu;
-    u32 element_count = menuGetElementCount(cur_menu), page_size = 20;
+    u32 element_count = menuGetElementCount(cur_menu), page_size = DEFAULT_PAGE_SIZE;
 
     TitleApplicationMetadata *app_metadata = NULL;
 
@@ -1203,10 +1385,15 @@ int main(int argc, char *argv[])
             /* Set title types child menu pointer if we're currently at the user titles submenu. */
             u32 child_id = selected_element->child_menu->id;
 
+            Menu *target_menu = (child_id == MenuId_NspTitleTypes ? &g_nspMenu : (child_id == MenuId_TicketTitleTypes ? &g_ticketMenu : (child_id == MenuId_NcaTitleTypes ? &g_ncaMenu : NULL)));
+
+            g_nspTitleTypesMenuElements[0]->child_menu = g_nspTitleTypesMenuElements[1]->child_menu = \
+            g_nspTitleTypesMenuElements[2]->child_menu = g_nspTitleTypesMenuElements[3]->child_menu = target_menu;
+
+            g_nspTitleTypesMenuElements[4]->userdata = (child_id == MenuId_NspTitleTypes ? &user_app_data : NULL);
+
             g_titleTypesMenuElements[0]->child_menu = g_titleTypesMenuElements[1]->child_menu = \
-            g_titleTypesMenuElements[2]->child_menu = g_titleTypesMenuElements[3]->child_menu = (child_id == MenuId_NspTitleTypes ? &g_nspMenu : \
-                                                                                                (child_id == MenuId_TicketTitleTypes ? &g_ticketMenu : \
-                                                                                                (child_id == MenuId_NcaTitleTypes ? &g_ncaMenu : NULL)));
+            g_titleTypesMenuElements[2]->child_menu = g_titleTypesMenuElements[3]->child_menu = target_menu;
         }
 
         consoleClear();
@@ -1215,7 +1402,15 @@ int main(int argc, char *argv[])
         consolePrint("______________________________\n\n");
         if (cur_menu->parent) consolePrint("press b to go back\n");
         if (g_umsDeviceCount) consolePrint("press x to safely remove all ums devices\n");
-        if ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && element_count) consolePrint("press y to dump csv with title info to the sd card\n");
+        if ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && element_count)
+        {
+            consolePrint("press y to dump csv with title info to the sd card\n");
+            if (cur_menu->id == MenuId_UserTitles)
+            {
+                consolePrint("press zl to add all titles to the nsp dump queue\n");
+                consolePrint("press zr to enter the nsp queue menu\n");
+            }
+        }
         consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
@@ -1261,7 +1456,7 @@ int main(int argc, char *argv[])
                 consolePrint("size: %s\n", title_info->size_str);
                 consolePrint("______________________________\n\n");
 
-                if (cur_menu->id == MenuId_Nsp) g_nspMenuElements[0]->userdata = title_info;
+                if (cur_menu->id == MenuId_Nsp) g_nspMenuElements[0]->userdata = g_nspMenuElements[1]->userdata = title_info;
 
                 if (cur_menu->id == MenuId_Ticket) g_ticketMenuElements[0]->userdata = title_info;
 
@@ -1293,8 +1488,22 @@ int main(int argc, char *argv[])
                 }
             }
         } else
-        if (cur_menu->id == MenuId_GameCard) {
+        if (cur_menu->id == MenuId_GameCard)
+        {
             consolePrint("For a full gamecard image: dump XCI, initial data, certificate, id set and uid.\n");
+            consolePrint("______________________________\n\n");
+        } else
+        if (cur_menu->id == MenuId_NspQueue || cur_menu->id == MenuId_NspQueueView)
+        {
+            consolePrint("nsp queue status:\n\n");
+            if (cur_menu->id == MenuId_NspQueueView && selected_element)
+            {
+                consolePrint("nsp: %u / %u\n", cur_menu->selected + 1, element_count);
+                consolePrint("selected nsp: %s\n", selected_element->str);
+                consolePrint("press a on an entry to remove it from the queue\n");
+            } else {
+                consolePrint("queued items: %u\n", g_nspQueueViewMenuElementCount);
+            }
             consolePrint("______________________________\n\n");
         }
 
@@ -1365,9 +1574,11 @@ int main(int argc, char *argv[])
 
         if (data_update) continue;
 
-        if ((btn_down & HidNpadButton_A) && selected_element)
+        bool is_nsp_queue_menu_btn_down = ((btn_down & HidNpadButton_ZR) && cur_menu->id == MenuId_UserTitles && element_count);
+
+        if (((btn_down & HidNpadButton_A) && selected_element) || is_nsp_queue_menu_btn_down)
         {
-            Menu *child_menu = selected_element->child_menu;
+            Menu *child_menu = (is_nsp_queue_menu_btn_down ? &g_nspQueueMenu : selected_element->child_menu);
 
             if (child_menu)
             {
@@ -1409,7 +1620,13 @@ int main(int argc, char *argv[])
 
                     if (title_info)
                     {
-                        title_info = getLatestTitleInfo(title_info, &title_info_idx, &title_info_count);
+                        if (title_info->meta_key.type == NcmContentMetaType_Patch || title_info->meta_key.type == NcmContentMetaType_DataPatch)
+                        {
+                            title_info = getLatestTitleInfo(title_info, &title_info_idx, &title_info_count);
+                        } else {
+                            title_info_idx = 0;
+                            title_info_count = titleGetCountFromInfoBlock(title_info);
+                        }
 
                         if (child_menu->id == MenuId_Nca)
                         {
@@ -1460,7 +1677,7 @@ int main(int argc, char *argv[])
 
                 if (!error)
                 {
-                    child_menu->parent = cur_menu;
+                    child_menu->parent = (is_nsp_queue_menu_btn_down ? &g_userTitlesMenu : cur_menu);
                     cur_menu = child_menu;
                     element_count = menuGetElementCount(cur_menu);
                 } else {
@@ -1472,6 +1689,10 @@ int main(int argc, char *argv[])
             if (selected_element->task_func)
             {
                 bool show_button_prompt = true;
+                bool is_queue_management_action = (selected_element->task_func == &addTitleToNintendoSubmissionPackageQueueByUserAction || \
+                                                   selected_element->task_func == &addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueueByUserAction || \
+                                                   selected_element->task_func == &clearNintendoSubmissionPackageQueue || \
+                                                   selected_element->task_func == &removeNintendoSubmissionPackageQueueEntry);
 
                 consoleClear();
 
@@ -1492,27 +1713,38 @@ int main(int argc, char *argv[])
                     /* Update free space. */
                     if (!useUsbHost()) updateStorageList();
                 } else
-                if (cur_menu->id > MenuId_Root)
+                if (cur_menu->id > MenuId_Root && !is_queue_management_action)
                 {
-                    /* Wait for USB session (if needed). */
-                    if (useUsbHost() && !waitForUsb())
+                    if (selected_element->task_func != &startNintendoSubmissionPackageQueueDump || g_nspQueueViewMenuElementCount)
                     {
-                        if (g_appletStatus) continue;
-                        break;
+                        /* Wait for USB session (if needed). */
+                        if (useUsbHost() && !waitForUsb())
+                        {
+                            if (g_appletStatus) continue;
+                            break;
+                        }
+
+                        /* Run task. */
+                        utilsSetLongRunningProcessState(true);
+
+                        if (selected_element->task_func(selected_element->userdata))
+                        {
+                            if (!useUsbHost()) updateStorageList(); // update free space
+                        }
+
+                        utilsSetLongRunningProcessState(false);
+                    } else {
+                        /* Don't proceed any further if there's no queue to work with. */
+                        /* There's no point in waiting for a USB connection if there's nothing to do afterwards. */
+                        consolePrint("nsp queue is empty\n");
                     }
-
-                    /* Run task. */
-                    utilsSetLongRunningProcessState(true);
-
-                    if (selected_element->task_func(selected_element->userdata))
-                    {
-                        if (!useUsbHost()) updateStorageList(); // update free space
-                    }
-
-                    utilsSetLongRunningProcessState(false);
                 } else {
                     /* Ignore result. */
                     selected_element->task_func(selected_element->userdata);
+
+                    /* Update element count if we're dealing with a NSP queue management action and
+                    we're currently at the NSP queue view menu. */
+                    if (is_queue_management_action && cur_menu->id == MenuId_NspQueueView) element_count = g_nspQueueViewMenuElementCount;
                 }
 
                 if (g_appletStatus && show_button_prompt)
@@ -1523,7 +1755,7 @@ int main(int argc, char *argv[])
                 }
             }
         } else
-        if (((btn_down & HidNpadButton_Down) || (btn_held & (HidNpadButton_StickLDown | HidNpadButton_StickRDown))) && element_count)
+        if (((btn_down & HidNpadButton_Down) || (btn_held & HidNpadButton_StickLDown)) && element_count)
         {
             cur_menu->selected++;
 
@@ -1542,7 +1774,7 @@ int main(int argc, char *argv[])
                 cur_menu->scroll++;
             }
         } else
-        if (((btn_down & HidNpadButton_Up) || (btn_held & (HidNpadButton_StickLUp | HidNpadButton_StickRUp))) && element_count)
+        if (((btn_down & HidNpadButton_Up) || (btn_held & HidNpadButton_StickLUp)) && element_count)
         {
             cur_menu->selected--;
 
@@ -1561,7 +1793,19 @@ int main(int argc, char *argv[])
                 cur_menu->scroll--;
             }
         } else
-        if ((btn_down & (HidNpadButton_Right | HidNpadButton_StickLRight | HidNpadButton_StickRRight)) && selected_element_options)
+        if (((btn_down & HidNpadButton_AnyRight) || (btn_held & HidNpadButton_StickRDown)) && element_count && !selected_element_options)
+        {
+            cur_menu->selected += page_size;
+            if (cur_menu->selected >= element_count) cur_menu->selected = (element_count - 1);
+            cur_menu->scroll = (cur_menu->selected - (cur_menu->selected % page_size));
+        } else
+        if (((btn_down & HidNpadButton_AnyLeft) || (btn_held & HidNpadButton_StickRUp)) && element_count && !selected_element_options)
+        {
+            cur_menu->selected -= page_size;
+            if (cur_menu->selected >= (UINT32_MAX - page_size) && cur_menu->selected <= UINT32_MAX) cur_menu->selected = 0;
+            cur_menu->scroll = (cur_menu->selected - (cur_menu->selected % page_size));
+        } else
+        if ((btn_down & HidNpadButton_AnyRight) && selected_element_options)
         {
             /* Point to the next base/patch title. */
             if (cur_menu->id == MenuId_NcaFsSectionsSubMenu && cur_menu->selected == 2)
@@ -1581,7 +1825,7 @@ int main(int argc, char *argv[])
             if (!selected_element_options->options[selected_element_options->selected]) selected_element_options->selected--;
             if (selected_element_options->setter_func) selected_element_options->setter_func(selected_element_options->selected);
         } else
-        if ((btn_down & (HidNpadButton_Left | HidNpadButton_StickLLeft | HidNpadButton_StickRLeft)) && selected_element_options)
+        if ((btn_down & HidNpadButton_AnyLeft) && selected_element_options)
         {
             selected_element_options->selected--;
             if (selected_element_options->selected == UINT32_MAX) selected_element_options->selected = 0;
@@ -1612,6 +1856,12 @@ int main(int argc, char *argv[])
             if (cur_menu->id == MenuId_UserTitlesSubMenu)
             {
                 titleFreeUserApplicationData(&user_app_data);
+
+                g_nspTitleTypesMenuElements[0]->child_menu = g_nspTitleTypesMenuElements[1]->child_menu = \
+                g_nspTitleTypesMenuElements[2]->child_menu = g_nspTitleTypesMenuElements[3]->child_menu = NULL;
+
+                g_nspTitleTypesMenuElements[4]->userdata = NULL;
+
                 g_titleTypesMenuElements[0]->child_menu = g_titleTypesMenuElements[1]->child_menu = \
                 g_titleTypesMenuElements[2]->child_menu = g_titleTypesMenuElements[3]->child_menu = NULL;
             } else
@@ -1623,6 +1873,7 @@ int main(int argc, char *argv[])
             if (cur_menu->id == MenuId_Nsp)
             {
                 g_nspMenuElements[0]->userdata = NULL;
+                g_nspMenuElements[1]->userdata = NULL;
             } else
             if (cur_menu->id == MenuId_Ticket)
             {
@@ -1715,6 +1966,10 @@ int main(int argc, char *argv[])
                 g_ncaMenuElements[i]->task_func = (g_ncaMenuRawMode ? &saveNintendoContentArchive : NULL);
             }
         } else
+        if ((btn_down & HidNpadButton_ZL) && cur_menu->id == MenuId_UserTitles && element_count)
+        {
+            addAllUserTitlesToNspDumpQueueViewList(element_count);
+        } else
         if (btn_down & HidNpadButton_Plus)
         {
             break;
@@ -1733,6 +1988,8 @@ int main(int argc, char *argv[])
     freeTitleList(&g_userTitlesMenu);
 
     freeStorageList();
+
+    freeNspQueueViewList();
 
     titleFreeUserApplicationData(&user_app_data);
 
@@ -1965,6 +2222,7 @@ void updateTitleList(Menu *menu, Menu *submenu, bool is_system)
 
     /* Allocate buffer. */
     elements = calloc(app_count + 1, sizeof(MenuElement*)); // NULL terminator
+    if (!elements) goto end;
 
     /* Generate menu elements. */
     for(u32 i = 0; i < app_count; i++)
@@ -1990,14 +2248,193 @@ end:
     if (app_metadata) free(app_metadata);
 }
 
+static void freeNspQueueViewList(void)
+{
+    if (g_nspQueueViewMenu.elements)
+    {
+        MenuElement *cur_menu_element = NULL;
+
+        for(u32 i = 0; (cur_menu_element = g_nspQueueViewMenu.elements[i]) != NULL; i++)
+        {
+            if (cur_menu_element->str) free(cur_menu_element->str);
+            if (cur_menu_element->userdata) titleFreeTitleInfo((TitleInfo**)&(cur_menu_element->userdata));
+            free(cur_menu_element);
+        }
+
+        free(g_nspQueueViewMenu.elements);
+        g_nspQueueViewMenu.elements = NULL;
+    }
+
+    g_nspQueueViewMenu.scroll = 0;
+    g_nspQueueViewMenu.selected = 0;
+
+    g_nspQueueViewMenuElementCount = 0;
+}
+
+static bool expandNspQueueViewList(TitleInfo *title_info)
+{
+    if (!title_info) return false;
+
+    MenuElement **elements = NULL, *extra = NULL;
+
+    /* Resize NSP queue view list. */
+    elements = realloc(g_nspQueueViewMenu.elements, (g_nspQueueViewMenuElementCount + 2) * sizeof(MenuElement*)); // New entry + NULL terminator
+    if (!elements) return false;
+
+    elements[g_nspQueueViewMenuElementCount] = NULL;
+    elements[g_nspQueueViewMenuElementCount + 1] = NULL;
+
+    g_nspQueueViewMenu.elements = elements;
+    elements = NULL;
+
+    /* Generate new menu element. */
+    extra = calloc(1, sizeof(MenuElement));
+    if (!extra) return false;
+
+    extra->str = titleGenerateFileName(title_info, TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+    extra->task_func = &removeNintendoSubmissionPackageQueueEntry;
+    extra->userdata = title_info;
+
+    g_nspQueueViewMenu.elements[g_nspQueueViewMenuElementCount++] = extra;
+
+    /* Sort menu element entries. */
+    if (g_nspQueueViewMenuElementCount > 1) qsort(g_nspQueueViewMenu.elements, g_nspQueueViewMenuElementCount, sizeof(MenuElement*), &nspDumpQueueViewListEntrySortFunction);
+
+    return true;
+}
+
+static int nspDumpQueueViewListEntrySortFunction(const void *a, const void *b)
+{
+    const MenuElement *menu_element_1 = *((const MenuElement**)a);
+    const MenuElement *menu_element_2 = *((const MenuElement**)b);
+
+    const TitleInfo* title_info_1 = (const TitleInfo*)menu_element_1->userdata;
+    const TitleInfo* title_info_2 = (const TitleInfo*)menu_element_2->userdata;
+
+    if (title_info_1->app_metadata && title_info_2->app_metadata)
+    {
+        int ret = strcasecmp(title_info_1->app_metadata->name, title_info_2->app_metadata->name);
+        if (ret != 0) return ret;
+    }
+
+    if (title_info_1->meta_key.type < title_info_2->meta_key.type)
+    {
+        return -1;
+    } else
+    if (title_info_1->meta_key.type > title_info_2->meta_key.type)
+    {
+        return 1;
+    }
+
+    if (title_info_1->meta_key.id < title_info_2->meta_key.id)
+    {
+        return -1;
+    } else
+    if (title_info_1->meta_key.id > title_info_2->meta_key.id)
+    {
+        return 1;
+    }
+
+    if (title_info_1->version.value < title_info_2->version.value)
+    {
+        return -1;
+    } else
+    if (title_info_1->version.value > title_info_2->version.value)
+    {
+        return 1;
+    }
+
+    return 0;
+}
+
+static void removeNspDumpQueueViewListEntryByTitleInfoPtr(TitleInfo *title_info)
+{
+    if (!title_info) return;
+
+    u32 idx = UINT32_MAX;
+
+    for(u32 i = 0; i < g_nspQueueViewMenuElementCount; i++)
+    {
+        MenuElement *cur_menu_element = g_nspQueueViewMenu.elements[i];
+        TitleInfo *entry = (cur_menu_element ? (TitleInfo*)cur_menu_element->userdata : NULL);
+
+        if (entry == title_info)
+        {
+            if (cur_menu_element->str) free(cur_menu_element->str);
+            titleFreeTitleInfo((TitleInfo**)&(cur_menu_element->userdata));
+            free(cur_menu_element);
+
+            g_nspQueueViewMenu.elements[i] = NULL;
+            idx = i;
+
+            break;
+        }
+    }
+
+    if (idx == UINT32_MAX) return;
+
+    if (idx < (g_nspQueueViewMenuElementCount - 1)) memmove(&(g_nspQueueViewMenu.elements[idx]), &(g_nspQueueViewMenu.elements[idx + 1]), (g_nspQueueViewMenuElementCount - idx) * sizeof(MenuElement*)); // Move NULL terminator too
+
+    if (--g_nspQueueViewMenuElementCount)
+    {
+        if (g_nspQueueViewMenu.selected >= g_nspQueueViewMenuElementCount)
+        {
+            g_nspQueueViewMenu.selected = (g_nspQueueViewMenuElementCount - 1);
+            g_nspQueueViewMenu.scroll = (g_nspQueueViewMenuElementCount >= DEFAULT_PAGE_SIZE ? (g_nspQueueViewMenuElementCount - DEFAULT_PAGE_SIZE) : 0);
+        }
+    } else {
+        freeNspQueueViewList();
+    }
+}
+
+static void addAllUserTitlesToNspDumpQueueViewList(const u32 user_titles_count)
+{
+    if (!user_titles_count || !g_userTitlesMenu.elements) return;
+
+    consoleClear();
+
+    consolePrint("warning: this will queue all available nsp dump targets from every user title entry\n");
+    consolePrint("including latest base apps, latest updates, all dlc and dlc updates\n");
+    consolePrint("press a to proceed, or b to cancel\n\n");
+
+    u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
+    if (btn_down & HidNpadButton_B)
+    {
+        consolePrint("global bulk queue add cancelled\n");
+        goto end;
+    }
+
+    consoleClear();
+    consolePrint("adding all titles to queue, please wait...\n");
+    consoleRefresh();
+
+    u32 added = 0;
+
+    for(u32 i = 0; i < user_titles_count; i++)
+    {
+        MenuElement *cur_menu_element = g_userTitlesMenu.elements[i];
+        TitleApplicationMetadata *cur_app_metadata = (cur_menu_element ? (TitleApplicationMetadata*)cur_menu_element->userdata : NULL);
+        if (!cur_app_metadata) continue;
+
+        TitleUserApplicationData user_app_data = {0};
+        if (!titleGetUserApplicationData(cur_app_metadata->title_id, &user_app_data)) continue;
+
+        added += addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueue(&user_app_data, true);
+        consoleRefresh();
+
+        titleFreeUserApplicationData(&user_app_data);
+    }
+
+    consolePrint("global bulk queue add finished: %u item(s) added\n", added);
+
+end:
+    consolePrint("press any button to go back\n");
+    utilsWaitForButtonPress(0);
+}
+
 static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *out_count)
 {
-    if (!title_info || !out_idx || !out_count || (title_info->meta_key.type != NcmContentMetaType_Patch && title_info->meta_key.type != NcmContentMetaType_DataPatch))
-    {
-        if (out_idx) *out_idx = 0;
-        if (out_count) *out_count = titleGetCountFromInfoBlock(title_info);
-        return title_info;
-    }
+    if (!titleIsValidInfoBlock(title_info)) return NULL;
 
     u32 idx = 0, count = 1;
     TitleInfo *cur_info = title_info->previous, *out = title_info;
@@ -2006,7 +2443,7 @@ static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *o
     {
         count++;
 
-        if (cur_info->version.value > out->version.value)
+        if (cur_info->meta_key.id == out->meta_key.id && cur_info->version.value > out->version.value)
         {
             out = cur_info;
             idx = count;
@@ -2023,7 +2460,7 @@ static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *o
     {
         count++;
 
-        if (cur_info->version.value > out->version.value)
+        if (cur_info->meta_key.id == out->meta_key.id && cur_info->version.value > out->version.value)
         {
             out = cur_info;
             idx = (count - 1);
@@ -2032,8 +2469,8 @@ static TitleInfo *getLatestTitleInfo(TitleInfo *title_info, u32 *out_idx, u32 *o
         cur_info = cur_info->next;
     }
 
-    *out_idx = idx;
-    *out_count = count;
+    if (out_idx) *out_idx = idx;
+    if (out_count) *out_count = count;
 
     return out;
 }
@@ -3451,6 +3888,8 @@ static bool saveNintendoSubmissionPackage(void *userdata)
 {
     if (!userdata) return false;
 
+    g_lastNspDumpUserCancelled = false;
+
     TitleInfo *title_info = (TitleInfo*)userdata;
     TitleApplicationMetadata *app_metadata = title_info->app_metadata;
 
@@ -3566,6 +4005,7 @@ static bool saveNintendoSubmissionPackage(void *userdata)
     } else
     if (nsp_thread_data.transfer_cancelled)
     {
+        g_lastNspDumpUserCancelled = true;
         consolePrint("process cancelled\n");
     } else {
         start = (time(NULL) - start);
@@ -3576,6 +4016,249 @@ static bool saveNintendoSubmissionPackage(void *userdata)
     consoleRefresh();
 
     return success;
+}
+
+static bool addTitleToNintendoSubmissionPackageQueue(TitleInfo *title_info, bool print_err_only)
+{
+    if (!title_info) return false;
+
+    TitleInfo *title_info_dup = NULL;
+    char err_str[0x100] = {0};
+    bool success = false;
+
+    snprintf(err_str, MAX_ELEMENTS(err_str), "unable to add title %016lX v%u [%s] to queue", title_info->meta_key.id, title_info->version.value, \
+                                                                                             titleGetNcmStorageIdName(title_info->storage_id));
+
+    title_info_dup = titleDuplicateTitleInfo(title_info, false);
+    if (!title_info_dup)
+    {
+        consolePrint("%s: failed to duplicate title info\n", err_str);
+        goto end;
+    }
+
+    if (title_info_dup->storage_id != NcmStorageId_GameCard && title_info_dup->storage_id != NcmStorageId_BuiltInUser && title_info_dup->storage_id != NcmStorageId_SdCard)
+    {
+        consolePrint("%s: only emmc, sd card and/or gamecard titles are supported\n", err_str);
+        goto end;
+    }
+
+    if (title_info_dup->meta_key.type < NcmContentMetaType_Application || title_info_dup->meta_key.type > NcmContentMetaType_DataPatch || title_info_dup->meta_key.type == NcmContentMetaType_Delta)
+    {
+        consolePrint("%s: invalid title type 0x%02X (%s)\n", err_str, title_info_dup->meta_key.type, titleGetNcmContentMetaTypeName(title_info_dup->meta_key.type));
+        goto end;
+    }
+
+    for(u32 i = 0; i < g_nspQueueViewMenuElementCount; i++)
+    {
+        MenuElement *cur_menu_element = g_nspQueueViewMenu.elements[i];
+        TitleInfo *entry = (cur_menu_element ? (TitleInfo*)cur_menu_element->userdata : NULL);
+        if (!entry || entry->meta_key.id != title_info_dup->meta_key.id || entry->meta_key.type != title_info_dup->meta_key.type) continue;
+
+        if (entry->version.value >= title_info_dup->version.value)
+        {
+            consolePrint("%s: title with equal or greater version (v%u [%s]) already queued\n", err_str, entry->version.value, titleGetNcmStorageIdName(entry->storage_id));
+            goto end;
+        }
+
+        consolePrint("updating queued title %016lX to a newer preferred entry (v%u [%s] -> v%u [%s])\n", entry->meta_key.id, entry->version.value, titleGetNcmStorageIdName(entry->storage_id), \
+                                                                                                         title_info_dup->version.value, titleGetNcmStorageIdName(title_info_dup->storage_id));
+
+        if (cur_menu_element->str) free(cur_menu_element->str);
+        titleFreeTitleInfo((TitleInfo**)&(cur_menu_element->userdata));
+
+        cur_menu_element->str = titleGenerateFileName(title_info_dup, TitleNamingConvention_Full, TitleFileNameIllegalCharReplaceType_IllegalFsChars);
+        cur_menu_element->userdata = title_info_dup;
+
+        success = true;
+
+        goto end;
+    }
+
+    if (!expandNspQueueViewList(title_info_dup))
+    {
+        consolePrint("%s: failed to expand nsp queue\n", err_str);
+        goto end;
+    }
+
+    if (!print_err_only)
+    {
+        consolePrint("queued title %016lX v%u [%s] (%u item[s] total)\n", title_info_dup->meta_key.id, title_info_dup->meta_key.version, titleGetNcmStorageIdName(title_info_dup->storage_id), \
+                                                                          g_nspQueueViewMenuElementCount);
+    }
+
+    success = true;
+
+end:
+    if (!success) titleFreeTitleInfo(&title_info_dup);
+
+    return success;
+}
+
+static bool addTitleToNintendoSubmissionPackageQueueByUserAction(void *userdata)
+{
+    return addTitleToNintendoSubmissionPackageQueue((TitleInfo*)userdata, false);
+}
+
+static u32 addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueue(TitleUserApplicationData *user_app_data, bool print_err_only)
+{
+    if (!user_app_data) return 0;
+
+    u64 cur_id = 0;
+    u32 added = 0;
+
+    TitleInfo *latest_app = getLatestTitleInfo(user_app_data->app_info, NULL, NULL);
+    if (latest_app && addTitleToNintendoSubmissionPackageQueue(latest_app, print_err_only)) added++;
+
+    TitleInfo *latest_patch = getLatestTitleInfo(user_app_data->patch_info, NULL, NULL);
+    if (latest_patch && addTitleToNintendoSubmissionPackageQueue(latest_patch, print_err_only)) added++;
+
+    for(TitleInfo *entry = user_app_data->aoc_info; entry; entry = entry->next)
+    {
+        /* Entries are ordered by TID and version. */
+        if (entry->meta_key.id == cur_id) continue;
+
+        cur_id = entry->meta_key.id;
+
+        TitleInfo *latest_aoc = getLatestTitleInfo(entry, NULL, NULL);
+        if (latest_aoc && addTitleToNintendoSubmissionPackageQueue(latest_aoc, print_err_only)) added++;
+    }
+
+    cur_id = 0;
+
+    for(TitleInfo *entry = user_app_data->aoc_patch_info; entry; entry = entry->next)
+    {
+        /* Entries are ordered by TID and version. */
+        if (entry->meta_key.id == cur_id) continue;
+
+        cur_id = entry->meta_key.id;
+
+        TitleInfo *latest_aoc_patch = getLatestTitleInfo(entry, NULL, NULL);
+        if (latest_aoc_patch && addTitleToNintendoSubmissionPackageQueue(latest_aoc_patch, print_err_only)) added++;
+    }
+
+    return added;
+}
+
+static bool addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueueByUserAction(void* userdata)
+{
+    TitleUserApplicationData *user_app_data = (TitleUserApplicationData*)userdata;
+    if (!user_app_data)
+    {
+        consolePrint("invalid user application data\n");
+        return false;
+    }
+
+    consolePrint("warning: this will queue all available nsp dump targets for the selected user\n");
+    consolePrint("title entry, including latest base app, latest update, all dlc and dlc updates\n");
+    consolePrint("press a to proceed, or b to cancel\n\n");
+
+    u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
+    if (btn_down & HidNpadButton_B)
+    {
+        consolePrint("bulk queue add cancelled\n");
+        return false;
+    }
+
+    const u32 added = addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueue(user_app_data, false);
+
+    consolePrint("bulk queue add finished: %u item(s) added\n", added);
+
+    return (added > 0);
+}
+
+static bool startNintendoSubmissionPackageQueueDump(void *userdata)
+{
+    NX_IGNORE_ARG(userdata);
+
+    const u32 queue_count = g_nspQueueViewMenuElementCount;
+    u32 success_count = 0, fail_count = 0, pending = queue_count;
+    bool queue_cancelled = false;
+
+    if (!queue_count)
+    {
+        consolePrint("nsp queue is empty\n");
+        return false;
+    }
+
+    for(u32 i = 0, j = 0; i < queue_count; i++)
+    {
+        MenuElement *cur_menu_element = g_nspQueueViewMenu.elements[j];
+        TitleInfo *entry = (cur_menu_element ? (TitleInfo*)cur_menu_element->userdata : NULL);
+        if (!entry)
+        {
+            j++;
+            fail_count++;
+            continue;
+        }
+
+        consoleClear();
+        consolePrint("queued nsp dump %u/%u\n", i + 1, queue_count);
+
+        if (saveNintendoSubmissionPackage(entry))
+        {
+            removeNspDumpQueueViewListEntryByTitleInfoPtr(entry);
+
+            success_count++;
+            pending--;
+
+            if (!pending) break;
+        } else {
+            if (g_lastNspDumpUserCancelled)
+            {
+                queue_cancelled = true;
+                break;
+            }
+
+            j++;
+            fail_count++;
+        }
+    }
+
+    if (queue_cancelled)
+    {
+        consolePrint("\nqueue cancelled by user\n");
+        consolePrint("completed: %u | failed: %u | pending: %u\n", success_count, fail_count, pending);
+        return false;
+    }
+
+    consolePrint("\nqueue done: %u succeeded, %u failed\n", success_count, fail_count);
+
+    return (success_count && !fail_count);
+}
+
+static bool clearNintendoSubmissionPackageQueue(void *userdata)
+{
+    NX_IGNORE_ARG(userdata);
+
+    if (!g_nspQueueViewMenuElementCount)
+    {
+        consolePrint("nsp queue is already empty\n");
+        return false;
+    }
+
+    consolePrint("are you sure you want to clear the nsp queue?\n");
+    consolePrint("press a to proceed, or b to cancel\n\n");
+
+    u64 btn_down = utilsWaitForButtonPress(HidNpadButton_A | HidNpadButton_B);
+    if (btn_down & HidNpadButton_A)
+    {
+        freeNspQueueViewList();
+        consolePrint("nsp queue cleared\n");
+    }
+
+    return true;
+}
+
+static bool removeNintendoSubmissionPackageQueueEntry(void *userdata)
+{
+    TitleInfo *title_info = (TitleInfo*)userdata;
+    if (!title_info) return false;
+
+    removeNspDumpQueueViewListEntryByTitleInfoPtr(title_info);
+
+    consolePrint("queue entry removed\n");
+
+    return true;
 }
 
 static bool saveTicket(void *userdata)
@@ -4006,7 +4689,7 @@ static bool fsBrowser(const char *mount_name, const char *base_out_path)
     FsBrowserEntry *entries = NULL;
     u32 entries_count = 0, depth = 0;
 
-    u32 scroll = 0, selected = 0, highlighted = 0, page_size = 20;
+    u32 scroll = 0, selected = 0, highlighted = 0, page_size = DEFAULT_PAGE_SIZE;
 
     bool success = true;
 

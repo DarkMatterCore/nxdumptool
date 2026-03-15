@@ -613,10 +613,10 @@ static TitleInfo *titleGetLatestAvailablePatchForUserTitle(u8 storage_id, const 
 
 static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out);
 
-static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
-static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info);
+static TitleInfo *titleDuplicateTitleInfoFull(const TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
+static TitleInfo *_titleDuplicateTitleInfo(const TitleInfo *title_info);
 
-static char *titleGetDisplayVersionString(TitleInfo *title_info);
+static char *titleGetDisplayVersionString(const TitleInfo *title_info);
 
 static bool titleCreateGameCardInfoThread(void);
 static void titleDestroyGameCardInfoThread(void);
@@ -869,6 +869,11 @@ void titleFreeTitleInfo(TitleInfo **info)
     *info = NULL;
 }
 
+TitleInfo *titleDuplicateTitleInfo(const TitleInfo *title_info, bool dup_linked_lists)
+{
+    return (dup_linked_lists ? titleDuplicateTitleInfoFull(title_info, NULL, NULL) : _titleDuplicateTitleInfo(title_info));
+}
+
 bool titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *out)
 {
     bool ret = false;
@@ -966,7 +971,7 @@ TitleInfo *titleGetAddOnContentBaseOrPatchList(TitleInfo *title_info)
             }
 
             /* Duplicate current entry. */
-            tmp = titleDuplicateTitleInfo(aoc_info);
+            tmp = _titleDuplicateTitleInfo(aoc_info);
             if (!tmp)
             {
                 LOG_MSG_ERROR("Failed to duplicate TitleInfo object!");
@@ -1076,7 +1081,7 @@ bool titleIsGameCardInfoUpdated(void)
     return ret;
 }
 
-char *titleGenerateFileName(TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type)
+char *titleGenerateFileName(const TitleInfo *title_info, TitleNamingConvention naming_convention, TitleFileNameIllegalCharReplaceType illegal_char_replace_type)
 {
     if (!titleIsValidInfoBlock(title_info) || naming_convention >= TitleNamingConvention_Count || illegal_char_replace_type >= TitleFileNameIllegalCharReplaceType_Count)
     {
@@ -3199,7 +3204,7 @@ static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *o
     return ret;
 }
 
-static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *previous, TitleInfo *next)
+static TitleInfo *titleDuplicateTitleInfoFull(const TitleInfo *title_info, TitleInfo *previous, TitleInfo *next)
 {
     if (!titleIsValidInfoBlock(title_info))
     {
@@ -3211,7 +3216,7 @@ static TitleInfo *titleDuplicateTitleInfoFull(TitleInfo *title_info, TitleInfo *
     bool dup_previous = false, dup_next = false, success = false;
 
     /* Duplicate TitleInfo object. */
-    title_info_dup = titleDuplicateTitleInfo(title_info);
+    title_info_dup = _titleDuplicateTitleInfo(title_info);
     if (!title_info_dup)
     {
         LOG_MSG_ERROR("Failed to duplicate TitleInfo object!");
@@ -3276,7 +3281,7 @@ end:
     return title_info_dup;
 }
 
-static TitleInfo *titleDuplicateTitleInfo(TitleInfo *title_info)
+static TitleInfo *_titleDuplicateTitleInfo(const TitleInfo *title_info)
 {
     if (!titleIsValidInfoBlock(title_info))
     {
@@ -3332,7 +3337,7 @@ end:
     return title_info_dup;
 }
 
-static char *titleGetDisplayVersionString(TitleInfo *title_info)
+static char *titleGetDisplayVersionString(const TitleInfo *title_info)
 {
     NcmContentInfo *nacp_content = NULL;
 
