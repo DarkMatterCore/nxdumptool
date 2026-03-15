@@ -1304,13 +1304,6 @@ static MenuElement *g_rootMenuElements[] = {
         .userdata = NULL
     },
     &(MenuElement){
-        .str = "nsp queue menu",
-        .child_menu = &g_nspQueueMenu,
-        .task_func = NULL,
-        .element_options = NULL,
-        .userdata = NULL
-    },
-    &(MenuElement){
         .str = "reset settings",
         .child_menu = NULL,
         .task_func = &resetSettings,
@@ -1412,8 +1405,11 @@ int main(int argc, char *argv[])
         if ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && element_count)
         {
             consolePrint("press y to dump csv with title info to the sd card\n");
-            if (cur_menu->id == MenuId_UserTitles) 
-                consolePrint("press zl + zr to add all titles to the nsp dump queue\n");
+            if (cur_menu->id == MenuId_UserTitles)
+            {
+                consolePrint("press zl to add all titles to the nsp dump queue\n");
+                consolePrint("press zr to enter the nsp queue menu\n");
+            }
         }
         consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
@@ -1578,9 +1574,11 @@ int main(int argc, char *argv[])
 
         if (data_update) continue;
 
-        if ((btn_down & HidNpadButton_A) && selected_element)
+        bool is_nsp_queue_menu_btn_down = ((btn_down & HidNpadButton_ZR) && cur_menu->id == MenuId_UserTitles && element_count);
+
+        if (((btn_down & HidNpadButton_A) && selected_element) || is_nsp_queue_menu_btn_down)
         {
-            Menu *child_menu = selected_element->child_menu;
+            Menu *child_menu = (is_nsp_queue_menu_btn_down ? &g_nspQueueMenu : selected_element->child_menu);
 
             if (child_menu)
             {
@@ -1679,7 +1677,7 @@ int main(int argc, char *argv[])
 
                 if (!error)
                 {
-                    child_menu->parent = cur_menu;
+                    child_menu->parent = (is_nsp_queue_menu_btn_down ? &g_userTitlesMenu : cur_menu);
                     cur_menu = child_menu;
                     element_count = menuGetElementCount(cur_menu);
                 } else {
@@ -1691,11 +1689,6 @@ int main(int argc, char *argv[])
             if (selected_element->task_func)
             {
                 bool show_button_prompt = true;
-                /* For queue management actions, we want to show the button prompt
-                and wait for a button press before going back to the queue view,
-                but we don't want to wait for USB or show the "please wait" message
-                since these actions are usually very fast and waiting for USB or
-                showing the message could be disruptive. */
                 bool is_queue_management_action = (selected_element->task_func == &addTitleToNintendoSubmissionPackageQueueByUserAction || \
                                                    selected_element->task_func == &addAllUserApplicationDataTitlesToNintendoSubmissionPackageQueueByUserAction || \
                                                    selected_element->task_func == &clearNintendoSubmissionPackageQueue || \
@@ -1973,7 +1966,7 @@ int main(int argc, char *argv[])
                 g_ncaMenuElements[i]->task_func = (g_ncaMenuRawMode ? &saveNintendoContentArchive : NULL);
             }
         } else
-        if ((btn_down & HidNpadButton_ZL) && (btn_down & HidNpadButton_ZR) && cur_menu->id == MenuId_UserTitles && element_count)
+        if ((btn_down & HidNpadButton_ZL) && cur_menu->id == MenuId_UserTitles && element_count)
         {
             addAllUserTitlesToNspDumpQueueViewList(element_count);
         } else
