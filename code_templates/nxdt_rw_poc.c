@@ -1411,6 +1411,8 @@ int main(int argc, char *argv[])
                 consolePrint("press zr to enter the nsp queue menu\n");
             }
         }
+        if (cur_menu->id == MenuId_NspTitleTypes || cur_menu->id == MenuId_Nsp)
+            consolePrint("press zr to enter the nsp queue menu\n");
         consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
@@ -1432,8 +1434,6 @@ int main(int argc, char *argv[])
                 consolePrint("publisher: %s\n", app_metadata->publisher);
                 if (cur_menu->id == MenuId_UserTitlesSubMenu || cur_menu->id == MenuId_NspTitleTypes || cur_menu->id == MenuId_TicketTitleTypes || \
                     cur_menu->id == MenuId_NcaTitleTypes) consolePrint("title id: %016lX\n", app_metadata->title_id);
-                if (cur_menu->id == MenuId_NspTitleTypes || cur_menu->id == MenuId_Nsp)
-                    consolePrint("press zr to enter the nsp queue menu\n");
                 consolePrint("______________________________\n\n");
             }
 
