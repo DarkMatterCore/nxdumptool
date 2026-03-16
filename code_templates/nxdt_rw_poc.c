@@ -1576,7 +1576,7 @@ int main(int argc, char *argv[])
 
         if (data_update) continue;
 
-        bool is_nsp_queue_menu_btn_down = ((btn_down & HidNpadButton_ZR) && (cur_menu->id == MenuId_UserTitles || (cur_menu->id == MenuId_NspTitleTypes || cur_menu->id == MenuId_Nsp)) && element_count);
+        bool is_nsp_queue_menu_btn_down = ((btn_down & HidNpadButton_ZR) && (cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_NspTitleTypes || cur_menu->id == MenuId_Nsp) && element_count);
 
         if (((btn_down & HidNpadButton_A) && selected_element) || is_nsp_queue_menu_btn_down)
         {
