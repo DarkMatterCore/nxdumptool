@@ -1402,16 +1402,12 @@ int main(int argc, char *argv[])
         consolePrint("______________________________\n\n");
         if (cur_menu->parent) consolePrint("press b to go back\n");
         if (g_umsDeviceCount) consolePrint("press x to safely remove all ums devices\n");
-        if ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && element_count)
+        if ((cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_SystemTitles) && element_count) consolePrint("press y to dump csv with title info to the sd card\n");
+        if ((cur_menu->id == MenuId_UserTitles ||cur_menu->id == MenuId_NspTitleTypes) && element_count)
         {
-            consolePrint("press y to dump csv with title info to the sd card\n");
-            if (cur_menu->id == MenuId_UserTitles)
-            {
-                consolePrint("press zl to add all titles to the nsp dump queue\n");
-                consolePrint("press zr to enter the nsp queue menu\n");
-            }
+            if (cur_menu->id == MenuId_UserTitles) consolePrint("press zl to add all titles to the nsp dump queue\n");
+            consolePrint("press zr to enter the nsp queue menu\n");
         }
-        if (cur_menu->id == MenuId_NspTitleTypes && element_count) consolePrint("press zr to enter the nsp queue menu\n");
         consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
