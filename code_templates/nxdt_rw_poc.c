@@ -1411,8 +1411,7 @@ int main(int argc, char *argv[])
                 consolePrint("press zr to enter the nsp queue menu\n");
             }
         }
-        if (cur_menu->id == MenuId_NspTitleTypes)
-            consolePrint("press zr to enter the nsp queue menu\n");
+        if (cur_menu->id == MenuId_NspTitleTypes && element_count) consolePrint("press zr to enter the nsp queue menu\n");
         consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
