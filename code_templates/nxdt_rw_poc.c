@@ -1411,6 +1411,7 @@ int main(int argc, char *argv[])
                 consolePrint("press zr to enter the nsp queue menu\n");
             }
         }
+        if (cur_menu->id == MenuId_NspTitleTypes && element_count) consolePrint("press zr to enter the nsp queue menu\n");
         consolePrint("use the sticks to scroll faster\n");
         consolePrint("press + to exit\n");
         consolePrint("______________________________\n\n");
@@ -1574,7 +1575,7 @@ int main(int argc, char *argv[])
 
         if (data_update) continue;
 
-        bool is_nsp_queue_menu_btn_down = ((btn_down & HidNpadButton_ZR) && cur_menu->id == MenuId_UserTitles && element_count);
+        bool is_nsp_queue_menu_btn_down = ((btn_down & HidNpadButton_ZR) && (cur_menu->id == MenuId_UserTitles || cur_menu->id == MenuId_NspTitleTypes) && element_count);
 
         if (((btn_down & HidNpadButton_A) && selected_element) || is_nsp_queue_menu_btn_down)
         {
@@ -1677,7 +1678,7 @@ int main(int argc, char *argv[])
 
                 if (!error)
                 {
-                    child_menu->parent = (is_nsp_queue_menu_btn_down ? &g_userTitlesMenu : cur_menu);
+                    child_menu->parent = cur_menu;
                     cur_menu = child_menu;
                     element_count = menuGetElementCount(cur_menu);
                 } else {
