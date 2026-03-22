@@ -106,7 +106,7 @@ CFLAGS		+=	-std=c23
 ASFLAGS		:=	-g $(ARCH)
 LDFLAGS		:=	-specs=$(DEVKITPRO)/libnx/switch.specs -g $(ARCH) -Wl,-Map,$(notdir $*.map)
 
-LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -ljson-c -lz -lnxtc -lusbhsfs -lntfs-3g -llwext4 -lnx
+LIBS		:=	-lcurl -lmbedtls -lmbedx509 -lmbedcrypto -lxml2 -ljson-c -lzstd -lz -lnxtc -lusbhsfs -lntfs-3g -llwext4 -lnx
 
 #---------------------------------------------------------------------------------
 # list of directories containing libraries, this must be the top level containing

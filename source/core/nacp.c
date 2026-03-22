@@ -1086,9 +1086,9 @@ static bool nacpDecompressTitleBlock(NacpContext *nacp_ctx)
         return false;
     }
 
-    const NacpTitleCompressedBlob *compressed_title = &(nacp_ctx->data->title_block.compressed_title);
-    const bool is_compressed = (nacp_ctx->data->title_compression == NacpTitleCompression_Enable);
-    const size_t title_block_size = (sizeof(NacpTitle) * (u32)NacpLanguage_CompressedEntryCount);
+    const NacpTitleFormat1 *compressed_title = &(nacp_ctx->data->title_block.format1);
+    const bool is_compressed = (nacp_ctx->data->titles_data_format == NacpTitlesDataFormat_Format1);
+    const size_t title_block_size = (sizeof(NacpTitle) * (u32)NacpLanguage_Format1EntryCount);
 
     z_stream zstrm = {0};
     int ret = Z_OK;
@@ -1105,7 +1105,7 @@ static bool nacpDecompressTitleBlock(NacpContext *nacp_ctx)
     /* Short-circuit: copy the uncompressed title entries to our allocated buffer if we're not dealing with any compression. */
     if (!is_compressed)
     {
-        memcpy(nacp_ctx->titles, nacp_ctx->data->title_block.uncompressed_title, sizeof(nacp_ctx->data->title_block.uncompressed_title));
+        memcpy(nacp_ctx->titles, nacp_ctx->data->title_block.format0, sizeof(nacp_ctx->data->title_block.format0));
         success = true;
         goto end;
     }
@@ -1113,8 +1113,8 @@ static bool nacpDecompressTitleBlock(NacpContext *nacp_ctx)
     LOG_DATA_DEBUG(compressed_title, title_block_size, "Decompressing title block for %016lX (size 0x%lX):", nacp_ctx->data->save_data_owner_id, title_block_size);
 
     /* Setup zlib stream settings. */
-    zstrm.next_in = (z_const Bytef*)compressed_title->compressed_blob;
-    zstrm.avail_in = (uInt)compressed_title->compressed_blob_size;
+    zstrm.next_in = (z_const Bytef*)compressed_title->data;
+    zstrm.avail_in = (uInt)compressed_title->data_size;
     zstrm.next_out = (Bytef*)nacp_ctx->titles;
     zstrm.avail_out = (uInt)title_block_size;
 

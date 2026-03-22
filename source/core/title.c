@@ -324,10 +324,10 @@ static const TitleSystemEntry g_systemTitles[] = {
     { 0x010000000000103C, "mnpp" },                             ///< Placeholder.
     { 0x010000000000103D, "bsdsocket_setting" },                ///< Placeholder.
     { 0x010000000000103E, "ntf_mission_completed" },            ///< Placeholder.
-    { 0x0100000000001042, "sysapplet_unknown_0d" },             ///< Placeholder.
-    { 0x0100000000001043, "sysapplet_unknown_0e" },             ///< Placeholder.
+    { 0x0100000000001042, "systemWeb" },
+    { 0x0100000000001043, "openWeb" },
     { 0x0100000000001048, "splay" },
-    { 0x0100000000001FFF, "EndOceanProgramId" },
+    { 0x0100000000001FFF, "EndOceanProgramId" },                ///< Placeholder.
 
     /* Development system applets. */
     { 0x0100000000002000, "A2BoardFunction" },

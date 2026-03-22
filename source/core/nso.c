@@ -250,11 +250,12 @@ static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType t
     const u8 *segment_hash = (type == NsoSegmentType_Text ? nso_ctx->nso_header.text_segment_hash : \
                              (type == NsoSegmentType_RoData ? nso_ctx->nso_header.rodata_segment_hash : nso_ctx->nso_header.data_segment_hash));
 
-    int lz4_res = 0;
-    bool compressed = (nso_ctx->nso_header.flags & BIT(type)), verify = (nso_ctx->nso_header.flags & BIT(type + 3));
+    const bool compressed = ((nso_ctx->nso_header.flags & BIT(type)) != 0);
+    const bool verify = ((nso_ctx->nso_header.flags & BIT(type + 3)) != 0);
+    const bool use_new_compression = ((nso_ctx->nso_header.flags & NsoFlags_UseNewCompression) != 0);
 
     u8 *buf = NULL;
-    u32 buf_size = (compressed ? LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(segment_info->size) : segment_info->size);
+    u32 buf_size = (compressed ? (use_new_compression ? ZSTD_DECOMPRESSION_MARGIN(segment_info->size, ZSTD_BLOCKSIZE_MAX) : LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(segment_info->size)) : segment_info->size);
 
     u8 *read_ptr = NULL;
     u32 read_size = (compressed ? segment_file_size : segment_info->size);
@@ -273,7 +274,7 @@ static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType t
         return NULL;
     }
 
-    read_ptr = (compressed ? (buf + (buf_size - segment_file_size)) : buf);
+    read_ptr = (compressed ? (buf + (buf_size - read_size)) : buf);
 
     /* Read segment data. */
     if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, read_ptr, read_size, segment_info->file_offset))
@@ -283,10 +284,36 @@ static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType t
     }
 
     /* Decompress segment data in-place. */
-    if (compressed && (lz4_res = LZ4_decompress_safe((char*)read_ptr, (char*)buf, (int)segment_file_size, (int)buf_size)) != (int)segment_info->size)
+    if (compressed)
     {
-        LOG_MSG_ERROR("LZ4 decompression failed for %s segment in NSO \"%s\"! (%d).", segment_name, nso_ctx->nso_filename, lz4_res);
-        goto end;
+        if (use_new_compression)
+        {
+            // TODO: this won't work if Nintendo is using custom dictionaries.
+
+            const u32 magic = __builtin_bswap32(*((u32*)read_ptr));
+            if (magic != NSO_ZBIC_MAGIC)
+            {
+                LOG_MSG_ERROR("Invalid ZBIC magic word in %s segment from NSO \"%s\"! (0x%08X != 0x%08X).", segment_name, nso_ctx->nso_filename, magic, __builtin_bswap32(NSO_ZBIC_MAGIC));
+                goto end;
+            }
+
+            // Replace magic number within our input buffer.
+            *((u32*)read_ptr) = ZSTD_MAGICNUMBER;
+
+            size_t zstd_res = ZSTD_decompress(buf, buf_size, read_ptr, read_size);
+            if (zstd_res != segment_info->size)
+            {
+                LOG_MSG_ERROR("Zstandard decompression failed for %s segment in NSO \"%s\"! (0x%lX != 0x%X).", segment_name, nso_ctx->nso_filename, zstd_res, segment_info->size);
+                goto end;
+            }
+        } else {
+            int lz4_res = LZ4_decompress_safe((char*)read_ptr, (char*)buf, (int)read_size, (int)buf_size);
+            if (lz4_res != (int)segment_info->size)
+            {
+                LOG_MSG_ERROR("LZ4 decompression failed for %s segment in NSO \"%s\"! (%d).", segment_name, nso_ctx->nso_filename, lz4_res);
+                goto end;
+            }
+        }
     }
 
     if (verify)

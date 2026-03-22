@@ -58,9 +58,9 @@ typedef enum : u8 {
     NacpLanguage_Taiwanese              = NacpLanguage_TraditionalChinese,
     NacpLanguage_Chinese                = NacpLanguage_SimplifiedChinese,
 
-    /// Used exclusively for NacpTitleBlock.
-    NacpLanguage_UncompressedEntryCount = 16,
-    NacpLanguage_CompressedEntryCount   = 32
+    /// Used exclusively for NacpTitles.
+    NacpLanguage_Format0EntryCount      = 16,
+    NacpLanguage_Format1EntryCount      = 32
 } NacpLanguage;
 
 typedef struct {
@@ -71,16 +71,16 @@ typedef struct {
 NXDT_ASSERT(NacpTitle, 0x300);
 
 typedef struct {
-    u16 compressed_blob_size;   ///< Size of the Zlib-compressed blob within 'compressed_blob'.
-    u8 compressed_blob[0x2FFE]; ///< Zlib-compressed blob, using wbits=-15.
-} NacpTitleCompressedBlob;
+    u16 data_size;      ///< Size of the Zlib-compressed blob within 'data'.
+    u8 data[0x2FFE];    ///< Zlib-compressed blob, using wbits=-15.
+} NacpTitleFormat1;
 
-NXDT_ASSERT(NacpTitleCompressedBlob, 0x3000);
+NXDT_ASSERT(NacpTitleFormat1, 0x3000);
 
 typedef struct {
     union {
-        NacpTitle uncompressed_title[NacpLanguage_UncompressedEntryCount];  // Used if title_compression is set to NacpTitleCompression_Disable.
-        NacpTitleCompressedBlob compressed_title;                           // Used if title_compression is set to NacpTitleCompression_Enable. Supports twice as many title entries.
+        NacpTitle format0[NacpLanguage_Format0EntryCount];  // Used if titles_data_format is set to NacpTitlesDataFormat_Format0.
+        NacpTitleFormat1 format1;                           // Used if titles_data_format is set to NacpTitlesDataFormat_Format1. Supports twice as many title entries.
     };
 } NacpTitleBlock;
 
@@ -318,10 +318,10 @@ typedef enum : u8 {
 } NacpApplicationErrorCodePrefix;
 
 typedef enum : u8 {
-    NacpTitleCompression_Disable = 0,
-    NacpTitleCompression_Enable  = 1,
-    NacpTitleCompression_Count   = 2    ///< Total values supported by this enum.
-} NacpTitleCompression;
+    NacpTitlesDataFormat_Format0 = 0,   ///< 16 uncompressed entries.
+    NacpTitlesDataFormat_Format1 = 1,   ///< 32 Zlib-compressed (deflate) entries.
+    NacpTitlesDataFormat_Count   = 2    ///< Total values supported by this enum.
+} NacpTitlesDataFormat;
 
 typedef enum : u8 {
     NacpApparentPlatform_NX    = 0,
@@ -474,7 +474,7 @@ typedef struct {
     u8 program_index;
     NacpRequiredNetworkServiceLicenseOnLaunch required_network_service_license_on_launch;
     NacpApplicationErrorCodePrefix application_error_code_prefix;
-    NacpTitleCompression title_compression;                                                         ///< TODO: add to XML generation.
+    NacpTitlesDataFormat titles_data_format;                                                        ///< TODO: add to XML generation.
     u8 acd_index;                                                                                   ///< Application Control Data index. Used to access `Acd_{idx}` subdirectories within the Control NCA RomFS.
     NacpApparentPlatform apparent_platform;
     NacpNeighborDetectionClientConfiguration neighbor_detection_client_configuration;
@@ -484,7 +484,7 @@ typedef struct {
     NacpCrashScreenshotForProd crash_screenshot_for_prod;
     NacpCrashScreenshotForDev crash_screenshot_for_dev;
     NacpContentsAvailabilityTransitionPolicy contents_availability_transition_policy;
-    NacpSupportedLanguage supported_language_copy;                                                  ///< TODO: add to XML generation.
+    NacpSupportedLanguage supported_language_flag_for_nx_addon;                                     ///< TODO: add to XML generation.
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
     NacpApplicationControlDataCondition application_control_data_condition;                         ///< Used for Switch 2 upgrade packs, which are distributed as AddOnContent titles. TODO: add to XML generation.
     u8 initial_program_index;                                                                       ///< TODO: add to XML generation.
@@ -496,7 +496,8 @@ typedef struct {
     u8 has_in_game_voice_chat;                                                                      ///< TODO: add enum with values / XML generation.
     u8 reserved_4[0x3];
     u8 supported_extra_add_on_content_flag[0x4];                                                    ///< TODO: add structure / enum / XML generation.
-    u8 reserved_5[0x698];
+    u8 has_karaoke_feature;                                                                         ///< TODO: add structure / enum / XML generation.
+    u8 reserved_5[0x697];
     u8 platform_specific_region[0x400];                                                             ///< TODO: add structure / XML generation.
 } NsApplicationControlProperty;
 

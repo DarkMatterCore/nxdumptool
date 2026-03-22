@@ -60,6 +60,10 @@
 /* Zlib. */
 #include <zlib.h>
 
+/* Zstandard. */
+#define ZSTD_STATIC_LINKING_ONLY /* Required by Zstandard to enable in-place decompression. */
+#include <zstd.h>
+
 /* Global defines. */
 #include "../defines.h"
 
