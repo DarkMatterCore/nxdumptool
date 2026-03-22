@@ -2037,19 +2037,12 @@ static bool titleGetApplicationControlDataFromNs(u64 title_id, NsApplicationCont
 
     Result rc = 0;
     u64 control_data_size = 0;
-    bool use_acd2 = hosversionAtLeast(19, 0, 0);
 
     /* Retrieve application control data from ns. */
-    if (use_acd2)
-    {
-        rc = nsGetApplicationControlData2(NsApplicationControlSource_Storage, title_id, out_control_data, sizeof(NsApplicationControlData), 0xFF, 0, &control_data_size, NULL);
-    } else {
-        rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, title_id, out_control_data, sizeof(NsApplicationControlData), &control_data_size);
-    }
-
+    rc = nsGetApplicationControlData(NsApplicationControlSource_Storage, title_id, out_control_data, sizeof(NsApplicationControlData), &control_data_size);
     if (R_FAILED(rc))
     {
-        LOG_MSG_ERROR("nsGetApplicationControlData%s failed for title ID \"%016lX\"! (0x%X).", use_acd2 ? "2" : "", title_id, rc);
+        LOG_MSG_ERROR("nsGetApplicationControlData failed for title ID \"%016lX\"! (0x%X).", title_id, rc);
         return false;
     }
 
