@@ -97,20 +97,20 @@ USB_MAGIC_WORD = b'NXDT'
 
 # Supported USB ABI version.
 USB_ABI_VERSION_MAJOR = 1
-USB_ABI_VERSION_MINOR = 3
+USB_ABI_VERSION_MINOR = 4
 
 # USB command header size.
 USB_CMD_HEADER_SIZE = 0x10
 
 # USB command IDs.
 USB_CMD_START_SESSION           = 0
-USB_CMD_SEND_FILE_PROPERTIES    = 1
-USB_CMD_CANCEL_FILE_TRANSFER    = 2
+USB_CMD_END_SESSION             = 1
+USB_CMD_SEND_FILE_PROPERTIES    = 2
 USB_CMD_SEND_NSP_HEADER         = 3
-USB_CMD_END_SESSION             = 4
+USB_CMD_CANCEL_FILE_TRANSFER    = 4
 USB_CMD_START_EXTRACTED_FS_DUMP = 5
-USB_CMD_END_EXTRACTED_FS_DUMP   = 6
-USB_CMD_START_BULK_NSP_DUMP     = 7
+USB_CMD_START_BULK_NSP_DUMP     = 6
+USB_CMD_END_BULK_OPERATION      = 7
 
 # USB command block sizes.
 USB_CMD_BLOCK_SIZE_START_SESSION           = 0x10
@@ -807,6 +807,11 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
     # Return status code.
     return USB_STATUS_SUCCESS
 
+def usbHandleEndSession(cmd_block: bytes) -> int:
+    assert g_logger is not None
+    g_logger.debug(f'Received EndSession ({USB_CMD_END_SESSION:02X}) command.')
+    return USB_STATUS_SUCCESS
+
 def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
     global g_nspTransferMode, g_nspSize, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath, g_outputDir, g_tkRoot, g_progressBarWindow
 
@@ -1023,23 +1028,6 @@ def usbHandleSendFileProperties(cmd_block: bytes) -> int | None:
 
     return USB_STATUS_SUCCESS
 
-def usbHandleCancelFileTransfer(cmd_block: bytes) -> int:
-    assert g_logger is not None
-
-    g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command.')
-
-    if g_nspTransferMode:
-        if (g_nspSize > USB_TRANSFER_THRESHOLD) and (g_progressBarWindow is not None):
-            g_progressBarWindow.end()
-
-        utilsResetNspInfo(True)
-
-        g_logger.warning('Transfer cancelled.')
-        return USB_STATUS_SUCCESS
-    else:
-        g_logger.error('Unexpected transfer cancellation.')
-        return USB_STATUS_MALFORMED_CMD
-
 def usbHandleSendNspHeader(cmd_block: bytes) -> int:
     global g_nspTransferMode, g_nspHeaderSize, g_nspRemainingSize, g_nspFile, g_nspFilePath
 
@@ -1074,10 +1062,22 @@ def usbHandleSendNspHeader(cmd_block: bytes) -> int:
 
     return USB_STATUS_SUCCESS
 
-def usbHandleEndSession(cmd_block: bytes) -> int:
+def usbHandleCancelFileTransfer(cmd_block: bytes) -> int:
     assert g_logger is not None
-    g_logger.debug(f'Received EndSession ({USB_CMD_END_SESSION:02X}) command.')
-    return USB_STATUS_SUCCESS
+
+    g_logger.debug(f'Received CancelFileTransfer ({USB_CMD_CANCEL_FILE_TRANSFER:02X}) command.')
+
+    if g_nspTransferMode:
+        if (g_nspSize > USB_TRANSFER_THRESHOLD) and (g_progressBarWindow is not None):
+            g_progressBarWindow.end()
+
+        utilsResetNspInfo(True)
+
+        g_logger.warning('Transfer cancelled.')
+        return USB_STATUS_SUCCESS
+    else:
+        g_logger.error('Unexpected transfer cancellation.')
+        return USB_STATUS_MALFORMED_CMD
 
 def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     assert g_logger is not None
@@ -1097,12 +1097,6 @@ def usbHandleStartExtractedFsDump(cmd_block: bytes) -> int:
     # Return status code.
     return USB_STATUS_SUCCESS
 
-def usbHandleEndExtractedFsDump(cmd_block: bytes) -> int:
-    assert g_logger is not None
-    g_logger.debug(f'Received EndExtractedFsDump ({USB_CMD_END_EXTRACTED_FS_DUMP:02X}) command.')
-    g_logger.info(f'Finished extracted FS dump.')
-    return USB_STATUS_SUCCESS
-
 def usbHandleStartBulkNspDump(cmd_block: bytes) -> int:
     assert g_logger is not None
 
@@ -1120,18 +1114,24 @@ def usbHandleStartBulkNspDump(cmd_block: bytes) -> int:
     # Return status code.
     return USB_STATUS_SUCCESS
 
+def usbHandleEndBulkOperation(cmd_block: bytes) -> int:
+    assert g_logger is not None
+    g_logger.debug(f'Received EndBulkOperation ({USB_CMD_END_BULK_OPERATION:02X}) command.')
+    g_logger.info(f'Finished bulk operation.')
+    return USB_STATUS_SUCCESS
+
 def usbCommandHandler() -> None:
     assert g_logger is not None
 
     cmd_dict = {
         USB_CMD_START_SESSION:           usbHandleStartSession,
-        USB_CMD_SEND_FILE_PROPERTIES:    usbHandleSendFileProperties,
-        USB_CMD_CANCEL_FILE_TRANSFER:    usbHandleCancelFileTransfer,
-        USB_CMD_SEND_NSP_HEADER:         usbHandleSendNspHeader,
         USB_CMD_END_SESSION:             usbHandleEndSession,
+        USB_CMD_SEND_FILE_PROPERTIES:    usbHandleSendFileProperties,
+        USB_CMD_SEND_NSP_HEADER:         usbHandleSendNspHeader,
+        USB_CMD_CANCEL_FILE_TRANSFER:    usbHandleCancelFileTransfer,
         USB_CMD_START_EXTRACTED_FS_DUMP: usbHandleStartExtractedFsDump,
-        USB_CMD_END_EXTRACTED_FS_DUMP:   usbHandleEndExtractedFsDump,
-        USB_CMD_START_BULK_NSP_DUMP:     usbHandleStartBulkNspDump
+        USB_CMD_START_BULK_NSP_DUMP:     usbHandleStartBulkNspDump,
+        USB_CMD_END_BULK_OPERATION:      usbHandleEndBulkOperation
     }
 
     # Get device endpoints.

@@ -63,7 +63,7 @@ bool usbSendFileProperties(u64 file_size, const char *filename);
 /// Sends NSP properties to the host device and enables NSP transfer mode. If needed, it must be called before usbSendFileData().
 /// Both 'nsp_size' and 'nsp_header_size' must be greater than zero. 'nsp_size' must also be greater than 'nsp_header_size'.
 /// Calling this function after NSP transfer mode has already been enabled will result in an error.
-/// The host device should immediately write 'nsp_header_size' padding at the start of the output file and start listening for further usbSendFileProperties() calls, or a usbSendNspHeader() call.
+/// The host device should immediately write 'nsp_header_size' padding at the start of the output file and start listening for further SendFileProperties requests, or a single SendNspHeader request.
 bool usbSendNspProperties(u64 nsp_size, const char *filename, u32 nsp_header_size);
 
 /// Performs a file data transfer. Must be continuously called after usbSendFileProperties() / usbSendNspProperties() until all file data has been transferred.
@@ -72,23 +72,25 @@ bool usbSendNspProperties(u64 nsp_size, const char *filename, u32 nsp_header_siz
 /// Calling this function if there's no remaining data to transfer will result in an error.
 bool usbSendFileData(const void *data, u64 data_size);
 
-/// Used to gracefully cancel an ongoing file transfer. The current USB session is kept alive.
-void usbCancelFileTransfer(void);
-
 /// Sends NSP header data to the host device, making it rewind the NSP file pointer to write this data, essentially finishing the NSP transfer process.
 /// Must be called after the data from all NSP file entries has been transferred using both usbSendNspProperties() and usbSendFileData() calls.
 /// If the NSP header size is aligned to the endpoint max packet size, the host device should expect a Zero Length Termination (ZLT) packet.
 bool usbSendNspHeader(const void *nsp_header, u32 nsp_header_size);
 
+/// Used to gracefully cancel an ongoing file transfer. The current USB session is kept alive.
+void usbCancelFileTransfer(void);
+
 /// Informs the host device that an extracted filesystem dump (e.g. HFS, PFS, RomFS) is about to begin.
 bool usbStartExtractedFsDump(u64 extracted_fs_size, const char *extracted_fs_root_path);
 
-/// Informs the host device that a previously started filesystem dump (via usbStartExtractedFsDump()) has finished.
-/// This is only issued after all extracted file entries have been successfully transferred to the host device.
-void usbEndExtractedFsDump(void);
-
 /// Informs the host device that a bulk NSP dump is about to begin.
 bool usbStartBulkNspDump(u32 nsp_count);
+
+/// Informs the host device that a previously started bulk operation (like an extracted filesystem dump or a bulk NSP dump) has finished.
+/// Under an extracted filesystem dump, this should only be issued after all extracted file entries have been successfully transferred to the host device.
+/// Under a bulk NSP dump, this should always be issued at the end of the process, regardless of any errors taking place or not.
+/// This call should never be used if the operation is cancelled by the user.
+void usbEndBulkOperation(void);
 
 #ifdef __cplusplus
 }

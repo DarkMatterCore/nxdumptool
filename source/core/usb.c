@@ -26,7 +26,7 @@
 #include <core/usb.h>
 
 #define USB_ABI_VERSION_MAJOR       1
-#define USB_ABI_VERSION_MINOR       3
+#define USB_ABI_VERSION_MINOR       4
 #define USB_ABI_VERSION             ((USB_ABI_VERSION_MAJOR << 4) | USB_ABI_VERSION_MINOR)
 
 #define USB_CMD_HEADER_MAGIC        0x4E584454                  /* "NXDT". */
@@ -57,15 +57,22 @@
 /* Type definitions. */
 
 typedef enum : u32 {
+    // Session management commands.
     UsbCommandType_StartSession         = 0,
-    UsbCommandType_SendFileProperties   = 1,
-    UsbCommandType_CancelFileTransfer   = 2,
+    UsbCommandType_EndSession           = 1,
+
+    // Regular file transfer commands.
+    UsbCommandType_SendFileProperties   = 2,
     UsbCommandType_SendNspHeader        = 3,
-    UsbCommandType_EndSession           = 4,
+    UsbCommandType_CancelFileTransfer   = 4,
+
+    // Bulk operation commands.
     UsbCommandType_StartExtractedFsDump = 5,
-    UsbCommandType_EndExtractedFsDump   = 6,
-    UsbCommandType_StartBulkNspDump     = 7,
-    UsbCommandType_Count                = 8     ///< Total values supported by this enum.
+    UsbCommandType_StartBulkNspDump     = 6,
+    UsbCommandType_EndBulkOperation     = 7,
+
+    // Total values supported by this enum.
+    UsbCommandType_Count                = 8
 } UsbCommandType;
 
 typedef struct {
@@ -464,24 +471,6 @@ end:
     return ret;
 }
 
-void usbCancelFileTransfer(void)
-{
-    SCOPED_LOCK(&g_usbInterfaceMutex)
-    {
-        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || (!g_usbTransferRemainingSize && !g_nspTransferMode)) break;
-
-        /* Reset variables right away. */
-        g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
-        g_nspTransferMode = false;
-
-        /* Prepare command data. */
-        usbPrepareCommandHeader(UsbCommandType_CancelFileTransfer, 0);
-
-        /* Send command. We don't care about the result here. */
-        usbSendCommand();
-    }
-}
-
 bool usbSendNspHeader(const void *nsp_header, u32 nsp_header_size)
 {
     bool ret = false;
@@ -509,6 +498,24 @@ bool usbSendNspHeader(const void *nsp_header, u32 nsp_header_size)
     return ret;
 }
 
+void usbCancelFileTransfer(void)
+{
+    SCOPED_LOCK(&g_usbInterfaceMutex)
+    {
+        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || (!g_usbTransferRemainingSize && !g_nspTransferMode)) break;
+
+        /* Reset variables right away. */
+        g_usbTransferRemainingSize = g_usbTransferWrittenSize = 0;
+        g_nspTransferMode = false;
+
+        /* Prepare command data. */
+        usbPrepareCommandHeader(UsbCommandType_CancelFileTransfer, 0);
+
+        /* Send command. We don't care about the result here. */
+        usbSendCommand();
+    }
+}
+
 bool usbStartExtractedFsDump(u64 extracted_fs_size, const char *extracted_fs_root_path)
 {
     bool ret = false;
@@ -534,20 +541,6 @@ bool usbStartExtractedFsDump(u64 extracted_fs_size, const char *extracted_fs_roo
     return ret;
 }
 
-void usbEndExtractedFsDump(void)
-{
-    SCOPED_LOCK(&g_usbInterfaceMutex)
-    {
-        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || g_nspTransferMode) break;
-
-        /* Prepare command data. */
-        usbPrepareCommandHeader(UsbCommandType_EndExtractedFsDump, 0);
-
-        /* Send command. We don't care about the result here. */
-        usbSendCommand();
-    }
-}
-
 bool usbStartBulkNspDump(u32 nsp_count)
 {
     bool ret = false;
@@ -569,6 +562,20 @@ bool usbStartBulkNspDump(u32 nsp_count)
     }
 
     return ret;
+}
+
+void usbEndBulkOperation(void)
+{
+    SCOPED_LOCK(&g_usbInterfaceMutex)
+    {
+        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || g_nspTransferMode) break;
+
+        /* Prepare command data. */
+        usbPrepareCommandHeader(UsbCommandType_EndBulkOperation, 0);
+
+        /* Send command. We don't care about the result here. */
+        usbSendCommand();
+    }
 }
 
 static bool usbCreateDetectionThread(void)

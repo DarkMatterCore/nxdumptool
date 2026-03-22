@@ -4224,6 +4224,8 @@ static bool startNintendoSubmissionPackageQueueDump(void *userdata)
         return false;
     }
 
+    if (useUsbHost()) usbEndBulkOperation();
+
     consolePrint("\nqueue done: %u succeeded, %u failed\n", success_count, fail_count);
 
     return (success_count && !fail_count);
@@ -6020,7 +6022,7 @@ static void extractedHfsReadThreadFunc(void *arg)
         if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
         mutexUnlock(&g_fileMutex);
 
-        if (dev_idx == 1) usbEndExtractedFsDump();
+        if (dev_idx == 1) usbEndBulkOperation();
 
         consolePrint("successfully saved extracted hfs partition data to \"%s\"\n", filename);
         consoleRefresh();
@@ -6408,7 +6410,7 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
         if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
         mutexUnlock(&g_fileMutex);
 
-        if (dev_idx == 1) usbEndExtractedFsDump();
+        if (dev_idx == 1) usbEndBulkOperation();
 
         consolePrint("successfully saved extracted partitionfs section data to \"%s\"\n", filename);
         consoleRefresh();
@@ -6728,7 +6730,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
         if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
         mutexUnlock(&g_fileMutex);
 
-        if (dev_idx == 1) usbEndExtractedFsDump();
+        if (dev_idx == 1) usbEndBulkOperation();
 
         consolePrint("successfully saved extracted romfs section data to \"%s\"\n", filename);
         consoleRefresh();
@@ -6876,7 +6878,7 @@ static void fsBrowserHighlightedEntriesReadThreadFunc(void *arg)
 
         if (!shared_thread_data->read_error && !shared_thread_data->write_error && !shared_thread_data->transfer_cancelled)
         {
-            if (dev_idx == 1) usbEndExtractedFsDump();
+            if (dev_idx == 1) usbEndBulkOperation();
 
             consolePrint("successfully saved dumped data to \"%s\"\n", base_out_path);
             consoleRefresh();
@@ -7326,7 +7328,7 @@ static void systemUpdateReadThreadFunc(void *arg)
         if (shared_thread_data->data_size) condvarWait(&g_readCondvar, &g_fileMutex);
         mutexUnlock(&g_fileMutex);
 
-        if (dev_idx == 1) usbEndExtractedFsDump();
+        if (dev_idx == 1) usbEndBulkOperation();
 
         shared_thread_data->read_error = !systemUpdateIsDumpContextFinished(sys_upd_dump_ctx);
         if (!shared_thread_data->read_error)
