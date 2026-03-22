@@ -26,7 +26,7 @@
 #include <core/usb.h>
 
 #define USB_ABI_VERSION_MAJOR       1
-#define USB_ABI_VERSION_MINOR       2
+#define USB_ABI_VERSION_MINOR       3
 #define USB_ABI_VERSION             ((USB_ABI_VERSION_MAJOR << 4) | USB_ABI_VERSION_MINOR)
 
 #define USB_CMD_HEADER_MAGIC        0x4E584454                  /* "NXDT". */
@@ -64,7 +64,8 @@ typedef enum : u32 {
     UsbCommandType_EndSession           = 4,
     UsbCommandType_StartExtractedFsDump = 5,
     UsbCommandType_EndExtractedFsDump   = 6,
-    UsbCommandType_Count                = 7     ///< Total values supported by this enum.
+    UsbCommandType_StartBulkNspDump     = 7,
+    UsbCommandType_Count                = 8     ///< Total values supported by this enum.
 } UsbCommandType;
 
 typedef struct {
@@ -104,6 +105,13 @@ typedef struct {
 } UsbCommandStartExtractedFsDump;
 
 NXDT_ASSERT(UsbCommandStartExtractedFsDump, 0x310);
+
+typedef struct {
+    u32 nsp_count;
+    u8 reserved[0xC];
+} UsbCommandStartBulkNspDump;
+
+NXDT_ASSERT(UsbCommandStartBulkNspDump, 0x10);
 
 typedef enum : u32 {
     ///< Expected response code.
@@ -538,6 +546,29 @@ void usbEndExtractedFsDump(void)
         /* Send command. We don't care about the result here. */
         usbSendCommand();
     }
+}
+
+bool usbStartBulkNspDump(u32 nsp_count)
+{
+    bool ret = false;
+
+    SCOPED_LOCK(&g_usbInterfaceMutex)
+    {
+        if (!g_usbInterfaceInit || !g_usbTransferBuffer || !g_usbHostAvailable || !g_usbSessionStarted || g_usbTransferRemainingSize || g_nspTransferMode || !nsp_count) break;
+
+        /* Prepare command data. */
+        usbPrepareCommandHeader(UsbCommandType_StartBulkNspDump, (u32)sizeof(UsbCommandStartBulkNspDump));
+
+        UsbCommandStartBulkNspDump *cmd_block = (UsbCommandStartBulkNspDump*)(g_usbTransferBuffer + sizeof(UsbCommandHeader));
+        memset(cmd_block, 0, sizeof(UsbCommandStartBulkNspDump));
+
+        cmd_block->nsp_count = nsp_count;
+
+        /* Send command. */
+        ret = usbSendCommand();
+    }
+
+    return ret;
 }
 
 static bool usbCreateDetectionThread(void)

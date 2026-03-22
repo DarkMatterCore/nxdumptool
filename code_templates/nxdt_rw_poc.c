@@ -4177,6 +4177,12 @@ static bool startNintendoSubmissionPackageQueueDump(void *userdata)
         return false;
     }
 
+    if (queue_count > 1 && useUsbHost() && !usbStartBulkNspDump(queue_count))
+    {
+        consolePrint("failed to send bulk nsp dump cmd to host\n");
+        return false;
+    }
+
     for(u32 i = 0, j = 0; i < queue_count; i++)
     {
         MenuElement *cur_menu_element = g_nspQueueViewMenu.elements[j];

@@ -97,7 +97,7 @@ USB_MAGIC_WORD = b'NXDT'
 
 # Supported USB ABI version.
 USB_ABI_VERSION_MAJOR = 1
-USB_ABI_VERSION_MINOR = 2
+USB_ABI_VERSION_MINOR = 3
 
 # USB command header size.
 USB_CMD_HEADER_SIZE = 0x10
@@ -110,11 +110,13 @@ USB_CMD_SEND_NSP_HEADER         = 3
 USB_CMD_END_SESSION             = 4
 USB_CMD_START_EXTRACTED_FS_DUMP = 5
 USB_CMD_END_EXTRACTED_FS_DUMP   = 6
+USB_CMD_START_BULK_NSP_DUMP     = 7
 
 # USB command block sizes.
 USB_CMD_BLOCK_SIZE_START_SESSION           = 0x10
 USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES    = 0x320
 USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP = 0x310
+USB_CMD_BLOCK_SIZE_START_BULK_NSP_DUMP     = 0x10
 
 # Max filename length (file properties).
 USB_FILE_PROPERTIES_MAX_NAME_LENGTH = 0x300
@@ -1101,6 +1103,23 @@ def usbHandleEndExtractedFsDump(cmd_block: bytes) -> int:
     g_logger.info(f'Finished extracted FS dump.')
     return USB_STATUS_SUCCESS
 
+def usbHandleStartBulkNspDump(cmd_block: bytes) -> int:
+    assert g_logger is not None
+
+    g_logger.debug(f'Received StartBulkNspDump ({USB_CMD_START_BULK_NSP_DUMP:02X}) command.')
+
+    if g_nspTransferMode:
+        g_logger.error('StartBulkNspDump received mid NSP transfer.')
+        return USB_STATUS_MALFORMED_CMD
+
+    # Parse command block.
+    nsp_count = struct.unpack_from(f'<I', cmd_block, 0)[0]
+
+    g_logger.info(f'Starting bulk NSP dump ({nsp_count} NSP[s]).')
+
+    # Return status code.
+    return USB_STATUS_SUCCESS
+
 def usbCommandHandler() -> None:
     assert g_logger is not None
 
@@ -1111,7 +1130,8 @@ def usbCommandHandler() -> None:
         USB_CMD_SEND_NSP_HEADER:         usbHandleSendNspHeader,
         USB_CMD_END_SESSION:             usbHandleEndSession,
         USB_CMD_START_EXTRACTED_FS_DUMP: usbHandleStartExtractedFsDump,
-        USB_CMD_END_EXTRACTED_FS_DUMP:   usbHandleEndExtractedFsDump
+        USB_CMD_END_EXTRACTED_FS_DUMP:   usbHandleEndExtractedFsDump,
+        USB_CMD_START_BULK_NSP_DUMP:     usbHandleStartBulkNspDump
     }
 
     # Get device endpoints.
@@ -1178,7 +1198,8 @@ def usbCommandHandler() -> None:
            (cmd_id == USB_CMD_SEND_FILE_PROPERTIES and cmd_block_size != USB_CMD_BLOCK_SIZE_SEND_FILE_PROPERTIES) or \
            (cmd_id == USB_CMD_CANCEL_FILE_TRANSFER and cmd_block_size) or \
            (cmd_id == USB_CMD_SEND_NSP_HEADER and not cmd_block_size) or \
-           (cmd_id == USB_CMD_START_EXTRACTED_FS_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP):
+           (cmd_id == USB_CMD_START_EXTRACTED_FS_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_EXTRACTED_FS_DUMP) or \
+           (cmd_id == USB_CMD_START_BULK_NSP_DUMP and cmd_block_size != USB_CMD_BLOCK_SIZE_START_BULK_NSP_DUMP):
             g_logger.error(f'Invalid command block size for command ID {cmd_id:02X}! (0x{cmd_block_size:X}).\n')
             usbSendStatus(USB_STATUS_MALFORMED_CMD)
             continue

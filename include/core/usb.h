@@ -87,6 +87,9 @@ bool usbStartExtractedFsDump(u64 extracted_fs_size, const char *extracted_fs_roo
 /// This is only issued after all extracted file entries have been successfully transferred to the host device.
 void usbEndExtractedFsDump(void);
 
+/// Informs the host device that a bulk NSP dump is about to begin.
+bool usbStartBulkNspDump(u32 nsp_count);
+
 #ifdef __cplusplus
 }
 #endif
