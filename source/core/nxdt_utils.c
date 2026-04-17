@@ -577,6 +577,94 @@ end:
     return success;
 }
 
+u32 utilsIllegalLookalikeCodepoint(u32 code) {
+    switch (code) {
+        /* Remap control characters to Control Pictures */
+        case /* NUL */ 0x00: return 0x2400;
+        case /* SOH */ 0x01: return 0x2401;
+        case /* STX */ 0x02: return 0x2402;
+        case /* ETX */ 0x03: return 0x2403;
+        case /* EOT */ 0x04: return 0x2404;
+        case /* ENQ */ 0x05: return 0x2405;
+        case /* ACK */ 0x06: return 0x2406;
+        case /* BEL */ 0x07: return 0x2407;
+        case /* BS  */ 0x08: return 0x2408;
+        case /* HT  */ 0x09: return 0x2409;
+        case /* LF  */ 0x0A: return 0x240A;
+        case /* VT  */ 0x0B: return 0x240B;
+        case /* FF  */ 0x0C: return 0x240C;
+        case /* CR  */ 0x0D: return 0x240D;
+        case /* SO  */ 0x0E: return 0x240E;
+        case /* SI  */ 0x0F: return 0x240F;
+        case /* DLE */ 0x10: return 0x2410;
+        case /* DC1 */ 0x11: return 0x2411;
+        case /* DC2 */ 0x12: return 0x2412;
+        case /* DC3 */ 0x13: return 0x2413;
+        case /* DC4 */ 0x14: return 0x2414;
+        case /* NAK */ 0x15: return 0x2415;
+        case /* SYN */ 0x16: return 0x2416;
+        case /* ETB */ 0x17: return 0x2417;
+        case /* CAN */ 0x18: return 0x2418;
+        case /* EM  */ 0x19: return 0x2419;
+        case /* SUB */ 0x1A: return 0x241A;
+        case /* ESC */ 0x1B: return 0x241B;
+        case /* FS  */ 0x1C: return 0x241C;
+        case /* GS  */ 0x1D: return 0x241D;
+        case /* RS  */ 0x1E: return 0x241E;
+        case /* US  */ 0x1F: return 0x241F;
+        case /* DEL */ 0x7F: return 0x2421;
+
+        /* Remap graphic characters to Halfwidth and Fullwidth Forms */
+        case /* "   */ 0x22: return 0xFF02;
+        case /* *   */ 0x2A: return 0xFF0A;
+        case /* /   */ 0x2F: return 0xFF0F;
+        case /* :   */ 0x3A: return 0xFF1A;
+        case /* <   */ 0x3C: return 0xFF1C;
+        case /* >   */ 0x3E: return 0xFF1E;
+        case /* ?   */ 0x3F: return 0xFF1F;
+        case /* \   */ 0x5C: return 0xFF3C;
+        case /* |   */ 0x7C: return 0xFF5C;
+    }
+
+    return 0;
+}
+
+void utilsReplaceIllegalCharactersWithLookalike(char *str)
+{
+    size_t str_size = 0, cur_pos = 0;
+
+    if (!str || !(str_size = strlen(str))) return;
+
+    u32 src, dst, tmp;
+    ssize_t src_size, dst_size;
+    u8 *ptr = (u8*)str;
+
+    while(cur_pos < str_size)
+    {
+        /* Decode codepoint */
+        src_size = decode_utf8(&src, ptr);
+        if (src_size < 0) { src_size = 1; src = /* REP */ 0xFFFE; }
+
+        /* Remap codepoint */
+        dst = utilsIllegalLookalikeCodepoint(src);
+        dst = dst != 0 ? dst : src;
+
+        /* Encode codepoint */
+        dst_size = encode_utf8((u8*)&tmp, dst);
+        if (dst_size < 0) dst_size = encode_utf8((u8*)&tmp, /* REP */ 0xFFFE);
+
+        /* Replace character */
+        memmove(ptr + dst_size, ptr + src_size, str_size - cur_pos);
+        memmove(ptr, &tmp, dst_size);
+
+        ptr += dst_size;
+        cur_pos += (size_t)dst_size;
+        str_size += (size_t)(dst_size - src_size);
+    }
+
+    *ptr = '\0';
+}
+
 void utilsReplaceIllegalCharacters(char *str, bool ascii_only)
 {
     size_t str_size = 0, cur_pos = 0;

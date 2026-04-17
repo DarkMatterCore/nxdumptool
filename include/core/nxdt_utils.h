@@ -127,6 +127,17 @@ void utilsJoinThread(Thread *thread);
 /// If the buffer isn't big enough to hold both its current contents and the new formatted string, it will be resized.
 __attribute__((format(printf, 3, 4))) bool utilsAppendFormattedStringToBuffer(char **dst, size_t *dst_size, const char *fmt, ...);
 
+/// Replaces illegal filesystem unicode codepoint with valid lookalike.
+/// Returns 0 if codepoint is valid.
+u32 utilsIllegalLookalikeCodepoint(u32 code);
+
+/// Replaces illegal filesystem characters in the provided NULL-terminated UTF-8 string with valid lookalikes.
+/// Replacements are performed on a per-codepoint basis, which means the string size in bytes can be vary with this function.
+/// If an invalid UTF-8 character is found, it will be replaced by '\uFFFD' (Unicode Replacement Character).
+/// Under normal operation, the string will remain the same size, or worst case, grow upto 21 bytes.
+/// The maximum size the string can become is strlen * 4.
+void utilsReplaceIllegalCharactersWithLookalike(char *str);
+
 /// Replaces illegal filesystem characters in the provided NULL-terminated UTF-8 string with underscores ('_').
 /// If 'ascii_only' is set to true, all codepoints outside of the [0x20,0x7E] range will also be replaced with underscores.
 /// Replacements are performed on a per-codepoint basis, which means the string size in bytes can be reduced by this function.

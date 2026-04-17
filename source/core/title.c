@@ -1110,8 +1110,6 @@ char *titleGenerateFileName(const TitleInfo *title_info, TitleNamingConvention n
                 snprintf(title_name + title_name_len, MAX_ELEMENTS(title_name) - title_name_len, "%s ", version_str);
                 free(version_str);
             }
-
-            if (illegal_char_replace_type) utilsReplaceIllegalCharacters(title_name, illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly);
         }
 
         title_name_len = strlen(title_name);
@@ -1121,6 +1119,20 @@ char *titleGenerateFileName(const TitleInfo *title_info, TitleNamingConvention n
     if (naming_convention == TitleNamingConvention_IdAndVersionOnly)
     {
         snprintf(title_name, MAX_ELEMENTS(title_name), "%016lX_v%u_%s", title_info->meta_key.id, title_info->meta_key.version, g_filenameTypeStrings[type_idx]);
+    }
+
+    /* Replace illegal characters in filename. */
+    if (illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly)
+    {
+        utilsReplaceIllegalCharacters(title_name, true);
+    }
+    if (illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_IllegalFsChars)
+    {
+        utilsReplaceIllegalCharacters(title_name, false);
+    }
+    if (illegal_char_replace_type == TitleFileNameIllegalCharReplaceType_IllegalLookalike)
+    {
+        utilsReplaceIllegalCharactersWithLookalike(title_name);
     }
 
     /* Duplicate generated filename. */
