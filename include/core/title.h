@@ -89,7 +89,8 @@ typedef enum : u8 {
     TitleFileNameIllegalCharReplaceType_None               = 0,
     TitleFileNameIllegalCharReplaceType_IllegalFsChars     = 1,
     TitleFileNameIllegalCharReplaceType_KeepAsciiCharsOnly = 2,
-    TitleFileNameIllegalCharReplaceType_Count              = 3  ///< Total values supported by this enum.
+    TitleFileNameIllegalCharReplaceType_IllegalLookalike   = 3,
+    TitleFileNameIllegalCharReplaceType_Count              = 4  ///< Total values supported by this enum.
 } TitleFileNameIllegalCharReplaceType;
 
 /// Initializes the title interface.
