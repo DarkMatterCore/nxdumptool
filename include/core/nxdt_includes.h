@@ -61,8 +61,9 @@
 #include <zlib.h>
 
 /* Zstandard. */
-#define ZSTD_STATIC_LINKING_ONLY /* Required by Zstandard to enable in-place decompression. */
-#include <zstd.h>
+#define ZSTD_STATIC_LINKING_ONLY    /* Required by Zstandard to enable in-place decompression. */
+#define ZSTD_ZBIC_SUPPORT 1         /* Required by Zstandard to enable custom ZBIC dictionary support. */
+#include "zstd.h"
 
 /* Global defines. */
 #include "../defines.h"

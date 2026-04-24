@@ -57,21 +57,21 @@
 /* Type definitions. */
 
 typedef enum : u32 {
-    // Session management commands.
+    ///< Session management commands.
     UsbCommandType_StartSession         = 0,
     UsbCommandType_EndSession           = 1,
 
-    // Regular file transfer commands.
+    ///< Regular file transfer commands.
     UsbCommandType_SendFileProperties   = 2,
     UsbCommandType_SendNspHeader        = 3,
     UsbCommandType_CancelFileTransfer   = 4,
 
-    // Bulk operation commands.
+    ///< Bulk operation commands.
     UsbCommandType_StartExtractedFsDump = 5,
     UsbCommandType_StartBulkNspDump     = 6,
     UsbCommandType_EndBulkOperation     = 7,
 
-    // Total values supported by this enum.
+    ///< Total values supported by this enum.
     UsbCommandType_Count                = 8
 } UsbCommandType;
 
@@ -136,7 +136,8 @@ typedef enum : u32 {
     UsbStatusType_MalformedCommand      = 7,
     UsbStatusType_HostIoError           = 8,
 
-    UsbStatusType_Count                 = 9         ///< Total values supported by this enum.
+    ///< Total values supported by this enum.
+    UsbStatusType_Count                 = 9
 } UsbStatusType;
 
 typedef struct {

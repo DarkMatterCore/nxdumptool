@@ -22,6 +22,18 @@
 #include <core/nxdt_utils.h>
 #include <core/nso.h>
 
+#define NSO_SEGMENT_INFO(ctx, type)             ((type) == NsoSegmentType_Text   ? &(ctx->nso_header.text_segment_info)   : \
+                                                ((type) == NsoSegmentType_RoData ? &(ctx->nso_header.rodata_segment_info) : \
+                                                                                   &(ctx->nso_header.data_segment_info)))
+
+#define NSO_SEGMENT_COMPRESSED_SIZE(ctx, type)  ((type) == NsoSegmentType_Text   ? ctx->nso_header.text_file_size   : \
+                                                ((type) == NsoSegmentType_RoData ? ctx->nso_header.rodata_file_size : \
+                                                                                   ctx->nso_header.data_file_size))
+
+#define NSO_SEGMENT_HASH(ctx, type)             ((type) == NsoSegmentType_Text   ? ctx->nso_header.text_segment_hash   : \
+                                                ((type) == NsoSegmentType_RoData ? ctx->nso_header.rodata_segment_hash : \
+                                                                                   ctx->nso_header.data_segment_hash))
+
 /* Type definitions. */
 
 typedef enum : u8 {
@@ -51,6 +63,7 @@ static const char *g_nsoSegmentTypeNames[NsoSegmentType_Count] = {
 static bool nsoGetModuleName(NsoContext *nso_ctx);
 
 static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType type);
+static bool nsoDecompressSegment(u8 **ptr, const size_t compressed_size, const size_t decompressed_size, const bool is_zbic);
 NX_INLINE void nsoFreeSegment(NsoSegment *segment);
 
 NX_INLINE bool nsoIsNnSdkVersionWithinSegment(const NsoModStart *mod_start, const NsoSegment *segment, u32 nnsdk_version_memory_offset);
@@ -241,88 +254,53 @@ static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType t
 
     const char *segment_name = g_nsoSegmentTypeNames[type];
 
-    const NsoSegmentInfo *segment_info = (type == NsoSegmentType_Text ? &(nso_ctx->nso_header.text_segment_info) : \
-                                         (type == NsoSegmentType_RoData ? &(nso_ctx->nso_header.rodata_segment_info) : &(nso_ctx->nso_header.data_segment_info)));
-
-    u32 segment_file_size = (type == NsoSegmentType_Text ? nso_ctx->nso_header.text_file_size : \
-                            (type == NsoSegmentType_RoData ? nso_ctx->nso_header.rodata_file_size : nso_ctx->nso_header.data_file_size));
-
-    const u8 *segment_hash = (type == NsoSegmentType_Text ? nso_ctx->nso_header.text_segment_hash : \
-                             (type == NsoSegmentType_RoData ? nso_ctx->nso_header.rodata_segment_hash : nso_ctx->nso_header.data_segment_hash));
+    const NsoSegmentInfo *segment_info = NSO_SEGMENT_INFO(nso_ctx, type);
+    const size_t segment_compressed_size = NSO_SEGMENT_COMPRESSED_SIZE(nso_ctx, type);
+    const size_t segment_decompressed_size = segment_info->size;
+    const u8 *segment_hash = NSO_SEGMENT_HASH(nso_ctx, type);
 
     const bool compressed = ((nso_ctx->nso_header.flags & BIT(type)) != 0);
     const bool verify = ((nso_ctx->nso_header.flags & BIT(type + 3)) != 0);
-    const bool use_new_compression = ((nso_ctx->nso_header.flags & NsoFlags_UseNewCompression) != 0);
-
-    u8 *buf = NULL;
-    u32 buf_size = (compressed ? (use_new_compression ? ZSTD_DECOMPRESSION_MARGIN(segment_info->size, ZSTD_BLOCKSIZE_MAX) : LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(segment_info->size)) : segment_info->size);
-
-    u8 *read_ptr = NULL;
-    u32 read_size = (compressed ? segment_file_size : segment_info->size);
+    const bool is_zbic = ((nso_ctx->nso_header.flags & NsoFlags_UseZbicCompression) != 0);
 
     u8 hash[SHA256_HASH_SIZE] = {0};
+
+    u8 *segment_data = NULL;
+    const size_t segment_data_size = (compressed ? segment_compressed_size : segment_decompressed_size);
 
     bool success = false;
 
     /* Clear output struct. */
     nsoFreeSegment(out);
 
-    /* Allocate memory for the segment buffer. */
-    if (!(buf = calloc(1, buf_size)))
+    /* Allocate memory for the segment data buffer. */
+    if (!(segment_data = calloc(1, segment_data_size)))
     {
-        LOG_MSG_ERROR("Failed to allocate 0x%X bytes for the %s segment in NSO \"%s\"!", buf_size, segment_name, nso_ctx->nso_filename);
-        return NULL;
+        LOG_MSG_ERROR("Failed to allocate 0x%lX bytes for %s segment in NSO \"%s\"!", segment_data_size, segment_name, nso_ctx->nso_filename);
+        goto end;
     }
 
-    read_ptr = (compressed ? (buf + (buf_size - read_size)) : buf);
-
     /* Read segment data. */
-    if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, read_ptr, read_size, segment_info->file_offset))
+    if (!pfsReadEntryData(nso_ctx->pfs_ctx, nso_ctx->pfs_entry, segment_data, segment_data_size, segment_info->file_offset))
     {
         LOG_MSG_ERROR("Failed to read %s segment in NSO \"%s\"!", segment_name, nso_ctx->nso_filename);
         goto end;
     }
 
-    /* Decompress segment data in-place. */
-    if (compressed)
+    /* Decompress segment data, if needed. */
+    if (compressed && !nsoDecompressSegment(&segment_data, segment_compressed_size, segment_decompressed_size, is_zbic))
     {
-        if (use_new_compression)
-        {
-            // TODO: this won't work if Nintendo is using custom dictionaries.
-
-            const u32 magic = __builtin_bswap32(*((u32*)read_ptr));
-            if (magic != NSO_ZBIC_MAGIC)
-            {
-                LOG_MSG_ERROR("Invalid ZBIC magic word in %s segment from NSO \"%s\"! (0x%08X != 0x%08X).", segment_name, nso_ctx->nso_filename, magic, __builtin_bswap32(NSO_ZBIC_MAGIC));
-                goto end;
-            }
-
-            // Replace magic number within our input buffer.
-            *((u32*)read_ptr) = ZSTD_MAGICNUMBER;
-
-            size_t zstd_res = ZSTD_decompress(buf, buf_size, read_ptr, read_size);
-            if (zstd_res != segment_info->size)
-            {
-                LOG_MSG_ERROR("Zstandard decompression failed for %s segment in NSO \"%s\"! (0x%lX != 0x%X).", segment_name, nso_ctx->nso_filename, zstd_res, segment_info->size);
-                goto end;
-            }
-        } else {
-            int lz4_res = LZ4_decompress_safe((char*)read_ptr, (char*)buf, (int)read_size, (int)buf_size);
-            if (lz4_res != (int)segment_info->size)
-            {
-                LOG_MSG_ERROR("LZ4 decompression failed for %s segment in NSO \"%s\"! (%d).", segment_name, nso_ctx->nso_filename, lz4_res);
-                goto end;
-            }
-        }
+        LOG_MSG_ERROR("Failed to decompress %s segment in NSO \"%s\"!", segment_name, nso_ctx->nso_filename);
+        goto end;
     }
 
+    /* Verify segment data hash, if needed. */
     if (verify)
     {
-        /* Verify segment data hash. */
-        sha256CalculateHash(hash, buf, segment_info->size);
+        sha256CalculateHash(hash, segment_data, segment_decompressed_size);
         if (memcmp(hash, segment_hash, SHA256_HASH_SIZE) != 0)
         {
-            LOG_MSG_ERROR("%s segment checksum mismatch for NSO \"%s\"!", segment_name, nso_ctx->nso_filename);
+            LOG_MSG_ERROR("Checksum mismatch for %s segment in NSO \"%s\"!", segment_name, nso_ctx->nso_filename);
             goto end;
         }
     }
@@ -331,13 +309,90 @@ static bool nsoGetSegment(NsoContext *nso_ctx, NsoSegment *out, NsoSegmentType t
     out->type = type;
     out->name = segment_name;
     memcpy(&(out->info), segment_info, sizeof(NsoSegmentInfo));
-    out->data = buf;
+    out->data = segment_data;
 
+    /* Update flag. */
     success = true;
 
 end:
-    if (!success && buf) free(buf);
+    if (!success && segment_data) free(segment_data);
 
+    return success;
+}
+
+static bool nsoDecompressSegment(u8 **ptr, const size_t compressed_size, const size_t decompressed_size, const bool is_zbic)
+{
+    u8 *segment_data = NULL, *dec_buf = NULL;
+    size_t dec_buf_size = 0;
+    bool success = false;
+
+    if (!ptr || !(segment_data = *ptr) || !compressed_size || decompressed_size <= compressed_size)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    /* Calculate decompression buffer size. */
+    dec_buf_size = (is_zbic ? ZSTD_decompressionMargin(segment_data, compressed_size) : LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(decompressed_size));
+
+    if (is_zbic)
+    {
+        /* Make sure we were able to retrieve the margin. */
+        if (ZSTD_isError(dec_buf_size))
+        {
+            LOG_MSG_ERROR("ZSTD_decompressionMargin() failed! (0x%lX).", dec_buf_size);
+            goto end;
+        }
+
+        /* Manually add decompressed segment size to calculated margin. */
+        dec_buf_size += decompressed_size;
+    }
+
+    /* Reallocate segment data buffer. */
+    dec_buf = realloc(segment_data, dec_buf_size);
+    if (!dec_buf)
+    {
+        LOG_MSG_ERROR("Failed to reallocate segment data buffer! (0x%lX).", dec_buf_size);
+        goto end;
+    }
+
+    /* Move segment data to the end of the buffer. */
+    segment_data = (dec_buf + (dec_buf_size - compressed_size));
+    memmove(segment_data, dec_buf, compressed_size);
+
+    /* Decompress segment data in-place. */
+    if (is_zbic)
+    {
+        const size_t zstd_res = ZSTD_decompress(dec_buf, dec_buf_size, segment_data, compressed_size);
+
+        if (ZSTD_isError(zstd_res))
+        {
+            LOG_MSG_ERROR("ZSTD_decompress() failed! (0x%lX).", zstd_res);
+            goto upd_ptr;
+        }
+
+        if (zstd_res != decompressed_size)
+        {
+            LOG_MSG_ERROR("ZBIC decompression failed! (0x%lX != 0x%lX).", zstd_res, decompressed_size);
+            goto upd_ptr;
+        }
+    } else {
+        const int lz4_res = LZ4_decompress_safe((char*)segment_data, (char*)dec_buf, (int)compressed_size, (int)dec_buf_size);
+        if (lz4_res != (int)decompressed_size)
+        {
+            LOG_MSG_ERROR("LZ4 decompression failed! (%d).", lz4_res);
+            goto upd_ptr;
+        }
+    }
+
+    /* Update flag. */
+    success = true;
+
+upd_ptr:
+    /* Update segment data pointer. */
+    *ptr = segment_data = dec_buf;
+
+end:
     return success;
 }
 

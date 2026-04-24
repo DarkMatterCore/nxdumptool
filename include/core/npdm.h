@@ -204,6 +204,8 @@ typedef enum : u64 {
     NpdmFsAccessControlFlags_StorageControl                 = BITL(42),
     NpdmFsAccessControlFlags_GameCardReport                 = BITL(43),
     NpdmFsAccessControlFlags_MarkBeforeEraseBis             = BITL(44),
+    NpdmFsAccessControlFlags_HtmlViewer                     = BITL(45),
+    NpdmFsAccessControlFlags_ApplicationSaveDataBackUp      = BITL(46),
     NpdmFsAccessControlFlags_Debug                          = BITL(62),
     NpdmFsAccessControlFlags_FullPermission                 = BITL(63),
     NpdmFsAccessControlFlags_Count                          = 64        ///< Total values supported by this enum.
@@ -429,7 +431,7 @@ typedef enum : u32 {
     NpdmSystemCallId_UnmapTransferMemory            = BIT(10),  ///< SVC 0x52.
     NpdmSystemCallId_CreateInterruptEvent           = BIT(11),  ///< SVC 0x53.
     NpdmSystemCallId_QueryPhysicalAddress           = BIT(12),  ///< SVC 0x54.
-    NpdmSystemCallId_QueryIoMapping                 = BIT(13),  ///< SVC 0x55.
+    NpdmSystemCallId_QueryMemoryMapping             = BIT(13),  ///< SVC 0x55. Old: NpdmSystemCallId_QueryIoMapping (1.0.0 - 9.2.0).
     NpdmSystemCallId_CreateDeviceAddressSpace       = BIT(14),  ///< SVC 0x56.
     NpdmSystemCallId_AttachDeviceAddressSpace       = BIT(15),  ///< SVC 0x57.
     NpdmSystemCallId_DetachDeviceAddressSpace       = BIT(16),  ///< SVC 0x58.
@@ -494,8 +496,8 @@ typedef enum : u32 {
     NpdmSystemCallId_Reserved22                     = BIT(23),  ///< SVC 0x8F.
 
     ///< System calls for index 6.
-    NpdmSystemCallId_MapInsecureMemory              = BIT(0),   ///< SVC 0x90 (15.0.0+).
-    NpdmSystemCallId_UnmapInsecureMemory            = BIT(1),   ///< SVC 0x91 (15.0.0+).
+    NpdmSystemCallId_MapInsecurePhysicalMemory      = BIT(0),   ///< SVC 0x90 (15.0.0+).
+    NpdmSystemCallId_UnmapInsecurePhysicalMemory    = BIT(1),   ///< SVC 0x91 (15.0.0+).
     NpdmSystemCallId_Reserved23                     = BIT(2),   ///< SVC 0x92.
     NpdmSystemCallId_Reserved24                     = BIT(3),   ///< SVC 0x93.
     NpdmSystemCallId_Reserved25                     = BIT(4),   ///< SVC 0x94.

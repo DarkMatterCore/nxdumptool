@@ -3,7 +3,7 @@
 """
  * nxdt_host.py
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -70,10 +70,10 @@ WINDOW_WIDTH  = 500
 WINDOW_HEIGHT = 470
 
 # Application version.
-APP_VERSION = '0.5'
+APP_VERSION = '0.6'
 
 # Copyright year.
-COPYRIGHT_YEAR = '2020-2024'
+COPYRIGHT_YEAR = '2020-2026'
 
 # USB VID/PID pair.
 USB_DEV_VID = 0x057E
@@ -801,7 +801,7 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
 
     # Check if we support this ABI version.
     if (g_nxdtAbiVersionMajor != USB_ABI_VERSION_MAJOR) or (g_nxdtAbiVersionMinor != USB_ABI_VERSION_MINOR):
-        g_logger.error('Unsupported ABI version!')
+        g_logger.error('Unsupported ABI version!\nPlease update this script and the nxdumptool binary.')
         return USB_STATUS_UNSUPPORTED_ABI_VERSION
 
     # Return status code.
