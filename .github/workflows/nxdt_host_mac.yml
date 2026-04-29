@@ -5,7 +5,6 @@ on:
     branches: [rewrite]
     paths:
       - 'host/**'
-      # Make sure to update this filename if you name the workflow differently!
       - '.github/workflows/nxdt_host_mac.yml'
 
   # Allows you to run this workflow manually from the Actions tab.
@@ -42,25 +41,20 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: nxdt_host_mac-${{ env.nxdt_commit }}.zip
-          # IMPORTANT: Update this path to match what your script outputs (.zip, .dmg, etc.)
           path: host/nxdt_host_mac.zip
           if-no-files-found: error
 
       - name: Upload nxdumptool-rewrite PoC artifacts to pre-release
         uses: ncipollo/release-action@v1
         with:
-          # Only update attachments on "rewrite-prerelease" tag.
           prerelease: True
           tag: "rewrite-prerelease"
           updateOnlyUnreleased: True
-          # Replace old artifacts with new ones.
           removeArtifacts: False
           replacesArtifacts: True
-          # Update preferences.
           allowUpdates: True
           omitBody: True
           omitBodyDuringUpdate: True
           omitNameDuringUpdate: True
-          # IMPORTANT: Ensure the artifact filenames match your actual macOS build output
           artifacts: "host/nxdt_host_mac.zip,host/nxdt_host.py"
           token: ${{ secrets.GITHUB_TOKEN }}
