@@ -1,0 +1,60 @@
+name: Build Host as macOS Executable
+
+on:
+  push:
+    branches: [rewrite]
+    paths:
+      - 'host/**'
+      - '.github/workflows/nxdt_host_mac.yml'
+
+  # Allows you to run this workflow manually from the Actions tab.
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Set environment variables
+        run: |
+          echo "nxdt_commit=${GITHUB_SHA:0:7}" >> $GITHUB_ENV
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: 3.12
+
+      - name: Install dependencies and build Executable
+        run: |
+          # IMPORTANT: Update 'macos_make_standalone.sh' to your actual macOS build script
+          chmod +x ./host/macos_make_standalone.sh
+          ./host/macos_make_standalone.sh
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nxdt_host_mac-${{ env.nxdt_commit }}.zip
+          path: host/nxdt_host_mac.zip
+          if-no-files-found: error
+
+      - name: Upload nxdumptool-rewrite PoC artifacts to pre-release
+        uses: ncipollo/release-action@v1
+        with:
+          prerelease: True
+          tag: "rewrite-prerelease"
+          updateOnlyUnreleased: True
+          removeArtifacts: False
+          replacesArtifacts: True
+          allowUpdates: True
+          omitBody: True
+          omitBodyDuringUpdate: True
+          omitNameDuringUpdate: True
+          artifacts: "host/nxdt_host_mac.zip,host/nxdt_host.py"
+          token: ${{ secrets.GITHUB_TOKEN }}
