@@ -32,6 +32,7 @@ python3 -m nuitka \
     --deployment \
     --macos-create-app-bundle \
     --enable-plugin=tk-inter \
+    --macos-app-icon=nxdt.icns \
     nxdt_host.py
 
 echo "Zipping the app bundle..."
