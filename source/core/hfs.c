@@ -50,7 +50,7 @@ bool hfsReadPartitionData(HashFileSystemContext *ctx, void *out, u64 read_size, 
     return true;
 }
 
-bool hfsReadEntryData(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset)
+bool hfsReadEntryData(HashFileSystemContext *ctx, const HashFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset)
 {
     if (!ctx || !fs_entry || !fs_entry->size || (fs_entry->offset + fs_entry->size) > ctx->size || !out || !read_size || (offset + read_size) > fs_entry->size)
     {
@@ -68,17 +68,53 @@ bool hfsReadEntryData(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry,
     return true;
 }
 
-bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size)
+bool hfsGetEntryIndexByName(const HashFileSystemContext *ctx, const char *name, u32 *out_idx)
 {
-    if (!hfsIsValidContext(ctx) || !out_size)
+    const HashFileSystemEntry *fs_entry = NULL;
+    u32 entry_count = hfsGetEntryCount(ctx), name_table_size = hfsGetNameTableSize(ctx);
+    const char *name_table = hfsGetNameTable(ctx);
+
+    if (!entry_count || !name_table_size || !name_table || !name || !*name || !out_idx)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
 
+    for(u32 i = 0; i < entry_count; i++)
+    {
+        if (!(fs_entry = hfsGetEntryByIndex(ctx, i)))
+        {
+            LOG_MSG_ERROR("Failed to retrieve Hash FS entry #%u!", i);
+            return false;
+        }
+
+        if (fs_entry->name_offset >= name_table_size)
+        {
+            LOG_MSG_ERROR("Name offset from Hash FS entry #%u exceeds name table size!", i);
+            return false;
+        }
+
+        if (!strcmp(name_table + fs_entry->name_offset, name))
+        {
+            *out_idx = i;
+            return true;
+        }
+    }
+
+    return false;
+}
+
+bool hfsGetTotalDataSize(const HashFileSystemContext *ctx, u64 *out_size)
+{
     u64 total_size = 0;
     u32 entry_count = hfsGetEntryCount(ctx);
-    HashFileSystemEntry *fs_entry = NULL;
+    const HashFileSystemEntry *fs_entry = NULL;
+
+    if (!entry_count || !out_size)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
 
     for(u32 i = 0; i < entry_count; i++)
     {
@@ -94,55 +130,6 @@ bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size)
     *out_size = total_size;
 
     return true;
-}
-
-bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *out_idx)
-{
-    HashFileSystemEntry *fs_entry = NULL;
-    u32 entry_count = 0, name_table_size = 0;
-    char *name_table = NULL;
-    bool ret = false;
-
-    if (hfsIsValidContext(ctx) && name && *name && out_idx)
-    {
-        entry_count = hfsGetEntryCount(ctx);
-        name_table = hfsGetNameTable(ctx);
-        ret = (entry_count && name_table);
-    }
-
-    if (!ret)
-    {
-        LOG_MSG_ERROR("Invalid parameters!");
-        goto end;
-    }
-
-    ret = false;
-    name_table_size = ((HashFileSystemHeader*)ctx->header)->name_table_size;
-
-    for(u32 i = 0; i < entry_count; i++)
-    {
-        if (!(fs_entry = hfsGetEntryByIndex(ctx, i)))
-        {
-            LOG_MSG_ERROR("Failed to retrieve Hash FS entry #%u!", i);
-            break;
-        }
-
-        if (fs_entry->name_offset >= name_table_size)
-        {
-            LOG_MSG_ERROR("Name offset from Hash FS entry #%u exceeds name table size!", i);
-            break;
-        }
-
-        if (!strcmp(name_table + fs_entry->name_offset, name))
-        {
-            *out_idx = i;
-            ret = true;
-            break;
-        }
-    }
-
-end:
-    return ret;
 }
 
 const char *hfsGetPartitionNameString(HashFileSystemPartitionType hfs_partition_type)

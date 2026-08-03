@@ -219,23 +219,23 @@ NX_INLINE void bktrFreeContext(BucketTreeContext *ctx)
     memset(ctx, 0, sizeof(BucketTreeContext));
 }
 
-NX_INLINE bool bktrIsValidContext(BucketTreeContext *ctx)
+NX_INLINE bool bktrIsValidContext(const BucketTreeContext *ctx)
 {
     return (ctx && ctx->nca_fs_ctx && ctx->storage_type < BucketTreeStorageType_Count && ctx->storage_table && ctx->node_size && ctx->entry_size && ctx->offset_count && \
             ctx->entry_set_count && ctx->node_storage_size && ctx->entry_storage_size && ctx->end_offset > ctx->start_offset);
 }
 
-NX_INLINE bool bktrIsOffsetWithinStorageRange(BucketTreeContext *ctx, u64 offset)
+NX_INLINE bool bktrIsOffsetWithinStorageRange(const BucketTreeContext *ctx, u64 offset)
 {
     return (bktrIsValidContext(ctx) && ctx->start_offset <= offset && offset < ctx->end_offset);
 }
 
-NX_INLINE bool bktrIsBlockWithinStorageRange(BucketTreeContext *ctx, u64 size, u64 offset)
+NX_INLINE bool bktrIsBlockWithinStorageRange(const BucketTreeContext *ctx, u64 size, u64 offset)
 {
     return (bktrIsValidContext(ctx) && size > 0 && ctx->start_offset <= offset && size <= (ctx->end_offset - offset));
 }
 
-NX_INLINE bool bktrIsValidSubStorage(BucketTreeSubStorage *substorage)
+NX_INLINE bool bktrIsValidSubStorage(const BucketTreeSubStorage *substorage)
 {
     return (substorage && substorage->index < BKTR_MAX_SUBSTORAGE_COUNT && substorage->nca_fs_ctx && substorage->type < BucketTreeSubStorageType_Count && \
             ((substorage->type == BucketTreeSubStorageType_Regular && substorage->index == 0 && !substorage->bktr_ctx) || \

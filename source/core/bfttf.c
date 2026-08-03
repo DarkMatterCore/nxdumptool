@@ -82,7 +82,7 @@ bool bfttfInitialize(void)
         for(u32 i = 0; i < g_fontInfoCount; i++)
         {
             BfttfFontInfo *font_info = &(g_fontInfo[i]);
-            RomFileSystemFileEntry *romfs_file_entry = NULL;
+            const RomFileSystemFileEntry *romfs_file_entry = NULL;
 
             /* Check if the title ID for the current font container matches the one from the previous font container. */
             /* We won't have to reinitialize both NCA and RomFS contexts if that's the case. */

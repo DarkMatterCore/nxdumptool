@@ -34,10 +34,10 @@
 /* Type definitions. */
 
 typedef struct {
-    u32 index;                              ///< Partition FS entry index.
-    PartitionFileSystemEntry *pfs_entry;    ///< Partition FS entry metadata.
-    const char *name;                       ///< Entry name.
-    u64 offset;                             ///< Current offset within Partition FS entry data.
+    u32 index;                                  ///< Partition FS entry index.
+    const PartitionFileSystemEntry *pfs_entry;  ///< Partition FS entry metadata.
+    const char *name;                           ///< Entry name.
+    u64 offset;                                 ///< Current offset within Partition FS entry data.
 } PartitionFileSystemFileState;
 
 typedef struct {
@@ -227,7 +227,7 @@ end:
 static int pfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 {
     u32 index = 0;
-    PartitionFileSystemEntry *pfs_entry = NULL;
+    const PartitionFileSystemEntry *pfs_entry = NULL;
 
     DEVOPTAB_INIT_VARS;
     PFS_DEV_INIT_FS_ACCESS;
@@ -292,7 +292,7 @@ end:
 
 static int pfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename, struct stat *filestat)
 {
-    PartitionFileSystemEntry *pfs_entry = NULL;
+    const PartitionFileSystemEntry *pfs_entry = NULL;
     const char *fname = NULL;
 
     PFS_DEV_INIT_DIR_VARS;

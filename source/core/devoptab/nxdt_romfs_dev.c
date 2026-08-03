@@ -37,15 +37,15 @@
 /* Type definitions. */
 
 typedef struct {
-    RomFileSystemFileEntry *file_entry; ///< RomFS file entry metadata.
-    u64 data_offset;                    ///< Current offset within RomFS file entry data.
+    const RomFileSystemFileEntry *file_entry;   ///< RomFS file entry metadata.
+    u64 data_offset;                            ///< Current offset within RomFS file entry data.
 } RomFileSystemFileState;
 
 typedef struct {
-    RomFileSystemDirectoryEntry *dir_entry; ///< RomFS directory entry metadata.
-    u8 state;                               ///< 0: "." entry; 1: ".." entry; 2: actual RomFS entry.
-    u64 cur_dir_offset;                     ///< Offset to current child directory entry within the RomFS directory table.
-    u64 cur_file_offset;                    ///< Offset to current child file entry within the RomFS file table.
+    const RomFileSystemDirectoryEntry *dir_entry;   ///< RomFS directory entry metadata.
+    u8 state;                                       ///< 0: "." entry; 1: ".." entry; 2: actual RomFS entry.
+    u64 cur_dir_offset;                             ///< Offset to current child directory entry within the RomFS directory table.
+    u64 cur_file_offset;                            ///< Offset to current child file entry within the RomFS file table.
 } RomFileSystemDirectoryState;
 
 /* Function prototypes. */
@@ -65,9 +65,9 @@ static int       romfsdev_statvfs(struct _reent *r, const char *path, struct sta
 static const char *romfsdev_get_truncated_path(struct _reent *r, const char *path);
 
 static void romfsdev_fill_file_stat(struct stat *st, const RomFileSystemContext *fs_ctx, const RomFileSystemFileEntry *file_entry, time_t mount_time);
-static void romfsdev_fill_dir_stat(struct stat *st, RomFileSystemContext *fs_ctx, RomFileSystemDirectoryEntry *dir_entry, time_t mount_time);
+static void romfsdev_fill_dir_stat(struct stat *st, const RomFileSystemContext *fs_ctx, const RomFileSystemDirectoryEntry *dir_entry, time_t mount_time);
 
-static nlink_t romfsdev_get_dir_nlink(RomFileSystemContext *ctx, RomFileSystemDirectoryEntry *dir_entry);
+static nlink_t romfsdev_get_dir_nlink(const RomFileSystemContext *ctx, const RomFileSystemDirectoryEntry *dir_entry);
 
 /* Global variables. */
 
@@ -233,8 +233,8 @@ end:
 
 static int romfsdev_stat(struct _reent *r, const char *file, struct stat *st)
 {
-    RomFileSystemDirectoryEntry *dir_entry = NULL;
-    RomFileSystemFileEntry *file_entry = NULL;
+    const RomFileSystemDirectoryEntry *dir_entry = NULL;
+    const RomFileSystemFileEntry *file_entry = NULL;
 
     DEVOPTAB_INIT_VARS;
     ROMFS_DEV_INIT_FS_ACCESS;
@@ -324,7 +324,7 @@ static int romfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename
 
     if (dir->state < 2)
     {
-        RomFileSystemDirectoryEntry *dir_entry = (dir->state == 0 ? dir->dir_entry : romfsGetDirectoryEntryByOffset(fs_ctx, dir->dir_entry->parent_offset));
+        const RomFileSystemDirectoryEntry *dir_entry = (dir->state == 0 ? dir->dir_entry : romfsGetDirectoryEntryByOffset(fs_ctx, dir->dir_entry->parent_offset));
         if (!dir_entry) DEVOPTAB_SET_ERROR_AND_EXIT(EFAULT);
 
         /* Fill directory entry. */
@@ -340,7 +340,7 @@ static int romfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename
     if (dir->cur_dir_offset != ROMFS_VOID_ENTRY)
     {
         /* Get next directory entry. */
-        RomFileSystemDirectoryEntry *dir_entry = romfsGetDirectoryEntryByOffset(fs_ctx, dir->cur_dir_offset);
+        const RomFileSystemDirectoryEntry *dir_entry = romfsGetDirectoryEntryByOffset(fs_ctx, dir->cur_dir_offset);
         if (!dir_entry) DEVOPTAB_SET_ERROR_AND_EXIT(EFAULT);
         if (dir_entry->name_length > NAME_MAX) DEVOPTAB_SET_ERROR_AND_EXIT(ENAMETOOLONG);
 
@@ -357,7 +357,7 @@ static int romfsdev_dirnext(struct _reent *r, DIR_ITER *dirState, char *filename
     if (dir->cur_file_offset != ROMFS_VOID_ENTRY)
     {
         /* Get next file entry. */
-        RomFileSystemFileEntry *file_entry = romfsGetFileEntryByOffset(fs_ctx, dir->cur_file_offset);
+        const RomFileSystemFileEntry *file_entry = romfsGetFileEntryByOffset(fs_ctx, dir->cur_file_offset);
         if (!file_entry) DEVOPTAB_SET_ERROR_AND_EXIT(EFAULT);
         if (file_entry->name_length > NAME_MAX) DEVOPTAB_SET_ERROR_AND_EXIT(ENAMETOOLONG);
 
@@ -489,7 +489,7 @@ static void romfsdev_fill_file_stat(struct stat *st, const RomFileSystemContext 
     st->st_atime = st->st_mtime = st->st_ctime = mount_time;
 }
 
-static void romfsdev_fill_dir_stat(struct stat *st, RomFileSystemContext *fs_ctx, RomFileSystemDirectoryEntry *dir_entry, time_t mount_time)
+static void romfsdev_fill_dir_stat(struct stat *st, const RomFileSystemContext *fs_ctx, const RomFileSystemDirectoryEntry *dir_entry, time_t mount_time)
 {
     /* Clear stat struct. */
     memset(st, 0, sizeof(struct stat));
@@ -502,7 +502,7 @@ static void romfsdev_fill_dir_stat(struct stat *st, RomFileSystemContext *fs_ctx
     st->st_atime = st->st_mtime = st->st_ctime = mount_time;
 }
 
-static nlink_t romfsdev_get_dir_nlink(RomFileSystemContext *fs_ctx, RomFileSystemDirectoryEntry *dir_entry)
+static nlink_t romfsdev_get_dir_nlink(const RomFileSystemContext *fs_ctx, const RomFileSystemDirectoryEntry *dir_entry)
 {
     u64 cur_entry_offset = 0;
     nlink_t count = 2; // One for self, one for parent.
@@ -515,7 +515,7 @@ static nlink_t romfsdev_get_dir_nlink(RomFileSystemContext *fs_ctx, RomFileSyste
     while(cur_entry_offset != ROMFS_VOID_ENTRY)
     {
         /* Get current file entry. */
-        RomFileSystemFileEntry *cur_file_entry = romfsGetFileEntryByOffset(fs_ctx, cur_entry_offset);
+        const RomFileSystemFileEntry *cur_file_entry = romfsGetFileEntryByOffset(fs_ctx, cur_entry_offset);
         if (!cur_file_entry) break;
 
         /* Update count. */
@@ -530,7 +530,7 @@ static nlink_t romfsdev_get_dir_nlink(RomFileSystemContext *fs_ctx, RomFileSyste
     while(cur_entry_offset != ROMFS_VOID_ENTRY)
     {
         /* Get current directory entry. */
-        RomFileSystemDirectoryEntry *cur_dir_entry = romfsGetDirectoryEntryByOffset(fs_ctx, cur_entry_offset);
+        const RomFileSystemDirectoryEntry *cur_dir_entry = romfsGetDirectoryEntryByOffset(fs_ctx, cur_entry_offset);
         if (!cur_dir_entry) break;
 
         /* Update count. */

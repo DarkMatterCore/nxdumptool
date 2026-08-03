@@ -43,7 +43,7 @@ typedef enum : u32 {
     NsoFlags_RoHash             = BIT(4),    ///< Determines if .rodata segment hash must be checked during load.
     NsoFlags_DataHash           = BIT(5),    ///< Determines if .data segment hash must be checked during load.
     NsoFlags_ExecuteOnlyMemory  = BIT(6),    ///< Determines if the NSO shall be mapped to execute-only memory.
-    NsoFlags_UseZbicCompression = BIT(7),    ///< Determines if ZBIC (modified Zstandard) is used instead of LZ4 to compress NSO segments.
+    NsoFlags_UseZbicCompression = BIT(7),    ///< Determines if ZBIC (modified Zstandard with BIC support) is used instead of LZ4 to compress NSO segments.
     NsoFlags_Count              = 8          ///< Total values supported by this enum.
 } NsoFlags;
 
@@ -154,24 +154,24 @@ typedef struct {
 NXDT_ASSERT(NsoRoDataStart, 0x8);
 
 typedef struct {
-    PartitionFileSystemContext *pfs_ctx;    ///< PartitionFileSystemContext for the Program NCA FS section #0, which is where this NSO is stored.
-    PartitionFileSystemEntry *pfs_entry;    ///< PartitionFileSystemEntry for this NSO in the Program NCA FS section #0. Used to read NSO data.
-    char *nso_filename;                     ///< Pointer to the NSO filename in the Program NCA FS section #0.
-    NsoHeader nso_header;                   ///< NSO header.
-    char *module_name;                      ///< Pointer to a dynamically allocated buffer that holds the NSO module name, if available. Otherwise, this is set to NULL.
-    NsoNnSdkVersion *nnsdk_version;         ///< Pointer to a dynamically allocated buffer that holds the nnSdk version info, if available. Otherwise, this is set to NULL.
-    char *module_path;                      ///< Pointer to a dynamically allocated buffer that holds the .rodata module path, if available. Otherwise, this is set to NULL.
-    char *rodata_api_info_section;          ///< Pointer to a dynamically allocated buffer that holds the .rodata API info section data, if available. Otherwise, this is set to NULL.
-                                            ///< Middleware and GuidelineApi entries are retrieved from this section.
-    u64 rodata_api_info_section_size;       ///< .rodata API info section size, if available. Otherwise, this is set to 0. Kept here for convenience - this is part of 'nso_header'.
-    char *rodata_dynstr_section;            ///< Pointer to a dynamically allocated buffer that holds the .rodata dynamic string section data. UnresolvedApi data is retrieved from this section.
-    u64 rodata_dynstr_section_size;         ///< .rodata dynamic string section size. Kept here for convenience - this is part of 'nso_header'.
-    u8 *rodata_dynsym_section;              ///< Pointer to a dynamically allocated buffer that holds the .rodata dynamic symbol section data. Used to retrieve pointers to symbol strings within dynstr.
-    u64 rodata_dynsym_section_size;         ///< .rodata dynamic symbol section size. Kept here for convenience - this is part of 'nso_header'.
+    PartitionFileSystemContext *pfs_ctx;        ///< PartitionFileSystemContext for the Program NCA FS section #0, which is where this NSO is stored.
+    const PartitionFileSystemEntry *pfs_entry;  ///< PartitionFileSystemEntry for this NSO in the Program NCA FS section #0. Used to read NSO data.
+    const char *nso_filename;                   ///< Pointer to the NSO filename in the Program NCA FS section #0.
+    NsoHeader nso_header;                       ///< NSO header.
+    char *module_name;                          ///< Pointer to a dynamically allocated buffer that holds the NSO module name, if available. Otherwise, this is set to NULL.
+    NsoNnSdkVersion *nnsdk_version;             ///< Pointer to a dynamically allocated buffer that holds the nnSdk version info, if available. Otherwise, this is set to NULL.
+    char *module_path;                          ///< Pointer to a dynamically allocated buffer that holds the .rodata module path, if available. Otherwise, this is set to NULL.
+    char *rodata_api_info_section;              ///< Pointer to a dynamically allocated buffer that holds the .rodata API info section data, if available. Otherwise, this is set to NULL.
+                                                ///< Middleware and GuidelineApi entries are retrieved from this section.
+    u64 rodata_api_info_section_size;           ///< .rodata API info section size, if available. Otherwise, this is set to 0. Kept here for convenience - this is part of 'nso_header'.
+    char *rodata_dynstr_section;                ///< Pointer to a dynamically allocated buffer that holds the .rodata dynamic string section data. UnresolvedApi data is retrieved from this section.
+    u64 rodata_dynstr_section_size;             ///< .rodata dynamic string section size. Kept here for convenience - this is part of 'nso_header'.
+    u8 *rodata_dynsym_section;                  ///< Pointer to a dynamically allocated buffer that holds the .rodata dynamic symbol section data. Used to retrieve pointers to symbol strings within dynstr.
+    u64 rodata_dynsym_section_size;             ///< .rodata dynamic symbol section size. Kept here for convenience - this is part of 'nso_header'.
 } NsoContext;
 
 /// Initializes a NsoContext using a previously initialized PartitionFileSystemContext (which must belong to the ExeFS from a Program NCA) and a PartitionFileSystemEntry belonging to an underlying NSO.
-bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, PartitionFileSystemEntry *pfs_entry);
+bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, const PartitionFileSystemEntry *pfs_entry);
 
 /// Helper inline functions.
 
@@ -185,6 +185,11 @@ NX_INLINE void nsoFreeContext(NsoContext *nso_ctx)
     if (nso_ctx->rodata_dynstr_section) free(nso_ctx->rodata_dynstr_section);
     if (nso_ctx->rodata_dynsym_section) free(nso_ctx->rodata_dynsym_section);
     memset(nso_ctx, 0, sizeof(NsoContext));
+}
+
+NX_INLINE bool nsoIsValidContext(const NsoContext *nso_ctx)
+{
+    return (nso_ctx && pfsIsValidContext(nso_ctx->pfs_ctx) && nso_ctx->pfs_entry && nso_ctx->nso_filename && nso_ctx->nso_filename[0]);
 }
 
 #ifdef __cplusplus

@@ -77,14 +77,14 @@ bool hfsReadPartitionData(HashFileSystemContext *ctx, void *out, u64 read_size, 
 
 /// Reads data from a previously retrieved HashFileSystemEntry using a Hash FS context.
 /// Input offset must be relative to the start of the Hash FS entry.
-bool hfsReadEntryData(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset);
+bool hfsReadEntryData(HashFileSystemContext *ctx, const HashFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset);
+
+/// Retrieves a Hash FS entry index by its name.
+bool hfsGetEntryIndexByName(const HashFileSystemContext *ctx, const char *name, u32 *out_idx);
 
 /// Calculates the extracted Hash FS size.
 /// If the target partition is empty, 'out_size' will be set to zero and true will be returned.
-bool hfsGetTotalDataSize(HashFileSystemContext *ctx, u64 *out_size);
-
-/// Retrieves a Hash FS entry index by its name.
-bool hfsGetEntryIndexByName(HashFileSystemContext *ctx, const char *name, u32 *out_idx);
+bool hfsGetTotalDataSize(const HashFileSystemContext *ctx, u64 *out_size);
 
 /// Takes a HashFileSystemPartitionType value. Returns a pointer to a string that represents the partition name that matches the provided Hash FS partition type.
 /// Returns NULL if the provided value is out of range.
@@ -100,42 +100,47 @@ NX_INLINE void hfsFreeContext(HashFileSystemContext *ctx)
     memset(ctx, 0, sizeof(HashFileSystemContext));
 }
 
-NX_INLINE bool hfsIsValidContext(HashFileSystemContext *ctx)
+NX_INLINE bool hfsIsValidContext(const HashFileSystemContext *ctx)
 {
     return (ctx && ctx->type > HashFileSystemPartitionType_None && ctx->type < HashFileSystemPartitionType_Count && ctx->name && ctx->size && ctx->header_size && ctx->header);
 }
 
-NX_INLINE u32 hfsGetEntryCount(HashFileSystemContext *ctx)
+NX_INLINE u32 hfsGetEntryCount(const HashFileSystemContext *ctx)
 {
-    return (hfsIsValidContext(ctx) ? ((HashFileSystemHeader*)ctx->header)->entry_count : 0);
+    return (hfsIsValidContext(ctx) ? ((const HashFileSystemHeader*)ctx->header)->entry_count : 0);
 }
 
-NX_INLINE HashFileSystemEntry *hfsGetEntryByIndex(HashFileSystemContext *ctx, u32 idx)
+NX_INLINE const HashFileSystemEntry *hfsGetEntryByIndex(const HashFileSystemContext *ctx, u32 idx)
 {
-    return (idx < hfsGetEntryCount(ctx) ? (HashFileSystemEntry*)(ctx->header + sizeof(HashFileSystemHeader) + (idx * sizeof(HashFileSystemEntry))) : NULL);
+    return (idx < hfsGetEntryCount(ctx) ? (const HashFileSystemEntry*)(ctx->header + sizeof(HashFileSystemHeader) + (idx * sizeof(HashFileSystemEntry))) : NULL);
 }
 
-NX_INLINE char *hfsGetNameTable(HashFileSystemContext *ctx)
+NX_INLINE const char *hfsGetNameTable(const HashFileSystemContext *ctx)
 {
     u32 entry_count = hfsGetEntryCount(ctx);
-    return (entry_count ? (char*)(ctx->header + sizeof(HashFileSystemHeader) + (entry_count * sizeof(HashFileSystemEntry))) : NULL);
+    return (entry_count ? (const char*)(ctx->header + sizeof(HashFileSystemHeader) + (entry_count * sizeof(HashFileSystemEntry))) : NULL);
 }
 
-NX_INLINE char *hfsGetEntryName(HashFileSystemContext *ctx, HashFileSystemEntry *fs_entry)
+NX_INLINE u32 hfsGetNameTableSize(const HashFileSystemContext *ctx)
 {
-    char *name_table = hfsGetNameTable(ctx);
-    if (!name_table || !fs_entry || fs_entry->name_offset >= ((HashFileSystemHeader*)ctx->header)->name_table_size || !name_table[fs_entry->name_offset]) return NULL;
+    return (hfsIsValidContext(ctx) ? ((const HashFileSystemHeader*)ctx->header)->name_table_size : 0);
+}
+
+NX_INLINE const char *hfsGetEntryName(const HashFileSystemContext *ctx, const HashFileSystemEntry *fs_entry)
+{
+    const char *name_table = hfsGetNameTable(ctx);
+    if (!name_table || !fs_entry || fs_entry->name_offset >= hfsGetNameTableSize(ctx) || !name_table[fs_entry->name_offset]) return NULL;
     return (name_table + fs_entry->name_offset);
 }
 
-NX_INLINE char *hfsGetEntryNameByIndex(HashFileSystemContext *ctx, u32 idx)
+NX_INLINE const char *hfsGetEntryNameByIndex(const HashFileSystemContext *ctx, u32 idx)
 {
-    HashFileSystemEntry *fs_entry = hfsGetEntryByIndex(ctx, idx);
-    char *name_table = hfsGetNameTable(ctx);
+    const HashFileSystemEntry *fs_entry = hfsGetEntryByIndex(ctx, idx);
+    const char *name_table = hfsGetNameTable(ctx);
     return ((fs_entry && name_table) ? (name_table + fs_entry->name_offset) : NULL);
 }
 
-NX_INLINE HashFileSystemEntry *hfsGetEntryByName(HashFileSystemContext *ctx, const char *name)
+NX_INLINE const HashFileSystemEntry *hfsGetEntryByName(const HashFileSystemContext *ctx, const char *name)
 {
     u32 idx = 0;
     return (hfsGetEntryIndexByName(ctx, name, &idx) ? hfsGetEntryByIndex(ctx, idx) : NULL);

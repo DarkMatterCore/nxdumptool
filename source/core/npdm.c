@@ -28,7 +28,7 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
     NcaContext *nca_ctx = NULL;
     u64 cur_offset = 0;
     bool success = false, dump_meta_header = false, dump_acid_header = false, dump_aci_header = false;
-    PartitionFileSystemEntry *pfs_entry = NULL;
+    const PartitionFileSystemEntry *pfs_entry = NULL;
 
     if (!out || !pfs_ctx || !ncaStorageIsValidContext(&(pfs_ctx->storage_ctx)) || !(nca_ctx = pfs_ctx->nca_fs_ctx->nca_ctx) || \
         nca_ctx->content_type != NcmContentType_Program || !pfs_ctx->offset || !pfs_ctx->size || !pfs_ctx->is_exefs || \
@@ -48,7 +48,7 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
         goto end;
     }
 
-    LOG_MSG_INFO("Found 'main.npdm' entry in Program NCA \"%s\".", nca_ctx->content_id_str);
+    LOG_MSG_DEBUG("Found 'main.npdm' entry in Program NCA \"%s\".", nca_ctx->content_id_str);
 
     /* Check raw NPDM size. */
     if (!pfs_entry->size)

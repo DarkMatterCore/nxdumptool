@@ -262,7 +262,7 @@ bool nacpInitializeContext(NacpContext *out, NcaContext *nca_ctx)
 
     const char *language_str = NULL;
     char icon_path[0x80] = {0};
-    RomFileSystemFileEntry *icon_entry = NULL;
+    const RomFileSystemFileEntry *icon_entry = NULL;
     NacpIconContext *tmp_icon_ctx = NULL;
 
     bool success = false;

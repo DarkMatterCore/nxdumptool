@@ -32,6 +32,12 @@ extern "C" {
 
 #define CNMT_DIGEST_SIZE    SHA256_HASH_SIZE
 
+typedef enum : u8 {
+    ContentMetaPlatform_Nx    = 0,
+    ContentMetaPlatform_Ounce = 1,
+    ContentMetaPlatform_Count = 2   ///< Total values supported by this enum.
+} ContentMetaPlatform;
+
 /// Equivalent to NcmContentMetaAttribute.
 typedef enum : u8 {
     ContentMetaAttribute_None                = 0,
@@ -43,12 +49,6 @@ typedef enum : u8 {
     ContentMetaAttribute_Unknown2            = BIT(5),
     ContentMetaAttribute_Count               = 6        ///< Total values supported by this enum.
 } ContentMetaAttribute;
-
-typedef enum : u8 {
-    ContentMetaPlatform_Nx    = 0,
-    ContentMetaPlatform_Ounce = 1,
-    ContentMetaPlatform_Count = 2   ///< Total values supported by this enum.
-} ContentMetaPlatform;
 
 typedef enum : u8 {
     ContentMetaInstallState_None      = 0,
@@ -114,7 +114,7 @@ typedef enum : u8 {
     ContentMetaContentAccessibility_Count      = 1          ///< Total values supported by this enum.
 } ContentMetaContentAccessibility;
 
-/// Extended header for AddOnContent tiles (15.0.0+).
+/// Extended header for AddOnContent titles (15.0.0+).
 /// Equivalent to NcmAddOnContentMetaExtendedHeader, but using a Version struct.
 typedef struct {
     u64 application_id;
@@ -299,10 +299,10 @@ NXDT_ASSERT(ContentMetaDeltaMetaExtendedDataHeader, 0x20);
 typedef struct {
     NcaContext *nca_ctx;                                    ///< Pointer to the NCA context for the Meta NCA from which CNMT data is retrieved.
     PartitionFileSystemContext pfs_ctx;                     ///< PartitionFileSystemContext for the Meta NCA FS section #0, which is where the CNMT is stored.
-    PartitionFileSystemEntry *pfs_entry;                    ///< PartitionFileSystemEntry for the CNMT in the Meta NCA FS section #0. Used to generate a NcaHierarchicalSha256Patch if needed.
+    const PartitionFileSystemEntry *pfs_entry;              ///< PartitionFileSystemEntry for the CNMT in the Meta NCA FS section #0. Used to generate a NcaHierarchicalSha256Patch if needed.
     NcaHierarchicalSha256Patch nca_patch;                   ///< NcaHierarchicalSha256Patch generated if CNMT modifications are needed. Used to seamlessly replace Meta NCA data while writing it.
                                                             ///< Bear in mind that generating a patch modifies the NCA context.
-    char *cnmt_filename;                                    ///< Pointer to the CNMT filename in the Meta NCA FS section #0.
+    const char *cnmt_filename;                              ///< Pointer to the CNMT filename in the Meta NCA FS section #0.
     u8 *raw_data;                                           ///< Pointer to a dynamically allocated buffer that holds the raw CNMT.
     u64 raw_data_size;                                      ///< Raw CNMT size. Kept here for convenience - this is part of 'pfs_entry'.
     u8 raw_data_hash[SHA256_HASH_SIZE];                     ///< SHA-256 checksum calculated over the whole raw CNMT. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
@@ -350,7 +350,7 @@ NX_INLINE void cnmtFreeContext(ContentMetaContext *cnmt_ctx)
     memset(cnmt_ctx, 0, sizeof(ContentMetaContext));
 }
 
-NX_INLINE bool cnmtIsValidContext(ContentMetaContext *cnmt_ctx)
+NX_INLINE bool cnmtIsValidContext(const ContentMetaContext *cnmt_ctx)
 {
     return (cnmt_ctx && cnmt_ctx->nca_ctx && cnmt_ctx->pfs_entry && cnmt_ctx->cnmt_filename && cnmt_ctx->raw_data && cnmt_ctx->raw_data_size && cnmt_ctx->packaged_header && \
             ((cnmt_ctx->packaged_header->extended_header_size && cnmt_ctx->extended_header) || (!cnmt_ctx->packaged_header->extended_header_size && !cnmt_ctx->extended_header)) && \
@@ -359,7 +359,7 @@ NX_INLINE bool cnmtIsValidContext(ContentMetaContext *cnmt_ctx)
             ((cnmt_ctx->extended_data_size && cnmt_ctx->extended_data) || (!cnmt_ctx->extended_data_size && !cnmt_ctx->extended_data)) && cnmt_ctx->digest);
 }
 
-NX_INLINE u64 cnmtGetRequiredTitleId(ContentMetaContext *cnmt_ctx)
+NX_INLINE u64 cnmtGetRequiredTitleId(const ContentMetaContext *cnmt_ctx)
 {
     if (!cnmtIsValidContext(cnmt_ctx)) return 0;
 
@@ -377,7 +377,7 @@ NX_INLINE u64 cnmtGetRequiredTitleId(ContentMetaContext *cnmt_ctx)
     return 0;
 }
 
-NX_INLINE u32 cnmtGetRequiredTitleVersion(ContentMetaContext *cnmt_ctx)
+NX_INLINE u32 cnmtGetRequiredTitleVersion(const ContentMetaContext *cnmt_ctx)
 {
     if (!cnmtIsValidContext(cnmt_ctx)) return 0;
 

@@ -408,10 +408,10 @@ typedef struct {
     u64 type;                                           ///< TODO: add enum with values.
     NacpApplicationControlDataConditionData data[0x8];
     u8 count;
-} NacpApplicationControlDataCondition;
+} NacpApplicationControlDataConditionStruct;
 #pragma pack(pop)
 
-NXDT_ASSERT(NacpApplicationControlDataCondition, 0x89);
+NXDT_ASSERT(NacpApplicationControlDataConditionStruct, 0x89);
 
 typedef enum : u8 {
     NacpAlbumFileExport_Allow = 0,
@@ -486,7 +486,7 @@ typedef struct {
     NacpContentsAvailabilityTransitionPolicy contents_availability_transition_policy;
     NacpSupportedLanguage supported_language_flag_for_nx_addon;                                     ///< TODO: add to XML generation.
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
-    NacpApplicationControlDataCondition application_control_data_condition;                         ///< Used for Switch 2 upgrade packs, which are distributed as AddOnContent titles. TODO: add to XML generation.
+    NacpApplicationControlDataConditionStruct application_control_data_condition;                         ///< Used for Switch 2 upgrade packs, which are distributed as AddOnContent titles. TODO: add to XML generation.
     u8 initial_program_index;                                                                       ///< TODO: add to XML generation.
     u8 reserved_2[0x2];
     u8 accessible_program_index_flags[0x4];                                                         ///< TODO: add structure / enum / XML generation.
@@ -510,20 +510,20 @@ typedef struct {
 } NacpIconContext;
 
 typedef struct {
-    NcaContext *nca_ctx;                        ///< Pointer to the NCA context for the Control NCA from which NACP data is retrieved.
-    RomFileSystemContext romfs_ctx;             ///< RomFileSystemContext for the Control NCA FS section #0, which is where the NACP is stored.
-    RomFileSystemFileEntry *romfs_file_entry;   ///< RomFileSystemFileEntry for the NACP in the Control NCA FS section #0. Used to generate a RomFileSystemFileEntryPatch if needed.
-    RomFileSystemFileEntryPatch nca_patch;      ///< RomFileSystemFileEntryPatch generated if NACP modifications are needed. Used to seamlessly replace Control NCA data while writing it.
-                                                ///< Bear in mind that generating a patch modifies the NCA context.
-    NsApplicationControlProperty *data;         ///< Pointer to a dynamically allocated buffer that holds the full NACP.
-    NacpTitle *titles;                          ///< Pointer to a dynamically allocated buffer that holds the decompressed title entries.
-    u8 data_hash[SHA256_HASH_SIZE];             ///< SHA-256 checksum calculated over the whole NACP. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
-    u8 icon_count;                              ///< NACP icon count. May be zero if no icons are available.
-    NacpIconContext *icon_ctx;                  ///< Pointer to a dynamically allocated buffer that holds 'icon_count' NACP icon contexts. May be NULL if no icons are available.
-    char *authoring_tool_xml;                   ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data.
-                                                ///< This is always NULL unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
-    u64 authoring_tool_xml_size;                ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
-                                                ///< This is always 0 unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
+    NcaContext *nca_ctx;                            ///< Pointer to the NCA context for the Control NCA from which NACP data is retrieved.
+    RomFileSystemContext romfs_ctx;                 ///< RomFileSystemContext for the Control NCA FS section #0, which is where the NACP is stored.
+    const RomFileSystemFileEntry *romfs_file_entry; ///< RomFileSystemFileEntry for the NACP in the Control NCA FS section #0. Used to generate a RomFileSystemFileEntryPatch if needed.
+    RomFileSystemFileEntryPatch nca_patch;          ///< RomFileSystemFileEntryPatch generated if NACP modifications are needed. Used to seamlessly replace Control NCA data while writing it.
+                                                    ///< Bear in mind that generating a patch modifies the NCA context.
+    NsApplicationControlProperty *data;             ///< Pointer to a dynamically allocated buffer that holds the full NACP.
+    NacpTitle *titles;                              ///< Pointer to a dynamically allocated buffer that holds the decompressed title entries.
+    u8 data_hash[SHA256_HASH_SIZE];                 ///< SHA-256 checksum calculated over the whole NACP. Used to determine if NcaHierarchicalSha256Patch generation is truly needed.
+    u8 icon_count;                                  ///< NACP icon count. May be zero if no icons are available.
+    NacpIconContext *icon_ctx;                      ///< Pointer to a dynamically allocated buffer that holds 'icon_count' NACP icon contexts. May be NULL if no icons are available.
+    char *authoring_tool_xml;                       ///< Pointer to a dynamically allocated, NULL-terminated buffer that holds AuthoringTool-like XML data.
+                                                    ///< This is always NULL unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
+    u64 authoring_tool_xml_size;                    ///< Size for the AuthoringTool-like XML. This is essentially the same as using strlen() on 'authoring_tool_xml'.
+                                                    ///< This is always 0 unless nacpGenerateAuthoringToolXml() is used on this NacpContext.
 } NacpContext;
 
 /// Initializes a NacpContext using a previously initialized NcaContext (which must belong to a Control NCA).
@@ -616,12 +616,12 @@ NX_INLINE void nacpFreeContext(NacpContext *nacp_ctx)
     memset(nacp_ctx, 0, sizeof(NacpContext));
 }
 
-NX_INLINE bool nacpIsValidIconContext(NacpIconContext *icon_ctx)
+NX_INLINE bool nacpIsValidIconContext(const NacpIconContext *icon_ctx)
 {
     return (icon_ctx && icon_ctx->language < NacpLanguage_Count && icon_ctx->icon_size && icon_ctx->icon_data);
 }
 
-NX_INLINE bool nacpIsValidContext(NacpContext *nacp_ctx)
+NX_INLINE bool nacpIsValidContext(const NacpContext *nacp_ctx)
 {
     if (!nacp_ctx || !nacp_ctx->nca_ctx || !nacp_ctx->romfs_file_entry || !nacp_ctx->data || !nacp_ctx->titles || \
         (!nacp_ctx->icon_count && nacp_ctx->icon_ctx) || (nacp_ctx->icon_count && !nacp_ctx->icon_ctx)) return false;

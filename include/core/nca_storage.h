@@ -57,7 +57,7 @@ bool ncaStorageInitializeContext(NcaStorageContext *out, NcaFsSectionContext *nc
 /// Retrieves the underlying NCA FS section's hierarchical hash target layer extents. Virtual extents may be returned, depending on the base storage type.
 /// Output offset is relative to the start of the NCA FS section.
 /// Either 'out_offset' or 'out_size' can be NULL, but at least one of them must be a valid pointer.
-bool ncaStorageGetHashTargetExtents(NcaStorageContext *ctx, u64 *out_offset, u64 *out_size);
+bool ncaStorageGetHashTargetExtents(const NcaStorageContext *ctx, u64 *out_offset, u64 *out_size);
 
 /// Reads data from the NCA storage using a previously initialized NcaStorageContext.
 bool ncaStorageRead(NcaStorageContext *ctx, void *out, u64 read_size, u64 offset);
@@ -70,7 +70,7 @@ void ncaStorageFreeContext(NcaStorageContext *ctx);
 
 /// Helper inline functions.
 
-NX_INLINE bool ncaStorageIsValidContext(NcaStorageContext *ctx)
+NX_INLINE bool ncaStorageIsValidContext(const NcaStorageContext *ctx)
 {
     return (ctx && ctx->base_storage_type >= NcaStorageBaseStorageType_Regular && ctx->base_storage_type <= NcaStorageBaseStorageType_Compressed && ctx->nca_fs_ctx && \
             ctx->nca_fs_ctx->enabled);

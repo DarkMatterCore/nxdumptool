@@ -708,7 +708,7 @@ NX_INLINE void npdmFreeContext(NpdmContext *npdm_ctx)
     memset(npdm_ctx, 0, sizeof(NpdmContext));
 }
 
-NX_INLINE bool npdmIsValidContext(NpdmContext *npdm_ctx)
+NX_INLINE bool npdmIsValidContext(const NpdmContext *npdm_ctx)
 {
     return (npdm_ctx && npdm_ctx->raw_data && npdm_ctx->raw_data_size && npdm_ctx->meta_header && npdm_ctx->acid_header && npdm_ctx->acid_fac_descriptor && \
             ((npdm_ctx->acid_header->srv_access_control_size && npdm_ctx->acid_sac_descriptor) || (!npdm_ctx->acid_header->srv_access_control_size && !npdm_ctx->acid_sac_descriptor)) && \

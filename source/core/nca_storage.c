@@ -99,7 +99,7 @@ end:
     return success;
 }
 
-bool ncaStorageGetHashTargetExtents(NcaStorageContext *ctx, u64 *out_offset, u64 *out_size)
+bool ncaStorageGetHashTargetExtents(const NcaStorageContext *ctx, u64 *out_offset, u64 *out_size)
 {
     if (!ncaStorageIsValidContext(ctx) || (!out_offset && !out_size))
     {

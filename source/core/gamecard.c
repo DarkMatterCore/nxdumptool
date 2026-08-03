@@ -169,7 +169,7 @@ static void gamecardCloseStorageArea(void);
 static bool gamecardGetStorageAreasSizes(void);
 NX_INLINE GameCardCapacity gamecardGetCapacityFromRomSizeValue(GameCardRomSize rom_size);
 
-static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size);
+static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, const u8 *hash, u64 hash_target_offset, u32 hash_target_size);
 static HashFileSystemContext *_gamecardGetHashFileSystemContext(HashFileSystemPartitionType hfs_partition_type);
 
 bool gamecardInitialize(void)
@@ -619,7 +619,7 @@ bool gamecardGetHashFileSystemEntryInfoByName(HashFileSystemPartitionType hfs_pa
         if (!hfs_ctx) break;
 
         /* Get Hash FS entry by name. */
-        HashFileSystemEntry *hfs_entry = hfsGetEntryByName(hfs_ctx, entry_name);
+        const HashFileSystemEntry *hfs_entry = hfsGetEntryByName(hfs_ctx, entry_name);
         if (!hfs_entry) break;
 
         /* Update output variables. */
@@ -885,7 +885,7 @@ static void gamecardLoadInfo(void)
 
     HashFileSystemContext *root_hfs_ctx = NULL;
     u32 root_hfs_entry_count = 0, root_hfs_name_table_size = 0;
-    char *root_hfs_name_table = NULL;
+    const char *root_hfs_name_table = NULL;
 
     /* Read gamecard header. */
     /* This step *will* fail if the running CFW enabled the "nogc" patch. */
@@ -967,8 +967,8 @@ static void gamecardLoadInfo(void)
     /* Initialize Hash FS contexts for the child partitions. */
     for(u32 i = 0; i < root_hfs_entry_count; i++)
     {
-        HashFileSystemEntry *hfs_entry = hfsGetEntryByIndex(root_hfs_ctx, i);
-        char *hfs_entry_name = (root_hfs_name_table + hfs_entry->name_offset);
+        const HashFileSystemEntry *hfs_entry = hfsGetEntryByIndex(root_hfs_ctx, i);
+        const char *hfs_entry_name = (root_hfs_name_table + hfs_entry->name_offset);
         u64 hfs_entry_offset = (root_hfs_ctx->offset + root_hfs_ctx->header_size + hfs_entry->offset);
 
         if (hfs_entry->name_offset >= root_hfs_name_table_size || !*hfs_entry_name)
@@ -1495,7 +1495,7 @@ NX_INLINE GameCardCapacity gamecardGetCapacityFromRomSizeValue(GameCardRomSize r
     return capacity;
 }
 
-static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, u8 *hash, u64 hash_target_offset, u32 hash_target_size)
+static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char *name, u64 offset, u64 size, const u8 *hash, u64 hash_target_offset, u32 hash_target_size)
 {
     u32 i = 0, magic = 0;
     HashFileSystemContext *hfs_ctx = NULL;
@@ -1619,7 +1619,7 @@ static HashFileSystemContext *gamecardInitializeHashFileSystemContext(const char
     } else {
         /* Calculate root partition size. */
         hfs_ctx->size = 1; // Prevents hfsGetEntryByIndex() from returning NULL.
-        HashFileSystemEntry *hfs_entry = hfsGetEntryByIndex(hfs_ctx, hfs_header.entry_count - 1);
+        const HashFileSystemEntry *hfs_entry = hfsGetEntryByIndex(hfs_ctx, hfs_header.entry_count - 1);
         hfs_ctx->size = (hfs_ctx->header_size + hfs_entry->offset + hfs_entry->size);
     }
 

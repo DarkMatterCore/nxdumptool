@@ -60,11 +60,6 @@
 /* Zlib. */
 #include <zlib.h>
 
-/* Zstandard. */
-#define ZSTD_STATIC_LINKING_ONLY    /* Required by Zstandard to enable in-place decompression. */
-#define ZSTD_ZBIC_SUPPORT 1         /* Required by Zstandard to enable custom ZBIC dictionary support. */
-#include "zstd.h"
-
 /* Global defines. */
 #include "../defines.h"
 
@@ -83,9 +78,12 @@
 /* SHA3 checksum calculator. */
 #include "sha3.h"
 
-/* LZ4 (dec)compression. */
+/* LZ4 (de)compression. */
 #define LZ4_STATIC_LINKING_ONLY /* Required by LZ4 to enable in-place decompression. */
 #include "lz4.h"
+
+/* Zstandard decompression with BIC support. */
+#include "zbic.h"
 
 /* Horizon OS version structs. */
 #include "hos_version_structs.h"

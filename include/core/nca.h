@@ -84,8 +84,6 @@ typedef enum : u8 {
     NcaContentType_Count      = 6   ///< Total values supported by this enum.
 } NcaContentType;
 
-
-
 typedef struct {
     u32 start_sector;   ///< Expressed in NCA_FS_SECTOR_SIZE sectors.
     u32 end_sector;     ///< Expressed in NCA_FS_SECTOR_SIZE sectors.
@@ -479,16 +477,16 @@ bool ncaInitializeContext(NcaContext *out, u8 storage_id, HashFileSystemPartitio
 /// If ticket data can't be retrieved, the context will still be initialized, but anything that involves working with encrypted NCA FS section blocks won't be possible (e.g. ncaReadFsSection()).
 /// Since this function doesn't take in NcmContentMetaKey nor NcmContentInfo arguments, information such as title ID, title version, title type, content type and ID offset won't be available
 /// in the returned NCA context.
-bool ncaInitializeContextByHashFileSystemEntry(NcaContext *out, HashFileSystemContext *hfs_ctx, HashFileSystemEntry *hfs_entry, Ticket *tik);
+bool ncaInitializeContextByHashFileSystemEntry(NcaContext *out, HashFileSystemContext *hfs_ctx, const HashFileSystemEntry *hfs_entry, Ticket *tik);
 
-/// Reads raw encrypted data from a NCA using an input context, previously initialized by ncaInitializeContext().
+/// Reads raw encrypted data from a NCA using a previously initialized context.
 /// Input offset must be relative to the start of the NCA content file.
 bool ncaReadContentFile(NcaContext *ctx, void *out, u64 read_size, u64 offset);
 
 /// Retrieves the FS section's hierarchical hash target layer extents.
 /// Output offset is relative to the start of the FS section.
 /// Either 'out_offset' or 'out_size' can be NULL, but at least one of them must be a valid pointer.
-bool ncaGetFsSectionHashTargetExtents(NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size);
+bool ncaGetFsSectionHashTargetExtents(const NcaFsSectionContext *ctx, u64 *out_offset, u64 *out_size);
 
 /// Reads decrypted data from a NCA FS section using an input context.
 /// Input offset must be relative to the start of the NCA FS section.
@@ -508,7 +506,7 @@ bool ncaGenerateHierarchicalSha256Patch(NcaFsSectionContext *ctx, const void *da
 /// Overwrites block(s) from a buffer holding raw NCA data using previously initialized NcaContext and NcaHierarchicalSha256Patch.
 /// 'buf_offset' must hold the raw NCA offset where the data stored in 'buf' was read from.
 /// The 'written' fields from the input NcaHierarchicalSha256Patch and its underlying NcaHashDataPatch elements are updated by this function.
-void ncaWriteHierarchicalSha256PatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset);
+void ncaWriteHierarchicalSha256PatchToMemoryBuffer(const NcaContext *ctx, NcaHierarchicalSha256Patch *patch, void *buf, u64 buf_size, u64 buf_offset);
 
 /// Generates HierarchicalIntegrity FS section patch data, which can be used to seamlessly replace NCA data.
 /// Input offset must be relative to the start of the last HierarchicalIntegrity hash level (actual underlying FS).
@@ -519,7 +517,7 @@ bool ncaGenerateHierarchicalIntegrityPatch(NcaFsSectionContext *ctx, const void 
 /// Overwrites block(s) from a buffer holding raw NCA data using a previously initialized NcaContext and NcaHierarchicalIntegrityPatch.
 /// 'buf_offset' must hold the raw NCA offset where the data stored in 'buf' was read from.
 /// The 'written' fields from the input NcaHierarchicalIntegrityPatch and its underlying NcaHashDataPatch elements are updated by this function.
-void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset);
+void ncaWriteHierarchicalIntegrityPatchToMemoryBuffer(const NcaContext *ctx, NcaHierarchicalIntegrityPatch *patch, void *buf, u64 buf_size, u64 buf_offset);
 
 /// Sets the distribution type field from the underlying NCA header in the provided NCA context to NcaDistributionType_Download.
 /// Needed for NSP dumps from gamecard titles.
@@ -542,12 +540,17 @@ void ncaWriteEncryptedHeaderDataToMemoryBuffer(NcaContext *ctx, void *buf, u64 b
 /// Updates the content ID and hash from a NCA context using a provided SHA-256 checksum.
 void ncaUpdateContentIdAndHash(NcaContext *ctx, const u8 *hash);
 
+/// Returns a pointer to a string holding the name of the provided NcaContentType value.
+/// Returns NULL if the provided value is invalid.
+const char *ncaGetContentTypeName(NcaContentType type);
+
 /// Returns a pointer to a string holding the name of the section type from the provided NCA FS section context.
-const char *ncaGetFsSectionTypeName(NcaFsSectionContext *ctx);
+/// Returns "Invalid" if no proper section name can be inferred from the NCA FS section properties.
+const char *ncaGetFsSectionTypeName(const NcaFsSectionContext *ctx);
 
 /// Helper inline functions.
 
-NX_INLINE bool ncaIsHeaderDirty(NcaContext *ctx)
+NX_INLINE bool ncaIsHeaderDirty(const NcaContext *ctx)
 {
     if (!ctx) return false;
     u8 tmp_hash[SHA256_HASH_SIZE] = {0};
@@ -555,7 +558,7 @@ NX_INLINE bool ncaIsHeaderDirty(NcaContext *ctx)
     return (memcmp(tmp_hash, ctx->header_hash, SHA256_HASH_SIZE) != 0);
 }
 
-NX_INLINE bool ncaVerifyBucketInfo(NcaBucketInfo *bucket)
+NX_INLINE bool ncaVerifyBucketInfo(const NcaBucketInfo *bucket)
 {
     return (bucket && __builtin_bswap32(bucket->header.magic) == NCA_BKTR_MAGIC && bucket->header.version <= NCA_BKTR_VERSION && bucket->header.entry_count >= 0);
 }

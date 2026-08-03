@@ -442,7 +442,7 @@ static bool systemUpdateGetSystemVersionFileData(SystemUpdateDumpContext *ctx)
     NcaContext *nca_ctx = NULL;
 
     RomFileSystemContext romfs_ctx = {0};
-    RomFileSystemFileEntry *romfs_file_entry = NULL;
+    const RomFileSystemFileEntry *romfs_file_entry = NULL;
 
     bool success = false;
 

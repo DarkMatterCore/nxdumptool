@@ -58,15 +58,12 @@ main() {
 
     # Build PoC
     local ret="$(build)"
-    if [[ $ret -ne 0 ]]; then
-        bail_out $ret
-    fi
 
     # Post build clean-up
     post_build_clean_up
 
     # Exit
-    bail_out 0
+    bail_out $ret
 }
 
 main

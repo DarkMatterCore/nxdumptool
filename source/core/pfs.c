@@ -30,7 +30,7 @@ bool pfsInitializeContext(PartitionFileSystemContext *out, NcaFsSectionContext *
     u32 magic = 0;
 
     PartitionFileSystemHeader pfs_header = {0};
-    PartitionFileSystemEntry *main_npdm_entry = NULL;
+    const PartitionFileSystemEntry *main_npdm_entry = NULL;
 
     bool success = false, dump_fs_header = false;
 
@@ -138,7 +138,7 @@ bool pfsReadPartitionData(PartitionFileSystemContext *ctx, void *out, u64 read_s
     return true;
 }
 
-bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset)
+bool pfsReadEntryData(PartitionFileSystemContext *ctx, const PartitionFileSystemEntry *fs_entry, void *out, u64 read_size, u64 offset)
 {
     if (!ctx || !fs_entry || !fs_entry->size || (fs_entry->offset + fs_entry->size) > ctx->size || !out || !read_size || (offset + read_size) > fs_entry->size)
     {
@@ -156,19 +156,17 @@ bool pfsReadEntryData(PartitionFileSystemContext *ctx, PartitionFileSystemEntry 
     return true;
 }
 
-bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u32 *out_idx)
+bool pfsGetEntryIndexByName(const PartitionFileSystemContext *ctx, const char *name, u32 *out_idx)
 {
-    PartitionFileSystemEntry *fs_entry = NULL;
-    u32 entry_count = pfsGetEntryCount(ctx), name_table_size = 0;
-    char *name_table = pfsGetNameTable(ctx);
+    const PartitionFileSystemEntry *fs_entry = NULL;
+    u32 entry_count = pfsGetEntryCount(ctx), name_table_size = pfsGetNameTableSize(ctx);
+    const char *name_table = pfsGetNameTable(ctx);
 
-    if (!entry_count || !name_table || !name || !*name || !out_idx)
+    if (!entry_count || !name_table_size || !name_table || !name || !*name || !out_idx)
     {
         LOG_MSG_ERROR("Invalid parameters!");
         return false;
     }
-
-    name_table_size = ((PartitionFileSystemHeader*)ctx->header)->name_table_size;
 
     for(u32 i = 0; i < entry_count; i++)
     {
@@ -191,16 +189,18 @@ bool pfsGetEntryIndexByName(PartitionFileSystemContext *ctx, const char *name, u
         }
     }
 
-    if (strcmp(name, "main.npdm") != 0) LOG_MSG_ERROR("Unable to find Partition FS entry \"%s\"!", name);
+#if LOG_LEVEL <= LOG_LEVEL_WARNING
+    if (strcmp(name, "main.npdm") != 0) LOG_MSG_WARNING("Unable to find Partition FS entry \"%s\"!", name);
+#endif
 
     return false;
 }
 
-bool pfsGetTotalDataSize(PartitionFileSystemContext *ctx, u64 *out_size)
+bool pfsGetTotalDataSize(const PartitionFileSystemContext *ctx, u64 *out_size)
 {
     u64 total_size = 0;
     u32 entry_count = pfsGetEntryCount(ctx);
-    PartitionFileSystemEntry *fs_entry = NULL;
+    const PartitionFileSystemEntry *fs_entry = NULL;
 
     if (!entry_count || !out_size)
     {
@@ -224,7 +224,7 @@ bool pfsGetTotalDataSize(PartitionFileSystemContext *ctx, u64 *out_size)
     return true;
 }
 
-bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out)
+bool pfsGenerateEntryPatch(PartitionFileSystemContext *ctx, const PartitionFileSystemEntry *fs_entry, const void *data, u64 data_size, u64 data_offset, NcaHierarchicalSha256Patch *out)
 {
     if (!pfsIsValidContext(ctx) || !fs_entry || !fs_entry->size || (fs_entry->offset + fs_entry->size) > ctx->size || !data || !data_size || \
         (data_offset + data_size) > fs_entry->size || !out)
@@ -350,7 +350,7 @@ bool pfsUpdateEntryNameFromImageContext(PartitionFileSystemImageContext *ctx, u3
     return true;
 }
 
-bool pfsWriteImageContextHeaderToMemoryBuffer(PartitionFileSystemImageContext *ctx, void *buf, u64 buf_size, u64 *out_header_size)
+bool pfsWriteImageContextHeaderToMemoryBuffer(const PartitionFileSystemImageContext *ctx, void *buf, u64 buf_size, u64 *out_header_size)
 {
     if (!ctx || !ctx->header.entry_count || !ctx->header.name_table_size || !ctx->entries || !ctx->name_table || !buf || !out_header_size)
     {
@@ -358,7 +358,7 @@ bool pfsWriteImageContextHeaderToMemoryBuffer(PartitionFileSystemImageContext *c
         return false;
     }
 
-    PartitionFileSystemHeader *header = &(ctx->header);
+    const PartitionFileSystemHeader *header = &(ctx->header);
     u8 *buf_u8 = (u8*)buf;
     u64 header_size = 0, block_offset = 0, block_size = 0;
 

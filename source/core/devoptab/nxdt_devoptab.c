@@ -34,17 +34,28 @@ typedef enum : u8 {
     DevoptabDeviceType_Count               = 4  ///< Total values supported by this enum.
 } DevoptabDeviceType;
 
-/* Global variables. */
+typedef const devoptab_t* (*DevoptabProviderFunction)(void);
 
-static Mutex g_devoptabMutex = 0;
-static DevoptabDeviceContext g_devoptabDevices[DEVOPTAB_DEVICE_COUNT] = {0};
-
-/* Function prototypes. */
+/* External function prototypes. */
 
 const devoptab_t *pfsdev_get_devoptab();
 const devoptab_t *hfsdev_get_devoptab();
 const devoptab_t *romfsdev_get_devoptab();
 const devoptab_t *fatdev_get_devoptab();
+
+/* Global variables. */
+
+static Mutex g_devoptabMutex = 0;
+static DevoptabDeviceContext g_devoptabDevices[DEVOPTAB_DEVICE_COUNT] = {0};
+
+static const DevoptabProviderFunction g_devoptabProviders[DevoptabDeviceType_Count] = {
+    [DevoptabDeviceType_PartitionFileSystem] = pfsdev_get_devoptab,
+    [DevoptabDeviceType_HashFileSystem]      = hfsdev_get_devoptab,
+    [DevoptabDeviceType_RomFileSystem]       = romfsdev_get_devoptab,
+    [DevoptabDeviceType_FatFs]               = fatdev_get_devoptab
+};
+
+/* Function prototypes. */
 
 static bool devoptabMountDevice(void *fs_ctx, const char *name, DevoptabDeviceType type);
 static DevoptabDeviceContext *devoptabFindDevice(const char *name);
@@ -175,25 +186,7 @@ static bool devoptabMountDevice(void *fs_ctx, const char *name, DevoptabDeviceTy
     }
 
     /* Retrieve a pointer to the appropriate devoptab interface for this filesystem type. */
-    switch(type)
-    {
-        case DevoptabDeviceType_PartitionFileSystem:
-            device = pfsdev_get_devoptab();
-            break;
-        case DevoptabDeviceType_HashFileSystem:
-            device = hfsdev_get_devoptab();
-            break;
-        case DevoptabDeviceType_RomFileSystem:
-            device = romfsdev_get_devoptab();
-            break;
-        case DevoptabDeviceType_FatFs:
-            device = fatdev_get_devoptab();
-            break;
-        default:
-            break;
-    }
-
-    if (!device)
+    if (!(device = g_devoptabProviders[type]()))
     {
         LOG_MSG_ERROR("Unable to retrieve a devoptab interface for \"%s\" (type %u).", name, type);
         return false;

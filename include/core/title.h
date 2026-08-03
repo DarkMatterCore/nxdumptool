@@ -139,7 +139,7 @@ void titleFreeUserApplicationData(TitleUserApplicationData *user_app_data);
 /// Returns a linked list of TitleInfo elements with title IDs matching the corresponding base/patch title ID, depending on the meta type of the input TitleInfo object.
 /// Particularly useful to display add-on-content patch titles related to a specific add-on-content base entry, or viceversa.
 /// Use titleFreeTitleInfo() to free the returned data.
-TitleInfo *titleGetAddOnContentBaseOrPatchList(TitleInfo *title_info);
+TitleInfo *titleGetAddOnContentBaseOrPatchList(const TitleInfo *title_info);
 
 /// Returns true if orphan titles are available.
 /// Orphan titles are patches or add-on contents with no NsApplicationControlData available for their parent user application ID.

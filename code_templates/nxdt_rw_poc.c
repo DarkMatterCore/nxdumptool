@@ -1915,7 +1915,10 @@ int main(int argc, char *argv[])
             size_t csv_buf_size = 0;
             u32 proc_title_cnt = 0;
 
+            utilsSetLongRunningProcessState(true);
             csv_buf = titleGenerateTitleRecordsCsv(&csv_buf_size, &proc_title_cnt, cur_menu->id == MenuId_SystemTitles, false);
+            utilsSetLongRunningProcessState(false);
+
             if (csv_buf)
             {
                 utilsCreateDirectoryTree(path, false);
@@ -5830,8 +5833,8 @@ static void extractedHfsReadThreadFunc(void *arg)
     char hfs_path[FS_MAX_PATH] = {0}, *filename = NULL;
     size_t filename_len = 0;
 
-    HashFileSystemEntry *hfs_entry = NULL;
-    char *hfs_entry_name = NULL;
+    const HashFileSystemEntry *hfs_entry = NULL;
+    const char *hfs_entry_name = NULL;
 
     u64 free_space = 0;
     u32 dev_idx = g_storageMenuElementOption.selected;
@@ -6199,8 +6202,8 @@ static void extractedPartitionFsReadThreadFunc(void *arg)
     char pfs_path[FS_MAX_PATH] = {0}, subdir[0x20] = {0}, *filename = NULL;
     size_t filename_len = 0;
 
-    PartitionFileSystemEntry *pfs_entry = NULL;
-    char *pfs_entry_name = NULL;
+    const PartitionFileSystemEntry *pfs_entry = NULL;
+    const char *pfs_entry_name = NULL;
 
     NcaFsSectionContext *nca_fs_ctx = pfs_ctx->nca_fs_ctx;
     NcaContext *nca_ctx = nca_fs_ctx->nca_ctx;
@@ -6513,7 +6516,7 @@ static void extractedRomFsReadThreadFunc(void *arg)
     SharedThreadData *shared_thread_data = &(romfs_thread_data->shared_thread_data);
 
     RomFileSystemContext *romfs_ctx = romfs_thread_data->romfs_ctx;
-    RomFileSystemFileEntry *romfs_file_entry = NULL;
+    const RomFileSystemFileEntry *romfs_file_entry = NULL;
     u64 cur_entry_offset = 0;
 
     char romfs_path[FS_MAX_PATH] = {0}, subdir[0x20] = {0}, *filename = NULL;
@@ -7556,7 +7559,7 @@ static void nspThreadFunc(void *arg)
     char entry_name[64] = {0};
     u64 nsp_header_size = 0, nsp_size = 0, nsp_offset = 0;
     char size_str[16] = {0};
-    char *tmp_name = NULL;
+    const char *tmp_name = NULL;
 
     Sha256Context clean_sha256_ctx = {0}, dirty_sha256_ctx = {0};
     u8 clean_sha256_hash[SHA256_HASH_SIZE] = {0}, dirty_sha256_hash[SHA256_HASH_SIZE] = {0};

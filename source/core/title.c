@@ -24,6 +24,7 @@
 #include <core/gamecard.h>
 #include <core/nacp.h>
 #include <core/cnmt.h>
+#include <core/program_info.h>
 
 #define NS_APPLICATION_RECORD_BLOCK_SIZE    1024
 
@@ -616,7 +617,14 @@ static bool _titleGetUserApplicationData(u64 app_id, TitleUserApplicationData *o
 static TitleInfo *titleDuplicateTitleInfoFull(const TitleInfo *title_info, TitleInfo *previous, TitleInfo *next);
 static TitleInfo *_titleDuplicateTitleInfo(const TitleInfo *title_info);
 
-static char *titleGetDisplayVersionString(const TitleInfo *title_info);
+static bool titleGetApplicationControlPropertyParams(const TitleInfo *title_info, NcaContext *nca_ctx_buf, char **out_display_version, char **out_bcat_passphrase);
+
+static char *_titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt, bool is_system, bool use_gamecard);
+static void titleGenerateCsvTitleRecordsFromApplicationMetadata(char **csv_buf, size_t *csv_buf_size, u32 *proc_title_cnt, NcaContext *nca_ctx, const TitleApplicationMetadata *app_metadata, bool is_system, bool use_gamecard);
+static bool titleGenerateCsvTitleRecordFromTitleInfo(char **csv_buf, size_t *csv_buf_size, NcaContext *nca_ctx, const TitleInfo *title_info, const char *escaped_title_name);
+
+static char *titleGenerateFormattedSdkVersionStringFromNso(const NsoContext *nso_ctx);
+static char *titleGenerateFormattedSdkVersionStringFromNcaHeader(const NcaHeader *nca_hdr);
 
 static bool titleCreateGameCardInfoThread(void);
 static void titleDestroyGameCardInfoThread(void);
@@ -937,7 +945,7 @@ void titleFreeUserApplicationData(TitleUserApplicationData *user_app_data)
     titleFreeTitleInfo(&(user_app_data->aoc_patch_info));
 }
 
-TitleInfo *titleGetAddOnContentBaseOrPatchList(TitleInfo *title_info)
+TitleInfo *titleGetAddOnContentBaseOrPatchList(const TitleInfo *title_info)
 {
     TitleInfo *out = NULL;
     bool success = false;
@@ -1102,9 +1110,9 @@ char *titleGenerateFileName(const TitleInfo *title_info, TitleNamingConvention n
         {
             snprintf(title_name, MAX_ELEMENTS(title_name), "%s ", title_info->app_metadata->name);
 
-            /* Retrieve display version string if we're dealing with a Patch. */
-            char *version_str = (title_info->meta_key.type == NcmContentMetaType_Patch ? titleGetDisplayVersionString(title_info) : NULL);
-            if (version_str)
+            /* Retrieve the Display Version string if we're dealing with a Patch. */
+            char *version_str = NULL;
+            if (title_info->meta_key.type == NcmContentMetaType_Patch && titleGetApplicationControlPropertyParams(title_info, NULL, &version_str, NULL) && version_str)
             {
                 title_name_len = strlen(title_name);
                 snprintf(title_name + title_name_len, MAX_ELEMENTS(title_name) - title_name_len, "%s ", version_str);
@@ -1160,171 +1168,9 @@ char *titleGenerateGameCardFileName(TitleNamingConvention naming_convention, Tit
 
 char *titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt, bool is_system, bool use_gamecard)
 {
-    char *csv_buf = NULL;
-    size_t csv_buf_size = 0;
-
-    SCOPED_LOCK(&g_titleMutex)
-    {
-        TitleApplicationMetadata **filtered_app_metadata = (is_system ? g_filteredSystemMetadata : g_filteredUserMetadata);
-        u32 filtered_app_metadata_count = (is_system ? g_filteredSystemMetadataCount : g_filteredUserMetadataCount);
-
-        TitleApplicationMetadata *cur_app_metadata = NULL;
-        TitleUserApplicationData user_app_data = {0};
-        TitleInfo *title_info = NULL;
-        char *escaped_title_name = NULL;
-
-        u32 proc_title_cnt = 0;
-
-        const u8 start_val = (!is_system ? NcmContentMetaType_Application : NcmContentMetaType_Unknown);
-        const u8 end_val = (!is_system ? NcmContentMetaType_DataPatch : NcmContentMetaType_Unknown);
-
-        bool success = false;
-
-        if (!g_titleInterfaceInit || !filtered_app_metadata || !filtered_app_metadata_count || !out_csv_size || (is_system && use_gamecard))
-        {
-            LOG_MSG_ERROR("Invalid parameters!");
-            break;
-        }
-
-#define TITLE_CSV_ADD_FMT_STR(fmt, ...) utilsAppendFormattedStringToBuffer(&csv_buf, &csv_buf_size, fmt, ##__VA_ARGS__)
-
-        /* Append CSV header. */
-        if (!TITLE_CSV_ADD_FMT_STR("Name,Type,Title ID,Version,Source Storage,Content Count,Size\r\n")) goto end;
-
-        /* Loop through our filtered application metadata entries. */
-        for(u32 i = 0; i < filtered_app_metadata_count; i++)
-        {
-            /* Get current application metadata entry. */
-            cur_app_metadata = filtered_app_metadata[i];
-            if (!cur_app_metadata) continue;
-
-            /* Retrieve title info entry if we're dealing with a system title, or user application data if we're dealing with a user title. */
-            if (is_system && !(title_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, cur_app_metadata->title_id)))
-            {
-                LOG_MSG_WARNING("Failed to retrieve title info entry for %016lX!", cur_app_metadata->title_id);
-                continue;
-            } else
-            if (!is_system && !_titleGetUserApplicationData(cur_app_metadata->title_id, &user_app_data))
-            {
-                LOG_MSG_WARNING("Failed to retrieve user application data for %016lX!", cur_app_metadata->title_id);
-                continue;
-            }
-
-            /* Escape title name, if needed. */
-            if (strchr(cur_app_metadata->name, ',') != NULL || strchr(cur_app_metadata->name, '"') != NULL)
-            {
-                escaped_title_name = utilsEscapeCharacters(cur_app_metadata->name, "\"", '"');
-                if (!escaped_title_name)
-                {
-                    LOG_MSG_ERROR("Failed to generate escaped title name for %016lX!", cur_app_metadata->title_id);
-                    goto end;
-                }
-            }
-
-            /* Process all title types available in the retrieved user application data, in order. */
-            /* Nothing else must be done for system titles. */
-            for(u8 j = start_val; j <= end_val; j++)
-            {
-                /* Skip Delta type. */
-                if (j == NcmContentMetaType_Delta) continue;
-
-                if (!is_system)
-                {
-                    /* Get the right title info pointer for the current title type. */
-                    title_info = (j == NcmContentMetaType_Application  ? user_app_data.app_info : \
-                                 (j == NcmContentMetaType_Patch        ? user_app_data.patch_info : \
-                                 (j == NcmContentMetaType_AddOnContent ? user_app_data.aoc_info : user_app_data.aoc_patch_info)));
-                }
-
-                /* Process title info linked list. */
-                while(title_info)
-                {
-                    /* Skip current entry if we're not supposed to process gamecard-based titles. */
-                    if (title_info->storage_id == NcmStorageId_GameCard && !use_gamecard)
-                    {
-                        title_info = title_info->next;
-                        continue;
-                    }
-
-                    /* Append title name. */
-                    if (!TITLE_CSV_ADD_FMT_STR(escaped_title_name ? "\"%s\"," : "%s,", escaped_title_name ? escaped_title_name : cur_app_metadata->name))
-                    {
-                        LOG_MSG_ERROR("Failed to append title name for %016lX!", cur_app_metadata->title_id);
-                        goto end;
-                    }
-
-                    /* Append title record to output CSV buffer. */
-                    if (!TITLE_CSV_ADD_FMT_STR("%s,%016lX,%u,%s,%u,%s (%lu bytes)\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
-                                                                                        title_info->version.value, titleGetNcmStorageIdName(title_info->storage_id), \
-                                                                                        title_info->content_count, title_info->size_str, title_info->size))
-                    {
-                        LOG_MSG_ERROR("Failed to append title record for %016lX!", cur_app_metadata->title_id);
-                        goto end;
-                    }
-
-                    /* Increase processed titles counter. */
-                    proc_title_cnt++;
-
-                    /* Get next pointer in the current linked list. */
-                    /* This is guaranteed to be NULL for system titles. */
-                    title_info = title_info->next;
-                }
-            }
-
-            /* Free escaped title name. */
-            if (escaped_title_name) free(escaped_title_name);
-            escaped_title_name = NULL;
-        }
-
-        /* Check if any orphan titles are available. */
-        if (!is_system && titleAreOrphanTitlesAvailable())
-        {
-            /* Loop through our orphan title entries. */
-            for(u32 i = 0; i < g_orphanTitleInfoCount; i++)
-            {
-                title_info = g_orphanTitleInfo[i];
-                if (!title_info) continue;
-
-                /* Append title record to output CSV buffer. */
-                if (!TITLE_CSV_ADD_FMT_STR("[UNKNOWN],%s,%016lX,%u,%s,%u,%s (%lu bytes)\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
-                                                                                            title_info->version.value, titleGetNcmStorageIdName(title_info->storage_id), \
-                                                                                            title_info->content_count, title_info->size_str, title_info->size))
-                {
-                    LOG_MSG_ERROR("Failed to append orphan title record for %016lX!", cur_app_metadata->title_id);
-                    goto end;
-                }
-
-                /* Increase processed titles counter. */
-                proc_title_cnt++;
-            }
-        }
-
-#undef TITLE_CSV_ADD_FMT_STR
-
-        /* Check if we actually processed any titles. */
-        if (proc_title_cnt)
-        {
-            /* Update output. */
-            *out_csv_size = strlen(csv_buf);
-            if (out_proc_title_cnt) *out_proc_title_cnt = proc_title_cnt;
-
-            /* Update flag. */
-            success = true;
-        } else {
-            LOG_MSG_INFO("No %s titles were processed.", is_system ? "system" : "user");
-        }
-
-end:
-        if (escaped_title_name) free(escaped_title_name);
-
-        if (!success && csv_buf)
-        {
-            free(csv_buf);
-            csv_buf = NULL;
-        }
-    }
-
-    return csv_buf;
+    char *ret = NULL;
+    SCOPED_LOCK(&g_titleMutex) ret = _titleGenerateTitleRecordsCsv(out_csv_size, out_proc_title_cnt, is_system, use_gamecard);
+    return ret;
 }
 
 void titleWipeLocalCache(void)
@@ -2832,8 +2678,8 @@ static bool titleGetGameCardContentMetaContexts(HashFileSystemContext *hfs_ctx, 
     /* Loop through all Hash FS file entries. */
     for(u32 i = 0; i < hfs_entry_count; i++)
     {
-        HashFileSystemEntry *hfs_entry = NULL;
-        char *hfs_entry_name = NULL;
+        const HashFileSystemEntry *hfs_entry = NULL;
+        const char *hfs_entry_name = NULL;
         size_t meta_nca_filename_len = 0;
 
         /* Retrieve Hash FS file entry information. */
@@ -3337,29 +3183,30 @@ end:
     return title_info_dup;
 }
 
-static char *titleGetDisplayVersionString(const TitleInfo *title_info)
+static bool titleGetApplicationControlPropertyParams(const TitleInfo *title_info, NcaContext *nca_ctx_buf, char **out_display_version, char **out_bcat_passphrase)
 {
     NcmContentInfo *nacp_content = NULL;
 
     if (!title_info || (title_info->meta_key.type != NcmContentMetaType_Application && title_info->meta_key.type != NcmContentMetaType_Patch) || \
-        !(nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0)))
+        (!out_display_version && !out_bcat_passphrase) || !(nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0)))
     {
         LOG_MSG_ERROR("Invalid parameters!");
-        return NULL;
+        return false;
     }
 
     u8 storage_id = title_info->storage_id;
     HashFileSystemPartitionType hfs_partition_type = (storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None);
     NcaContext *nca_ctx = NULL;
     NacpContext nacp_ctx = {0};
-    char display_version[0x11] = {0}, *str = NULL;
+    char *tmp_str = NULL;
+    bool success = false;
 
-    LOG_MSG_DEBUG("Retrieving display version string for %s \"%s\" (%016lX) in %s...", titleGetNcmContentMetaTypeName(title_info->meta_key.type), \
-                                                                                       title_info->app_metadata->name, title_info->meta_key.id, \
-                                                                                       titleGetNcmStorageIdName(title_info->storage_id));
+    /*LOG_MSG_DEBUG("Retrieving application control property params for %s \"%s\" (%016lX) in %s...", titleGetNcmContentMetaTypeName(title_info->meta_key.type), \
+                                                                                                    title_info->app_metadata->name, title_info->meta_key.id, \
+                                                                                                    titleGetNcmStorageIdName(title_info->storage_id));*/
 
     /* Allocate memory for the NCA context. */
-    nca_ctx = calloc(1, sizeof(NcaContext));
+    nca_ctx = (nca_ctx_buf ? nca_ctx_buf : calloc(1, sizeof(NcaContext)));
     if (!nca_ctx)
     {
         LOG_MSG_ERROR("Failed to allocate memory for NCA context!");
@@ -3380,27 +3227,350 @@ static char *titleGetDisplayVersionString(const TitleInfo *title_info)
         goto end;
     }
 
-    /* Get trimmed version string. */
-    snprintf(display_version, sizeof(display_version), "%s", nacp_ctx.data->display_version);
-    utilsTrimString(display_version);
-
-    /* Check version string length. */
-    if (!*display_version)
-    {
-        LOG_MSG_ERROR("Display version string from %016lX is empty!", title_info->meta_key.id);
-        goto end;
+#define TITLE_DUP_NACP_STR_PARAM(out_var, field, field_desc) \
+    if (out_var) { \
+        tmp_str = strndup(nacp_ctx.data->field, sizeof(nacp_ctx.data->field)); \
+        if (!tmp_str) { \
+            LOG_MSG_ERROR("Failed to duplicate " field_desc " from %016lX!", title_info->meta_key.id); \
+            goto end; \
+        } \
+        utilsTrimString(tmp_str); \
+        if (!*tmp_str) { \
+            LOG_MSG_WARNING(field_desc " string from %016lX is empty!", title_info->meta_key.id); \
+            free(tmp_str); \
+            tmp_str = NULL; \
+        } \
+        *out_var = tmp_str; \
     }
 
-    /* Duplicate version string. */
-    str = strdup(display_version);
-    if (!str) LOG_MSG_ERROR("Failed to duplicate version string from %016lX!", title_info->meta_key.id);
+    /* Duplicate and trim Display Version string. */
+    TITLE_DUP_NACP_STR_PARAM(out_display_version, display_version, "Display Version");
+
+    /* Duplicate and trim BCAT Passphrase string. */
+    TITLE_DUP_NACP_STR_PARAM(out_bcat_passphrase, bcat_passphrase, "BCAT Passphrase");
+
+#undef TITLE_DUP_NACP_STR_PARAM
+
+    /* Update flag. */
+    success = true;
 
 end:
     nacpFreeContext(&nacp_ctx);
 
+    if (nca_ctx && !nca_ctx_buf) free(nca_ctx);
+
+    return success;
+}
+
+static char *_titleGenerateTitleRecordsCsv(size_t *out_csv_size, u32 *out_proc_title_cnt, bool is_system, bool use_gamecard)
+{
+    char *csv_buf = NULL;
+    size_t csv_buf_size = 0;
+
+    TitleApplicationMetadata **filtered_app_metadata = (is_system ? g_filteredSystemMetadata : g_filteredUserMetadata);
+    u32 filtered_app_metadata_count = (is_system ? g_filteredSystemMetadataCount : g_filteredUserMetadataCount);
+
+    NcaContext *nca_ctx = NULL;
+
+    u32 proc_title_cnt = 0;
+
+    bool success = false;
+
+    if (!g_titleInterfaceInit || !filtered_app_metadata || !filtered_app_metadata_count || !out_csv_size || (is_system && use_gamecard))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
+
+    /* Allocate memory for the NCA context. */
+    nca_ctx = calloc(1, sizeof(NcaContext));
+    if (!nca_ctx)
+    {
+        LOG_MSG_ERROR("Failed to allocate memory for NCA context!");
+        goto end;
+    }
+
+    /* Append CSV header. */
+    if (!utilsAppendFormattedStringToBuffer(&csv_buf, &csv_buf_size, "Name,Type,Title ID,Title Version,Display Version,Source Storage,Content Count,Size,SDK Version,Build ID,BCAT Passphrase,Rights ID,Encrypted Title Key,Decrypted Title Key\r\n")) goto end;
+
+    /* Loop through our filtered application metadata entries. */
+    /* We will generate a CSV title record for each one and append it to our output buffer. */
+    for(u32 i = 0; i < filtered_app_metadata_count; i++) titleGenerateCsvTitleRecordsFromApplicationMetadata(&csv_buf, &csv_buf_size, &proc_title_cnt, nca_ctx, filtered_app_metadata[i], is_system, use_gamecard);
+
+    /* Check if any orphan titles are available. */
+    if (!is_system && titleAreOrphanTitlesAvailable())
+    {
+        /* Loop through our orphan title entries. */
+        for(u32 i = 0; i < g_orphanTitleInfoCount; i++)
+        {
+            /* Append title record to our output CSV buffer and increase processed titles counter. */
+            TitleInfo *title_info = g_orphanTitleInfo[i];
+            if (title_info && titleGenerateCsvTitleRecordFromTitleInfo(&csv_buf, &csv_buf_size, nca_ctx, title_info, NULL)) proc_title_cnt++;
+        }
+    }
+
+    /* Check if we actually processed any titles. */
+    if (proc_title_cnt)
+    {
+        /* Update output. */
+        *out_csv_size = strlen(csv_buf);
+        if (out_proc_title_cnt) *out_proc_title_cnt = proc_title_cnt;
+
+        /* Update flag. */
+        success = true;
+    } else {
+        LOG_MSG_INFO("No %s titles were processed.", is_system ? "system" : "user");
+    }
+
+end:
     if (nca_ctx) free(nca_ctx);
 
-    return str;
+    if (!success && csv_buf)
+    {
+        free(csv_buf);
+        csv_buf = NULL;
+    }
+
+    return csv_buf;
+}
+
+static void titleGenerateCsvTitleRecordsFromApplicationMetadata(char **csv_buf, size_t *csv_buf_size, u32 *proc_title_cnt, NcaContext *nca_ctx, const TitleApplicationMetadata *app_metadata, bool is_system, bool use_gamecard)
+{
+    if (!csv_buf || !csv_buf_size || !nca_ctx || !app_metadata)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return;
+    }
+
+    TitleUserApplicationData user_app_data = {0};
+    TitleInfo *title_info = NULL;
+    char *escaped_title_name = NULL;
+
+    /* Retrieve title info entry if we're dealing with a system title, or user application data if we're dealing with a user title. */
+    if (is_system && !(title_info = _titleGetTitleInfoEntryFromStorageByTitleId(NcmStorageId_BuiltInSystem, app_metadata->title_id)))
+    {
+        LOG_MSG_WARNING("Failed to retrieve title info entry for %016lX!", app_metadata->title_id);
+        return;
+    } else
+    if (!is_system && !_titleGetUserApplicationData(app_metadata->title_id, &user_app_data))
+    {
+        LOG_MSG_WARNING("Failed to retrieve user application data for %016lX!", app_metadata->title_id);
+        return;
+    }
+
+    /* Escape title name, if needed. */
+    if (strchr(app_metadata->name, ',') != NULL || strchr(app_metadata->name, '"') != NULL)
+    {
+        escaped_title_name = utilsEscapeCharacters(app_metadata->name, "\"", '"');
+        if (!escaped_title_name)
+        {
+            LOG_MSG_ERROR("Failed to generate escaped title name for %016lX!", app_metadata->title_id);
+            return;
+        }
+    }
+
+    const u8 start_val = (!is_system ? NcmContentMetaType_Application : NcmContentMetaType_Unknown);
+    const u8 end_val = (!is_system ? NcmContentMetaType_DataPatch : NcmContentMetaType_Unknown);
+
+    /* Process all title types available in the retrieved user application data, in order. */
+    /* Nothing else must be done for system titles. */
+    for(u8 j = start_val; j <= end_val; j++)
+    {
+        /* Skip Delta type. */
+        if (j == NcmContentMetaType_Delta) continue;
+
+        if (!is_system)
+        {
+            /* Get the right title info pointer for the current title type. */
+            title_info = (j == NcmContentMetaType_Application  ? user_app_data.app_info : \
+                         (j == NcmContentMetaType_Patch        ? user_app_data.patch_info : \
+                         (j == NcmContentMetaType_AddOnContent ? user_app_data.aoc_info : user_app_data.aoc_patch_info)));
+        }
+
+        /* Process title info linked list. */
+        while(title_info)
+        {
+            /* Skip current entry if we're not supposed to process gamecard-based titles. */
+            if (title_info->storage_id == NcmStorageId_GameCard && !use_gamecard)
+            {
+                title_info = title_info->next;
+                continue;
+            }
+
+            /* Append title record to our output CSV buffer and increase processed titles counter. */
+            if (titleGenerateCsvTitleRecordFromTitleInfo(csv_buf, csv_buf_size, nca_ctx, title_info, escaped_title_name) && proc_title_cnt) (*proc_title_cnt)++;
+
+            /* Get next pointer in the current linked list. */
+            /* This is guaranteed to be NULL for system titles. */
+            title_info = title_info->next;
+        }
+    }
+
+    if (escaped_title_name) free(escaped_title_name);
+}
+
+static bool titleGenerateCsvTitleRecordFromTitleInfo(char **csv_buf, size_t *csv_buf_size, NcaContext *nca_ctx, const TitleInfo *title_info, const char *escaped_title_name)
+{
+    if (!csv_buf || !csv_buf_size || !nca_ctx || !title_info)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return false;
+    }
+
+    const char *title_name = ((escaped_title_name && *escaped_title_name) ? escaped_title_name : \
+                              title_info->app_metadata                    ? title_info->app_metadata->name : "[UNKNOWN]");
+
+    NcmContentInfo *program_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Program, 0); // Ticket Initialization (Application, Patch), Build ID, SDK Version.
+    NcmContentInfo *data_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Data, 0); // Ticket Initialization (AddOnContent), SDK Version.
+    NcmContentInfo *nacp_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Control, 0); // Display Version, BCAT Passphrase.
+    NcmContentInfo *meta_content = titleGetContentInfoByTypeAndIdOffset(title_info, NcmContentType_Meta, 0); // SDK Version (fallback method).
+
+    Ticket tik = {0}; // Rights ID, Encrypted Title Key, Decrypted Title Key.
+
+    ProgramInfoContext program_info_ctx = {0};
+    NsoContext *nso_ctx = NULL;
+
+    HashFileSystemPartitionType hfs_partition_type = (title_info->storage_id == NcmStorageId_GameCard ? HashFileSystemPartitionType_Secure : HashFileSystemPartitionType_None);
+
+    char *sdk_version = NULL, build_id[SHA256_HASH_STR_SIZE] = {0}, *display_version = NULL, *bcat_passphrase = NULL;
+    bool use_tik = false, success = false;
+
+    /* Process Program NCA. */
+    if (!program_content) goto process_data_nca;
+
+    if (!ncaInitializeContext(nca_ctx, title_info->storage_id, hfs_partition_type, &(title_info->meta_key), program_content, &tik)) // Ticket is implicitly initialized here.
+    {
+        LOG_MSG_WARNING("Failed to initialize NCA context for Program NCA from %016lX!", title_info->meta_key.id);
+        goto process_data_nca;
+    }
+
+    if (!programInfoInitializeContext(&program_info_ctx, nca_ctx))
+    {
+        LOG_MSG_WARNING("Failed to initialize ProgramInfo context for Program NCA from %016lX!", title_info->meta_key.id);
+        goto process_data_nca;
+    }
+
+    nso_ctx = programInfoGetNsoContextByFilename(&program_info_ctx, "main");
+    if (!nso_ctx)
+    {
+        // We should never get here.
+        LOG_MSG_WARNING("Failed to locate \"main\" NSO binary within ExeFS section in Program NCA from %016lX!", title_info->meta_key.id);
+        goto process_data_nca;
+    }
+
+    /* Get SDK Version string. */
+    sdk_version = titleGenerateFormattedSdkVersionStringFromNso(nso_ctx);
+    if (!sdk_version) goto end;
+
+    /* Generate formatted Build ID string. */
+    utilsGenerateHexString(build_id, sizeof(build_id), nso_ctx->nso_header.module_id, sizeof(nso_ctx->nso_header.module_id), false);
+
+process_data_nca:
+    /* Process Data NCA. */
+    if (!data_content || sdk_version) goto process_control_nca;
+
+    if (!ncaInitializeContext(nca_ctx, title_info->storage_id, hfs_partition_type, &(title_info->meta_key), data_content, &tik)) // Ticket is implicitly initialized here.
+    {
+        LOG_MSG_WARNING("Failed to initialize NCA context for Data NCA from %016lX!", title_info->meta_key.id);
+        goto process_control_nca;
+    }
+
+    /* Get SDK Version string. */
+    sdk_version = titleGenerateFormattedSdkVersionStringFromNcaHeader(&(nca_ctx->header));
+    if (!sdk_version) goto end;
+
+process_control_nca:
+    /* Process Control NCA. */
+    if (nacp_content)
+    {
+        /* Retrieve the Display Version and BCAT Passphrase strings. */
+        (void)titleGetApplicationControlPropertyParams(title_info, nca_ctx, &display_version, &bcat_passphrase);
+    }
+
+    /* Process Meta NCA. */
+    if (!meta_content || sdk_version) goto gen_title_rec;
+
+    if (!ncaInitializeContext(nca_ctx, title_info->storage_id, hfs_partition_type, &(title_info->meta_key), meta_content, &tik))
+    {
+        LOG_MSG_WARNING("Failed to initialize NCA context for Meta NCA from %016lX!", title_info->meta_key.id);
+        goto gen_title_rec;
+    }
+
+    /* Get SDK Version string. */
+    sdk_version = titleGenerateFormattedSdkVersionStringFromNcaHeader(&(nca_ctx->header));
+    if (!sdk_version) goto end;
+
+gen_title_rec:
+    /* Check if we can use the ticket data. */
+    use_tik = tikIsValidTicket(&tik);
+
+    /* Append title name to output CSV buffer. */
+    if (!utilsAppendFormattedStringToBuffer(csv_buf, csv_buf_size, escaped_title_name ? "\"%s\"," : "%s,", title_name))
+    {
+        LOG_MSG_ERROR("Failed to append title name for %016lX!", title_info->meta_key.id);
+        goto end;
+    }
+
+    /* Append title record to output CSV buffer. */
+    if (!utilsAppendFormattedStringToBuffer(csv_buf, csv_buf_size, "%s,%016lX,%u,%s,%s,%u,%s (%lu bytes),%s,%s,%s,%s,%s,%s\r\n", titleGetNcmContentMetaTypeName(title_info->meta_key.type), title_info->meta_key.id, \
+                                                                                                                                 title_info->version.value, display_version ? display_version : "N/A", \
+                                                                                                                                 titleGetNcmStorageIdName(title_info->storage_id),  title_info->content_count, \
+                                                                                                                                 title_info->size_str, title_info->size, sdk_version ? sdk_version : "N/A", \
+                                                                                                                                 *build_id ? build_id : "N/A", bcat_passphrase ? bcat_passphrase : "N/A", \
+                                                                                                                                 use_tik ? tik.rights_id_str : "N/A", use_tik ? tik.enc_titlekey_str : "N/A", \
+                                                                                                                                 use_tik ? tik.dec_titlekey_str : "N/A")) LOG_MSG_ERROR("Failed to append title record for %016lX!", title_info->meta_key.id);
+
+    /* Update flag. */
+    success = true;
+
+end:
+    if (bcat_passphrase) free(bcat_passphrase);
+    if (display_version) free(display_version);
+    if (sdk_version) free(sdk_version);
+
+    programInfoFreeContext(&program_info_ctx);
+
+    return success;
+}
+
+static char *titleGenerateFormattedSdkVersionStringFromNso(const NsoContext *nso_ctx)
+{
+    if (!nsoIsValidContext(nso_ctx))
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
+
+    char *sdk_version = NULL;
+    size_t sdk_version_size = 0;
+
+    if (nso_ctx->nnsdk_version)
+    {
+        /* Use the nnSdk version section from the main NSO binary to generate the formatted SDK Version string. */
+        utilsAppendFormattedStringToBuffer(&sdk_version, &sdk_version_size, "%u.%u.%u (%s NSO nnSdk section)", nso_ctx->nnsdk_version->major, nso_ctx->nnsdk_version->minor, nso_ctx->nnsdk_version->micro, nso_ctx->nso_filename);
+    } else {
+        /* Fallback to the SdkAddOnVersion area from the NCA header. */
+        sdk_version = titleGenerateFormattedSdkVersionStringFromNcaHeader(&(nso_ctx->pfs_ctx->nca_fs_ctx->nca_ctx->header));
+    }
+
+    return sdk_version;
+}
+
+static char *titleGenerateFormattedSdkVersionStringFromNcaHeader(const NcaHeader *nca_hdr)
+{
+    if (!nca_hdr)
+    {
+        LOG_MSG_ERROR("Invalid parameters!");
+        return NULL;
+    }
+
+    char *sdk_version = NULL;
+    size_t sdk_version_size = 0;
+    const SdkAddOnVersion *sdk_addon_version = &(nca_hdr->sdk_addon_version.sdk_addon_version);
+
+    utilsAppendFormattedStringToBuffer(&sdk_version, &sdk_version_size, "%u.%u.%u-%u (%s NCA header)", sdk_addon_version->major, sdk_addon_version->minor, sdk_addon_version->micro, sdk_addon_version->relstep, ncaGetContentTypeName(nca_hdr->content_type));
+
+    return sdk_version;
 }
 
 static bool titleCreateGameCardInfoThread(void)
@@ -3595,9 +3765,9 @@ static void titleGenerateGameCardApplicationMetadataArray(void)
         tmp_gc_app_metadata->version.value = app_version;
         tmp_gc_app_metadata->dlc_count = dlc_count;
 
-        /* Try to retrieve the display version string. */
-        char *version_str = titleGetDisplayVersionString(patch_info ? patch_info : app_info);
-        if (version_str)
+        /* Try to retrieve the Display Version string. */
+        char *version_str = NULL;
+        if (titleGetApplicationControlPropertyParams(patch_info ? patch_info : app_info, NULL, &version_str, NULL) && version_str)
         {
             snprintf(tmp_gc_app_metadata->display_version, MAX_ELEMENTS(tmp_gc_app_metadata->display_version), "%s", version_str);
             free(version_str);

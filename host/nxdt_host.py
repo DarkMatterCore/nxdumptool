@@ -545,7 +545,7 @@ class ProgressBarWindow:
         self.prev_n = cur_n
         self.prev_iter_time = cur_time
 
-        return self.bar_format.replace('__custom_rate_fmt__', f'{rate:.2f}MiB/s')
+        return self.bar_format.replace('__custom_rate_fmt__', f'{rate:.2f} MiB/s')
 
     def end(self) -> None:
         self.n = 0
@@ -688,7 +688,7 @@ def usbGetDeviceEndpoints() -> bool:
             if not g_cliMode:
                 utilsLogException(traceback.format_exc())
 
-            g_logger.error('Fatal error ocurred while enumerating USB devices.')
+            g_logger.error('Fatal error occurred while enumerating USB devices.')
 
             if g_isWindows:
                 g_logger.error('Try reinstalling the libusbK driver using Zadig.')
@@ -797,7 +797,7 @@ def usbHandleStartSession(cmd_block: bytes) -> int:
     g_nxdtAbiVersionMinor = (abi_version & 0x0F)
 
     # Print client info.
-    g_logger.info(f'Client info: {USB_DEV_PRODUCT} v{g_nxdtVersionMajor}.{g_nxdtVersionMinor}.{g_nxdtVersionMicro}, USB ABI v{g_nxdtAbiVersionMajor}.{g_nxdtAbiVersionMinor} (commit {g_nxdtGitCommit}), USB {g_usbVersion}.\n')
+    g_logger.info(f'Client info: {USB_DEV_PRODUCT} v{g_nxdtVersionMajor}.{g_nxdtVersionMinor}.{g_nxdtVersionMicro} (commit {g_nxdtGitCommit}), USB ABI v{g_nxdtAbiVersionMajor}.{g_nxdtAbiVersionMinor} over USB {g_usbVersion}.\n')
 
     # Check if we support this ABI version.
     if (g_nxdtAbiVersionMajor != USB_ABI_VERSION_MAJOR) or (g_nxdtAbiVersionMinor != USB_ABI_VERSION_MINOR):

@@ -85,12 +85,12 @@ NX_INLINE void systemUpdateFreeDumpContext(SystemUpdateDumpContext *ctx)
     memset(ctx, 0, sizeof(SystemUpdateDumpContext));
 }
 
-NX_INLINE bool systemUpdateIsValidDumpContext(SystemUpdateDumpContext *ctx)
+NX_INLINE bool systemUpdateIsValidDumpContext(const SystemUpdateDumpContext *ctx)
 {
     return (ctx && ctx->total_size && ctx->content_count && ctx->nca_ctxs);
 }
 
-NX_INLINE bool systemUpdateIsDumpContextFinished(SystemUpdateDumpContext *ctx)
+NX_INLINE bool systemUpdateIsDumpContextFinished(const SystemUpdateDumpContext *ctx)
 {
     return (ctx && ctx->cur_size >= ctx->total_size && ctx->content_idx >= ctx->content_count);
 }

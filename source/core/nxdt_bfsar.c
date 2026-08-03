@@ -45,7 +45,7 @@ bool bfsarInitialize(void)
     NcaContext *nca_ctx = NULL;
 
     RomFileSystemContext romfs_ctx = {0};
-    RomFileSystemFileEntry *romfs_file_entry = NULL;
+    const RomFileSystemFileEntry *romfs_file_entry = NULL;
 
     FILE *bfsar_file = NULL;
     u8 *bfsar_data = NULL;

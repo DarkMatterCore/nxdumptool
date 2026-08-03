@@ -123,16 +123,16 @@ static const BucketTreeNodeHeader *bktrGetEntryNodeHeader(BucketTreeContext *ctx
 NX_INLINE u64 bktrGetEntryNodeEntryOffset(u64 entry_set_offset, u64 entry_size, u32 entry_index);
 NX_INLINE u64 bktrGetEntryNodeEntryOffsetByIndex(u32 entry_set_index, u64 node_size, u64 entry_size, u32 entry_index);
 
-NX_INLINE bool bktrIsExistL2(BucketTreeContext *ctx);
-NX_INLINE bool bktrIsExistOffsetL2OnL1(BucketTreeContext *ctx);
+NX_INLINE bool bktrIsExistL2(const BucketTreeContext *ctx);
+NX_INLINE bool bktrIsExistOffsetL2OnL1(const BucketTreeContext *ctx);
 
 static void bktrInitializeStorageNode(BucketTreeStorageNode *out, u64 entry_size, u32 entry_count);
 static void bktrStorageNodeFind(BucketTreeStorageNode *storage_node, const BucketTreeNodeHeader *node_header, u64 virtual_offset);
-NX_INLINE BucketTreeStorageNodeOffset bktrStorageNodeOffsetAdd(BucketTreeStorageNodeOffset *ofs, u64 value);
+NX_INLINE BucketTreeStorageNodeOffset bktrStorageNodeOffsetAdd(const BucketTreeStorageNodeOffset *ofs, u64 value);
 NX_INLINE const u64 bktrStorageNodeOffsetGetEntryVirtualOffset(const BucketTreeNodeHeader *node_header, const BucketTreeStorageNodeOffset *ofs);
 
-NX_INLINE bool bktrVisitorIsValid(BucketTreeVisitor *visitor);
-NX_INLINE bool bktrVisitorCanMoveNext(BucketTreeVisitor *visitor);
+NX_INLINE bool bktrVisitorIsValid(const BucketTreeVisitor *visitor);
+NX_INLINE bool bktrVisitorCanMoveNext(const BucketTreeVisitor *visitor);
 static bool bktrVisitorMoveNext(BucketTreeVisitor *visitor);
 
 bool bktrInitializeContext(BucketTreeContext *out, NcaFsSectionContext *nca_fs_ctx, BucketTreeStorageType storage_type)
@@ -1610,12 +1610,12 @@ NX_INLINE u64 bktrGetEntryNodeEntryOffsetByIndex(u32 entry_set_index, u64 node_s
     return bktrGetEntryNodeEntryOffset((u64)entry_set_index * node_size, entry_size, entry_index);
 }
 
-NX_INLINE bool bktrIsExistL2(BucketTreeContext *ctx)
+NX_INLINE bool bktrIsExistL2(const BucketTreeContext *ctx)
 {
     return (ctx->offset_count < ctx->entry_set_count);
 }
 
-NX_INLINE bool bktrIsExistOffsetL2OnL1(BucketTreeContext *ctx)
+NX_INLINE bool bktrIsExistOffsetL2OnL1(const BucketTreeContext *ctx)
 {
     return (bktrIsExistL2(ctx) && ctx->storage_table->offset_node.header.count < ctx->offset_count);
 }
@@ -1667,7 +1667,7 @@ static void bktrStorageNodeFind(BucketTreeStorageNode *storage_node, const Bucke
     }
 }
 
-NX_INLINE BucketTreeStorageNodeOffset bktrStorageNodeOffsetAdd(BucketTreeStorageNodeOffset *ofs, u64 value)
+NX_INLINE BucketTreeStorageNodeOffset bktrStorageNodeOffsetAdd(const BucketTreeStorageNodeOffset *ofs, u64 value)
 {
     BucketTreeStorageNodeOffset out = { ofs->offset + (value * (u64)ofs->stride), ofs->stride };
     return out;
@@ -1678,12 +1678,12 @@ NX_INLINE const u64 bktrStorageNodeOffsetGetEntryVirtualOffset(const BucketTreeN
     return *((const u64*)((const u8*)node_header + ofs->offset));
 }
 
-NX_INLINE bool bktrVisitorIsValid(BucketTreeVisitor *visitor)
+NX_INLINE bool bktrVisitorIsValid(const BucketTreeVisitor *visitor)
 {
     return (visitor && visitor->bktr_ctx && visitor->entry_index != UINT32_MAX);
 }
 
-NX_INLINE bool bktrVisitorCanMoveNext(BucketTreeVisitor *visitor)
+NX_INLINE bool bktrVisitorCanMoveNext(const BucketTreeVisitor *visitor)
 {
     return (bktrVisitorIsValid(visitor) && ((visitor->entry_index + 1) < visitor->entry_set.header.count || (visitor->entry_set.header.index + 1) < visitor->bktr_ctx->entry_set_count));
 }

@@ -33,7 +33,7 @@ bool legalInfoInitializeContext(LegalInfoContext *out, NcaContext *nca_ctx)
     }
 
     RomFileSystemContext romfs_ctx = {0};
-    RomFileSystemFileEntry *xml_entry = NULL;
+    const RomFileSystemFileEntry *xml_entry = NULL;
 
     bool success = false;
 

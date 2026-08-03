@@ -73,7 +73,7 @@ static bool nsoGetModulePath(NsoContext *nso_ctx, const NsoSegment *segment);
 
 static bool nsoGetSectionFromRoDataSegment(NsoContext *nso_ctx, const NsoSectionInfo *section_info, const NsoSegment *segment, u8 **out_ptr);
 
-bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, PartitionFileSystemEntry *pfs_entry)
+bool nsoInitializeContext(NsoContext *out, PartitionFileSystemContext *pfs_ctx, const PartitionFileSystemEntry *pfs_entry)
 {
     NsoModStart mod_start = {0};
     NsoSegment segment = {0};
@@ -333,19 +333,13 @@ static bool nsoDecompressSegment(u8 **ptr, const size_t compressed_size, const s
     }
 
     /* Calculate decompression buffer size. */
-    dec_buf_size = (is_zbic ? ZSTD_decompressionMargin(segment_data, compressed_size) : LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(decompressed_size));
+    dec_buf_size = (is_zbic ? zbicGetInPlaceDecompressionBufferSize(segment_data, compressed_size, decompressed_size) : \
+                              LZ4_DECOMPRESS_INPLACE_BUFFER_SIZE(decompressed_size));
 
-    if (is_zbic)
+    if (dec_buf_size <= decompressed_size)
     {
-        /* Make sure we were able to retrieve the margin. */
-        if (ZSTD_isError(dec_buf_size))
-        {
-            LOG_MSG_ERROR("ZSTD_decompressionMargin() failed! (0x%lX).", dec_buf_size);
-            goto end;
-        }
-
-        /* Manually add decompressed segment size to calculated margin. */
-        dec_buf_size += decompressed_size;
+        LOG_MSG_ERROR("In-place decompression buffer size calculation failed! (0x%lX <= 0x%lX).", dec_buf_size, decompressed_size);
+        return false;
     }
 
     /* Reallocate segment data buffer. */
@@ -363,14 +357,7 @@ static bool nsoDecompressSegment(u8 **ptr, const size_t compressed_size, const s
     /* Decompress segment data in-place. */
     if (is_zbic)
     {
-        const size_t zstd_res = ZSTD_decompress(dec_buf, dec_buf_size, segment_data, compressed_size);
-
-        if (ZSTD_isError(zstd_res))
-        {
-            LOG_MSG_ERROR("ZSTD_decompress() failed! (0x%lX).", zstd_res);
-            goto upd_ptr;
-        }
-
+        const size_t zstd_res = zbicDecompress(dec_buf, dec_buf_size, segment_data, compressed_size);
         if (zstd_res != decompressed_size)
         {
             LOG_MSG_ERROR("ZBIC decompression failed! (0x%lX != 0x%lX).", zstd_res, decompressed_size);
@@ -380,7 +367,7 @@ static bool nsoDecompressSegment(u8 **ptr, const size_t compressed_size, const s
         const int lz4_res = LZ4_decompress_safe((char*)segment_data, (char*)dec_buf, (int)compressed_size, (int)dec_buf_size);
         if (lz4_res != (int)decompressed_size)
         {
-            LOG_MSG_ERROR("LZ4 decompression failed! (%d).", lz4_res);
+            LOG_MSG_ERROR("LZ4 decompression failed! (%d != %d).", lz4_res, (int)decompressed_size);
             goto upd_ptr;
         }
     }

@@ -50,6 +50,11 @@ bool programInfoInitializeContext(ProgramInfoContext *out, NcaContext *nca_ctx);
 /// If the function succeeds, XML data and size will get saved to the 'authoring_tool_xml' and 'authoring_tool_xml_size' members from the ProgramInfoContext.
 bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx);
 
+/// Returns a pointer to a NsoContext within a previously initialized ProgramInfoContext that matches the provided NSO filename.
+/// The returned NsoContext belongs to the provided ProgramInfoContext, and as such, it should not be freed manually.
+/// Returns NULL if an error occurs or if a NSO binary with a matching filename can't be found.
+NsoContext *programInfoGetNsoContextByFilename(ProgramInfoContext *program_info_ctx, const char *filename);
+
 /// Helper inline functions.
 
 NX_INLINE void programInfoFreeContext(ProgramInfoContext *program_info_ctx)
@@ -69,7 +74,7 @@ NX_INLINE void programInfoFreeContext(ProgramInfoContext *program_info_ctx)
     memset(program_info_ctx, 0, sizeof(ProgramInfoContext));
 }
 
-NX_INLINE bool programInfoIsValidContext(ProgramInfoContext *program_info_ctx)
+NX_INLINE bool programInfoIsValidContext(const ProgramInfoContext *program_info_ctx)
 {
     return (program_info_ctx && program_info_ctx->nca_ctx && npdmIsValidContext(&(program_info_ctx->npdm_ctx)) && program_info_ctx->nso_count && program_info_ctx->nso_ctx);
 }
