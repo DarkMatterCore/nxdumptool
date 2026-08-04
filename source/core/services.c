@@ -1,7 +1,7 @@
 /*
  * services.c
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *
@@ -288,10 +288,8 @@ static void servicesClkrstExit(void)
 
 static bool servicesClkGetServiceType(void *arg)
 {
-    if (!arg) return false;
-
     ServiceInfo *info = (ServiceInfo*)arg;
-    if (strcmp(info->name, "clk") != 0 || info->init_func != NULL || info->close_func != NULL) return false;
+    if (info == NULL || strcmp(info->name, "clk") != 0 || info->init_func != NULL || info->close_func != NULL) return false;
 
     /* Determine which service needs to be used to control hardware clock rates, depending on the system version. */
     /* This may either be pcv (sysver lower than 8.0.0) or clkrst (sysver equal to or greater than 8.0.0). */

@@ -2,7 +2,7 @@
  * key_sources.h
  *
  * Copyright (c) 2019-2023, shchmue.
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * This file is part of nxdumptool (https://github.com/DarkMatterCore/nxdumptool).
  *

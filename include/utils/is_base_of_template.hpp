@@ -1,7 +1,7 @@
 /*
  * is_base_of_template.hpp
  *
- * Copyright (c) 2020-2024, DarkMatterCore <pabloacurielz@gmail.com>.
+ * Copyright (c) 2020-2026, DarkMatterCore <pabloacurielz@gmail.com>.
  *
  * Based on goneskiing's C++ implementation at:
  * https://stackoverflow.com/a/63562826
