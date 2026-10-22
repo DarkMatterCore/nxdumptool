@@ -83,10 +83,10 @@ bool npdmInitializeContext(NpdmContext *out, PartitionFileSystemContext *pfs_ctx
         goto end;
     }
 
-    if (!out->meta_header->flags.is_64bit_instruction && (out->meta_header->flags.process_address_space == NpdmProcessAddressSpace_AddressSpace64BitOld || \
-        out->meta_header->flags.process_address_space == NpdmProcessAddressSpace_AddressSpace64Bit))
+    if (!out->meta_header->flags0.is_64bit_instruction && (out->meta_header->flags0.process_address_space == NpdmProcessAddressSpace_AddressSpace64BitOld || \
+        out->meta_header->flags0.process_address_space == NpdmProcessAddressSpace_AddressSpace64Bit))
     {
-        LOG_MSG_ERROR("Invalid meta header flags! (0x%02X).", *((u8*)&(out->meta_header->flags)));
+        LOG_MSG_ERROR("Invalid meta header flags! (0x%02X).", *((u8*)&(out->meta_header->flags0)));
         dump_meta_header = true;
         goto end;
     }

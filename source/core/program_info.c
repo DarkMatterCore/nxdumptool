@@ -171,7 +171,7 @@ bool programInfoGenerateAuthoringToolXml(ProgramInfoContext *program_info_ctx)
     u64 xml_buf_size = 0;
 
     char *sdk_version = NULL, *build_type = NULL;
-    bool is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags.is_64bit_instruction == 1);
+    bool is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags0.is_64bit_instruction == 1);
 
     u8 *npdm_acid = (u8*)program_info_ctx->npdm_ctx.acid_header;
     u64 npdm_acid_size = program_info_ctx->npdm_ctx.meta_header->acid_size, npdm_acid_b64_size = 0;
@@ -494,7 +494,7 @@ static bool programInfoAddNsoSymbolsToAuthoringToolXml(char **xml_buf, u64 *xml_
     }
 
     NsoContext *nso_ctx = NULL;
-    bool success = false, symbols_exist = false, is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags.is_64bit_instruction == 1);
+    bool success = false, symbols_exist = false, is_64bit = (program_info_ctx->npdm_ctx.meta_header->flags0.is_64bit_instruction == 1);
 
     char *symbol_str = NULL;
     u64 symbol_size = (!is_64bit ? sizeof(Elf32Symbol) : sizeof(Elf64Symbol));

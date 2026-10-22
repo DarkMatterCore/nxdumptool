@@ -486,18 +486,20 @@ typedef struct {
     NacpContentsAvailabilityTransitionPolicy contents_availability_transition_policy;
     NacpSupportedLanguage supported_language_flag_for_nx_addon;                                     ///< TODO: add to XML generation.
     NacpAccessibleLaunchRequiredVersion accessible_launch_required_version;
-    NacpApplicationControlDataConditionStruct application_control_data_condition;                         ///< Used for Switch 2 upgrade packs, which are distributed as AddOnContent titles. TODO: add to XML generation.
+    NacpApplicationControlDataConditionStruct application_control_data_condition;                   ///< Used for Switch 2 upgrade packs, which are distributed as AddOnContent titles. TODO: add to XML generation.
     u8 initial_program_index;                                                                       ///< TODO: add to XML generation.
     u8 reserved_2[0x2];
     u8 accessible_program_index_flags[0x4];                                                         ///< TODO: add structure / enum / XML generation.
     NacpAlbumFileExport album_file_export;
-    u8 reserved_3[0x7];
+    u8 supress_force_console_mode;                                                                  ///< TODO: add enum with values / XML generation.
+    u8 reserved_3[0x6];
     u8 save_data_certificate_bytes[0x80];                                                           ///< TODO: add structure / XML generation.
     u8 has_in_game_voice_chat;                                                                      ///< TODO: add enum with values / XML generation.
     u8 reserved_4[0x3];
     u8 supported_extra_add_on_content_flag[0x4];                                                    ///< TODO: add structure / enum / XML generation.
     u8 has_karaoke_feature;                                                                         ///< TODO: add structure / enum / XML generation.
-    u8 reserved_5[0x697];
+    u8 stream_play_save_data_key_type;                                                              ///< TODO: add enum with values / XML generation.
+    u8 reserved_5[0x696];
     u8 platform_specific_region[0x400];                                                             ///< TODO: add structure / XML generation.
 } NsApplicationControlProperty;
 
