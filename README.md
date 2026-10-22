@@ -1,5 +1,16 @@
 # nxdumptool
+
+## Project discontinued, old readme contents further below
+
+![farewell](farewell.png)
+
+---
+
+<details>
+  <summary>Old readme</summary>
+
 <img width="200" src="romfs/icon/nxdumptool.jpg">
+
 Nintendo Switch Dump Tool
 
 ### Official Discord server: https://discord.gg/SCbbcQx
@@ -46,3 +57,4 @@ Legend:
 * :white_check_mark: - Implemented
 * :warning: - Partially implemented
 * :x: - Not implemented
+</details>
