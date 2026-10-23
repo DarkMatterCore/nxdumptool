@@ -221,6 +221,7 @@ static char *generateOutputLayeredFsFileName(u64 title_id, const char *subdir, c
 static bool dumpGameCardSecurityInformation(GameCardSecurityInformation *out);
 
 static bool saveGameCardImage(void *userdata);
+static bool saveGameCardImageAndExtras(void *userdata);
 static bool saveGameCardHeader(void *userdata);
 static bool saveGameCardCardInfo(void *userdata);
 static bool saveGameCardHeader2(void *userdata);
@@ -454,6 +455,13 @@ static MenuElement *g_xciMenuElements[] = {
         .str = "start xci dump",
         .child_menu = NULL,
         .task_func = &saveGameCardImage,
+        .element_options = NULL,
+        .userdata = NULL
+    },
+    &(MenuElement){
+        .str = "start xci dump and extras (initial data, certificate, id set, uid)",
+        .child_menu = NULL,
+        .task_func = &saveGameCardImageAndExtras,
         .element_options = NULL,
         .userdata = NULL
     },
@@ -3206,6 +3214,16 @@ end:
     if (filename) free(filename);
 
     return success;
+}
+
+static bool saveGameCardImageAndExtras(void *userdata)
+{
+    if (!saveGameCardInitialData(userdata)) return false;
+    if (!saveGameCardCertificate(userdata)) return false;
+    if (!saveGameCardIdSet(userdata))       return false;
+    if (!saveGameCardUid(userdata))         return false;
+    if (!saveGameCardImage(userdata))       return false;
+    return true;
 }
 
 static bool saveGameCardHeader(void *userdata)
